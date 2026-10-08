@@ -512,7 +512,7 @@ fn assemble_builtin_parts()
     fragment.merge(plot::build_provider_fragment()?);
     let fragment = fragment.finish()?;
     let (required_i18n, alias_keys) =
-        i18n_requirements(&fragment.types, &fragment.categories, &fragment.nodes)?;
+        i18n_requirements(&fragment.types, &fragment.categories, &fragment.nodes);
     let mut i18n = fragment.i18n;
     i18n.keys.extend(required_i18n.keys);
     let catalog = BuiltinCatalog::new(&fragment.messages).map_err(|source| {
@@ -758,7 +758,7 @@ fn i18n_requirements(
     types: &[TypeRegistration],
     categories: &[CategoryRegistration],
     nodes: &[RegisteredNode],
-) -> Result<(I18nManifest, BTreeSet<I18nKey>), BuiltinAssemblyError> {
+) -> (I18nManifest, BTreeSet<I18nKey>) {
     let mut keys = BTreeSet::new();
     let mut alias_keys = BTreeSet::new();
     keys.extend(types.iter().map(|item| item.title_key.clone()));
@@ -780,7 +780,7 @@ fn i18n_requirements(
             keys.extend(parameter.description_key.iter().cloned());
         }
     }
-    Ok((I18nManifest { keys }, alias_keys))
+    (I18nManifest { keys }, alias_keys)
 }
 
 fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {

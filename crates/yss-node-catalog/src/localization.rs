@@ -455,16 +455,27 @@ impl BuiltinCatalog {
     }
 
     fn message(&self, locale: &str, key: &I18nKey) -> Option<&Message> {
+        if let Some(message) = self.bundles.get(locale).and_then(|bundle| bundle.get(key)) {
+            return Some(message);
+        }
         locale_chain(locale).into_iter().find_map(|candidate| {
             self.bundles
                 .get(candidate.as_str())
+                .or_else(|| {
+                    self.bundles
+                        .iter()
+                        .find(|(name, _)| name.eq_ignore_ascii_case(candidate.as_str()))
+                        .map(|(_, bundle)| bundle)
+                })
                 .or_else(|| {
                     (!candidate.contains('-'))
                         .then(|| {
                             self.bundles
                                 .iter()
                                 .find(|(name, _)| {
-                                    name.split('-').next() == Some(candidate.as_str())
+                                    name.split('-').next().is_some_and(|language| {
+                                        language.eq_ignore_ascii_case(candidate.as_str())
+                                    })
                                 })
                                 .map(|(_, bundle)| bundle)
                         })
@@ -591,3 +602,29 @@ fn fold_latin_diacritic(character: char) -> Option<char> {
 }
 
 pub(crate) use Message::{Aliases, Text};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn locale_tags_keep_text_across_case_and_separator_variants() {
+        let key = I18nKey::new("nodes.example.title").unwrap();
+        let catalog = BuiltinCatalog::new(&[
+            ("en-US", key.as_str().to_owned(), Text("Example")),
+            ("zh-CN", key.as_str().to_owned(), Text("示例")),
+        ])
+        .unwrap();
+        for (locale, expected) in [
+            ("en-US", "Example"),
+            ("EN-us", "Example"),
+            ("EN_US", "Example"),
+            ("zh-CN", "示例"),
+            ("ZH_cn", "示例"),
+            ("ZH-tw", "示例"),
+            ("fr-FR", "Example"),
+        ] {
+            assert_eq!(catalog.text(locale, &key).as_ref(), expected, "{locale}");
+        }
+    }
+}
