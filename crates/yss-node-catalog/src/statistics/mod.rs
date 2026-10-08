@@ -1,8 +1,7 @@
 //! Statistical node protocols staged for aggregation into the built-in provider.
 //!
-//! Algorithms are lowered to runtime kernel handles and depend on the current
-//! node-system contracts. Runtime adapters consume the `sci` and `tabular`
-//! application boundaries.
+//! This module owns graph-independent interfaces and localization. Node Kernel
+//! owns executable adapters; Graph Analysis owns connected types and schemas.
 
 use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;

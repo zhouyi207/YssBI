@@ -10,4 +10,4 @@ adjustment 默认 holm：将 m 个原始 P 值排序后，使用 $p^*_{(i)}=\min
 
 区间为均值差加减 t 临界值乘标准误。Bonferroni 使用尾部概率 $(1-c)/(2m)$，给出同时区间；Holm 和 none 仍保留名义水平的未校正区间。解释覆盖率前请查看 intervals_adjusted。
 
-result 包含按首次出现排列的 group_labels、各组样本量/均值/标准差、method、adjustment、confidence_level、comparisons、intervals_adjusted。comparisons 表包含 group_a/group_b（group_labels 中从 1 开始的位置）、estimate（a 减 b）、standard_error、degrees_of_freedom、statistic、p_value、adjusted_p_value、lower、upper。节点比较原始组均值，不执行 Tukey 极差检验或协变量调整后的对比。
+result 包含按首次出现排列的 group_labels、各组样本量/均值/标准差、method、adjustment、confidence_level、comparisons、intervals_adjusted。comparisons 表包含 group_a/group_b（group_labels 中从 1 开始的位置）、group_a_label/group_b_label（对应分组标签的文本）、estimate（a 减 b）、standard_error、degrees_of_freedom、statistic、p_value、adjusted_p_value、lower、upper。节点比较原始组均值，不执行 Tukey 极差检验或协变量调整后的对比。
