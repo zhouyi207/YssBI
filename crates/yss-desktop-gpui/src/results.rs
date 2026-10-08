@@ -1,4 +1,5 @@
 //! Native result panels own view state and one Application result lease.
+mod addition;
 mod plot;
 mod query;
 mod report;
@@ -29,6 +30,10 @@ pub enum ResultEvent {
     Loaded(bool),
     Activated,
     Closed,
+    Replaced {
+        previous: ResultReference,
+        current: ResultReference,
+    },
 }
 
 pub struct ResultPanel {
@@ -50,6 +55,9 @@ pub struct ResultPanel {
     generation: u64,
     task: Option<gpui::Task<()>>,
     closed: bool,
+    report_subscription: Option<gpui::Subscription>,
+    addition_task: Option<gpui::Task<()>>,
+    addition_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 impl ResultPanel {
@@ -77,6 +85,9 @@ impl ResultPanel {
             generation: 0,
             task: None,
             closed: false,
+            report_subscription: None,
+            addition_task: None,
+            addition_cancel: None,
         }
     }
     pub fn available(&self) -> bool {
@@ -108,38 +119,7 @@ impl ResultPanel {
                 }
                 view.loading = false;
                 match result {
-                    Ok((lease, content)) => {
-                        view.lease = Some(lease);
-                        match content {
-                            ResultContent::InvalidPlot => {
-                                view.error = Some(crate::text::translate("plot.invalidData"));
-                            }
-                            ResultContent::Plot(data) => {
-                                view.plot = Some(cx.new(|_| plot::PlotView::new(data)));
-                            }
-                            ResultContent::Value {
-                                value,
-                                tables,
-                                report,
-                            } => {
-                                if let Some(report) = report {
-                                    view.report = Some(cx.new(|cx| {
-                                        report::ReportView::new(
-                                            view.services.clone(),
-                                            view.reference,
-                                            value.clone(),
-                                            report,
-                                            cx,
-                                        )
-                                    }));
-                                }
-                                view.tables = tables;
-                                view.rows = value::rows(&value, &view.expanded, tables);
-                                view.value = Some(value);
-                            }
-                            ResultContent::Page(page) => view.install_page(page, window, cx),
-                        }
-                    }
+                    Ok((lease, content)) => view.install_content(lease, content, window, cx),
                     Err(_) => {
                         view.error = Some("结果不可用或读取失败，请检查当前项目和日志。".into())
                     }
@@ -149,6 +129,67 @@ impl ResultPanel {
             });
         }));
         cx.notify();
+    }
+
+    fn install_content(
+        &mut self,
+        lease: ResultLease,
+        content: ResultContent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.reference = lease.reference();
+        self.report_subscription = None;
+        self.report = None;
+        self.plot = None;
+        self.value = None;
+        self.table = None;
+        self.part = None;
+        self.expanded.clear();
+        self.rows.clear();
+        self.tables = false;
+        match content {
+            ResultContent::InvalidPlot => {
+                self.error = Some(crate::text::translate("plot.invalidData"))
+            }
+            ResultContent::Plot(data) => self.plot = Some(cx.new(|_| plot::PlotView::new(data))),
+            ResultContent::Page(page) => self.install_page(page, window, cx),
+            ResultContent::Value {
+                value,
+                tables,
+                report,
+            } => {
+                if let Some(report) = report {
+                    let entity = cx.new(|cx| {
+                        report::ReportView::new(
+                            self.services.clone(),
+                            self.reference,
+                            value.clone(),
+                            report,
+                            window,
+                            cx,
+                        )
+                    });
+                    self.report_subscription = Some(cx.subscribe_in(&entity, window, |view, _, request: &yss_application::graph::results::report::addition::LinearSummaryAddition, window, cx| {
+                        view.add_contents(request.clone(), window, cx);
+                    }));
+                    self.report = Some(entity);
+                }
+                self.tables = tables;
+                self.rows = value::rows(&value, &self.expanded, tables);
+                self.value = Some(value);
+            }
+        }
+        self.replace_lease(Some(lease));
+    }
+
+    fn replace_lease(&mut self, lease: Option<ResultLease>) {
+        if let Some(previous) = std::mem::replace(&mut self.lease, lease) {
+            self.services.run(move |_| {
+                drop(previous);
+                Ok(())
+            });
+        }
     }
 
     fn install_page(&mut self, page: ResultGrid, window: &mut Window, cx: &mut Context<Self>) {
@@ -417,9 +458,12 @@ impl BasePanel for ResultPanel {
     }
     fn on_removed(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.closed = true;
+        self.cancel_addition();
+        self.addition_task = None;
+        self.report_subscription = None;
         self.generation += 1;
         self.task = None;
-        self.lease = None;
+        self.replace_lease(None);
         self.table = None;
         self.value = None;
         self.plot = None;

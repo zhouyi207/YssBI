@@ -16,6 +16,7 @@ use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
 pub mod plot;
 pub mod report;
 mod retention;
+pub use retention::ResultLease;
 mod structure;
 pub(crate) mod structured;
 pub(crate) use structure::ResultStructure;

@@ -115,12 +115,19 @@ pub fn overview(projection: &ResultValueProjection) -> anyhow::Result<Arc<Runtim
     let json = match projection {
         ResultValueProjection::Value(value) => return Ok(Arc::new(value.clone())),
         ResultValueProjection::LinearModel(model) => serde_json::to_value(model)?,
-        ResultValueProjection::LinearReport(report) => serde_json::json!({
-            "title": report.title, "endog_name": report.endog_name, "model": report.model,
-            "condition_number": report.condition_number,
-            "coefficients": { "kind": "tableRef", "part": "coefficients", "rowCount": report.coefficient_count },
-            "observations": { "kind": "tableRef", "part": "observations", "rowCount": report.observation_count },
-        }),
+        ResultValueProjection::LinearReport(report) => return linear_overview(report),
     };
+    Ok(Arc::new(RuntimeValue::try_from(json)?))
+}
+
+pub fn linear_overview(
+    report: &yss_application::graph::results::report::LinearRegressionReportProjection,
+) -> anyhow::Result<Arc<RuntimeValue>> {
+    let json = serde_json::json!({
+        "title": report.title, "endog_name": report.endog_name, "model": report.model,
+        "condition_number": report.condition_number,
+        "coefficients": { "kind": "tableRef", "part": "coefficients", "rowCount": report.coefficient_count },
+        "observations": { "kind": "tableRef", "part": "observations", "rowCount": report.observation_count },
+    });
     Ok(Arc::new(RuntimeValue::try_from(json)?))
 }

@@ -224,13 +224,40 @@ impl Workbench {
         let services = self.services.clone();
         let panel = cx.new(|cx| ResultPanel::new(services, reference, cx));
         let lifecycle = self.lifecycle;
-        self.subscriptions.push(
-            cx.subscribe_in(&panel, window, move |view, _, event, _, cx| {
-                if view.lifecycle == lifecycle && matches!(event, ResultEvent::Activated) {
-                    view.clear_graph_context(cx);
+        self.subscriptions.push(cx.subscribe_in(
+            &panel,
+            window,
+            move |view, panel, event, _, cx| {
+                if view.lifecycle != lifecycle {
+                    return;
                 }
-            }),
-        );
+                match event {
+                    ResultEvent::Activated => view.clear_graph_context(cx),
+                    ResultEvent::Replaced { previous, current } => {
+                        let previous = (
+                            previous.execution_session_id.as_uuid(),
+                            previous.result_id.get(),
+                        );
+                        if view
+                            .result_panels
+                            .get(&previous)
+                            .and_then(gpui::WeakEntity::upgrade)
+                            .is_some_and(|held| held == *panel)
+                        {
+                            view.result_panels.remove(&previous);
+                        }
+                        view.result_panels.insert(
+                            (
+                                current.execution_session_id.as_uuid(),
+                                current.result_id.get(),
+                            ),
+                            panel.downgrade(),
+                        );
+                    }
+                    _ => {}
+                }
+            },
+        ));
         self.result_panels.insert(key, panel.downgrade());
         self.present_panel(
             gpui_component::dock::panel_handle(panel.clone()),
@@ -260,7 +287,7 @@ impl Workbench {
                 let applied = match event {
                     ResultEvent::Loaded(applied) => *applied,
                     ResultEvent::Closed => false,
-                    ResultEvent::Activated => return,
+                    ResultEvent::Activated | ResultEvent::Replaced { .. } => return,
                 };
                 if view.lifecycle == lifecycle
                     && let Some(id) = pending.take()

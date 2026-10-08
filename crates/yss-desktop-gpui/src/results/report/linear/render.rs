@@ -106,7 +106,7 @@ impl Render for LinearReport {
                 && !options.model_summary
                 && !options.anova
                 && self.sections.is_empty(),
-            |body| body.child(crate::text::translate("native.reports.emptySelection")),
+            |body| body.child(crate::text::translate("reportSummary.empty")),
         )
     }
 }

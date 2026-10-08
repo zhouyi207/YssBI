@@ -2,6 +2,16 @@ use std::sync::OnceLock;
 use yss_application::activity_panel::ActivityText;
 use yss_graph_editor::projection::EditorDiagnosticModel;
 
+pub const DEFAULT_LANGUAGE: &str = "zh-CN";
+
+pub fn locale() -> &'static str {
+    if gpui_component::locale().starts_with("en") {
+        "en-US"
+    } else {
+        DEFAULT_LANGUAGE
+    }
+}
+
 pub fn translate(key: &str) -> String {
     static LOCALE: OnceLock<serde_json::Value> = OnceLock::new();
     let mut value = LOCALE.get_or_init(|| {

@@ -77,7 +77,7 @@
   },
   "reportSummary": {
     "add": "添加内容",
-    "help": "选择要补充的内容。添加并计算会同步更新 Summary 节点配置，并使用当前模型和数据更新整份报告。内容选择和检验参数也可在节点的 Parameters → Configure 中修改。",
+    "help": "选择要补充的内容。添加并计算会更新 Summary 节点配置，并使用当前模型和数据更新整份报告。图的修改可撤销，需要显式保存。",
     "compute": "添加并计算",
     "computing": "正在计算…",
     "pending": "正在更新报告，原报告保持可读。",
@@ -2680,7 +2680,6 @@
       "mapping": "变量映射",
       "significantCount": "本页显著系数：{{count}} / {{total}}",
       "significance": "显著性：*** p < 0.001，** p < 0.01，* p < 0.05，. p < 0.1",
-      "emptySelection": "本次执行未选择报告内容，请修改 Summary 节点配置后重新执行。",
       "metrics": {
         "modelType": "模型",
         "method": "方法",

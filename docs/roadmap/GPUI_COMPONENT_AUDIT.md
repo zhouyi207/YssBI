@@ -154,6 +154,17 @@
 - 完整真实结果交互、自动重绘、悬浮、筛选及生命周期验收继续开放，步骤见 GPUI README；未添加 UI 单元测试或新依赖。
 
 
+### 显式追加线性报告内容
+
+- 已逐项核对 AddReportContents 及其编辑、执行、保留租约和面板替换流程；原生表单只拥有未提交选择，业务编排归 Application 的 report/addition。
+- 只合并勾选内容及其关联参数，按捕获版本执行单个 Summary 输出并复用已有输入；新回执必须匹配当前输出。图编辑沿用原撤销/脏状态，不隐式保存。
+- 完整新报告持有原 Results 自动租约，安装前再次检查会话与图版本；失败、取消、关闭及迟到交付保留旧报告并释放临时租约。结果面板成功后同时更新值、报告和工作台引用索引。
+- 原生普通结果读取也复用 Application 的自动租约，删除桌面侧重复释放包装；面板常规回收继续交给 worker。原显式 lease API 与 ResultStore 保持原职责。
+- 独立提交内容的 L2 验证：`cargo test -p yss-application --lib graph::results::report::` 的 12 个报告测试及 `cargo test -p yss-application --lib presentation::tests::open_result_intents_follow_result_retention -- --exact` 的 1 个消费者测试通过；`cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 与 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。
+- 18 个变更 Rust 文件的局部格式、3 份变更文档的元信息与 287 个相对链接、25 个复用文案键及占位符、模块索引生成器与 `git diff --check` 通过。临时样例窗口已目视核对正常、计算中、失败状态及 205 个中文参数名的有界布局；样例已移出仓库，此检查不等同于真实交互验收。
+- 真实项目中的按钮、面板替换、拖动、语言、关闭和自动重绘验收仍开放，不新增 UI 单元测试或依赖。
+
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -456,8 +467,8 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/results/internal/ui/info/AddReportContents.tsx](../../react/src/modules/results/internal/ui/info/AddReportContents.tsx) | 迁移：追加报告内容 | 已阅读选项、滞后阶数、假设与失败保留流程；需复用原 Summary 编辑和执行 owner | 待迁移 |
-| [modules/results/internal/ui/info/LinearRegressionReport.tsx](../../react/src/modules/results/internal/ui/info/LinearRegressionReport.tsx) | 迁移：线性报告专项章节 | 方程、摘要、ANOVA、系数/观测页及全部选中分析已接入；追加内容流程仍待迁移 | 读取章节已覆盖；追加流程与人工验收待完成 |
+| [modules/results/internal/ui/info/AddReportContents.tsx](../../react/src/modules/results/internal/ui/info/AddReportContents.tsx) | 迁移：原生选择表单与 Application 追加用例 | 只合并勾选项，复用原输入执行并核对本次输出；失败保留旧报告及输入，成功更新面板引用 | 代码已覆盖；真实交互验收待完成 |
+| [modules/results/internal/ui/info/LinearRegressionReport.tsx](../../react/src/modules/results/internal/ui/info/LinearRegressionReport.tsx) | 迁移：线性报告专项章节与显式追加 | 方程、摘要、ANOVA、系数/观测页、选中分析和追加流程均已接入；结果与版本仍由 Rust owner 管理 | 代码已覆盖；真实交互及生命周期验收待完成 |
 | [modules/results/internal/ui/info/ReportView.tsx](../../react/src/modules/results/internal/ui/info/ReportView.tsx) | 迁移：类型化报告入口 | 结构化与线性报告沿用同一面板租约；数值/报告切换保留局部状态 | 代码已覆盖；人工验收待完成 |
 | [modules/results/internal/ui/info/StructuredReportTable.tsx](../../react/src/modules/results/internal/ui/info/StructuredReportTable.tsx) | 迁移：声明表格与稳定性图 | Application 校验全部声明和行；原生共享表格、单位圆、当前页提示、分页与重试 | 代码已覆盖；人工验收待完成 |
 | [modules/results/internal/ui/info/StructuredResult.tsx](../../react/src/modules/results/internal/ui/info/StructuredResult.tsx) | 迁移：结构化报告 | 原方程文本、声明章节和结构化原值；嵌套数组按原路径读取，不复制统计逻辑 | 代码已覆盖；人工验收待完成 |
