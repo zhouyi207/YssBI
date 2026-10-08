@@ -12,7 +12,7 @@ mod validation;
 
 pub use constant_references::{constant_references_for_copy, remap_copied_constant_references};
 pub use error::DocumentError;
-pub use patch::apply_graph_document_patch;
+pub use patch::{apply_graph_document_patch, prepare_graph_document_patch};
 pub use validation::{
     PortMemberGroupState, port_member_group_state, user_created_port_instance_count,
     validate_graph_document,

@@ -34,8 +34,8 @@ pub(super) fn update_connection_operations(
     }
     // Free the whole selection first so swapping occupied endpoints is atomic.
     let mut operations = disconnect_connection_operations(document, selected.iter().copied())?;
-    let mut staged = document.clone();
-    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
+    let mut staged =
+        prepare_graph_document_patch(document, &GraphDocumentPatch::new(operations.clone()))?;
     for proposal in proposals {
         let mut next = connect_operations(
             &staged,
@@ -134,9 +134,8 @@ pub(crate) fn move_connection_operations(
         .cloned()
         .map(|connection| (connection.id, connection))
         .collect::<BTreeMap<_, _>>();
-    let mut staged = document.clone();
-    apply_graph_document_patch(
-        &mut staged,
+    let mut staged = prepare_graph_document_patch(
+        document,
         &GraphDocumentPatch::new(
             removals
                 .values()
@@ -159,9 +158,8 @@ pub(crate) fn move_connection_operations(
         .cloned()
         .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
         .collect::<Vec<_>>();
-    staged = document.clone();
-    apply_graph_document_patch(
-        &mut staged,
+    staged = prepare_graph_document_patch(
+        document,
         &GraphDocumentPatch::new(removal_operations.clone()),
     )?;
     for proposal in &proposals {
@@ -422,8 +420,8 @@ fn plan_connection_operations_after_type_validation(
         .into_values()
         .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
         .collect::<Vec<_>>();
-    let mut staged = document.clone();
-    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
+    let staged =
+        prepare_graph_document_patch(document, &GraphDocumentPatch::new(operations.clone()))?;
     validate_connection_capacity(&staged, &output, output_connections)?;
     validate_connection_capacity(&staged, &input, input_connections)?;
     operations.push(GraphDocumentOperation::InsertConnection {

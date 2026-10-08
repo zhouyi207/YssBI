@@ -72,8 +72,7 @@ pub(super) fn instantiate_with_identities(
         anchor,
         &ids,
     )?;
-    let mut staged = document.clone();
-    yss_graph_document_edit::apply_graph_document_patch(&mut staged, &patch)
+    yss_graph_document_edit::prepare_graph_document_patch(document, &patch)
         .map_err(|error| invalid_clipboard(format!("subgraph patch validation failed: {error}")))?;
     let mut addresses = snapshot
         .port_bindings
@@ -781,9 +780,8 @@ fn plan_instantiation(
         });
     }
 
-    let mut staged = document.clone();
-    yss_graph_document_edit::apply_graph_document_patch(
-        &mut staged,
+    let mut staged = yss_graph_document_edit::prepare_graph_document_patch(
+        document,
         &GraphDocumentPatch::new(operations.clone()),
     )
     .map_err(|error| invalid_clipboard(format!("node and port staging failed: {error}")))?;

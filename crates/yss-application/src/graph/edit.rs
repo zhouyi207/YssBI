@@ -5,7 +5,7 @@ use crate::session::{ApplicationSession, ApplicationState};
 use std::sync::Arc;
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
-use yss_graph_document_edit::{apply_graph_document_patch, validate_graph_document};
+use yss_graph_document_edit::{prepare_graph_document_patch, validate_graph_document};
 use yss_graph_editor::projection::{EditorProjectionInput, build_editor_projection};
 use yss_graph_editor::{
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
@@ -192,11 +192,11 @@ impl<'a> GraphDocumentEditor<'a> {
                 )
             };
         if !patch.is_empty() {
-            apply_graph_document_patch(Arc::make_mut(&mut self.document), &patch).map_err(
-                |error| {
+            self.document = Arc::new(
+                prepare_graph_document_patch(&self.document, &patch).map_err(|error| {
                     ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
-                },
-            )?;
+                })?,
+            );
         }
         self.patch.operations.extend(patch.operations);
         Ok(copied)

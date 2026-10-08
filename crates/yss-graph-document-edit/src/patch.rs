@@ -168,16 +168,23 @@ fn set_input_state(
     Ok(())
 }
 
-pub fn apply_graph_document_patch(
-    document: &mut GraphDocument,
+pub fn prepare_graph_document_patch(
+    document: &GraphDocument,
     patch: &GraphDocumentPatch,
-) -> Result<(), DocumentError> {
+) -> Result<GraphDocument, DocumentError> {
     let mut staged = document.clone();
     for operation in &patch.operations {
         apply_operation(operation, &mut staged)?;
     }
     validate_graph_document(&staged)?;
-    *document = staged;
+    Ok(staged)
+}
+
+pub fn apply_graph_document_patch(
+    document: &mut GraphDocument,
+    patch: &GraphDocumentPatch,
+) -> Result<(), DocumentError> {
+    *document = prepare_graph_document_patch(document, patch)?;
     Ok(())
 }
 
@@ -185,12 +192,50 @@ pub fn apply_graph_document_patch(
 mod tests {
     use super::{
         DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
+        prepare_graph_document_patch,
     };
     use yss_graph_document::{
         DocumentNode, DynamicPortBinding, GraphDocument, NodeId, NodePosition, OrderKey,
         ParameterValues, PortAddress,
     };
     use yss_node_protocol::{NodeTypeId, PortKey};
+
+    #[test]
+    fn prepared_patch_keeps_source_and_checks_sequential_before_states() {
+        let id = NodeId::new();
+        let before = DocumentNode {
+            id,
+            node_type: NodeTypeId::new("yssbi.test.patch").unwrap(),
+            position: NodePosition { x: 1.0, y: 2.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        };
+        let mut after = before.clone();
+        after.position.x = 42.0;
+        let mut document = GraphDocument::default();
+        document.nodes.insert(id, before.clone());
+        let update = GraphDocumentOperation::UpdateNode {
+            before: before.clone(),
+            after: after.clone(),
+        };
+        let prepared =
+            prepare_graph_document_patch(&document, &GraphDocumentPatch::new([update.clone()]))
+                .unwrap();
+        assert_eq!(document.nodes[&id], before);
+        assert_eq!(prepared.nodes[&id], after);
+
+        let failed = prepare_graph_document_patch(
+            &document,
+            &GraphDocumentPatch::new([
+                update,
+                GraphDocumentOperation::RemoveNode {
+                    node: before.clone(),
+                },
+            ]),
+        );
+        assert_eq!(failed.unwrap_err(), DocumentError::NodeContentMismatch(id));
+        assert_eq!(document.nodes[&id], before);
+    }
 
     #[test]
     fn patch_commit_is_atomic() {

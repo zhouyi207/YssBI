@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::time::{Duration, Instant};
 use yss_graph_document::{GraphDocument, GraphResourcePath};
-use yss_graph_document_edit::apply_graph_document_patch;
+use yss_graph_document_edit::prepare_graph_document_patch;
 use yss_graph_editor::{EditorGraphMutation, MutationConflict};
 use yss_project::{GraphEditVersion, GraphEditingState, GraphHistoryAction};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -409,9 +409,11 @@ impl ApplicationState {
         )?;
         let mut document = Arc::clone(&operation.document);
         if let Some(patch) = &patch {
-            apply_graph_document_patch(Arc::make_mut(&mut document), patch).map_err(|error| {
-                ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
-            })?;
+            document = Arc::new(prepare_graph_document_patch(&document, patch).map_err(
+                |error| {
+                    ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
+                },
+            )?);
         }
         let editor =
             GraphDocumentEditor::new(&captured, &request.graph_path, &request.locale, document)?;

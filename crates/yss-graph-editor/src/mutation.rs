@@ -7,7 +7,7 @@ use yss_graph_document::{
 use yss_graph_document::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_graph_document_edit::{
     DocumentError, apply_graph_document_patch, port_member_group_state,
-    user_created_port_instance_count,
+    prepare_graph_document_patch, user_created_port_instance_count,
 };
 use yss_node_catalog::reroute_node_type;
 use yss_node_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
@@ -855,8 +855,7 @@ fn insert_reroute_operations_with_allocators(
             },
         },
     ];
-    let mut staged = document.clone();
-    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
+    prepare_graph_document_patch(document, &GraphDocumentPatch::new(operations.clone()))?;
     Ok(operations)
 }
 
@@ -922,8 +921,8 @@ fn append_atomic_connection(
     let resources = context
         .catalog
         .ok_or_else(|| invalid_editor_mutation("catalog compatibility snapshot is unavailable"))?;
-    let mut staged = document.clone();
-    apply_graph_document_patch(&mut staged, &GraphDocumentPatch::new(operations.clone()))?;
+    let mut staged =
+        prepare_graph_document_patch(document, &GraphDocumentPatch::new(operations.clone()))?;
     let candidate =
         crate::compatibility::connection_candidate(&staged, node_id, registry, resources, source)
             .map_err(MutationConflict::Editor)?;

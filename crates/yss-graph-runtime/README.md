@@ -21,6 +21,8 @@ Application 在交付前继续重验项目与会话。验证失败和物化阶�
 连线候选与编辑规划先借用原文档。只有需要认领/恢复派生绑定或应用已生成的补丁时才创建临时副本，
 方向、类型等预检拒绝不提前复制整图；已有非 orphan 绑定也按借用读取。
 候选判断继续使用提交所用的同一规划器，补丁原子校验及无引用派生绑定清理仍由现有入口完成。
+规划器通过 Document Edit 的 `prepare_graph_document_patch` 直接取得经过 before-state 和完整结构
+校验的候选；未认领绑定时不先复制正文再调用原子应用。候选只供本次规划读取，提交仍重验当前文档。
 
 Graph Runtime 为最近使用的图保留一个不含本地化文本的完整 `GraphAnalysis` 缓存，容量由 [semantic_cache.rs](src/semantic_cache.rs) 定义。复用前校验解析文档指纹、registry/kernel 指纹和之前实际读取的资源，包括传递函数正文和 absent lookup。解析缓存的身份与执行身份分开：常量名称、函数参数名称、诊断所用 connection ID 和 orphan metadata 会影响解析快照，不能仅凭 `semanticInputHash` 复用。无关资源变化不使该缓存失效。
 
