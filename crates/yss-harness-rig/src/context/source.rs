@@ -4,7 +4,9 @@ use rig_core::completion::message::UserContent;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
-pub(super) fn summary_source(messages: &[Message]) -> Result<String, serde_json::Error> {
+pub(super) fn summary_source<'a>(
+    messages: impl IntoIterator<Item = &'a Message>,
+) -> Result<String, serde_json::Error> {
     let mut source = String::new();
     let mut observations = BTreeMap::new();
     for message in messages {

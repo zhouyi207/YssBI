@@ -184,9 +184,9 @@ impl RigAgentDriver {
                         }
                         Err(error) => error,
                     };
-                    let boundary = hook.boundary();
-                    if boundary.completed_calls != completed_calls {
-                        completed_calls = boundary.completed_calls;
+                    let (text_position, completed_at_boundary) = hook.retry_boundary();
+                    if completed_at_boundary != completed_calls {
+                        completed_calls = completed_at_boundary;
                         attempt = 0;
                     }
                     let context_exceeded =
@@ -196,7 +196,7 @@ impl RigAgentDriver {
                     }
                     // A checkpoint is taken only after all prior tool outcomes entered Rig's
                     // history. Reissuing this sampling request cannot replay their execution.
-                    stream_output.rewind(boundary.text_position).await?;
+                    stream_output.rewind(text_position).await?;
                     use yss_harness_contract::{AgentEvent, AgentRuntimePhase};
                     stream_output
                         .emit(AgentEvent::RuntimeStatus {

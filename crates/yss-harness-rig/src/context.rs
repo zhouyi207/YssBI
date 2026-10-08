@@ -98,6 +98,10 @@ impl ContextHook {
             .boundary
             .clone()
     }
+    pub(crate) fn retry_boundary(&self) -> (usize, usize) {
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        (state.boundary.text_position, state.boundary.completed_calls)
+    }
     pub(crate) fn take_failure(&self) -> Option<AgentDriverFailure> {
         self.failure
             .lock()
@@ -143,18 +147,20 @@ impl AgentHook for ContextHook {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .threshold;
-        let history = event.history.to_vec();
         {
             // Capture this sampling boundary before compaction can fail. Every earlier
             // tool has already settled; a summary failure must not replay those tools.
             let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-            state.boundary.messages.history = history.clone();
+            state.boundary.messages.history = event.history.to_vec();
             state.boundary.messages.prompt = event.prompt.clone();
             state.boundary.text_position = self.output.position();
             state.boundary.completed_calls = state.completed_calls;
         }
-        let mut all = history.clone();
-        all.push(event.prompt.clone());
+        let all: Vec<_> = event
+            .history
+            .iter()
+            .chain(std::iter::once(event.prompt))
+            .collect();
         let size = match serde_json::to_vec(&all) {
             Ok(bytes) => bytes.len(),
             Err(_) => return self.fail(crate::error::invalid_response()),
