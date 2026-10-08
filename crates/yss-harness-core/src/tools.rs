@@ -188,22 +188,21 @@ impl HarnessToolExecutor {
         workflow_step_id: WorkflowStepId,
     ) -> Self {
         Self {
-            registry,
-            gateway,
-            knowledge,
-            ledger,
-            clock,
-            ids,
-            principal_id,
-            session_id,
-            turn_id,
-            project,
-            cancellation,
             workflow_run_id: Some(workflow_run_id),
             workflow_step_id: Some(workflow_step_id),
-            approval_grant_id: None,
-            output: None,
-            agent: None,
+            ..Self::new(
+                registry,
+                gateway,
+                knowledge,
+                ledger,
+                clock,
+                ids,
+                principal_id,
+                session_id,
+                turn_id,
+                project,
+                cancellation,
+            )
         }
     }
 
@@ -225,22 +224,20 @@ impl HarnessToolExecutor {
         approval_grant_id: ApprovalGrantId,
     ) -> Self {
         Self {
-            registry,
-            gateway,
-            knowledge,
-            ledger,
-            clock,
-            ids,
-            principal_id,
-            session_id,
-            turn_id,
-            project,
-            cancellation: CancellationToken::default(),
-            workflow_run_id: None,
-            workflow_step_id: None,
             approval_grant_id: Some(approval_grant_id),
-            output: None,
-            agent: None,
+            ..Self::new(
+                registry,
+                gateway,
+                knowledge,
+                ledger,
+                clock,
+                ids,
+                principal_id,
+                session_id,
+                turn_id,
+                project,
+                CancellationToken::default(),
+            )
         }
     }
 

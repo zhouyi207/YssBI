@@ -3,8 +3,8 @@
 use super::agent_definition;
 use yss_harness_contract::{
     AgentInvocationScope, AgentResourceOperation as Op, AgentRole, CapabilityFailure,
-    CapabilityFailureCode, ProjectResourceKind as Kind, ProjectResourceRef, ResourceCreation,
-    model::CapabilityInput as Request,
+    CapabilityFailureCode, CapabilityId, ProjectResourceKind as Kind, ProjectResourceRef,
+    ResourceCreation, model::CapabilityInput as Request,
 };
 
 fn denied() -> CapabilityFailure {
@@ -77,17 +77,26 @@ fn graph_resource(
     authorize_agent_resource(scope, &resource.resource, operation)
 }
 
+fn authorize_role_capability(
+    scope: &AgentInvocationScope,
+    capability: CapabilityId,
+) -> Result<(), CapabilityFailure> {
+    if agent_definition(scope.role)
+        .capabilities
+        .contains(&capability)
+    {
+        Ok(())
+    } else {
+        Err(denied())
+    }
+}
+
 /// Called both before ledger admission and at the Application gateway boundary.
 pub(crate) fn authorize_model_capability(
     scope: &AgentInvocationScope,
     request: &Request,
 ) -> Result<(), CapabilityFailure> {
-    if !agent_definition(scope.role)
-        .capabilities
-        .contains(&request.capability_id())
-    {
-        return Err(denied());
-    }
+    authorize_role_capability(scope, request.capability_id())?;
     match request {
         Request::ListResources(_) | Request::InspectUiIntent(_) | Request::RequestUiIntent(_) => {
             if scope.role == AgentRole::Manager && scope.task.is_none() {
@@ -359,6 +368,10 @@ pub fn authorize_agent_capability(
         yss_harness_contract::AutomationCapabilityRequest::SaveGraph(value) => {
             return graph_resource(scope, &value.graph_path, Op::Save);
         }
+        yss_harness_contract::AutomationCapabilityRequest::GraphMutation(value) => {
+            authorize_role_capability(scope, value.input.capability_id())?;
+            return authorize_agent_resource(scope, &value.input.graph().resource(), Op::Edit);
+        }
         _ => {}
     }
     authorize_model_capability(scope, &request.into())
@@ -468,6 +481,67 @@ fn authorize_result(
 mod authorization_tests {
     use super::*;
     use yss_harness_contract::*;
+    #[test]
+    fn bound_graph_mutations_require_the_registered_role_and_exact_edit_grant() {
+        let graph = GraphResourceRef::for_path("events/measure.yssbi-event");
+        let input: model::MoveNodesInput = serde_json::from_value(serde_json::json!({
+            "graph": graph,
+            "positions": [{"nodeId":"node-1","x":1.0,"y":2.0}],
+        }))
+        .unwrap();
+        let public = Request::MoveNodes(input.clone());
+        let bound = AutomationCapabilityRequest::GraphMutation(GraphMutationRequest {
+            input: model::GraphMutationInput::MoveNodes(input),
+            base_revision: 1,
+            graph_hash: "0".repeat(64),
+            client_key: "move-nodes".into(),
+        });
+        for (role, resource, operation, allowed) in [
+            (
+                AgentRole::Stats,
+                graph.resource(),
+                AgentResourceOperation::Edit,
+                true,
+            ),
+            (
+                AgentRole::Stats,
+                graph.resource(),
+                AgentResourceOperation::Inspect,
+                false,
+            ),
+            (
+                AgentRole::Stats,
+                GraphResourceRef::for_path("events/other.yssbi-event").resource(),
+                AgentResourceOperation::Edit,
+                false,
+            ),
+            (
+                AgentRole::Review,
+                graph.resource(),
+                AgentResourceOperation::Edit,
+                false,
+            ),
+        ] {
+            let scope = AgentInvocationScope {
+                run_id: AgentRunId::try_new("worker").unwrap(),
+                role,
+                task: Some(AgentTaskScope {
+                    resources: vec![AgentResourceAccess {
+                        resource,
+                        version: Some(ResourceVersion {
+                            revision: 1,
+                            session_id: None,
+                        }),
+                        operations: vec![operation],
+                    }],
+                    ..Default::default()
+                }),
+            };
+            assert_eq!(authorize_model_capability(&scope, &public).is_ok(), allowed);
+            assert_eq!(authorize_agent_capability(&scope, &bound).is_ok(), allowed);
+        }
+    }
+
     #[test]
     fn manager_and_review_validate_graphs_without_execution_authority() {
         let graph = GraphResourceRef::for_path("events/measure.yssbi-event");
