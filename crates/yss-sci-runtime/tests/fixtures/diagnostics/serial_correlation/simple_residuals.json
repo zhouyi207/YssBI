@@ -21,6 +21,6 @@
   },
   "goldenSource": {
     "tool": "scipy + yss-sci serial-correlation equations",
-    "notes": "Computed with the current Durbin-Watson and Ljung-Box equations used by yss_sci::ts::serial_correlation. BG is skipped because exog is null."
+    "notes": "Computed with the current Durbin-Watson and Ljung-Box equations used by yss_sci::diagnostics::serial_correlation. BG is skipped because exog is null."
   }
 }

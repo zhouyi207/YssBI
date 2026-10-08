@@ -77,3 +77,37 @@ fn shared_ols_options_reach_the_model_and_typed_report() {
         nonrobust.report.coefficients[0].std_err
     );
 }
+
+#[test]
+fn report_confidence_limits_preserve_scientific_precision_for_small_units() {
+    let response = [1.1, 2.2, 2.8, 4.1, 5.3, 5.7, 7.2, 8.4]
+        .into_iter()
+        .map(|value| value * 1e-13)
+        .collect::<Vec<_>>();
+    let predictors = vec![(1..=8).map(f64::from).collect::<Vec<_>>()];
+    let fit = super::fit_ols(
+        response.clone(),
+        &predictors,
+        Default::default(),
+        yss_sci_contract::StatisticalObservationMetadata {
+            original_observation_count: response.len(),
+            used_observation_count: response.len(),
+            dropped_null_count: 0,
+            dropped_nan_count: 0,
+            missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
+        },
+    )
+    .unwrap();
+    let summary = crate::regression::report::linear_regression_report(&fit).unwrap();
+    let inference = fit.statistics.coefficient_statistics();
+    for (index, row) in summary.coefficients.iter().enumerate() {
+        assert_eq!(
+            row.ci_lower.to_bits(),
+            inference.confidence_interval_lower[index].to_bits()
+        );
+        assert_eq!(
+            row.ci_upper.to_bits(),
+            inference.confidence_interval_upper[index].to_bits()
+        );
+    }
+}

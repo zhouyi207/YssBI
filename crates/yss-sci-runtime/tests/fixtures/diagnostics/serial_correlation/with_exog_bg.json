@@ -37,6 +37,6 @@
   },
   "goldenSource": {
     "tool": "scipy + yss-sci serial-correlation equations",
-    "notes": "Computed with the current Durbin-Watson, Ljung-Box, and Breusch-Godfrey equations used by yss_sci::ts::serial_correlation."
+    "notes": "Computed with the current Durbin-Watson, Ljung-Box, and Breusch-Godfrey equations used by yss_sci::diagnostics::serial_correlation."
   }
 }

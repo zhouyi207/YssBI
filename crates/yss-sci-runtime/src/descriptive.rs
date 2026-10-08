@@ -1,22 +1,8 @@
 //! Descriptive statistical reports over neutral numeric slices.
 use serde::Serialize;
-use yss_sci_contract::descriptive::{DagumResult, GiniResult};
 use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
 
-pub fn gini(
-    values: &[f64],
-    control: &ScientificExecutionControl,
-) -> Result<GiniResult, ScientificComputationError> {
-    yss_sci::descriptive::gini(values, control)
-}
-
-pub fn dagum_gini(
-    values: &[f64],
-    groups: &[usize],
-    control: &ScientificExecutionControl,
-) -> Result<DagumResult, ScientificComputationError> {
-    yss_sci::descriptive::dagum_gini(values, groups, control)
-}
+pub use yss_sci::descriptive::{dagum_gini, gini};
 
 #[derive(Debug, Serialize)]
 pub struct TheilReport {

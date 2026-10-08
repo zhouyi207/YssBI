@@ -1,12 +1,10 @@
 //! Linear regression entry points with admission and execution-control checks.
 pub mod prais;
 use crate::error::{invalid, map_sci_error};
+pub use yss_sci::regression::linear::fit::fit_ols;
 use yss_sci_contract::execution::{
     ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
 };
-use yss_sci_contract::regression::OlsOptions;
-use yss_sci_contract::regression::fit::RegressionFit;
-use yss_sci_contract::{SciError, StatisticalObservationMetadata};
 
 pub fn linear_regression(
     request: yss_sci_contract::regression::linear::LinearRegressionRequest,
@@ -111,15 +109,6 @@ fn validate_ols_covariance(
     } else {
         Err(invalid(ScientificInputViolation::ParameterOutOfRange))
     }
-}
-
-pub fn fit_ols(
-    response: Vec<f64>,
-    predictors: &[Vec<f64>],
-    config: OlsOptions,
-    metadata: StatisticalObservationMetadata,
-) -> Result<RegressionFit, SciError> {
-    yss_sci::regression::linear::fit::fit_ols(response, predictors, config, metadata)
 }
 
 #[cfg(test)]

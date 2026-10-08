@@ -22,10 +22,6 @@ struct PraisInfo {
     pub transform: String,
 }
 
-fn stable_report_number(value: f64) -> f64 {
-    (value * 1e12).round() / 1e12
-}
-
 fn report_coefficients(fit: &RegressionFit) -> Vec<RegressionCoefficient> {
     let statistics = fit.statistics.coefficient_statistics();
 
@@ -40,8 +36,8 @@ fn report_coefficients(fit: &RegressionFit) -> Vec<RegressionCoefficient> {
                 std_err: statistics.standard_errors[index],
                 t_value: statistics.statistic_values[index],
                 p_value,
-                ci_lower: stable_report_number(statistics.confidence_interval_lower[index]),
-                ci_upper: stable_report_number(statistics.confidence_interval_upper[index]),
+                ci_lower: statistics.confidence_interval_lower[index],
+                ci_upper: statistics.confidence_interval_upper[index],
                 is_significant: p_value < 0.05,
             }
         })

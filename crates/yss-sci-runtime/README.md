@@ -18,6 +18,12 @@ Tabular transformations and time/panel alignment use native relation plans in
 `yss-database-engine`, requested by [Node Kernel](../yss-node-kernel/README.md).
 Runtime receives prepared neutral inputs and has no Arrow dependency.
 
+Entries that need no admission or report projection re-export SCI functions
+directly. Runtime owns the controlled linear/ACF adapters and method-specific
+report projections, while SCI remains the single owner of numerical signatures
+and implementations. Report fields preserve computed numeric precision;
+rounding belongs to display formatting.
+
 Input errors share Contract's `execution::ScientificInputViolation`. The controlled
 linear/ACF error adapter preserves that violation for `Regression` and `AcfPacf`;
 other operation codes still map to `ComputationFailed` at this boundary.
@@ -74,13 +80,13 @@ nor duplicates their neutral result contracts.
 model-comparison and influence/design/questionnaire computations to SCI. Cox PH
 score diagnostics are exposed through `survival::cox`. The fitted-model boundary
 is checked against independent references by
-`pnpm test:rs:package -p yss-sci-runtime --test diagnostics_models_golden`.
+`cargo test -p yss-sci-runtime --test diagnostics_models_golden`.
 
 ## Capability modules
 
 `visualization` exposes controlled, stateless plot-data computations over neutral
 slices and model facts. Algorithms stay in SCI, tabular preparation in Node Kernel,
-and rendering in D3. It does not create or retrieve results.
+and rendering in the consuming view. It does not create or retrieve results.
 
 Domain names follow [SCI's category mapping](../yss-sci/README.md#domain-organization).
 Entry points and method-specific report records live in their owning domains.
@@ -209,7 +215,7 @@ Plugin Manager → framed IPC → Julia extension → Bayes worker port → Juli
 
 `yss-node-kernel` 拥有中立调用契约、运行值及冻结注册表；Application 装配后向 Execution 注入同一注册表。图计划、资源授权、结果存储和节点错误定位仍由 Execution/Application 的现有所有者负责，kernel 不反向依赖 Graph、Project 或 Application。具体调用边界见 [Node Kernel](../yss-node-kernel/README.md)。
 
-Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative DTO 转换为 presentation model。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 随独立插件编译；`yss-bayes-runtime` 是插件内部的科学编排，不是宿主 bridge。宿主 Application 只实现通用数据快照和结果提交端口，不包含 Julia/Bayes 专用 command。已提交插件结果位于项目 `extension-results/`，包含内容哈希、包摘要、操作身份、输入快照来源和通用文件；卸载插件不删除它们。
+Rust algorithms 拥有统计数值和 typed result；原生桌面通过 Application 查询结果并呈现。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 随独立插件编译；`yss-bayes-runtime` 是插件内部的科学编排，不是宿主 bridge。宿主 Application 只实现通用数据快照和结果提交端口，不包含 Julia/Bayes 专用 command。已提交插件结果位于项目 `extension-results/`，包含内容哈希、包摘要、操作身份、输入快照来源和通用文件；卸载插件不删除它们。
 
 [`yss-sci-linalg`](../yss-sci-linalg/README.md) 拥有不透明的 `Mat`、`Col`、行与借用视图，以及矩阵运算、分解检查、稳定错误类型和秩阈值。faer 仅是该 crate 的实现依赖，对外不重导出原生类型。SCI 只通过 Linalg 使用矩阵；runtime 只调用 SCI，不依赖 Linalg 或 faer。中性契约使用业务结构和普通向量，Arrow 负责表格交换；输入与报告按逻辑行列转换，不依赖矩阵物理存储顺序。
 
