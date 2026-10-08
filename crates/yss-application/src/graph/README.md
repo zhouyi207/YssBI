@@ -114,6 +114,8 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
 原生宿主直接消费模型。投影不依赖 Application，也不构成第二份语义 authority。
 资源成员是否为 orphan 由当前语义快照决定；持久化端口绑定中的 Resolved/Orphan 标记不覆盖资源丢失或恢复后的解析结果。投影仍核对节点、端点地址、绑定来源及连接数量，不改写文档。
+仍被连线或字面量引用、但当前声明中不存在的端口，保留 Analysis 的 orphan 事实与阻断诊断，
+使结构合法的图仍可打开并修复。声明端口的 orphan 必须有当前文档引用，连接数量继续按文档核验。
 迁移连线检查起点与终点，插入转接点检查原连线两端；这些地址统一经过 Graph Runtime 现有语义准入。已恢复成员的绑定调整随可逆编辑补丁提交，当前仍失效的成员继续拒绝操作，不在查询时改写文档。
 
 `graph_connection_candidates` 为一个起点和 connect / moveConnections 意图查询当前图的全部端口决策。

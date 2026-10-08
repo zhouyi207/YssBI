@@ -158,6 +158,86 @@ fn open_request(session: &StagedSession, path: &GraphResourcePath) -> OpenGraphR
 }
 
 #[test]
+fn open_graph_preserves_referenced_declared_orphans_for_repair() {
+    use yss_graph_document::{
+        ConnectionId, DocumentConnection, DocumentNode, InputState, NodeId, NodePosition,
+        PortAddress,
+    };
+
+    let path = GraphResourcePath::new("events/DeclaredOrphan.yssbi-event").unwrap();
+    let mut project = graph_project(&path);
+    let document = Arc::make_mut(&mut project.graphs.get_mut(&path).unwrap().document);
+    let source = NodeId::new();
+    let target = NodeId::new();
+    for (id, x) in [(source, 0.0), (target, 200.0)] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: "yssbi.logic.not".parse().unwrap(),
+                position: NodePosition { x, y: 0.0 },
+                parameters: Default::default(),
+                user_label: None,
+            },
+        );
+    }
+    let missing = PortAddress::declared(target, "missing_input".parse().unwrap());
+    let connection = ConnectionId::new();
+    document.connections.insert(
+        connection,
+        DocumentConnection {
+            id: connection,
+            output: PortAddress::declared(source, "result".parse().unwrap()),
+            input: missing.clone(),
+            order: None,
+        },
+    );
+    let missing_literal = PortAddress::declared(target, "missing_literal".parse().unwrap());
+    document.input_states.insert(
+        missing_literal.clone(),
+        InputState {
+            literal_override: Some(yss_node_protocol::TypedValue {
+                value_type: yss_node_protocol::TypeExpr::Concrete("core.binary".parse().unwrap()),
+                value: yss_data_contract::DataValue::Bool(false),
+            }),
+        },
+    );
+    let session = staged_session(
+        TestProject::unloaded("declared-orphan", project),
+        GraphRuntimeTestControl::default(),
+    );
+
+    let receipt = session
+        .application
+        .open_graph(open_request(&session, &path))
+        .expect("a structural graph with semantic problems remains openable for repair");
+    for address in [&missing, &missing_literal] {
+        let port = receipt
+            .projection()
+            .nodes
+            .iter()
+            .flat_map(|node| &node.ports)
+            .find(|port| &port.address == address)
+            .expect("the referenced missing port remains visible in the read projection");
+        assert!(port.orphan);
+        assert!(!port.connections.can_append);
+    }
+    assert!(receipt.projection().diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_ref() == "graph.port.unknown" && diagnostic.blocking
+    }));
+    assert!(receipt.analysis().semantic_snapshot().ready().is_none());
+    assert_eq!(receipt.document().connections[&connection].input, missing);
+    assert_eq!(
+        receipt.document().input_states[&missing_literal]
+            .literal_override
+            .as_ref()
+            .unwrap()
+            .value,
+        yss_data_contract::DataValue::Bool(false)
+    );
+}
+
+#[test]
 fn materialization_failure_preserves_loaded_residency_and_skips_projection() {
     let path = GraphResourcePath::new("events/MaterializationFailure.yssbi-event").unwrap();
     let control = GraphRuntimeTestControl::default();

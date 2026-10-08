@@ -267,7 +267,14 @@ fn project_port(
 
 fn port_fact_has_concrete_address(port: &GraphPortSemanticFact, document: &GraphDocument) -> bool {
     match (&port.backing, &port.address.port) {
-        (GraphPortBacking::Declared, PortRef::Declared { .. }) => !port.orphan && !port.can_remove,
+        (GraphPortBacking::Declared, PortRef::Declared { .. }) => {
+            // Analysis retains unknown declared addresses still referenced by the document.
+            // Connection counts are checked against the document by the caller.
+            !port.can_remove
+                && (!port.orphan
+                    || port.connections.current > 0
+                    || document.input_states.contains_key(&port.address))
+        }
         (GraphPortBacking::DocumentInstance, PortRef::Instance { .. }) => {
             match document.port_bindings.get(&port.address) {
                 Some(yss_graph_document::DynamicPortBinding::UserCreated { .. }) => !port.orphan,
