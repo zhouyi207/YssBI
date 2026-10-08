@@ -12857,6 +12857,7 @@ dependencies = [
  "arrow",
  "atomicwrites",
  "ed25519-dalek",
+ "libc",
  "semver",
  "serde",
  "serde_jcs",

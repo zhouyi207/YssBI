@@ -15,7 +15,7 @@ use yss_plugin_sdk::{Handler, Peer};
 pub struct PluginProcess {
     pub instance_id: String,
     pub peer: Arc<Peer>,
-    child: Mutex<Child>,
+    child: Mutex<Option<Child>>,
     pub leases: AtomicUsize,
     pub(super) diagnostics: Arc<crate::diagnostics::DiagnosticBuffer>,
     #[cfg(windows)]
@@ -105,7 +105,7 @@ impl PluginProcess {
         let process = Arc::new(Self {
             instance_id,
             peer,
-            child: Mutex::new(child),
+            child: Mutex::new(Some(child)),
             leases: AtomicUsize::new(0),
             diagnostics,
             #[cfg(windows)]
@@ -117,10 +117,9 @@ impl PluginProcess {
                 let Some(process) = weak.upgrade() else {
                     return;
                 };
-                let exited = process
-                    .child
-                    .lock()
-                    .map_or(true, |mut child| !matches!(child.try_wait(), Ok(None)));
+                let exited = process.child.lock().map_or(true, |mut child| {
+                    child.as_mut().is_none_or(child_has_exited)
+                });
                 if exited || !process.peer.is_alive() {
                     process.stop();
                     return;
@@ -163,15 +162,144 @@ impl PluginProcess {
         unsafe {
             windows_sys::Win32::System::JobObjects::TerminateJobObject(self.job.0, 1);
         }
-        if let Ok(mut child) = self.child.lock() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        stop_child(&self.child);
     }
 }
 impl Drop for PluginProcess {
     fn drop(&mut self) {
         self.stop();
+    }
+}
+
+#[cfg(not(unix))]
+fn child_has_exited(child: &mut Child) -> bool {
+    !matches!(child.try_wait(), Ok(None))
+}
+
+#[cfg(unix)]
+fn child_has_exited(child: &mut Child) -> bool {
+    let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+    loop {
+        // Keep the group leader unreaped so its ID cannot be reused before stop.
+        let result = unsafe {
+            libc::waitid(
+                libc::P_PID,
+                child.id() as libc::id_t,
+                info.as_mut_ptr(),
+                libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+            )
+        };
+        if result == 0 {
+            return unsafe { info.assume_init() }.si_signo == libc::SIGCHLD;
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return true;
+        }
+    }
+}
+
+fn stop_child(slot: &Mutex<Option<Child>>) {
+    let child = slot
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
+    if let Some(mut child) = child {
+        #[cfg(unix)]
+        {
+            // Spawn gave this unreaped child its own group; consume it only once.
+            let result = unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL) };
+            if result != 0 {
+                let _ = child.kill();
+            }
+        }
+        #[cfg(not(unix))]
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod unix_process_tests {
+    use super::*;
+    use std::{
+        io::{BufRead, BufReader},
+        os::unix::process::CommandExt,
+        sync::mpsc,
+        time::Instant,
+    };
+
+    struct Fixture(Mutex<Option<Child>>);
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            stop_child(&self.0);
+        }
+    }
+
+    fn fixture(exit_leader: bool) -> (Fixture, mpsc::Receiver<()>) {
+        let tail = if exit_leader { "exit 0" } else { "wait" };
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg(format!("sleep 2 & printf 'ready\\n'; {tail}"))
+            .process_group(0)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut reader = BufReader::new(child.stdout.take().unwrap());
+        let mut ready = String::new();
+        reader.read_line(&mut ready).unwrap();
+        assert_eq!(ready, "ready\n");
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            std::io::copy(&mut reader, &mut std::io::sink()).unwrap();
+            let _ = sender.send(());
+        });
+        (Fixture(Mutex::new(Some(child))), receiver)
+    }
+
+    #[test]
+    fn stopping_a_plugin_closes_descendant_pipes_and_retires_the_handle_once() {
+        let (fixture, eof) = fixture(false);
+        stop_child(&fixture.0);
+        assert!(fixture.0.lock().unwrap().is_none());
+        stop_child(&fixture.0);
+        let stopped = eof.recv_timeout(Duration::from_millis(300)).is_ok();
+        if !stopped {
+            eof.recv_timeout(Duration::from_secs(5)).unwrap();
+        }
+        assert!(
+            stopped,
+            "a plugin descendant retained its output pipe after stop"
+        );
+    }
+
+    #[test]
+    fn exited_leader_remains_waitable_until_its_group_is_stopped() {
+        let (fixture, eof) = fixture(true);
+        let result = {
+            let mut slot = fixture.0.lock().unwrap();
+            let child = slot.as_mut().unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !child_has_exited(child) {
+                assert!(Instant::now() < deadline, "plugin leader did not exit");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+            // WNOWAIT verifies ownership without consuming the leader's identity.
+            unsafe {
+                libc::waitid(
+                    libc::P_PID,
+                    child.id() as libc::id_t,
+                    info.as_mut_ptr(),
+                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                )
+            }
+        };
+        stop_child(&fixture.0);
+        eof.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(result, 0, "exit polling reaped the process-group leader");
     }
 }
 

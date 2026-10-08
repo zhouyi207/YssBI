@@ -92,8 +92,11 @@ and plugin implementations remain migration work.
 A task cancellation first goes to its plugin task. If cancellation fails, exceeds its grace
 period or the process is lost, the host treats it as a process-level fault: all nonterminal tasks
 of that exact plugin instance become `outcomeUnknown` and contexts are revoked. Windows stops the
-process tree through its job object. Unix currently creates a process group but stops only its
-leader; group termination and execution acceptance remain open platform work. Late results cannot
+process tree through its job object. Unix stops the plugin's dedicated process group, including
+descendants that retain that group. Its exit observer leaves the leader unreaped until group
+termination, keeping the group ID owned; shutdown takes the one Child handle before signaling and
+waiting, so repeated stop calls cannot reuse a retired process ID. Waiting and termination occur
+outside the handle lock. Target-platform execution acceptance remains open. Late results cannot
 change those terminal records. Other instances are unaffected.
 
 Stdout remains protocol-only. Stderr is drained into a 64 KiB ring per process, tagged with plugin,
@@ -105,6 +108,7 @@ Focused installation validation uses:
 
 ```sh
 cargo test -p yss-plugin-runtime --test installation
+cargo test -p yss-plugin-runtime --lib process::unix_process_tests::
 cargo clippy -p yss-plugin-runtime --lib --test installation --no-deps -- -D warnings
 cargo fmt -p yss-plugin-runtime -- --check
 ```

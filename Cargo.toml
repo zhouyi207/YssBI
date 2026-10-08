@@ -11,6 +11,7 @@ rust-version = "1.95"
 [workspace.dependencies]
 dunce = "1.0.5"
 atomicwrites = { version = "=0.4.4", default-features = false }
+libc = "0.2"
 semver = "1"
 arrow-array = "=59.3.0"
 arrow-select = "=59.3.0"
