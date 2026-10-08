@@ -58,8 +58,7 @@ fn execute_with_tolerance(
             scalar(operation, left, right)
         }
     };
-    let prepared =
-        super::series::prepare(&invocation.inputs.iter().collect::<Vec<_>>(), invocation)?;
+    let prepared = super::series::prepare(invocation.inputs, invocation)?;
     let values = prepared.iter().map(|v| v.as_ref()).collect::<Vec<_>>();
     let [left, right] = values.as_slice() else {
         return Err(KernelError::Failed);

@@ -11,8 +11,7 @@ pub(crate) fn execute(
     operation: NumericOperation,
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
-    let prepared =
-        super::series::prepare(&invocation.inputs.iter().collect::<Vec<_>>(), invocation)?;
+    let prepared = super::series::prepare(invocation.inputs, invocation)?;
     let inputs = prepared.iter().map(|v| v.unannotated()).collect::<Vec<_>>();
     if !operation.accepts_arity(inputs.len()) {
         return Err(KernelError::InvalidNumericInput);

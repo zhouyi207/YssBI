@@ -21,8 +21,7 @@ pub(super) fn execute(
         return Err(KernelError::Failed);
     }
     invocation.check_control()?;
-    let prepared =
-        super::series::prepare(&invocation.inputs.iter().collect::<Vec<_>>(), invocation)?;
+    let prepared = super::series::prepare(invocation.inputs, invocation)?;
     let normalized = prepared
         .iter()
         .map(|value| {

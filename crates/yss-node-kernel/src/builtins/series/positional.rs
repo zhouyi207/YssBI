@@ -10,28 +10,26 @@ use yss_relational_contract::{RelationError, RelationHandle, SeriesHandle};
 
 /// Keep a shared lazy expression when possible; otherwise read each operand in its own order.
 pub(in crate::builtins) fn prepare<'a>(
-    inputs: &[&'a RuntimeValue],
+    inputs: &'a [RuntimeValue],
     inv: &KernelInvocation<'_>,
 ) -> Result<Vec<Cow<'a, RuntimeValue>>, KernelError> {
     inv.check_control()?;
-    let handles = inputs
-        .iter()
-        .filter_map(|v| match v.unannotated() {
-            RuntimeValue::Series(handle) => Some(handle),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let Some(first) = handles.first() else {
-        return Ok(inputs.iter().map(|v| Cow::Borrowed(*v)).collect());
+    let first = inputs.iter().find_map(|v| match v.unannotated() {
+        RuntimeValue::Series(handle) => Some(handle),
+        _ => None,
+    });
+    let Some(first) = first else {
+        return Ok(inputs.iter().map(Cow::Borrowed).collect());
     };
     if !inputs
         .iter()
         .any(|v| matches!(v.unannotated(), RuntimeValue::List(_)))
-        && handles
-            .iter()
-            .all(|h| first.relation().shares_row_domain(h.relation()))
+        && inputs.iter().all(|value| match value.unannotated() {
+            RuntimeValue::Series(handle) => first.relation().shares_row_domain(handle.relation()),
+            _ => true,
+        })
     {
-        return Ok(inputs.iter().map(|v| Cow::Borrowed(*v)).collect());
+        return Ok(inputs.iter().map(Cow::Borrowed).collect());
     }
     let mut retained = 0usize;
     for value in inputs {
@@ -62,7 +60,7 @@ pub(in crate::builtins) fn prepare<'a>(
                 .check_bytes(column.bytes().and_then(|n| retained.checked_add(n)))?;
             Cow::Owned(column.into_value(inv)?)
         } else {
-            Cow::Borrowed(*value)
+            Cow::Borrowed(value)
         };
         if let RuntimeValue::List(values) = value.unannotated() {
             if rows.is_some_and(|rows| rows != values.len()) {

@@ -207,8 +207,7 @@ pub(crate) fn execute(
         {
             return Err(KernelError::Failed);
         }
-        let prepared =
-            super::series::prepare(&invocation.inputs.iter().collect::<Vec<_>>(), invocation)?;
+        let prepared = super::series::prepare(invocation.inputs, invocation)?;
         let inputs = prepared.iter().map(|v| v.as_ref()).collect::<Vec<_>>();
         if inputs.iter().all(|v| matches!(v, RuntimeValue::Series(_))) {
             let series = inputs
