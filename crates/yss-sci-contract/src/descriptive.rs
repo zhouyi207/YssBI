@@ -1,8 +1,6 @@
 //! Empirical inequality measures and their subgroup decomposition.
 use serde::Serialize;
 
-/// Bounds the number of pairwise rows in a Dagum report.
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GiniResult {
     pub gini: f64,

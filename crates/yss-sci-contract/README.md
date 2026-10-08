@@ -144,6 +144,10 @@ the borrowed model contract.
   omission records, combined P values and a funnel payload with an explicit
   descending standard-error domain. Study row details are separate from summary records.
 
+`SciError` carries typed operation and failure facts. Runtime and Node Kernel
+map those facts at their own boundaries; this crate does not maintain a separate
+host-facing string-code mapping.
+
 This crate owns data and execution-control contracts, not algorithms, report rendering,
 project/database state, Tauri, Polars, faer or concrete backend implementations.
 Observation metadata records row selection counts and the applied missing-value

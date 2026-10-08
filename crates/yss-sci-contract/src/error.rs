@@ -29,12 +29,3 @@ pub enum SciError {
     #[error("scientific computation failed")]
     ComputationFailed { operation: SciOperationCode },
 }
-
-impl SciError {
-    pub fn code(&self) -> &'static str {
-        match self {
-            Self::InvalidInput { .. } => "sci_invalid_input",
-            Self::ComputationFailed { .. } => "sci_computation_failed",
-        }
-    }
-}
