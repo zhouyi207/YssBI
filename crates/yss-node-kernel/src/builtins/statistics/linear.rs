@@ -1,11 +1,10 @@
 use super::super::numeric_input;
 use super::super::series::numeric_columns as columns;
+use super::common::computation_error;
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use std::sync::Arc;
 use yss_data_contract::TabularScalar;
-use yss_sci_contract::execution::{
-    ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
-};
+use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
 
@@ -176,16 +175,7 @@ pub(crate) fn execute(
                     invocation.control.deadline,
                 ),
             )
-            .map_err(|error| match error {
-                ScientificComputationError::Cancelled => KernelError::Cancelled,
-                ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-                ScientificComputationError::InvalidInput { violation } => match violation {
-                    ScientificInputViolation::ShapeMismatch => KernelError::ShapeMismatch,
-                    ScientificInputViolation::ParameterOutOfRange => KernelError::InvalidParameter,
-                    _ => KernelError::InvalidNumericInput,
-                },
-                ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-            })?;
+            .map_err(computation_error)?;
             let fitted = numeric_list(&result.fitted, invocation)?;
             let residuals = numeric_list(&result.residuals, invocation)?;
             vec![
