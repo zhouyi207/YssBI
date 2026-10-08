@@ -62,14 +62,54 @@ pub fn hash_canonical<T: Serialize + ?Sized>(
 #[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 struct ObjectKey<'a>(#[serde(borrow)] Cow<'a, str>);
 
+struct ObjectMembers<'a>(Vec<(ObjectKey<'a>, &'a serde_json::value::RawValue)>);
+
+impl<'de> Deserialize<'de> for ObjectMembers<'de> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct MembersVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for MembersVisitor {
+            type Value = ObjectMembers<'de>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a JSON object")
+            }
+
+            fn visit_map<M: serde::de::MapAccess<'de>>(
+                self,
+                mut map: M,
+            ) -> Result<Self::Value, M::Error> {
+                let mut members: Vec<(ObjectKey<'de>, &'de serde_json::value::RawValue)> =
+                    Vec::new();
+                while let Some(member) = map.next_entry()? {
+                    members.push(member);
+                }
+                members.sort_by(|left, right| left.0.cmp(&right.0));
+                // Stable sorting preserves encounter order for equal decoded keys.
+                // Keep the last value, matching JSON map deserialization.
+                members.dedup_by(|later, earlier| {
+                    if later.0 == earlier.0 {
+                        earlier.1 = later.1;
+                        true
+                    } else {
+                        false
+                    }
+                });
+                Ok(ObjectMembers(members))
+            }
+        }
+
+        deserializer.deserialize_map(MembersVisitor)
+    }
+}
+
 fn encode_canonical(raw: &str, encoded: &mut Vec<u8>) -> Result<(), serde_json::Error> {
     // Borrow encoded values instead of converting numbers through Value, which
     // cannot represent every integer accepted by Serde JSON's serializer.
     let raw = raw.trim();
     match raw.as_bytes()[0] {
         b'{' => {
-            let members: std::collections::BTreeMap<ObjectKey<'_>, &serde_json::value::RawValue> =
-                serde_json::from_str(raw)?;
+            let ObjectMembers(members) = serde_json::from_str(raw)?;
             encoded.push(b'{');
             for (index, (key, value)) in members.into_iter().enumerate() {
                 if index != 0 {
@@ -156,6 +196,27 @@ mod tests {
         assert_ne!(
             hash_canonical("test.array", &first).unwrap(),
             hash_canonical("test.array", &reversed).unwrap()
+        );
+    }
+
+    #[test]
+    fn repeated_object_keys_keep_the_last_value_after_canonical_sorting() {
+        struct RepeatedKeys;
+        impl Serialize for RepeatedKeys {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(4))?;
+                map.serialize_entry("z", &0)?;
+                map.serialize_entry("a", &1)?;
+                map.serialize_entry("z", &3)?;
+                map.serialize_entry("a", &2)?;
+                map.end()
+            }
+        }
+        let expected = serde_json::json!({"a": 2, "z": 3});
+        assert_eq!(
+            hash_canonical("test.repeated-keys", &RepeatedKeys).unwrap(),
+            hash_canonical("test.repeated-keys", &expected).unwrap()
         );
     }
 
