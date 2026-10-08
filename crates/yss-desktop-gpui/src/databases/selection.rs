@@ -1,84 +1,12 @@
-//! The component owns the active cursor; this extension owns the range anchor and its paint bounds.
-use super::{DatabaseEditor, grid::DatabaseGrid};
-use gpui::{ClipboardItem, Context, Window};
-use gpui_component::table::{TableEvent, TableSelection, TableState};
-use std::ops::Range;
+//! Component selection events feed one page-local highlight and clipboard projection.
+mod ranges;
+pub(super) use ranges::PageSelection;
 
-#[derive(Clone)]
-pub(super) struct SelectionBounds {
-    pub rows: Range<usize>,
-    pub columns: Range<usize>,
-}
-impl SelectionBounds {
-    pub fn cell_count(&self) -> usize {
-        self.rows.len().saturating_mul(self.columns.len())
-    }
-    pub fn contains(&self, row: usize, column: usize) -> bool {
-        self.rows.contains(&row) && self.columns.contains(&column)
-    }
-}
-#[derive(Default)]
-pub(super) struct PageSelection {
-    anchor: TableSelection,
-    pub bounds: Option<SelectionBounds>,
-    pub all: bool,
-    pub dragging: bool,
-    extend_next: bool,
-}
-impl PageSelection {
-    fn accept(&mut self, target: TableSelection, extend: bool, rows: usize, columns: usize) {
-        let pending_extend = std::mem::take(&mut self.extend_next);
-        let extend = extend || self.dragging || pending_extend;
-        self.all = false;
-        if target == TableSelection::None {
-            *self = Self::default();
-            return;
-        }
-        if !extend || std::mem::discriminant(&self.anchor) != std::mem::discriminant(&target) {
-            self.anchor = target;
-        }
-        let (row_range, column_range) = match (self.anchor, target) {
-            (TableSelection::Cell(a_row, a_col), TableSelection::Cell(row, col)) => {
-                (between(a_row, row, rows), between(a_col, col, columns))
-            }
-            (TableSelection::Row(anchor), TableSelection::Row(row)) => {
-                (between(anchor, row, rows), 0..columns)
-            }
-            (TableSelection::Column(anchor), TableSelection::Column(column)) => {
-                (0..rows, between(anchor, column, columns))
-            }
-            _ => return,
-        };
-        self.bounds =
-            (!row_range.is_empty() && !column_range.is_empty()).then_some(SelectionBounds {
-                rows: row_range,
-                columns: column_range,
-            });
-    }
-    pub fn begin_cell(&mut self, row: usize, column: usize, extend: bool) {
-        if !extend {
-            self.anchor = TableSelection::Cell(row, column);
-        }
-        self.dragging = true;
-        self.extend_next = true;
-    }
-    pub fn extend_cell(&mut self) {
-        self.extend_next = true;
-    }
-    fn select_all(&mut self, rows: usize, columns: usize) {
-        *self = Self {
-            all: true,
-            bounds: (rows > 0 && columns > 0).then_some(SelectionBounds {
-                rows: 0..rows,
-                columns: 0..columns,
-            }),
-            ..Self::default()
-        };
-    }
-}
-fn between(anchor: usize, target: usize, limit: usize) -> Range<usize> {
-    anchor.min(target).min(limit)..anchor.max(target).saturating_add(1).min(limit)
-}
+use super::{DatabaseEditor, grid::DatabaseGrid};
+use gpui::{ClipboardItem, Context, Focusable, Modifiers, Window};
+use gpui_component::table::{TableEvent, TableSelection, TableState};
+use yss_data_contract::TabularScalar;
+
 impl DatabaseEditor {
     pub(super) fn selection_changed(
         &mut self,
@@ -93,33 +21,65 @@ impl DatabaseEditor {
             TableEvent::ClearSelection => TableSelection::None,
             _ => return,
         };
-        let extend = window.modifiers().shift;
-        self.grid.update(cx, |table, cx| {
-            let grid = table.delegate_mut();
-            grid.selection.accept(
+        let columns = self.grid.read(cx).delegate().rows.columns().len();
+        // The built-in keyboard cursor can enter a non-selectable column. Skip our row marker.
+        if columns > 0
+            && matches!(
                 target,
-                extend,
-                grid.rows.row_count(),
-                grid.rows.columns().len(),
-            );
-            cx.notify();
-        });
-        cx.emit(super::DatabaseEvent::Activated);
+                TableSelection::Cell(_, 0) | TableSelection::Column(0)
+            )
+        {
+            self.grid.update(cx, |table, cx| match target {
+                TableSelection::Cell(row, _) => table.set_selected_cell(row, 1, cx),
+                _ => table.set_selected_col(1, cx),
+            });
+            return;
+        }
+        let modifiers = window.modifiers();
+        let additive =
+            !window.last_input_was_keyboard() && (modifiers.control || modifiers.platform);
+        let synchronizing = self.selection_cursor_sync.take() == Some(target);
+        if !synchronizing {
+            self.grid.update(cx, |table, cx| {
+                let grid = table.delegate_mut();
+                let data_target = grid.data_selection(target);
+                if window.last_input_was_keyboard() {
+                    grid.selection.dragging = false;
+                }
+                grid.selection
+                    .accept(data_target, modifiers.shift, additive);
+                let retained = grid.selection.retained_cursor(data_target);
+                if retained != data_target {
+                    let retained = table_selection(retained);
+                    // Keep the component cursor on a retained index without toggling it twice.
+                    self.selection_cursor_sync = Some(retained);
+                    table.set_selection(retained, cx);
+                }
+                cx.notify();
+            });
+        }
+        self.update_selection_preview(window, cx);
+        if self.grid.focus_handle(cx).is_focused(window) {
+            cx.emit(super::DatabaseEvent::Activated);
+        }
         self.changed(cx);
     }
-    pub(super) fn select_page(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn select_page(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.busy() || !self.ready {
             return;
         }
         self.grid.update(cx, |table, cx| {
             let grid = table.delegate_mut();
-            grid.selection
-                .select_all(grid.rows.row_count(), grid.rows.columns().len());
-            cx.notify();
+            if grid.rows.row_count() > 0 && !grid.rows.columns().is_empty() {
+                grid.selection.select_all();
+                cx.notify();
+            }
         });
+        self.update_selection_preview(window, cx);
         self.changed(cx);
     }
     pub(super) fn clear_selection(&mut self, cx: &mut Context<Self>) {
+        self.selection_cursor_sync = None;
         self.grid.update(cx, |table, cx| {
             table.delegate_mut().selection = PageSelection::default();
             table.clear_selection(cx);
@@ -131,23 +91,48 @@ impl DatabaseEditor {
             table.delegate_mut().selection.dragging = false;
         });
     }
+    pub(super) fn update_selection_preview(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let table = self.grid.read(cx);
+        let grid = table.delegate();
+        let value = grid
+            .selection
+            .primary_cell(grid.data_selection(table.selection()))
+            .and_then(|(row, column)| grid.value(row, column));
+        let text = value
+            .filter(|value| !matches!(value, TabularScalar::Null))
+            .map(super::grid::display)
+            .unwrap_or_default();
+        self.selection_preview.update(cx, |input, cx| {
+            if input.value() != text {
+                input.set_value(text, window, cx);
+            }
+        });
+    }
     pub(super) fn copy_selection(&self, cx: &mut Context<Self>) {
         if !self.ready || self.busy() {
             return;
         }
         let table = self.grid.read(cx);
         let grid = table.delegate();
-        let Some(bounds) = &grid.selection.bounds else {
+        let Some((rows, columns)) = grid
+            .selection
+            .clipboard_axes(grid.rows.row_count(), grid.rows.columns().len())
+        else {
             return;
         };
-        let text = bounds
-            .rows
-            .clone()
+        let text = rows
+            .into_iter()
             .map(|row| {
-                bounds
-                    .columns
-                    .clone()
-                    .map(|column| clipboard_cell(&grid.text(row, column)))
+                columns
+                    .iter()
+                    .map(|column| {
+                        let value = grid.value(row, *column);
+                        let text = value
+                            .filter(|value| !matches!(value, TabularScalar::Null))
+                            .map(super::grid::display)
+                            .unwrap_or_default();
+                        clipboard_cell(&text)
+                    })
                     .collect::<Vec<_>>()
                     .join("\t")
             })
@@ -163,20 +148,29 @@ fn clipboard_cell(value: &str) -> String {
         value.into()
     }
 }
-pub(super) fn start_cell(
+pub(super) fn start(
     table: &mut TableState<DatabaseGrid>,
-    row: usize,
-    column: usize,
-    extend: bool,
+    target: TableSelection,
+    modifiers: Modifiers,
     window: &mut Window,
     cx: &mut Context<TableState<DatabaseGrid>>,
 ) {
-    use gpui::Focusable;
     window.focus(&table.focus_handle(cx), cx);
-    table
-        .delegate_mut()
-        .selection
-        .begin_cell(row, column, extend);
-    table.set_selected_cell(row, column, cx);
+    if let TableSelection::Cell(row, column) = target {
+        table.delegate_mut().selection.begin_cell(
+            (row, column),
+            modifiers.shift,
+            modifiers.control || modifiers.platform,
+        );
+    }
+    table.set_selection(table_selection(target), cx);
     cx.stop_propagation();
+}
+
+fn table_selection(target: TableSelection) -> TableSelection {
+    match target {
+        TableSelection::Cell(row, column) => TableSelection::Cell(row, column + 1),
+        TableSelection::Column(column) => TableSelection::Column(column + 1),
+        other => other,
+    }
 }

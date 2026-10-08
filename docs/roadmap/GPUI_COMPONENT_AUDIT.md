@@ -53,6 +53,18 @@
 - `cargo test -p yss-application --lib database::tests::bundled_samples_import_edit_and_reopen_as_independent_project_datasets -- --exact` 一项通过，实际覆盖五个示例的独立导入、重复导入、编辑、保存和重开。
 - `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` 与 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；这批界面人工验收仍开放，具体操作见 GPUI README。
 
+### 数据库分页、选择与内容预览
+
+- 已阅读四个数据库编辑器组件和选中内容预览，连同分页、导出、键盘、选择适配、剪贴板和主要单元格投影实现一起核对。
+- 数据读取、资源版本、历史和保存继续使用原 Application；grid 与 Details 共享不可变元数据，GPUI TableState 继续拥有活动光标、焦点、滚动和导航。
+- 补齐固定页面行号、原列类型提示、布尔勾选/数字对齐/空值样式；行号列只属于展示适配，键盘跳过该列，数据与复制不增加虚构列。React 的补位空列无需迁移，空白区域交给原生表格。
+- 选区扩展支持 Ctrl/Cmd 增选矩形、切换离散行列和 Ctrl/Cmd+Shift 扩选；高亮、统计、复制与 Details 消费同一范围。重叠统计合并区间，常见单矩形直接计数。
+- 复制多矩形中的当前矩形，离散行列按页面顺序输出；修复空值被复制为字符串 `null`，保留宽整数与 TSV 转义。详情预览复用默认收起的 Collapsible 与只读 Textarea，区分未选择、NULL 和空字符串，主要单元格不再局限于单元格选择模式。
+- 工具栏补齐页面行号范围与随页面交付的读取耗时，图标按钮自然换行；导出选择器防止重复进入，取消后保留原页面并处理排队刷新。界面保持参考实现的只读表格，不凭未调用的旧文案添加编辑功能。
+- `cargo test -p yss-application --lib database::tests::rows::row_batches_return_committed_ids_and_keep_one_history_unit_and_revision_gate -- --exact` 一项通过，覆盖稳定行身份、批次历史和过期版本拒绝。
+- 原生 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` 与 `cargo build -p yss-desktop-gpui --bin yss-desktop-gpui` 通过，独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`。
+- 使用临时 `YSSBI_APP_DATA_DIR` 启动 Linux/X11 窗口并确认主窗口渲染；当前显示环境的模拟输入未能驱动控件，未据此宣称交互验收通过。短表补位行越界与取消当前多选项后的组件光标已经按组件调用契约修复，完整操作路径仍保留在 GPUI README。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -206,10 +218,10 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/database-editor/internal/ui/DatabaseEditorContent.tsx](../../react/src/modules/database-editor/internal/ui/DatabaseEditorContent.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/database-editor/internal/ui/Layout/Toolbar.tsx](../../react/src/modules/database-editor/internal/ui/Layout/Toolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/database-editor/internal/ui/Table/DataTable.tsx](../../react/src/modules/database-editor/internal/ui/Table/DataTable.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/database-editor/internal/ui/Table/DatabaseGridRenderers.tsx](../../react/src/modules/database-editor/internal/ui/Table/DatabaseGridRenderers.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/database-editor/internal/ui/DatabaseEditorContent.tsx](../../react/src/modules/database-editor/internal/ui/DatabaseEditorContent.tsx) | 优化：原生每页查询沿用版本化 Application，面板拥有读投影和当前页交互，布局由 DockArea 持有 | `databases/query` 与 `install_read` 绑定元数据、编辑状态、页数据与耗时；新页清选区，语义刷新保留匹配数据页 | 业务回归通过；人工验收待完成 |
+| [modules/database-editor/internal/ui/Layout/Toolbar.tsx](../../react/src/modules/database-editor/internal/ui/Layout/Toolbar.tsx) | 迁移/优化：复用 GPUI 按钮与原分页/导出入口，统计由已接纳页面派生 | `databases/toolbar` 补齐行号范围、读取耗时、图标提示和窄面板换行；导出选择期间防止重复操作并保留刷新队列 | 代码已覆盖；人工验收待完成 |
+| [modules/database-editor/internal/ui/Table/DataTable.tsx](../../react/src/modules/database-editor/internal/ui/Table/DataTable.tsx) | 优化：复用原生虚拟表格、键盘和光标；补位空列无需迁移 | `grid` 固定行号与 `selection` 多范围/离散行列选择；高亮、复制、Details 共用选区；只读、分页、版本失效与主题沿用原 owner | 代码已覆盖；人工验收待完成 |
+| [modules/database-editor/internal/ui/Table/DatabaseGridRenderers.tsx](../../react/src/modules/database-editor/internal/ui/Table/DatabaseGridRenderers.tsx) | 迁移：列头、只读单元格和行号由同一个 GPUI TableDelegate 提供 | 补齐原列类型提示、布尔勾选、数字右对齐、弱化空值和全局行号；行号不进入数据索引及剪贴板 | 代码已覆盖；人工验收待完成 |
 
 ## modules/details
 
@@ -233,7 +245,7 @@
 | [modules/details/internal/ui/panels/DataColumnSemanticFields.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticFields.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/DataColumnSettings.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSettings.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/DataDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/DataDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/DataSelectionPreview.tsx](../../react/src/modules/details/internal/ui/panels/DataSelectionPreview.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/DataSelectionPreview.tsx](../../react/src/modules/details/internal/ui/panels/DataSelectionPreview.tsx) | 迁移/优化：从当前数据库面板的同一选区派生主要单元格，不新增全局面板状态 | `databases/details` 补齐默认收起的预览、行号、列名与可选择的只读内容，区分 NULL/空字符串/未选择；覆盖行列与全页选择 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/EventDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/EventDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/FileDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FileDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/FunctionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FunctionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

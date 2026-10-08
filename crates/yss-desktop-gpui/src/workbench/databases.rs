@@ -117,7 +117,7 @@ impl Workbench {
                 cx,
             )
         });
-        editor.update(cx, |editor, cx| editor.install_read(read, cx));
+        editor.update(cx, |editor, cx| editor.install_read(read, window, cx));
         self.subscriptions.push(cx.subscribe_in(
             &editor,
             window,

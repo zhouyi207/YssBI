@@ -1,11 +1,13 @@
 use super::DatabaseEditor;
-use gpui::{Context, IntoElement, PromptLevel, Window, div, prelude::*};
+use gpui::{Context, IntoElement, PromptLevel, Window, div, prelude::*, px};
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
+    collapsible::Collapsible,
+    input::Textarea,
     menu::{DropdownMenu, PopupMenuItem},
-    table::TableSelection,
 };
+use gpui_kit_assets::IconName;
 use yss_application::database::DatabaseMutation;
 use yss_database_schema::DatabaseColumnFact;
 
@@ -31,7 +33,11 @@ const PHYSICAL_TYPES: [&str; 19] = [
     "Dictionary(Int32, Utf8)",
 ];
 impl DatabaseEditor {
-    pub fn render_details(&mut self, cx: &mut Context<Self>) -> gpui::AnyElement {
+    pub fn render_details(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::AnyElement {
         let mut view = div()
             .p_4()
             .flex()
@@ -68,56 +74,111 @@ impl DatabaseEditor {
                     .child("列设置已写入项目。保存会建立检查点，关闭不会还原已应用的设置。"),
             );
         }
-        let selected = self.grid.read(cx).selection();
-        let selection = &self.grid.read(cx).delegate().selection;
-        let all = selection.all;
-        let single_column = selection
-            .bounds
-            .as_ref()
-            .is_some_and(|bounds| bounds.columns.len() == 1)
-            && !all;
-        if let Some(bounds) = &selection.bounds
-            && (bounds.cell_count() > 1 || all)
+        let table = self.grid.read(cx);
+        let page = table.delegate();
+        let selection = &page.selection;
+        if let Some(summary) = selection.summary(page.rows.row_count(), page.rows.columns().len())
+            && summary.cells > 1
         {
             view = view.child(
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!(
-                        "已选 {} 行 × {} 列 · {} 个单元格；Ctrl/Cmd+C 复制当前页选区。",
-                        bounds.rows.len(),
-                        bounds.columns.len(),
-                        bounds.cell_count()
+                    .child(crate::text::format(
+                        "native.databases.selectionHint",
+                        &[
+                            ("value0", summary.rows.to_string()),
+                            ("value1", summary.columns.to_string()),
+                            ("value2", summary.cells.to_string()),
+                        ],
                     )),
             );
         }
-        if let TableSelection::Cell(row, column) = selected
-            && !all
-        {
-            let table = self.grid.read(cx);
-            let page = table.delegate();
-            let title = page
-                .rows
-                .columns()
-                .get(column)
-                .map(|column| column.name().as_str())
-                .unwrap_or("");
-            let value = page.text(row, column);
-            view = view
+        let primary = selection
+            .primary_cell(page.data_selection(table.selection()))
+            .filter(|(row, column)| page.value(*row, *column).is_some());
+        let row_number = primary
+            .map(|(row, _)| (page.offset + row + 1).to_string())
+            .unwrap_or_else(|| "—".into());
+        let column_name = primary
+            .map(|(_, column)| page.rows.columns()[column].name().as_str())
+            .unwrap_or("—");
+        let preview_content = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .justify_between()
+                    .gap_2()
+                    .text_xs()
+                    .child(crate::text::translate("databaseEditor.rowNumber"))
+                    .child(row_number),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .text_xs()
+                    .child(crate::text::translate("databaseEditor.columnName"))
+                    .child(column_name.to_owned()),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .child(crate::text::translate("databaseEditor.content")),
+            )
+            .child(
+                Textarea::new(&self.selection_preview)
+                    .readonly(true)
+                    .small()
+                    .h(px(130.)),
+            );
+        view = view.child(
+            Collapsible::new()
+                .open(self.selection_preview_open)
                 .child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(format!("第 {} 行 · {}", page.offset + row + 1, title)),
+                    Button::new("database-selection-preview")
+                        .small()
+                        .ghost()
+                        .w_full()
+                        .label(crate::text::translate("databaseEditor.selected"))
+                        .icon(if self.selection_preview_open {
+                            IconName::ChevronDown
+                        } else {
+                            IconName::ChevronRight
+                        })
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.selection_preview_open = !view.selection_preview_open;
+                            view.changed(cx);
+                        })),
                 )
-                .child(div().text_sm().child(value));
+                .content(preview_content),
+        );
+        let column = selection.single_column();
+        let placeholder = crate::text::translate(
+            match primary.and_then(|(row, column)| page.value(row, column)) {
+                None => "databaseEditor.cellPreviewPlaceholder",
+                Some(yss_data_contract::TabularScalar::Null) => {
+                    "databaseEditor.nullCellPlaceholder"
+                }
+                _ => "databaseEditor.emptyStringPlaceholder",
+            },
+        );
+        if self
+            .selection_preview
+            .read(cx)
+            .presentation()
+            .placeholder()
+            .as_ref()
+            != placeholder.as_str()
+        {
+            self.selection_preview.update(cx, |input, cx| {
+                input.set_placeholder(placeholder, window, cx)
+            });
         }
-        let column = match selected {
-            TableSelection::Cell(_, column) | TableSelection::Column(column) if single_column => {
-                Some(column)
-            }
-            _ => None,
-        };
         if let Some(column) = column.and_then(|index| meta.columns.get(index)).cloned() {
             view = view.child(self.column_settings(column, cx));
         } else {

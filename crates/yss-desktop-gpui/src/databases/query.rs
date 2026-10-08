@@ -1,11 +1,16 @@
 use super::DatabaseEditor;
 use gpui::{Context, Window};
+use std::time::{Duration, Instant};
 pub(super) const PAGE_ROWS: usize = 100;
 pub(crate) struct DatabaseRead {
     pub(super) meta: yss_application::database::DatabaseMetaResult,
     pub(super) edit: yss_database_contract::EditState,
-    pub(super) page: Option<yss_application::database::DatabaseRowsResult>,
+    pub(super) page: Option<PageRead>,
     pub(super) offset: usize,
+}
+pub(super) struct PageRead {
+    pub rows: yss_application::database::DatabaseRowsResult,
+    pub elapsed: Duration,
 }
 pub(crate) fn read(
     services: &yss_application::runtime::ApplicationServices,
@@ -15,6 +20,7 @@ pub(crate) fn read(
     offset: usize,
     retain: Option<u64>,
 ) -> anyhow::Result<DatabaseRead> {
+    let started = Instant::now();
     let meta = services.application.query_database_meta_for_application(
         project.clone(),
         id.clone(),
@@ -27,13 +33,17 @@ pub(crate) fn read(
     let page = if retain == Some(meta.data_revision) && page_offset == offset {
         None
     } else {
-        Some(services.application.query_database_rows_for_application(
+        let rows = services.application.query_database_rows_for_application(
             project,
             id,
             revision,
             page_offset,
             PAGE_ROWS,
-        )?)
+        )?;
+        Some(PageRead {
+            rows,
+            elapsed: started.elapsed(),
+        })
     };
     Ok(DatabaseRead {
         meta,
@@ -74,7 +84,7 @@ impl DatabaseEditor {
                 view.busy = false;
                 if view.revision == revision {
                     if let Some(read) = result {
-                        view.install_read(read, cx);
+                        view.install_read(read, window, cx);
                     } else {
                         view.error = Some("数据读取未完成，请刷新项目后重试。".into());
                     }

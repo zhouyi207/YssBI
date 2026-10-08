@@ -154,18 +154,29 @@ impl DatabaseEditor {
             return;
         }
         let revision = self.revision;
+        let generation = self.generation;
         let name = format!("{}.{}", self.name, format);
         let directory = std::env::current_dir().unwrap_or_default();
+        self.busy = true;
+        self.changed(cx);
         let prompt = cx.prompt_for_new_path(&directory, Some(&name));
         cx.spawn_in(window, async move |view, cx| {
-            if let Ok(Ok(Some(path))) = prompt.await {
-                let _ = view.update_in(cx, |view, window, cx| {
-                    if view.revision != revision || view.busy() || !view.ready {
-                        return;
-                    }
+            let path = prompt.await.ok().and_then(Result::ok).flatten();
+            let _ = view.update_in(cx, |view, window, cx| {
+                if view.generation != generation {
+                    return;
+                }
+                view.busy = false;
+                if view.revision == revision
+                    && view.ready
+                    && let Some(path) = path
+                {
                     view.export_to(path, format, window, cx);
-                });
-            }
+                } else if view.refresh_again {
+                    view.reload(true, window, cx);
+                }
+                view.changed(cx);
+            });
         })
         .detach();
     }

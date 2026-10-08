@@ -431,7 +431,7 @@ impl Render for DetailsPanel {
                 view.child(mind.update(cx, |mind, cx| mind.render_details(window, cx)))
             })
             .when_some(self.database(), |view, editor| {
-                view.child(editor.update(cx, |editor, cx| editor.render_details(cx)))
+                view.child(editor.update(cx, |editor, cx| editor.render_details(window, cx)))
             })
             .when_some(self.chart(), |view, chart| {
                 view.child(chart.update(cx, |chart, cx| chart.render_details(cx)))

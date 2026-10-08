@@ -6,6 +6,7 @@ pub(crate) mod query;
 mod render;
 mod selection;
 mod semantic;
+mod toolbar;
 
 use crate::services::NativeServices;
 pub(crate) use commands::{DatabaseSaveOutcome, DatabaseSaveRequest};
@@ -15,7 +16,8 @@ use gpui::{
 };
 use gpui_component::{
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
-    table::TableState,
+    input::TextareaState,
+    table::{TableSelection, TableState},
 };
 use grid::DatabaseGrid;
 use std::sync::Arc;
@@ -43,10 +45,13 @@ pub struct DatabaseEditor {
     pub id: String,
     pub revision: ResourceRevision,
     pub name: String,
-    meta: Option<DatabaseMetaResult>,
+    meta: Option<Arc<DatabaseMetaResult>>,
     edit: Option<EditState>,
     grid: Entity<TableState<DatabaseGrid>>,
+    selection_preview: Entity<TextareaState>,
+    selection_preview_open: bool,
     _grid_subscription: Subscription,
+    selection_cursor_sync: Option<TableSelection>,
     generation: u64,
     offset: usize,
     busy: bool,
@@ -69,6 +74,7 @@ impl DatabaseEditor {
             TableState::new(DatabaseGrid::empty(), window, cx)
                 .cell_selectable(true)
                 .row_selectable(true)
+                .row_header(false)
                 .col_selectable(true)
                 .col_movable(false)
                 .sortable(false)
@@ -86,7 +92,10 @@ impl DatabaseEditor {
             meta: None,
             edit: None,
             grid,
+            selection_preview: cx.new(|cx| TextareaState::new(window, cx).rows(5)),
+            selection_preview_open: false,
             _grid_subscription: subscription,
+            selection_cursor_sync: None,
             generation: 0,
             offset: 0,
             busy: false,
@@ -110,21 +119,35 @@ impl DatabaseEditor {
         cx.emit(DatabaseEvent::Changed);
         cx.notify();
     }
-    pub fn install_read(&mut self, read: query::DatabaseRead, cx: &mut Context<Self>) {
+    pub fn install_read(
+        &mut self,
+        read: query::DatabaseRead,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.name = read.meta.name.clone();
-        self.meta = Some(read.meta);
+        let meta = Arc::new(read.meta);
+        self.meta = Some(meta.clone());
         self.edit = Some(read.edit);
         self.ready = true;
         self.error = None;
         self.offset = read.offset;
         if let Some(page) = read.page {
+            self.selection_cursor_sync = None;
             let offset = self.offset;
             self.grid.update(cx, |grid, cx| {
-                *grid.delegate_mut() = DatabaseGrid::from_page(page, offset);
+                *grid.delegate_mut() =
+                    DatabaseGrid::from_page(page.rows, offset, meta, page.elapsed);
                 grid.clear_selection(cx);
                 grid.refresh(cx);
             });
+        } else {
+            self.grid.update(cx, |grid, cx| {
+                grid.delegate_mut().schema = Some(meta);
+                cx.notify();
+            });
         }
+        self.update_selection_preview(window, cx);
         self.changed(cx);
     }
     pub fn replace_index(
