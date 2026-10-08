@@ -146,7 +146,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 }
 
 fn help(id: &str, locale: &str) -> &'static str {
-    match (id, locale.starts_with("zh")) {
+    match (id, crate::documentation::is_chinese_locale(locale)) {
         ("yssbi.dataframe.groupby.groups", true) => include_str!("../docs/zh/groupby_groups.md"),
         ("yssbi.dataframe.groupby.groups", false) => include_str!("../docs/en/groupby_groups.md"),
         ("yssbi.dataframe.groupby.apply", true) => include_str!("../docs/zh/groupby_apply.md"),

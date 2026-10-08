@@ -608,6 +608,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn node_help_uses_the_same_locale_as_its_metadata() {
+        let system = crate::build_builtin_node_system().unwrap();
+        for (baseline, requested) in [("zh-CN", "ZH_CN"), ("en-US", "zhx")] {
+            let expected = system.catalog.localize(&system.registry, baseline);
+            let actual = system.catalog.localize(&system.registry, requested);
+            assert_eq!(actual.items.len(), expected.items.len());
+            for (actual, expected) in actual.items.iter().zip(&expected.items) {
+                assert_eq!(actual.node_type_id, expected.node_type_id);
+                assert_eq!(actual.title, expected.title, "{}", actual.node_type_id);
+                assert_eq!(
+                    actual.documentation, expected.documentation,
+                    "{}: {requested}",
+                    actual.node_type_id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn locale_tags_keep_text_across_case_and_separator_variants() {
         let key = I18nKey::new("nodes.example.title").unwrap();
         let catalog = BuiltinCatalog::new(&[

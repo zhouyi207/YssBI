@@ -23,7 +23,14 @@ pub(crate) fn aggregation_documentation(id: &str, locale: &str) -> Option<Box<st
         _ => return None,
     };
     let (en, zh) = aggregation::help(kind);
-    Some(if locale.starts_with("zh") { zh } else { en }.into())
+    Some(
+        if crate::documentation::is_chinese_locale(locale) {
+            zh
+        } else {
+            en
+        }
+        .into(),
+    )
 }
 
 use super::builtin::{

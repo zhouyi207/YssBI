@@ -72,8 +72,7 @@ pub(crate) fn documentation(entries: &[Entry], id: &str, locale: &str) -> Option
         .map(u16::to_string)
         .collect::<Vec<_>>()
         .join(", ");
-    let locale = locale.trim().replace('_', "-").to_ascii_lowercase();
-    let description = if locale == "zh" || locale.starts_with("zh-") {
+    let description = if crate::documentation::is_chinese_locale(locale) {
         format!(
             "# {}\n\n目录入口，暂不可执行。输入、输出、参数和执行内核尚未定义。\n\n方法：`{}`\n\n分类：`{}`\n\n原始用途：{}\n\n原始方法编号：{}（已从待登记清单移除）。\n\n{}",
             entry.zh, entry.method, entry.category, entry.product_form, ids, entry.scope_note,

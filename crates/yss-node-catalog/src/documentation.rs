@@ -3,14 +3,14 @@ use yss_node_protocol::NodeTypeId;
 #[derive(Clone, Copy)]
 struct Documentation {
     en: &'static str,
-    zh: Option<&'static str>,
+    zh: &'static str,
 }
 
 macro_rules! markdown {
     ($slug:literal) => {
         Documentation {
             en: include_str!(concat!("docs/en/", $slug, ".md")),
-            zh: Some(include_str!(concat!("docs/zh/", $slug, ".md"))),
+            zh: include_str!(concat!("docs/zh/", $slug, ".md")),
         }
     };
 }
@@ -486,10 +486,17 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
 }
 
 fn select_locale(documentation: Documentation, locale: &str) -> &'static str {
-    let locale = locale.trim().replace('_', "-").to_ascii_lowercase();
-    if locale == "zh" || locale.starts_with("zh-") {
-        documentation.zh.unwrap_or(documentation.en)
+    if is_chinese_locale(locale) {
+        documentation.zh
     } else {
         documentation.en
     }
+}
+
+pub(crate) fn is_chinese_locale(locale: &str) -> bool {
+    locale
+        .trim()
+        .split(['-', '_'])
+        .next()
+        .is_some_and(|language| language.eq_ignore_ascii_case("zh"))
 }

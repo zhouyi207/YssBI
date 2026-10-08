@@ -449,7 +449,7 @@ pub(super) fn minimum_periods_parameter() -> Result<Parameter, BuiltinAssemblyEr
 pub(crate) fn documentation(id: &str, locale: &str) -> Option<Box<str>> {
     let entry = ENTRIES.iter().find(|entry| entry.id == id)?;
     Some(
-        if locale.trim().to_ascii_lowercase().starts_with("zh") {
+        if crate::documentation::is_chinese_locale(locale) {
             entry.zh_help
         } else {
             entry.en_help
