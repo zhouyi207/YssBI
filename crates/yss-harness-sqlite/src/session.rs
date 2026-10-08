@@ -152,14 +152,16 @@ impl HarnessSessionStorePort for SqliteHarnessStore {
         record: &'a HarnessTurnRecord,
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
         let id = record.id.as_str().to_owned();
+        let session_id = record.session_id.as_str().to_owned();
         let state = turn_state(record.state);
         let payload = encode(record);
         Box::pin(async move {
             let result =
-                sqlx::query("UPDATE assistant_turn SET state = ?, payload_json = ? WHERE id = ?")
+                sqlx::query("UPDATE assistant_turn SET state = ?, payload_json = ? WHERE id = ? AND session_id = ?")
                     .bind(state)
                     .bind(payload?)
                     .bind(id)
+                    .bind(session_id)
                     .execute(&self.pool)
                     .await
                     .map_err(|_| unavailable())?;

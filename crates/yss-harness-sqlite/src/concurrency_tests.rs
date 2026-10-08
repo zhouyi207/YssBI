@@ -201,3 +201,143 @@ async fn concurrent_event_append_with_an_insert_failure_keeps_a_contiguous_durab
     reopened.pool.close().await;
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[tokio::test]
+async fn indexed_invocation_identity_cannot_be_replaced_when_finishing() {
+    let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
+    let session = session();
+    store.create_session(&session).await.unwrap();
+    let original = ToolInvocationRecord {
+        id: ToolInvocationId::try_new("tool-1").unwrap(),
+        idempotency_key: IdempotencyKey::try_new("key-1").unwrap(),
+        session_id: session.id.clone(),
+        turn_id: HarnessTurnId::try_new("turn-1").unwrap(),
+        agent_run_id: None,
+        workflow_run_id: None,
+        workflow_step_id: None,
+        project: session.project,
+        capability_id: CapabilityId::InspectGraph,
+        request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest::overview(
+            "events/Main.yssbi-event",
+        ))
+        .into(),
+        state: ToolInvocationState::Running,
+        result: None,
+        failure: None,
+        started_at: UnixMillis::from_existing(1),
+        deadline: UnixMillis::from_existing(10),
+        finished_at: None,
+    };
+    store.begin(&original).await.unwrap();
+    for change_session in [false, true] {
+        let mut changed = original.clone();
+        if change_session {
+            changed.session_id = HarnessSessionId::try_new("another-session").unwrap();
+        } else {
+            changed.id = ToolInvocationId::try_new("another-invocation").unwrap();
+        }
+        changed.state = ToolInvocationState::Failed;
+        assert_eq!(
+            store.finish(&changed).await.unwrap_err().code,
+            PersistenceFailureCode::NotFound
+        );
+        assert_eq!(
+            store
+                .load_invocation(&original.session_id, &original.id)
+                .await
+                .unwrap(),
+            Some(original.clone())
+        );
+    }
+    let mut finished = original.clone();
+    finished.state = ToolInvocationState::Failed;
+    store.finish(&finished).await.unwrap();
+    assert_eq!(
+        store
+            .load_invocation(&original.session_id, &original.id)
+            .await
+            .unwrap(),
+        Some(finished)
+    );
+}
+
+#[tokio::test]
+async fn indexed_turn_parent_cannot_change_during_an_update() {
+    let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
+    let session = session();
+    store.create_session(&session).await.unwrap();
+    let original = HarnessTurnRecord {
+        id: HarnessTurnId::try_new("turn-1").unwrap(),
+        session_id: session.id,
+        state: HarnessTurnState::Running,
+        user_message: "Inspect".into(),
+        final_text: None,
+        started_at: UnixMillis::from_existing(1),
+        finished_at: None,
+    };
+    store.create_turn(&original).await.unwrap();
+    let mut changed = original.clone();
+    changed.session_id = HarnessSessionId::try_new("another-session").unwrap();
+    changed.state = HarnessTurnState::Completed;
+    assert_eq!(
+        store.update_turn(&changed).await.unwrap_err().code,
+        PersistenceFailureCode::NotFound
+    );
+    assert_eq!(
+        store.load_turn(&original.id).await.unwrap(),
+        Some(original.clone())
+    );
+    changed.session_id = original.session_id;
+    store.update_turn(&changed).await.unwrap();
+    assert_eq!(store.load_turn(&changed.id).await.unwrap(), Some(changed));
+}
+
+#[tokio::test]
+async fn indexed_approval_consumption_matches_the_inserted_record() {
+    let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
+    let session = session();
+    let grant = ApprovalGrantRecord {
+        id: ApprovalGrantId::try_new("already-consumed").unwrap(),
+        principal_id: session.principal_id,
+        session_id: session.id,
+        project: session.project,
+        capability_id: CapabilityId::ApplyGraphEdit,
+        request_fingerprint: SourceHash::try_new("fingerprint-1").unwrap(),
+        issued_at: UnixMillis::from_existing(1),
+        expires_at: UnixMillis::from_existing(10),
+        consumed_at: Some(UnixMillis::from_existing(2)),
+    };
+    ApprovalStorePort::insert(&store, &grant).await.unwrap();
+    let consumed: Option<i64> =
+        sqlx::query_scalar("SELECT consumed_at FROM approval_grant WHERE id = ?")
+            .bind(grant.id.as_str())
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
+    assert_eq!(consumed, Some(2));
+    assert!(
+        !ApprovalStorePort::consume(&store, &grant.id, UnixMillis::from_existing(3))
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        ApprovalStorePort::load(&store, &grant.id).await.unwrap(),
+        Some(grant.clone())
+    );
+    let mut invalid = grant;
+    invalid.id = ApprovalGrantId::try_new("unrepresentable-time").unwrap();
+    invalid.consumed_at = Some(UnixMillis::from_existing(u64::MAX));
+    assert_eq!(
+        ApprovalStorePort::insert(&store, &invalid)
+            .await
+            .unwrap_err()
+            .code,
+        PersistenceFailureCode::InvalidRecord
+    );
+    assert!(
+        ApprovalStorePort::load(&store, &invalid.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}

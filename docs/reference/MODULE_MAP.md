@@ -44,7 +44,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-harness-contract` | `crates/yss-harness-contract` | [Cargo.toml](../../crates/yss-harness-contract/Cargo.toml) | — |
 | `yss-harness-core` | `crates/yss-harness-core` | [Cargo.toml](../../crates/yss-harness-core/Cargo.toml) | [README](../../crates/yss-harness-core/README.md) |
 | `yss-harness-rig` | `crates/yss-harness-rig` | [Cargo.toml](../../crates/yss-harness-rig/Cargo.toml) | — |
-| `yss-harness-sqlite` | `crates/yss-harness-sqlite` | [Cargo.toml](../../crates/yss-harness-sqlite/Cargo.toml) | — |
+| `yss-harness-sqlite` | `crates/yss-harness-sqlite` | [Cargo.toml](../../crates/yss-harness-sqlite/Cargo.toml) | [README](../../crates/yss-harness-sqlite/README.md) |
 | `yss-harness-tantivy` | `crates/yss-harness-tantivy` | [Cargo.toml](../../crates/yss-harness-tantivy/Cargo.toml) | [README](../../crates/yss-harness-tantivy/README.md) |
 | `yss-ipc-contract` | `crates/yss-ipc-contract` | [Cargo.toml](../../crates/yss-ipc-contract/Cargo.toml) | [README](../../crates/yss-ipc-contract/README.md) |
 | `yss-logging` | `crates/yss-logging` | [Cargo.toml](../../crates/yss-logging/Cargo.toml) | [README](../../crates/yss-logging/README.md) |

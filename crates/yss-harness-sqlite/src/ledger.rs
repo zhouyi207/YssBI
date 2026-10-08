@@ -80,15 +80,19 @@ impl ToolInvocationLedgerPort for SqliteHarnessStore {
         record: &'a ToolInvocationRecord,
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
         let idempotency_key = record.idempotency_key.as_str().to_owned();
+        let id = record.id.as_str().to_owned();
+        let session_id = record.session_id.as_str().to_owned();
         let state = invocation_state(record.state);
         let payload = encode(record);
         Box::pin(async move {
             let result = sqlx::query(
-                "UPDATE tool_invocation SET state = ?, payload_json = ? WHERE idempotency_key = ?",
+                "UPDATE tool_invocation SET state = ?, payload_json = ? WHERE idempotency_key = ? AND id = ? AND session_id = ?",
             )
             .bind(state)
             .bind(payload?)
             .bind(idempotency_key)
+            .bind(id)
+            .bind(session_id)
             .execute(&self.pool)
             .await
             .map_err(|_| unavailable())?;

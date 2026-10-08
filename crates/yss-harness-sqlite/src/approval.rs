@@ -11,12 +11,17 @@ impl ApprovalStorePort for SqliteHarnessStore {
         record: &'a ApprovalGrantRecord,
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
         let id = record.id.as_str().to_owned();
+        let consumed_at = record
+            .consumed_at
+            .map(|value| i64::try_from(value.get()).map_err(|_| invalid_record()))
+            .transpose();
         let payload = encode(record);
         Box::pin(async move {
             sqlx::query(
-                "INSERT INTO approval_grant (id, consumed_at, payload_json) VALUES (?, NULL, ?)",
+                "INSERT INTO approval_grant (id, consumed_at, payload_json) VALUES (?, ?, ?)",
             )
             .bind(id)
+            .bind(consumed_at?)
             .bind(payload?)
             .execute(&self.pool)
             .await
