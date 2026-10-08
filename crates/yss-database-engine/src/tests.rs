@@ -62,8 +62,8 @@ fn result_snapshot_preserves_resolved_columns_order_and_storage_lifetime() {
     assert_eq!(
         result.page(1, 2, &control()).unwrap().data.columns()[0].values(),
         &[
-            yss_data_contract::TabularScalar::Unsigned(1),
-            yss_data_contract::TabularScalar::Unsigned(3)
+            yss_data_contract::TabularScalar::Integer(1),
+            yss_data_contract::TabularScalar::Integer(3)
         ]
     );
     assert_eq!(result.bindings(), source.bindings());
@@ -165,11 +165,11 @@ fn drop_rows_and_columns_preserve_nulls_order_and_source() {
     let page = kept.page(0, 10, &control()).unwrap();
     assert_eq!(
         page.data.columns()[0].values(),
-        &[V::Null, V::Unsigned(0), V::Unsigned(2)]
+        &[V::Null, V::Integer(0), V::Integer(2)]
     );
     assert_eq!(
         page.data.columns()[1].values(),
-        &[V::Unsigned(2), V::Unsigned(3), V::Unsigned(4)]
+        &[V::Integer(2), V::Integer(3), V::Integer(4)]
     );
     condition.comparison = RelationComparison::IsNull;
     condition.value = None;
@@ -434,7 +434,7 @@ fn table_composition_preserves_order_alignment_and_combined_sources() {
     assert_eq!(page.row_count, 2);
     assert_eq!(
         page.data.columns()[0].values(),
-        &[V::Unsigned(1), V::Unsigned(1)]
+        &[V::Integer(1), V::Integer(1)]
     );
 
     let missing = right
@@ -996,7 +996,7 @@ fn computed_series_remain_lazy_and_aligned_through_broadcasts_and_chained_arithm
     assert_eq!(page.columns[0].data_type.as_ref(), "Int64");
     assert_eq!(
         page.data.columns()[0].values()[0],
-        TabularScalar::String((BASE + 1).to_string().into())
+        TabularScalar::Integer(BASE + 1)
     );
     assert!(page.has_more);
 }
@@ -1234,7 +1234,7 @@ fn semantic_conversion_is_lazy_aligned_and_preserves_configuration_identity() {
     assert_eq!(combined.schema().field(1).data_type(), &DataType::Float64);
     assert_eq!(
         page.data.columns()[0].values(),
-        &[V::Unsigned(1), V::Null, V::Unsigned(2), V::Unsigned(3)]
+        &[V::Integer(1), V::Null, V::Integer(2), V::Integer(3)]
     );
     assert_eq!(
         page.data.columns()[1].values(),
@@ -1686,8 +1686,8 @@ fn numeric_materialization_enforces_missing_values_cancellation_and_memory_budge
 }
 
 #[test]
-fn relation_pages_probe_one_extra_row_and_preserve_wide_integer_display() {
-    use arrow::array::UInt64Array;
+fn relation_pages_probe_one_extra_row_and_preserve_exact_integer_carriers() {
+    use arrow::array::{Int32Array, UInt64Array};
     use yss_data_contract::TabularScalar;
     let runtime = DataFusionRuntime::new(32 * 1024 * 1024, 2).unwrap();
     let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::UInt64, true)]));
@@ -1712,7 +1712,7 @@ fn relation_pages_probe_one_extra_row_and_preserve_wide_integer_display() {
     assert_eq!(
         first.data.columns()[0].values(),
         &[
-            TabularScalar::String(u64::MAX.to_string().into()),
+            TabularScalar::Unsigned(u64::MAX),
             TabularScalar::Unsigned(1)
         ]
     );
@@ -1736,6 +1736,27 @@ fn relation_pages_probe_one_extra_row_and_preserve_wide_integer_display() {
         )
         .unwrap();
     assert_eq!(source.page(0, 2, &control()).unwrap(), first);
+
+    let dense_batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Int32,
+            false,
+        )])),
+        vec![Arc::new(Int32Array::from(vec![0; 128]))],
+    )
+    .unwrap();
+    let mut budget = control();
+    budget.max_input_bytes = 1024;
+    assert!(dense_batch.get_array_memory_size() < budget.max_input_bytes);
+    let mut dense_binding = binding();
+    dense_binding.snapshot = "dense-page".into();
+    let dense = runtime.batch_relation(dense_binding, dense_batch).unwrap();
+    assert_eq!(
+        dense.page(0, 128, &budget),
+        Err(RelationError::MemoryLimitExceeded),
+        "native scalar containers must fit the page budget"
+    );
 }
 
 #[test]

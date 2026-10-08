@@ -80,7 +80,7 @@ fn grouped_apply_keeps_null_keys_and_validates_each_returned_schema() {
     );
     assert_eq!(
         page.data.columns()[2].values(),
-        &[30, 60, 20, 40, 10, 50].map(V::Unsigned)
+        &[30, 60, 20, 40, 10, 50].map(V::Integer)
     );
     drop(result);
 
@@ -105,7 +105,7 @@ fn grouped_apply_keeps_null_keys_and_validates_each_returned_schema() {
     );
     assert_eq!(
         page.data.columns()[2].values(),
-        &[20, 10, 50].map(V::Unsigned)
+        &[20, 10, 50].map(V::Integer)
     );
     drop(result);
 
@@ -163,7 +163,7 @@ fn grouped_transform_proves_alignment_across_snapshots_and_restores_source_order
     assert_eq!(page.data.columns().len(), 1);
     assert_eq!(
         page.data.columns()[0].values(),
-        &[10, 20, 30, 40, 50, 60].map(V::Unsigned)
+        &[10, 20, 30, 40, 50, 60].map(V::Integer)
     );
     drop(result);
     let mut mapping = groups
