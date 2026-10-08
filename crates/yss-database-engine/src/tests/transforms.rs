@@ -314,7 +314,13 @@ fn native_series_windows_remain_lazy_aligned_and_page_consistently() {
         vec![None, None, Some(10.0), Some(16.0), Some(7.0)]
     );
     let standardized = source
-        .transform_series(&x, &SeriesTransform::Standardize)
+        .transform_series(
+            &x,
+            &SeriesTransform::Standardize {
+                mean: 11.5,
+                standard_deviation: 15.0_f64.sqrt(),
+            },
+        )
         .unwrap();
     let restored = source
         .transform_series(
@@ -336,6 +342,20 @@ fn native_series_windows_remain_lazy_aligned_and_page_consistently() {
             _ => panic!("null position changed"),
         }
     }
+    let subset = source.limit(2, 2).unwrap();
+    let standardized_subset = subset
+        .transform_series(
+            &subset.select_series("x").unwrap(),
+            &SeriesTransform::Standardize {
+                mean: 11.5,
+                standard_deviation: 15.0_f64.sqrt(),
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        series_numbers(&standardized_subset),
+        vec![Some((7.0 - 11.5) / 15.0_f64.sqrt()), None]
+    );
     let plan = projected
         .plan()
         .as_any()

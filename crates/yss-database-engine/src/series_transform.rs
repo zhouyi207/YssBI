@@ -591,18 +591,11 @@ impl DataFusionRelation {
                     .otherwise(result)
                     .map_err(plan)?
             }
-            Standardize => {
-                let x = numeric()?;
-                let mean = over(aggregate::avg(x.clone()), vec![], vec![], whole())?;
-                let sd = finite(
-                    over(aggregate::stddev(x.clone()), vec![], vec![], whole())?,
-                    &DataType::Float64,
-                    true,
-                );
-                output = field("result", DataType::Float64, SemanticType::Numeric, true)?;
-                finite((x - mean) / sd, &DataType::Float64, false)
+            Standardize {
+                mean,
+                standard_deviation,
             }
-            InverseStandardize {
+            | InverseStandardize {
                 mean,
                 standard_deviation,
             } => {
@@ -613,11 +606,12 @@ impl DataFusionRelation {
                     return Err(RelationError::InvalidInput);
                 }
                 output = field("result", DataType::Float64, SemanticType::Numeric, true)?;
-                finite(
-                    numeric()? * lit(*standard_deviation) + lit(*mean),
-                    &DataType::Float64,
-                    false,
-                )
+                let result = if matches!(operation, Standardize { .. }) {
+                    (numeric()? - lit(*mean)) / lit(*standard_deviation)
+                } else {
+                    numeric()? * lit(*standard_deviation) + lit(*mean)
+                };
+                finite(result, &DataType::Float64, false)
             }
             DummyInformation { base_level } => {
                 let semantic = yss_database_arrow::column_semantic(source)

@@ -12810,6 +12810,7 @@ dependencies = [
  "yss-canonical-hash",
  "yss-data-contract",
  "yss-database-arrow",
+ "yss-database-engine",
  "yss-relational-contract",
  "yss-sci-contract",
  "yss-sci-runtime",

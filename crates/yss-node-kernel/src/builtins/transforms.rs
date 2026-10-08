@@ -630,13 +630,20 @@ pub(super) fn execute_series(
             let [mean, sd] = stats.as_slice() else {
                 return Err(KernelError::OutputContractMismatch);
             };
+            let location = numeric_input(Some(&RuntimeValue::Scalar(mean.clone())))?;
             let scale = numeric_input(Some(&RuntimeValue::Scalar(sd.clone())))?;
             if scale <= 0.0 {
                 return Err(KernelError::InvalidNumericInput);
             }
             let result = series
                 .relation()
-                .transform_series(&series, &SeriesTransform::Standardize)
+                .transform_series(
+                    &series,
+                    &SeriesTransform::Standardize {
+                        mean: location,
+                        standard_deviation: scale,
+                    },
+                )
                 .map_err(kernel_error)?;
             return Ok(vec![
                 RuntimeValue::Series(result),
@@ -988,3 +995,6 @@ fn execute(
             .map_err(kernel_error)?,
     )])
 }
+
+#[cfg(test)]
+mod tests;

@@ -568,6 +568,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                 std::num::NonZeroU32::new(match kind {
                     Comparison(_) => 10,
                     Distribution(_) => 3,
+                    Series(series::SeriesKernel::Standardize) => 6,
                     Series(_) => 5,
                     Statistical(Fit) => 10,
                     Boolean(_) => 5,

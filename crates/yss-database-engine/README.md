@@ -21,6 +21,10 @@ while producing each value, before allocating an oversized display column.
 Exact Arrow snapshots, aggregate/profile queries and numeric materialization retain their
 separate entry points. Display pages do not replace the committed or computed Arrow schema.
 
+Standardization transforms consume the caller's evaluated mean and sample standard deviation.
+The engine validates finite statistics and a positive deviation, then builds a nullable Float64
+projection without recomputing aggregates. Forward and inverse transforms preserve the row domain.
+
 Run focused checks from the repository root:
 
 ```sh

@@ -119,7 +119,11 @@ pub enum SeriesTransform {
         forward: bool,
         window: SeriesWindow,
     },
-    Standardize,
+    /// Apply evaluated input statistics without aggregating again.
+    Standardize {
+        mean: f64,
+        standard_deviation: f64,
+    },
     InverseStandardize {
         mean: f64,
         standard_deviation: f64,
