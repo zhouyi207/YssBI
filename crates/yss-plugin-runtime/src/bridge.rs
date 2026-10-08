@@ -4,7 +4,8 @@ use crate::{
 use serde_json::{Value, json};
 use std::{fs, path::PathBuf, time::Duration};
 use yss_plugin_protocol::{
-    CallContext, MAX_ASSET_BYTES, PluginFailure, RpcRequest, ViewScope, ViewSession,
+    CallContext, MAX_NATIVE_VIEW_BYTES, NativeCommandReply, NativeView, PluginFailure, RpcRequest,
+    ViewScope, ViewSession,
 };
 
 impl RuntimeState {
@@ -52,16 +53,31 @@ impl PluginManager {
             .iter()
             .find(|file| file.path == view.entry)
             .ok_or_else(|| fail("plugin_asset_invalid"))?;
+        if asset
+            .size
+            .parse::<u64>()
+            .map_err(|_| fail("plugin_asset_invalid"))?
+            > MAX_NATIVE_VIEW_BYTES
+        {
+            return Err(fail("plugin_resource_exhausted"));
+        }
         package::verify_file(&root, asset)?;
-        let html = String::from_utf8(read_bounded(
+        let native_view: NativeView = serde_json::from_slice(&read_bounded(
             &resolve_data_file(&root, &view.entry)?,
-            MAX_ASSET_BYTES,
+            MAX_NATIVE_VIEW_BYTES,
         )?)
-        .map_err(|_| fail("plugin_asset_invalid"))?;
-        // The host enforces policy even when a signed publisher omits its own CSP.
-        let html = format!(
-            "<!doctype html><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'\">{html}"
-        );
+        .map_err(|_| fail("plugin_view_invalid"))?;
+        native_view.validate(&entry.manifest)?;
+        let project = if view.scope == ViewScope::Project {
+            Some(
+                self.inner
+                    .services
+                    .current_project()?
+                    .ok_or_else(|| fail("plugin_project_required"))?,
+            )
+        } else {
+            None
+        };
         let lease = self.acquire(id)?;
         if self.registration(id)?.generation != entry.generation {
             return Err(fail("plugin_stale_context"));
@@ -72,11 +88,7 @@ impl PluginManager {
             installation_generation: entry.generation.to_string(),
             instance_id: lease.process.instance_id.clone(),
             package_digest: entry.digest.clone(),
-            project: if view.scope == ViewScope::Project {
-                self.inner.services.current_project()?
-            } else {
-                None
-            },
+            project,
             task_id: None,
             operation_id: None,
             parameters_hash: None,
@@ -108,7 +120,7 @@ impl PluginManager {
         );
         Ok(ViewSession {
             session_id,
-            html,
+            view: native_view,
             installation_generation: entry.generation.to_string(),
         })
     }
@@ -402,11 +414,18 @@ impl PluginManager {
                 if lease.process.instance_id != binding.context.instance_id {
                     return Err(fail("plugin_stale_context"));
                 }
-                lease.process.request(
+                let response = lease.process.request(
                     method,
                     json!({"context":context,"input":input}),
                     Duration::from_secs(30),
-                )
+                )?;
+                self.context(session_id)?;
+                if method == "commands.execute" {
+                    let reply: NativeCommandReply = serde_json::from_value(response.clone())
+                        .map_err(|_| fail("plugin_view_invalid"))?;
+                    reply.validate(&manifest)?;
+                }
+                Ok(response)
             }
             _ => Err(fail("plugin_method_unknown")),
         }

@@ -19,5 +19,9 @@ caller receives `plugin_request_timeout`; other pending callers receive `plugin_
 No expired-request cache is retained for a closed connection. Responses without a matching pending
 request close the peer. The host process supervisor observes that closure and stops the transport.
 
-Plugins reference this existing crate through an explicit Cargo path dependency. The Web SDK remains
-inside the Julia plugin; separate SDK publication is deferred until it has independent consumers.
+Plugins reference this existing crate through an explicit Cargo path dependency.
+The [native_form example](examples/native_form.rs) is a complete Rust process using initialization
+budget grants, typed native command replies and cancellable tasks. Build it with
+`cargo build --locked -p yss-plugin-sdk --example native_form`; the Runtime
+[package example](../yss-plugin-runtime/examples/native_view_package.rs) creates its signed native
+view package. Separate SDK publication is deferred until it has independent consumers.

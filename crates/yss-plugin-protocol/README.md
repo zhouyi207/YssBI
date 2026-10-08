@@ -19,8 +19,13 @@ Cache directory overlap uses ASCII case-insensitive identity and directory bound
 preserving the declared spelling. A parent and child directory cannot both be cleanup roots.
 
 Run `cargo run -p yss-plugin-protocol --bin plugin-schema` from the repository root for schema output.
-`scripts/generate-plugin-contract.mjs` retains generation for the archived React contract reference;
-it is outside the native build.
+
+Custom views are signed `.view.json` assets described by `NativeView`. The contract owns bounded
+text, number, boolean, choice and JSON inputs and declared command/task/view actions. Validation
+checks unique control IDs, initial values, byte/count limits and manifest method/declaration grants.
+Task actions also require `tasks.get` so the host can observe their result without retrying work.
+`ViewSession.view` carries this model; command replies use `NativeCommandReply` and may replace
+the form. HTML, scripts and unknown wire fields are rejected; no legacy-format conversion exists.
 
 Operations use a creation timestamp and a nonce. Reuse the identifier and parameters for retries;
 the host retains receipts for 30 days and rejects expired identifiers instead of executing them again.

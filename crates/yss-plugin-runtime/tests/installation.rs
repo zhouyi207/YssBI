@@ -69,7 +69,7 @@ fn package_variant(path: &Path, escape: bool, version: &str, key_seed: u8, budge
             views: vec![PluginView {
                 id: "main".into(),
                 title: "Statistics".into(),
-                entry: "web/index.html".into(),
+                entry: "views/main.view.json".into(),
                 location: ViewLocation::Sidebar,
                 scope: ViewScope::Application,
             }],
@@ -86,7 +86,10 @@ fn package_variant(path: &Path, escape: bool, version: &str, key_seed: u8, budge
 fn signed_package(path: &Path, escape: bool, manifest: PluginManifest, key_seed: u8) {
     let content = [
         ("bin/plugin.exe", b"test-executable".as_slice()),
-        ("web/index.html", b"<p>Fixture</p>".as_slice()),
+        (
+            "views/main.view.json",
+            br#"{"description":"Fixture","fields":[],"actions":[]}"#.as_slice(),
+        ),
     ];
     let files = content
         .iter()
@@ -267,7 +270,7 @@ fn installation_is_digest_bound_idempotent_and_preserves_private_data_on_uninsta
             0o700
         );
         assert_eq!(
-            fs::metadata(package.join("web/index.html"))
+            fs::metadata(package.join("views/main.view.json"))
                 .unwrap()
                 .permissions()
                 .mode()

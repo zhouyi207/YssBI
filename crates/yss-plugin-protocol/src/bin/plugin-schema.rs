@@ -4,6 +4,7 @@ fn main() {
         "InstalledPlugin":schemars::schema_for!(InstalledPlugin),
         "PackageInspection":schemars::schema_for!(PackageInspection),
         "ViewSession":schemars::schema_for!(ViewSession),
+        "NativeCommandReply":schemars::schema_for!(NativeCommandReply),
         "TaskSnapshot":schemars::schema_for!(TaskSnapshot),
         "TaskHistoryPage":schemars::schema_for!(TaskHistoryPage),
         "PluginDiagnostic":schemars::schema_for!(PluginDiagnostic),

@@ -186,7 +186,7 @@ impl PluginManifest {
             if !valid_id(&view.id)
                 || !ids.insert(&view.id)
                 || !valid_relative_path(&view.entry)
-                || !view.entry.ends_with(".html")
+                || !view.entry.ends_with(".view.json")
                 || view.title.is_empty()
                 || view.title.len() > 128
             {

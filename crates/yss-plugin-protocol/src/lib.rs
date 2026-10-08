@@ -1,8 +1,10 @@
 mod host;
 mod manifest;
+mod native_view;
 mod operation;
 pub use host::*;
 pub use manifest::*;
+pub use native_view::*;
 pub use operation::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

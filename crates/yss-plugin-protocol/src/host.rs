@@ -64,7 +64,7 @@ pub struct PackageInspection {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ViewSession {
     pub session_id: String,
-    pub html: String,
+    pub view: crate::NativeView,
     pub installation_generation: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

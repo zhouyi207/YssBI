@@ -98,9 +98,25 @@ archive mode bits do not grant execute permission to other assets.
 
 The [native desktop](../yss-desktop-gpui/README.md) consumes this manager directly for installation,
 enable/disable, uninstall, storage maintenance, task history and diagnostics. Manager-owned facts
-and receipts remain authoritative. Custom view attachment still loads the manifest's HTML entry
-and returns an HTML `ViewSession`; the GPUI host does not open it. A native custom-view contract
-and plugin implementations remain migration work.
+and receipts remain authoritative. Custom view attachment verifies the signed `.view.json` asset,
+reads at most 256 KiB and validates its typed `NativeView` against the manifest before publishing
+a session. Project-scoped views require a current project. Command replies validate the same
+native contract and recheck their original context after the plugin returns. Existing view-state,
+task admission, cancellation and operation receipts remain the backend owners used by native controls.
+External plugin implementations and target-platform execution acceptance remain open.
+
+Build the [SDK native example](../yss-plugin-sdk/examples/native_form.rs) and package it from the
+repository root for isolated desktop acceptance:
+
+```sh
+cargo build --locked -p yss-plugin-sdk --example native_form
+cargo run --locked -p yss-plugin-runtime --example native_view_package -- target/debug/examples/native_form /tmp/native-example.yssplugin
+```
+
+The [package example](examples/native_view_package.rs) uses a public deterministic example signing
+identity, not a release credential. Install through the native manager with an isolated absolute
+`YSSBI_APP_DATA_DIR`, then open the declared views, edit controls, calculate, save/reopen, start/cancel
+tasks and close/reopen panels. This example does not establish acceptance of external business plugins.
 
 ## Cancellation and diagnostics
 
