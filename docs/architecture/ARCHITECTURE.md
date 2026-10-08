@@ -71,7 +71,7 @@ GPUI desktop composition
 ```
 
 Application 不依赖 GPUI 或窗口。Project、Graph、数据库、SCI 和通用 FS 不依赖桌面宿主。
-`yss-ipc-contract` 保留平台中立共享值，不实现传输或保存业务状态。
+`yss-harness-contract` 同时拥有 Harness 共享类型和 Assistant 公开读投影，不实现传输或保存业务状态。
 插件进程协议属于 Plugin Manager / Plugin Protocol，与图执行和日志通知分别拥有生命周期。
 
 `yss-filesystem` 拥有通用访问、事务和 watcher，不依赖仓库其他 crates。

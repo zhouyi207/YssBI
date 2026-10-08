@@ -358,10 +358,10 @@ impl ConversationPanel {
         for tool in tools {
             let id = tool.id.clone();
             let code = match tool.kind {
-                yss_ipc_contract::harness::HarnessToolIdentityDto::Capability(kind) => {
+                yss_harness_contract::AssistantToolIdentity::Capability(kind) => {
                     kind.as_str().to_owned()
                 }
-                yss_ipc_contract::harness::HarnessToolIdentityDto::Control(kind) => {
+                yss_harness_contract::AssistantToolIdentity::Control(kind) => {
                     kind.as_str().to_owned()
                 }
             };

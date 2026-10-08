@@ -41,12 +41,11 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-graph-resource-contract` | `crates/yss-graph-resource-contract` | [Cargo.toml](../../crates/yss-graph-resource-contract/Cargo.toml) | [README](../../crates/yss-graph-resource-contract/README.md) |
 | `yss-graph-runtime` | `crates/yss-graph-runtime` | [Cargo.toml](../../crates/yss-graph-runtime/Cargo.toml) | [README](../../crates/yss-graph-runtime/README.md) |
 | `yss-graph-type-mapping` | `crates/yss-graph-type-mapping` | [Cargo.toml](../../crates/yss-graph-type-mapping/Cargo.toml) | [README](../../crates/yss-graph-type-mapping/README.md) |
-| `yss-harness-contract` | `crates/yss-harness-contract` | [Cargo.toml](../../crates/yss-harness-contract/Cargo.toml) | — |
+| `yss-harness-contract` | `crates/yss-harness-contract` | [Cargo.toml](../../crates/yss-harness-contract/Cargo.toml) | [README](../../crates/yss-harness-contract/README.md) |
 | `yss-harness-core` | `crates/yss-harness-core` | [Cargo.toml](../../crates/yss-harness-core/Cargo.toml) | [README](../../crates/yss-harness-core/README.md) |
 | `yss-harness-rig` | `crates/yss-harness-rig` | [Cargo.toml](../../crates/yss-harness-rig/Cargo.toml) | [README](../../crates/yss-harness-rig/README.md) |
 | `yss-harness-sqlite` | `crates/yss-harness-sqlite` | [Cargo.toml](../../crates/yss-harness-sqlite/Cargo.toml) | [README](../../crates/yss-harness-sqlite/README.md) |
 | `yss-harness-tantivy` | `crates/yss-harness-tantivy` | [Cargo.toml](../../crates/yss-harness-tantivy/Cargo.toml) | [README](../../crates/yss-harness-tantivy/README.md) |
-| `yss-ipc-contract` | `crates/yss-ipc-contract` | [Cargo.toml](../../crates/yss-ipc-contract/Cargo.toml) | [README](../../crates/yss-ipc-contract/README.md) |
 | `yss-logging` | `crates/yss-logging` | [Cargo.toml](../../crates/yss-logging/Cargo.toml) | [README](../../crates/yss-logging/README.md) |
 | `yss-math-expr` | `crates/yss-math-expr` | [Cargo.toml](../../crates/yss-math-expr/Cargo.toml) | [README](../../crates/yss-math-expr/README.md) |
 | `yss-node-catalog` | `crates/yss-node-catalog` | [Cargo.toml](../../crates/yss-node-catalog/Cargo.toml) | [README](../../crates/yss-node-catalog/README.md) |

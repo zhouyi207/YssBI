@@ -612,12 +612,6 @@
         "target": null
       },
       {
-        "name": "yss-ipc-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-logging",
         "kind": "normal",
         "optional": false,
@@ -1208,18 +1202,6 @@
   {
     "name": "yss-harness-tantivy",
     "manifest": "crates/yss-harness-tantivy/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-harness-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-ipc-contract",
-    "manifest": "crates/yss-ipc-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-harness-contract",

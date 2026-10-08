@@ -1,7 +1,8 @@
+//! Tool-ledger read projections with explicit field filtering and exact result identities.
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-use yss_harness_contract::{
+use crate::{
     AutomationCapabilityRequest as Request, AutomationCapabilityResult as Result,
     GraphResultReference, ManageResourceRequest, ResourceChange, ToolInvocationRecord,
 };
@@ -10,22 +11,22 @@ use yss_harness_contract::{
 /// never become tool-card parameters or a second copy of the model's context.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HarnessToolInspectionDto {
+pub struct AssistantToolInspection {
     pub target: Option<String>,
     pub parameters: BTreeMap<String, Value>,
     pub artifacts: Vec<ResourceChange>,
-    pub results: Vec<HarnessResultReferenceDto>,
+    pub results: Vec<AssistantResultReference>,
     pub started_at: u64,
     pub finished_at: Option<u64>,
     pub failure: Option<Value>,
 }
 
-impl HarnessToolInspectionDto {
+impl AssistantToolInspection {
     pub fn from_control_events(
-        events: &[yss_harness_contract::HarnessEventEnvelope],
-        id: &yss_harness_contract::ToolInvocationId,
+        events: &[crate::HarnessEventEnvelope],
+        id: &crate::ToolInvocationId,
     ) -> Option<Self> {
-        use yss_harness_contract::{AgentEvent, HarnessEvent};
+        use crate::{AgentEvent, HarnessEvent};
         let mut inspection = None;
         for envelope in events {
             let event = match &envelope.event {
@@ -53,8 +54,8 @@ impl HarnessToolInspectionDto {
                     if let Some(value) = &mut inspection {
                         value.finished_at = Some(envelope.occurred_at.get());
                         value.failure = failure_code.map(|code| {
-                            yss_harness_contract::model::failure(
-                                &yss_harness_contract::CapabilityFailure {
+                            crate::model::failure(
+                                &crate::CapabilityFailure {
                                     code,
                                     details: failure_details.clone().unwrap_or_default(),
                                 },
@@ -69,7 +70,7 @@ impl HarnessToolInspectionDto {
     }
 }
 
-impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
+impl From<ToolInvocationRecord> for AssistantToolInspection {
     fn from(record: ToolInvocationRecord) -> Self {
         let mut dto = Self {
             target: None,
@@ -81,7 +82,7 @@ impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
             failure: record
                 .failure
                 .as_ref()
-                .map(yss_harness_contract::model::failure),
+                .map(crate::model::failure),
         };
         if let Some(request) = record.request.bound() {
             match request {
@@ -159,22 +160,22 @@ impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
                 Request::EditResource(request) => {
                     dto.target = Some(request.resource.id.clone());
                     let operation = match request.capability_id() {
-                        yss_harness_contract::CapabilityId::UndoResource => "undo",
-                        yss_harness_contract::CapabilityId::RedoResource => "redo",
-                        yss_harness_contract::CapabilityId::InsertRows => "insert_rows",
-                        yss_harness_contract::CapabilityId::UpdateCells => "update_cells",
-                        yss_harness_contract::CapabilityId::DeleteRows => "delete_rows",
-                        yss_harness_contract::CapabilityId::CreateColumns => "create_columns",
-                        yss_harness_contract::CapabilityId::RenameColumns => "rename_columns",
-                        yss_harness_contract::CapabilityId::DeleteColumns => "delete_columns",
-                        yss_harness_contract::CapabilityId::CastColumns => "cast_columns",
-                        yss_harness_contract::CapabilityId::SetColumnSemantics => {
+                        crate::CapabilityId::UndoResource => "undo",
+                        crate::CapabilityId::RedoResource => "redo",
+                        crate::CapabilityId::InsertRows => "insert_rows",
+                        crate::CapabilityId::UpdateCells => "update_cells",
+                        crate::CapabilityId::DeleteRows => "delete_rows",
+                        crate::CapabilityId::CreateColumns => "create_columns",
+                        crate::CapabilityId::RenameColumns => "rename_columns",
+                        crate::CapabilityId::DeleteColumns => "delete_columns",
+                        crate::CapabilityId::CastColumns => "cast_columns",
+                        crate::CapabilityId::SetColumnSemantics => {
                             "set_column_semantics"
                         }
                         _ => "edit",
                     };
                     dto.parameters.insert("operation".into(), json!(operation));
-                    use yss_harness_contract::ResourceEdit;
+                    use crate::ResourceEdit;
                     if let ResourceEdit::UpdateChart { settings } = &request.edit {
                         dto.parameters.insert("settings".into(), json!(settings));
                     }
@@ -208,7 +209,7 @@ impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
                         .insert("section".into(), json!(request.input.section()));
                     dto.parameters
                         .insert("range".into(), json!(request.input.range()));
-                    use yss_harness_contract::model::DocumentReadInput;
+                    use crate::model::DocumentReadInput;
                     let (offset, limit) = match &request.input {
                         DocumentReadInput::Outline(value) => (value.offset, value.limit),
                         DocumentReadInput::Text(value) => (value.offset, value.limit),
@@ -222,7 +223,7 @@ impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
                 }
                 Request::ReadMind(request) => {
                     dto.target = Some(request.input.mind().id.clone());
-                    use yss_harness_contract::model::MindReadInput;
+                    use crate::model::MindReadInput;
                     match &request.input {
                         MindReadInput::Outline(value) => {
                             dto.parameters
@@ -254,7 +255,7 @@ impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
                 }
                 Request::ReadDatabase(request) => {
                     dto.target = Some(request.input.database().id.clone());
-                    use yss_harness_contract::model::DatabaseReadInput;
+                    use crate::model::DatabaseReadInput;
                     match &request.input {
                         DatabaseReadInput::Overview(_) => {}
                         DatabaseReadInput::Schema(v) => {
@@ -396,7 +397,7 @@ impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
                 dto.results = result
                     .results
                     .into_iter()
-                    .map(HarnessResultReferenceDto::from)
+                    .map(AssistantResultReference::from)
                     .collect();
             }
             Some(Result::GraphResults(result)) => {
@@ -409,7 +410,7 @@ impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
                 dto.results = result
                     .results
                     .into_iter()
-                    .map(HarnessResultReferenceDto::from)
+                    .map(AssistantResultReference::from)
                     .collect();
             }
             Some(Result::ResultInspection(result)) => {
@@ -463,13 +464,13 @@ impl From<ToolInvocationRecord> for HarnessToolInspectionDto {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HarnessResultReferenceDto {
+pub struct AssistantResultReference {
     pub execution_session_id: String,
     pub result_id: String,
     pub output: String,
 }
 
-impl From<GraphResultReference> for HarnessResultReferenceDto {
+impl From<GraphResultReference> for AssistantResultReference {
     fn from(value: GraphResultReference) -> Self {
         Self {
             execution_session_id: value.result_ref.execution_session_id().into(),
@@ -482,7 +483,7 @@ impl From<GraphResultReference> for HarnessResultReferenceDto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_harness_contract::*;
+    use crate::*;
 
     #[test]
     fn pre_execution_failure_details_keep_safe_targets_and_authoritative_timing() {
@@ -508,7 +509,7 @@ mod tests {
                 capability_id: CapabilityId::WriteDocument,
                 input,
             };
-            let dto = HarnessToolInspectionDto::from(record);
+            let dto = AssistantToolInspection::from(record);
             assert_eq!(dto.target.as_deref(), has_input.then_some("docs/report.md"));
             assert_eq!(dto.parameters["argumentStatus"], "rejected");
             assert_eq!(dto.finished_at.unwrap() - dto.started_at, 37);
@@ -548,16 +549,16 @@ mod tests {
             "capabilityId": "import_database", "request": ToolInvocationRequest::from(request), "state": "running", "result": null, "failure": null,
             "startedAt": 1000, "deadline": 31000, "finishedAt": null,
         })).unwrap();
-        let dto = serde_json::to_value(HarnessToolInspectionDto::from(record)).unwrap();
+        let dto = serde_json::to_value(AssistantToolInspection::from(record)).unwrap();
         assert_eq!(dto["parameters"], json!({ "operation": "create" }));
         assert_eq!(dto["startedAt"], 1000);
         assert!(!dto.to_string().contains("private"));
-        let result = HarnessResultReferenceDto::from(GraphResultReference {
-            result_ref: yss_harness_contract::ResultRef::new("execution-1".into(), u64::MAX),
-            validity: yss_harness_contract::ResultValidity::Retained,
+        let result = AssistantResultReference::from(GraphResultReference {
+            result_ref: crate::ResultRef::new("execution-1".into(), u64::MAX),
+            validity: crate::ResultValidity::Retained,
             run_id: 1,
             output: "node:result".into(),
-            category: yss_harness_contract::ResultCategoryInspection::Value,
+            category: crate::ResultCategoryInspection::Value,
         });
         assert_eq!(
             serde_json::to_value(result).unwrap()["resultId"],

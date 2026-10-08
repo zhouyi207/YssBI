@@ -1,19 +1,19 @@
+//! Public event facts for Assistant delivery and replay; consistency metadata stays internal.
 use serde::Serialize;
-mod inspection;
-pub use inspection::{HarnessResultReferenceDto, HarnessToolInspectionDto};
-use yss_harness_contract::{
+use super::AssistantResultReference;
+use crate::{
     AgentEvent, CapabilityId, HarnessEvent, HarnessEventEnvelope, KnowledgeCitation,
     StatisticalPlan,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum HarnessToolIdentityDto {
+pub enum AssistantToolIdentity {
     Capability(CapabilityId),
-    Control(yss_harness_contract::AgentControlTool),
+    Control(crate::AgentControlTool),
 }
 
-impl From<CapabilityId> for HarnessToolIdentityDto {
+impl From<CapabilityId> for AssistantToolIdentity {
     fn from(value: CapabilityId) -> Self {
         Self::Capability(value)
     }
@@ -21,13 +21,13 @@ impl From<CapabilityId> for HarnessToolIdentityDto {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HarnessEventDto {
+pub struct AssistantEvent {
     pub sequence: u64,
     pub session_id: String,
     pub turn_id: Option<String>,
     pub occurred_at: u64,
     #[serde(flatten)]
-    pub event: HarnessEventKindDto,
+    pub event: AssistantEventKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -37,17 +37,17 @@ pub struct HarnessEventDto {
     rename_all = "snake_case",
     rename_all_fields = "camelCase"
 )]
-pub enum HarnessEventKindDto {
+pub enum AssistantEventKind {
     TurnConfigured {
-        options: yss_harness_contract::HarnessTurnOptions,
+        options: crate::HarnessTurnOptions,
     },
     ReasoningDelta {
         delta: String,
     },
     UsageReported {
-        usage: yss_harness_contract::ModelTokenUsage,
+        usage: crate::ModelTokenUsage,
         context_window: Option<u32>,
-        purpose: yss_harness_contract::ModelCallPurpose,
+        purpose: crate::ModelCallPurpose,
     },
     ContextCompactionProgress {
         completed_bytes: usize,
@@ -60,7 +60,7 @@ pub enum HarnessEventKindDto {
     },
     AgentRunResumed {
         run_id: String,
-        role: yss_harness_contract::AgentRole,
+        role: crate::AgentRole,
         objective: String,
     },
     TextRetracted {
@@ -68,7 +68,7 @@ pub enum HarnessEventKindDto {
     },
     ContextCompacted,
     RuntimeStatus {
-        phase: yss_harness_contract::AgentRuntimePhase,
+        phase: crate::AgentRuntimePhase,
         attempt: u32,
     },
     DeliveryBlocked {
@@ -80,30 +80,30 @@ pub enum HarnessEventKindDto {
     AgentRunStarted {
         run_id: String,
         parent_run_id: Option<String>,
-        role: yss_harness_contract::AgentRole,
+        role: crate::AgentRole,
         objective: String,
     },
     AgentRunOutput {
         run_id: String,
-        event: Box<HarnessEventKindDto>,
+        event: Box<AssistantEventKind>,
     },
     AgentRunFinished {
         run_id: String,
-        role: yss_harness_contract::AgentRole,
-        state: yss_harness_contract::AgentRunState,
-        failure_code: Option<yss_harness_contract::AgentDriverFailureCode>,
+        role: crate::AgentRole,
+        state: crate::AgentRunState,
+        failure_code: Option<crate::AgentDriverFailureCode>,
         summary: Option<String>,
         blocked_reason: Option<String>,
         warnings: Vec<String>,
         evidence_count: usize,
-        artifacts: Vec<yss_harness_contract::ResourceChange>,
-        results: Vec<HarnessResultReferenceDto>,
+        artifacts: Vec<crate::ResourceChange>,
+        results: Vec<AssistantResultReference>,
     },
     SessionCreated,
     TurnStarted {
         user_message: String,
-        model: yss_harness_contract::LanguageModelIdentity,
-        resources: Vec<yss_harness_contract::HarnessResourceReference>,
+        model: crate::LanguageModelIdentity,
+        resources: Vec<crate::HarnessResourceReference>,
     },
     TextDelta {
         delta: String,
@@ -113,15 +113,15 @@ pub enum HarnessEventKindDto {
     },
     ToolInvocationStarted {
         invocation_id: String,
-        capability_id: HarnessToolIdentityDto,
+        capability_id: AssistantToolIdentity,
     },
     ToolInvocationCompleted {
         invocation_id: String,
-        capability_id: HarnessToolIdentityDto,
+        capability_id: AssistantToolIdentity,
     },
     ToolInvocationFailed {
         invocation_id: String,
-        capability_id: HarnessToolIdentityDto,
+        capability_id: AssistantToolIdentity,
         failure_code: String,
     },
     TurnCompleted {
@@ -165,19 +165,19 @@ pub enum HarnessEventKindDto {
     },
 }
 
-impl From<&HarnessEventEnvelope> for HarnessEventDto {
+impl From<&HarnessEventEnvelope> for AssistantEvent {
     fn from(envelope: &HarnessEventEnvelope) -> Self {
         Self {
             sequence: envelope.sequence,
             session_id: envelope.session_id.to_string(),
             turn_id: envelope.turn_id.as_ref().map(ToString::to_string),
             occurred_at: envelope.occurred_at.get(),
-            event: HarnessEventKindDto::from(&envelope.event),
+            event: AssistantEventKind::from(&envelope.event),
         }
     }
 }
 
-impl From<&HarnessEvent> for HarnessEventKindDto {
+impl From<&HarnessEvent> for AssistantEventKind {
     fn from(event: &HarnessEvent) -> Self {
         match event {
             HarnessEvent::AgentRunResumed {
@@ -232,7 +232,7 @@ impl From<&HarnessEvent> for HarnessEventKindDto {
                     .results
                     .iter()
                     .cloned()
-                    .map(HarnessResultReferenceDto::from)
+                    .map(AssistantResultReference::from)
                     .collect(),
             },
             HarnessEvent::SessionCreated => Self::SessionCreated,
@@ -296,7 +296,7 @@ impl From<&HarnessEvent> for HarnessEventKindDto {
     }
 }
 
-impl From<&AgentEvent> for HarnessEventKindDto {
+impl From<&AgentEvent> for AssistantEventKind {
     fn from(event: &AgentEvent) -> Self {
         match event {
             AgentEvent::ReasoningDelta { delta } => Self::ReasoningDelta {
@@ -352,7 +352,7 @@ impl From<&AgentEvent> for HarnessEventKindDto {
                 tool,
             } => Self::ToolInvocationStarted {
                 invocation_id: invocation_id.to_string(),
-                capability_id: HarnessToolIdentityDto::Control(*tool),
+                capability_id: AssistantToolIdentity::Control(*tool),
             },
             AgentEvent::ControlToolFinished {
                 invocation_id,
@@ -361,13 +361,13 @@ impl From<&AgentEvent> for HarnessEventKindDto {
                 failure_details,
             } => {
                 let invocation_id = invocation_id.to_string();
-                let capability_id = HarnessToolIdentityDto::Control(*tool);
+                let capability_id = AssistantToolIdentity::Control(*tool);
                 match failure_code {
                     Some(failure_code) => Self::ToolInvocationFailed {
                         invocation_id,
                         capability_id,
-                        failure_code: yss_harness_contract::model::failure_code(
-                            &yss_harness_contract::CapabilityFailure {
+                        failure_code: crate::model::failure_code(
+                            &crate::CapabilityFailure {
                                 code: *failure_code,
                                 details: failure_details.clone().unwrap_or_default(),
                             },
@@ -401,8 +401,8 @@ impl From<&AgentEvent> for HarnessEventKindDto {
             } => Self::ToolInvocationFailed {
                 invocation_id: invocation_id.to_string(),
                 capability_id: (*capability_id).into(),
-                failure_code: yss_harness_contract::model::failure_code(
-                    &yss_harness_contract::CapabilityFailure {
+                failure_code: crate::model::failure_code(
+                    &crate::CapabilityFailure {
                         code: *failure_code,
                         details: failure_details.clone().unwrap_or_default(),
                     },
@@ -415,10 +415,11 @@ impl From<&AgentEvent> for HarnessEventKindDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AssistantToolInspection;
 
     #[test]
     fn tool_failures_share_public_codes_in_events_and_inspection() {
-        use yss_harness_contract::{
+        use crate::{
             AgentControlTool, CapabilityFailureCode, HarnessSessionId, ToolInvocationId, UnixMillis,
         };
         let invocation_id = ToolInvocationId::try_new("delegation").unwrap();
@@ -454,7 +455,7 @@ mod tests {
             let replay: AgentEvent =
                 serde_json::from_value(serde_json::to_value(&business).unwrap()).unwrap();
             assert_eq!(business, replay);
-            let business_wire = serde_json::to_value(HarnessEventKindDto::from(&replay)).unwrap();
+            let business_wire = serde_json::to_value(AssistantEventKind::from(&replay)).unwrap();
             assert_eq!(business_wire["payload"]["failureCode"], expected);
             let finished = AgentEvent::ControlToolFinished {
                 invocation_id: invocation_id.clone(),
@@ -462,7 +463,7 @@ mod tests {
                 failure_code: Some(code),
                 failure_details: Some(details),
             };
-            let wire = serde_json::to_value(HarnessEventKindDto::from(&finished)).unwrap();
+            let wire = serde_json::to_value(AssistantEventKind::from(&finished)).unwrap();
             assert_eq!(wire["payload"]["failureCode"], expected);
             let events = [
                 AgentEvent::ControlToolStarted {
@@ -484,7 +485,7 @@ mod tests {
             let replay: Vec<HarnessEventEnvelope> =
                 serde_json::from_value(serde_json::to_value(events).unwrap()).unwrap();
             let inspection =
-                HarnessToolInspectionDto::from_control_events(&replay, &invocation_id).unwrap();
+                AssistantToolInspection::from_control_events(&replay, &invocation_id).unwrap();
             let failure = inspection.failure.unwrap();
             assert_eq!(failure["code"], expected);
             assert_eq!(failure["details"]["resourceId"], "database-1");
@@ -503,13 +504,13 @@ mod tests {
             failure_code: CapabilityFailureCode::RevisionConflict,
             failure_details: None,
         };
-        let wire = serde_json::to_value(HarnessEventKindDto::from(&event)).unwrap();
+        let wire = serde_json::to_value(AssistantEventKind::from(&event)).unwrap();
         assert_eq!(wire["payload"]["failureCode"], "resource_changed");
     }
 
     #[test]
     fn control_events_replay_exact_tool_identity_failure_and_inspection_times() {
-        use yss_harness_contract::{
+        use crate::{
             AgentControlTool, CapabilityFailureCode, HarnessSessionId, ToolInvocationId, UnixMillis,
         };
         let invocation_id = ToolInvocationId::try_new("control-call").unwrap();
@@ -546,7 +547,7 @@ mod tests {
         let replay: Vec<HarnessEventEnvelope> =
             serde_json::from_value(serde_json::to_value(&events).unwrap()).unwrap();
         let inspection =
-            HarnessToolInspectionDto::from_control_events(&replay, &invocation_id).unwrap();
+            AssistantToolInspection::from_control_events(&replay, &invocation_id).unwrap();
         assert_eq!(inspection.started_at, 1000);
         assert_eq!(inspection.finished_at, Some(1037));
         assert!(inspection.parameters.is_empty() && inspection.artifacts.is_empty());
@@ -559,12 +560,12 @@ mod tests {
         let HarnessEvent::Agent(event) = &replay[1].event else {
             panic!("control event")
         };
-        let wire = serde_json::to_value(HarnessEventKindDto::from(event)).unwrap();
+        let wire = serde_json::to_value(AssistantEventKind::from(event)).unwrap();
         assert_eq!(wire["type"], "tool_invocation_failed");
         assert_eq!(wire["payload"]["capabilityId"], "delegate_task");
         assert_eq!(wire["payload"]["failureCode"], "invalid_request");
         assert!(
-            HarnessToolInspectionDto::from_control_events(
+            AssistantToolInspection::from_control_events(
                 &replay,
                 &ToolInvocationId::try_new("absent").unwrap()
             )
@@ -575,11 +576,11 @@ mod tests {
     #[test]
     fn harness_event_serialization_preserves_public_facts_and_hides_checkpoints() {
         let events = [
-            HarnessEventKindDto::SessionCreated,
-            HarnessEventKindDto::TurnStarted {
+            AssistantEventKind::SessionCreated,
+            AssistantEventKind::TurnStarted {
                 resources: vec![],
-                model: yss_harness_contract::LanguageModelIdentity {
-                    selection: yss_harness_contract::LanguageModelSelection {
+                model: crate::LanguageModelIdentity {
+                    selection: crate::LanguageModelSelection {
                         provider_id: "test-provider".into(),
                         model_id: "test-model".into(),
                     },
@@ -588,49 +589,49 @@ mod tests {
                 },
                 user_message: "Inspect the dataset".into(),
             },
-            HarnessEventKindDto::ToolInvocationStarted {
+            AssistantEventKind::ToolInvocationStarted {
                 invocation_id: "tool-1".into(),
                 capability_id: CapabilityId::InspectDatasetSchema.into(),
             },
-            HarnessEventKindDto::TurnCompleted {
+            AssistantEventKind::TurnCompleted {
                 final_text: "Schema inspected.".into(),
             },
-            HarnessEventKindDto::WorkflowStepFailed {
+            AssistantEventKind::WorkflowStepFailed {
                 run_id: "workflow-1".into(),
                 step_id: "schema".into(),
                 retriable: true,
             },
-            HarnessEventKindDto::ToolInvocationFailed {
+            AssistantEventKind::ToolInvocationFailed {
                 invocation_id: "tool-2".into(),
                 capability_id: CapabilityId::InspectDatasetProfile.into(),
-                failure_code: yss_harness_contract::CapabilityFailureCode::DeadlineElapsed
+                failure_code: crate::CapabilityFailureCode::DeadlineElapsed
                     .to_string(),
             },
-            HarnessEventKindDto::AgentRunResumed {
+            AssistantEventKind::AgentRunResumed {
                 run_id: "worker-1".into(),
-                role: yss_harness_contract::AgentRole::Report,
+                role: crate::AgentRole::Report,
                 objective: "Save report".into(),
             },
-            HarnessEventKindDto::RuntimeStatus {
-                phase: yss_harness_contract::AgentRuntimePhase::Reconnecting,
+            AssistantEventKind::RuntimeStatus {
+                phase: crate::AgentRuntimePhase::Reconnecting,
                 attempt: 1,
             },
-            HarnessEventKindDto::ContextCompacted,
-            HarnessEventKindDto::TextRetracted { characters: 7 },
-            HarnessEventKindDto::GraphExecutionFinished {
+            AssistantEventKind::ContextCompacted,
+            AssistantEventKind::TextRetracted { characters: 7 },
+            AssistantEventKind::GraphExecutionFinished {
                 invocation_id: "tool-3".into(),
                 status: "failed".into(),
                 failure_code: Some("resource_version_changed".into()),
             },
-            HarnessEventKindDto::DeliveryBlocked {
+            AssistantEventKind::DeliveryBlocked {
                 reason: "report_resource_not_saved".into(),
             },
-            HarnessEventKindDto::AgentRunFinished {
+            AssistantEventKind::AgentRunFinished {
                 run_id: "worker-1".into(),
-                role: yss_harness_contract::AgentRole::Report,
-                state: yss_harness_contract::AgentRunState::Failed,
+                role: crate::AgentRole::Report,
+                state: crate::AgentRunState::Failed,
                 failure_code: Some(
-                    yss_harness_contract::AgentDriverFailureCode::ProviderPaymentRequired,
+                    crate::AgentDriverFailureCode::ProviderPaymentRequired,
                 ),
                 summary: None,
                 blocked_reason: None,
@@ -639,17 +640,17 @@ mod tests {
                 artifacts: vec![],
                 results: vec![],
             },
-            HarnessEventKindDto::TurnConfigured {
-                options: yss_harness_contract::HarnessTurnOptions {
-                    mode: yss_harness_contract::HarnessMode::Ask,
-                    reasoning_effort: Some(yss_harness_contract::ReasoningEffort::High),
+            AssistantEventKind::TurnConfigured {
+                options: crate::HarnessTurnOptions {
+                    mode: crate::HarnessMode::Ask,
+                    reasoning_effort: Some(crate::ReasoningEffort::High),
                 },
             },
-            HarnessEventKindDto::ReasoningDelta {
+            AssistantEventKind::ReasoningDelta {
                 delta: "Checking evidence".into(),
             },
-            HarnessEventKindDto::UsageReported {
-                usage: yss_harness_contract::ModelTokenUsage {
+            AssistantEventKind::UsageReported {
+                usage: crate::ModelTokenUsage {
                     input_tokens: Some(100),
                     output_tokens: Some(20),
                     cached_input_tokens: Some(60),
@@ -657,12 +658,12 @@ mod tests {
                     cache_creation_input_tokens: None,
                 },
                 context_window: Some(1000),
-                purpose: yss_harness_contract::ModelCallPurpose::Response,
+                purpose: crate::ModelCallPurpose::Response,
             },
         ]
         .into_iter()
         .enumerate()
-        .map(|(index, event)| HarnessEventDto {
+        .map(|(index, event)| AssistantEvent {
             sequence: index as u64 + 1,
             session_id: "session-1".into(),
             turn_id: ((1..=3).contains(&index) || index >= 5).then(|| "turn-1".into()),
@@ -671,19 +672,19 @@ mod tests {
         })
         .collect::<Vec<_>>();
         let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("harness/fixtures/events.json")).unwrap();
+            serde_json::from_str(include_str!("fixtures/events.json")).unwrap();
         assert_eq!(serde_json::to_value(events).unwrap(), fixture);
         let progress = AgentEvent::ContextCompactionProgress {
             completed_bytes: 50,
             total_bytes: 100,
-            checkpoint: Some(yss_harness_contract::ContextCompactionCheckpoint {
+            checkpoint: Some(crate::ContextCompactionCheckpoint {
                 processed_bytes: 50,
                 prefix_hash: "private-prefix".into(),
                 summary: "private-model-context".into(),
             }),
         };
         assert_eq!(
-            serde_json::to_value(HarnessEventKindDto::from(&progress)).unwrap(),
+            serde_json::to_value(AssistantEventKind::from(&progress)).unwrap(),
             serde_json::json!({
                 "type":"context_compaction_progress", "payload":{"completedBytes":50,"totalBytes":100}
             })

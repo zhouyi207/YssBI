@@ -7,7 +7,7 @@ use gpui_component::{
     text::TextView,
 };
 use yss_harness_contract::{KnowledgeCitation, ToolInvocationId};
-use yss_ipc_contract::harness::{HarnessResultReferenceDto, HarnessToolInspectionDto};
+use yss_harness_contract::{AssistantResultReference, AssistantToolInspection};
 
 impl ConversationPanel {
     pub(super) fn inspect_tool(&self, id: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -33,7 +33,7 @@ impl ConversationPanel {
                 .await
                 .map_err(super::commands::harness_failure)?;
             let detail = if let Some(record) = record {
-                Some(HarnessToolInspectionDto::from(record))
+                Some(AssistantToolInspection::from(record))
             } else {
                 let events = services
                     .application
@@ -42,7 +42,7 @@ impl ConversationPanel {
                     .events_after(&session, 0)
                     .await
                     .map_err(super::commands::harness_failure)?;
-                HarnessToolInspectionDto::from_control_events(&events, &invocation)
+                AssistantToolInspection::from_control_events(&events, &invocation)
             };
             services
                 .application
@@ -238,7 +238,7 @@ impl ConversationPanel {
         })
         .detach();
     }
-    pub(super) fn open_result(&self, result: &HarnessResultReferenceDto, cx: &mut Context<Self>) {
+    pub(super) fn open_result(&self, result: &AssistantResultReference, cx: &mut Context<Self>) {
         if let (Ok(session), Ok(id)) = (
             result.execution_session_id.parse(),
             result.result_id.parse(),

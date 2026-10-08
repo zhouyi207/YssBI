@@ -37,7 +37,6 @@ yss-node-protocol = { path = "../yss-node-protocol" }
 yss-node-catalog = { path = "../yss-node-catalog" }
 yss-harness-contract = { path = "../yss-harness-contract" }
 yss-harness-core = { path = "../yss-harness-core" }
-yss-ipc-contract = { path = "../yss-ipc-contract" }
 yss-ui-contract = { path = "../yss-ui-contract" }
 yss-filesystem = { path = "../yss-filesystem" }
 tokio = { workspace = true, features = ["sync", "time"] }

@@ -5,7 +5,7 @@ use gpui::{Context, Window};
 use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
 use yss_harness_contract::{HarnessEvent, HarnessEventEnvelope};
-use yss_ipc_contract::harness::HarnessEventDto;
+use yss_harness_contract::AssistantEvent;
 
 impl ConversationPanel {
     pub(super) fn connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -57,7 +57,7 @@ impl ConversationPanel {
         let directory_changed = matches!(event.event, HarnessEvent::TurnStarted { .. });
         if self
             .transcript
-            .accept(HarnessEventDto::from(&event))
+            .accept(AssistantEvent::from(&event))
             .is_err()
         {
             self.recover(window, cx);
@@ -147,7 +147,7 @@ impl ConversationPanel {
                         let mut continuous = !view.overflow;
                         for event in events.iter().chain(view.buffered.iter()) {
                             if event.session_id != session.id
-                                || candidate.accept(HarnessEventDto::from(event)).is_err()
+                                || candidate.accept(AssistantEvent::from(event)).is_err()
                             {
                                 continuous = false;
                                 break;

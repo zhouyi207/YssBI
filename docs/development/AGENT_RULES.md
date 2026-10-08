@@ -94,8 +94,9 @@ add or commit them unless explicitly requested.
   subscriptions. Rust producers use tracing; the native host owns delivery and
   localized feedback. Graph Problems, diagnostics, run state and results remain
   domain-owned facts, independent of log delivery. Business workflows belong to
-  application use cases or domain owners. `yss-ipc-contract` retains platform-neutral
-  shared values; it has no GUI or runtime dependency.
+  application use cases or domain owners. `yss-harness-contract` owns the
+  platform-neutral Assistant read projections alongside the underlying Harness
+  contracts; it has no GUI or runtime dependency.
 - Serialized command failures use the exact Rust-owned `{ code, details, incidentId }`
   shape. The native host consumes typed Application errors and localizes stable
   codes; business crates do not produce user-facing prose.
@@ -133,7 +134,7 @@ Use `docs/README.md` for the module index. Representative owners are:
 - Workbench UI intents: `crates/yss-ui-contract/README.md`
 - Plugin protocol/runtime: `crates/yss-plugin-protocol/README.md` and
   `crates/yss-plugin-runtime/README.md`
-- Shared transport values: `crates/yss-ipc-contract/README.md`
+- Shared Harness values and Assistant read projections: `crates/yss-harness-contract/README.md`
 - Architecture review and documentation checks: `docs/development/ARCHITECTURE_GATES.md`
 - Validation discipline: root `.rules`; command usage: root `README.md`
   and the affected module README.

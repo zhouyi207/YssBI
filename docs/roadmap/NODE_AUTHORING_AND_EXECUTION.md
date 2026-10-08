@@ -52,13 +52,13 @@
 | `src-tauri/crates/yss-graph-editor`                                           | 创建与参数编辑共用候选参数处理；将完整参数纳入创建补丁；输出编辑器投影           |
 | `src-tauri/crates/yss-graph-runtime` 与 `yss-project`                         | 对候选文档解析、提交、撤销重做及保存；维持版本和并发校验                         |
 | `src-tauri/crates/yss-application`                                            | 编排 GUI 与 Harness 用例、创建前定义查询、资源绑定、会话重验和回执               |
-| `src-tauri/crates/yss-harness-contract` 与 `yss-ipc-contract`                 | AI 与共享桌面契约；命令专用 DTO 继续放在 Application IPC 的现有位置              |
+| `crates/yss-harness-contract`                                                | AI 契约与 Assistant 公开读投影；原生桌面直接调用 Application 类型化用例          |
 | `src/services/nodeSystem` 与 `src/features/application`                       | 适配契约、现有图 FIFO 和创建交互；安装后端投影                                   |
 | `src/modules/details` 与 `src/modules/graph-editor`                           | 基础表单、上下文选择控件、创建前配置入口；不推导业务合法性                       |
 | `src-tauri/crates/yss-graph-execution`                                        | P5 起负责局部执行、结果版本、复用、取消和发布                                    |
 | `yss-graph-resource-contract`、`yss-relational-contract` 与 `yss-node-kernel` | P6 至 P7 按现有边界承接函数输入契约、分组数据操作与叶节点计算                    |
 
-相关模块契约：[Node Catalog](../../crates/yss-node-catalog/README.md)、[Graph Analysis](../../crates/yss-graph-analysis/README.md)、[Graph Application](../../crates/yss-application/src/graph/README.md)、[Editor Application](../../react/src/features/application/editor/README.md)、[IPC Contract](../../crates/yss-ipc-contract/README.md)、[Harness](../../crates/yss-harness-core/README.md)。
+相关模块契约：[Node Catalog](../../crates/yss-node-catalog/README.md)、[Graph Analysis](../../crates/yss-graph-analysis/README.md)、[Graph Application](../../crates/yss-application/src/graph/README.md)、[Editor Application](../../react/src/features/application/editor/README.md)、[Harness Contract](../../crates/yss-harness-contract/README.md)、[Harness](../../crates/yss-harness-core/README.md)。
 
 ## 核心数据流与依赖关系
 

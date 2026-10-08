@@ -42,7 +42,7 @@ GPUI 原生宿主见 [GPUI host](../crates/yss-desktop-gpui/README.md)，开放�
 | Harness / Assistant          | [Harness Core](../crates/yss-harness-core/README.md)                                                                                                                                                                         |
 | 运行观测和用户反馈           | [Observability](../react/src/features/application/observability/README.md)                                                                                                                                                                   |
 | 日志存储与呈现               | [Logging runtime](../crates/yss-logging/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md)                                                                                                                            |
-| Assistant 公开读投影 | [Assistant projections](../crates/yss-ipc-contract/README.md) |
+| Harness 契约与 Assistant 公开读投影 | [Harness contracts](../crates/yss-harness-contract/README.md) |
 | 插件体系 | [Plugin runtime](../crates/yss-plugin-runtime/README.md)、[Plugin protocol](../crates/yss-plugin-protocol/README.md) |
 
 更多 Project、Database、SCI 与插件内部模块见[实现参考](reference/README.md)和[生成的模块索引](reference/MODULE_MAP.md)。

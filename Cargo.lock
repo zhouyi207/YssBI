@@ -12502,7 +12502,6 @@ dependencies = [
  "yss-graph-execution",
  "yss-harness-contract",
  "yss-harness-core",
- "yss-ipc-contract",
  "yss-logging",
  "yss-node-catalog",
  "yss-node-kernel",
@@ -12758,15 +12757,6 @@ version = "0.1.0"
 dependencies = [
  "tantivy",
  "tokio",
- "yss-harness-contract",
-]
-
-[[package]]
-name = "yss-ipc-contract"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
  "yss-harness-contract",
 ]
 

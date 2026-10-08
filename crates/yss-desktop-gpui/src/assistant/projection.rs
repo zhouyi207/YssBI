@@ -4,9 +4,9 @@ use yss_harness_contract::{
     AgentRole, AgentRunState, HarnessResourceReference, HarnessTurnOptions, KnowledgeCitation,
     LanguageModelIdentity, ModelCallPurpose, ModelTokenUsage, StatisticalPlan,
 };
-use yss_ipc_contract::harness::{
-    HarnessEventDto, HarnessEventKindDto as Event, HarnessResultReferenceDto,
-    HarnessToolIdentityDto,
+use yss_harness_contract::{
+    AssistantEvent, AssistantEventKind as Event, AssistantResultReference,
+    AssistantToolIdentity,
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -19,7 +19,7 @@ pub(super) enum TurnState {
 #[derive(Clone)]
 pub(super) struct Tool {
     pub id: String,
-    pub kind: HarnessToolIdentityDto,
+    pub kind: AssistantToolIdentity,
     pub finished: bool,
     pub failure: Option<String>,
     pub execution: Option<String>,
@@ -34,7 +34,7 @@ pub(super) struct Task {
     pub error: Option<String>,
     pub warnings: Vec<String>,
     pub artifacts: Vec<yss_harness_contract::ResourceChange>,
-    pub results: Vec<HarnessResultReferenceDto>,
+    pub results: Vec<AssistantResultReference>,
     pub tools: Vec<Tool>,
 }
 #[derive(Clone)]
@@ -66,7 +66,7 @@ impl Transcript {
             .last()
             .is_some_and(|turn| turn.state == TurnState::Running)
     }
-    pub fn accept(&mut self, event: HarnessEventDto) -> Result<(), ()> {
+    pub fn accept(&mut self, event: AssistantEvent) -> Result<(), ()> {
         if event.sequence <= self.sequence {
             return Ok(());
         }

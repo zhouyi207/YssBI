@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod agents;
+mod assistant;
 mod capabilities;
 mod chart;
 mod context;
@@ -27,6 +28,7 @@ mod ui;
 mod validation;
 
 pub use agents::*;
+pub use assistant::*;
 pub use capabilities::*;
 pub use chart::*;
 pub use context::*;

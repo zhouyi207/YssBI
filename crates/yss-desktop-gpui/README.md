@@ -141,10 +141,10 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
 - `assistant/stream`：先订阅原生交付再从持久序号 0 重放，在未发布候选中合并有界实时缓冲，
   按会话和查询代次拒绝旧交付；缺号或 broadcast lag 最多自动恢复一次，恢复再次失败等待显式刷新。
   项目会话变化重新验证原归属和绑定，历史不成为新的授权。接近底部时跟随流式正文，浏览早期内容时保持位置。
-- `assistant/projection`：消费现有公开 HarnessEventDto，形成消息、工具、任务、计划、引用和供应商报告的 Token 用量投影。
+- `assistant/projection`：消费现有公开 AssistantEvent，形成消息、工具、任务、计划、引用和供应商报告的 Token 用量投影。
   不显示模型上下文 checkpoint，不把 Worker 正文拼入 Manager 回复；工具完成和图执行状态分别读取。
   render 初次呈现最近 20 轮，按批展开较早历史；Markdown、推理文本、任务和工具详情均由原生控件呈现。
-- `assistant/inspect`：按需校验当前会话并读取 ledger 或控制工具事件，复用原 HarnessToolInspectionDto；
+- `assistant/inspect`：按需校验当前会话并读取 ledger 或控制工具事件，复用原 AssistantToolInspection；
   参数不复制原请求中的凭据、数据行、正文和内部版本。引用通过原知识服务校验来源后显示片段与资源定位。
 - `workbench/assistant`：独立读取 Rust Assistant Activity 文档并交给共用 ActivityPanel，新建/重命名后重读原目录，
   不从操作回执拼接列表、不为目录订阅完整历史。会话缓存只按 ID 查找和保留暂态输入，不持有布局拓扑；
