@@ -84,12 +84,20 @@ mod tests {
     }
 
     #[test]
-    fn record_preserves_the_existing_camel_case_wire_shape() {
-        let expected: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../react/src/tests/fixtures/project-event-wire/project-record.json"
-        ))
-        .unwrap();
-        assert_eq!(serde_json::to_value(record()).unwrap(), expected);
+    fn record_serializes_canonical_camel_case_fields() {
+        assert_eq!(
+            serde_json::to_value(record()).unwrap(),
+            json!({
+                "id": "registration-1",
+                "name": "Example",
+                "path": "C:/projects/example/metadata.yssbi",
+                "createdAt": "17",
+                "lastOpenedAt": "19",
+                "isFavorite": true,
+                "rootIdentity": "native-root-3",
+                "rootIdentityState": "valid"
+            })
+        );
     }
 
     #[test]
