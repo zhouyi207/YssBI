@@ -342,9 +342,9 @@ fn decimal_coefficient(text: &str, precision: u8, scale: i8) -> Result<String, T
     Ok(digits)
 }
 
-/// Snapshot scalars retain signed/unsigned integer carriers and finite floating values.
+/// Snapshot scalars retain signed/unsigned carriers and finite Float32/Float64 values.
 /// Exact decimals, calendar values and category labels retain their textual projection.
-/// Non-finite floats use the existing page null representation.
+/// Non-finite Float32/Float64 values use the existing page null representation.
 pub fn array_to_scalars(array: &dyn Array) -> Result<Vec<TabularScalar>, TabularArrowError> {
     use arrow::util::display::array_value_to_string;
     let normalized = crate::timezone_free_array(array)?;

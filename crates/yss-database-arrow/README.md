@@ -7,8 +7,8 @@
 
 `RecordBatch` and its exact schema carry stored and computed columns. `array_to_scalars`
 projects a bounded array to the existing `TabularScalar` contract: signed and unsigned
-integers retain their carriers and full width, and finite floats retain numeric values.
-Non-finite floats retain the page null representation. Decimal, calendar and category
+integers retain their carriers and full width, and finite Float32/Float64 values stay numeric.
+Their non-finite values retain the page null representation. Decimal, calendar and category
 values retain their exact text; calendar normalization preserves wall-clock fields.
 JSON consumers apply the shared scalar display encoding at their output boundary.
 
