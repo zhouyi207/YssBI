@@ -1,4 +1,4 @@
-//! Bounded Arrow IPC/CSV/Parquet I/O and Excel decoding for host data.
+//! Arrow IPC/Parquet I/O, bounded CSV decoding and Excel input for host data.
 
 mod csv;
 mod excel;
@@ -260,31 +260,6 @@ pub fn write_ipc_batches(
             writer.write(&batch).map_err(error)?;
         }
         writer.finish().map_err(error)?;
-    }
-    sync(&file, format)
-}
-
-pub fn write_csv_batches(
-    path: &Path,
-    batches: impl IntoIterator<Item = Result<RecordBatch, ArrowError>>,
-) -> Result<(), TabularIoError> {
-    let format = TabularIoFormat::Csv;
-    let error = |source| {
-        failure(
-            TabularIoOperation::Write,
-            format,
-            TabularIoPhase::Encode,
-            source,
-        )
-    };
-    let mut file = create(path, format)?;
-    {
-        let mut writer = arrow::csv::WriterBuilder::new()
-            .with_header(true)
-            .build(&mut file);
-        for batch in batches {
-            writer.write(&batch.map_err(error)?).map_err(error)?;
-        }
     }
     sync(&file, format)
 }

@@ -247,8 +247,9 @@ fn parquet_float_encoding_preserves_bits_nulls_and_column_identity() {
 }
 
 #[test]
-fn csv_stream_has_one_header_and_propagates_late_batch_failure() {
+fn csv_reader_consumes_one_header_and_ipc_propagates_late_batch_failure() {
     let directory = TestDirectory::create();
+    fs::create_dir_all(directory.path()).unwrap();
     let csv = directory.path().join("data.csv");
     let schema = Arc::new(Schema::new(vec![Field::new("label", DataType::Utf8, true)]));
     let batch = RecordBatch::try_new(
@@ -256,8 +257,7 @@ fn csv_stream_has_one_header_and_propagates_late_batch_failure() {
         vec![Arc::new(StringArray::from(vec!["a", "b"]))],
     )
     .unwrap();
-    write_csv_batches(&csv, [Ok(batch.clone()), Ok(batch.clone())]).unwrap();
-    assert_eq!(fs::read_to_string(&csv).unwrap(), "label\na\nb\na\nb\n");
+    fs::write(&csv, "label\na\nb\na\nb\n").unwrap();
     let reader = read_csv_batches(&csv, b',', true, 2, 1).unwrap();
     assert_eq!(reader.collect::<Result<Vec<_>, _>>().unwrap().len(), 4);
     let failure = write_ipc_batches(
@@ -287,6 +287,7 @@ fn current_directory_output_has_no_parent_to_create() {
 fn csv_wide_multiline_values_are_batched_by_bytes_and_oversized_records_fail() {
     use std::io::Write;
     let directory = TestDirectory::create();
+    fs::create_dir_all(directory.path()).unwrap();
     let path = directory.path().join("wide.csv");
     let label = format!("{}\n\"quoted\"", "x".repeat(4096));
     let schema = Arc::new(Schema::new(vec![
@@ -304,7 +305,9 @@ fn csv_wide_multiline_values_are_batched_by_bytes_and_oversized_records_fail() {
         ],
     )
     .unwrap();
-    write_csv_batches(&path, [Ok(batch)]).unwrap();
+    let mut fixture = arrow::csv::Writer::new(File::create(&path).unwrap());
+    fixture.write(&batch).unwrap();
+    drop(fixture.into_inner());
     let reader = read_csv_batches(&path, b',', true, 2, 50_000).unwrap();
     assert_eq!(reader.schema().field(0).data_type(), &DataType::Utf8);
     let mut count = 0;
