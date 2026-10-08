@@ -1,6 +1,6 @@
 use serde_json::Value;
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::BTreeMap,
     io::{Read, Write},
     sync::{
         Arc, Mutex,
@@ -18,7 +18,6 @@ pub struct Peer {
     outgoing: mpsc::SyncSender<Vec<u8>>,
     outgoing_bytes: Arc<AtomicUsize>,
     pending: Mutex<Option<Pending>>,
-    expired: Mutex<VecDeque<String>>,
     next: AtomicU64,
     prefix: String,
     budget: Mutex<ResourceBudget>,
@@ -37,7 +36,6 @@ impl Peer {
             outgoing,
             outgoing_bytes: outgoing_bytes.clone(),
             pending: Mutex::new(Some(BTreeMap::new())),
-            expired: Mutex::new(VecDeque::new()),
             next: AtomicU64::new(1),
             prefix: uuid::Uuid::new_v4().to_string(),
             budget: Mutex::new(budget),
@@ -159,11 +157,7 @@ impl Peer {
                             Some(error) => Err(error.data),
                             None => Ok(response.result.unwrap_or(Value::Null)),
                         });
-                    } else if !peer
-                        .expired
-                        .lock()
-                        .is_ok_and(|expired| expired.contains(&response.id))
-                    {
+                    } else {
                         break;
                     }
                 }
@@ -202,7 +196,7 @@ impl Peer {
         }
         let request = RpcRequest {
             jsonrpc: "2.0".into(),
-            id: id.clone(),
+            id,
             method: method.to_owned(),
             params,
         };
@@ -214,17 +208,6 @@ impl Peer {
         match receiver.recv_timeout(timeout) {
             Ok(result) => result,
             Err(_) => {
-                if let Ok(mut expired) = self.expired.lock() {
-                    expired.push_back(id.clone());
-                    while expired.len() > 128 {
-                        expired.pop_front();
-                    }
-                }
-                if let Ok(mut pending) = self.pending.lock()
-                    && let Some(pending) = pending.as_mut()
-                {
-                    pending.remove(&id);
-                }
                 self.close();
                 Err(PluginFailure::new("plugin_request_timeout"))
             }
@@ -314,7 +297,6 @@ mod tests {
             outgoing,
             outgoing_bytes: Arc::new(AtomicUsize::new(0)),
             pending: Mutex::new(Some(BTreeMap::new())),
-            expired: Mutex::new(VecDeque::new()),
             next: AtomicU64::new(1),
             prefix: "test".into(),
             budget: Mutex::new(ResourceBudget::default()),
@@ -344,5 +326,41 @@ mod tests {
         assert!(matches!(frames.try_recv(), Err(mpsc::TryRecvError::Empty)));
         peer.close();
         assert_eq!(peer.pending_count(), 0);
+    }
+
+    #[test]
+    fn timeout_closes_admission_and_wakes_other_pending_calls() {
+        let (outgoing, frames) = mpsc::sync_channel(32);
+        let peer = Arc::new(Peer {
+            outgoing,
+            outgoing_bytes: Arc::new(AtomicUsize::new(0)),
+            pending: Mutex::new(Some(BTreeMap::new())),
+            next: AtomicU64::new(1),
+            prefix: "timeout".into(),
+            budget: Mutex::new(ResourceBudget::default()),
+        });
+        let caller = peer.clone();
+        let waiting = std::thread::spawn(move || {
+            caller.call("tasks.get", Value::Null, Duration::from_secs(5))
+        });
+        frames.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(peer.pending_count(), 1);
+
+        let timeout = peer
+            .call("tasks.cancel", Value::Null, Duration::ZERO)
+            .unwrap_err();
+        assert_eq!(timeout.code, "plugin_request_timeout");
+        assert!(!peer.is_alive());
+        assert_eq!(peer.pending_count(), 0);
+        assert_eq!(
+            waiting.join().unwrap().unwrap_err().code,
+            "plugin_process_exited"
+        );
+        assert_eq!(
+            peer.call("tasks.get", Value::Null, Duration::ZERO)
+                .unwrap_err()
+                .code,
+            "plugin_process_exited"
+        );
     }
 }
