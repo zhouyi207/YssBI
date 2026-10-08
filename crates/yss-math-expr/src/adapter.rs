@@ -498,14 +498,13 @@ fn prepare_latex_symbols(
                 continue;
             }
             if run.chars().count() > 1 {
-                let splits = unique_segmentations(run, known, 2);
-                match splits.as_slice() {
-                    [parts] if parts.len() > 1 => {
+                match segment_symbol(run, known) {
+                    SymbolSegmentation::Unique(parts) if parts.len() > 1 => {
                         text.push_str(&parts.join("\\cdot "));
                         index += run_len;
                         continue;
                     }
-                    _ if splits.len() > 1 => {
+                    SymbolSegmentation::Ambiguous => {
                         return Err(MathError::new(
                             MathErrorKind::AmbiguousSymbol,
                             format!("标识符 '{run}' 可按已知符号进行多种分词"),
@@ -618,18 +617,18 @@ fn resolve_symbol(
     {
         return Ok(MathExpr::Symbol(name.to_string()));
     }
-    let splits = unique_segmentations(name, options.known_symbols, 2);
-    match splits.as_slice() {
-        [] => Ok(MathExpr::Symbol(name.to_string())),
-        [parts] if parts.len() == 1 => Ok(MathExpr::Symbol(name.to_string())),
-        [parts] => {
+    match segment_symbol(name, options.known_symbols) {
+        SymbolSegmentation::Unique(parts) if parts.len() > 1 => {
+            ensure_depth(depth + parts.len() - 1)?;
             let mut expressions = parts
                 .iter()
                 .map(|part| MathExpr::Symbol((*part).to_string()));
             let first = expressions.next().expect("segmentation is non-empty");
             expressions.try_fold(first, |left, right| {
+                // The original variable was charged before expansion; each extra
+                // symbol contributes a leaf and a multiplication node.
                 budget.add_node()?;
-                ensure_depth(depth + 1)?;
+                budget.add_node()?;
                 Ok(MathExpr::Binary {
                     op: BinaryOp::Mul,
                     left: Box::new(left),
@@ -637,39 +636,58 @@ fn resolve_symbol(
                 })
             })
         }
-        _ => Err(MathError::new(
+        SymbolSegmentation::Ambiguous => Err(MathError::new(
             MathErrorKind::AmbiguousSymbol,
             format!("标识符 '{name}' 可按已知符号进行多种分词"),
         )),
+        SymbolSegmentation::Unknown | SymbolSegmentation::Unique(_) => {
+            Ok(MathExpr::Symbol(name.to_string()))
+        }
     }
 }
 
-fn unique_segmentations<'a>(name: &str, known: &'a [String], limit: usize) -> Vec<Vec<&'a str>> {
-    fn visit<'a>(
-        rest: &str,
-        known: &'a [String],
-        current: &mut Vec<&'a str>,
-        output: &mut Vec<Vec<&'a str>>,
-        limit: usize,
-    ) {
-        if output.len() >= limit {
-            return;
-        }
-        if rest.is_empty() {
-            output.push(current.clone());
-            return;
-        }
+enum SymbolSegmentation<'a> {
+    Unknown,
+    Unique(Vec<&'a str>),
+    Ambiguous,
+}
+
+fn segment_symbol<'a>(name: &str, known: &'a [String]) -> SymbolSegmentation<'a> {
+    let mut counts = vec![0_u8; name.len() + 1];
+    counts[name.len()] = 1;
+    // Only zero, one, or multiple interpretations matter. Calculate every suffix
+    // once, including dead ends, instead of recursively enumerating split paths.
+    for (index, _) in name.char_indices().rev() {
         for symbol in known {
-            if !symbol.is_empty() && rest.starts_with(symbol) {
-                current.push(symbol.as_str());
-                visit(&rest[symbol.len()..], known, current, output, limit);
-                current.pop();
+            if !symbol.is_empty() && name[index..].starts_with(symbol) {
+                counts[index] = (counts[index] + counts[index + symbol.len()]).min(2);
+                if counts[index] == 2 {
+                    break;
+                }
             }
         }
     }
-    let mut output = Vec::new();
-    visit(name, known, &mut Vec::new(), &mut output, limit);
-    output
+    match counts[0] {
+        0 => SymbolSegmentation::Unknown,
+        1 => {
+            let mut parts = Vec::new();
+            let mut index = 0;
+            while index < name.len() {
+                let symbol = known
+                    .iter()
+                    .find(|symbol| {
+                        !symbol.is_empty()
+                            && name[index..].starts_with(symbol.as_str())
+                            && counts[index + symbol.len()] > 0
+                    })
+                    .expect("a unique segmentation has a reachable next symbol");
+                parts.push(symbol.as_str());
+                index += symbol.len();
+            }
+            SymbolSegmentation::Unique(parts)
+        }
+        _ => SymbolSegmentation::Ambiguous,
+    }
 }
 
 struct RelationParts<'a> {
@@ -858,6 +876,24 @@ mod tests {
         let known = symbols(&["a", "ab", "b", "bc", "c"]);
         let error = parse_expression("abc", ParseOptions::latex(&known)).unwrap_err();
         assert_eq!(error.kind, MathErrorKind::AmbiguousSymbol);
+    }
+
+    #[test]
+    fn symbol_expansion_charges_each_generated_node_to_the_shared_budget() {
+        let known = symbols(&["a", "l", "p", "h"]);
+        let input = std::iter::repeat_n(r"\alpha = 0", 26)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let error = parse_relations(&input, ParseOptions::latex(&known)).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::NodeLimit);
+    }
+
+    #[test]
+    fn rejects_unsegmentable_latex_runs_without_enumerating_prefix_splits() {
+        let input = format!("{}b", "a".repeat(40));
+        let known = symbols(&["a", "aa"]);
+        let error = parse_expression(&input, ParseOptions::latex(&known)).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::Parse);
     }
 
     #[test]
