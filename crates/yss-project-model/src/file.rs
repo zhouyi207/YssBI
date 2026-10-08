@@ -25,10 +25,14 @@ pub trait FileContent: Clone + Debug + PartialEq + Serialize + DeserializeOwned 
     }
 }
 pub fn bounded(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
-    if bytes.len() > MAX_FILE_BYTES {
+    validate_file_size(bytes.len())?;
+    Ok(bytes)
+}
+pub(crate) fn validate_file_size(size: usize) -> Result<(), String> {
+    if size > MAX_FILE_BYTES {
         Err("file size limit exceeded".into())
     } else {
-        Ok(bytes)
+        Ok(())
     }
 }
 #[derive(Debug, Clone)]

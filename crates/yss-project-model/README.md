@@ -37,6 +37,8 @@ Doc files use `docs/<name>.md` and contain plain UTF-8 Markdown, including norma
 headings, lists, links and code fences. The typed IPC snapshot is a read contract
 and is not wrapped around the saved Markdown file. No editor-specific AST,
 renderer state, resource revision or editing session ID is written into either format.
+Doc edits check the UTF-8 byte size before replacing the current Markdown. Doc content
+fingerprints borrow those same bytes, preserving saved-file identity without cloning the body.
 
 Bounds are defined by `MAX_FILE_BYTES` in `file.rs` and `MAX_MIND_NODES` in `mind.rs`.
 Mind validation uses an ID index and connected-node set; adapters may build their

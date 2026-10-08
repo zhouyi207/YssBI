@@ -1,4 +1,4 @@
-use crate::file::{FileContent, FilePath, FileState, bounded};
+use crate::file::{FileContent, FilePath, FileState, validate_file_size};
 use serde::{Deserialize, Serialize};
 mod query;
 pub use query::*;
@@ -21,19 +21,49 @@ impl FileContent for DocDocument {
         Self(String::new())
     }
     fn decode(bytes: &[u8]) -> Result<Self, String> {
-        String::from_utf8(bounded(bytes.to_vec())?)
+        validate_file_size(bytes.len())?;
+        String::from_utf8(bytes.to_vec())
             .map(Self)
             .map_err(|e| e.to_string())
     }
     fn encode(&self) -> Result<Vec<u8>, String> {
-        bounded(self.0.as_bytes().to_vec())
+        validate_file_size(self.0.len())?;
+        Ok(self.0.as_bytes().to_vec())
     }
     fn apply(&mut self, edit: DocEdit) -> Result<(), String> {
         let DocEdit::SetMarkdown { markdown } = edit;
+        validate_file_size(markdown.len())?;
         self.0 = markdown;
-        self.encode().map(|_| ())
+        Ok(())
     }
     fn duplicate(&self, _next_id: &mut dyn FnMut() -> String) -> Self {
         self.clone()
+    }
+    fn fingerprint(&self) -> Result<String, String> {
+        validate_file_size(self.0.len())?;
+        Ok(yss_canonical_hash::content_sha256(self.0.as_bytes()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::file::MAX_FILE_BYTES;
+
+    #[test]
+    fn oversized_markdown_edit_preserves_current_content_and_exact_identity() {
+        let mut document = DocDocument("# 报告\n🙂\r\n".into());
+        let original = document.clone();
+        let identity = yss_canonical_hash::content_sha256(document.0.as_bytes());
+        assert_eq!(document.fingerprint().unwrap(), identity);
+        let error = document.apply(DocEdit::SetMarkdown {
+            markdown: "é".repeat(MAX_FILE_BYTES / 2 + 1),
+        });
+        assert!(error.is_err());
+        assert!(
+            document == original,
+            "rejected edit replaced the current body"
+        );
+        assert_eq!(document.fingerprint().unwrap(), identity);
     }
 }
