@@ -62,7 +62,8 @@ pub(super) fn costs(inv: &KernelInvocation<'_>, p: usize) -> Result<Vec<bool>, K
         return Err(KernelError::InvalidParameter);
     };
     for value in indices.iter() {
-        let index = crate::builtins::numeric_input(Some(value))?;
+        let index = crate::builtins::numeric_input(Some(value))
+            .map_err(|_| KernelError::InvalidParameter)?;
         if index < 1. || index > p as f64 || index.fract() != 0. {
             return Err(KernelError::InvalidParameter);
         }
