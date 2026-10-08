@@ -14,6 +14,10 @@ Analysis 的参数投影，再使用既有本地化与 Editor 映射生成创建
 `registry()` 返回本运行时使用的冻结注册表借用。Application 的函数正文捕获和 Project 引用事务
 复用该声明身份，不重新组装内置注册表，也不新增可写节点配置。
 
+连线候选与编辑规划先借用原文档。只有需要认领/恢复派生绑定或应用已生成的补丁时才创建临时副本，
+方向、类型等预检拒绝不提前复制整图；已有非 orphan 绑定也按借用读取。
+候选判断继续使用提交所用的同一规划器，补丁原子校验及无引用派生绑定清理仍由现有入口完成。
+
 Graph Runtime 为最近使用的图保留一个不含本地化文本的完整 `GraphAnalysis` 缓存，容量由 [semantic_cache.rs](src/semantic_cache.rs) 定义。复用前校验解析文档指纹、registry/kernel 指纹和之前实际读取的资源，包括传递函数正文和 absent lookup。解析缓存的身份与执行身份分开：常量名称、函数参数名称、诊断所用 connection ID 和 orphan metadata 会影响解析快照，不能仅凭 `semanticInputHash` 复用。无关资源变化不使该缓存失效。
 
 `ResourceCatalogSnapshot` 只保存捕获的函数和数据库 Schema 事实；缓存与执行身份使用实际依赖的读取记录，不计算或保存未被消费者使用的全目录指纹。项目会话和资源提交身份仍由 Application 在捕获与交付边界重验。

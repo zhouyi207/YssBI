@@ -226,7 +226,7 @@ impl GraphRuntimeState {
         catalog: &CatalogMutationValidationSnapshot,
         analysis: Option<&GraphAnalysis>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
-        let mut candidate = document.clone();
+        let mut candidate = std::borrow::Cow::Borrowed(document);
         let mut operations = Vec::new();
         let referenced_ports = mutation.referenced_ports(document);
         for address in referenced_ports {
@@ -244,8 +244,8 @@ impl GraphRuntimeState {
                     },
                 ));
             }
-            if let Some(previous) = candidate.port_bindings.get(address).cloned() {
-                if let DynamicPortBinding::Orphan { origin, order, .. } = &previous {
+            if let Some(previous) = candidate.port_bindings.get(address) {
+                if let DynamicPortBinding::Orphan { origin, order, .. } = previous {
                     let binding = DynamicPortBinding::Resolved {
                         origin: origin.clone(),
                         order: order.clone(),
@@ -254,7 +254,9 @@ impl GraphRuntimeState {
                             value_type: Some(port.accepted_type.clone()),
                         },
                     };
+                    let previous = previous.clone();
                     candidate
+                        .to_mut()
                         .port_bindings
                         .insert(address.clone(), binding.clone());
                     operations.push(GraphDocumentOperation::RemovePortBinding {
@@ -290,6 +292,7 @@ impl GraphRuntimeState {
                 },
             };
             candidate
+                .to_mut()
                 .port_bindings
                 .insert(address.clone(), binding.clone());
             operations.push(GraphDocumentOperation::InsertPortBinding {
@@ -306,7 +309,7 @@ impl GraphRuntimeState {
                 semantics: analysis.map(GraphAnalysis::semantic_snapshot),
             },
         )?;
-        apply_graph_document_patch(&mut candidate, &mutation_patch)?;
+        apply_graph_document_patch(candidate.to_mut(), &mutation_patch)?;
         operations.extend(mutation_patch.operations);
         let referenced_ports = candidate
             .connections
