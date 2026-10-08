@@ -300,14 +300,13 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
         Box::pin(async move {
             let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            if state
-                .sessions
-                .insert(record.id.clone(), record.clone())
-                .is_some()
-            {
-                return Err(conflict());
+            match state.sessions.entry(record.id.clone()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(record.clone());
+                    Ok(())
+                }
+                std::collections::btree_map::Entry::Occupied(_) => Err(conflict()),
             }
-            Ok(())
         })
     }
 
@@ -364,14 +363,13 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
         Box::pin(async move {
             let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            if state
-                .turns
-                .insert(record.id.clone(), record.clone())
-                .is_some()
-            {
-                return Err(conflict());
+            match state.turns.entry(record.id.clone()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(record.clone());
+                    Ok(())
+                }
+                std::collections::btree_map::Entry::Occupied(_) => Err(conflict()),
             }
-            Ok(())
         })
     }
 
@@ -661,14 +659,13 @@ impl ApprovalStorePort for InMemoryHarnessStore {
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
         Box::pin(async move {
             let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            if state
-                .approvals
-                .insert(record.id.clone(), record.clone())
-                .is_some()
-            {
-                return Err(conflict());
+            match state.approvals.entry(record.id.clone()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(record.clone());
+                    Ok(())
+                }
+                std::collections::btree_map::Entry::Occupied(_) => Err(conflict()),
             }
-            Ok(())
         })
     }
 
@@ -843,4 +840,84 @@ fn invalid_record() -> PersistenceFailure {
 
 fn not_found() -> PersistenceFailure {
     PersistenceFailure::new(PersistenceFailureCode::NotFound)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_harness_contract::{
+        HarnessSessionState, HarnessTurnState, PrincipalId, ProjectSessionBinding, SourceHash,
+    };
+    use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
+
+    #[tokio::test]
+    async fn duplicate_creation_preserves_original_session_turn_and_approval_records() {
+        let store = InMemoryHarnessStore::default();
+        let now = UnixMillis::from_existing(100);
+        let session = HarnessSessionRecord {
+            id: HarnessSessionId::try_new("session").unwrap(),
+            principal_id: PrincipalId::try_new("principal").unwrap(),
+            project: ProjectSessionBinding::new(
+                ProjectInstanceId::new(),
+                ProjectSessionId::new("project"),
+            ),
+            conversation: None,
+            state: HarnessSessionState::Active,
+            created_at: now,
+            updated_at: now,
+        };
+        store.create_session(&session).await.unwrap();
+        let mut conflicting_session = session.clone();
+        conflicting_session.state = HarnessSessionState::Stale;
+        assert_eq!(
+            store
+                .create_session(&conflicting_session)
+                .await
+                .unwrap_err()
+                .code,
+            PersistenceFailureCode::Conflict
+        );
+        assert_eq!(
+            store.load_session(&session.id).await.unwrap(),
+            Some(session.clone())
+        );
+
+        let turn = HarnessTurnRecord {
+            id: HarnessTurnId::try_new("turn").unwrap(),
+            session_id: session.id.clone(),
+            state: HarnessTurnState::Running,
+            user_message: "Original request".into(),
+            final_text: None,
+            started_at: now,
+            finished_at: None,
+        };
+        store.create_turn(&turn).await.unwrap();
+        let mut conflicting_turn = turn.clone();
+        conflicting_turn.user_message = "Changed request".into();
+        assert_eq!(
+            store.create_turn(&conflicting_turn).await.unwrap_err().code,
+            PersistenceFailureCode::Conflict
+        );
+        assert_eq!(store.load_turn(&turn.id).await.unwrap(), Some(turn));
+
+        let approval = ApprovalGrantRecord {
+            id: ApprovalGrantId::try_new("approval").unwrap(),
+            principal_id: session.principal_id,
+            session_id: session.id,
+            project: session.project,
+            capability_id: yss_harness_contract::CapabilityId::CreateNodes,
+            request_fingerprint: SourceHash::try_new("0".repeat(64)).unwrap(),
+            issued_at: now,
+            expires_at: UnixMillis::from_existing(200),
+            consumed_at: None,
+        };
+        store.insert(&approval).await.unwrap();
+        let mut conflicting_approval = approval.clone();
+        conflicting_approval.consumed_at = Some(now);
+        assert_eq!(
+            store.insert(&conflicting_approval).await.unwrap_err().code,
+            PersistenceFailureCode::Conflict
+        );
+        assert_eq!(store.load(&approval.id).await.unwrap(), Some(approval));
+    }
 }
