@@ -518,6 +518,8 @@ Workflow run 绑定 exact definition ID/version 和 Project session。恢复或�
 
 Skill 是包含指令正文的版本化方法包，manifest 记录 ID、版本和来源哈希。`SkillRegistry` 是当前内置方法包的来源，SQLite 不存储 Skill 安装包。当前内置 Skill 用于上下文预加载；执行权限由实际角色/任务范围和 Gateway 校验。内置 Knowledge source 是 authority；项目来源的正文 authority 仍为 Project，SQLite 只保存显式来源选择和检索快照。搜索索引可以重建。
 
+同一 ID 和版本的 Skill 只有在 manifest 与正文均相同时才视为重复安装；正文变化但沿用原哈希仍是冲突，注册表拒绝该包并保留已安装内容。
+
 Application 装配 `yss-harness-tantivy`，Core 只依赖中立索引端口。Tantivy 使用 BM25，标题与 scope/标签分别加权；英文按单词、中文按相邻双字分词，索引、查询和摘要使用同一 tokenizer，保留原始 UTF-8 偏移。这是字面检索，不承诺同义词或语义召回。Core 按 Unicode 字符切出重叠片段，Tantivy 先过滤可见文档、再选每份文档的最佳片段，最后限制结果数量，避免一份长文档占满结果。若命中在最终核验时失效，Core 排除已检查文档后继续查询，避免旧来源挤占当前有效结果。
 
 普通轮次不预先检索或把命中片段拼入用户消息。模型需要方法背景时调用 `search_knowledge`，再通过 `read_knowledge` 获取完整片段；两者使用原生工具结果并随账本重建历史。查询只接受文本、scope 与结果数量，读取只接受文档/片段定位；project binding、来源版本、hash 和索引缓存标记由后端处理，不进入模型 schema、返回结果或历史。Knowledge 文本始终是参考数据，不能授予权限或替代实际计算结果。

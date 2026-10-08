@@ -27,7 +27,7 @@ impl SkillRegistry {
             package.manifest.version.clone(),
         );
         if let Some(existing) = self.packages.get(&key) {
-            return if existing.manifest.source_hash == package.manifest.source_hash {
+            return if existing == &package {
                 Ok(())
             } else {
                 Err(SkillError::SilentShadowing)
@@ -115,6 +115,14 @@ mod tests {
         );
         let report = report.clone();
         registry.install(report.clone()).unwrap();
+        let mut changed = report.clone();
+        changed
+            .instructions
+            .push_str("\nChanged reporting requirements.");
+        assert!(matches!(
+            registry.install(changed),
+            Err(SkillError::SilentShadowing)
+        ));
         let mut changed = report;
         changed.manifest.source_hash = SourceHash::try_new("f".repeat(64)).unwrap();
         assert!(matches!(
