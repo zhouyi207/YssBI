@@ -19,7 +19,9 @@
 验证按受影响模块选择契约测试、原生编译/Clippy 和局部格式检查；UI 使用人工验收，不增加 UI 单元测试。
 历史迁移和平台验收见 [GPUI 迁移](GPUI_MIGRATION.md)，当前原生契约见 [GPUI host](../../crates/yss-desktop-gpui/README.md)。
 
-## 当前批次
+## 已审查批次
+
+### 项目知识库与共用设置结构
 
 - 项目知识库设置已接入 `ProjectKnowledgeService` 与既有项目索引，覆盖选择文档、来源状态、添加/重建/移除和打开原文。
 - 索引内容和来源状态仍归 Application/Harness；原生视图只持有当前查询与选择。文档索引变化合并刷新，项目切换清除选择并拒绝迟到回复。
@@ -27,6 +29,17 @@
 - 聚焦验证：`cargo test -p yss-application --lib harness::knowledge::tests::` 两项通过，覆盖正文变化/删除/移除与重开/跨项目隔离。
 - `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。
 - 本批界面人工验收保持开放，操作路径见 GPUI README；编译和业务测试不作为界面验收证据。
+
+### 模型与供应商设置
+
+- 已逐项阅读四个模型设置组件及关联目录/服务：供应商列表和默认模型、供应商编辑、可搜索选择器、模型编辑。
+- 原生供应商选择复用 GPUI Combobox，直接使用服务预设；新增配置直接进入编辑，更换预设保留账户及自定义名称并清空模型和临时密钥。
+- 已补齐独立协议选择、模型显示名回退与发现结果按 ID 自动合并；删除旧发现列表，保留已有参数和正在编辑的输入。
+- 模型表单继续只挂载当前编辑项，复用共享类型校验；不复制 React 的每行输入状态或为未展开模型创建控件。
+- 列表补齐实际供应商名称；列表和默认模型菜单借用目录，编辑按钮按稳定账户 ID 读取当前配置，去掉每次渲染的整份配置复制。
+- 凭据归属由 Contract 定义，Application 在保存及发现时强制校验，避免更换供应商后隐式复用旧密钥；新加两项业务回归分别保护这两个入口。
+- `cargo test -p yss-application --lib harness::models::tests::` 八项通过，覆盖发现草稿/过期回执、账户身份、密钥替换与配置持久化。
+- `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 与 `cargo clippy -p yss-application -p yss-harness-contract --lib --tests --no-deps -- -D warnings` 通过；UI 人工验收保持开放，具体路径见 GPUI README。
 
 ## app
 
@@ -349,10 +362,10 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [modules/settings/internal/ui/KnowledgeSettings.tsx](../../react/src/modules/settings/internal/ui/KnowledgeSettings.tsx) | 迁移：保留显式项目文档索引管理；原生直接调用 Application，移除 Web IPC 适配需求 | `settings/knowledge` 状态/命令/渲染；`workbench/settings` 注入项目与打开原文；来源刷新按文档变化合并 | 已实现并通过聚焦业务测试/编译/Clippy；人工验收待完成 |
-| [modules/settings/internal/ui/LanguageModelEditor.tsx](../../react/src/modules/settings/internal/ui/LanguageModelEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/settings/internal/ui/LanguageModelProviderEditor.tsx](../../react/src/modules/settings/internal/ui/LanguageModelProviderEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/settings/internal/ui/LanguageModelProviderSelect.tsx](../../react/src/modules/settings/internal/ui/LanguageModelProviderSelect.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/settings/internal/ui/LanguageModelSettings.tsx](../../react/src/modules/settings/internal/ui/LanguageModelSettings.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/settings/internal/ui/LanguageModelEditor.tsx](../../react/src/modules/settings/internal/ui/LanguageModelEditor.tsx) | 优化：只挂载当前编辑模型，数值/JSON/推理配置继续复用共享校验 | `settings/models` 已有单模型输入及应用/取消，补齐空显示名使用模型 ID；未编辑项只保留原配置 | 代码已覆盖；人工验收待完成 |
+| [modules/settings/internal/ui/LanguageModelProviderEditor.tsx](../../react/src/modules/settings/internal/ui/LanguageModelProviderEditor.tsx) | 迁移/优化：连接编辑和模型草稿留在 UI，保存/发现及凭据归属由 Application 负责 | `settings/models/provider` 补齐预设切换、独立协议/认证与换密钥提示；`commands` 合并发现结果并保留原参数 | 业务回归通过；人工验收待完成 |
+| [modules/settings/internal/ui/LanguageModelProviderSelect.tsx](../../react/src/modules/settings/internal/ui/LanguageModelProviderSelect.tsx) | 复用原生组件：GPUI Combobox 替代 shadcn/Base UI，搜索与键盘由组件处理 | 直接消费 Application 预设，重选同项不重置，切换保留稳定账户 ID 与自定义名称 | 代码已覆盖；人工验收待完成 |
+| [modules/settings/internal/ui/LanguageModelSettings.tsx](../../react/src/modules/settings/internal/ui/LanguageModelSettings.tsx) | 优化：目录仍由 Application 持有，原生仅缓存读投影和未提交草稿 | 默认模型、列表、删除与存储已接入；新增直接打开编辑器，面包屑统一使用配置显示名 | 代码已覆盖；人工验收待完成 |
 | [modules/settings/internal/ui/SettingsField.tsx](../../react/src/modules/settings/internal/ui/SettingsField.tsx) | 优化：共用名称/说明/控件行，不迁移 DOM Label 包装 | `settings/fields` 按窗口宽度排列，模型与知识库共用；键盘/焦点与标签关系须人工检查 | 实现已复核；人工验收待完成 |
 | [modules/settings/internal/ui/SettingsPage.tsx](../../react/src/modules/settings/internal/ui/SettingsPage.tsx) | 复用原生组件：标题/动作/通知固定，正文独立滚动 | `settings/render` 统一页面结构；知识库失败/加载提示在正文滚动区之外 | 已有原生实现；人工验收待完成 |
 | [modules/settings/internal/ui/SettingsPageHeader.tsx](../../react/src/modules/settings/internal/ui/SettingsPageHeader.tsx) | 复用原生组件：原生按钮/图标展示面包屑与页面操作 | `settings/render::header`；模型草稿导航保留放弃确认，知识库使用独立标题；长标题提示和焦点待检查 | 已有原生实现；人工验收待完成 |

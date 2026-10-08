@@ -115,6 +115,12 @@ pub struct LanguageModelProviderConfig {
 }
 
 impl LanguageModelProviderConfig {
+    /// Saved credentials belong to one account and provider, independently of its display name.
+    /// Endpoint and protocol edits within that provider may keep the same credential.
+    pub fn matches_credential_scope(&self, id: &str, name: &str, adapter: &str) -> bool {
+        self.id == id && self.name == name && self.adapter == adapter
+    }
+
     pub fn validate(&self) -> bool {
         let mut ids = std::collections::BTreeSet::new();
         !self.id.trim().is_empty()

@@ -11,6 +11,7 @@ use yss_harness_contract::{LanguageModelAuthentication, LanguageModelSelection};
 
 impl Render for SettingsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.refresh_key_placeholder(window, cx);
         self.render_width = f32::from(window.viewport_size().width);
         div()
             .id("native-settings")
@@ -107,7 +108,7 @@ impl SettingsPanel {
         let title = self
             .editor
             .as_ref()
-            .map(|draft| draft.name.read(cx).value().to_string())
+            .map(|draft| draft.display_name(cx))
             .unwrap_or_default();
         let mut header =
             div()
@@ -162,44 +163,37 @@ impl SettingsPanel {
                             .disabled(self.busy() || !self.dirty())
                             .on_click(cx.listener(|view, _, window, cx| view.save(window, cx))),
                     );
-        } else {
-            let presets = self
-                .catalog
-                .as_ref()
-                .map(|catalog| catalog.presets.clone())
-                .unwrap_or_default();
-            let generation = self.generation;
-            let owner = cx.entity().downgrade();
-            header = header.child(div().flex_1()).child(
-                Button::new("add-provider")
-                    .small()
-                    .primary()
-                    .label("添加供应商")
-                    .disabled(self.busy() || self.catalog.is_none())
-                    .dropdown_menu(move |mut menu, _, _| {
-                        for preset in &presets {
-                            let preset = preset.clone();
-                            let owner = owner.clone();
-                            menu = menu.item(PopupMenuItem::new(preset.name.clone()).on_click(
-                                move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        if view.generation == generation {
-                                            view.edit_provider(
-                                                None,
-                                                Some(preset.clone()),
-                                                window,
-                                                cx,
-                                            );
-                                        }
-                                    });
-                                },
-                            ));
-                        }
-                        menu
-                    }),
-            );
+        } else if self.page == Page::Providers {
+            header = header
+                .child(div().flex_1())
+                .child(self.add_provider_button(cx));
         }
         header.into_any_element()
+    }
+
+    fn add_provider_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        Button::new("add-provider")
+            .small()
+            .primary()
+            .icon(IconName::Plus)
+            .label(crate::text::translate("settings.models.addProvider"))
+            .disabled(
+                self.busy()
+                    || self
+                        .catalog
+                        .as_ref()
+                        .is_none_or(|catalog| catalog.presets.is_empty()),
+            )
+            .on_click(cx.listener(|view, _, window, cx| {
+                let preset = view
+                    .catalog
+                    .as_ref()
+                    .and_then(|catalog| catalog.presets.first())
+                    .cloned();
+                if let Some(preset) = preset {
+                    view.edit_provider(None, Some(preset), window, cx);
+                }
+            }))
     }
 
     fn status(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -240,10 +234,9 @@ impl SettingsPanel {
     }
 
     fn overview(&self, cx: &mut Context<Self>) -> AnyElement {
-        let catalog = self.catalog.clone();
         let mut label = "尚未选择默认模型".to_owned();
         let mut options = vec![];
-        if let Some(catalog) = &catalog {
+        if let Some(catalog) = &self.catalog {
             for provider in &catalog.providers {
                 for model in &provider.config.models {
                     let selection = LanguageModelSelection {
@@ -305,7 +298,7 @@ impl SettingsPanel {
             );
         }
         for provider in &catalog.providers {
-            let provider = provider.clone();
+            let id = provider.config.id.clone();
             let label = provider_name(&provider.config);
             let info = format!(
                 "{} 个模型 · {}",
@@ -339,6 +332,10 @@ impl SettingsPanel {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
+                                    .flex()
+                                    .flex_wrap()
+                                    .gap_2()
+                                    .child(provider.config.name.clone())
                                     .child(info),
                             ),
                     )
@@ -353,7 +350,19 @@ impl SettingsPanel {
                         .disabled(self.busy())
                         .on_click(cx.listener(
                             move |view, _, window, cx| {
-                                view.edit_provider(Some(provider.clone()), None, window, cx)
+                                let provider = view
+                                    .catalog
+                                    .as_ref()
+                                    .and_then(|catalog| {
+                                        catalog
+                                            .providers
+                                            .iter()
+                                            .find(|provider| provider.config.id == id)
+                                    })
+                                    .cloned();
+                                if let Some(provider) = provider {
+                                    view.edit_provider(Some(provider), None, window, cx);
+                                }
                             },
                         )),
                     ),

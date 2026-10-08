@@ -301,6 +301,106 @@ async fn model_discovery_queries_unsaved_connections_without_persisting_them() {
 }
 
 #[tokio::test]
+async fn credential_scope_changes_require_replacement_before_saving() {
+    let dir = tempfile::tempdir().unwrap();
+    let credentials = Arc::new(Credentials::default());
+    let service = LanguageModelService::new(dir.path().into(), credentials.clone());
+    let saved = service
+        .save_provider(
+            provider(),
+            CredentialChange::Replace(SecretCredential::new("original-provider-key").unwrap()),
+        )
+        .await
+        .unwrap();
+    let path = dir.path().join("settings/language-models.json");
+    let content = std::fs::read(&path).unwrap();
+    let original_keys = credentials.entries.lock().unwrap().clone();
+
+    let mut renamed = provider();
+    renamed.name = "Another provider".into();
+    let mut adapted = provider();
+    adapted.adapter = "deepseek/openai".into();
+    for changed in [renamed.clone(), adapted] {
+        assert!(matches!(
+            service.save_provider(changed, CredentialChange::Keep).await,
+            Err(ModelSettingsError::Invalid)
+        ));
+        assert_eq!(service.catalog().await.unwrap(), saved);
+        assert_eq!(std::fs::read(&path).unwrap(), content);
+        assert_eq!(*credentials.entries.lock().unwrap(), original_keys);
+    }
+
+    let replacement = service
+        .save_provider(
+            renamed.clone(),
+            CredentialChange::Replace(SecretCredential::new("replacement-provider-key").unwrap()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(replacement.providers[0].config, renamed);
+    assert!(replacement.providers[0].has_api_key);
+    assert_eq!(
+        credentials
+            .entries
+            .lock()
+            .unwrap()
+            .values()
+            .collect::<Vec<_>>(),
+        vec!["replacement-provider-key"]
+    );
+}
+
+#[tokio::test]
+async fn credential_scope_changes_require_replacement_before_discovery() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut changed = provider();
+    changed.base_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let server = tokio::spawn(discovery_server(
+        listener,
+        vec![Some("replacement-provider-key")],
+    ));
+    let dir = tempfile::tempdir().unwrap();
+    let credentials = Arc::new(Credentials::default());
+    let service = LanguageModelService::new(dir.path().into(), credentials.clone());
+    let saved = service
+        .save_provider(
+            provider(),
+            CredentialChange::Replace(SecretCredential::new("original-provider-key").unwrap()),
+        )
+        .await
+        .unwrap();
+    let path = dir.path().join("settings/language-models.json");
+    let content = std::fs::read(&path).unwrap();
+    let original_keys = credentials.entries.lock().unwrap().clone();
+
+    changed.name = "Another provider".into();
+    let mut adapted = changed.clone();
+    adapted.name = provider().name;
+    adapted.adapter = "deepseek/openai".into();
+    for draft in [changed.clone(), adapted] {
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            service.discover_models(draft, None),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(result, Err(ModelSettingsError::Invalid)));
+    }
+    let models = service
+        .discover_models(
+            changed,
+            Some(SecretCredential::new("replacement-provider-key").unwrap()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(models[0].id, "listed-model");
+    assert_eq!(service.catalog().await.unwrap(), saved);
+    assert_eq!(std::fs::read(path).unwrap(), content);
+    assert_eq!(*credentials.entries.lock().unwrap(), original_keys);
+    server.await.unwrap();
+}
+
+#[tokio::test]
 async fn model_discovery_uses_drafts_without_replacing_saved_connections_or_keys() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let mut draft = provider();

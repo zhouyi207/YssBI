@@ -112,8 +112,21 @@ impl LanguageModelService {
             let previous = candidate
                 .providers
                 .iter()
-                .find(|entry| entry.config.id == config.id)
-                .and_then(|entry| entry.credential_key.clone());
+                .find(|entry| entry.config.id == config.id);
+            if config.authentication == LanguageModelAuthentication::ApiKey
+                && matches!(credential, CredentialChange::Keep)
+                && previous.is_some_and(|entry| {
+                    entry.credential_key.is_some()
+                        && !entry.config.matches_credential_scope(
+                            &config.id,
+                            &config.name,
+                            &config.adapter,
+                        )
+                })
+            {
+                return Err(ModelSettingsError::Invalid);
+            }
+            let previous = previous.and_then(|entry| entry.credential_key.clone());
             let mut created_key = None;
             let credential = if config.authentication == LanguageModelAuthentication::None {
                 CredentialChange::Remove
@@ -217,9 +230,19 @@ impl LanguageModelService {
                     LanguageModelAuthentication::None => None,
                     LanguageModelAuthentication::ApiKey => Some(match credential {
                         Some(value) => value,
-                        None => state
-                            .credential(provider.ok_or(ModelSettingsError::ModelUnavailable)?)?
-                            .ok_or(ModelSettingsError::ModelUnavailable)?,
+                        None => {
+                            let provider = provider.ok_or(ModelSettingsError::ModelUnavailable)?;
+                            if !provider.config.matches_credential_scope(
+                                &config.id,
+                                &config.name,
+                                &config.adapter,
+                            ) {
+                                return Err(ModelSettingsError::Invalid);
+                            }
+                            state
+                                .credential(provider)?
+                                .ok_or(ModelSettingsError::ModelUnavailable)?
+                        }
                     }),
                 };
                 let client = RigProviderClient::new(&config, credential.as_ref())

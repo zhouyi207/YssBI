@@ -17,6 +17,11 @@ to [Harness Core](../yss-harness-core/README.md).
   and consistency facts needed by their owners.
 - `model` owns model-facing inputs, results and public failure classification.
   Internal binding, revision and persistence fields stay out of this boundary.
+- `models` owns provider/model configuration and validation. The credential scope
+  matches account ID, provider name and adapter; custom display names, endpoints
+  and protocol edits within that scope do not select a different stored key.
+  Application enforces this scope before saving or discovering with a saved key;
+  desktop forms use the same predicate for connection readiness and feedback.
 - `assistant` owns the read projections used by the
   [GPUI Assistant](../yss-desktop-gpui/README.md). It reads existing events and
   records without adding state, subscriptions or another transport layer.

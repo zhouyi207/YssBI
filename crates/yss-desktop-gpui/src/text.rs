@@ -17,6 +17,30 @@ pub fn translate(key: &str) -> String {
     value.as_str().unwrap_or(key).to_owned()
 }
 
+/// Interpolate once: resource names and user input containing {{braces}} remain literal.
+pub fn format(key: &str, arguments: &[(&str, String)]) -> String {
+    let template = translate(key);
+    let mut rest = template.as_str();
+    let mut result = String::with_capacity(rest.len());
+    while let Some(open) = rest.find("{{") {
+        result.push_str(&rest[..open]);
+        let Some(close) = rest[open + 2..].find("}}") else {
+            result.push_str(&rest[open..]);
+            return result;
+        };
+        let end = open + 2 + close;
+        let name = &rest[open + 2..end];
+        if let Some((_, value)) = arguments.iter().find(|(key, _)| *key == name) {
+            result.push_str(value);
+        } else {
+            result.push_str(&rest[open..end + 2]);
+        }
+        rest = &rest[end + 2..];
+    }
+    result.push_str(rest);
+    result
+}
+
 pub fn activity_text(text: &ActivityText) -> String {
     match text {
         ActivityText::Literal(value) => value.clone(),

@@ -1,4 +1,5 @@
 //! Provider and model input buffers; validation and persistence stay with the existing service.
+mod provider;
 mod render;
 
 use super::{Page, SettingsPanel};
@@ -16,7 +17,8 @@ use yss_harness_contract::{
 
 pub(super) struct ProviderDraft {
     pub id: String,
-    pub name: Entity<InputState>,
+    pub name: String,
+    pub preset: Entity<provider::ProviderPicker>,
     pub custom_name: Entity<InputState>,
     pub base_url: Entity<InputState>,
     pub key: Entity<InputState>,
@@ -24,7 +26,6 @@ pub(super) struct ProviderDraft {
     pub adapter: String,
     pub authentication: LanguageModelAuthentication,
     pub models: Vec<LanguageModelConfig>,
-    pub has_api_key: bool,
     pub changed: bool,
     pub saved: bool,
 }
@@ -42,11 +43,20 @@ pub(super) struct ModelDraft {
 }
 
 impl ProviderDraft {
+    pub(super) fn display_name(&self, cx: &App) -> String {
+        let custom = self.custom_name.read(cx).value();
+        if custom.trim().is_empty() {
+            self.name.clone()
+        } else {
+            custom.trim().to_owned()
+        }
+    }
+
     pub(super) fn configuration(&self, cx: &App) -> LanguageModelProviderConfig {
         let custom = self.custom_name.read(cx).value().trim().to_owned();
         LanguageModelProviderConfig {
             id: self.id.clone(),
-            name: self.name.read(cx).value().trim().to_owned(),
+            name: self.name.clone(),
             custom_name: (!custom.is_empty()).then_some(custom),
             protocol: self.protocol,
             adapter: self.adapter.clone(),
@@ -65,9 +75,11 @@ impl ModelDraft {
             serde_json::from_str(parameters.as_ref())
                 .map_err(|_| "扩展参数应为 JSON 对象。".to_owned())?
         };
+        let id = self.id.read(cx).value().trim().to_owned();
+        let name = self.name.read(cx).value().trim().to_owned();
         Ok(LanguageModelConfig {
-            id: self.id.read(cx).value().trim().to_owned(),
-            name: self.name.read(cx).value().trim().to_owned(),
+            name: if name.is_empty() { id.clone() } else { name },
+            id,
             context_window: optional(&self.context, "上下文容量", cx)?,
             max_output_tokens: optional(&self.output, "最大输出", cx)?,
             temperature: optional(&self.temperature, "Temperature", cx)?,
@@ -124,20 +136,15 @@ impl SettingsPanel {
                 models: vec![],
             }
         });
+        let picker = self.provider_picker(&config, window, cx);
         self.editor = Some(ProviderDraft {
             id: config.id,
-            name: self.field(config.name, false, None, window, cx),
-            custom_name: self.field(
-                config.custom_name.unwrap_or_default(),
-                false,
-                None,
-                window,
-                cx,
-            ),
-            base_url: self.field(config.base_url, true, None, window, cx),
+            name: config.name,
+            preset: picker,
+            custom_name: self.field(config.custom_name.unwrap_or_default(), None, window, cx),
+            base_url: self.field(config.base_url, None, window, cx),
             key: self.field(
                 String::new(),
-                true,
                 Some(if has_api_key {
                     "********"
                 } else {
@@ -150,7 +157,6 @@ impl SettingsPanel {
             adapter: config.adapter,
             authentication: config.authentication,
             models: config.models,
-            has_api_key,
             changed: !saved,
             saved,
         });
@@ -161,7 +167,6 @@ impl SettingsPanel {
     fn field(
         &mut self,
         value: String,
-        connection: bool,
         masked: Option<&str>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -179,9 +184,6 @@ impl SettingsPanel {
                 if matches!(event, InputEvent::Change) && view.epoch == epoch {
                     if let Some(draft) = &mut view.editor {
                         draft.changed = true;
-                    }
-                    if connection {
-                        view.discovered.clear();
                     }
                     view.error = None;
                     view.feedback = None;

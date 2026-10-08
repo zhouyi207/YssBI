@@ -1903,6 +1903,7 @@
       "defaultModel": "默认模型",
       "defaultModelDescription": "选择新建对话时默认使用的 AI 模型。",
       "modelCount": "{{count}} 个模型",
+      "discoveryAdded": "已将 {{count}} 个新模型加入草稿；保存配置后生效。",
       "keyStored": "密钥已保存",
       "edit": "编辑",
       "addProvider": "添加供应商",

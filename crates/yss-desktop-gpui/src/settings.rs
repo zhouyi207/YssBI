@@ -46,7 +46,6 @@ pub(crate) struct SettingsPanel {
     error: Option<String>,
     load_failed: bool,
     feedback: Option<String>,
-    discovered: Vec<yss_harness_contract::LanguageModelConfig>,
 }
 
 impl SettingsPanel {
@@ -68,7 +67,6 @@ impl SettingsPanel {
             error: None,
             load_failed: false,
             feedback: None,
-            discovered: vec![],
         }
     }
 
@@ -92,7 +90,6 @@ impl SettingsPanel {
         self.model = None;
         self.provider_subscriptions.clear();
         self.model_subscriptions.clear();
-        self.discovered.clear();
         self.page = Page::Providers;
         self.error = None;
         self.feedback = None;

@@ -33,12 +33,14 @@ impl crate::settings::SettingsPanel {
                     .flex_col()
                     .gap_1p5()
                     .child(div().text_sm().child(label.to_owned()))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(description.to_owned()),
-                    ),
+                    .when(!description.is_empty(), |view| {
+                        view.child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(description.to_owned()),
+                        )
+                    }),
             )
             .child(
                 div()

@@ -581,7 +581,7 @@ OpenAI 兼容协议另支持 `none` 认证，用于无需密钥的本地服务�
 
 每轮准入通过 `LanguageModelResolverPort` 解析一次配置、凭据与具体 `AgentDriverPort`，Manager 和所有 Worker 共用该轮固定驱动。会话模型选择可在运行时修改，影响后续轮次；不会更换运行中的客户端。`TurnStarted.model` 持久保存执行时的 provider/model ID 与显示名；其中 `providerName` 捕获当时的自定义名称，去除首尾空白后为空时使用供应商名称。历史模型提示直接读取该快照，不依赖当前目录，也不随配置改名或删除而变化。队列携带入队时选择，发送旧队列不会覆盖会话的新选择。配置完成不表示远端认证已通过。
 
-模型发现使用当前连接草稿，连接信息填写完整即可请求，无需先保存，也不依赖模型表单是否填写完毕。新输入的密钥仅用于本次请求；没有新输入时由 Application 按供应商 ID 读取已存密钥，`none` 认证不读取密钥。发现操作不保存草稿或临时密钥。请求捕获已存连接与凭据基线，网络返回后由 Application 重验；其他窗口保存、删除或替换该基线后不交付旧目录。前端切换连接参数会使当前发现请求失效并拒绝迟到回复，保存期间禁用表单输入，避免保存完成覆盖随后输入的修改。
+模型发现使用当前连接草稿，连接信息填写完整即可请求，无需先保存，也不依赖模型表单是否填写完毕。新输入的密钥仅用于本次请求；没有新输入时由 Application 按账户 ID 读取已存密钥，并复用 Contract 核对供应商名称与 adapter；归属改变后必须提供新密钥，保存也遵守同一校验。`none` 认证不读取密钥。发现操作不保存草稿或临时密钥。请求捕获已存连接与凭据基线，网络返回后由 Application 重验；其他窗口保存、删除或替换该基线后不交付旧目录。React 参考实现通过请求序号丢弃连接修改后的迟到回复；GPUI 发现和保存期间禁用表单输入，关闭设置窗口保留原草稿。
 
 Rig adapter 使用 `rig-core`、`rig-agent` 和 `rig-reqwest` 0.43.0，最低 Rust 版本为 1.95。Provider registry 建立原生客户端，`DynModel<Completion>` 进入统一的工具、流式与恢复流程；HTTP transport 由 `rig-reqwest` 提供，显式启用 Rustls，以支持 HTTPS、证书校验及系统代理。生产客户端禁止自动跟随 HTTP 重定向，避免将消息正文或供应商专用认证头转发到未配置的端点；3xx 返回稳定的请求拒绝错误，由用户修正 API 根地址。
 协议显式区分 OpenAI Responses、OpenAI Chat Completions、Anthropic Messages 与 Gemini Interactions。Rig 原生 provider registry 负责供应商方言和默认地址；Moonshot/Kimi、DeepSeek、GLM 等保留各自 adapter。Gemini 使用 Rig 的 Interactions wire，保留完整 JSON Schema，并显式设置 `store: false`，对话状态继续由 Harness 管理；其扩展生成参数位于 `generation_config`。认证、请求编码、模型目录和流式解析由 Rig 处理，最终进入同一 Harness 循环。
@@ -623,7 +623,7 @@ Transport recovery retries only the latest sampling boundary, at most five conse
 
 原生供应商/模型设置已在 [GPUI settings](../yss-desktop-gpui/README.md) 接入 LanguageModelService：
 配置草稿、遮蔽密钥输入、模型发现、默认模型和保存全部均留在宿主边界，当前配置与凭据 owner 未变化。
-原生会话目录、消息/工具/任务/引用投影与模型目录失效交付已接入；独立会话分组、草稿持久化、完整卡片、项目知识库及外观偏好仍需继续迁移与人工验收。
+原生会话目录、消息/工具/任务/引用投影、模型目录失效交付与项目知识库设置已接入；原生能力和待验收范围以 GPUI README 为准，草稿持久化、完整卡片及其他外观偏好仍需继续迁移与人工验收。
 
 以下 Assistant 投影和样式说明记录 `react/` 中保留的参考实现，不表示原生 Assistant 已完成迁移。旧 Tauri 命令、Channel hubs 与 IPC 注册表已移除，原生界面应使用上面的类型化服务和事件边界。
 

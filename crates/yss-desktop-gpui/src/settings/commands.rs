@@ -85,6 +85,11 @@ impl SettingsPanel {
             }
         };
         let key = self.editor.as_ref().unwrap().key.read(cx).value();
+        if self.replacement_key_required() && key.trim().is_empty() {
+            self.error = Some(crate::text::translate("settings.models.newProviderKeyHint"));
+            cx.notify();
+            return None;
+        }
         let credential =
             if config.authentication == LanguageModelAuthentication::None || key.is_empty() {
                 CredentialChange::Keep
@@ -161,7 +166,7 @@ impl SettingsPanel {
     }
 
     pub(super) fn discover(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.busy() {
+        if self.busy() || !self.connection_ready(cx) {
             return;
         }
         let Some(draft) = &self.editor else {
@@ -186,7 +191,6 @@ impl SettingsPanel {
         self.task = Some("获取服务端模型…");
         self.error = None;
         self.load_failed = false;
-        self.discovered.clear();
         let epoch = self.epoch;
         let service = self.services.application.harness.models.clone();
         let job = self
@@ -202,9 +206,29 @@ impl SettingsPanel {
                 view.task = None;
                 match outcome {
                     Ok(models) => {
-                        view.feedback =
-                            Some(format!("已获取 {} 个模型；添加后保存配置。", models.len()));
-                        view.discovered = models;
+                        let editing_id = view
+                            .model
+                            .as_ref()
+                            .map(|model| model.id.read(cx).value().trim().to_owned());
+                        let mut added = 0;
+                        if let Some(draft) = &mut view.editor {
+                            let mut ids: std::collections::HashSet<_> =
+                                draft.models.iter().map(|model| model.id.clone()).collect();
+                            if let Some(id) = editing_id.filter(|id| !id.is_empty()) {
+                                ids.insert(id);
+                            }
+                            for model in models {
+                                if ids.insert(model.id.clone()) {
+                                    draft.models.push(model);
+                                    added += 1;
+                                }
+                            }
+                            draft.changed |= added > 0;
+                        }
+                        view.feedback = Some(crate::text::format(
+                            "settings.models.discoveryAdded",
+                            &[("count", added.to_string())],
+                        ));
                     }
                     Err(error) => view.error = Some(failure(&error)),
                 }

@@ -69,6 +69,11 @@ Harness 启动恢复的错误同样保留底层持久化错误码。`invalid_rec
 
 [默认 Harness 组装](src/runtime/harness.rs) 选择 SQLite、Rig、系统时钟与 ID 实现；项目注册 SQLite、notify 文件监听器和 Plugin Manager 在 runtime 内构造。`runtime.rs` 与 `runtime/harness.rs` 是业务 Composition Root，原生宿主提供中立资源发布和事件回调。普通用例模块不构造窗口或具体 provider。
 
+`harness::models::LanguageModelService` 拥有模型目录、配置写入与系统密钥访问。保存和模型发现复用
+[Harness Contract](../yss-harness-contract/README.md) 的凭据归属判定：稳定账户 ID 对应的供应商名称或适配器改变时，
+API Key 认证必须显式提供替换密钥；拒绝不会修改配置或凭据。发现只使用本次连接草稿，返回时重验已存连接基线，
+不隐式保存草稿或临时密钥。调用方仅持有未提交表单及公开目录，不读取已存密钥。
+
 ### 应用会话
 
 `session/` 拥有完整应用会话；内部模块保持私有，通过 `session` 的明确公开项使用。桌面宿主从 crate 根导入 `ApplicationState`，窗口销毁调用现有 `close_result_owner` 释放该窗口的结果租约。

@@ -4,9 +4,8 @@ use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::{Input, Textarea},
-    menu::{DropdownMenu, PopupMenuItem},
 };
-use yss_harness_contract::{LanguageModelAuthentication, LanguageModelProtocol, ReasoningEffort};
+use yss_harness_contract::ReasoningEffort;
 
 impl SettingsPanel {
     pub(in crate::settings) fn provider_form(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -14,95 +13,7 @@ impl SettingsPanel {
             return div().into_any_element();
         };
         let busy = self.busy();
-        let epoch = self.epoch;
-        let presets = self
-            .catalog
-            .as_ref()
-            .map(|catalog| catalog.presets.clone())
-            .unwrap_or_default();
-        let owner = cx.entity().downgrade();
-        let protocol = format!("{} · {}", protocol_label(draft.protocol), draft.adapter);
-        let mut content = div()
-            .flex()
-            .flex_col()
-            .child(self.render_field(
-                "供应商名称",
-                "用于区分配置来源。",
-                Input::new(&draft.name).disabled(busy),
-                cx,
-            ))
-            .child(self.render_field(
-                "自定义名称",
-                "可选；用于模型选择和对话中的显示。",
-                Input::new(&draft.custom_name).disabled(busy),
-                cx,
-            ))
-            .child(
-                self.render_field(
-                    "协议与适配器",
-                    "连接使用供应商对应的原生协议。",
-                    Button::new("provider-protocol")
-                        .label(protocol)
-                        .disabled(busy)
-                        .dropdown_menu(move |mut menu, _, _| {
-                            for preset in &presets {
-                                let preset = preset.clone();
-                                let owner = owner.clone();
-                                let label = format!(
-                                    "{} · {}",
-                                    preset.name,
-                                    protocol_label(preset.protocol)
-                                );
-                                menu = menu.item(PopupMenuItem::new(label).on_click(
-                                    move |_, _, cx| {
-                                        let _ = owner.update(cx, |view, cx| {
-                                            if view.epoch != epoch || view.busy() {
-                                                return;
-                                            }
-                                            if let Some(draft) = &mut view.editor {
-                                                draft.protocol = preset.protocol;
-                                                draft.adapter = preset.adapter.clone();
-                                                draft.changed = true;
-                                                if !matches!(
-                                                    draft.protocol,
-                                                    LanguageModelProtocol::OpenAiChat
-                                                        | LanguageModelProtocol::OpenAiResponses
-                                                ) {
-                                                    draft.authentication =
-                                                        LanguageModelAuthentication::ApiKey;
-                                                }
-                                                view.discovered.clear();
-                                                view.error = None;
-                                                cx.notify();
-                                            }
-                                        });
-                                    },
-                                ));
-                            }
-                            menu
-                        }),
-                    cx,
-                ),
-            )
-            .child(self.authentication(cx))
-            .child(self.render_field(
-                "API 根地址",
-                "填写完整根地址，包含服务要求的路径。",
-                Input::new(&draft.base_url).disabled(busy),
-                cx,
-            ));
-        if draft.authentication == LanguageModelAuthentication::ApiKey {
-            content = content.child(self.render_field(
-                "API Key",
-                if draft.has_api_key {
-                    "已保存密钥；留空保留，输入新值后保存替换。"
-                } else {
-                    "保存在系统凭据库。"
-                },
-                Input::new(&draft.key).disabled(busy),
-                cx,
-            ));
-        }
+        let mut content = div().flex().flex_col().child(self.connection_fields(cx));
         content = content
             .child(
                 div()
@@ -116,8 +27,8 @@ impl SettingsPanel {
                         Button::new("models-discover")
                             .small()
                             .ghost()
-                            .label("从服务获取")
-                            .disabled(busy)
+                            .label(crate::text::translate("settings.models.discover"))
+                            .disabled(busy || !self.connection_ready(cx))
                             .on_click(cx.listener(|view, _, window, cx| view.discover(window, cx))),
                     )
                     .child(
@@ -137,16 +48,13 @@ impl SettingsPanel {
         if self.model.is_some() {
             content = content.child(self.model_form(cx));
         }
-        if !self.discovered.is_empty() {
-            content = content.child(self.discovery_list(cx));
-        }
         if draft.saved {
             content = content.child(
                 div().pt_6().child(
                     Button::new("provider-delete")
                         .small()
                         .danger()
-                        .label("删除供应商…")
+                        .label(crate::text::translate("settings.models.removeProvider"))
                         .disabled(busy)
                         .on_click(
                             cx.listener(|view, _, window, cx| view.delete_provider(window, cx)),
@@ -155,56 +63,6 @@ impl SettingsPanel {
             );
         }
         content.into_any_element()
-    }
-
-    fn authentication(&self, cx: &mut Context<Self>) -> AnyElement {
-        let draft = self.editor.as_ref().unwrap();
-        let allow_none = matches!(
-            draft.protocol,
-            LanguageModelProtocol::OpenAiChat | LanguageModelProtocol::OpenAiResponses
-        );
-        let epoch = self.epoch;
-        let owner = cx.entity().downgrade();
-        self.render_field(
-            "认证方式",
-            "本地 OpenAI 兼容服务可选择无需认证。",
-            Button::new("provider-auth")
-                .label(
-                    if draft.authentication == LanguageModelAuthentication::None {
-                        "无需认证"
-                    } else {
-                        "API Key"
-                    },
-                )
-                .disabled(self.busy())
-                .dropdown_menu(move |mut menu, _, _| {
-                    for (label, value) in [
-                        ("API Key", LanguageModelAuthentication::ApiKey),
-                        ("无需认证", LanguageModelAuthentication::None),
-                    ] {
-                        let owner = owner.clone();
-                        menu = menu.item(
-                            PopupMenuItem::new(label)
-                                .disabled(value == LanguageModelAuthentication::None && !allow_none)
-                                .on_click(move |_, _, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        if view.epoch == epoch && !view.busy() {
-                                            if let Some(draft) = &mut view.editor {
-                                                draft.authentication = value;
-                                                draft.changed = true;
-                                            }
-                                            view.discovered.clear();
-                                            view.error = None;
-                                            cx.notify();
-                                        }
-                                    });
-                                }),
-                        );
-                    }
-                    menu
-                }),
-            cx,
-        )
     }
 
     fn model_list(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -404,65 +262,5 @@ impl SettingsPanel {
                     ),
             );
         form.into_any_element()
-    }
-
-    fn discovery_list(&self, cx: &mut Context<Self>) -> AnyElement {
-        let draft = self.editor.as_ref().unwrap();
-        let mut list = div()
-            .mt_4()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(div().text_sm().child("服务端模型"));
-        for (index, model) in self.discovered.iter().enumerate() {
-            let epoch = self.epoch;
-            let exists = draft.models.iter().any(|saved| saved.id == model.id);
-            let model = model.clone();
-            list = list.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .py_1()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_sm()
-                            .truncate()
-                            .child(model.id.clone()),
-                    )
-                    .child(
-                        Button::new(("discovered-model", index))
-                            .small()
-                            .ghost()
-                            .label(if exists { "已添加" } else { "添加" })
-                            .disabled(exists || self.busy() || self.model.is_some())
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                if view.epoch != epoch || view.busy() || view.model.is_some() {
-                                    return;
-                                }
-                                if let Some(draft) = &mut view.editor {
-                                    if draft.models.iter().any(|existing| existing.id == model.id) {
-                                        return;
-                                    }
-                                    draft.models.push(model.clone());
-                                    draft.changed = true;
-                                }
-                                cx.notify();
-                            })),
-                    ),
-            );
-        }
-        list.into_any_element()
-    }
-}
-
-fn protocol_label(protocol: LanguageModelProtocol) -> &'static str {
-    match protocol {
-        LanguageModelProtocol::OpenAiResponses => "OpenAI Responses",
-        LanguageModelProtocol::OpenAiChat => "OpenAI Chat Completions",
-        LanguageModelProtocol::Anthropic => "Anthropic",
-        LanguageModelProtocol::Gemini => "Gemini Interactions",
     }
 }
