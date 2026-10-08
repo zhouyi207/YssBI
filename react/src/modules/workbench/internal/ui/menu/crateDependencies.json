@@ -1351,6 +1351,12 @@
     "manifest": "crates/yss-plugin-runtime/Cargo.toml",
     "dependencies": [
       {
+        "name": "yss-filesystem",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-plugin-protocol",
         "kind": "normal",
         "optional": false,

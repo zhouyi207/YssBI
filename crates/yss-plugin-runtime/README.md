@@ -26,8 +26,9 @@ and file-access entry points remain available from the crate root.
 | [process](src/process.rs), [tasks](src/tasks.rs) and [diagnostics](src/diagnostics.rs) | Process supervision, task lifecycle and bounded diagnostic delivery                              |
 
 These modules operate on the same manager-owned state. Process startup and file I/O
-retain the existing lock boundaries; file resolution and storage accounting share
-the same platform redirect predicate. No second registry or backend is introduced.
+retain the existing lock boundaries; file resolution and storage accounting reuse
+`yss-filesystem::metadata_is_redirect` for platform redirect checks. Plugin-relative
+path rules and failures remain owned by this crate.
 
 ## Durable task and installation state
 

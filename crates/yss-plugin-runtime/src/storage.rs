@@ -4,21 +4,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use yss_filesystem::metadata_is_redirect;
 use yss_plugin_protocol::valid_relative_path;
-
-fn redirected(metadata: &std::fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        if metadata.file_attributes() & 0x400 != 0 {
-            return true;
-        }
-    }
-    false
-}
 
 pub(super) fn validate_path(root: &Path, path: &Path) -> Result<(), PluginFailure> {
     let relative = path
@@ -33,7 +20,9 @@ pub(super) fn validate_path(root: &Path, path: &Path) -> Result<(), PluginFailur
             current.push(component);
         }
         match std::fs::symlink_metadata(&current) {
-            Ok(metadata) if redirected(&metadata) => return Err(fail("plugin_path_invalid")),
+            Ok(metadata) if metadata_is_redirect(&metadata) => {
+                return Err(fail("plugin_path_invalid"));
+            }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => return Err(fail("plugin_storage_failed")),
@@ -49,7 +38,7 @@ pub(super) fn directory_bytes(path: &Path) -> Result<u64, PluginFailure> {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
             Err(_) => return Err(fail("plugin_storage_failed")),
         };
-        if redirected(&metadata) {
+        if metadata_is_redirect(&metadata) {
             return Ok(0);
         }
         if !metadata.is_dir() {
@@ -212,7 +201,7 @@ pub fn resolve_data_file(root: &Path, relative: &str) -> Result<PathBuf, PluginF
         return Err(fail("plugin_path_invalid"));
     }
     let meta = fs::symlink_metadata(root).map_err(|_| fail("plugin_path_invalid"))?;
-    if redirected(&meta) {
+    if metadata_is_redirect(&meta) {
         return Err(fail("plugin_path_invalid"));
     }
     let root = fs::canonicalize(root).map_err(|_| fail("plugin_path_invalid"))?;
@@ -220,7 +209,7 @@ pub fn resolve_data_file(root: &Path, relative: &str) -> Result<PathBuf, PluginF
     for component in relative.split('/') {
         candidate.push(component);
         let meta = fs::symlink_metadata(&candidate).map_err(|_| fail("plugin_path_invalid"))?;
-        if redirected(&meta) {
+        if metadata_is_redirect(&meta) {
             return Err(fail("plugin_path_invalid"));
         }
     }

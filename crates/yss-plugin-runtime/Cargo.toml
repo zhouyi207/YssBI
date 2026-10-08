@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+yss-filesystem = { path = "../yss-filesystem" }
 yss-plugin-protocol = { path = "../yss-plugin-protocol" }
 yss-plugin-sdk = { path = "../yss-plugin-sdk" }
 atomicwrites.workspace = true

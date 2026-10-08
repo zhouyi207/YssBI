@@ -12867,6 +12867,7 @@ dependencies = [
  "tokio",
  "uuid",
  "windows-sys 0.61.2",
+ "yss-filesystem",
  "yss-plugin-protocol",
  "yss-plugin-sdk",
  "zip 6.0.0",
