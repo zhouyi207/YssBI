@@ -79,7 +79,7 @@ pub(crate) struct LogStore {
 }
 
 impl LogStore {
-    /// Open on a dedicated blocking thread, as the plugin dispatcher does.
+    /// Open on the log dispatcher's dedicated blocking thread.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, LogStoreError> {
         let path = path.as_ref();
         if let Some(parent) = path.parent() {

@@ -130,16 +130,24 @@ pub(crate) fn spawn_output(
     let worker = thread::Builder::new()
         .name(format!("yssbi-log-{name}"))
         .spawn(move || {
-            while worker_active.load(Ordering::Acquire) {
-                match receiver.recv() {
-                    Ok(OutputCommand::Record(record)) => {
+            loop {
+                // Once producers stop, drain accepted records without waiting
+                // on retained handles. A full queue may reject the wake-up marker.
+                let command = if worker_active.load(Ordering::Acquire) {
+                    receiver.recv().ok()
+                } else {
+                    receiver.try_recv().ok()
+                };
+                match command {
+                    Some(OutputCommand::Record(record)) => {
                         let succeeded = catch_unwind(AssertUnwindSafe(|| sink(record.as_ref())))
                             .unwrap_or(false);
                         if !succeeded {
                             worker_active.store(false, Ordering::Release);
+                            break;
                         }
                     }
-                    Ok(OutputCommand::Shutdown) | Err(_) => break,
+                    Some(OutputCommand::Shutdown) | None => break,
                 }
             }
             worker_active.store(false, Ordering::Release);
@@ -255,6 +263,43 @@ mod tests {
             released.recv_timeout(Duration::from_secs(1)),
             Err(mpsc::RecvTimeoutError::Disconnected)
         );
+    }
+
+    #[test]
+    fn shutdown_drains_a_full_queue_while_a_producer_handle_is_retained() {
+        let (started_sender, started_receiver) = mpsc::channel();
+        let (release_sender, release_receiver) = mpsc::channel();
+        let written = Arc::new(AtomicUsize::new(0));
+        let sink_written = written.clone();
+        let sink: OutputSink = Box::new(move |_| {
+            if sink_written.fetch_add(1, Ordering::Relaxed) == 0 {
+                started_sender.send(()).unwrap();
+                release_receiver
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap();
+            }
+            true
+        });
+        let (output, guard) = spawn_output("drain-test", sink).unwrap();
+        let record = Arc::new(test_record());
+        output.try_enqueue(record.clone());
+        started_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap();
+        for _ in 0..OUTPUT_QUEUE_CAPACITY {
+            output.try_enqueue(record.clone());
+        }
+
+        let shutdown = thread::spawn(move || drop(guard));
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        while output.active.load(Ordering::Acquire) && std::time::Instant::now() < deadline {
+            thread::yield_now();
+        }
+        assert!(!output.active.load(Ordering::Acquire));
+        release_sender.send(()).unwrap();
+        shutdown.join().unwrap();
+
+        assert_eq!(written.load(Ordering::Relaxed), OUTPUT_QUEUE_CAPACITY + 1);
     }
 
     #[test]

@@ -13,8 +13,10 @@ Rust 生产者使用普通 `tracing` 宏；`log` facade 由 collector 的 LogTra
 
 `LogCollection::initialize(directory)` 安装 process-wide subscriber 和受限 console worker，
 在指定目录打开 `logs.sqlite`。存储无法初始化时保留 console 输出，并向宿主表示历史不可用。
-宿主持有 collection 至窗口循环结束；`shutdown` 和 Drop 排空已接收日志，先结束 dispatcher，
-再结束 console worker。原生 `YSSBI_APP_DATA_DIR` 可隔离验收数据，具体路径由宿主决定。
+宿主持有 collection 至窗口循环结束；`shutdown` 排空已接收日志并结束 dispatcher，
+Drop 随后停止 console 入队并排空队列。console 关闭等待约 250 ms；sink 拒收或 panic
+会终止输出，持续阻塞的 sink 不会无限阻塞宿主关闭。
+原生 `YSSBI_APP_DATA_DIR` 可隔离验收数据，具体路径由宿主决定。
 
 `LogRuntime` 提供 typed query、statistics、recent snapshot 和 subscribe/unsubscribe。
 订阅使用中立 sink 回调；关闭释放原 worker。Logs 清空只清视图，不删除持久记录。

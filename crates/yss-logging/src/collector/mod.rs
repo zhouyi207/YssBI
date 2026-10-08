@@ -1,4 +1,4 @@
-//! Plugin-owned tracing collection, filtering, sanitization and console output.
+//! Rust tracing collection, filtering, sanitization and console output.
 
 mod layer;
 mod limits;
