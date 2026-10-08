@@ -249,23 +249,36 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     let predictors = group(inv, "x");
     let width = predictors
         .len()
-        .checked_add(group_labels.len())
-        .and_then(|v| v.checked_add(causes + 4))
+        .checked_add(if method == "workflow.subgroup" {
+            group_labels.len()
+        } else {
+            0
+        })
+        .and_then(|v| v.checked_add(4))
         .ok_or(KernelError::BudgetExceeded)?;
+    // Only subgroup labels become design columns; Log-rank labels size its covariance.
+    let matrix_width = if method == "survival.logrank" {
+        group_labels.len()
+    } else {
+        width
+    };
     let plot_points = if method == "plot.decision_curve" {
         integer(inv, "decision_points")?
     } else {
         n
     };
     inv.control.check_bytes((|| {
+        let matrix_items = matrix_width.checked_mul(matrix_width)?;
         let workspace = n
             .checked_mul(width.checked_add(8)?)?
             .checked_mul(128)?
-            .checked_add(width.checked_mul(width)?.checked_mul(192)?)?;
+            .checked_add(matrix_items.checked_mul(192)?)?
+            .checked_add(causes.checked_mul(128)?)?;
         let output_items = n
             .checked_mul(causes.checked_add(24)?)?
-            .checked_add(width.checked_mul(width)?)?
-            .checked_add(plot_points.checked_mul(16)?)?;
+            .checked_add(matrix_items)?
+            .checked_add(plot_points.checked_mul(16)?)?
+            .checked_add(group_labels.len().checked_mul(8)?)?;
         retained.checked_add(workspace)?.checked_add(
             output_items.checked_mul(STRUCTURED_VALUE_BYTES * STRUCTURED_VALUE_COPIES)?,
         )

@@ -1,6 +1,109 @@
 use super::*;
 
 #[test]
+fn survival_workspace_distinguishes_group_metadata_from_matrix_dimensions() {
+    let relations = crate::tests::relations();
+    let registry = KernelRegistry::default();
+    let outputs = [KernelOutputSpec {
+        data_type: ValueType::Struct("statistics.report".into()),
+        fields: None,
+    }];
+    let mut control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(30),
+    );
+    let n = 300;
+    let mut values = vec![
+        series(&vec![1.0; n]),
+        series(&vec![1.0; n]),
+        RuntimeValue::List((0..n).map(|i| int(i as i64)).collect()),
+    ];
+    for budget in [8 * 1024 * 1024, 1024 * 1024] {
+        control.max_input_bytes = budget;
+        let inv = KernelInvocation {
+            relations: &relations,
+            inputs: &values,
+            input_keys: &["time", "event", "groups"],
+            parameters: Default::default(),
+            outputs: &outputs,
+            control: &control,
+        };
+        super::super::common::materialize(&inv).unwrap();
+        let result = registry.execute(
+            &KernelId::new("yssbi.statistics.survival.kaplan_meier".into()).unwrap(),
+            &inv,
+        );
+        if budget == 8 * 1024 * 1024 {
+            let values = result.unwrap();
+            let RuntimeValue::List(curves) = field(&values[0], "curves").unwrap() else {
+                panic!("curves must be a list")
+            };
+            assert_eq!(curves.len(), n);
+            // Log-rank retains a real group covariance; its quadratic workspace still exceeds this budget.
+            assert!(matches!(
+                registry.execute(
+                    &KernelId::new("yssbi.statistics.survival.logrank".into()).unwrap(),
+                    &inv
+                ),
+                Err(KernelError::BudgetExceeded)
+            ));
+        } else {
+            assert!(
+                matches!(result, Err(KernelError::BudgetExceeded)),
+                "{result:?}"
+            );
+        }
+    }
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../../yss-sci/tests/fixtures/survival_category_reference.json"
+    ))
+    .unwrap();
+    let data = &fixture["time_dependent"];
+    values = ["start", "stop", "event", "subjects"]
+        .iter()
+        .map(|key| series(&serde_json::from_value::<Vec<f64>>(data[key].clone()).unwrap()))
+        .collect();
+    for x in data["predictors"].as_array().unwrap() {
+        values.push(series(
+            &serde_json::from_value::<Vec<f64>>(x.clone()).unwrap(),
+        ));
+    }
+    control.max_input_bytes = 8 * 1024 * 1024;
+    let parameters = [
+        ("survival_ties", string("efron")),
+        ("max_iterations", int(1000)),
+        ("tolerance", number(1e-8)),
+    ];
+    let inv = KernelInvocation {
+        relations: &relations,
+        inputs: &values,
+        input_keys: &["start", "stop", "event", "subjects", "x", "x"],
+        parameters: parameters
+            .iter()
+            .map(|(k, v)| {
+                (
+                    KernelParameterKey::new((*k).into()).unwrap(),
+                    Cow::Borrowed(v),
+                )
+            })
+            .collect(),
+        outputs: &outputs,
+        control: &control,
+    };
+    let result = registry
+        .execute(
+            &KernelId::new("yssbi.statistics.survival.time_dependent_cox".into()).unwrap(),
+            &inv,
+        )
+        .unwrap();
+    assert_eq!(field(&result[0], "observations").unwrap(), &int(240));
+    let RuntimeValue::List(coefficients) = field(&result[0], "coefficients").unwrap() else {
+        panic!("coefficients must be a list")
+    };
+    assert_eq!(coefficients.len(), 2);
+}
+
+#[test]
 fn survival_admission_distinguishes_observations_from_options() {
     let error = run(
         "yssbi.statistics.survival.kaplan_meier",

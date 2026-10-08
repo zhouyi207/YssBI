@@ -82,7 +82,12 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(
-                1 + if matches!(
+                1 + if (id.starts_with("yssbi.statistics.survival.")
+                    && id != "yssbi.statistics.survival.competing_risks")
+                    || id == "yssbi.statistics.workflow.subgroup"
+                {
+                    6
+                } else if matches!(
                     id,
                     "yssbi.statistics.meta.inverse_variance"
                         | "yssbi.statistics.meta.fixed_effect"
@@ -101,18 +106,10 @@ pub(super) fn install(
                         | "yssbi.statistics.plot.funnel"
                         | "yssbi.statistics.workflow.mediation"
                         | "yssbi.statistics.workflow.moderated_mediation"
-                        | "yssbi.statistics.survival.exponential"
-                        | "yssbi.statistics.survival.weibull"
-                        | "yssbi.statistics.survival.lognormal"
-                        | "yssbi.statistics.survival.loglogistic"
-                        | "yssbi.statistics.survival.aft"
-                        | "yssbi.statistics.survival.kaplan_meier"
-                        | "yssbi.statistics.survival.nelson_aalen"
-                        | "yssbi.statistics.survival.logrank"
-                        | "yssbi.statistics.survival.cox"
-                        | "yssbi.statistics.survival.time_dependent_cox"
-                        | "yssbi.statistics.workflow.subgroup"
                         | "yssbi.statistics.diagnostic.ph"
+                        | "yssbi.statistics.survival.competing_risks"
+                        | "yssbi.statistics.plot.calibration"
+                        | "yssbi.statistics.plot.decision_curve"
                 ) {
                     5
                 } else if id == "yssbi.statistics.iv.2sls.summary" {
@@ -169,7 +166,6 @@ pub(super) fn install(
                     || id.starts_with("yssbi.statistics.psychometrics.")
                     || id == "yssbi.statistics.inference.cluster_robust"
                     || id.starts_with("yssbi.statistics.mixed.")
-                    || id.starts_with("yssbi.statistics.survival.")
                     || matches!(
                         id,
                         "yssbi.statistics.longitudinal.gee"
@@ -183,8 +179,6 @@ pub(super) fn install(
                             | "yssbi.statistics.causal.regression_adjustment"
                             | "yssbi.statistics.causal.aipw"
                             | "yssbi.statistics.plot.nomogram"
-                            | "yssbi.statistics.plot.calibration"
-                            | "yssbi.statistics.plot.decision_curve"
                     )
                     || id.starts_with("yssbi.plot.")
                     || id.ends_with(".granger")

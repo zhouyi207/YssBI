@@ -78,7 +78,7 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 不归为参数错误。`inference.cluster_robust` 使用 revision 5。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
 直接使用该准备的回归模型内核采用 revision 4，逐步回归采用 revision 5；五个参数生存拟合内核
-（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 6。
+（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 7。
 复用该准备的 Mixed/GEE、因果估计和共线性诊断采用 revision 5；Meta 模型/诊断/绘图及
 中介 bootstrap 采用 revision 6，能力指纹涵盖共享输入错误契约。
 
@@ -167,8 +167,11 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 预算和取消协议。普通事件列支持布尔或 0/1；竞争风险原因保留整数代码。
 观测时间、事件/治疗编码、计数过程区间、分组可辨识性和预测概率保持为数值输入错误；
 数组或模型布局不符保持为形状错误。预测期限、分箱/刻度数及迭代设置仍为参数错误。
-参数生存、分组曲线、Log-rank、Cox/计数过程、亚组和 Cox PH 诊断使用 revision 6；
-竞争风险、列线图、校准及决策曲线使用 revision 5。SCI 共用一次建立的精确分组行索引，
+参数生存、分组曲线、Log-rank、Cox/计数过程及亚组使用 revision 7；Cox PH 诊断、
+竞争风险、校准及决策曲线使用 revision 6，列线图使用 revision 5。
+生存工作区分别计算设计宽度、矩阵维度和线性组元数据；受试者数和曲线组数不增加
+模型列数。Log-rank 保留组协方差预算，亚组治疗效应保留设计矩阵预算；竞争风险输出
+按行数与原因数计费。SCI 共用一次建立的精确分组行索引，
 按组消费行，新增行索引落在现有生存节点工作区预算内。
 静态 Cox 和 AFT 将原行序的时间、事件和风险一起物化为 `predictions` 关系，供下游
 评估节点选列；不把无血缘的内存预测向量与数据表按相同行数强行对齐。
