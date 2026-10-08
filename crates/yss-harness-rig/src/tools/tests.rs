@@ -217,16 +217,16 @@ fn model_capabilities_hide_concurrency_fields_in_schemas_calls_and_live_replay_r
             );
         }
     }
-    // Historical calls below remain replayable even though they cannot admit new calls.
-    for retired in [
+    // Current workflow operations can appear in history without admitting model calls.
+    for internal in [
         CapabilityId::ApplyGraphEdit,
         CapabilityId::SaveGraph,
         CapabilityId::InspectDatasetSchema,
         CapabilityId::InspectDatasetProfile,
     ] {
-        let schema = serde_json::to_value(capability_input_schema(retired)).unwrap();
+        let schema = serde_json::to_value(capability_input_schema(internal)).unwrap();
         assert_eq!(schema, json!(false));
-        assert!(decode_request(retired, json!({}), &schema).is_err());
+        assert!(decode_request(internal, json!({}), &schema).is_err());
     }
     for (capability, input) in [
         (

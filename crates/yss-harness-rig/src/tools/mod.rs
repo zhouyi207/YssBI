@@ -266,10 +266,10 @@ fn decode_request(
             arguments::decode(arguments, schema).map(CapabilityInput::FindConnections)
         }
 
-        CapabilityId::InspectDatasetSchema => Err(CapabilityFailure::new(
-            CapabilityFailureCode::InvalidRequest,
-        )),
-        CapabilityId::InspectDatasetProfile => Err(CapabilityFailure::new(
+        CapabilityId::InspectDatasetSchema
+        | CapabilityId::InspectDatasetProfile
+        | CapabilityId::ApplyGraphEdit
+        | CapabilityId::SaveGraph => Err(CapabilityFailure::new(
             CapabilityFailureCode::InvalidRequest,
         )),
         CapabilityId::InspectResult => {
@@ -281,9 +281,6 @@ fn decode_request(
         CapabilityId::ListResources => {
             arguments::decode(arguments, schema).map(CapabilityInput::ListResources)
         }
-        CapabilityId::ApplyGraphEdit => Err(CapabilityFailure::new(
-            CapabilityFailureCode::InvalidRequest,
-        )),
         CapabilityId::CreateNodes => {
             arguments::decode(arguments, schema).map(CapabilityInput::CreateNodes)
         }
@@ -315,9 +312,6 @@ fn decode_request(
         CapabilityId::ExecuteGraph => {
             arguments::decode(arguments, schema).map(CapabilityInput::ExecuteGraph)
         }
-        CapabilityId::SaveGraph => Err(CapabilityFailure::new(
-            CapabilityFailureCode::InvalidRequest,
-        )),
         CapabilityId::InspectUiIntent => {
             arguments::decode(arguments, schema).map(CapabilityInput::InspectUiIntent)
         }
@@ -494,12 +488,10 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
         CapabilityId::ReadDatabaseRows => {
             "Read selected columns with stable rowIds and a page continuation. All filters are ANDed. Order uses owner semantics, then stable row order. Use returned rowIds for edits; never use page positions."
         }
-        CapabilityId::InspectDatasetSchema => {
-            "Read dataset columns, physical types, semantic annotations and nullability. The host captures data currentness."
-        }
-        CapabilityId::InspectDatasetProfile => {
-            "Read dataset quality/profile facts. Null metrics mean unknown or not computed, never zero."
-        }
+        CapabilityId::InspectDatasetSchema
+        | CapabilityId::InspectDatasetProfile
+        | CapabilityId::ApplyGraphEdit
+        | CapabilityId::SaveGraph => "Internal owner operation; unavailable as a model tool.",
         CapabilityId::InspectResult => {
             "Inspect a complete resultRef copied from a receipt. Returns scalar values or a structural overview with complete tableRef values; never reads a table's rows. Tabular schema is paged with schemaOffset/schemaLimit. Validity distinguishes current values, stale pins and retained historical results. Queries never recompute."
         }
@@ -533,14 +525,12 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
         CapabilityId::DeleteConnections => {
             "Delete the exact connectionIds in one saved, undoable batch. Nodes remain present; no computation is triggered."
         }
-        CapabilityId::ApplyGraphEdit => "Historical operation; unavailable as a model tool.",
         CapabilityId::ValidateGraph => {
             "Read readiness and paged diagnostics for a graph or selected nodeIds and their execution dependencies. Unrelated branch failures do not block selected scopes. Readiness uses all relevant diagnostics even when a page is empty. This optional check does not save or execute; missing runtime inputs still require explicit execution."
         }
         CapabilityId::ExecuteGraph => {
             "Execute graph; omit nodeId and mode to rerun the whole graph. For a selected nodeId, mode:currentInputs consumes current inputs without rerunning upstream; mode:dependencies (default) computes needed dependencies. Unrelated incomplete branches do not block node scope. The host binds the observed graph and prepares its plan. Check actual status and failures. Use returned result references directly with inspect_result. resultCount is null on failure; resultsComplete:false means references are partial. Does not save."
         }
-        CapabilityId::SaveGraph => "Historical operation; unavailable as a model tool.",
         CapabilityId::ListGraphResults => {
             "List results for graph with optional runId, nodeIds or exact outputs and pagination. Without runId, returns current pins including stale values; a selected run returns only still-retained values. Check validity and runStatus. Copy complete resultRef values to inspect_result; queries do not execute."
         }
