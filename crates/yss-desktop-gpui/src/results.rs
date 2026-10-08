@@ -2,19 +2,21 @@
 mod addition;
 mod plot;
 mod query;
+mod reading;
+mod render;
 mod report;
 mod table;
+mod toolbar;
 mod value;
 
 use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
-    Window, div, prelude::*, px, uniform_list,
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Window,
+    div, prelude::*,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, Selectable, Sizable,
-    button::{Button, ButtonVariants},
+    Icon,
     dock::{BasePanel, Panel, PanelEvent},
-    table::{DataTable, TableState},
+    table::TableState,
 };
 use std::{collections::BTreeSet, sync::Arc};
 use yss_application::graph::results::report::ResultTablePart;
@@ -51,7 +53,8 @@ pub struct ResultPanel {
     table: Option<Entity<TableState<ResultGrid>>>,
     part: Option<ResultTablePart>,
     loading: bool,
-    error: Option<String>,
+    error: Option<reading::ReadFailure>,
+    view_locale: &'static str,
     generation: u64,
     task: Option<gpui::Task<()>>,
     closed: bool,
@@ -82,6 +85,7 @@ impl ResultPanel {
             part: None,
             loading: false,
             error: None,
+            view_locale: crate::text::locale(),
             generation: 0,
             task: None,
             closed: false,
@@ -95,348 +99,6 @@ impl ResultPanel {
     }
     pub fn loaded(&self) -> bool {
         self.lease.is_some()
-    }
-
-    pub fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.loading || self.closed {
-            return;
-        }
-        self.loading = true;
-        self.error = None;
-        self.generation += 1;
-        let generation = self.generation;
-        let reference = self.reference;
-        let owner = self.services.clone();
-        let task = self.services.run(move |_| query::open(owner, reference));
-        self.task = Some(cx.spawn_in(window, async move |view, cx| {
-            let result = task
-                .await
-                .map_err(anyhow::Error::from)
-                .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
-                if view.closed || view.generation != generation {
-                    return;
-                }
-                view.loading = false;
-                match result {
-                    Ok((lease, content)) => view.install_content(lease, content, window, cx),
-                    Err(_) => {
-                        view.error = Some("结果不可用或读取失败，请检查当前项目和日志。".into())
-                    }
-                }
-                cx.emit(ResultEvent::Loaded(view.loaded()));
-                cx.notify();
-            });
-        }));
-        cx.notify();
-    }
-
-    fn install_content(
-        &mut self,
-        lease: ResultLease,
-        content: ResultContent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.reference = lease.reference();
-        self.report_subscription = None;
-        self.report = None;
-        self.plot = None;
-        self.value = None;
-        self.table = None;
-        self.part = None;
-        self.expanded.clear();
-        self.rows.clear();
-        self.tables = false;
-        match content {
-            ResultContent::InvalidPlot => {
-                self.error = Some(crate::text::translate("plot.invalidData"))
-            }
-            ResultContent::Plot(data) => self.plot = Some(cx.new(|_| plot::PlotView::new(data))),
-            ResultContent::Page(page) => self.install_page(page, window, cx),
-            ResultContent::Value {
-                value,
-                tables,
-                report,
-            } => {
-                if let Some(report) = report {
-                    let entity = cx.new(|cx| {
-                        report::ReportView::new(
-                            self.services.clone(),
-                            self.reference,
-                            value.clone(),
-                            report,
-                            window,
-                            cx,
-                        )
-                    });
-                    self.report_subscription = Some(cx.subscribe_in(&entity, window, |view, _, request: &yss_application::graph::results::report::addition::LinearSummaryAddition, window, cx| {
-                        view.add_contents(request.clone(), window, cx);
-                    }));
-                    self.report = Some(entity);
-                }
-                self.tables = tables;
-                self.rows = value::rows(&value, &self.expanded, tables);
-                self.value = Some(value);
-            }
-        }
-        self.replace_lease(Some(lease));
-    }
-
-    fn replace_lease(&mut self, lease: Option<ResultLease>) {
-        if let Some(previous) = std::mem::replace(&mut self.lease, lease) {
-            self.services.run(move |_| {
-                drop(previous);
-                Ok(())
-            });
-        }
-    }
-
-    fn install_page(&mut self, page: ResultGrid, window: &mut Window, cx: &mut Context<Self>) {
-        self.table = Some(cx.new(|cx| TableState::new(page, window, cx).sortable(false)));
-    }
-
-    fn load_page(
-        &mut self,
-        part: Option<ResultTablePart>,
-        offset: usize,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.loading || self.closed || self.lease.is_none() {
-            return;
-        }
-        self.loading = true;
-        self.error = None;
-        self.generation += 1;
-        let generation = self.generation;
-        let reference = self.reference;
-        let owner = self.services.clone();
-        let query_part = part.clone();
-        let task = self
-            .services
-            .run(move |_| query::page(&owner, reference, query_part, offset));
-        self.task = Some(cx.spawn_in(window, async move |view, cx| {
-            let result = task
-                .await
-                .map_err(anyhow::Error::from)
-                .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
-                if view.closed || view.generation != generation {
-                    return;
-                }
-                view.loading = false;
-                match result {
-                    Ok(page) => {
-                        view.part = part;
-                        view.install_page(page, window, cx);
-                    }
-                    Err(_) => view.error = Some("数据页读取失败，原结果保留，请重试。".into()),
-                }
-                cx.notify();
-            });
-        }));
-        cx.notify();
-    }
-
-    fn render_row(&self, index: usize, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        let row = &self.rows[index];
-        let path = row.path.clone();
-        let part = row.table.clone();
-        div()
-            .h(px(32.))
-            .flex()
-            .items_center()
-            .gap_2()
-            .pl(px(row.depth as f32 * 16. + 8.))
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .text_sm()
-            .child(
-                Button::new(("value-row", index))
-                    .small()
-                    .ghost()
-                    .label(row.label.clone())
-                    .disabled(!row.expandable && part.is_none())
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        if let Some(part) = &part {
-                            view.load_page(Some(part.clone()), 0, window, cx);
-                        } else {
-                            if !view.expanded.insert(path.clone()) {
-                                view.expanded.remove(&path);
-                            }
-                            if let Some(value) = &view.value {
-                                view.rows = value::rows(value, &view.expanded, view.tables);
-                            }
-                            cx.notify();
-                        }
-                    })),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .overflow_hidden()
-                    .child(if row.table.is_some() {
-                        "查看数据".into()
-                    } else {
-                        row.value.clone()
-                    }),
-            )
-    }
-}
-
-impl Render for ResultPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let paging = self
-            .table
-            .as_ref()
-            .filter(|_| !self.report_mode)
-            .map(|table| {
-                let page = table.read(cx).delegate();
-                (
-                    page.offset,
-                    page.row_count(),
-                    page.total_count,
-                    page.has_more,
-                )
-            });
-        div()
-            .id("result-view")
-            .track_focus(&self.focus)
-            .size_full()
-            .flex()
-            .flex_col()
-            .bg(cx.theme().background)
-            .child(
-                div()
-                    .p_2()
-                    .flex()
-                    .gap_2()
-                    .items_center()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .when(self.report.is_some(), |bar| {
-                        bar.children(
-                            [
-                                (false, "sourceInspector.numericView"),
-                                (true, "sourceInspector.reportView"),
-                            ]
-                            .into_iter()
-                            .map(|(report, key)| {
-                                Button::new(("result-mode", usize::from(report)))
-                                    .small()
-                                    .ghost()
-                                    .selected(self.report_mode == report)
-                                    .label(crate::text::translate(key))
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        view.report_mode = report;
-                                        cx.notify();
-                                    }))
-                            }),
-                        )
-                    })
-                    .when(
-                        !self.report_mode && self.value.is_some() && self.table.is_some(),
-                        |bar| {
-                            bar.child(
-                                Button::new("result-overview")
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::ArrowLeft)
-                                    .label("返回概览")
-                                    .disabled(self.loading)
-                                    .on_click(cx.listener(|view, _, _, cx| {
-                                        view.table = None;
-                                        view.part = None;
-                                        cx.notify();
-                                    })),
-                            )
-                        },
-                    )
-                    .when_some(paging, |bar, (offset, count, total, has_more)| {
-                        bar.child(
-                            Button::new("result-prev")
-                                .small()
-                                .ghost()
-                                .label("上一页")
-                                .disabled(self.loading || offset == 0)
-                                .on_click(cx.listener(move |view, _, window, cx| {
-                                    view.load_page(
-                                        view.part.clone(),
-                                        offset.saturating_sub(query::PAGE_ROWS),
-                                        window,
-                                        cx,
-                                    )
-                                })),
-                        )
-                        .child(format!(
-                            "{}–{}{}",
-                            if count == 0 { 0 } else { offset + 1 },
-                            offset + count,
-                            total.map(|total| format!(" / {total}")).unwrap_or_default()
-                        ))
-                        .child(
-                            Button::new("result-next")
-                                .small()
-                                .ghost()
-                                .label("下一页")
-                                .disabled(self.loading || !has_more)
-                                .on_click(cx.listener(move |view, _, window, cx| {
-                                    view.load_page(
-                                        view.part.clone(),
-                                        offset + query::PAGE_ROWS,
-                                        window,
-                                        cx,
-                                    )
-                                })),
-                        )
-                    })
-                    .when(self.loading, |bar| bar.child("正在读取…"))
-                    .when(self.error.is_some() && self.lease.is_none(), |bar| {
-                        bar.child(
-                            Button::new("retry-result")
-                                .small()
-                                .ghost()
-                                .label("重试")
-                                .on_click(cx.listener(|view, _, window, cx| view.load(window, cx))),
-                        )
-                    }),
-            )
-            .children(self.error.as_ref().map(|error| {
-                div()
-                    .px_2()
-                    .text_color(cx.theme().danger)
-                    .child(error.clone())
-            }))
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .when_some(
-                        self.report.as_ref().filter(|_| self.report_mode),
-                        |body, report| body.child(report.clone()),
-                    )
-                    .when_some(
-                        self.table.as_ref().filter(|_| !self.report_mode),
-                        |body, table| body.child(DataTable::new(table).small().stripe(true)),
-                    )
-                    .when_some(self.plot.as_ref(), |body, plot| body.child(plot.clone()))
-                    .when(
-                        !self.report_mode && self.table.is_none() && self.plot.is_none(),
-                        |body| {
-                            body.child(
-                                uniform_list(
-                                    "result-values",
-                                    self.rows.len(),
-                                    cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
-                                        range.map(|index| view.render_row(index, cx)).collect()
-                                    }),
-                                )
-                                .size_full(),
-                            )
-                        },
-                    ),
-            )
     }
 }
 

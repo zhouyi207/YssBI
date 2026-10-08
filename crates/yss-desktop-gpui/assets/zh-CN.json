@@ -2746,6 +2746,16 @@
       "fitted": "拟合值",
       "residual": "残差",
       "noMatchingObservations": "当前范围内没有匹配的观测。"
+    },
+    "results": {
+      "unavailable": "结果不可用或读取失败，请检查当前项目和日志。",
+      "pageFailed": "数据页读取失败，原结果保留，请重试。",
+      "viewData": "查看数据",
+      "backToOverview": "返回概览",
+      "rowRangeKnown": "第 {{start}}–{{end}} 行，共 {{total}} 行",
+      "rowRangeUnknown": "第 {{start}}–{{end}} 行",
+      "pageKnown": "第 {{page}} / {{pages}} 页",
+      "pageUnknown": "第 {{page}} 页"
     }
   }
 }

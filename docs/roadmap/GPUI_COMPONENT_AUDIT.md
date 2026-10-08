@@ -165,6 +165,17 @@
 - 真实项目中的按钮、面板替换、拖动、语言、关闭和自动重绘验收仍开放，不新增 UI 单元测试或依赖。
 
 
+### 结果容器与只读数据页
+
+- 已逐项阅读结果 Application 的 7 个呈现组件、ResultContent/Inspector/Panel 以及 3 个独立窗口组件，核对查询与租约契约。数值、分页、报告和图形沿用原生类型化分流；React Context 与包装组件合并到原生容器。
+- ResultPanel 的读取、容器渲染及工具栏分开组织；失败保留原页和精确的表/偏移重试目标，返回概览撤销旧分页交付资格。语言切换只刷新本地显示，不发起结果查询或清空展开状态。
+- 普通只读表格补齐固定行号、后端原始列类型、数值对齐、布尔与空值样式以及完整单元格提示；嵌套列表/记录保持单个单元格。格式化文本按页准备并共享，重绘不重复展开或复制完整字符串；紧凑报告表保持自身列定义。
+- 页范围、页码与下一页可用性采用已接纳回执；未知总数和偏移大于零的空页分别显示实际页码与 0 行。没有新增结果缓存、领域状态、依赖或 UI 单元测试。
+- L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；临时样例用 `cargo build -p yss-desktop-gpui --example results_container_review` 构建，目视检查正常、读取中、失败和未知总数空页的静态布局，样例随后移出仓库。
+- 7 个变更 Rust 文件的局部格式、2 份变更文档的元信息与 269 个相对链接、16 个文案键及占位符、模块索引生成器与 `git diff --check` 通过。此次只改变原生呈现及读取控制，不重复运行未改动的后端统计测试；没有把静态样例算作真实交互验收。
+- 独立 Plot/Inspector 窗口的原生创建、租约交付和会话关闭仍待迁移；真实翻页、失败重试、语言、滚动、提示与关闭验收继续开放。
+
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -252,15 +263,15 @@
 | [features/application/assistant/AssistantRuntimeProvider.tsx](../../react/src/features/application/assistant/AssistantRuntimeProvider.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [features/application/presentation/LinePlotControls.tsx](../../react/src/features/application/presentation/LinePlotControls.tsx) | 迁移：实体只拥有工具栏和点可见性，复用 Button/Switch | results/plot 普通折线局部切换，保留曲线/参考线和租约，ROC 无此开关 | 代码已覆盖；人工验收待完成 |
 | [features/application/presentation/PlotResultView.tsx](../../react/src/features/application/presentation/PlotResultView.tsx) | 迁移：完整结果与统计值归 Application，几何与开关归原生视图 | results/plot 已支持 20/20 类；系数/帕累托每页 100 项，保留完整数据与原置信水平/累计比例，翻页不重新读取 | 图形已覆盖；真实结果交互和生命周期验收开放 |
-| [features/application/results/components/ReadOnlyDataGrid.tsx](../../react/src/features/application/results/components/ReadOnlyDataGrid.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [features/application/results/components/ResultPageToolbar.tsx](../../react/src/features/application/results/components/ResultPageToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [features/application/results/components/ResultReadError.tsx](../../react/src/features/application/results/components/ResultReadError.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [features/application/results/components/ResultViewShell.tsx](../../react/src/features/application/results/components/ResultViewShell.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [features/application/results/components/UnifiedResultView.tsx](../../react/src/features/application/results/components/UnifiedResultView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [features/application/results/components/renderers/ResultRenderers.tsx](../../react/src/features/application/results/components/renderers/ResultRenderers.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [features/application/results/resultViewPresentation.tsx](../../react/src/features/application/results/resultViewPresentation.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [features/application/results/components/ReadOnlyDataGrid.tsx](../../react/src/features/application/results/components/ReadOnlyDataGrid.tsx) | 复用原生虚拟 Table，迁移只读单元格语义 | results/table 持有一页格式化数据；固定行号、原始列类型、布尔、空值、宽整数及嵌套值提示；紧凑报告表不补列或行号 | 代码已覆盖；真实滚动与提示验收待完成 |
+| [features/application/results/components/ResultPageToolbar.tsx](../../react/src/features/application/results/components/ResultPageToolbar.tsx) | 迁移分页控制，采用后端回执 | results/toolbar 显示已接纳页的范围与页码；未知总数采用 has_more，空页不显示错误的 0–offset 范围 | 代码已覆盖；真实翻页验收待完成 |
+| [features/application/results/components/ResultReadError.tsx](../../react/src/features/application/results/components/ResultReadError.tsx) | 迁移原生失败反馈与原请求重试 | results/reading 保留失败读取的 part/offset；toolbar 在当前语言显示失败并重试，原页继续可读；不搬迁 IPC ErrorReference 展示层 | 代码已覆盖；失败与重试验收待完成 |
+| [features/application/results/components/ResultViewShell.tsx](../../react/src/features/application/results/components/ResultViewShell.tsx) | 合并到原生结果容器 | results/render 和 toolbar 统一边框、工具栏和有界内容；没有独立业务状态，无须复制 React 包装层 | 原生面板已覆盖；独立窗口另行迁移 |
+| [features/application/results/components/UnifiedResultView.tsx](../../react/src/features/application/results/components/UnifiedResultView.tsx) | 复用类型化读取分流 | results/query::open 按原 Result 类型选择分页、数值、报告和完整图形；不新增第二个路由器或预读取 | 代码已覆盖；人工验收待完成 |
+| [features/application/results/components/renderers/ResultRenderers.tsx](../../react/src/features/application/results/components/renderers/ResultRenderers.tsx) | 迁移数列与标量呈现 | 数列复用有界表格，标量与对象沿用可展开值树；保留宽整数、空值和布尔，长标量提供完整提示 | 代码已覆盖；人工验收待完成 |
+| [features/application/results/resultViewPresentation.tsx](../../react/src/features/application/results/resultViewPresentation.tsx) | 无需迁移 React Context | 原生 Panel 与窗口容器负责呈现边界；读取和租约不依赖 embedded/standalone Context | 面板已复用；独立窗口待迁移 |
 | [features/application/statusBar/useStatusBarItems.tsx](../../react/src/features/application/statusBar/useStatusBarItems.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [features/application/window/PresentationWindowShell.tsx](../../react/src/features/application/window/PresentationWindowShell.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [features/application/window/PresentationWindowShell.tsx](../../react/src/features/application/window/PresentationWindowShell.tsx) | 迁移窗口外壳与加载失败呈现 | 原生独立窗口应复用窗口控制和 ResultPanel；不复制 WebView 路由、SVG 图标或第二结果存储 | 待迁移独立窗口 |
 
 ## features/core
 
@@ -475,11 +486,11 @@
 | [modules/results/internal/ui/info/shared/ACFPACFBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/ACFPACFBlock.tsx) | 迁移/复用：报告与结果共享 correlogram | 首次展开读取原 ACF/PACF；分别从滞后 0/1 开始，保留置信带与观测数 | 代码已覆盖；真实结果验收待完成 |
 | [modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx) | 迁移：类型化检验与原约束文本 | 原 H₀/H₁ 支持复制，t/F、自由度及微小 p 值沿用原结果；不按变量名重写公式 | 代码已覆盖；真实结果验收待完成 |
 | [modules/results/internal/ui/info/shared/SerialTestsBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/SerialTestsBlock.tsx) | 迁移：原生统计卡片 | BG、Ljung–Box 与 DW 直接显示原统计量、滞后和概率，章节共享懒加载及重试 | 代码已覆盖；真实结果验收待完成 |
-| [modules/results/internal/ui/panel/ResultContent.tsx](../../react/src/modules/results/internal/ui/panel/ResultContent.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/panel/ResultInspector.tsx](../../react/src/modules/results/internal/ui/panel/ResultInspector.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/panel/ResultPanel.tsx](../../react/src/modules/results/internal/ui/panel/ResultPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/plot/PlotWindow.tsx](../../react/src/modules/results/internal/ui/plot/PlotWindow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx](../../react/src/modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/results/internal/ui/panel/ResultContent.tsx](../../react/src/modules/results/internal/ui/panel/ResultContent.tsx) | 迁移加载、失败与类型化内容 | results/reading/render 复用自动租约并拒绝关闭后的迟到回复；已接纳内容独立于普通重跑 | 面板代码已覆盖；独立展开待迁移 |
+| [modules/results/internal/ui/panel/ResultInspector.tsx](../../react/src/modules/results/internal/ui/panel/ResultInspector.tsx) | 迁移数值/报告切换并复用同一实体 | ResultPanel 保留报告实体和局部章节状态；显式追加完整替换同一引用下的数值与报告 | 代码已覆盖；切换与追加验收待完成 |
+| [modules/results/internal/ui/panel/ResultPanel.tsx](../../react/src/modules/results/internal/ui/panel/ResultPanel.tsx) | 复用原生 ResultPanel 与 DockArea | 面板只拥有显示状态和 Application 租约；移动重挂载保留同一实体，实际关闭释放租约 | 代码已覆盖；生命周期验收待完成 |
+| [modules/results/internal/ui/plot/PlotWindow.tsx](../../react/src/modules/results/internal/ui/plot/PlotWindow.tsx) | 迁移原生独立结果窗口 | 已阅读类型路由、标题与窗口动作；图形呈现可直接复用 ResultPanel/PlotView，仍需原生创建及会话关闭接入 | 待迁移独立窗口 |
+| [modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx](../../react/src/modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx) | 迁移原生独立结果窗口 | 已阅读数值与报告路由；复用同一结果读取和报告实体设计，无须 Tauri URL 或跨 WebView 租约交接 | 待迁移独立窗口 |
 
 ## modules/settings
 

@@ -1,6 +1,10 @@
 //! A virtual native grid for one bounded result page.
-use gpui::{App, Context, IntoElement, Window, div, prelude::*, px};
-use gpui_component::table::{Column, TableDelegate, TableState};
+mod cell;
+mod render;
+
+use cell::Cell;
+use gpui::{SharedString, px};
+use gpui_component::table::Column;
 use yss_application::graph::results::ResultPageProjection;
 use yss_node_kernel::RuntimeValue;
 
@@ -8,7 +12,9 @@ use super::value::display;
 
 pub struct ResultGrid {
     columns: Vec<Column>,
-    rows: Vec<Vec<String>>,
+    rows: Vec<Vec<Cell>>,
+    data_types: Vec<SharedString>,
+    row_numbers: bool,
     pub offset: usize,
     pub total_count: Option<usize>,
     pub has_more: bool,
@@ -20,20 +26,29 @@ impl ResultGrid {
             columns: names
                 .iter()
                 .enumerate()
-                .map(|(index, name)| Column::new(index.to_string(), name.clone()).width(px(150.)))
+                .map(|(index, name)| {
+                    Column::new(index.to_string(), name.clone())
+                        .width(px(150.))
+                        .movable(false)
+                })
                 .collect(),
             total_count: Some(rows.len()),
-            rows,
+            rows: rows
+                .into_iter()
+                .map(|row| row.into_iter().map(Cell::text).collect())
+                .collect(),
+            data_types: vec![],
+            row_numbers: false,
             offset: 0,
             has_more: false,
         }
     }
 
     pub fn from_page(page: ResultPageProjection) -> Self {
-        Self::with_format(page, display)
+        Self::with_format(page, display, true)
     }
     pub fn from_report(page: ResultPageProjection) -> Self {
-        Self::with_format(page, super::report::scalar)
+        Self::with_format(page, super::report::scalar, false)
     }
 
     /// A bounded array page can use the same grid when every cell is scalar.
@@ -42,10 +57,10 @@ impl ResultGrid {
         const MAX_COLUMNS: usize = 64;
         let scalar = |value: &RuntimeValue| matches!(value.unannotated(), RuntimeValue::Scalar(_));
         let values = &page.values;
-        let (names, rows): (Vec<String>, Vec<Vec<String>>) = if values.iter().all(scalar) {
+        let (names, rows): (Vec<String>, Vec<Vec<Cell>>) = if values.iter().all(scalar) {
             let rows = values
                 .iter()
-                .map(|value| vec![super::report::scalar(value)])
+                .map(|value| vec![Cell::new(value, super::report::scalar)])
                 .collect();
             (vec!["value".into()], rows)
         } else {
@@ -80,8 +95,8 @@ impl ResultGrid {
                         .map(|key| {
                             fields
                                 .get(key.as_str())
-                                .map(super::report::scalar)
-                                .unwrap_or_default()
+                                .map(|value| Cell::new(value, super::report::scalar))
+                                .unwrap_or_else(|| Cell::text(String::new()))
                         })
                         .collect()
                 })
@@ -96,49 +111,77 @@ impl ResultGrid {
             columns: names
                 .iter()
                 .enumerate()
-                .map(|(index, name)| Column::new(index.to_string(), name.clone()).width(px(180.)))
+                .map(|(index, name)| {
+                    Column::new(index.to_string(), name.clone())
+                        .width(px(180.))
+                        .movable(false)
+                })
                 .collect(),
             rows,
+            data_types: vec![],
+            row_numbers: false,
             offset: page.offset,
             total_count: page.total_count,
             has_more: page.has_more,
         })
     }
-    fn with_format(page: ResultPageProjection, display: fn(&RuntimeValue) -> String) -> Self {
+    fn with_format(
+        page: ResultPageProjection,
+        display: fn(&RuntimeValue) -> String,
+        row_numbers: bool,
+    ) -> Self {
         let names: Vec<String> = page
             .columns
             .iter()
             .map(|column| column.name.to_string())
             .collect();
         let columns = if names.is_empty() {
-            vec![Column::new("value", "值").width(px(400.))]
+            vec![Column::new("value", "value").width(px(400.)).movable(false)]
         } else {
             names
                 .iter()
                 .enumerate()
-                .map(|(index, name)| Column::new(index.to_string(), name.clone()).width(px(180.)))
+                .map(|(index, name)| {
+                    Column::new(index.to_string(), name.clone())
+                        .width(px(180.))
+                        .movable(false)
+                })
                 .collect()
         };
         let rows = page
             .values
             .iter()
             .map(|value| match value.unannotated() {
-                RuntimeValue::List(values) => values.iter().map(display).collect(),
+                RuntimeValue::List(values) => values
+                    .iter()
+                    .map(|value| Cell::new(value, display))
+                    .collect(),
                 RuntimeValue::Record(record) => names
                     .iter()
                     .map(|name| {
                         record
                             .get(name.as_str())
-                            .map(display)
-                            .unwrap_or_else(|| "null".into())
+                            .map(|value| Cell::new(value, display))
+                            .unwrap_or_else(|| {
+                                Cell::new(&yss_data_contract::TabularScalar::Null.into(), display)
+                            })
                     })
                     .collect(),
-                value => vec![display(value)],
+                value => vec![Cell::new(value, display)],
             })
             .collect();
         Self {
             columns,
             rows,
+            data_types: if row_numbers {
+                page.columns
+                    .iter()
+                    .map(|column| column.data_type.to_string().into())
+                    .collect()
+            } else {
+                vec![]
+            },
+            row_numbers,
             offset: page.offset,
             total_count: page.total_count,
             has_more: page.has_more,
@@ -146,29 +189,5 @@ impl ResultGrid {
     }
     pub fn row_count(&self) -> usize {
         self.rows.len()
-    }
-}
-
-impl TableDelegate for ResultGrid {
-    fn columns_count(&self, _: &App) -> usize {
-        self.columns.len()
-    }
-    fn rows_count(&self, _: &App) -> usize {
-        self.rows.len()
-    }
-    fn column(&self, index: usize, _: &App) -> Column {
-        self.columns[index].clone()
-    }
-    fn render_td(
-        &mut self,
-        row: usize,
-        column: usize,
-        _: &mut Window,
-        _: &mut Context<TableState<Self>>,
-    ) -> impl IntoElement {
-        div()
-            .text_sm()
-            .overflow_hidden()
-            .child(self.rows[row].get(column).cloned().unwrap_or_default())
     }
 }
