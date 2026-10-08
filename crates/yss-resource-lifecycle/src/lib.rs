@@ -73,6 +73,11 @@ struct ResourceLifecycleKey {
 }
 
 impl ResourceLifecycleOwner {
+    fn matches_key(&self, key: &ResourceLifecycleKey) -> bool {
+        self.project_instance_id == key.project_instance_id
+            && self.resource_path == key.resource_path
+    }
+
     fn key(&self) -> ResourceLifecycleKey {
         ResourceLifecycleKey {
             project_instance_id: self.project_instance_id.clone(),
@@ -247,7 +252,13 @@ impl ResourceLifecycleRegistry {
             Ok(state) => (state, false),
             Err(error) => (error.into_inner(), true),
         };
-        (ResourceLifecycleBoundary { state }, recovered)
+        (
+            ResourceLifecycleBoundary {
+                state,
+                registry_state: &self.state,
+            },
+            recovered,
+        )
     }
 
     pub fn clear_poison(&self) {
@@ -273,6 +284,7 @@ impl ResourceLifecycleRegistry {
 
 pub struct ResourceLifecycleBoundary<'a> {
     state: MutexGuard<'a, ResourceLifecycleState>,
+    registry_state: &'a Arc<Mutex<ResourceLifecycleState>>,
 }
 
 impl ResourceLifecycleBoundary<'_> {
@@ -299,6 +311,9 @@ impl ResourceLifecycleBoundary<'_> {
         guard: &mut ResourceLifecycleGuard,
         intent: ResourceLifecycleIntent,
     ) -> Result<ResourceLifecycleOwner, ResourceLifecycleError> {
+        if !Arc::ptr_eq(self.registry_state, &guard.registry.state) {
+            return Err(stale_owner_error(&guard.owner));
+        }
         self.validate(&guard.owner)?;
         let mut committed = guard.owner.clone();
         committed.intent = intent;
@@ -312,9 +327,9 @@ impl ResourceLifecycleBoundary<'_> {
         registration.owner = committed.clone();
         registration.predecessor = None;
         registration.state = ResourceLifecycleRegistrationState::Committed;
-        self.state
-            .registrations
-            .retain(|id, registration| *id == registration_id || registration.owner.key() != key);
+        self.state.registrations.retain(|id, registration| {
+            *id == registration_id || !registration.owner.matches_key(&key)
+        });
         guard.armed = false;
         Ok(committed)
     }
@@ -406,7 +421,7 @@ fn compact_registration_chain(state: &mut ResourceLifecycleState, key: &Resource
     let registration_ids = state
         .registrations
         .iter()
-        .filter(|(_, registration)| registration.owner.key() == *key)
+        .filter(|(_, registration)| registration.owner.matches_key(key))
         .map(|(registration_id, _)| *registration_id)
         .collect::<Vec<_>>();
     for registration_id in &registration_ids {
@@ -420,7 +435,7 @@ fn compact_registration_chain(state: &mut ResourceLifecycleState, key: &Resource
         }
     }
     state.registrations.retain(|_, registration| {
-        registration.owner.key() != *key
+        !registration.owner.matches_key(key)
             || registration.state != ResourceLifecycleRegistrationState::Abandoned
     });
 }
@@ -473,6 +488,31 @@ mod tests {
             error,
             ResourceLifecycleError::TransactionBusy { .. }
         ));
+    }
+
+    #[test]
+    fn commit_rejects_a_guard_from_another_registry_and_preserves_its_release() {
+        let first = ResourceLifecycleRegistry::default();
+        let second = ResourceLifecycleRegistry::default();
+        let session = project("registry-origin");
+        let path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
+        let own = first
+            .register(&session, &path, 1, ResourceLifecycleIntent::Load)
+            .unwrap();
+        let mut foreign = second
+            .register(&session, &path, 1, ResourceLifecycleIntent::Load)
+            .unwrap();
+        let foreign_owner = foreign.owner().clone();
+
+        let error = first
+            .boundary()
+            .commit_guard(&mut foreign, ResourceLifecycleIntent::Unload)
+            .expect_err("foreign guards cannot be committed");
+        assert_stale(error);
+        first.validate(own.owner()).unwrap();
+        second.validate(&foreign_owner).unwrap();
+        drop(foreign);
+        assert_stale(second.validate(&foreign_owner).unwrap_err());
     }
 
     #[test]
