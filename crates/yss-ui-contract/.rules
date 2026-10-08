@@ -1,6 +1,6 @@
 # Workbench intent contract changes
 
 - Read `README.md` before changing the intent protocol.
-- Update the Rust contract, TypeScript domain and wire validators, and workbench
+- Update the Rust contract, Application presentation and native workbench
   delivery consumers together. Harness schemas derive from the Rust types;
   do not maintain a separate handwritten intent catalog.

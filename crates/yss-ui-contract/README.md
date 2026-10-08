@@ -5,9 +5,9 @@
 > Canonical owners: `yss-ui-contract` 拥有共享协议；Application presentation 验证目标并管理意图；本文维护跨端契约
 > Update when: 意图类型、会话边界、交付或回执改变时
 
-Workbench 拓扑、标签顺序、尺寸、选中面板和折叠状态由各宿主的原生布局 owner 拥有：GPUI 使用根 DockArea。Application 接收打开资源、定位图节点、打开结果和显示登记面板的请求，界面调用已有工作台入口并确认执行结果。
+Workbench 拓扑、标签顺序、尺寸、选中面板和折叠状态由 GPUI 的根 DockArea 拥有。Application 接收打开资源、定位图节点、打开结果和显示登记面板的请求，原生宿主调用已有工作台入口并确认执行结果。
 
-协议见 [UI contract](src/lib.rs)，用例见 [presentation](../yss-application/src/presentation.rs)。报告组件直接消费 [Results](../../react/src/modules/results/README.md) 的已解析结果，不经过本模块。
+协议见 [UI contract](src/lib.rs)，用例见 [presentation](../yss-application/src/presentation.rs)，原生交付见 [workbench intents](../yss-desktop-gpui/src/workbench/intents.rs)。报告组件直接消费 [Application Results](../yss-application/src/graph/README.md) 的已解析结果，不经过本模块。
 
 ## 请求与交付
 
@@ -25,16 +25,16 @@ GUI 与 Harness 通过原 Application 请求、检查和结算同一回执；Har
 Harness `request_ui_intent` 通过 Application 请求界面操作。`openResource` 使用
 `yss-project-identity::ProjectResourceRef { kind, id }` 打开已有事件图、函数图、图表、思维导图、
 文档或数据；可选 `nodeId` 只用于事件图和函数图的节点定位。其他意图为打开保留结果、显示白名单面板。
-前端复用文件/数据库打开入口；新资源的索引通知尚未到达时先刷新索引，并检查原生活动面板的真实身份。
-后端验证项目、资源成员关系、结果会话和请求大小；只有 `main` 工作台订阅能认领意图，其他窗口不能执行工作台操作。
+原生宿主复用文件/数据库打开入口，并检查原生活动面板的真实身份。
+后端验证项目、资源成员关系、结果会话和请求大小；当前工作台通过自己的 binding 认领意图，并按登记的 claimant 结算。
 
 请求携带 `clientKey`，在调用者与 Application session 内去重。相同 key 和内容返回原回执，不同内容拒绝；回执缓存有界，跨会话或淘汰后不承诺重放。
-回执状态是 pending → claimed → applied / failed。前端先原子认领，再串行调用现有入口，最后确认实际结果；重复消息不能重复认领。
+回执状态是 pending → claimed → applied / failed。宿主先原子认领，再串行调用现有入口，最后确认实际结果；重复消息不能重复认领。
 关闭面板不要求结束 Harness 对话，界面操作也不保存图文档。
 
 未认领或未确认的请求超过 30 秒转为 expired；它表示没有及时得到完成证据，不能宣称已执行或撤销。没有活动工作台时请求直接失败。
 重连恢复只投递 pending 意图，不重新执行 claimed 意图。Harness 可通过 `inspect_ui_intent` 查询回执，pending 不是成功证据。
-前端 `uiIntentDelivery` 拥有当前工作台绑定的临时认领队列与恢复请求，React hook 只负责订阅及生命周期。
-pending 读取期间再次收到缺口会合并为一次后续读取；旧请求成功或失败后均重新查询，项目或绑定失效则丢弃后续恢复和旧回执。
-前端交付队列满载时记录一次恢复需求，原队列排空后重新读取 pending；后台已过期并淘汰的旧回执不能让新意图永久漏投递。恢复不扩张队列，也不重放已经认领的操作。
-项目替换后不执行旧队列，结果打开仍经既有租约取得与失败释放流程。
+GPUI Workbench 持有当前 binding 的有界临时队列和恢复标记。队列满载时记录恢复需求，
+排空后从同一 binding 重读 pending；恢复不扩张队列，也不重放已经认领的操作。
+事件接纳检查项目身份和宿主的交付代次，项目替换时丢弃旧队列。
+结果打开按原结果面板的完成通知结算，继续使用既有租约取得与失败释放流程。
