@@ -1,7 +1,8 @@
 #![deny(unused_must_use)]
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -48,10 +49,9 @@ pub fn hash_canonical<T: Serialize + ?Sized>(
     domain: &str,
     value: &T,
 ) -> Result<[u8; 32], CanonicalEncodingError> {
-    let serialized = serde_json::to_vec(value).map_err(CanonicalEncodingError::from_serde)?;
-    let raw = serde_json::from_slice(&serialized).map_err(CanonicalEncodingError::from_serde)?;
+    let serialized = serde_json::to_string(value).map_err(CanonicalEncodingError::from_serde)?;
     let mut encoded = Vec::with_capacity(serialized.len());
-    encode_canonical(raw, &mut encoded).map_err(CanonicalEncodingError::from_serde)?;
+    encode_canonical(&serialized, &mut encoded).map_err(CanonicalEncodingError::from_serde)?;
     let mut digest = Sha256::new();
     digest.update((domain.len() as u64).to_be_bytes());
     digest.update(domain.as_bytes());
@@ -59,25 +59,25 @@ pub fn hash_canonical<T: Serialize + ?Sized>(
     Ok(digest.finalize().into())
 }
 
-fn encode_canonical(
-    value: &serde_json::value::RawValue,
-    encoded: &mut Vec<u8>,
-) -> Result<(), serde_json::Error> {
+#[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+struct ObjectKey<'a>(#[serde(borrow)] Cow<'a, str>);
+
+fn encode_canonical(raw: &str, encoded: &mut Vec<u8>) -> Result<(), serde_json::Error> {
     // Borrow encoded values instead of converting numbers through Value, which
     // cannot represent every integer accepted by Serde JSON's serializer.
-    let raw = value.get().trim();
+    let raw = raw.trim();
     match raw.as_bytes()[0] {
         b'{' => {
-            let members: std::collections::BTreeMap<String, &serde_json::value::RawValue> =
+            let members: std::collections::BTreeMap<ObjectKey<'_>, &serde_json::value::RawValue> =
                 serde_json::from_str(raw)?;
             encoded.push(b'{');
             for (index, (key, value)) in members.into_iter().enumerate() {
                 if index != 0 {
                     encoded.push(b',');
                 }
-                serde_json::to_writer(&mut *encoded, &key)?;
+                serde_json::to_writer(&mut *encoded, &key.0)?;
                 encoded.push(b':');
-                encode_canonical(value, encoded)?;
+                encode_canonical(value.get(), encoded)?;
             }
             encoded.push(b'}');
         }
@@ -88,7 +88,7 @@ fn encode_canonical(
                 if index != 0 {
                     encoded.push(b',');
                 }
-                encode_canonical(value, encoded)?;
+                encode_canonical(value.get(), encoded)?;
             }
             encoded.push(b']');
         }
@@ -169,6 +169,43 @@ mod tests {
         assert_eq!(
             actual,
             "f03bc9b1e8f353b88604b5cb77e515180361520a3f972868767322e34eb0a2b9"
+        );
+    }
+
+    #[test]
+    fn escaped_and_unicode_object_keys_keep_sorted_exact_values() {
+        #[derive(Serialize)]
+        struct EscapedKeys {
+            #[serde(rename = "z\"")]
+            quote: u128,
+            #[serde(rename = "a\\")]
+            backslash: u128,
+            #[serde(rename = "m\n")]
+            newline: u128,
+            #[serde(rename = "é")]
+            unicode: u128,
+        }
+        let value = EscapedKeys {
+            quote: u128::MAX,
+            backslash: 1,
+            newline: 2,
+            unicode: 3,
+        };
+        let sorted = std::collections::BTreeMap::from([
+            ("z\"", u128::MAX),
+            ("a\\", 1),
+            ("m\n", 2),
+            ("é", 3),
+        ]);
+        use sha2::Digest;
+        let domain = "test.escaped-keys";
+        let mut expected = sha2::Sha256::new();
+        expected.update((domain.len() as u64).to_be_bytes());
+        expected.update(domain.as_bytes());
+        expected.update(serde_json::to_vec(&sorted).unwrap());
+        assert_eq!(
+            hash_canonical(domain, &value).unwrap(),
+            <[u8; 32]>::from(expected.finalize())
         );
     }
 
