@@ -64,6 +64,9 @@ GPUI 宿主先初始化 `yss-logging::LogCollection`，再组装 Application 和
 
 Harness 启动恢复的错误同样保留底层持久化错误码。`invalid_record` 表示已有记录不满足当前契约；启动不会跳过不兼容历史、转换旧工具记录或自动清空数据库。开发环境需要重建账本时，先归档应用数据目录中的 `db/statistical-harness.sqlite` 及仍存在的 WAL/SHM 文件，再由正常初始化建立新库；项目文件和模型设置分别由原 owner 保存。
 
+`harness::delete_harness_session` 与会话创建、打开和重命名共用当前项目范围捕获与重验。
+删除授权、运行中保护及会话记录的原子清理由 Harness Core 和原持久化端口负责；Application 不直接删除数据库行或项目资源。
+
 [默认 Harness 组装](src/runtime/harness.rs) 选择 SQLite、Rig、系统时钟与 ID 实现；项目注册 SQLite、notify 文件监听器和 Plugin Manager 在 runtime 内构造。`runtime.rs` 与 `runtime/harness.rs` 是业务 Composition Root，原生宿主提供中立资源发布和事件回调。普通用例模块不构造窗口或具体 provider。
 
 ### 应用会话

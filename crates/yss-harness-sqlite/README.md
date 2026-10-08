@@ -27,6 +27,11 @@ record's consumption time in both JSON and the nullable SQLite index; times that
 fit SQLite's integer carrier fail as `InvalidRecord`. Consumption uses a conditional
 update so only one caller can succeed.
 
+Session deletion removes its turns, events, tool invocations, workflow runs and approval
+grants in the same transaction as the session. Failure rolls back the complete removal;
+other sessions, shared workflow definitions and knowledge remain unchanged. Core owns
+authorization and excludes active turns or unfinished workflows before calling this port.
+
 Event append reserves the SQLite writer with `BEGIN IMMEDIATE` before reading the head,
 then inserts and commits the next sequence. Failed appends consume no sequence, including
 writers using separate store connections. Workflow definitions cannot be replaced at the

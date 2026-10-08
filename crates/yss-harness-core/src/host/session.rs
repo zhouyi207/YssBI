@@ -4,7 +4,10 @@ use yss_harness_contract::{
     HarnessSessionState, PrincipalId, ProjectSessionBinding,
 };
 
-/// Serializes session selection and binding writes without owning the current project.
+#[cfg(test)]
+mod deletion_tests;
+
+/// Serializes session selection, binding and deletion without owning the current project.
 pub struct HarnessSessionAccess<'a> {
     host: &'a HarnessHost,
     _guard: tokio::sync::MutexGuard<'a, ()>,
@@ -56,6 +59,29 @@ impl HarnessSessionAccess<'_> {
         session.updated_at = self.host.ports.clock.now();
         self.host.ports.sessions.update_session(&session).await?;
         Ok(session)
+    }
+
+    pub async fn delete_conversation(
+        &mut self,
+        session_id: &HarnessSessionId,
+        principal: &PrincipalId,
+        project_key: &str,
+    ) -> Result<(), HarnessError> {
+        self.host
+            .conversation(session_id, principal, project_key)
+            .await?;
+        let (_cancel, _admission) = self.host.admit_turn(session_id)?;
+        if self
+            .host
+            .ports
+            .workflows
+            .has_unfinished_runs(session_id)
+            .await?
+        {
+            return Err(HarnessError::ConcurrentWorkflow);
+        }
+        self.host.ports.sessions.delete_session(session_id).await?;
+        Ok(())
     }
 
     pub async fn create_conversation(

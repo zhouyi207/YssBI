@@ -84,6 +84,13 @@ impl HarnessSessionStorePort for PausedSessions {
         })
     }
 
+    fn delete_session<'a>(
+        &'a self,
+        id: &'a HarnessSessionId,
+    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
+        self.store.delete_session(id)
+    }
+
     fn create_turn<'a>(
         &'a self,
         record: &'a HarnessTurnRecord,

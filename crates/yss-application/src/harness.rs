@@ -80,6 +80,23 @@ impl ApplicationState {
         Ok(session)
     }
 
+    pub async fn delete_harness_session(
+        &self,
+        host: &HarnessHost,
+        principal: &PrincipalId,
+        session_id: &HarnessSessionId,
+    ) -> Result<(), HarnessSessionError> {
+        let (captured, _binding, key) = self.harness_conversation_scope()?;
+        let mut access = host.session_access().await;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)?;
+        access
+            .delete_conversation(session_id, principal, &key)
+            .await?;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| HarnessSessionError::Changed)
+    }
+
     pub async fn initialize_harness(
         &self,
         ports: HarnessPorts,
@@ -267,6 +284,84 @@ mod tests {
             clock,
             ids,
         }
+    }
+
+    #[tokio::test]
+    async fn conversation_deletion_is_project_scoped_and_persists_after_reopen() {
+        let directory =
+            std::env::temp_dir().join(format!("yss-conversation-delete-{}", uuid::Uuid::new_v4()));
+        let application = project_application(Arc::new(yss_project::ProjectState::new()));
+        let other = project_application(Arc::new(yss_project::ProjectState::new()));
+        let store = Arc::new(
+            yss_harness_sqlite::SqliteHarnessStore::connect(directory.clone())
+                .await
+                .unwrap(),
+        );
+        let clock = Arc::new(FixedClock::new(1000));
+        let ids = Arc::new(SequentialIds::default());
+        let host = application
+            .initialize_harness(persistent_ports(store.clone(), clock.clone(), ids.clone()))
+            .await
+            .unwrap();
+        let principal = PrincipalId::try_new("local-user").unwrap();
+        let deleted = application
+            .create_harness_session(&host, principal.clone())
+            .await
+            .unwrap();
+        let kept = application
+            .create_harness_session(&host, principal.clone())
+            .await
+            .unwrap();
+        host.submit_turn(
+            &deleted.id,
+            &deleted.project,
+            "A saved conversation".into(),
+            vec![],
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            other
+                .delete_harness_session(&host, &principal, &deleted.id)
+                .await,
+            Err(HarnessSessionError::Host(HarnessError::SessionNotFound))
+        ));
+        assert!(store.load_session(&deleted.id).await.unwrap().is_some());
+        application
+            .delete_harness_session(&host, &principal, &deleted.id)
+            .await
+            .unwrap();
+        drop(host);
+        drop(store);
+
+        let reopened = Arc::new(
+            yss_harness_sqlite::SqliteHarnessStore::connect(directory.clone())
+                .await
+                .unwrap(),
+        );
+        let host = application
+            .initialize_harness(persistent_ports(reopened.clone(), clock, ids))
+            .await
+            .unwrap();
+        assert_eq!(
+            application
+                .list_harness_sessions(&host, &principal)
+                .await
+                .unwrap(),
+            [kept]
+        );
+        assert!(matches!(
+            application
+                .open_harness_session(&host, &principal, &deleted.id)
+                .await,
+            Err(HarnessSessionError::Host(HarnessError::SessionNotFound))
+        ));
+        assert!(host.events_after(&deleted.id, 0).await.unwrap().is_empty());
+        drop(host);
+        drop(reopened);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[tokio::test]

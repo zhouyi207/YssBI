@@ -5,6 +5,9 @@ use yss_harness_contract::{
     HarnessTurnRecord, HarnessTurnState, PersistenceFailure, PersistenceFuture,
 };
 
+#[cfg(test)]
+mod deletion_tests;
+
 impl HarnessSessionStorePort for SqliteHarnessStore {
     fn list_conversations<'a>(
         &'a self,
@@ -105,6 +108,37 @@ impl HarnessSessionStorePort for SqliteHarnessStore {
             .await
             .map_err(|_| unavailable())?;
             require_updated(result.rows_affected())
+        })
+    }
+
+    fn delete_session<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
+        Box::pin(async move {
+            let mut transaction = self.pool.begin().await.map_err(|_| unavailable())?;
+            // All records owned by the session leave together, including records
+            // whose session identity is stored only in their JSON payload.
+            for query in [
+                "DELETE FROM approval_grant WHERE json_extract(payload_json, '$.sessionId') = ?",
+                "DELETE FROM workflow_run WHERE json_extract(payload_json, '$.sessionId') = ?",
+                "DELETE FROM tool_invocation WHERE session_id = ?",
+                "DELETE FROM assistant_event WHERE session_id = ?",
+                "DELETE FROM assistant_turn WHERE session_id = ?",
+            ] {
+                sqlx::query(query)
+                    .bind(session_id.as_str())
+                    .execute(&mut *transaction)
+                    .await
+                    .map_err(|_| unavailable())?;
+            }
+            let result = sqlx::query("DELETE FROM assistant_session WHERE id = ?")
+                .bind(session_id.as_str())
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| unavailable())?;
+            require_updated(result.rows_affected())?;
+            transaction.commit().await.map_err(|_| unavailable())
         })
     }
 

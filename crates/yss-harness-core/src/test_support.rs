@@ -357,6 +357,26 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
         })
     }
 
+    fn delete_session<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
+        Box::pin(async move {
+            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            state.sessions.remove(session_id).ok_or_else(not_found)?;
+            state.turns.retain(|_, turn| &turn.session_id != session_id);
+            state.events.remove(session_id);
+            state
+                .invocations
+                .retain(|_, invocation| &invocation.session_id != session_id);
+            state.runs.retain(|_, run| &run.session_id != session_id);
+            state
+                .approvals
+                .retain(|_, grant| &grant.session_id != session_id);
+            Ok(())
+        })
+    }
+
     fn create_turn<'a>(
         &'a self,
         record: &'a HarnessTurnRecord,
@@ -485,6 +505,30 @@ impl HarnessEventSinkPort for InMemoryHarnessStore {
 }
 
 impl WorkflowStorePort for InMemoryHarnessStore {
+    fn has_unfinished_runs<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+    ) -> PersistenceFuture<'a, Result<bool, PersistenceFailure>> {
+        Box::pin(async move {
+            Ok(self
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .runs
+                .values()
+                .any(|run| {
+                    &run.session_id == session_id
+                        && matches!(
+                            run.state,
+                            WorkflowRunState::Planned
+                                | WorkflowRunState::Ready
+                                | WorkflowRunState::Running
+                                | WorkflowRunState::Paused
+                        )
+                }))
+        })
+    }
+
     fn save_definition<'a>(
         &'a self,
         definition: &'a WorkflowDefinition,

@@ -370,6 +370,14 @@ pub trait HarnessSessionStorePort: Send + Sync {
         record: &'a HarnessSessionRecord,
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
 
+    /// Atomically remove the session and its turns, events, invocations, runs and grants.
+    /// Shared workflow definitions and project resources are retained. Missing sessions
+    /// return NotFound; the caller must exclude active work before deleting.
+    fn delete_session<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
+
     fn create_turn<'a>(
         &'a self,
         record: &'a HarnessTurnRecord,
@@ -417,6 +425,12 @@ pub trait HarnessEventSinkPort: Send + Sync {
 }
 
 pub trait WorkflowStorePort: Send + Sync {
+    /// Includes planned runs that have not started yet, as well as ready, running and paused work.
+    fn has_unfinished_runs<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+    ) -> PersistenceFuture<'a, Result<bool, PersistenceFailure>>;
+
     fn save_definition<'a>(
         &'a self,
         definition: &'a WorkflowDefinition,

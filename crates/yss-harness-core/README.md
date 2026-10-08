@@ -154,6 +154,11 @@ Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各
 
 Harness 只保存业务资源的 opaque references、project/session binding、captured revisions、完整结果 JSON、分页数据及其他有界 capability results 和 receipts。Result payload 仍由 Execution `ResultStore` 拥有；Harness 不能复制完整 DataFrame 或成为 Project history。
 
+会话删除经 Application 捕获当前项目范围，由 `HarnessSessionAccess::delete_conversation` 校验 principal 与项目归属。
+删除复用会话访问锁和 Turn 准入，拒绝运行中的 Turn 及尚未结束的 Workflow；Workflow 创建也经过同一个会话访问锁，避免删除检查后新增任务。
+存储端口原子删除该会话及其 Turn、事件、工具调用、Workflow Run 和审批记录；共享 Workflow 定义、知识来源及项目资源保留。
+删除后原 session ID 不再可打开或提交新 Turn，不通过新建会话来恢复已删除记录。
+
 ## 3. Stable contracts and ports
 
 `yss-harness-contract` 是 Pure Leaf，拥有 Harness、Application Gateway、Rig 和 MCP adapter 共享的 stable typed contracts：identities、project binding、capability request/result、tool descriptor、workflow records、approval、knowledge citation、event、cancellation/deadline 和 structured failure。

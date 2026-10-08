@@ -14,6 +14,8 @@ impl HarnessHost {
         turn_id: Option<&HarnessTurnId>,
         compiled: &CompiledWorkflow,
     ) -> Result<WorkflowRunRecord, HarnessError> {
+        // A new run cannot appear after conversation deletion has checked for idle work.
+        let _access = self.session_access().await;
         let session = self
             .ports
             .sessions

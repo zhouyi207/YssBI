@@ -6,6 +6,19 @@ use yss_harness_contract::{
 };
 
 impl WorkflowStorePort for SqliteHarnessStore {
+    fn has_unfinished_runs<'a>(
+        &'a self,
+        session_id: &'a yss_harness_contract::HarnessSessionId,
+    ) -> PersistenceFuture<'a, Result<bool, PersistenceFailure>> {
+        Box::pin(async move {
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflow_run WHERE json_extract(payload_json, '$.sessionId') = ? AND state IN ('planned', 'ready', 'running', 'paused'))")
+                .bind(session_id.as_str())
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|_| unavailable())
+        })
+    }
+
     fn save_definition<'a>(
         &'a self,
         definition: &'a WorkflowDefinition,
