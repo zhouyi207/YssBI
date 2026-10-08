@@ -55,6 +55,7 @@ fn parse_expression_with_budget(
             &protected_symbols.text
         }
     };
+    ensure_unary_depth(parser_input, depth)?;
     let parsed = match options.format {
         MathInputFormat::Plain => mathlex::parse(parser_input),
         MathInputFormat::Latex => mathlex::parse_latex(parser_input),
@@ -156,6 +157,21 @@ fn ensure_depth(depth: usize) -> Result<(), MathError> {
             MathErrorKind::DepthLimit,
             "数学表达式深度不能超过 32",
         ));
+    }
+    Ok(())
+}
+
+fn ensure_unary_depth(input: &str, depth: usize) -> Result<(), MathError> {
+    let mut signs = 0;
+    for character in input.chars() {
+        match character {
+            '+' | '-' => {
+                signs += 1;
+                ensure_depth(depth + signs)?;
+            }
+            character if character.is_whitespace() => {}
+            _ => signs = 0,
+        }
     }
     Ok(())
 }
@@ -826,6 +842,15 @@ mod tests {
         let input = "x".repeat(MAX_INPUT_BYTES + 1);
         let error = parse_relations(&input, ParseOptions::plain(&[])).unwrap_err();
         assert_eq!(error.kind, MathErrorKind::InputLimit);
+    }
+
+    #[test]
+    fn rejects_excessive_unary_prefixes_before_recursive_parsing() {
+        let input = format!("{}1", "-".repeat(MAX_INPUT_BYTES - 1));
+        let error = parse_expression(&input, ParseOptions::plain(&[])).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::DepthLimit);
+        let at_limit = format!("{}1", "-".repeat(MAX_DEPTH - 1));
+        assert!(parse_expression(&at_limit, ParseOptions::plain(&[])).is_ok());
     }
 
     #[test]
