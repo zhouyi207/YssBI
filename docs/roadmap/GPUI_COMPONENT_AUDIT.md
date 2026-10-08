@@ -176,6 +176,14 @@
 - 独立 Plot/Inspector 窗口的原生创建、租约交付和会话关闭仍待迁移；真实翻页、失败重试、语言、滚动、提示与关闭验收继续开放。
 
 
+### 基础控件与框架包装
+
+- 已完整阅读 `components/ui` 的 26 个文件及其子组件，核对实际消费路径，并补读唯一进度条消费者 ProgressOverlay。按钮、输入、搜索选择、菜单、折叠、表格与提示复用当前 gpui-component 和既有宿主实现；不创建一套同名 Rust 包装层。
+- Card、Badge、Alert、Empty、Label 与分隔线的样式由原生主题及已有字段/分节/反馈函数承担；业务数据、草稿、失败和提交仍归原使用方。React Context、Radix Portal、DOM 特例和 CSS 变体不构成新的应用职责。
+- 特别记录 Dialog 的恢复焦点与堆叠、Tooltip 的拖窗关闭、InputGroup 的聚焦、单选/多选语义及 Progress 的比例单位；原生组件存在不代表所有消费者已经迁移或完成人工验收。项目进度遮罩的阶段、详情、未知进度与取消流程仍待迁移。
+- 本批只更新审查结论，不改变运行代码、依赖或 UI 状态，也不新增基础控件测试。文档元信息、267 个相对链接、265 个无重复组件行及 26 项基础控件结论检查通过；`git diff --check` 通过，并复用当前任务已通过的模块索引检查（59 crates / 239 条依赖声明）。
+
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -212,32 +220,32 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [components/ui/alert.tsx](../../react/src/components/ui/alert.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/badge.tsx](../../react/src/components/ui/badge.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/button.tsx](../../react/src/components/ui/button.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/card.tsx](../../react/src/components/ui/card.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/checkbox.tsx](../../react/src/components/ui/checkbox.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/collapsible.tsx](../../react/src/components/ui/collapsible.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/combobox.tsx](../../react/src/components/ui/combobox.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/context-menu.tsx](../../react/src/components/ui/context-menu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/dialog.tsx](../../react/src/components/ui/dialog.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/dropdown-menu.tsx](../../react/src/components/ui/dropdown-menu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/empty.tsx](../../react/src/components/ui/empty.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/input-group.tsx](../../react/src/components/ui/input-group.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/input.tsx](../../react/src/components/ui/input.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/label.tsx](../../react/src/components/ui/label.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/menubar.tsx](../../react/src/components/ui/menubar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/popover.tsx](../../react/src/components/ui/popover.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/progress.tsx](../../react/src/components/ui/progress.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/scroll-area.tsx](../../react/src/components/ui/scroll-area.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/select.tsx](../../react/src/components/ui/select.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/separator.tsx](../../react/src/components/ui/separator.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/switch.tsx](../../react/src/components/ui/switch.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/table.tsx](../../react/src/components/ui/table.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/textarea.tsx](../../react/src/components/ui/textarea.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/toggle-group.tsx](../../react/src/components/ui/toggle-group.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/toggle.tsx](../../react/src/components/ui/toggle.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui/tooltip.tsx](../../react/src/components/ui/tooltip.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [components/ui/alert.tsx](../../react/src/components/ui/alert.tsx) | 复用原生反馈区域或 Alert | 仅封装等级、标题、描述和布局；结果、模型与项目反馈保留各自失败 owner，不建立公共错误状态 | 无需独立移植；随业务反馈验收 |
+| [components/ui/badge.tsx](../../react/src/components/ui/badge.tsx) | 复用原生 Badge 或状态文字 | 仅样式变体；现有状态卡片按主题渲染，等级由原业务投影决定 | 无需独立移植 |
+| [components/ui/button.tsx](../../react/src/components/ui/button.tsx) | 复用 gpui_component::Button | 既有按钮提供尺寸、图标、禁用及选中展示；回调仍调用所属面板，Radix Slot/asChild 无须映射为 Rust 类型 | 已采用；键盘与焦点随使用方验收 |
+| [components/ui/card.tsx](../../react/src/components/ui/card.tsx) | 合并到原生分节布局 | Header/Content/Footer 都是无状态样式包装；settings 与 results/report/display 已按原生主题组织卡片 | 无需独立移植 |
+| [components/ui/checkbox.tsx](../../react/src/components/ui/checkbox.tsx) | 复用 gpui_component::Checkbox | 报告补选、模型能力和节点参数已有受控原生选项；选择仍是表单暂态，提交归 Application | 已采用；随表单验收 |
+| [components/ui/collapsible.tsx](../../react/src/components/ui/collapsible.tsx) | 复用原生 Collapsible 与章节实体 | 报告保留章节和已读数据，展开状态归对应实体；不引入全局折叠 store | 已采用；业务消费者继续逐项审查 |
+| [components/ui/combobox.tsx](../../react/src/components/ui/combobox.tsx) | 复用 ComboboxState/SearchableVec | 供应商预设已有可搜索原生列表、空态及受控选择；Assistant 模型选择随 Assistant 批次核对，不复制 Base UI Chips/Portal 包装 | 供应商已采用；Assistant 消费者待审查 |
+| [components/ui/context-menu.tsx](../../react/src/components/ui/context-menu.tsx) | 复用 ContextMenuExt/PopupMenu | 既有 Activity 右键菜单提供项目动作和禁用状态；Portal、CSS 定位与快捷键文字由原生菜单承担 | 基础能力已采用；动作集合随使用方审查 |
+| [components/ui/dialog.tsx](../../react/src/components/ui/dialog.tsx) | 复用原生弹窗与关闭流程 | 已核对堆叠层和恢复焦点逻辑；现有原生 Dialog 路径与宿主窗口负责焦点、遮罩和关闭，草稿确认仍归所属表单 | 无需复制 DialogStackContext；弹窗交互待验收 |
+| [components/ui/dropdown-menu.tsx](../../react/src/components/ui/dropdown-menu.tsx) | 复用 DropdownMenu/PopupMenuItem | 仅 Portal 与项目样式包装；原生工具栏和模型配置已有菜单，选中及禁用来自原状态 | 已采用；随使用方验收 |
+| [components/ui/empty.tsx](../../react/src/components/ui/empty.tsx) | 复用 appearance::empty_state 和局部空态 | 标题、说明、图标和可选动作都是展示；已有原生空态使用统一主题和图标 | 无需独立移植 |
+| [components/ui/input-group.tsx](../../react/src/components/ui/input-group.tsx) | 复用原生 Input 的 prefix/suffix 与布局 | 参考实现只被组合框内部使用；装饰、清除按钮和点击聚焦由输入组件与调用方组合，不保存第二份输入值 | 无需独立移植；聚焦随组合框验收 |
+| [components/ui/input.tsx](../../react/src/components/ui/input.tsx) | 复用 InputState/Input | 原生输入实体保留未提交文字、选择与撤销；placeholder、禁用和校验提示由当前表单提供 | 已采用；输入法与键盘随表单验收 |
+| [components/ui/label.tsx](../../react/src/components/ui/label.tsx) | 复用字段标题、说明与原生标签 | Settings render_field 和 Details 字段已有展示；可访问名称与点击聚焦跟随对应输入绑定，不移植 HTML for 属性模型 | 展示已采用；焦点与可访问性待验收 |
+| [components/ui/menubar.tsx](../../react/src/components/ui/menubar.tsx) | 复用原生菜单模型与 AppMenuBar | 原生 workbench/menus 提供菜单与命令，勾选/禁用从工作台派生；本文件只有 Radix 外壳，菜单项目另行审查 | 基础能力已采用；菜单项目审查仍开放 |
+| [components/ui/popover.tsx](../../react/src/components/ui/popover.tsx) | 复用 gpui_component::Popover 或所属菜单 | 参考内容只是锚点与 Portal 布局；筛选草稿、选择和详情继续由所属面板管理，不建立通用弹出层状态库 | 无需独立移植；具体消费者待审查 |
+| [components/ui/progress.tsx](../../react/src/components/ui/progress.tsx) | 复用原生 Progress，迁移调用方比例适配 | 参考默认 max=1；原生 Progress 接收 0–100 并支持未知进度。唯一业务消费者为 ProgressOverlay，阶段与取消需接入项目管理 owner | 基础控件无须重写；进度遮罩待迁移 |
+| [components/ui/scroll-area.tsx](../../react/src/components/ui/scroll-area.tsx) | 复用原生滚动与虚拟列表/Table | 方向和滚动句柄归原生容器；结果和日志已有有界视口，不搬迁 Radix DOM wrapper 修补或额外滚动位置镜像 | 已采用；滚动及拖动随使用方验收 |
+| [components/ui/select.tsx](../../react/src/components/ui/select.tsx) | 复用原生选项菜单/Combobox | workbench/controls::choice 与设置菜单消费原选项和当前值；需要搜索时复用 ComboboxState，不复制 Radix 选择状态 | 已采用；选项业务语义随使用方审查 |
+| [components/ui/separator.tsx](../../react/src/components/ui/separator.tsx) | 复用原生 Separator 或边框 | 仅横/竖分隔样式，唯一直接消费者为架构介绍；不引入应用状态或新封装 | 无需独立移植 |
+| [components/ui/switch.tsx](../../react/src/components/ui/switch.tsx) | 复用原生布尔控件 | 节点参数已有 Checkbox，图形控制使用原受控选项；开关外观可用原生 Switch，布尔值与提交入口保持原 owner | 基础能力已采用；各业务选项待验收 |
+| [components/ui/table.tsx](../../react/src/components/ui/table.tsx) | 复用虚拟 Table 与已有报告表 | HTML 表头/行/单元格都是样式包装；results/table、系数及数据库网格已有有界行数据与原列定义 | 已采用；不复制 HTML 表格组件族 |
+| [components/ui/textarea.tsx](../../react/src/components/ui/textarea.tsx) | 复用 InputState/Textarea | 模型参数表单已使用 Textarea，多行草稿保留在同一输入实体；不增加正文或撤销状态 | 已采用；多行编辑随模型表单验收 |
+| [components/ui/toggle-group.tsx](../../react/src/components/ui/toggle-group.tsx) | 复用受控 Button 选中状态 | 报告数值/报告及图形模式已有原生按钮；单选/多选由所属显示状态决定，不复制仅传递样式的 Context | 已采用；随报告与图形验收 |
+| [components/ui/toggle.tsx](../../react/src/components/ui/toggle.tsx) | 无需迁移样式常量 | 文件只导出 toggleVariants，供 ToggleGroup 使用，没有独立组件或业务行为；原生按钮主题覆盖其职责 | 无需移植 |
+| [components/ui/tooltip.tsx](../../react/src/components/ui/tooltip.tsx) | 复用原生 Tooltip 与控件提示接口 | 已核对受控/非受控状态和自定义拖窗广播；原生提示归 Window/元素，不搬迁浏览器全局事件协调器 | 已采用；拖窗、焦点和遮挡仍需验收 |
 
 ## components/ui-presentation
 
@@ -567,7 +575,7 @@
 | [shared/ui/MessageDialog.tsx](../../react/src/shared/ui/MessageDialog.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [shared/ui/Modal.tsx](../../react/src/shared/ui/Modal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [shared/ui/PageAlert.tsx](../../react/src/shared/ui/PageAlert.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [shared/ui/ProgressOverlay.tsx](../../react/src/shared/ui/ProgressOverlay.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [shared/ui/ProgressOverlay.tsx](../../react/src/shared/ui/ProgressOverlay.tsx) | 迁移项目进度遮罩 | 已阅读 0–1 比例、未知进度、阶段/详情及 cancelable 约束；需接入原项目任务进度与取消入口，不能只替换进度条外观 | 待迁移 |
 | [shared/ui/Select.tsx](../../react/src/shared/ui/Select.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [shared/ui/ToolbarIconButton.tsx](../../react/src/shared/ui/ToolbarIconButton.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [shared/ui/WindowChrome.tsx](../../react/src/shared/ui/WindowChrome.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
