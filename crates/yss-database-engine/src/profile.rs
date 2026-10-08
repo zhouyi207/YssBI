@@ -188,7 +188,6 @@ impl DatasetQuery {
         Ok(ColumnStats::Numeric(NumericColumnStats {
             column_name: field.name().clone(),
             column_type: yss_database_arrow::data_type_name(field.data_type()),
-            kind: "numeric",
             count,
             null_count: count
                 .checked_sub(integer(&batch, 1, 0)?)
@@ -288,7 +287,6 @@ impl DatasetQuery {
         Ok(ColumnStats::String(StringColumnStats {
             column_name: field.name().clone(),
             column_type: yss_database_arrow::data_type_name(field.data_type()),
-            kind: "string",
             count,
             null_count: count
                 .checked_sub(non_null)
@@ -327,7 +325,6 @@ impl DatasetQuery {
                     })?;
                     Ok(ColumnDistribution::String(StringDistribution {
                         column_name: field.name().clone(),
-                        kind: "string",
                         categories,
                         other_count: valid.checked_sub(top).ok_or(RelationError::InvalidInput)?,
                     }))
@@ -405,7 +402,6 @@ impl DatasetQuery {
         };
         Ok(ColumnDistribution::Numeric(NumericDistribution {
             column_name: field.name().clone(),
-            kind: "numeric",
             bins,
         }))
     }

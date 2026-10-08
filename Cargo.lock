@@ -12468,9 +12468,6 @@ dependencies = [
 [[package]]
 name = "yss-dataset-profile"
 version = "0.1.0"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "yss-desktop-gpui"

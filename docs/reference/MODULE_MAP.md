@@ -26,7 +26,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-database-schema` | `crates/yss-database-schema` | [Cargo.toml](../../crates/yss-database-schema/Cargo.toml) | [README](../../crates/yss-database-schema/README.md) |
 | `yss-database-source` | `crates/yss-database-source` | [Cargo.toml](../../crates/yss-database-source/Cargo.toml) | — |
 | `yss-database-store` | `crates/yss-database-store` | [Cargo.toml](../../crates/yss-database-store/Cargo.toml) | [README](../../crates/yss-database-store/README.md) |
-| `yss-dataset-profile` | `crates/yss-dataset-profile` | [Cargo.toml](../../crates/yss-dataset-profile/Cargo.toml) | — |
+| `yss-dataset-profile` | `crates/yss-dataset-profile` | [Cargo.toml](../../crates/yss-dataset-profile/Cargo.toml) | [README](../../crates/yss-dataset-profile/README.md) |
 | `yss-desktop-gpui` | `crates/yss-desktop-gpui` | [Cargo.toml](../../crates/yss-desktop-gpui/Cargo.toml) | [README](../../crates/yss-desktop-gpui/README.md) |
 | `yss-display-naming` | `crates/yss-display-naming` | [Cargo.toml](../../crates/yss-display-naming/Cargo.toml) | — |
 | `yss-filesystem` | `crates/yss-filesystem` | [Cargo.toml](../../crates/yss-filesystem/Cargo.toml) | [README](../../crates/yss-filesystem/README.md) |

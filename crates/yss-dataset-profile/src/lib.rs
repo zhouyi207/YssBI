@@ -1,4 +1,4 @@
-//! Stable dataset-profile DTOs, column categories, and display formatting.
+//! Typed dataset-profile values, column categories, and histogram label formatting.
 
 mod column_distribution;
 mod column_stats;
