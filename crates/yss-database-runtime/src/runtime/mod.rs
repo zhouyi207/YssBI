@@ -367,8 +367,9 @@ impl DatabaseRuntimeSession {
     pub(crate) fn read_physical_column_distributions(
         &self,
         database: &DatabaseId,
+        columns: &[String],
     ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
-        self.physical.read_column_distributions(database)
+        self.physical.read_column_distributions(database, columns)
     }
 
     pub(crate) fn read_physical_profile(

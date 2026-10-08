@@ -81,6 +81,14 @@ impl Workbench {
     ) -> gpui::Entity<ChartEditor> {
         let path = read.path.as_str().to_owned();
         let services = self.services.clone();
+        let catalog = self
+            .project
+            .as_ref()
+            .filter(|project| {
+                project.index.publication_revision >= read.catalog.publication_revision
+            })
+            .map(|project| project.index.clone())
+            .unwrap_or_else(|| read.catalog.clone());
         let chart = cx.new(|cx| ChartEditor::new(services, read, cx));
         self.subscriptions
             .push(cx.subscribe(&chart, |view, chart, event, cx| {
@@ -99,7 +107,7 @@ impl Workbench {
             window,
             cx,
         );
-        chart.update(cx, |view, cx| view.refresh(window, cx));
+        chart.update(cx, |view, cx| view.replace_catalog(catalog, window, cx));
         chart
     }
     pub(super) fn refresh_charts(&self, window: &mut Window, cx: &mut Context<Self>) {

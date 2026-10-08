@@ -28,7 +28,8 @@ pub(crate) struct ChartEditor {
     saved: ChartDocument,
     draft: ChartDocument,
     focus: FocusHandle,
-    meta: Option<DatabaseMetaResult>,
+    meta: Option<Arc<DatabaseMetaResult>>,
+    columns_page: usize,
     meta_source: Option<(String, ResourceRevision)>,
     preview: Option<Arc<query::PreviewData>>,
     draft_epoch: u64,
@@ -59,6 +60,7 @@ impl ChartEditor {
             draft: read.document,
             focus: cx.focus_handle(),
             meta: None,
+            columns_page: 0,
             meta_source: None,
             preview: None,
             draft_epoch: 0,
@@ -103,7 +105,12 @@ impl ChartEditor {
         {
             return;
         }
-        update(&mut self.draft);
+        let mut draft = self.draft.clone();
+        update(&mut draft);
+        if draft == self.draft {
+            return;
+        }
+        self.draft = draft;
         self.draft_epoch = self.draft_epoch.wrapping_add(1);
         self.error = None;
         self.schedule_preview(window, cx);

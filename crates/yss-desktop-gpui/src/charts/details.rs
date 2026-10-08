@@ -1,5 +1,9 @@
 use super::ChartEditor;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
+use gpui_kit_assets::IconName;
+
+pub(super) const PAGE_COLUMNS: usize = 50;
+
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
@@ -27,25 +31,21 @@ impl ChartEditor {
         let epoch = self.draft_epoch;
         let publication = self.catalog.publication_revision;
         let owner = cx.entity().downgrade();
-        let datasets = self
-            .catalog
-            .databases
-            .iter()
-            .map(|entry| {
-                (
-                    entry.id.clone(),
-                    entry.name.clone().unwrap_or_else(|| "未命名数据集".into()),
-                )
-            })
-            .collect::<Vec<_>>();
+        let datasets = self.catalog.clone();
         let current_name = if self.draft.database_id.is_empty() {
             "选择数据集".into()
         } else {
             datasets
+                .databases
                 .iter()
-                .find(|(id, _)| *id == self.draft.database_id)
-                .map(|(_, name)| name.clone())
-                .unwrap_or_else(|| "已移除的数据集".into())
+                .find(|entry| entry.id == self.draft.database_id)
+                .map(|entry| {
+                    entry
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| crate::text::translate("native.charts.unnamedDataset"))
+                })
+                .unwrap_or_else(|| crate::text::translate("native.charts.removedDataset"))
         };
         let type_owner = owner.clone();
         let mut view = div()
@@ -74,7 +74,14 @@ impl ChartEditor {
                     .disabled(self.busy() || !self.available)
                     .dropdown_menu(move |mut menu, _, _| {
                         for (id, name) in std::iter::once((String::new(), "不选择数据集".into()))
-                            .chain(datasets.clone())
+                            .chain(datasets.databases.iter().map(|entry| {
+                                (
+                                    entry.id.clone(),
+                                    entry.name.clone().unwrap_or_else(|| {
+                                        crate::text::translate("native.charts.unnamedDataset")
+                                    }),
+                                )
+                            }))
                         {
                             let owner = owner.clone();
                             menu = menu.item(PopupMenuItem::new(name).on_click(
@@ -84,9 +91,11 @@ impl ChartEditor {
                                             epoch,
                                             publication,
                                             |document| {
-                                                document.database_id = id.clone();
-                                                document.encodings =
-                                                    ChartEncodings { x: None, y: None };
+                                                if document.database_id != id {
+                                                    document.database_id = id.clone();
+                                                    document.encodings =
+                                                        ChartEncodings { x: None, y: None };
+                                                }
                                             },
                                             window,
                                             cx,
@@ -115,9 +124,11 @@ impl ChartEditor {
                                             epoch,
                                             publication,
                                             |document| {
-                                                document.chart_type = kind;
-                                                document.encodings =
-                                                    ChartEncodings { x: None, y: None };
+                                                if document.chart_type != kind {
+                                                    document.chart_type = kind;
+                                                    document.encodings =
+                                                        ChartEncodings { x: None, y: None };
+                                                }
                                             },
                                             window,
                                             cx,
@@ -143,7 +154,12 @@ impl ChartEditor {
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("{} 行 · {} 列", meta.row_count, meta.column_count)),
             );
-            for column in &meta.columns {
+            for column in meta
+                .columns
+                .iter()
+                .skip(self.columns_page * PAGE_COLUMNS)
+                .take(PAGE_COLUMNS)
+            {
                 view = view.child(
                     div()
                         .flex()
@@ -160,6 +176,52 @@ impl ChartEditor {
                             div()
                                 .text_color(cx.theme().muted_foreground)
                                 .child(column.display_type().to_owned()),
+                        ),
+                );
+            }
+            let pages = meta.columns.len().div_ceil(PAGE_COLUMNS).max(1);
+            if meta.columns.is_empty() {
+                view = view.child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(crate::text::translate("chartsSidebar.noColumns")),
+                );
+            } else if pages > 1 {
+                view = view.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_2()
+                        .child(
+                            Button::new("chart-columns-previous")
+                                .small()
+                                .ghost()
+                                .icon(IconName::ChevronLeft)
+                                .tooltip(crate::text::translate("databaseEditor.previousPage"))
+                                .disabled(self.columns_page == 0)
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.columns_page = view.columns_page.saturating_sub(1);
+                                    view.changed(cx);
+                                })),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .child(format!("{} / {pages}", self.columns_page + 1)),
+                        )
+                        .child(
+                            Button::new("chart-columns-next")
+                                .small()
+                                .ghost()
+                                .icon(IconName::ChevronRight)
+                                .tooltip(crate::text::translate("databaseEditor.nextPage"))
+                                .disabled(self.columns_page + 1 >= pages)
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    view.columns_page = (view.columns_page + 1).min(pages - 1);
+                                    view.changed(cx);
+                                })),
                         ),
                 );
             }
@@ -186,17 +248,7 @@ impl ChartEditor {
         let publication = self.catalog.publication_revision;
         let owner = cx.entity().downgrade();
         let histogram = self.draft.chart_type == ChartType::Histogram;
-        let columns = self
-            .meta
-            .as_ref()
-            .map(|meta| {
-                meta.columns
-                    .iter()
-                    .filter(|column| histogram || numeric(column))
-                    .map(|column| column.name().as_str().to_owned())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let metadata = self.meta.clone();
         let selected = if x_axis {
             self.draft.encodings.x.as_deref()
         } else {
@@ -208,7 +260,11 @@ impl ChartEditor {
         };
         let label = selected
             .map(|name| {
-                if columns.iter().any(|column| column == name) {
+                if metadata.as_ref().is_some_and(|meta| {
+                    meta.columns.iter().any(|column| {
+                        column.name().as_str() == name && (histogram || numeric(column))
+                    })
+                }) {
                     name.to_owned()
                 } else {
                     format!("{name}（当前不可用）")
@@ -233,8 +289,12 @@ impl ChartEditor {
                     .label(label)
                     .disabled(self.busy() || !self.available || self.meta.is_none())
                     .dropdown_menu(move |mut menu, _, _| {
-                        for column in std::iter::once(None).chain(columns.iter().cloned().map(Some))
-                        {
+                        let columns = metadata
+                            .iter()
+                            .flat_map(|meta| meta.columns.iter())
+                            .filter(|column| histogram || numeric(column))
+                            .map(|column| Some(column.name().as_str().to_owned()));
+                        for column in std::iter::once(None).chain(columns) {
                             let owner = owner.clone();
                             menu = menu.item(
                                 PopupMenuItem::new(

@@ -133,7 +133,10 @@ to microseconds before becoming numeric coordinates. Plugin snapshots use exact 
 
 Harness profile inspection calls `session_api::dataset_overview_with_control` with the caller's
 cancellation and query budget. Chart histograms use `session_api::column_distributions` through
-the Application revision-checked read boundary.
+the Application revision-checked read boundary. That read requires an explicit nonempty column
+selection, projects those fields with the existing Engine query before computing distributions,
+and retains its original query budget and operation lease. Duplicate or missing columns are
+rejected by the same projection owner; an empty list never silently aggregates the whole dataset.
 
 `profile_query.rs`, re-exported by `session_api`, also admits explicit column selections and
 requested `Completeness`, `Statistics` or `Distribution` groups. One captured instance supplies

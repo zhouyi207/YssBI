@@ -2635,6 +2635,11 @@
       "storageType": "存储类型",
       "semantics": "数据语义",
       "unset": "未设置"
+    },
+    "charts": {
+      "unnamedDataset": "未命名数据集",
+      "removedDataset": "已移除的数据集",
+      "noFinitePoints": "所选列没有可用于绘图的有限数值对。"
     }
   }
 }

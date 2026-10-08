@@ -1,16 +1,11 @@
 //! All chart reads use the original project publication and database resource identities.
+mod preview;
 use super::ChartEditor;
 use gpui::{Context, Window};
+pub(super) use preview::{HistogramDatum, PreviewData, PreviewFailure};
 use std::{sync::Arc, time::Duration};
-use yss_application::{
-    chart::{ChartPlotQuery, ChartPlotResult},
-    database::DatabaseMetaResult,
-    runtime::ApplicationServices,
-};
-use yss_chart_document::{ChartDocument, ChartResourcePath, ChartType};
-use yss_data_contract::TabularColumnName;
-use yss_database_contract::DatabaseId;
-use yss_dataset_profile::ColumnDistribution;
+use yss_application::runtime::ApplicationServices;
+use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_project::ProjectIndex;
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 
@@ -49,138 +44,6 @@ pub(crate) fn read(
         document,
     })
 }
-#[derive(Clone)]
-pub(super) struct HistogramDatum {
-    pub index: usize,
-    pub label: String,
-    pub count: usize,
-}
-pub(super) enum PreviewData {
-    Empty(&'static str),
-    Failed(&'static str),
-    Histogram {
-        bins: Vec<HistogramDatum>,
-        column: String,
-        other_count: usize,
-    },
-    Cartesian(Arc<super::plot::CartesianData>),
-}
-struct PreviewRead {
-    meta: Option<DatabaseMetaResult>,
-    data: PreviewData,
-}
-fn preview(
-    services: &ApplicationServices,
-    project: ProjectInstanceId,
-    catalog: &ProjectIndex,
-    document: &ChartDocument,
-) -> anyhow::Result<PreviewRead> {
-    if document.database_id.is_empty() {
-        return Ok(PreviewRead {
-            meta: None,
-            data: PreviewData::Empty("在右侧属性中选择数据集和绘图列"),
-        });
-    }
-    let source = catalog
-        .databases
-        .iter()
-        .find(|entry| entry.id == document.database_id)
-        .ok_or_else(|| anyhow::anyhow!("chart source absent from project index"))?;
-    let meta = services.application.query_database_meta_for_application(
-        project.clone(),
-        source.id.clone(),
-        source.revision,
-    )?;
-    let data = (|| -> anyhow::Result<PreviewData> {
-        Ok(match document.chart_type {
-            ChartType::Histogram => {
-                if let Some(column) = document
-                    .encodings
-                    .y
-                    .as_ref()
-                    .or(document.encodings.x.as_ref())
-                {
-                    let distributions = services
-                        .application
-                        .query_column_distributions_for_application(
-                            project,
-                            source.id.clone(),
-                            source.revision,
-                        )?;
-                    histogram(distributions, column)?
-                } else {
-                    PreviewData::Empty("选择一列，查看它的数值或类别分布")
-                }
-            }
-            ChartType::Scatter | ChartType::Line => {
-                if let (Some(x), Some(y)) = (&document.encodings.x, &document.encodings.y) {
-                    let pair: ChartPlotResult =
-                        services.application.query_chart_plot(ChartPlotQuery {
-                            project_instance_id: project,
-                            database_id: DatabaseId::from_existing(source.id.clone().into()),
-                            expected_revision: source.revision,
-                            x_column: TabularColumnName::try_from(x.as_str())?,
-                            y_column: TabularColumnName::try_from(y.as_str())?,
-                            max_points: None,
-                        })?;
-                    PreviewData::Cartesian(Arc::new(super::plot::CartesianData::new(
-                        pair,
-                        document.chart_type,
-                    )))
-                } else {
-                    PreviewData::Empty("选择 X 轴和 Y 轴列，查看散点或折线")
-                }
-            }
-        })
-    })()
-    .unwrap_or(PreviewData::Failed(
-        "无法读取当前配置的绘图数据，请重新选择列或刷新。",
-    ));
-    Ok(PreviewRead {
-        meta: Some(meta),
-        data,
-    })
-}
-fn histogram(distributions: Vec<ColumnDistribution>, column: &str) -> anyhow::Result<PreviewData> {
-    for distribution in distributions {
-        match distribution {
-            ColumnDistribution::Numeric(value) if value.column_name == column => {
-                return Ok(PreviewData::Histogram {
-                    bins: value
-                        .bins
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, bin)| HistogramDatum {
-                            index,
-                            label: bin.label,
-                            count: bin.count,
-                        })
-                        .collect(),
-                    column: column.into(),
-                    other_count: 0,
-                });
-            }
-            ColumnDistribution::String(value) if value.column_name == column => {
-                return Ok(PreviewData::Histogram {
-                    bins: value
-                        .categories
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, bin)| HistogramDatum {
-                            index,
-                            label: bin.label,
-                            count: bin.value,
-                        })
-                        .collect(),
-                    column: column.into(),
-                    other_count: value.other_count,
-                });
-            }
-            _ => {}
-        }
-    }
-    Err(anyhow::anyhow!("chart column unavailable"))
-}
 impl ChartEditor {
     pub(super) fn schedule_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.preview_generation = self.preview_generation.wrapping_add(1);
@@ -198,13 +61,19 @@ impl ChartEditor {
         if self.meta_source != source {
             self.meta = None;
             self.meta_source = None;
+            self.columns_page = 0;
         }
+        let metadata = self.meta.clone();
         let owner = self.services.clone();
         let timer = cx.background_executor().timer(Duration::from_millis(250));
         self.preview_task = Some(cx.spawn_in(window, async move |view, cx| {
             timer.await;
             let result = owner
-                .run(move |services| preview(services, project, &catalog, &document))
+                .run(move |services| {
+                    Ok(preview::read(
+                        services, project, &catalog, &document, metadata,
+                    ))
+                })
                 .await
                 .ok()
                 .and_then(Result::ok);
@@ -216,12 +85,15 @@ impl ChartEditor {
                 match result {
                     Some(read) => {
                         view.meta = read.meta;
-                        view.meta_source = source;
+                        view.meta_source = view.meta.as_ref().and(source);
+                        view.columns_page =
+                            view.columns_page.min(view.meta.as_ref().map_or(0, |meta| {
+                                meta.columns.len().saturating_sub(1) / super::details::PAGE_COLUMNS
+                            }));
                         view.preview = Some(Arc::new(read.data));
                     }
                     None => {
-                        view.error =
-                            Some("图表预览未读取，请检查数据集、列类型或当前资源状态。".into())
+                        view.preview = Some(Arc::new(PreviewData::Failed(PreviewFailure::Read)))
                     }
                 }
                 view.changed(cx);
@@ -320,7 +192,7 @@ impl ChartEditor {
         self.available = true;
         if revision != self.revision {
             self.refresh(window, cx);
-        } else if source_changed {
+        } else if source_changed || (self.preview.is_none() && !self.preview_loading) {
             self.schedule_preview(window, cx);
         }
         self.changed(cx);

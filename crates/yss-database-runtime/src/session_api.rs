@@ -552,9 +552,16 @@ pub fn page_query_snapshot(
 pub fn column_distributions(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
+    columns: &[String],
 ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
     let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
-    session.read_physical_column_distributions(&database)
+    if columns.is_empty() {
+        return Err(DatabaseError::invalid_request(
+            DatabaseOperation::Query,
+            Some(database),
+        ));
+    }
+    session.read_physical_column_distributions(&database, columns)
 }
 
 pub fn dataset_overview_with_control(

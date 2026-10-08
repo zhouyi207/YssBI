@@ -49,6 +49,10 @@ Harness 的数据库读取适配位于 `automation/resources/database/read.rs`�
 原生分页保留精确的有符号和无符号整数载体；模型行页在输出边界使用共享的显示编码，将宽整数保存为十进制文本。
 导入入口接受可选名称，在原导入准备与唯一名称分配中一次确定；省略时继续由来源生成名称。
 
+图表直方图的 `query_column_distributions_for_application` 要求显式非空列名列表，沿用同一个读取 gate。
+Runtime 将列选择交给已有 Engine 投影后再计算分布，避免为单列预览聚合无关列；空列表、重复列与不存在的列被拒绝。
+原分箱、类别顺序、查询预算和资源版本重验保持不变；原生图表当前只传所选一列。
+
 列取值初始化按单列读取整列非空去重值，用于前端语义映射草稿；沿用 Runtime 的有界读取，不使用表格当前页或分布查询的截断类别。查询本身不修改语义或数据。
 
 `query_database_rows_selected_for_application` 在相同读取 gate 内传入 Engine 的类型化列投影、

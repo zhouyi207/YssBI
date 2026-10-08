@@ -143,6 +143,7 @@ impl ApplicationState {
         project_instance_id: ProjectInstanceId,
         id: String,
         expected_revision: ResourceRevision,
+        columns: &[String],
     ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         read_database_in_captured_session(
@@ -151,7 +152,7 @@ impl ApplicationState {
             &id,
             expected_revision,
             DatabaseApplicationOperation::ColumnDistribution,
-            session_api::column_distributions,
+            |session, database| session_api::column_distributions(session, database, columns),
         )
     }
 
@@ -492,6 +493,52 @@ mod tests {
     }
 
     #[test]
+    fn chart_distributions_only_read_explicit_columns_and_reject_invalid_selection() {
+        use yss_dataset_profile::ColumnDistribution;
+        let (_fixture, state, id) = imported_database("value,label,other\n1,a,9\n2,b,10\n2,a,11\n");
+        let captured = state.capture_session().unwrap();
+        let instance = captured.project_instance_id().clone();
+        let expected = revision(&captured, &id);
+        let read = |columns: &[String]| {
+            state.query_column_distributions_for_application(
+                instance.clone(),
+                id.clone(),
+                expected,
+                columns,
+            )
+        };
+        let selected = read(&["label".into()]).unwrap();
+        assert_eq!(selected.len(), 1);
+        let ColumnDistribution::String(distribution) = &selected[0] else {
+            panic!("selected label distribution");
+        };
+        assert_eq!(distribution.column_name, "label");
+        assert_eq!(
+            distribution
+                .categories
+                .iter()
+                .map(|value| (value.label.as_str(), value.value))
+                .collect::<Vec<_>>(),
+            [("a", 2), ("b", 1)]
+        );
+        assert_eq!(distribution.other_count, 0);
+        let selected = read(&["value".into()]).unwrap();
+        assert_eq!(selected.len(), 1);
+        let ColumnDistribution::Numeric(distribution) = &selected[0] else {
+            panic!("selected numeric distribution");
+        };
+        assert_eq!(distribution.column_name, "value");
+        assert_eq!(
+            distribution.bins.iter().map(|bin| bin.count).sum::<usize>(),
+            3
+        );
+        assert!(read(&[]).is_err());
+        assert!(read(&["missing".into()]).is_err());
+        assert!(read(&["label".into(), "label".into()]).is_err());
+        assert_eq!(revision(&captured, &id), expected);
+    }
+
+    #[test]
     fn reads_require_the_requested_project_and_runtime_revision() {
         let (fixture, state, id) = imported_database("value,other\n7,11\n");
         let captured = state.capture_session().unwrap();
@@ -559,6 +606,7 @@ mod tests {
                     instance.clone(),
                     id.clone(),
                     expected,
+                    &["value".into()],
                 ),
                 expected,
             );

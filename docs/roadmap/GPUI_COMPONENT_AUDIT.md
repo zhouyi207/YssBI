@@ -76,6 +76,16 @@
 - `cargo test -p yss-database-arrow --lib tests::column_semantics_enforce_explicit_domains_and_numeric_constraints -- --exact` 一项通过；`cargo test -p yss-application --lib database::tests::project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots -- --exact` 一项通过，分别保护显式域/精度约束和应用修改/历史/持久化流程。
 - `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` 已通过；独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`。集成工作区后续检查遇到并行插件视图与 Runtime 接口未对齐，未据此修改其他会话内容。人工验收操作见 GPUI README，本批不添加 UI 单元测试，UI 验收仍开放。
 
+### 独立图表编辑与配置
+
+- 已逐项阅读 ChartEditor、ChartPreview（含错误与内容子组件）、ChartEmptyState 和 ChartDetailPanel（含配置子组件），连同文件读取、预览缓存、保存及图形适配入口核对。共享结果图形的额外模型/参考线等能力仍单独待审查。
+- 配置草稿仍属于当前 ChartEditor，资源版本与保存仍由原 Project/Application 管理。初次打开使用工作台加载/错误/资源重开入口，原生面板只接纳完整文件读取；接纳后使用更新的已知目录启动预览，不重复读取相同配置。
+- 数据源/列菜单改为打开时借用共享投影构造，去掉每次 Details 渲染复制完整选项列表；列清单分页。重复选择当前数据源或图表类型保留编码，无变化不触发读取。
+- 预览复用匹配数据库身份与资源版本的元数据；缺列、数据源删除、空数值对与读取失败分别呈现，错误显示稳定码与重试，不展示内部错误对象或虚构 incidentId。重试刷新基线且保留未保存配置。
+- 直方图分布沿用既有 Application/Runtime 读取入口，新增显式列选择并在 Engine 聚合前投影；保留原分箱与类别顺序、预算、会话及版本 gate，移除全列聚合开销。
+- `cargo test -p yss-application --lib database::query::tests::chart_distributions_only_read_explicit_columns_and_reject_invalid_selection -- --exact`、`cargo test -p yss-application --lib database::query::tests::reads_require_the_requested_project_and_runtime_revision -- --exact` 和 `cargo test -p yss-application --lib chart::projection::tests::chart_projection_filters_caps_and_preserves_formats -- --exact` 各一项通过，分别覆盖选列/无效选择、版本 gate、有限坐标/截断/格式。
+- `cargo clippy -p yss-application -p yss-database-runtime --lib --tests --no-deps -- -D warnings` 与 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过，独立提交版本的 GPUI Clippy 同样通过。人工验收路径见 GPUI README，交互验收仍开放，未添加 UI 单元测试。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -204,9 +214,9 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/chart/internal/ui/ChartEditor.tsx](../../react/src/modules/chart/internal/ui/ChartEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/chart/internal/ui/ChartEmptyState.tsx](../../react/src/modules/chart/internal/ui/ChartEmptyState.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/chart/internal/ui/ChartPreview.tsx](../../react/src/modules/chart/internal/ui/ChartPreview.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/chart/internal/ui/ChartEditor.tsx](../../react/src/modules/chart/internal/ui/ChartEditor.tsx) | 优化：复用工作台资源打开和原生面板生命周期，配置/保存归原 owner | 首次接纳读取后使用更新目录启动预览；保存、外部修改保护和资源重开沿用原流程 | 代码已覆盖；人工验收待完成 |
+| [modules/chart/internal/ui/ChartEmptyState.tsx](../../react/src/modules/chart/internal/ui/ChartEmptyState.tsx) | 复用原生组件：无需复制 React Empty 的 DOM 层级 | `appearance::empty_state` 与原图标库复用参考标题/配置提示，支持无编码与加载状态 | 代码已覆盖；人工验收待完成 |
+| [modules/chart/internal/ui/ChartPreview.tsx](../../react/src/modules/chart/internal/ui/ChartPreview.tsx) | 优化：预览数据、错误与读取身份在 charts 模块收口，统计继续由 Application 提供 | `query/preview` 单列分布、匹配元数据复用、缺列与空数值对错误、稳定码和重试；原 GPUI 图形承担三类独立预览 | 代码已覆盖；人工验收待完成 |
 
 ## modules/commands
 
@@ -250,7 +260,7 @@
 | [modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/ChartDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/ChartDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/ChartDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/ChartDetailPanel.tsx) | 优化：共享当前草稿及元数据，菜单按需生成，列清单有界呈现 | `charts/details` 数据源/类型/编码和清除入口；重复选择保留配置，旧菜单版本校验，列清单分页 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/ConstantValueFields.tsx](../../react/src/modules/details/internal/ui/panels/ConstantValueFields.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx) | 迁移/优化：复用当前对话框宿主与类型化提交，视图只拥有未提交草稿 | `semantic` 补齐类别切换保留映射、失败重试、重复/数量校验、未修改直接关闭与过期保护 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/DataColumnSemanticFields.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticFields.tsx) | 迁移：复用原生 Input、Checkbox 与图标按钮；控件数量限定在当前页 | `semantic/fields` 与 `semantic/inputs` 补齐值/标签编辑、增删、跨页排序、正值清除和精确数值输入 | 代码已覆盖；人工验收待完成 |

@@ -18,6 +18,8 @@
 保留的 React 参考实现中，`ChartPreview` 与 `PlotResultView` 复用 `ChartRenderer`，不参与当前原生构建。
 
 直方图列分布与散点/折线列对读取都携带前端捕获的数据库资源 revision；没有该版本时不发出查询。
+原生直方图显式传入所选列，Application/Runtime 在统计之前使用原 Engine 列投影，保留分箱、类别排序与读取 gate。
+图表预览可以借用已接纳且数据库 ID/revision 匹配的元数据；原数据读取和返回版本重验仍由 Application 执行。
 列对查询按数据库 ID 复用 Project 授权校验，检查 Runtime 列对的声明版本，并在投影完成后重验，
 不为单个数据库查询构造完整项目索引。Application 会话检查继续保留；前端返回接纳和缓存失效仍按原读取身份处理。
 

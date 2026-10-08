@@ -2,7 +2,7 @@ use super::{
     ChartEditor, SaveChart,
     details::chart_type_label,
     plot::CartesianPlot,
-    query::{HistogramDatum, PreviewData},
+    query::{HistogramDatum, PreviewData, PreviewFailure},
 };
 use crate::{appearance, assets::NativeIcon};
 use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
@@ -11,6 +11,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     chart::BarChart,
 };
+use gpui_kit_assets::IconName;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct HistogramBand {
@@ -91,6 +92,51 @@ impl Render for ChartEditor {
     }
 }
 impl ChartEditor {
+    fn render_preview_failure(
+        &self,
+        failure: &PreviewFailure,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        div()
+            .id("chart-preview-error")
+            .size_full()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap_3()
+            .p_4()
+            .role(gpui::Role::Alert)
+            .child(
+                Icon::new(IconName::TriangleAlert)
+                    .size_6()
+                    .text_color(cx.theme().danger),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().danger)
+                    .child(failure.summary()),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap_2()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(crate::text::translate("common.errorCode"))
+                    .child(failure.code()),
+            )
+            .child(
+                Button::new("chart-preview-retry")
+                    .small()
+                    .outline()
+                    .label(crate::text::translate("common.retry"))
+                    .disabled(self.busy() || !self.available)
+                    .on_click(cx.listener(|view, _, window, cx| view.refresh(window, cx))),
+            )
+            .into_any_element()
+    }
     fn render_preview(&self, cx: &mut Context<Self>) -> AnyElement {
         if self.preview_loading || self.reading {
             return appearance::empty_state(
@@ -111,14 +157,14 @@ impl ChartEditor {
             .into_any_element();
         };
         match preview.as_ref() {
-            PreviewData::Empty(message) => {
-                appearance::empty_state(NativeIcon::Chart, "配置图表", message.to_string(), cx)
-                    .into_any_element()
-            }
-            PreviewData::Failed(message) => {
-                appearance::empty_state(NativeIcon::Chart, "预览未读取", message.to_string(), cx)
-                    .into_any_element()
-            }
+            PreviewData::Empty(message) => appearance::empty_state(
+                NativeIcon::Chart,
+                crate::text::translate("chart.previewEmpty"),
+                crate::text::translate(message),
+                cx,
+            )
+            .into_any_element(),
+            PreviewData::Failed(failure) => self.render_preview_failure(failure, cx),
             PreviewData::Histogram {
                 bins,
                 column,

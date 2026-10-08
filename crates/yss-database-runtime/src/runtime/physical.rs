@@ -219,9 +219,11 @@ impl DatabaseRuntimePhysicalState {
     pub(crate) fn read_column_distributions(
         &self,
         database: &DatabaseId,
+        columns: &[String],
     ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
         self.required_instance(database)?
             .query()
+            .and_then(|query| query.project_columns(columns).map_err(Into::into))
             .and_then(|query| {
                 query
                     .column_distributions(&query_control(16 * 1024 * 1024))
