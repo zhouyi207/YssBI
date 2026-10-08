@@ -105,7 +105,7 @@ fn gls_identity_estimates_scale_like_ols() {
 #[test]
 fn weighted_statistics_use_the_transformed_intercept() {
     use yss_sci::regression::covariance::compute_cov_beta;
-    use yss_sci_contract::regression::{CovParams, OlsCovariance};
+    use yss_sci_contract::regression::OlsCovariance;
     use yss_sci_linalg::{MatrixExt, Solve};
     let weights = Col::from_fn(5, |i| (1 << i) as f64);
     for constant in [true, false] {
@@ -214,11 +214,10 @@ fn weighted_statistics_use_the_transformed_intercept() {
             &residuals,
             expected.df_residual,
             intercept_col,
-            "HAC",
-            Some(&CovParams::HAC {
+            &OlsCovariance::Hac {
                 kernel: "bartlett".into(),
                 bandwidth: None,
-            }),
+            },
         )
         .unwrap()
     };

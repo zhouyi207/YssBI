@@ -73,7 +73,6 @@ impl WLS {
         let df_total = df_residual + df_model;
 
         let covariance_type = self.config.covariance.name().to_owned();
-        let covariance_parameters = self.config.covariance.parameters();
 
         let xtx = zz.transpose() * zz.as_ref();
         let xtz = zz.transpose() * z.as_ref();
@@ -98,18 +97,13 @@ impl WLS {
         let ms_total = ss_total / df_total as f64;
         let r2_adjusted = 1.0 - ms_residual / ms_total;
         let u = &z - z_hat.as_ref();
-        let x_nd = zz.as_ref().to_owned();
-        let xtx_inv_nd = xtx_inv.as_ref().to_owned();
-        let u_nd: Col<f64> = u.as_ref().to_owned();
-
         let cov_beta = compute_cov_beta(
-            &x_nd,
-            &xtx_inv_nd,
-            &u_nd,
+            &zz,
+            &xtx_inv,
+            &u,
             df_residual,
             self.config.constant.then_some(0),
-            &covariance_type,
-            covariance_parameters.as_ref(),
+            &self.config.covariance,
         )?;
 
         let (f, f_p_value) = super::overall_f_test(

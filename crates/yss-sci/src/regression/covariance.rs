@@ -3,7 +3,7 @@
 
 use yss_sci_linalg::{Col, Mat};
 
-use yss_sci_contract::regression::{CovParams, OlsCovariance, OlsOptions};
+use yss_sci_contract::regression::OlsCovariance;
 
 /// 计算参数协方差矩阵 cov_beta
 /// - x: (n × k) 设计矩阵
@@ -17,27 +17,29 @@ pub fn compute_cov_beta(
     u: &Col<f64>,
     df_residual: usize,
     intercept_col: Option<usize>,
-    cov_type: &str,
-    cov_params: Option<&CovParams>,
+    covariance: &OlsCovariance,
 ) -> Result<Mat<f64>, String> {
-    let selection = OlsOptions::from_covariance_parts(false, cov_type, cov_params)
-        .map_err(|error| error.to_string())?;
     let n = x.nrows();
     let k = x.ncols();
     if intercept_col.is_some_and(|column| column >= k) {
         return Err("Intercept column is outside the design matrix".into());
     }
 
-    match selection.covariance {
+    match covariance {
         OlsCovariance::NonRobust => cov_nonrobust(xtx_inv, u, df_residual),
-        OlsCovariance::FixedScale { .. } => cov_fixed_scale(xtx_inv, cov_params),
+        OlsCovariance::FixedScale { scale } => cov_fixed_scale(xtx_inv, *scale),
         OlsCovariance::Hc0 => cov_hc0(x, xtx_inv, u, n, k),
         OlsCovariance::Hc1 => cov_hc1(x, xtx_inv, u, n, k, df_residual),
         OlsCovariance::Hc2 => cov_hc2(x, xtx_inv, u, n, k),
         OlsCovariance::Hc3 => cov_hc3(x, xtx_inv, u, n, k),
-        OlsCovariance::Cluster { .. } => cov_cluster(x, xtx_inv, u, cov_params),
-        OlsCovariance::Hac { .. } => cov_hac(x, xtx_inv, u, n, k, intercept_col, cov_params),
-        OlsCovariance::Newey { .. } => cov_newey(x, xtx_inv, u, n, k, df_residual, cov_params),
+        OlsCovariance::Cluster {
+            cluster_id,
+            xtreg_fe_style,
+        } => cov_cluster(x, xtx_inv, u, cluster_id, *xtreg_fe_style),
+        OlsCovariance::Hac { kernel, bandwidth } => {
+            cov_hac(x, xtx_inv, u, intercept_col, kernel, *bandwidth)
+        }
+        OlsCovariance::Newey { lag } => cov_newey(x, xtx_inv, u, df_residual, *lag),
     }
 }
 
@@ -47,15 +49,7 @@ fn cov_nonrobust(xtx_inv: &Mat<f64>, u: &Col<f64>, df_residual: usize) -> Result
 }
 
 /// Fixed scale: scale * (X'X)⁻¹，scale 由用户通过 Config 指定
-fn cov_fixed_scale(xtx_inv: &Mat<f64>, cov_params: Option<&CovParams>) -> Result<Mat<f64>, String> {
-    let scale = match cov_params {
-        Some(CovParams::FixedScale { scale }) => *scale,
-        _ => {
-            return Err(
-                "fixed scale cov_type requires CovParams::FixedScale with scale".to_string(),
-            );
-        }
-    };
+fn cov_fixed_scale(xtx_inv: &Mat<f64>, scale: f64) -> Result<Mat<f64>, String> {
     if scale <= 0.0 {
         return Err("fixed scale: scale must be positive".to_string());
     }
@@ -262,19 +256,12 @@ fn cov_hac(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
     u: &Col<f64>,
-    n: usize,
-    k: usize,
     intercept_col: Option<usize>,
-    cov_params: Option<&CovParams>,
+    kernel: &str,
+    bandwidth: Option<i64>,
 ) -> Result<Mat<f64>, String> {
-    let (kernel, bandwidth) = match cov_params {
-        Some(CovParams::HAC { kernel, bandwidth }) => (kernel.as_str(), *bandwidth),
-        _ => {
-            return Err(
-                "HAC cov_type requires CovParams::HAC with kernel and bandwidth".to_string(),
-            );
-        }
-    };
+    let n = x.nrows();
+    let k = x.ncols();
 
     // ivreg2 bw(b): max lag = b-1, weight = 1 - j/b.
     // bw(auto): full Newey-West (1994) procedure (mstar=20*(T/100)^expo, data-dependent optlag).
@@ -324,15 +311,11 @@ fn cov_newey(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
     u: &Col<f64>,
-    n: usize,
-    k: usize,
     df_residual: usize,
-    cov_params: Option<&CovParams>,
+    lag: Option<i64>,
 ) -> Result<Mat<f64>, String> {
-    let lag = match cov_params {
-        Some(CovParams::Newey { lag }) => *lag,
-        _ => return Err("newey cov_type requires CovParams::Newey with lag".to_string()),
-    };
+    let n = x.nrows();
+    let k = x.ncols();
 
     let l = match lag {
         Some(q) if q >= 0 => q as usize,
@@ -380,16 +363,9 @@ fn cov_cluster(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
     u: &Col<f64>,
-    cov_params: Option<&CovParams>,
+    cluster_id: &[usize],
+    xtreg_fe_style: bool,
 ) -> Result<Mat<f64>, String> {
-    let (cluster_id, xtreg_fe_style) = match cov_params {
-        Some(CovParams::Cluster {
-            cluster_id,
-            xtreg_fe_style,
-        }) => (cluster_id, *xtreg_fe_style),
-        _ => return Err("cluster cov_type requires CovParams::Cluster".to_string()),
-    };
-
     if cluster_id.len() != x.nrows() {
         return Err(format!(
             "cluster_id length {} does not match n={}",
@@ -444,6 +420,7 @@ fn cov_cluster(
 mod tests {
     use super::*;
     use crate::regression::linear::OLS;
+    use yss_sci_contract::regression::{CovParams, OlsOptions};
 
     #[test]
     fn test_hac_bartlett_bw1_equals_hc0() {
@@ -653,11 +630,10 @@ mod tests {
                         &expected.residuals,
                         expected.df_residual,
                         Some(k - 1),
-                        "HAC",
-                        Some(&CovParams::HAC {
+                        &OlsCovariance::Hac {
                             kernel: "bartlett".into(),
                             bandwidth,
-                        }),
+                        },
                     )
                     .unwrap();
                     for i in 0..k {

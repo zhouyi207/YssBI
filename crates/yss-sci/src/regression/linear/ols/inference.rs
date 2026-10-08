@@ -28,7 +28,6 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     let df_total = df_residual + df_model;
 
     let covariance_type = model.config.covariance.name().to_string();
-    let covariance_parameters = model.config.covariance.parameters();
 
     let y_mean = y.iter().mean();
 
@@ -53,23 +52,17 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     // 残差（需在 cov_beta 之前计算）
     let u = &y - y_hat.as_ref();
 
-    let x_nd = x.as_ref().to_owned();
-    let xtx_inv_nd = xtx_inv.as_ref().to_owned();
-    let u_nd: Col<f64> = u.as_ref().to_owned();
-
-    // 参数协方差矩阵（根据 cov_type）
     let cov_beta = compute_cov_beta(
-        &x_nd,
-        &xtx_inv_nd,
-        &u_nd,
+        &x,
+        &xtx_inv,
+        &u,
         df_residual,
         model.config.constant.then_some(0),
-        &covariance_type,
-        covariance_parameters.as_ref(),
+        &model.config.covariance,
     )
     .map_err(OlsFitError::Covariance)?;
 
-    let cov_beta_nonrobust = yss_sci_linalg::Scale(ms_residual) * &xtx_inv_nd;
+    let cov_beta_nonrobust = yss_sci_linalg::Scale(ms_residual) * &xtx_inv;
 
     // F 统计量：robust VCE 时用 Wald，否则用经典 F
     let (f, f_p_value) = super::super::overall_f_test(

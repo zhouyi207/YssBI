@@ -6,7 +6,7 @@
 
 use crate::regression::covariance::compute_cov_beta;
 use crate::regression::design::covariance_rows;
-use yss_sci_contract::regression::CovParams;
+use yss_sci_contract::regression::OlsOptions;
 use yss_sci_contract::{
     causal::iv::InstrumentalVariableStatistics, regression::fit::RegressionCoefficientStatistics,
 };
@@ -17,23 +17,15 @@ use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
-/// LIML 配置（与 2SLS 一致）
-pub struct IVLIMLConfig {
-    pub constant: bool,
-    pub cov_type: String,
-    pub cov_params: Option<CovParams>,
-    pub small: bool,
-}
-
-/// IV:LIML 输入（与 IV2SLS 相同结构）
+/// IV:LIML 数值输入，复用共享 OLS 选项。
 pub struct IVLIML {
     pub endog: Col<f64>,
     pub exog: Mat<f64>,
     pub endog_reg: Mat<f64>,
     pub instruments: Mat<f64>,
-    pub config: IVLIMLConfig,
-    pub endog_names: Option<Vec<String>>,
-    pub z_var_names: Option<Vec<String>>,
+    pub options: OlsOptions,
+    /// Stata small: if true, use ESS/(n-k) for σ²; otherwise ESS/n.
+    pub small: bool,
 }
 
 impl IVLIML {
@@ -50,12 +42,12 @@ impl IVLIML {
             ));
         }
 
-        let k_z = if self.config.constant {
+        let k_z = if self.options.constant {
             k_exog + k_iv + 1
         } else {
             k_exog + k_iv
         };
-        let k1 = if self.config.constant {
+        let k1 = if self.options.constant {
             k_exog + 1
         } else {
             k_exog
@@ -64,7 +56,7 @@ impl IVLIML {
         // Z = [const?, exog, instruments]
         let mut z_raw = Vec::with_capacity(n * k_z);
         for i in 0..n {
-            if self.config.constant {
+            if self.options.constant {
                 z_raw.push(1.0);
             }
             for j in 0..k_exog {
@@ -79,7 +71,7 @@ impl IVLIML {
         // X1 = [const?, exog]
         let mut x1_raw = Vec::with_capacity(n * k1);
         for i in 0..n {
-            if self.config.constant {
+            if self.options.constant {
                 x1_raw.push(1.0);
             }
             for j in 0..k_exog {
@@ -89,14 +81,14 @@ impl IVLIML {
         let x1 = yss_sci_linalg::MatRef::from_row_major_slice(&(x1_raw), n, k1).to_owned();
 
         // X = [const?, exog, endog_reg] (structural)
-        let k_x = if self.config.constant {
+        let k_x = if self.options.constant {
             k_exog + k_endog + 1
         } else {
             k_exog + k_endog
         };
         let mut x_raw = Vec::with_capacity(n * k_x);
         for i in 0..n {
-            if self.config.constant {
+            if self.options.constant {
                 x_raw.push(1.0);
             }
             for j in 0..k_exog {
@@ -220,13 +212,17 @@ impl IVLIML {
             return Err("Insufficient residual degrees of freedom".to_string());
         }
         let df_residual = n - rank;
-        let df_model = if self.config.constant { rank - 1 } else { rank };
+        let df_model = if self.options.constant {
+            rank - 1
+        } else {
+            rank
+        };
         let df_total = df_residual + df_model;
 
         let u_structural: Col<f64> = &self.endog - &(x.as_ref() * betas_nd.as_ref());
         let ss_residual = u_structural.transpose() * u_structural.as_ref();
         let y_mean = self.endog.iter().mean();
-        let ss_total = if self.config.constant {
+        let ss_total = if self.options.constant {
             self.endog.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
         } else {
             self.endog.iter().map(|v| v.powi(2)).sum::<f64>()
@@ -244,18 +240,14 @@ impl IVLIML {
             0.0
         };
 
-        let sigma2_df = if self.config.small { df_residual } else { n };
-        let xt_ikmz_x_inv_nd = xt_ikmz_x_inv.as_ref().to_owned();
-        let x_nd = x_matrix.as_ref().to_owned();
-
+        let sigma2_df = if self.small { df_residual } else { n };
         let cov_beta = compute_cov_beta(
-            &x_nd,
-            &xt_ikmz_x_inv_nd,
+            &x_matrix,
+            &xt_ikmz_x_inv,
             &u_structural,
             sigma2_df,
-            self.config.constant.then_some(0),
-            &self.config.cov_type,
-            self.config.cov_params.as_ref(),
+            self.options.constant.then_some(0),
+            &self.options.covariance,
         )?;
 
         let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
@@ -273,15 +265,11 @@ impl IVLIML {
         let ci_lower = &betas_nd - yss_sci_linalg::Scale(z_crit) * &std_err;
         let ci_upper = &betas_nd + yss_sci_linalg::Scale(z_crit) * &std_err;
 
-        let covariance_type = if self.config.cov_type.is_empty() {
-            "nonrobust".to_string()
-        } else {
-            self.config.cov_type.clone()
-        };
+        let covariance_type = self.options.covariance.name().to_owned();
 
         let k = betas_nd.nrows();
         let (wald_chi2, wald_p) = {
-            let (beta_s, v_s, df_wald) = if self.config.constant && k > 1 {
+            let (beta_s, v_s, df_wald) = if self.options.constant && k > 1 {
                 let beta_s = betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned();
                 let v_s = cov_beta
                     .submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1)

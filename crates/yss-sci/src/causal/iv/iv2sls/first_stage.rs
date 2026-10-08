@@ -4,7 +4,7 @@ use super::critical_values::{
 };
 use super::types::FirstStageSummary;
 use crate::regression::covariance::compute_cov_beta;
-use yss_sci_contract::regression::CovParams;
+use yss_sci_contract::regression::OlsCovariance;
 
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor},
@@ -15,8 +15,7 @@ use yss_sci_linalg::{MatrixExt, Solve};
 
 pub(crate) struct FirstStageOptions<'a> {
     pub(crate) has_constant: bool,
-    pub(crate) cov_type: &'a str,
-    pub(crate) cov_params: Option<&'a CovParams>,
+    pub(crate) covariance: &'a OlsCovariance,
     pub(crate) small: bool,
     pub(crate) for_liml: bool,
 }
@@ -32,8 +31,7 @@ pub(crate) fn compute_first_stage_summary(
 ) -> Result<FirstStageSummary, String> {
     let FirstStageOptions {
         has_constant,
-        cov_type,
-        cov_params,
+        covariance,
         small,
         for_liml,
     } = input;
@@ -161,7 +159,7 @@ pub(crate) fn compute_first_stage_summary(
     };
 
     let min_eigenvalue = min_eigenvalue_from_cd;
-    let is_robust = is_robust_cov_type(cov_type);
+    let is_robust = is_robust_covariance(covariance);
     let min_eigenvalue_cv = if !is_robust {
         if for_liml {
             if k_endog == 1 {
@@ -264,8 +262,7 @@ pub(crate) fn compute_first_stage_summary(
                 &first_stage_resid,
                 sigma2_df,
                 has_constant.then_some(0),
-                cov_type,
-                cov_params,
+                covariance,
             )?;
             let gamma = ztz_inv_nd.as_ref() * (z.transpose() * y_col.as_ref()).as_ref();
             let gamma2 = gamma.subrows(k1, gamma.nrows() - k1).to_owned();
@@ -449,9 +446,15 @@ pub(crate) fn compute_first_stage_summary(
     })
 }
 
-pub(super) fn is_robust_cov_type(cov_type: &str) -> bool {
+pub(super) fn is_robust_covariance(covariance: &OlsCovariance) -> bool {
     matches!(
-        cov_type,
-        "HC0" | "HC1" | "HC2" | "HC3" | "cluster" | "HAC" | "newey"
+        covariance,
+        OlsCovariance::Hc0
+            | OlsCovariance::Hc1
+            | OlsCovariance::Hc2
+            | OlsCovariance::Hc3
+            | OlsCovariance::Cluster { .. }
+            | OlsCovariance::Hac { .. }
+            | OlsCovariance::Newey { .. }
     )
 }

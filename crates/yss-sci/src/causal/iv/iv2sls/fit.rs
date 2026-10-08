@@ -22,14 +22,14 @@ impl IV2SLS {
             return Err("Insufficient residual degrees of freedom".to_string());
         }
         let df_residual = n - rank;
-        let df_model = if self.config.constant { rank - 1 } else { rank };
+        let df_model = if self.options.constant {
+            rank - 1
+        } else {
+            rank
+        };
         let df_total = df_residual + df_model;
 
-        let covariance_type = if self.config.cov_type.is_empty() {
-            "nonrobust".to_string()
-        } else {
-            self.config.cov_type.clone()
-        };
+        let covariance_type = self.options.covariance.name().to_owned();
 
         // OLS on second stage: β = (X'X)^{-1} X'y
         let x_matrix = x.as_ref().to_owned();
@@ -52,7 +52,7 @@ impl IV2SLS {
         let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas_nd.as_ref());
 
         let y_mean = y_vector.iter().mean();
-        let ss_total = if self.config.constant {
+        let ss_total = if self.options.constant {
             y_vector.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
         } else {
             y_vector.iter().map(|v| v.powi(2)).sum::<f64>()
@@ -72,20 +72,16 @@ impl IV2SLS {
             0.0
         };
 
-        let x_nd = x_matrix.as_ref().to_owned();
-        let xtx_inv_nd = xtx_inv.as_ref().to_owned();
-
         // Stata: s² = ESS/(n-k) if small, else ESS/n. Affects VCE and robust scale.
-        let sigma2_df = if self.config.small { df_residual } else { n };
+        let sigma2_df = if self.small { df_residual } else { n };
 
         let cov_beta = compute_cov_beta(
-            &x_nd,
-            &xtx_inv_nd,
+            &x_matrix,
+            &xtx_inv,
             &u_structural,
             sigma2_df,
-            self.config.constant.then_some(0),
-            &covariance_type,
-            self.config.cov_params.as_ref(),
+            self.options.constant.then_some(0),
+            &self.options.covariance,
         )?;
 
         let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
@@ -111,7 +107,7 @@ impl IV2SLS {
         // constant term is calculated; W ∼ χ²(k−1)." W = β_s' V_s^{-1} β_s. Use solve(V_s, β_s) for stability.
         let k = betas_nd.nrows();
         let (wald_chi2, wald_p) = {
-            let (beta_s, v_s, df_wald) = if self.config.constant && k > 1 {
+            let (beta_s, v_s, df_wald) = if self.options.constant && k > 1 {
                 // Exclude constant (index 0). Our X = [const, exog, endog_hat], so const is always first.
                 let beta_s = betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned();
                 let v_s = cov_beta

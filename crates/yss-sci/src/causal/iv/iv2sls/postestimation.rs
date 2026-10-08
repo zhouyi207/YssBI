@@ -1,4 +1,4 @@
-use super::first_stage::{compute_first_stage_summary, is_robust_cov_type};
+use super::first_stage::{compute_first_stage_summary, is_robust_covariance};
 use super::{design::PreparedIvDesign, types::*};
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, StudentsT},
@@ -23,7 +23,7 @@ impl IV2SLS {
         let df_z = n.saturating_sub(k_z);
         let z_matrix = z.as_ref().to_owned();
         let ztz_inv_nd = ztz_inv.as_ref().to_owned();
-        let covariance_type = &self.config.cov_type;
+        let covariance = &self.options.covariance;
         let mut first_stage: Vec<FirstStageResult> = Vec::with_capacity(k_endog);
         for j in 0..k_endog {
             let endog_col = self.endog_reg.col(j).to_owned();
@@ -113,10 +113,9 @@ impl IV2SLS {
             &self.exog,
             &self.instruments,
             crate::causal::iv::iv2sls::FirstStageOptions {
-                has_constant: self.config.constant,
-                cov_type: covariance_type,
-                cov_params: self.config.cov_params.as_ref(),
-                small: self.config.small,
+                has_constant: self.options.constant,
+                covariance,
+                small: self.small,
                 for_liml,
             },
         )?;
@@ -136,7 +135,7 @@ impl IV2SLS {
             ..
         } = self.design()?;
         let k_z = z.ncols();
-        let covariance_type = &self.config.cov_type;
+        let covariance = &self.options.covariance;
         let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas.as_ref());
         // Overidentification test (estat overid): Sargan/Basmann (homoskedastic) or Wooldridge (1995) robust score (robust VCE).
         // Stata: "If you used the 2SLS estimator and requested a robust VCE, Wooldridge's robust score test of
@@ -146,7 +145,7 @@ impl IV2SLS {
             let chi2_dist = ChiSquared::new(df_overid as f64)
                 .map_err(|e| format!("IV2SLS overid ChiSquared: {}", e))?;
 
-            let is_robust = is_robust_cov_type(covariance_type);
+            let is_robust = is_robust_covariance(covariance);
 
             if is_robust {
                 // Wooldridge (1995) robust score test. Stata Methods: Let Ŷ = endog_hat, Q = excluded instruments (m cols).
@@ -258,7 +257,7 @@ impl IV2SLS {
         let k_z = z.ncols();
         let k_x = x.ncols();
         let df_residual = n.saturating_sub(k_x);
-        let covariance_type = &self.config.cov_type;
+        let covariance = &self.options.covariance;
         let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas_nd.as_ref());
         let xtx = x.transpose() * x.as_ref();
         let xtx_inv_nd = xtx
@@ -266,7 +265,7 @@ impl IV2SLS {
             .map_err(|_| "IV endogeneity: singular projected design")?
             .solve(&Mat::identity(k_x, k_x));
         // Hausman tests (traditional + Durbin-Wu-Hausman): only for nonrobust VCE
-        let (hausman, endogenous) = if !is_robust_cov_type(covariance_type) {
+        let (hausman, endogenous) = if !is_robust_covariance(covariance) {
             // OLS on y ~ X_struct (treating endog as exogenous): β_ols, u_ols
             let x_struct_tx = x_struct.transpose() * x_struct.as_ref();
             let x_struct_tx_inv: Option<yss_sci_linalg::Mat<f64>> = x_struct_tx
@@ -346,7 +345,7 @@ impl IV2SLS {
             let endogenous = if sigma2_ols > 1e-300 && (u_ols.transpose() * u_ols.as_ref()) > 1e-300
             {
                 let p1 = k_endog;
-                let k1 = if self.config.constant {
+                let k1 = if self.options.constant {
                     k_exog + 1
                 } else {
                     k_exog
@@ -443,11 +442,11 @@ impl IV2SLS {
             ..
         } = self.design()?;
         let k_z = z.ncols();
-        let covariance_type = &self.config.cov_type;
+        let covariance = &self.options.covariance;
         let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas.as_ref());
         // Overidentification test (estat overid): Anderson-Rubin chi2, Basmann F.
         // Only when nonrobust VCE. With robust (vce(robust)), Stata does not compute overid.
-        let overid = if k_iv > k_endog && !is_robust_cov_type(covariance_type) {
+        let overid = if k_iv > k_endog && !is_robust_covariance(covariance) {
             let df_overid = k_iv - k_endog;
             let df_denom = n.saturating_sub(k_z);
             let uu = u_structural.transpose() * u_structural.as_ref();

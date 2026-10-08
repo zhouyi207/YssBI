@@ -547,6 +547,13 @@ WLS uses the shared typed `OlsCovariance` selection. Named covariance callers
 are validated by `OlsOptions::from_covariance_parts`; unsupported names or missing
 required parameters never fall back to nonrobust computation.
 
+`compute_cov_beta` borrows the selected `OlsCovariance` directly. It reads cluster
+IDs, HAC kernels and lag settings from that selection rather than reconstructing
+named parameters; OLS, WLS and IV reuse their existing design, inverse cross product
+and residual buffers. IV 2SLS/LIML models consume the same `OlsOptions`, with `small`
+remaining an IV-specific input. Fit projection moves those options into the result;
+first-stage and postestimation checks borrow the same covariance selection.
+
 Covariance callers supply the intercept column from the existing model or design
 options. Automatic HAC bandwidth excludes that column from a multicolumn pilot
 score, and includes every column when no intercept is configured; a single-column

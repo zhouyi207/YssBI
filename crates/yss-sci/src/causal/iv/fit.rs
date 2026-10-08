@@ -1,6 +1,6 @@
 //! Instrumental-variable design preparation and fit projection.
-use super::iv2sls::{IV2SLS, IV2SLSConfig};
-use super::ivliml::{IVLIML, IVLIMLConfig};
+use super::iv2sls::IV2SLS;
+use super::ivliml::IVLIML;
 use crate::error::{computation_failed, invalid_input};
 use crate::regression::design::design_matrix;
 use yss_sci_contract::causal::iv::{InstrumentalVariableFit, InstrumentalVariableKind};
@@ -39,43 +39,34 @@ pub fn fit_instrumental_variables(
     let endog_reg = design_matrix(endogenous, observations, false, op)?;
     let instrument_columns = instruments;
     let instruments = design_matrix(instrument_columns, observations, false, op)?;
-    let constant = options.constant;
-    let cov_type = options.covariance.name().to_owned();
-    let cov_params = options.covariance.parameters();
     let y = Col::from_iter(response);
-    let result = match kind {
-        InstrumentalVariableKind::TwoStageLeastSquares => IV2SLS {
-            endog: y,
-            exog,
-            endog_reg,
-            instruments,
-            config: IV2SLSConfig {
-                constant,
-                cov_type,
-                cov_params,
+    let (result, options) = match kind {
+        InstrumentalVariableKind::TwoStageLeastSquares => {
+            let model = IV2SLS {
+                endog: y,
+                exog,
+                endog_reg,
+                instruments,
+                options,
                 small,
-            },
-            endog_names: None,
-            z_var_names: None,
+                endog_names: None,
+                z_var_names: None,
+            };
+            (model.fit(), model.options)
         }
-        .fit(),
-        InstrumentalVariableKind::LimitedInformationMaximumLikelihood => IVLIML {
-            endog: y,
-            exog,
-            endog_reg,
-            instruments,
-            config: IVLIMLConfig {
-                constant,
-                cov_type,
-                cov_params,
+        InstrumentalVariableKind::LimitedInformationMaximumLikelihood => {
+            let model = IVLIML {
+                endog: y,
+                exog,
+                endog_reg,
+                instruments,
+                options,
                 small,
-            },
-            endog_names: None,
-            z_var_names: None,
+            };
+            (model.fit(), model.options)
         }
-        .fit(),
-    }
-    .map_err(|_| computation_failed(op))?;
+    };
+    let result = result.map_err(|_| computation_failed(op))?;
     Ok(InstrumentalVariableFit {
         response_name: "response".into(),
         parameter_names: std::iter::once("_cons".into())
@@ -141,12 +132,8 @@ fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IV2SLS, SciError> {
         },
         endog_reg: design_matrix(&data.endogenous, n, false, op)?,
         instruments: design_matrix(&data.instruments, n, false, op)?,
-        config: IV2SLSConfig {
-            constant: fit.options.constant,
-            cov_type: fit.options.covariance.name().into(),
-            cov_params: fit.options.covariance.parameters(),
-            small: fit.small,
-        },
+        options: fit.options.clone(),
+        small: fit.small,
         endog_names: None,
         z_var_names: None,
     })

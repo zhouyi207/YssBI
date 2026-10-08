@@ -24,14 +24,14 @@ impl IV2SLS {
         }
 
         // Z = [exog, instruments] for stage 1 (with constant if config.constant)
-        let k_z = if self.config.constant {
+        let k_z = if self.options.constant {
             k_exog + k_iv + 1
         } else {
             k_exog + k_iv
         };
         let mut z_raw = Vec::with_capacity(n * k_z);
         for i in 0..n {
-            if self.config.constant {
+            if self.options.constant {
                 z_raw.push(1.0);
             }
             for j in 0..k_exog {
@@ -67,14 +67,14 @@ impl IV2SLS {
         }
 
         // Stage 2: X = [exog, endog_hat] (with constant)
-        let k_x = if self.config.constant {
+        let k_x = if self.options.constant {
             k_exog + k_endog + 1
         } else {
             k_exog + k_endog
         };
         let mut x_raw = Vec::with_capacity(n * k_x);
         for i in 0..n {
-            if self.config.constant {
+            if self.options.constant {
                 x_raw.push(1.0);
             }
             for j in 0..k_exog {
@@ -88,7 +88,7 @@ impl IV2SLS {
 
         let mut x_struct_raw = Vec::with_capacity(n * k_x);
         for i in 0..n {
-            if self.config.constant {
+            if self.options.constant {
                 x_struct_raw.push(1.0);
             }
             for j in 0..k_exog {

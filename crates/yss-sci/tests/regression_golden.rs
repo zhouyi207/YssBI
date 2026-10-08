@@ -3,7 +3,7 @@
 //! 使用当前已验证正确的计算结果作为参考，重构后若计算不一致则测试失败
 
 use std::f64::consts::PI;
-use yss_sci::causal::iv::iv2sls::{IV2SLS, IV2SLSConfig};
+use yss_sci::causal::iv::iv2sls::IV2SLS;
 use yss_sci::diagnostics;
 use yss_sci::regression::linear::{OLS, WLS, WLSConfig};
 use yss_sci_linalg::{Col, Mat};
@@ -101,17 +101,18 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 exog: exog.clone(),
                 endog_reg: endogenous.clone(),
                 instruments: instruments.clone(),
-                config: IV2SLSConfig {
-                    constant: true,
-                    cov_type: covariance_type.to_owned(),
-                    cov_params: (covariance_type == "HAC").then(|| {
-                        yss_sci_contract::regression::CovParams::HAC {
+                options: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                    true,
+                    covariance_type,
+                    (covariance_type == "HAC")
+                        .then(|| yss_sci_contract::regression::CovParams::HAC {
                             kernel: "bartlett".into(),
                             bandwidth: None,
-                        }
-                    }),
-                    small: false,
-                },
+                        })
+                        .as_ref(),
+                )
+                .unwrap(),
+                small: false,
                 endog_names: None,
                 z_var_names: None,
             };
@@ -181,12 +182,8 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 endogenous[(row, order[column])]
             }),
             instruments: instruments.clone(),
-            config: IV2SLSConfig {
-                constant: true,
-                cov_type: "nonrobust".into(),
-                cov_params: None,
-                small: false,
-            },
+            options: yss_sci_contract::regression::OlsOptions::default(),
+            small: false,
             endog_names: None,
             z_var_names: None,
         };
@@ -207,12 +204,11 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
         exog: Mat::zeros(16, 0),
         endog_reg: Mat::from_fn(16, 1, |_, _| 1.0),
         instruments: Mat::from_fn(16, 1, |_, _| 1.0),
-        config: IV2SLSConfig {
+        options: yss_sci_contract::regression::OlsOptions {
             constant: false,
-            cov_type: "nonrobust".into(),
-            cov_params: None,
-            small: false,
+            covariance: yss_sci_contract::regression::OlsCovariance::NonRobust,
         },
+        small: false,
         endog_names: None,
         z_var_names: None,
     };
