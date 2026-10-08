@@ -10,11 +10,13 @@ Each group has its own baseline hazard and treatment slope, with shared adjustme
 $$h_g(t\mid D,x)=h_{0g}(t)\exp(\beta_gD+x^\top\gamma).$$
 $H_0:\beta_1=\cdots=\beta_G$ versus $H_1$: at least one treatment log hazard ratio differs. Let $C$ compare groups 2 through $G$ against group 1:
 
-$$ W=(C\widehat\beta)^\top(C\widehat V C^\top)^{-1}(C\widehat\beta)
-\ \overset{H_0}{\approx}\ \chi^2_{G-1}.$$
+$$
+W=(C\widehat\beta)^\top(C\widehat V C^\top)^{-1}(C\widehat\beta)
+\ \overset{H_0}{\approx}\ \chi^2_{G-1}.
+$$
+
 The contrast uses the joint covariance from one stratified fit, not a comparison of independently estimated p-values.
 
 `result` contains group labels/counts/events, group treatment hazard ratios and 95% intervals, the equality test and the full stratified Cox model. Treatment columns precede adjustment columns. Individual coefficient tests use the standard normal Wald statistic under a zero-coefficient null. Group baselines are not compared by the equality test.
 
 A small equality-test p-value indicates heterogeneity of the adjusted treatment association under the model. This is one executable analysis, not an automatic multi-node workflow expansion. No multiplicity adjustment, causal identification, automatic subgroup search or future prediction is performed.
-$$

@@ -6,12 +6,14 @@
 
 ## 模型与推断
 
-$$ h(t\mid x)=h_0(t)\exp(x^\top\beta),\qquad
-\widehat S(t\mid x)=\exp\{-\widehat H_{0,\bar x}(t)\exp[(x-\bar x)^\top\widehat\beta]\}.$$
+$$
+h(t\mid x)=h_0(t)\exp(x^\top\beta),\qquad
+\widehat S(t\mid x)=\exp\{-\widehat H_{0,\bar x}(t)\exp[(x-\bar x)^\top\widehat\beta]\}.
+$$
+
 每个事件时点的风险集包含该时点仍在随访的个体。即使系数采用 Efron 拟合，输出基线也使用 **Breslow** 估计，参考点为自变量均值；基线点包含该时点的事件。在首个事件之前预测事件概率为零。
 
 `result` 为可继续连接的 Cox 模型，含系数、协方差、危险比及其 95% 区间、偏对数似然、迭代数、样本/事件数、自变量均值与范围、中心化线性预测量及基线曲线。系数检验为 $H_0:\beta_j=0$ 对 $H_1:\beta_j\ne0$，统计量 $z=\widehat\beta_j/SE$ 使用标准正态参考分布；系数区间取指数得到危险比区间。固定其他变量时，危险比大于 1 表示瞬时事件风险更高。
 
 `predictions` 输出按输入原行序排列的 DataFrame，包含 `time`、`event`、`risk`。从该输出选取三个列后连接校准曲线或决策曲线节点，各节点使用相同的 `survival_horizon`。这里预测的是参与拟合的观测，对这些行进行评估属于样本内的表观表现。
 `result` 可以连接 Cox 列线图。比例风险、个体独立及条件独立删失为模型假设，节点不会自动检验；此节点不含惩罚、稳健/聚类协方差、权重或分层。时变协变量和已支持的亚组设计使用对应节点。
-$$

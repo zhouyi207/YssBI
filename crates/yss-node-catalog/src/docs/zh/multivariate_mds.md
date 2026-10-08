@@ -4,7 +4,7 @@
 
 选择 `dissimilarity_matrix` 时，每个输入数列是距离矩阵的一列，必须方形、非负、对称，主对角线为零。对称性和零对角线允许相对于最大距离 $10^{-12}$ 的浮点误差，不做加性距离校正。缺失值和无正变异的距离拒绝。所有输入列须等长并按当前位置逐项对应，可混合数据库与内存数列。
 
-设观测数为 $n$；**保留维数** 默认 2，范围为 $1\le k\len-1$。令 $D$ 为距离，$J=I-\mathbf1\mathbf1^T/n$，经典嵌入为
+设观测数为 $n$；**保留维数** 默认 2，范围为 $1\le k\le n-1$。令 $D$ 为距离，$J=I-\mathbf1\mathbf1^T/n$，经典嵌入为
 
 $$B=-\tfrac12J D^{\circ2}J=V\Lambda V^T,\qquad T_k=V_k\operatorname{diag}(\sqrt{\max(\lambda_j,0)}).$$
 

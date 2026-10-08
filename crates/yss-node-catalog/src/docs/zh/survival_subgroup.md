@@ -10,11 +10,13 @@
 $$h_g(t\mid D,x)=h_{0g}(t)\exp(\beta_gD+x^\top\gamma).$$
 检验 $H_0:\beta_1=\cdots=\beta_G$ 对 $H_1$：至少一个处理对数危险比不同。令 $C$ 将第 2 至第 $G$ 组分别与第 1 组比较：
 
-$$ W=(C\widehat\beta)^\top(C\widehat V C^\top)^{-1}(C\widehat\beta)
-\ \overset{H_0}{\approx}\ \chi^2_{G-1}.$$
+$$
+W=(C\widehat\beta)^\top(C\widehat V C^\top)^{-1}(C\widehat\beta)
+\ \overset{H_0}{\approx}\ \chi^2_{G-1}.
+$$
+
 此检验使用一次联合分层拟合的完整协方差，而非比较各组单独检验的 p 值。
 
 `result` 含原组标签、各组人数及事件数、各组处理危险比与 95% 区间、效应相等检验，以及完整的分层 Cox 模型。系数先排列亚组处理项，再排列调整变量。单系数检验采用零系数原假设下的标准正态 Wald 统计量。效应相等检验不比较各组基线风险。
 
 较小 p 值表示该模型下调整后处理关联存在异质性。本节点执行一项完整分析，不自动展开多个工作流节点；不进行多重比较校正、因果识别、自动亚组搜索或未来风险预测。
-$$

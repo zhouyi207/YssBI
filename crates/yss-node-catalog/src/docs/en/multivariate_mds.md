@@ -4,7 +4,7 @@ This node uses classical metric MDS. **MDS input** defaults to `observations`: p
 
 With `dissimilarity_matrix`, each input is one column of a nonnegative symmetric square distance matrix with zero diagonal. Symmetry and zero diagonal allow floating error of $10^{-12}$ relative to maximum distance. No additive distance correction is applied. Missing values and distances without positive variation are rejected. Columns must have equal lengths and pair by current position, including mixed database and in-memory inputs.
 
-Let $n$ be the observation count. **Retained dimensions** defaults to 2 with $1\le k\len-1$. For distances $D$ and centering $J=I-\mathbf1\mathbf1^T/n$:
+Let $n$ be the observation count. **Retained dimensions** defaults to 2 with $1\le k\le n-1$. For distances $D$ and centering $J=I-\mathbf1\mathbf1^T/n$:
 
 $$B=-\tfrac12J D^{\circ2}J=V\Lambda V^T,\qquad T_k=V_k\operatorname{diag}(\sqrt{\max(\lambda_j,0)}).$$
 
