@@ -42,17 +42,7 @@ pub fn relational_scalar_type_from_data_type(data_type: &ValueType) -> Relationa
 
 pub fn data_type_from_resolved_type(value: &ResolvedType) -> Option<ValueType> {
     match value {
-        ResolvedType::Nominal(id) => Some(
-            yss_data_contract::SemanticType::ALL
-                .into_iter()
-                .find(|semantic| semantic.type_id() == id.as_str())
-                .map(ValueType::Scalar)
-                .unwrap_or_else(|| match id.as_str() {
-                    "core.object" => ValueType::Object,
-                    "tabular.dataframe" => ValueType::DataFrame,
-                    id => ValueType::Struct(id.to_owned()),
-                }),
-        ),
+        ResolvedType::Nominal(id) => Some(data_type_from_nominal(id.as_str())),
         ResolvedType::Applied {
             constructor,
             arguments,
@@ -71,6 +61,45 @@ pub fn data_type_from_resolved_type(value: &ResolvedType) -> Option<ValueType> {
     }
 }
 
+/// Concrete declarations convert without inferring classes, generics or unknown types.
+pub fn data_type_from_type_expr(value: &TypeExpr) -> Option<ValueType> {
+    match value {
+        TypeExpr::Concrete(id) => Some(data_type_from_nominal(id.as_str())),
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } if arguments.len() == 1 => match constructor.as_str() {
+            DATA_SERIES_CONSTRUCTOR_ID => data_type_from_type_expr(&arguments[0])
+                .map(|element| ValueType::DataSeries(Box::new(element))),
+            "core.array" => data_type_from_type_expr(&arguments[0])
+                .map(|element| ValueType::Array(Box::new(element))),
+            _ => None,
+        },
+        TypeExpr::Union(values) if !values.is_empty() => values
+            .iter()
+            .map(data_type_from_type_expr)
+            .collect::<Option<Vec<_>>>()
+            .map(ValueType::one_of),
+        TypeExpr::Class(_)
+        | TypeExpr::Generic(_)
+        | TypeExpr::Unknown
+        | TypeExpr::Applied { .. }
+        | TypeExpr::Union(_) => None,
+    }
+}
+
+fn data_type_from_nominal(id: &str) -> ValueType {
+    yss_data_contract::SemanticType::ALL
+        .into_iter()
+        .find(|semantic| semantic.type_id() == id)
+        .map(ValueType::Scalar)
+        .unwrap_or_else(|| match id {
+            "core.object" => ValueType::Object,
+            "tabular.dataframe" => ValueType::DataFrame,
+            id => ValueType::Struct(id.to_owned()),
+        })
+}
+
 fn concrete_type(semantic_id: &str) -> Result<TypeExpr, GraphTypeMappingError> {
     TypeId::new(semantic_id)
         .map(TypeExpr::Concrete)
@@ -87,10 +116,11 @@ fn applied_type(constructor: &str, element: &ValueType) -> Result<TypeExpr, Grap
 #[cfg(test)]
 mod tests {
     use super::{
-        GraphTypeMappingError, relational_scalar_type_from_data_type, type_expr_from_data_type,
+        GraphTypeMappingError, data_type_from_type_expr, relational_scalar_type_from_data_type,
+        type_expr_from_data_type,
     };
     use yss_data_contract::ValueType;
-    use yss_node_protocol::TypeExpr;
+    use yss_node_protocol::{DATA_SERIES_CONSTRUCTOR_ID, TypeExpr};
 
     #[test]
     fn maps_scalar_composite_union_and_unknown_types() {
@@ -192,5 +222,62 @@ mod tests {
             relational_scalar_type_from_data_type(&ValueType::DataFrame),
             yss_node_protocol::RelationalScalarType::Unknown
         );
+    }
+
+    #[test]
+    fn converts_declared_nominal_containers_and_normalizes_union_members() {
+        for value in [
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+            ValueType::Object,
+            ValueType::DataFrame,
+            ValueType::Struct("domain.record".into()),
+            ValueType::Array(Box::new(ValueType::DataSeries(Box::new(
+                ValueType::Scalar(yss_data_contract::SemanticType::Datetime),
+            )))),
+        ] {
+            let declared = type_expr_from_data_type(&value).unwrap();
+            assert_eq!(data_type_from_type_expr(&declared), Some(value));
+        }
+        let text = TypeExpr::Concrete("core.text".parse().unwrap());
+        let number = TypeExpr::Concrete("core.numeric".parse().unwrap());
+        let union = TypeExpr::Union(vec![
+            text.clone(),
+            TypeExpr::Union(vec![number, text]),
+            TypeExpr::Concrete("core.object".parse().unwrap()),
+        ]);
+        assert_eq!(
+            data_type_from_type_expr(&union),
+            Some(ValueType::OneOf(vec![
+                ValueType::Scalar(yss_data_contract::SemanticType::Text),
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                ValueType::Object,
+            ]))
+        );
+    }
+
+    #[test]
+    fn unresolved_and_unsupported_declarations_do_not_become_value_types() {
+        let number = TypeExpr::Concrete("core.numeric".parse().unwrap());
+        for declared in [
+            TypeExpr::Class("core.numeric".parse().unwrap()),
+            TypeExpr::Generic("element".parse().unwrap()),
+            TypeExpr::Unknown,
+            TypeExpr::Union(vec![]),
+            TypeExpr::Union(vec![number.clone(), TypeExpr::Unknown]),
+            TypeExpr::Applied {
+                constructor: "core.array".parse().unwrap(),
+                arguments: vec![],
+            },
+            TypeExpr::Applied {
+                constructor: DATA_SERIES_CONSTRUCTOR_ID.parse().unwrap(),
+                arguments: vec![number.clone(), number.clone()],
+            },
+            TypeExpr::Applied {
+                constructor: "domain.container".parse().unwrap(),
+                arguments: vec![number],
+            },
+        ] {
+            assert_eq!(data_type_from_type_expr(&declared), None);
+        }
     }
 }

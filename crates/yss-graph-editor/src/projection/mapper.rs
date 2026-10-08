@@ -1,6 +1,5 @@
 use super::model::*;
 use std::collections::{BTreeMap, BTreeSet};
-use yss_data_contract::ValueType;
 use yss_graph_analysis::{
     GraphDiagnosticFact, GraphNodeSemanticFact, GraphParameterConfigurationFact,
     GraphParameterFact, GraphPortBacking, GraphPortInstanceAdditionFact, GraphPortSemanticFact,
@@ -8,6 +7,7 @@ use yss_graph_analysis::{
 };
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress, PortRef};
+use yss_graph_type_mapping::data_type_from_type_expr;
 use yss_node_protocol::{
     ParameterEditorSpec, PortDirection, ResolvedType, TypeDomain, TypeExpr, TypeState,
 };
@@ -320,7 +320,7 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         },
         editor,
         presentation: fact.presentation,
-        value_type: data_type_for(&fact.value_type),
+        value_type: data_type_from_type_expr(&fact.value_type),
         multiline,
         value: fact.effective_value.as_ref().map(|value| match value {
             yss_graph_analysis::GraphResolvedParameterValue::Literal(value) => value.clone(),
@@ -539,35 +539,8 @@ fn diagnostics_by_node<'a>(
     by_node
 }
 
-fn data_type_for(value: &TypeExpr) -> Option<ValueType> {
-    match value {
-        TypeExpr::Concrete(id) => yss_graph_type_mapping::data_type_from_resolved_type(
-            &yss_node_protocol::ResolvedType::Nominal(id.clone()),
-        ),
-        TypeExpr::Applied {
-            constructor,
-            arguments,
-        } if constructor.as_str() == "core.data_series" && arguments.len() == 1 => {
-            data_type_for(&arguments[0]).map(|element| ValueType::DataSeries(Box::new(element)))
-        }
-        TypeExpr::Applied {
-            constructor,
-            arguments,
-        } if constructor.as_str() == "core.array" && arguments.len() == 1 => {
-            data_type_for(&arguments[0]).map(|element| ValueType::Array(Box::new(element)))
-        }
-        TypeExpr::Applied { .. } => None,
-        TypeExpr::Union(values) if !values.is_empty() => values
-            .iter()
-            .map(data_type_for)
-            .collect::<Option<Vec<_>>>()
-            .map(ValueType::one_of),
-        TypeExpr::Class(_) | TypeExpr::Generic(_) | TypeExpr::Unknown | TypeExpr::Union(_) => None,
-    }
-}
-
 fn type_display(value: &TypeExpr) -> String {
-    if let Some(value_type) = data_type_for(value) {
+    if let Some(value_type) = data_type_from_type_expr(value) {
         return value_type.to_string();
     }
     match value {

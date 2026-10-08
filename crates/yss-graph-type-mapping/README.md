@@ -16,6 +16,12 @@ constructors back to Data Contract values. Other nominal IDs represent named str
 unsupported applied constructors or arities return `None`. `relational_scalar_type_from_data_type`
 only exposes scalar semantics and leaves composite types unknown.
 
+`data_type_from_type_expr` uses the same nominal rules for declarations and supports unary
+Array/DataSeries constructors. Nonempty unions use Data Contract's `one_of` normalization,
+flattening and removing duplicates while preserving first occurrence order. Classes, generics,
+unknown declarations, empty unions and unsupported constructors or arities return `None`;
+this conversion does not infer a concrete type. Editor projection uses this entry directly.
+
 This crate does not register types, infer node types or hold graph state. The underlying
 contracts belong to [Data Contract](../yss-data-contract/README.md) and
 [Node Protocol](../yss-node-protocol/README.md); graph semantics belong to
