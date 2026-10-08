@@ -9,6 +9,14 @@ pub(super) struct AxisDomain {
     span: f64,
 }
 impl AxisDomain {
+    pub fn fixed([start, end]: [f64; 2]) -> Self {
+        let magnitude = start.abs().max(end.abs()).max(f64::MIN_POSITIVE);
+        Self {
+            magnitude,
+            start: start / magnitude,
+            span: end / magnitude - start / magnitude,
+        }
+    }
     pub fn from_values(values: impl Iterator<Item = f64>) -> Self {
         let (mut min, mut max) = (f64::INFINITY, f64::NEG_INFINITY);
         for value in values {
@@ -55,7 +63,7 @@ pub(super) fn chart_box(bounds: Size<Pixels>, y_format: PlotAxisFormat) -> Optio
     (width > px(24.) && height > px(24.))
         .then_some(Bounds::new(point(px(left), px(18.)), size(width, height)))
 }
-pub(super) fn axis_value(value: f64, format: PlotAxisFormat) -> String {
+pub(crate) fn axis_value(value: f64, format: PlotAxisFormat) -> String {
     let date = match format {
         PlotAxisFormat::Date => DateTime::from_timestamp((value * 86400.).round() as i64, 0),
         PlotAxisFormat::Datetime => DateTime::from_timestamp_micros(value.round() as i64),

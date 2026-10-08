@@ -10,6 +10,7 @@ mod documents;
 mod file_commands;
 mod imports;
 mod minds;
+mod plots;
 mod plugins;
 mod project;
 mod projects;

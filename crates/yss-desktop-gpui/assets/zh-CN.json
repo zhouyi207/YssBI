@@ -2639,7 +2639,14 @@
     "charts": {
       "unnamedDataset": "未命名数据集",
       "removedDataset": "已移除的数据集",
-      "noFinitePoints": "所选列没有可用于绘图的有限数值对。"
+      "noFinitePoints": "所选列没有可用于绘图的有限数值对。",
+      "dataPoints": "数据点"
+    },
+    "plots": {
+      "bubbleSize": "气泡大小",
+      "toolbar": "图形显示选项",
+      "points": "显示数据点",
+      "axes": "X：{{x}} · Y：{{y}}"
     }
   }
 }

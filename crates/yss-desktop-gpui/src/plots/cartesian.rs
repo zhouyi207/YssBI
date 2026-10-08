@@ -1,31 +1,104 @@
-mod axes;
-use axes::{AxisDomain, axis_value, chart_box};
+use super::axes::{AxisDomain, axis_value, chart_box};
+use gpui::prelude::*;
 use gpui::{
     AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, TextAlign,
-    Window, fill, point, px, size,
+    Window, point, px,
 };
 use gpui_component::{
     ActiveTheme,
     plot::{
-        AxisLabelSide, AxisText, Curve, Grid, IntoPlot, PathCaches, Plot, PlotAxis, TooltipState,
-        shape::Line, tooltip::Tooltip,
+        AxisLabelSide, AxisText, Grid, IntoPlot, Plot, PlotAxis, TooltipState, tooltip::Tooltip,
     },
 };
 use std::sync::Arc;
+mod marks;
 use yss_application::chart::{ChartPlotResult, PlotPoint};
-use yss_chart_document::ChartType;
 
-pub(super) struct CartesianData {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CartesianKind {
+    Scatter,
+    Line,
+    Ecdf,
+    Density,
+}
+pub(crate) struct CartesianOptions {
+    pub kind: CartesianKind,
+    pub reference_lines: Vec<[PlotPoint; 2]>,
+    pub point_sizes: Option<Vec<f64>>,
+    pub x_domain: Option<[f64; 2]>,
+    pub y_domain: Option<[f64; 2]>,
+}
+impl CartesianOptions {
+    pub fn new(kind: CartesianKind) -> Self {
+        Self {
+            kind,
+            reference_lines: Vec::new(),
+            point_sizes: None,
+            x_domain: None,
+            y_domain: None,
+        }
+    }
+}
+
+pub(crate) struct CartesianData {
     pub result: ChartPlotResult,
-    pub kind: ChartType,
+    pub kind: CartesianKind,
+    reference_lines: Vec<[PlotPoint; 2]>,
+    point_sizes: Option<Vec<f64>>,
+    largest_size: f64,
     x: AxisDomain,
     y: AxisDomain,
 }
 impl CartesianData {
-    pub fn new(result: ChartPlotResult, kind: ChartType) -> Self {
-        let x = AxisDomain::from_values(result.data.iter().map(|p| p.x));
-        let y = AxisDomain::from_values(result.data.iter().map(|p| p.y));
-        Self { result, kind, x, y }
+    pub fn new(result: ChartPlotResult, options: CartesianOptions) -> Self {
+        let x = options.x_domain.map(AxisDomain::fixed).unwrap_or_else(|| {
+            AxisDomain::from_values(
+                result
+                    .data
+                    .iter()
+                    .map(|p| p.x)
+                    .chain(options.reference_lines.iter().flatten().map(|p| p.x)),
+            )
+        });
+        let natural_y = AxisDomain::from_values(
+            result
+                .data
+                .iter()
+                .map(|p| p.y)
+                .chain(options.reference_lines.iter().flatten().map(|p| p.y)),
+        );
+        let y = options
+            .y_domain
+            .map(AxisDomain::fixed)
+            .unwrap_or_else(|| match options.kind {
+                CartesianKind::Ecdf => AxisDomain::fixed([0., 1.]),
+                CartesianKind::Density => {
+                    AxisDomain::fixed([0., natural_y.at(1.).clamp(0.01, f64::MAX)])
+                }
+                _ => natural_y,
+            });
+        let largest_size = options
+            .point_sizes
+            .as_ref()
+            .map_or(0., |values| values.iter().copied().fold(0_f64, f64::max));
+        Self {
+            result,
+            kind: options.kind,
+            x,
+            y,
+            reference_lines: options.reference_lines,
+            point_sizes: options.point_sizes,
+            largest_size,
+        }
+    }
+    fn radius(&self, index: usize) -> f32 {
+        self.point_sizes.as_ref().map_or(2.5, |sizes| {
+            if self.largest_size > 0. {
+                (sizes[index] / self.largest_size).sqrt() as f32 * 16.
+            } else {
+                0.
+            }
+        })
     }
     fn position(&self, datum: &PlotPoint, chart: &Bounds<Pixels>) -> Point<Pixels> {
         point(
@@ -35,10 +108,11 @@ impl CartesianData {
     }
 }
 #[derive(IntoPlot)]
-pub(super) struct CartesianPlot {
+pub(crate) struct CartesianPlot {
     pub data: Arc<CartesianData>,
     pub id: SharedString,
     pub generation: u64,
+    pub show_points: bool,
 }
 impl Plot for CartesianPlot {
     fn id(&self) -> Option<ElementId> {
@@ -52,7 +126,6 @@ impl Plot for CartesianPlot {
             return;
         };
         chart.origin += bounds.origin;
-        let color = cx.theme().primary;
         let grid_color = cx.theme().border.opacity(0.65);
         let text_color = cx.theme().muted_foreground;
         let width = chart.size.width.as_f32();
@@ -107,35 +180,11 @@ impl Plot for CartesianPlot {
             .y_label(y_labels)
             .stroke(grid_color)
             .paint(&chart, window, cx);
-        if self.data.kind == ChartType::Line {
-            let (x, y) = (self.data.x, self.data.y);
-            let line = Line::new()
-                .data(self.data.result.data.iter().copied())
-                .x(move |p: &PlotPoint| Some(x.position(p.x) * width))
-                .y(move |p: &PlotPoint| Some((1. - y.position(p.y)) * height))
-                .curve(Curve::Linear)
-                .stroke(color)
-                .stroke_width(px(2.))
-                .dot()
-                .dot_size(px(4.))
-                .dot_fill(color.opacity(0.7));
-            let caches = PathCaches::for_paint(self.id.clone(), window, cx);
-            caches.update(cx, |caches, _| {
-                line.paint_cached(&chart, caches.slot(0), window)
-            });
-        } else {
-            for datum in &self.data.result.data {
-                let position = self.data.position(datum, &chart);
-                window.paint_quad(
-                    fill(
-                        Bounds::new(position - point(px(2.5), px(2.5)), size(px(5.), px(5.))),
-                        color.opacity(0.7),
-                    )
-                    .corner_radii(px(2.5)),
-                );
-            }
-        }
+        window.with_content_mask(Some(gpui::ContentMask { bounds: chart }), |window| {
+            self.paint_marks(&chart, window, cx);
+        });
     }
+
     fn tooltip_state(
         &self,
         position: Point<Pixels>,
@@ -152,6 +201,7 @@ impl Plot for CartesianPlot {
             .data
             .iter()
             .enumerate()
+            .filter(|(index, _)| self.data.radius(*index) > 0.)
             .map(|(index, datum)| {
                 let target = self.data.position(datum, &chart);
                 let dx = (target.x - position.x).as_f32();
@@ -159,7 +209,11 @@ impl Plot for CartesianPlot {
                 (index, target, dx * dx + dy * dy)
             })
             .min_by(|a, b| a.2.total_cmp(&b.2))?;
-        (distance <= 100.).then_some(TooltipState::new(index, target, vec![target]))
+        (distance <= self.data.radius(index).max(10.).powi(2)).then_some(TooltipState::new(
+            index,
+            target,
+            vec![target],
+        ))
     }
     fn tooltip(
         &self,
@@ -172,7 +226,7 @@ impl Plot for CartesianPlot {
         let datum = self.data.result.data.get(state.index)?;
         Some(
             Tooltip::new(cursor, bounds.size)
-                .title("数据点")
+                .title(crate::text::translate("native.charts.dataPoints"))
                 .plain_row(
                     self.data
                         .result
@@ -191,6 +245,15 @@ impl Plot for CartesianPlot {
                         .to_owned(),
                     axis_value(datum.y, self.data.result.y_format),
                 )
+                .when_some(self.data.point_sizes.as_ref(), |tooltip, sizes| {
+                    tooltip.plain_row(
+                        crate::text::translate("native.plots.bubbleSize"),
+                        axis_value(
+                            sizes[state.index],
+                            yss_application::chart::PlotAxisFormat::Number,
+                        ),
+                    )
+                })
                 .into_any_element(),
         )
     }

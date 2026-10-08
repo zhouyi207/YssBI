@@ -1,28 +1,19 @@
 use super::{
     ChartEditor, SaveChart,
     details::chart_type_label,
-    plot::CartesianPlot,
-    query::{HistogramDatum, PreviewData, PreviewFailure},
+    query::{PreviewData, PreviewFailure},
 };
-use crate::{appearance, assets::NativeIcon};
+use crate::assets::NativeIcon;
+use crate::{
+    appearance,
+    plots::{cartesian::CartesianPlot, histogram},
+};
 use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
 use gpui_component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
-    chart::BarChart,
 };
 use gpui_kit_assets::IconName;
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct HistogramBand {
-    index: usize,
-    label: gpui::SharedString,
-}
-impl From<HistogramBand> for gpui::SharedString {
-    fn from(value: HistogramBand) -> Self {
-        value.label
-    }
-}
 
 impl Render for ChartEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -179,7 +170,6 @@ impl ChartEditor {
                     )
                     .into_any_element();
                 }
-                let color = cx.theme().primary;
                 div()
                     .size_full()
                     .flex()
@@ -191,21 +181,11 @@ impl ChartEditor {
                             .text_color(cx.theme().muted_foreground)
                             .child(format!("{column} · 频数")),
                     )
-                    .child(
-                        div().flex_1().min_h_0().child(
-                            BarChart::new(bins.clone())
-                                .id(format!("chart-bars-{}", cx.entity_id()))
-                                .band(|datum: &HistogramDatum| HistogramBand {
-                                    index: datum.index,
-                                    label: datum.label.clone().into(),
-                                })
-                                .value(|datum: &HistogramDatum| datum.count as f64)
-                                .fill(move |_, _, _, _| color)
-                                .value_axis(true)
-                                .band_tick_count(8)
-                                .appear(false),
-                        ),
-                    )
+                    .child(div().flex_1().min_h_0().child(histogram::render(
+                        format!("chart-bars-{}", cx.entity_id()),
+                        bins,
+                        cx,
+                    )))
                     .when(*other_count > 0, |view| {
                         view.child(
                             div()
@@ -237,6 +217,7 @@ impl ChartEditor {
                     data: data.clone(),
                     id: format!("chart-points-{}", cx.entity_id()).into(),
                     generation: self.preview_generation,
+                    show_points: true,
                 }))
                 .child(div().h(px(8.)))
                 .into_any_element(),

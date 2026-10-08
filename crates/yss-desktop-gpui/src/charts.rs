@@ -1,7 +1,6 @@
 //! Native chart configuration is a draft; Project owns persisted chart files and versions.
 pub(crate) mod commands;
 mod details;
-mod plot;
 pub(crate) mod query;
 mod render;
 

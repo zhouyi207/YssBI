@@ -1,4 +1,5 @@
 //! Native result panels own view state and one Application result lease.
+mod plot;
 mod query;
 mod table;
 mod value;
@@ -8,7 +9,7 @@ use gpui::{
     Window, div, prelude::*, px, uniform_list,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable,
+    ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
     table::{DataTable, TableState},
@@ -18,8 +19,8 @@ use yss_application::graph::results::report::ResultTablePart;
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
 
-use crate::assets::NativeIcon;
 use crate::services::NativeServices;
+use gpui_kit_assets::IconName;
 use query::{ResultContent, ResultLease};
 use table::ResultGrid;
 
@@ -35,6 +36,7 @@ pub struct ResultPanel {
     lease: Option<ResultLease>,
     focus: FocusHandle,
     value: Option<Arc<RuntimeValue>>,
+    plot: Option<Entity<plot::PlotView>>,
     rows: Vec<value::ValueRow>,
     expanded: BTreeSet<String>,
     tables: bool,
@@ -59,6 +61,7 @@ impl ResultPanel {
             lease: None,
             focus: cx.focus_handle(),
             value: None,
+            plot: None,
             rows: vec![],
             expanded: BTreeSet::new(),
             tables: false,
@@ -103,6 +106,12 @@ impl ResultPanel {
                     Ok((lease, content)) => {
                         view.lease = Some(lease);
                         match content {
+                            ResultContent::InvalidPlot => {
+                                view.error = Some(crate::text::translate("plot.invalidData"));
+                            }
+                            ResultContent::Plot(data) => {
+                                view.plot = Some(cx.new(|_| plot::PlotView::new(data)));
+                            }
                             ResultContent::Value { value, tables } => {
                                 view.tables = tables;
                                 view.rows = value::rows(&value, &view.expanded, tables);
@@ -318,7 +327,8 @@ impl Render for ResultPanel {
                     .when_some(self.table.as_ref(), |body, table| {
                         body.child(DataTable::new(table).small().stripe(true))
                     })
-                    .when(self.table.is_none(), |body| {
+                    .when_some(self.plot.as_ref(), |body, plot| body.child(plot.clone()))
+                    .when(self.table.is_none() && self.plot.is_none(), |body| {
                         body.child(
                             uniform_list(
                                 "result-values",
@@ -357,6 +367,7 @@ impl BasePanel for ResultPanel {
         self.lease = None;
         self.table = None;
         self.value = None;
+        self.plot = None;
         self.rows.clear();
         cx.emit(ResultEvent::Closed);
     }
@@ -368,7 +379,14 @@ impl Panel for ResultPanel {
             .flex()
             .items_center()
             .gap_2()
-            .child(Icon::new(NativeIcon::Table).size_3())
+            .child(
+                Icon::new(if self.plot.is_some() {
+                    IconName::ChartLine
+                } else {
+                    IconName::Table
+                })
+                .size_3(),
+            )
             .child("结果")
     }
     fn inner_padding(&self, _: &App) -> bool {

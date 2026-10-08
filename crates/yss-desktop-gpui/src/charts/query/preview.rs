@@ -12,12 +12,7 @@ use yss_dataset_profile::ColumnDistribution;
 use yss_project::ProjectIndex;
 use yss_project_identity::ProjectInstanceId;
 
-#[derive(Clone)]
-pub(in crate::charts) struct HistogramDatum {
-    pub index: usize,
-    pub label: String,
-    pub count: usize,
-}
+use crate::plots::histogram::HistogramDatum;
 pub(in crate::charts) enum PreviewFailure {
     Read,
     SourceMissing,
@@ -52,7 +47,7 @@ pub(in crate::charts) enum PreviewData {
         column: String,
         other_count: usize,
     },
-    Cartesian(Arc<crate::charts::plot::CartesianData>),
+    Cartesian(Arc<crate::plots::cartesian::CartesianData>),
 }
 pub(super) struct PreviewRead {
     pub meta: Option<Arc<DatabaseMetaResult>>,
@@ -156,7 +151,16 @@ pub(super) fn read(
                         _ => PreviewFailure::Read,
                     })?;
                 Ok(PreviewData::Cartesian(Arc::new(
-                    crate::charts::plot::CartesianData::new(result, document.chart_type),
+                    crate::plots::cartesian::CartesianData::new(
+                        result,
+                        crate::plots::cartesian::CartesianOptions::new(
+                            if document.chart_type == ChartType::Line {
+                                crate::plots::cartesian::CartesianKind::Line
+                            } else {
+                                crate::plots::cartesian::CartesianKind::Scatter
+                            },
+                        ),
+                    ),
                 )))
             }
         }

@@ -29,6 +29,8 @@ impl Drop for ResultLease {
 }
 
 pub enum ResultContent {
+    InvalidPlot,
+    Plot(super::plot::PlotData),
     Value {
         value: Arc<RuntimeValue>,
         tables: bool,
@@ -52,6 +54,27 @@ pub fn open(
         id,
         owner,
     };
+    if matches!(
+        snapshot.value().category(),
+        yss_graph_execution::plan::ResultCategory::PlotData(_)
+    ) {
+        match services
+            .application
+            .application
+            .query_result_plot(reference)
+        {
+            Ok(Some(plot)) => {
+                return Ok((lease, ResultContent::Plot(super::plot::PlotData::new(plot))));
+            }
+            Err(
+                yss_application::graph::results::ResultQueryApplicationError::UnrepresentableValue,
+            ) => {
+                return Ok((lease, ResultContent::InvalidPlot));
+            }
+            Err(error) => return Err(error.into()),
+            Ok(None) => {}
+        }
+    }
     let content = match snapshot.value().value().unannotated() {
         RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::List(_) => {
             ResultContent::Page(page(&services, reference, None, 0)?)

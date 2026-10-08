@@ -2,7 +2,7 @@
 mod preview;
 use super::ChartEditor;
 use gpui::{Context, Window};
-pub(super) use preview::{HistogramDatum, PreviewData, PreviewFailure};
+pub(super) use preview::{PreviewData, PreviewFailure};
 use std::{sync::Arc, time::Duration};
 use yss_application::runtime::ApplicationServices;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
