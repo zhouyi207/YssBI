@@ -199,7 +199,6 @@ fn anova_nodes_execute_graph_defaults_with_mixed_factor_labels_and_interactions(
                 PlanRegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
                 runtime.kernels().fingerprint(),
                 BTreeMap::new(),
-                BTreeMap::new(),
             ),
             &yss_graph_execution::graph_preparation::GraphExecutionScope::all(
                 analysis.semantic_snapshot(),

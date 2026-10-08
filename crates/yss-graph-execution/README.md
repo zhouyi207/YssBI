@@ -40,6 +40,10 @@ Application 校验文档、捕获解析与语义身份后，Execution 的 `Graph
 Application 重验依赖、捕获结果发布依据并准备资源绑定。运行不隐式保存，也不回退磁盘旧文档。
 草稿或依赖变化返回 `graph_draft_changed`，范围内阻断诊断返回 `graph_not_ready`，内部解析和计划构建故障保留诊断编号。
 
+`PlanBasis::resource_observations` 是执行包中资源存在性与版本的唯一依据：Present 必须携带版本，
+Absent 保留可选的删除版本。Application 从同次 Project 授权构造它；资源准备按该观察核对绑定版本、
+项目会话与必需/可选要求，不再并行保存一份资源版本映射。Project 的最终授权重验保持独立。
+
 `GraphExecutionScope::schema_frontier` 从范围内被消费的 Deferred / Observed 输出选择最早可执行的
 结构边界。Application 发布这些稳定结果并重新解析后继续准备计划。“运行至此”可复用有效边界，
 全图重跑先重新求值动态结构；同一次运行已完成的输出即使是后续需求根也不重复计算。

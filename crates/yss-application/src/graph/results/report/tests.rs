@@ -263,7 +263,6 @@ pub(crate) fn fixture_with_options(
         PlanRegistryFingerprint::from_bytes([0; 32]),
         yss_node_kernel::KernelRegistry::default().fingerprint(),
         BTreeMap::new(),
-        BTreeMap::new(),
     );
     let package = runtime
         .prepare_graph_package(

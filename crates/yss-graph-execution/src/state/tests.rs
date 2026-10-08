@@ -30,7 +30,6 @@ fn prepared_plan(state: &ExecutionRuntimeState) -> PreparedExecutionPlan {
         PlanProjectSessionId::from_existing("session".into()),
         PlanRegistryFingerprint::from_bytes([4; 32]),
         yss_node_kernel::KernelRegistry::default().fingerprint(),
-        BTreeMap::from([(resource.clone(), version.clone())]),
         BTreeMap::from([(resource, PlanResourceObservedState::Present(version))]),
     );
     let parameters = Arc::new(PlanParameterBundleBuilder::new(basis.clone()).freeze());
@@ -83,7 +82,6 @@ fn prepared_operation_plan(
         PlanProjectSessionId::from_existing("session".into()),
         PlanRegistryFingerprint::from_bytes([4; 32]),
         state.kernels().fingerprint(),
-        BTreeMap::new(),
         BTreeMap::new(),
     );
     let mut parameters = PlanParameterBundleBuilder::new(basis.clone());

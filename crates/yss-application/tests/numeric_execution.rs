@@ -1724,7 +1724,6 @@ fn execute(
         PlanRegistryFingerprint::from_bytes([0; 32]),
         state.kernels().fingerprint(),
         BTreeMap::new(),
-        BTreeMap::new(),
     );
     let package = state
         .prepare_graph_package(

@@ -211,7 +211,6 @@ mod tests {
             PlanRegistryFingerprint::from_bytes([1; 32]),
             yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
-            BTreeMap::new(),
         );
         let parameters = Arc::new(PlanParameterBundleBuilder::new(basis.clone()).freeze());
         ExecutionPlanPackage::new(

@@ -58,8 +58,6 @@ impl PlanResourceRequirement {
     }
 }
 
-pub type PlanResourceVersionSet = BTreeMap<PlanResourceId, PlanResourceVersion>;
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanResourceObservedState {
     Present(PlanResourceVersion),
@@ -73,7 +71,6 @@ pub struct PlanBasis {
     project_session: PlanProjectSessionId,
     registry_fingerprint: PlanRegistryFingerprint,
     kernel_fingerprint: yss_node_kernel::KernelFingerprint,
-    resource_versions: PlanResourceVersionSet,
     resource_observations: PlanResourceObservationSet,
 }
 
@@ -82,14 +79,12 @@ impl PlanBasis {
         project_session: PlanProjectSessionId,
         registry_fingerprint: PlanRegistryFingerprint,
         kernel_fingerprint: yss_node_kernel::KernelFingerprint,
-        resource_versions: PlanResourceVersionSet,
         resource_observations: PlanResourceObservationSet,
     ) -> Self {
         Self {
             project_session,
             registry_fingerprint,
             kernel_fingerprint,
-            resource_versions,
             resource_observations,
         }
     }
@@ -100,10 +95,6 @@ impl PlanBasis {
 
     pub const fn registry_fingerprint(&self) -> PlanRegistryFingerprint {
         self.registry_fingerprint
-    }
-
-    pub fn resource_versions(&self) -> &PlanResourceVersionSet {
-        &self.resource_versions
     }
 
     pub const fn kernel_fingerprint(&self) -> yss_node_kernel::KernelFingerprint {

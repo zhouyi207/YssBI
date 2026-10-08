@@ -10,7 +10,7 @@ pub(crate) mod result_category;
 
 pub use basis::{
     PlanBasis, PlanResourceObservationSet, PlanResourceObservedState, PlanResourceRequirement,
-    PlanResourceVersionSet, ResourceAccess, ResourceKind,
+    ResourceAccess, ResourceKind,
 };
 pub use identity::{
     InvalidPlanIdentity, PlanGraphId, PlanId, PlanInputGroupId, PlanNodeId, PlanNodeTypeId,
@@ -44,7 +44,6 @@ mod tests {
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([1; 32]),
             yss_node_kernel::KernelRegistry::default().fingerprint(),
-            BTreeMap::new(),
             BTreeMap::new(),
         )
     }

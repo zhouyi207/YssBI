@@ -229,7 +229,6 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
             PlanRegistryFingerprint::from_bytes(session.graph().registry_fingerprint()),
             fingerprint,
             BTreeMap::new(),
-            BTreeMap::new(),
         )
     };
     let package = session

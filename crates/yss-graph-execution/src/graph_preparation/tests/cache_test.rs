@@ -39,7 +39,6 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         PlanRegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
         execution.kernels().fingerprint(),
         BTreeMap::new(),
-        BTreeMap::new(),
     );
     let graph =
         GraphResourcePath::new("events/Cache.yssbi-event").expect("test graph path is valid");

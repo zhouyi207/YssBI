@@ -283,7 +283,7 @@ Application 使用 Analysis 的范围就绪检查与资源引用准备授权，�
 
 执行能力检查新增阻断诊断时，同步将完整解析的 snapshot 标为 Incomplete，投影为 `analysisBlocked`；`success` 不得同时携带阻断诊断。已有 InternalFailure 保留原故障信息。
 
-`semanticInputHash` 来自语义文档内容、registry 与实际读取的 dependency manifest，排除 node position/user label、无引用 derived metadata 和相关展示字段。图常量属于语义文档；manifest 记录所用函数签名/正文、数据库 Schema 以及 absent lookup，basis 同时传递 resource versions/observations。无关 catalog 变化不改变 artifact identity。函数正文读取由 Project owner 完成，Graph resolver 不读文件。
+`semanticInputHash` 来自语义文档内容、registry 与实际读取的 dependency manifest，排除 node position/user label、无引用 derived metadata 和相关展示字段。图常量属于语义文档；manifest 记录所用函数签名/正文、数据库 Schema 以及 absent lookup。Execution 的 `PlanBasis` 从同次 Project 授权保存一份资源存在性与版本观察，不再并行保存资源版本映射。无关 catalog 变化不改变 artifact identity。函数正文读取由 Project owner 完成，Graph resolver 不读文件。
 
 函数正文捕获与 Analysis 调用图校验共同使用 `yss_graph_analysis::direct_function_dependencies`
 及同一会话的冻结 Registry 识别直接调用目标，包括扩展角色和适用的默认引用；Application 继续遍历传递依赖、从捕获的 Project 会话读取正文并重验身份。

@@ -202,7 +202,6 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
             PlanRegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
             yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
-            BTreeMap::new(),
         );
         let execution = ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),

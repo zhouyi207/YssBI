@@ -31,16 +31,8 @@ pub enum ResourcePreparationError {
     RequirementMismatch { resource: PlanResourceId },
     #[error("resource requirement has no matching binding")]
     MissingBinding { resource: PlanResourceId },
-    #[error("resource requirement is missing a version observation")]
-    MissingVersion { resource: PlanResourceId },
     #[error("resource requirement is missing an observation")]
     MissingObservation { resource: PlanResourceId },
-    #[error("resource observation does not match the basis version")]
-    ObservationVersionMismatch {
-        resource: PlanResourceId,
-        expected: PlanResourceVersion,
-        actual: PlanResourceVersion,
-    },
     #[error("resource binding version does not match the basis version")]
     VersionMismatch {
         resource: PlanResourceId,
@@ -235,27 +227,15 @@ impl ResourceProviderFactory {
             {
                 return Err(ResourcePreparationError::DuplicateRequirement);
             }
-            let Some(version) = basis.resource_versions().get(&resource) else {
+            let Some(observed) = basis.resource_observations().get(&resource) else {
                 if requirement.optional() {
                     continue;
                 }
-                return Err(ResourcePreparationError::MissingVersion { resource });
-            };
-            let Some(observed) = basis.resource_observations().get(&resource) else {
                 return Err(ResourcePreparationError::MissingObservation { resource });
             };
             match observed {
-                PlanResourceObservedState::Present(observed_version)
-                    if observed_version == version =>
-                {
+                PlanResourceObservedState::Present(version) => {
                     available_versions.insert(resource, version.clone());
-                }
-                PlanResourceObservedState::Present(observed_version) => {
-                    return Err(ResourcePreparationError::ObservationVersionMismatch {
-                        resource,
-                        expected: version.clone(),
-                        actual: observed_version.clone(),
-                    });
                 }
                 PlanResourceObservedState::Absent(_) if requirement.optional() => {}
                 PlanResourceObservedState::Absent(_) => {
@@ -336,18 +316,13 @@ mod tests {
     use std::sync::Arc;
     use yss_data_contract::TabularScalar;
 
-    fn prepared_plan() -> PreparedExecutionPlan {
+    fn prepared_plan(observation: PlanResourceObservedState) -> PreparedExecutionPlan {
         let resource = PlanResourceId::from_existing("databases/answer".into());
-        let version = PlanResourceVersion::from_existing("v1".into());
         let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([3; 32]),
             yss_node_kernel::KernelRegistry::default().fingerprint(),
-            BTreeMap::from([(resource, version)]),
-            BTreeMap::from([(
-                PlanResourceId::from_existing("databases/answer".into()),
-                PlanResourceObservedState::Present(PlanResourceVersion::from_existing("v1".into())),
-            )]),
+            BTreeMap::from([(resource, observation)]),
         );
         let parameters = Arc::new(PlanParameterBundleBuilder::new(basis.clone()).freeze());
         let package = ExecutionPlanPackage::new(
@@ -373,31 +348,35 @@ mod tests {
         .expect("test package is valid")
     }
 
-    fn request<'a>(plan: &'a PreparedExecutionPlan) -> RunResourceRequest<'a> {
+    fn bindings(optional: bool, version: Option<&str>) -> RunResourceBindings {
         let requirement = PlanResourceRequirement::new(
             PlanResourceId::from_existing("databases/answer".into()),
             ResourceKind::DataFrame,
             ResourceAccess::Shared,
-            false,
+            optional,
         );
-        let bindings = Box::leak(Box::new(RunResourceBindings::new(
+        RunResourceBindings::new(
             PlanProjectSessionId::from_existing("session".into()),
             [requirement.clone()],
-            [RunResourceBinding::new(
-                requirement,
-                PlanResourceVersion::from_existing("v1".into()),
-                RuntimeValue::Scalar(TabularScalar::Integer(4)),
-            )],
-        )));
-        RunResourceRequest::new(plan, bindings)
+            version.map(|version| {
+                RunResourceBinding::new(
+                    requirement,
+                    PlanResourceVersion::from_existing(version.into()),
+                    RuntimeValue::Scalar(TabularScalar::Integer(4)),
+                )
+            }),
+        )
     }
 
     #[test]
     fn prepare_seals_a_session_bound_grant_from_the_complete_basis() {
-        let plan = prepared_plan();
+        let plan = prepared_plan(PlanResourceObservedState::Present(
+            PlanResourceVersion::from_existing("v1".into()),
+        ));
+        let bindings = bindings(false, Some("v1"));
         let factory = ResourceProviderFactory::new("session".into());
         let prepared = factory
-            .prepare(&request(&plan))
+            .prepare(&RunResourceRequest::new(&plan, &bindings))
             .expect("matching neutral binding must prepare");
         assert_eq!(
             prepared.value(&PlanResourceId::from_existing("databases/answer".into())),
@@ -407,11 +386,54 @@ mod tests {
 
     #[test]
     fn prepare_rejects_a_factory_bound_to_another_session() {
-        let plan = prepared_plan();
+        let plan = prepared_plan(PlanResourceObservedState::Present(
+            PlanResourceVersion::from_existing("v1".into()),
+        ));
+        let bindings = bindings(false, Some("v1"));
         let factory = ResourceProviderFactory::new("other-session".into());
         assert!(matches!(
-            factory.prepare(&request(&plan)),
+            factory.prepare(&RunResourceRequest::new(&plan, &bindings)),
             Err(ResourcePreparationError::FactorySessionMismatch { .. })
         ));
+    }
+
+    #[test]
+    fn prepare_rejects_a_binding_that_differs_from_the_observed_version() {
+        let expected = PlanResourceVersion::from_existing("v1".into());
+        let actual = PlanResourceVersion::from_existing("v2".into());
+        let plan = prepared_plan(PlanResourceObservedState::Present(expected.clone()));
+        let bindings = bindings(false, Some(actual.as_str()));
+        let factory = ResourceProviderFactory::new("session".into());
+        assert_eq!(
+            factory
+                .prepare(&RunResourceRequest::new(&plan, &bindings))
+                .unwrap_err(),
+            ResourcePreparationError::VersionMismatch {
+                resource: PlanResourceId::from_existing("databases/answer".into()),
+                expected,
+                actual,
+            }
+        );
+    }
+
+    #[test]
+    fn prepare_accepts_absent_resources_only_when_optional() {
+        let plan = prepared_plan(PlanResourceObservedState::Absent(Some(
+            PlanResourceVersion::from_existing("v1".into()),
+        )));
+        let factory = ResourceProviderFactory::new("session".into());
+        let optional = bindings(true, None);
+        let prepared = factory
+            .prepare(&RunResourceRequest::new(&plan, &optional))
+            .unwrap();
+        let resource = PlanResourceId::from_existing("databases/answer".into());
+        assert_eq!(prepared.value(&resource), None);
+        let required = bindings(false, None);
+        assert_eq!(
+            factory
+                .prepare(&RunResourceRequest::new(&plan, &required))
+                .unwrap_err(),
+            ResourcePreparationError::Unavailable { resource },
+        );
     }
 }

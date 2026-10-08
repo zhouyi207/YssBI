@@ -640,7 +640,6 @@ fn plan_basis(
     captured: &ApplicationSession,
     grants: &[ProjectResourceGrant],
 ) -> Result<yss_graph_execution::plan::PlanBasis, ExecutionApplicationError> {
-    let mut versions = BTreeMap::new();
     let mut observations = BTreeMap::new();
     for grant in grants {
         let resource = PlanResourceId::new(grant.resource().as_str().to_owned().into_boxed_str())
@@ -652,9 +651,6 @@ fn plan_basis(
         let version = grant
             .version()
             .map(|version| PlanResourceVersion::from_existing(version.get().to_string().into()));
-        if let Some(version) = version.clone() {
-            versions.insert(resource.clone(), version.clone());
-        }
         observations.insert(
             resource,
             match grant.presence() {
@@ -675,7 +671,6 @@ fn plan_basis(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
         PlanRegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
         captured.execution().kernels().fingerprint(),
-        versions,
         observations,
     ))
 }
