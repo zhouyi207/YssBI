@@ -2671,7 +2671,52 @@
       "real": "实部",
       "imaginary": "虚部",
       "modulus": "模",
-      "axes": "横轴：实部 · 纵轴：虚部"
+      "axes": "横轴：实部 · 纵轴：虚部",
+      "yes": "是",
+      "no": "否",
+      "equationLimit": "方程仅在完整系数不超过 {{count}} 项时展示；请查看系数分页。",
+      "symbolic": "符号式",
+      "expanded": "展开式",
+      "mapping": "变量映射",
+      "significantCount": "本页显著系数：{{count}} / {{total}}",
+      "significance": "显著性：*** p < 0.001，** p < 0.01，* p < 0.05，. p < 0.1",
+      "pendingAnalyses": "所选诊断与检验章节暂不可显示。",
+      "emptySelection": "本次执行未选择报告内容，请修改 Summary 节点配置后重新执行。",
+      "metrics": {
+        "modelType": "模型",
+        "method": "方法",
+        "rSquared": "R²",
+        "adjRSquared": "调整 R²",
+        "fStatistic": "F 统计量",
+        "probFStatistic": "F 检验 p 值",
+        "numObservations": "观测数",
+        "covarianceType": "协方差类型",
+        "dfModel": "模型自由度",
+        "dfResidual": "残差自由度",
+        "dfTotal": "总自由度",
+        "conditionNumber": "条件数"
+      },
+      "columns": {
+        "source": "来源",
+        "ss": "平方和",
+        "df": "自由度",
+        "ms": "均方",
+        "variable": "变量",
+        "coef": "系数",
+        "stdErr": "标准误",
+        "t": "t",
+        "p": "P > |t|",
+        "lower": "95% CI 下限",
+        "upper": "95% CI 上限",
+        "significant": "显著",
+        "symbol": "符号"
+      },
+      "sources": {
+        "Model": "模型",
+        "Residual": "残差",
+        "Total": "总计"
+      },
+      "emptyCoefficients": "此模型没有可展示的系数。"
     }
   }
 }

@@ -131,6 +131,17 @@
 - 独立提交内容通过 `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；12 个变更 Rust 文件格式、翻译键、模块索引、文档本地链接与 `git diff --check` 通过。
 - 本批未添加 UI 单元测试；具体交互步骤和生命周期验收见 GPUI README。线性回归专项章节、追加报告内容与独立结果窗口仍开放。
 
+### 线性报告基础章节
+
+- 已逐项核对 Equation、FormulaMappingTable、CoefficientTable、CoefficientChart、KeyValue、StatCard、DataTable、TableFrame 与受控切换；完整 LinearRegressionReport 的分析/追加流程保持待迁移。
+- 原生保留类型化报告，方程/表/图共用 200 项系数页，观测页复用已有 100 行懒加载和重试；直接读取原统计值及原显著性，不新增依赖。
+- Application 共用内容许可、分页范围、会话/租约重验；截距由模型标记及首项位置决定，名称为 `const` 的普通变量不会被误认。
+- 方程用原生文本呈现符号式/展开式、映射与复制；仅显示完整且不超过 200 项的系数集。模型摘要、ANOVA 和条件数复用原展示投影，微小非零数使用科学记数法。
+- `cargo test -p yss-application --lib graph::results::report::tests::` 在工作区和隔离提交中各运行 7 项通过；新增用例覆盖原值、页边界、失效会话与租约，既有用例补充内容许可、201 项尾页及截距身份。
+- 隔离提交的 `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；13 个改动 Rust 文件格式、文案键/参数、文档链接和模块索引检查通过。
+- 样例窗口核对了含/不含截距的方程、映射、摘要、ANOVA、系数表与正负条形布局；完整真实结果交互与自动重绘验收仍开放。诊断、残差图、ACF/PACF、序列/假设检验及追加内容是后续独立批次。
+
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -199,17 +210,17 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [components/ui-presentation/Chart.tsx](../../react/src/components/ui-presentation/Chart.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/CoefficientChart.tsx](../../react/src/components/ui-presentation/CoefficientChart.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/CoefficientTable.tsx](../../react/src/components/ui-presentation/CoefficientTable.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/Controls.tsx](../../react/src/components/ui-presentation/Controls.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/DataTable.tsx](../../react/src/components/ui-presentation/DataTable.tsx) | 复用原生组件：虚拟 Table | 结构化报告已复用 `results/table`，保留精确数值；线性报告格式与 p 值样式随专项报告处理 | 结构化报告已覆盖；其余消费者待迁移 |
-| [components/ui-presentation/Equation.tsx](../../react/src/components/ui-presentation/Equation.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/FormulaMappingTable.tsx](../../react/src/components/ui-presentation/FormulaMappingTable.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [components/ui-presentation/KeyValue.tsx](../../react/src/components/ui-presentation/KeyValue.tsx) | 迁移：原生字段展示 | 结构化值已使用原生字段/值布局；线性报告的展示格式随专项报告处理 | 部分覆盖；人工验收待完成 |
+| [components/ui-presentation/CoefficientChart.tsx](../../react/src/components/ui-presentation/CoefficientChart.tsx) | 迁移：有界原生系数条形图 | 共享类型化 200 项系数页；保留正负方向、相对大小、原显著性透明度和完整标签提示 | 代码已覆盖；人工验收待完成 |
+| [components/ui-presentation/CoefficientTable.tsx](../../react/src/components/ui-presentation/CoefficientTable.tsx) | 复用原生组件：虚拟 Table | 共享系数页显示原统计量、置信区间、原显著性及 p 值星号；极小非零值不格式化为零 | 代码已覆盖；人工验收待完成 |
+| [components/ui-presentation/Controls.tsx](../../react/src/components/ui-presentation/Controls.tsx) | 复用原生组件：受控 Button 切换 | 方程符号/展开模式由报告持有；不另建通用 toggle 状态 | 方程已覆盖；其余消费者随迁移复核 |
+| [components/ui-presentation/DataTable.tsx](../../react/src/components/ui-presentation/DataTable.tsx) | 复用原生组件：虚拟 Table | 结构化表与线性 ANOVA 使用 results/table 和类型化展示格式 | 代码已覆盖；其余分析消费者待迁移 |
+| [components/ui-presentation/Equation.tsx](../../react/src/components/ui-presentation/Equation.tsx) | 迁移：原生线性方程展示 | 符号式/展开式、变量映射、水平滚动与复制；模型标记决定截距，只显示有界完整系数的方程 | 代码已覆盖；人工验收待完成 |
+| [components/ui-presentation/FormulaMappingTable.tsx](../../react/src/components/ui-presentation/FormulaMappingTable.tsx) | 复用原生组件：虚拟 Table | 映射从共享完整系数页生成，文字标签不解析为 Markdown/LaTeX | 代码已覆盖；人工验收待完成 |
+| [components/ui-presentation/KeyValue.tsx](../../react/src/components/ui-presentation/KeyValue.tsx) | 迁移：原生字段与指标展示 | 结构化字段与线性模型摘要已覆盖，原统计值与展示格式直接读取 Application | 代码已覆盖；人工验收待完成 |
 | [components/ui-presentation/Section.tsx](../../react/src/components/ui-presentation/Section.tsx) | 复用原生组件：Collapsible | `results/report/section` 首次展开创建内容，保留折叠与页状态；不迁移 DOM details | 代码已覆盖；人工验收待完成 |
-| [components/ui-presentation/StatCard.tsx](../../react/src/components/ui-presentation/StatCard.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [components/ui-presentation/StatCard.tsx](../../react/src/components/ui-presentation/StatCard.tsx) | 迁移：类型化统计卡片 | 条件数消费原 presentation::DisplayData，不复制统计计算 | 代码已覆盖；人工验收待完成 |
 | [components/ui-presentation/StructuredData.tsx](../../react/src/components/ui-presentation/StructuredData.tsx) | 迁移：通用结构化值 | 原生标量/记录表格、字段与嵌套数组；分页 100 行，宽整数和空值保持原值 | 代码已覆盖；人工验收待完成 |
-| [components/ui-presentation/TableFrame.tsx](../../react/src/components/ui-presentation/TableFrame.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [components/ui-presentation/TableFrame.tsx](../../react/src/components/ui-presentation/TableFrame.tsx) | 复用原生组件：Table 及报告边框 | 条纹、滚动、表头和表格生命周期交给组件；不移植 DOM/CSS 包装 | 代码已覆盖；人工验收待完成 |
 
 ## features/application
 
@@ -434,8 +445,8 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [modules/results/internal/ui/info/AddReportContents.tsx](../../react/src/modules/results/internal/ui/info/AddReportContents.tsx) | 迁移：追加报告内容 | 已阅读选项、滞后阶数、假设与失败保留流程；需复用原 Summary 编辑和执行 owner | 待迁移 |
-| [modules/results/internal/ui/info/LinearRegressionReport.tsx](../../react/src/modules/results/internal/ui/info/LinearRegressionReport.tsx) | 迁移：线性报告专项章节 | 已阅读章节、分页、诊断及追加内容流程；现有原生只显示概览，需继续接入类型化分析 | 待迁移 |
-| [modules/results/internal/ui/info/ReportView.tsx](../../react/src/modules/results/internal/ui/info/ReportView.tsx) | 迁移：类型化报告入口 | 结构化报告及无效声明反馈已接入；同一面板租约保留数值/报告切换状态 | 结构化部分已覆盖；线性报告待迁移 |
+| [modules/results/internal/ui/info/LinearRegressionReport.tsx](../../react/src/modules/results/internal/ui/info/LinearRegressionReport.tsx) | 迁移：线性报告专项章节 | 方程、模型摘要、ANOVA、条件数、共享系数表/图及观测分页已接入；诊断分析与追加流程仍待迁移 | 基础章节已覆盖；分析与人工验收待完成 |
+| [modules/results/internal/ui/info/ReportView.tsx](../../react/src/modules/results/internal/ui/info/ReportView.tsx) | 迁移：类型化报告入口 | 结构化与线性报告沿用同一面板租约；数值/报告切换保留局部状态 | 代码已覆盖；线性分析仍待迁移 |
 | [modules/results/internal/ui/info/StructuredReportTable.tsx](../../react/src/modules/results/internal/ui/info/StructuredReportTable.tsx) | 迁移：声明表格与稳定性图 | Application 校验全部声明和行；原生共享表格、单位圆、当前页提示、分页与重试 | 代码已覆盖；人工验收待完成 |
 | [modules/results/internal/ui/info/StructuredResult.tsx](../../react/src/modules/results/internal/ui/info/StructuredResult.tsx) | 迁移：结构化报告 | 原方程文本、声明章节和结构化原值；嵌套数组按原路径读取，不复制统计逻辑 | 代码已覆盖；人工验收待完成 |
 | [modules/results/internal/ui/info/shared/ACFPACFBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/ACFPACFBlock.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

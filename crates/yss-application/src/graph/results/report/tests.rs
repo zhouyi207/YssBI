@@ -349,6 +349,10 @@ fn summary_selection_limits_pages_and_analyses() {
     let projection = overview(&app, reference);
     assert_eq!(projection.summary, options);
     assert!(matches!(
+        app.query_result_coefficients(reference, 0, 10),
+        Err(ReportQueryError::InvalidRequest)
+    ));
+    assert!(matches!(
         app.query_result_table(reference, ResultTablePart::Coefficients, 0, 10),
         Err(ReportQueryError::InvalidRequest)
     ));
@@ -372,6 +376,10 @@ fn summary_selection_limits_pages_and_analyses() {
     let fit = session.execution().query_graph_results("events/report.yssbi-event", 10)
         .into_iter().find(|result| matches!(result.value().value(), RuntimeValue::LinearRegression(model) if model.summary.is_none())).unwrap();
     let fit_reference = fit.provenance().reference();
+    assert!(matches!(
+        app.query_result_coefficients(fit_reference, 0, 10),
+        Err(ReportQueryError::WrongKind)
+    ));
     let model = crate::result_encoding::query_result_json(&app, fit_reference)
         .unwrap()
         .unwrap();
@@ -407,6 +415,64 @@ fn parameter_catalog_is_independent_of_coefficient_pages() {
     assert_eq!(overview["paramNames"].as_array().unwrap().len(), 201);
     assert_eq!(overview["paramNames"][200], "x200");
     assert_eq!(overview["coefficients"]["rowCount"], 201);
+    let tail = coefficients::page(&model.report.coefficients, 200, 200).unwrap();
+    assert_eq!(tail.offset, 200);
+    assert_eq!(tail.total_count, 201);
+    assert_eq!(tail.coefficients.len(), 1);
+    assert_eq!(tail.coefficients[0].variable, "x200");
+
+    assert!(report_projection(reference, &model, &LinearSummaryOptions::default()).constant);
+    model.constant = false;
+    model.report.coefficients[0].variable = "const".into();
+    let projection = report_projection(reference, &model, &LinearSummaryOptions::default());
+    assert!(!projection.constant);
+    assert_eq!(projection.param_names[0], "const");
+
+    model.report.coefficients[200].p_value = f64::NAN;
+    assert!(coefficients::page(&model.report.coefficients, 0, 200).is_ok());
+    assert!(matches!(
+        coefficients::page(&model.report.coefficients, 200, 200),
+        Err(ReportQueryError::UnrepresentableValue)
+    ));
+}
+
+#[test]
+fn typed_coefficient_pages_keep_values_bounds_and_lease_identity() {
+    let (app, reference, fit) = fixture(30);
+    let lease = uuid::Uuid::new_v4();
+    app.retain_result(reference, lease, "coefficient-report", None)
+        .unwrap();
+    app.capture_session()
+        .unwrap()
+        .execution()
+        .invalidate_graph_results("events/report.yssbi-event");
+    let page = app.query_result_coefficients(reference, 1, 200).unwrap();
+    assert_eq!(page.offset, 1);
+    assert_eq!(page.total_count, fit.report.coefficients.len());
+    assert_eq!(page.coefficients, fit.report.coefficients[1..]);
+    let empty = app.query_result_coefficients(reference, 999, 200).unwrap();
+    assert_eq!(empty.offset, page.total_count);
+    assert!(empty.coefficients.is_empty());
+    for (offset, limit) in [(0, 0), (0, MAX_RESULT_PAGE_ROWS + 1), (usize::MAX, 1)] {
+        assert!(matches!(
+            app.query_result_coefficients(reference, offset, limit),
+            Err(ReportQueryError::InvalidRequest)
+        ));
+    }
+    let foreign = ResultReference {
+        execution_session_id: ExecutionSessionId::new(uuid::Uuid::new_v4()),
+        ..reference
+    };
+    assert!(matches!(
+        app.query_result_coefficients(foreign, 0, 1),
+        Err(ReportQueryError::Stale)
+    ));
+    app.release_result_lease(lease, "coefficient-report")
+        .unwrap();
+    assert!(matches!(
+        app.query_result_coefficients(reference, 0, 1),
+        Err(ReportQueryError::Unavailable)
+    ));
 }
 
 #[test]

@@ -1,4 +1,6 @@
 //! Report entities retain local presentation state under the result panel's lease.
+mod display;
+mod linear;
 mod page;
 mod section;
 
@@ -6,7 +8,6 @@ use std::sync::Arc;
 
 use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*};
 use gpui_component::ActiveTheme;
-use yss_application::graph::results::report::structured::ReportSection;
 use yss_data_contract::TabularScalar;
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
@@ -17,6 +18,7 @@ use section::{Section, Source, Title};
 pub struct ReportView {
     sections: Vec<Entity<Section>>,
     invalid: bool,
+    linear: Option<Entity<linear::LinearReport>>,
 }
 
 impl ReportView {
@@ -24,9 +26,19 @@ impl ReportView {
         services: Arc<NativeServices>,
         reference: ResultReference,
         value: Arc<RuntimeValue>,
-        declarations: Result<Vec<ReportSection>, ()>,
+        report: super::query::ReportContent,
         cx: &mut Context<Self>,
     ) -> Self {
+        let declarations = match report {
+            super::query::ReportContent::Structured(declarations) => declarations,
+            super::query::ReportContent::Linear(report) => {
+                return Self {
+                    sections: vec![],
+                    invalid: false,
+                    linear: Some(cx.new(|cx| linear::LinearReport::new(services, *report, cx))),
+                };
+            }
+        };
         let invalid = declarations.is_err();
         let mut sections = declarations
             .unwrap_or_default()
@@ -53,7 +65,11 @@ impl ReportView {
                 open,
             )
         }));
-        Self { sections, invalid }
+        Self {
+            sections,
+            invalid,
+            linear: None,
+        }
     }
 }
 
@@ -79,7 +95,8 @@ impl Render for ReportView {
                                 .child(crate::text::translate("native.reports.invalidDisplay")),
                         )
                     })
-                    .children(self.sections.iter().cloned()),
+                    .children(self.sections.iter().cloned())
+                    .children(self.linear.iter().cloned()),
             )
     }
 }

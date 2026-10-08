@@ -37,17 +37,17 @@ pub enum DisplayFormat {
 
 #[derive(Serialize)]
 pub struct Metric {
-    id: &'static str,
-    label: &'static str,
-    value: DisplayValue,
-    format: DisplayFormat,
+    pub id: &'static str,
+    pub label: &'static str,
+    pub value: DisplayValue,
+    pub format: DisplayFormat,
 }
 
 #[derive(Serialize)]
 pub struct Column {
-    id: &'static str,
-    label: &'static str,
-    format: DisplayFormat,
+    pub id: &'static str,
+    pub label: &'static str,
+    pub format: DisplayFormat,
 }
 
 #[derive(Serialize)]

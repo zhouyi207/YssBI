@@ -34,11 +34,14 @@ pub enum ResultContent {
     Value {
         value: Arc<RuntimeValue>,
         tables: bool,
-        report: Option<
-            Result<Vec<yss_application::graph::results::report::structured::ReportSection>, ()>,
-        >,
+        report: Option<ReportContent>,
     },
     Page(ResultGrid),
+}
+
+pub enum ReportContent {
+    Structured(Result<Vec<yss_application::graph::results::report::structured::ReportSection>, ()>),
+    Linear(Box<yss_application::graph::results::report::LinearRegressionReportProjection>),
 }
 
 pub fn open(
@@ -94,10 +97,14 @@ pub fn open(
                 );
             let tables = matches!(projection, ResultValueProjection::LinearReport(_)) || structured;
             let value = super::value::overview(&projection)?;
-            let report = structured.then(|| {
-                yss_application::graph::results::report::structured::sections(&value)
-                    .map_err(|_| ())
-            });
+            let report = match projection {
+                ResultValueProjection::LinearReport(report) => Some(ReportContent::Linear(report)),
+                _ if structured => Some(ReportContent::Structured(
+                    yss_application::graph::results::report::structured::sections(&value)
+                        .map_err(|_| ()),
+                )),
+                _ => None,
+            };
             ResultContent::Value {
                 value,
                 tables,

@@ -13,7 +13,8 @@ use crate::session::{ApplicationState, SessionCaptureError};
 use yss_sci_contract::diagnostics::serial_correlation::SerialTestsOutput;
 use yss_sci_contract::hypothesis::HypothesisTestOutput;
 
-pub(crate) mod presentation;
+pub mod coefficients;
+pub mod presentation;
 pub mod structured;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,6 +45,8 @@ pub struct LinearRegressionReportProjection {
     pub reference: ResultReference,
     pub title: String,
     pub endog_name: String,
+    /// The first fitted parameter is an intercept only when the model declares one.
+    pub constant: bool,
     pub param_names: Vec<String>,
     pub model: LinearModelSummary,
     pub condition_number: f64,
@@ -145,11 +148,7 @@ impl ApplicationState {
         }
         self.with_linear_regression_summary(reference, |result, summary| {
             let allowed = match part {
-                ResultTablePart::Coefficients => {
-                    summary.options.coefficient_table
-                        || summary.options.coefficient_chart
-                        || summary.options.equation
-                }
+                ResultTablePart::Coefficients => coefficients::selected(&summary.options),
                 ResultTablePart::Observations => summary.options.observations,
                 ResultTablePart::Structured(_) => return Err(ReportQueryError::WrongKind),
             };
@@ -266,6 +265,7 @@ pub(super) fn report_projection(
         reference,
         title: result.report.title.clone(),
         endog_name: result.report.endog_name.clone(),
+        constant: result.constant,
         param_names: result
             .report
             .coefficients
@@ -285,9 +285,6 @@ fn table_page(
     offset: usize,
     limit: usize,
 ) -> Result<ResultPageProjection, ReportQueryError> {
-    if limit == 0 || limit > MAX_RESULT_PAGE_ROWS || offset.checked_add(limit).is_none() {
-        return Err(ReportQueryError::InvalidRequest);
-    }
     let (count, columns): (_, &[(&str, &str)]) = match part {
         ResultTablePart::Coefficients => (
             result.report.coefficients.len(),
@@ -312,9 +309,10 @@ fn table_page(
         ),
         ResultTablePart::Structured(_) => return Err(ReportQueryError::WrongKind),
     };
-    let offset = offset.min(count);
-    let end = offset.saturating_add(limit).min(count);
-    let values = (offset..end)
+    let range = page_range(count, offset, limit)?;
+    let offset = range.start;
+    let end = range.end;
+    let values = range
         .map(|row| {
             Ok(RuntimeValue::List(match part {
                 ResultTablePart::Coefficients => {
@@ -364,6 +362,18 @@ fn table_page(
             .collect(),
         values,
     })
+}
+
+fn page_range(
+    count: usize,
+    offset: usize,
+    limit: usize,
+) -> Result<std::ops::Range<usize>, ReportQueryError> {
+    if limit == 0 || limit > MAX_RESULT_PAGE_ROWS || offset.checked_add(limit).is_none() {
+        return Err(ReportQueryError::InvalidRequest);
+    }
+    let offset = offset.min(count);
+    Ok(offset..offset.saturating_add(limit).min(count))
 }
 
 fn residual_plot(

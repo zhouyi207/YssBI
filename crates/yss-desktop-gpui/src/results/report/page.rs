@@ -24,6 +24,7 @@ use crate::{
 pub(super) enum PageSource {
     Declared(ReportTable),
     Array(ResultTablePart),
+    Observations,
 }
 
 enum Content {
@@ -82,6 +83,7 @@ impl ReportPage {
             let part = match &source {
                 PageSource::Declared(table) => table.part(),
                 PageSource::Array(part) => part,
+                PageSource::Observations => &ResultTablePart::Observations,
             };
             let page = services.application.query_result_table(
                 reference,
@@ -90,6 +92,7 @@ impl ReportPage {
                 PAGE_ROWS,
             )?;
             let (page, roots) = match source {
+                PageSource::Observations => (page, None),
                 PageSource::Declared(table) => {
                     let content = table.present(page)?;
                     (
@@ -144,7 +147,10 @@ impl ReportPage {
         self.has_more = page.has_more;
         self.content = Some(if let Some(roots) = roots {
             Content::Roots(roots)
-        } else if matches!(self.source, PageSource::Declared(_)) {
+        } else if matches!(
+            self.source,
+            PageSource::Declared(_) | PageSource::Observations
+        ) {
             Content::Grid(cx.new(|cx| {
                 TableState::new(ResultGrid::from_report(page), window, cx).sortable(false)
             }))

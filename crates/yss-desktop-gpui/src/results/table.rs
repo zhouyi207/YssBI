@@ -15,6 +15,20 @@ pub struct ResultGrid {
 }
 
 impl ResultGrid {
+    pub fn formatted(names: Vec<String>, rows: Vec<Vec<String>>) -> Self {
+        Self {
+            columns: names
+                .iter()
+                .enumerate()
+                .map(|(index, name)| Column::new(index.to_string(), name.clone()).width(px(150.)))
+                .collect(),
+            total_count: Some(rows.len()),
+            rows,
+            offset: 0,
+            has_more: false,
+        }
+    }
+
     pub fn from_page(page: ResultPageProjection) -> Self {
         Self::with_format(page, display)
     }
