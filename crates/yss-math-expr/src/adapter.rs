@@ -62,11 +62,7 @@ fn parse_expression_with_budget(
     .map_err(|error| {
         MathError::new(MathErrorKind::Parse, format!("数学表达式解析失败: {error}"))
     })?;
-    let mut converted = convert(&parsed, options, depth, budget)?;
-    if options.format == MathInputFormat::Latex {
-        restore_protected_symbols(&mut converted, &protected_symbols.names);
-    }
-    Ok(converted)
+    convert(&parsed, options, depth, budget, &protected_symbols.names)
 }
 
 pub(super) fn parse_relations(
@@ -169,6 +165,7 @@ fn convert(
     options: ParseOptions<'_>,
     depth: usize,
     budget: &mut ParseBudget,
+    protected_names: &HashMap<String, String>,
 ) -> Result<MathExpr, MathError> {
     ensure_depth(depth)?;
     budget.add_node()?;
@@ -176,18 +173,30 @@ fn convert(
     match &expression.kind {
         ExprKind::Integer(value) => number(*value as f64),
         ExprKind::Float(value) => number(value.value()),
-        ExprKind::Variable(name) => resolve_symbol(name, options, depth, budget),
+        ExprKind::Variable(name) => {
+            if let Some(original) = protected_names.get(name) {
+                Ok(MathExpr::Symbol(original.clone()))
+            } else {
+                resolve_symbol(name, options, depth, budget)
+            }
+        }
         ExprKind::Unary {
             op: LexUnaryOp::Neg,
             operand,
         } => Ok(MathExpr::Unary {
             op: UnaryOp::Neg,
-            operand: Box::new(convert(operand, options, depth + 1, budget)?),
+            operand: Box::new(convert(
+                operand,
+                options,
+                depth + 1,
+                budget,
+                protected_names,
+            )?),
         }),
         ExprKind::Unary {
             op: LexUnaryOp::Pos,
             operand,
-        } => convert(operand, options, depth + 1, budget),
+        } => convert(operand, options, depth + 1, budget, protected_names),
         ExprKind::Binary { op, left, right } => {
             let op = match op {
                 LexBinaryOp::Add => BinaryOp::Add,
@@ -199,23 +208,26 @@ fn convert(
             };
             Ok(MathExpr::Binary {
                 op,
-                left: Box::new(convert(left, options, depth + 1, budget)?),
-                right: Box::new(convert(right, options, depth + 1, budget)?),
+                left: Box::new(convert(left, options, depth + 1, budget, protected_names)?),
+                right: Box::new(convert(right, options, depth + 1, budget, protected_names)?),
             })
         }
-        ExprKind::Function { name, args } if name.starts_with("q_9") || is_allowed_call(name) => {
+        ExprKind::Function { name, args } => {
+            let name = protected_names.get(name).unwrap_or(name);
+            if !is_allowed_call(name) {
+                return Err(MathError::new(
+                    MathErrorKind::UnknownFunction,
+                    format!("不支持函数 {name}()"),
+                ));
+            }
             Ok(MathExpr::Call {
                 name: name.clone(),
                 args: args
                     .iter()
-                    .map(|arg| convert(arg, options, depth + 1, budget))
+                    .map(|arg| convert(arg, options, depth + 1, budget, protected_names))
                     .collect::<Result<Vec<_>, _>>()?,
             })
         }
-        ExprKind::Function { name, .. } => Err(MathError::new(
-            MathErrorKind::UnknownFunction,
-            format!("不支持函数 {name}()"),
-        )),
         _ => unsupported("表达式超出项目支持的数学子集"),
     }
 }
@@ -311,6 +323,22 @@ fn prepare_latex_symbols(
     candidates.sort_by_key(|name| std::cmp::Reverse(name.len()));
     let mut text = String::with_capacity(input.len());
     let mut names: HashMap<String, String> = HashMap::new();
+    let input_digits = input
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>();
+    let mut next_placeholder = 900_000;
+    let mut protect = |name: &str| loop {
+        let suffix = next_placeholder.to_string();
+        next_placeholder += 1;
+        // A fresh numeric subscript cannot alias a user spelling, including braces.
+        if input_digits.contains(&suffix) {
+            continue;
+        }
+        let placeholder = format!("q_{suffix}");
+        names.insert(placeholder.clone(), name.to_owned());
+        return placeholder;
+    };
     let mut index = 0;
     while index < input.len() {
         let rest = &input[index..];
@@ -326,9 +354,7 @@ fn prepare_latex_symbols(
                     .is_none_or(|ch| !ch.is_alphanumeric() && ch != '_')
         });
         if let Some(name) = matched {
-            let placeholder = format!("q_{}", names.len() + 900_000);
-            text.push_str(&placeholder);
-            names.insert(placeholder, (*name).clone());
+            text.push_str(&protect(name));
             index += name.len();
             continue;
         }
@@ -349,9 +375,7 @@ fn prepare_latex_symbols(
             let run = &rest[..run_len];
             let followed_by_call = rest[run_len..].trim_start().starts_with('(');
             if run.chars().count() > 1 && followed_by_call {
-                let placeholder = format!("q_{}", names.len() + 900_000);
-                text.push_str(&placeholder);
-                names.insert(placeholder, run.to_string());
+                text.push_str(&protect(run));
                 index += run_len;
                 continue;
             }
@@ -377,30 +401,6 @@ fn prepare_latex_symbols(
         index += ch.len_utf8();
     }
     Ok(ProtectedLatexSymbols { text, names })
-}
-
-fn restore_protected_symbols(expr: &mut MathExpr, names: &HashMap<String, String>) {
-    match expr {
-        MathExpr::Symbol(name) => {
-            if let Some(original) = names.get(name) {
-                *name = original.clone();
-            }
-        }
-        MathExpr::Unary { operand, .. } => restore_protected_symbols(operand, names),
-        MathExpr::Binary { left, right, .. } => {
-            restore_protected_symbols(left, names);
-            restore_protected_symbols(right, names);
-        }
-        MathExpr::Call { name, args } => {
-            if let Some(original) = names.get(name) {
-                *name = original.clone();
-            }
-            for arg in args {
-                restore_protected_symbols(arg, names);
-            }
-        }
-        MathExpr::Number(_) => {}
-    }
 }
 
 fn exact_mathrm_identifier(input: &str) -> Result<Option<&str>, MathError> {
@@ -747,6 +747,27 @@ mod tests {
         let known = symbols(&["x"]);
         assert!(
             matches!(plain("-x^2", &known), MathExpr::Unary { op: UnaryOp::Neg, operand } if matches!(*operand, MathExpr::Binary { op: BinaryOp::Pow, .. }))
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_calls_without_a_placeholder_prefix_escape() {
+        let error =
+            parse_expression("q_900000(x)", ParseOptions::plain(&symbols(&["x"]))).unwrap_err();
+        assert_eq!(error.kind, MathErrorKind::UnknownFunction);
+    }
+
+    #[test]
+    fn protected_latex_symbols_do_not_replace_explicit_user_subscripts() {
+        let expression =
+            parse_expression(r"age + q_{900000}", ParseOptions::latex(&symbols(&["age"]))).unwrap();
+        assert_eq!(
+            expression,
+            MathExpr::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(MathExpr::Symbol("age".into())),
+                right: Box::new(MathExpr::Symbol("q_900000".into())),
+            }
         );
     }
 

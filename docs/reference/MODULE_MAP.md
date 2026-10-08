@@ -48,7 +48,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-harness-tantivy` | `crates/yss-harness-tantivy` | [Cargo.toml](../../crates/yss-harness-tantivy/Cargo.toml) | — |
 | `yss-ipc-contract` | `crates/yss-ipc-contract` | [Cargo.toml](../../crates/yss-ipc-contract/Cargo.toml) | [README](../../crates/yss-ipc-contract/README.md) |
 | `yss-logging` | `crates/yss-logging` | [Cargo.toml](../../crates/yss-logging/Cargo.toml) | [README](../../crates/yss-logging/README.md) |
-| `yss-math-expr` | `crates/yss-math-expr` | [Cargo.toml](../../crates/yss-math-expr/Cargo.toml) | — |
+| `yss-math-expr` | `crates/yss-math-expr` | [Cargo.toml](../../crates/yss-math-expr/Cargo.toml) | [README](../../crates/yss-math-expr/README.md) |
 | `yss-node-catalog` | `crates/yss-node-catalog` | [Cargo.toml](../../crates/yss-node-catalog/Cargo.toml) | [README](../../crates/yss-node-catalog/README.md) |
 | `yss-node-kernel` | `crates/yss-node-kernel` | [Cargo.toml](../../crates/yss-node-kernel/Cargo.toml) | [README](../../crates/yss-node-kernel/README.md) |
 | `yss-node-protocol` | `crates/yss-node-protocol` | [Cargo.toml](../../crates/yss-node-protocol/Cargo.toml) | [README](../../crates/yss-node-protocol/README.md) |
