@@ -1,5 +1,4 @@
 //! Provider and model input buffers; validation and persistence stay with the existing service.
-pub(super) mod fields;
 mod render;
 
 use super::{Page, SettingsPanel};
@@ -369,6 +368,7 @@ impl SettingsPanel {
         if !self.dirty() {
             self.discard(cx);
             self.page = page;
+            self.load_knowledge(cx);
             return;
         }
         let epoch = self.epoch;
@@ -388,6 +388,7 @@ impl SettingsPanel {
                             if view.epoch == epoch && !view.busy() {
                                 view.discard(cx);
                                 view.page = page;
+                                view.load_knowledge(cx);
                                 cx.notify();
                             }
                         })

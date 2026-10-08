@@ -1,12 +1,17 @@
 //! The settings window shares the workbench's existing draft and model services.
 use super::{SaveAllGraphs, ShowSettings, Workbench, menus::MenuCommand};
-use crate::{canvas::SaveGraph, settings::SettingsPanel, window_chrome};
+use crate::{
+    canvas::SaveGraph,
+    settings::{SettingsEvent, SettingsPanel},
+    window_chrome,
+};
 use gpui::{
     AnyWindowHandle, AppContext, Bounds, Context, Entity, Focusable, IntoElement, Render,
     Subscription, WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, div,
     prelude::*, px, size,
 };
-use gpui_component::{ActiveTheme, Icon, IconName, Root, TitleBar};
+use gpui_component::{ActiveTheme, Icon, Root, TitleBar};
+use gpui_kit_assets::IconName;
 
 impl Workbench {
     pub(super) fn show_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -65,7 +70,7 @@ struct SettingsWindow {
     panel: Entity<SettingsPanel>,
     owner: WeakEntity<Workbench>,
     owner_window: AnyWindowHandle,
-    _subscription: Subscription,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl SettingsWindow {
@@ -76,8 +81,27 @@ impl SettingsWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let subscription = cx.observe(&panel, |_, _, cx| cx.notify());
+        let mut subscriptions = vec![cx.observe(&panel, |_, _, cx| cx.notify())];
+        subscriptions.push(cx.subscribe(&panel, |view, _, event, cx| match event {
+            SettingsEvent::OpenDocument { project, path } => {
+                let project = project.clone();
+                let path = path.clone();
+                view.in_workbench(cx, move |view, window, cx| {
+                    if view
+                        .project
+                        .as_ref()
+                        .is_some_and(|current| current.identity == project)
+                    {
+                        view.open_document(path, None, window, cx);
+                    }
+                });
+            }
+        }));
+        if let Some(owner) = owner.upgrade() {
+            subscriptions.push(cx.observe(&owner, |view, _, cx| view.sync_project(cx)));
+        }
         cx.defer_in(window, |view, window, cx| {
+            view.sync_project(cx);
             window.focus(&view.panel.read(cx).focus_handle(cx), cx);
             view.panel.update(cx, |panel, cx| panel.reload(window, cx));
         });
@@ -85,8 +109,20 @@ impl SettingsWindow {
             panel,
             owner,
             owner_window,
-            _subscription: subscription,
+            _subscriptions: subscriptions,
         }
+    }
+
+    fn sync_project(&self, cx: &mut Context<Self>) {
+        let project = self.owner.upgrade().and_then(|owner| {
+            owner
+                .read(cx)
+                .project
+                .as_ref()
+                .map(|project| (project.identity.clone(), project.index.clone()))
+        });
+        self.panel
+            .update(cx, |panel, cx| panel.bind_knowledge_project(project, cx));
     }
 
     fn in_workbench(

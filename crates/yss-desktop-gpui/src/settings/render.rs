@@ -1,15 +1,17 @@
 use super::{Page, SaveSettings, SettingsPanel, models::provider_name};
 use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable,
+    ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     menu::{DropdownMenu, PopupMenuItem},
     sidebar::{Sidebar, SidebarHeader, SidebarMenu, SidebarMenuItem},
 };
+use gpui_kit_assets::IconName;
 use yss_harness_contract::{LanguageModelAuthentication, LanguageModelSelection};
 
 impl Render for SettingsPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.render_width = f32::from(window.viewport_size().width);
         div()
             .id("native-settings")
             .key_context("Settings")
@@ -37,11 +39,24 @@ impl Render for SettingsPanel {
                             )
                             .child(
                                 SidebarMenuItem::new("供应商与模型")
-                                    .active(self.page != Page::Overview)
+                                    .active(matches!(self.page, Page::Providers | Page::Provider))
                                     .disable(self.busy())
                                     .on_click(cx.listener(|view, _, window, cx| {
                                         view.navigate(Page::Providers, window, cx)
                                     })),
+                            )
+                            .child(
+                                SidebarMenuItem::new(crate::text::translate(
+                                    "settings.knowledge.title",
+                                ))
+                                .icon(IconName::Search)
+                                .active(self.page == Page::Knowledge)
+                                .disable(self.busy())
+                                .on_click(cx.listener(
+                                    |view, _, window, cx| {
+                                        view.navigate(Page::Knowledge, window, cx)
+                                    },
+                                )),
                             ),
                     ),
             )
@@ -54,6 +69,9 @@ impl Render for SettingsPanel {
                     .flex_col()
                     .child(self.header(cx))
                     .child(self.status(cx))
+                    .when(self.page == Page::Knowledge, |view| {
+                        view.child(self.knowledge_status(cx))
+                    })
                     .child(
                         div()
                             .id(("settings-content", self.epoch))
@@ -65,6 +83,7 @@ impl Render for SettingsPanel {
                                 Page::Overview => self.overview(cx),
                                 Page::Providers => self.providers(cx),
                                 Page::Provider => self.provider_form(cx),
+                                Page::Knowledge => self.knowledge_page(cx),
                             }),
                     ),
             )
@@ -72,6 +91,19 @@ impl Render for SettingsPanel {
 }
 impl SettingsPanel {
     fn header(&self, cx: &mut Context<Self>) -> AnyElement {
+        if self.page == Page::Knowledge {
+            return div()
+                .h(px(52.))
+                .flex_shrink_0()
+                .px_5()
+                .flex()
+                .items_center()
+                .text_sm()
+                .border_b_1()
+                .border_color(cx.theme().border)
+                .child(crate::text::translate("settings.knowledge.title"))
+                .into_any_element();
+        }
         let title = self
             .editor
             .as_ref()
@@ -230,7 +262,7 @@ impl SettingsPanel {
         }
         let generation = self.generation;
         let owner = cx.entity().downgrade();
-        super::models::fields::field(
+        self.render_field(
             "默认模型",
             "用于未单独指定模型的新对话。",
             Button::new("settings-default-model")

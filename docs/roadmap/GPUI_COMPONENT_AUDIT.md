@@ -21,9 +21,12 @@
 
 ## 当前批次
 
-- 项目知识库设置：React `KnowledgeSettings` 有项目文档选择、来源状态、添加/重建/移除和打开原文；原生设置仅实现模型配置。
-- 复用 `ProjectKnowledgeService` 与既有项目索引，索引内容和来源状态仍归 Application/Harness；原生视图只持有当前查询与选择。
-- 界面未保存模型草稿、项目切换和设置独立窗口生命周期须继续保持。
+- 项目知识库设置已接入 `ProjectKnowledgeService` 与既有项目索引，覆盖选择文档、来源状态、添加/重建/移除和打开原文。
+- 索引内容和来源状态仍归 Application/Harness；原生视图只持有当前查询与选择。文档索引变化合并刷新，项目切换清除选择并拒绝迟到回复。
+- 共用字段按窄窗口改为纵向排列；设置页结构与面包屑已逐项对照，其他设置缺口继续保留。
+- 聚焦验证：`cargo test -p yss-application --lib harness::knowledge::tests::` 两项通过，覆盖正文变化/删除/移除与重开/跨项目隔离。
+- `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。
+- 本批界面人工验收保持开放，操作路径见 GPUI README；编译和业务测试不作为界面验收证据。
 
 ## app
 
@@ -345,15 +348,15 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/settings/internal/ui/KnowledgeSettings.tsx](../../react/src/modules/settings/internal/ui/KnowledgeSettings.tsx) | 迁移：保留显式项目文档索引管理 | 复用 Application `ProjectKnowledgeService`；原生设置尚缺此页 | 实现中；人工验收待完成 |
+| [modules/settings/internal/ui/KnowledgeSettings.tsx](../../react/src/modules/settings/internal/ui/KnowledgeSettings.tsx) | 迁移：保留显式项目文档索引管理；原生直接调用 Application，移除 Web IPC 适配需求 | `settings/knowledge` 状态/命令/渲染；`workbench/settings` 注入项目与打开原文；来源刷新按文档变化合并 | 已实现并通过聚焦业务测试/编译/Clippy；人工验收待完成 |
 | [modules/settings/internal/ui/LanguageModelEditor.tsx](../../react/src/modules/settings/internal/ui/LanguageModelEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/settings/internal/ui/LanguageModelProviderEditor.tsx](../../react/src/modules/settings/internal/ui/LanguageModelProviderEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/settings/internal/ui/LanguageModelProviderSelect.tsx](../../react/src/modules/settings/internal/ui/LanguageModelProviderSelect.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/settings/internal/ui/LanguageModelSettings.tsx](../../react/src/modules/settings/internal/ui/LanguageModelSettings.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/settings/internal/ui/SettingsField.tsx](../../react/src/modules/settings/internal/ui/SettingsField.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/settings/internal/ui/SettingsPage.tsx](../../react/src/modules/settings/internal/ui/SettingsPage.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/settings/internal/ui/SettingsPageHeader.tsx](../../react/src/modules/settings/internal/ui/SettingsPageHeader.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/settings/internal/ui/SettingsView.tsx](../../react/src/modules/settings/internal/ui/SettingsView.tsx) | 迁移/复核：原生独立设置窗口替代 React Dialog | 原生模型页已有；知识库、外观及搜索/重置尚待逐项对照 | 审查中 |
+| [modules/settings/internal/ui/SettingsField.tsx](../../react/src/modules/settings/internal/ui/SettingsField.tsx) | 优化：共用名称/说明/控件行，不迁移 DOM Label 包装 | `settings/fields` 按窗口宽度排列，模型与知识库共用；键盘/焦点与标签关系须人工检查 | 实现已复核；人工验收待完成 |
+| [modules/settings/internal/ui/SettingsPage.tsx](../../react/src/modules/settings/internal/ui/SettingsPage.tsx) | 复用原生组件：标题/动作/通知固定，正文独立滚动 | `settings/render` 统一页面结构；知识库失败/加载提示在正文滚动区之外 | 已有原生实现；人工验收待完成 |
+| [modules/settings/internal/ui/SettingsPageHeader.tsx](../../react/src/modules/settings/internal/ui/SettingsPageHeader.tsx) | 复用原生组件：原生按钮/图标展示面包屑与页面操作 | `settings/render::header`；模型草稿导航保留放弃确认，知识库使用独立标题；长标题提示和焦点待检查 | 已有原生实现；人工验收待完成 |
+| [modules/settings/internal/ui/SettingsView.tsx](../../react/src/modules/settings/internal/ui/SettingsView.tsx) | 迁移/复核：原生独立设置窗口替代 React Dialog，保留分类、搜索与外观设置 | 知识库已接入；语言、搜索、主题、标题栏、平滑滚动及重置仍需逐项复核/补齐 | 审查中，不以知识库完成代表整个设置完成 |
 
 ## modules/workbench
 

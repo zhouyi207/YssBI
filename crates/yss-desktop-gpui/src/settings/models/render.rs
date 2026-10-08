@@ -1,4 +1,4 @@
-use super::{SettingsPanel, fields::field};
+use super::SettingsPanel;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
@@ -25,68 +25,74 @@ impl SettingsPanel {
         let mut content = div()
             .flex()
             .flex_col()
-            .child(field(
+            .child(self.render_field(
                 "供应商名称",
                 "用于区分配置来源。",
                 Input::new(&draft.name).disabled(busy),
                 cx,
             ))
-            .child(field(
+            .child(self.render_field(
                 "自定义名称",
                 "可选；用于模型选择和对话中的显示。",
                 Input::new(&draft.custom_name).disabled(busy),
                 cx,
             ))
-            .child(field(
-                "协议与适配器",
-                "连接使用供应商对应的原生协议。",
-                Button::new("provider-protocol")
-                    .label(protocol)
-                    .disabled(busy)
-                    .dropdown_menu(move |mut menu, _, _| {
-                        for preset in &presets {
-                            let preset = preset.clone();
-                            let owner = owner.clone();
-                            let label =
-                                format!("{} · {}", preset.name, protocol_label(preset.protocol));
-                            menu =
-                                menu.item(PopupMenuItem::new(label).on_click(move |_, _, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        if view.epoch != epoch || view.busy() {
-                                            return;
-                                        }
-                                        if let Some(draft) = &mut view.editor {
-                                            draft.protocol = preset.protocol;
-                                            draft.adapter = preset.adapter.clone();
-                                            draft.changed = true;
-                                            if !matches!(
-                                                draft.protocol,
-                                                LanguageModelProtocol::OpenAiChat
-                                                    | LanguageModelProtocol::OpenAiResponses
-                                            ) {
-                                                draft.authentication =
-                                                    LanguageModelAuthentication::ApiKey;
+            .child(
+                self.render_field(
+                    "协议与适配器",
+                    "连接使用供应商对应的原生协议。",
+                    Button::new("provider-protocol")
+                        .label(protocol)
+                        .disabled(busy)
+                        .dropdown_menu(move |mut menu, _, _| {
+                            for preset in &presets {
+                                let preset = preset.clone();
+                                let owner = owner.clone();
+                                let label = format!(
+                                    "{} · {}",
+                                    preset.name,
+                                    protocol_label(preset.protocol)
+                                );
+                                menu = menu.item(PopupMenuItem::new(label).on_click(
+                                    move |_, _, cx| {
+                                        let _ = owner.update(cx, |view, cx| {
+                                            if view.epoch != epoch || view.busy() {
+                                                return;
                                             }
-                                            view.discovered.clear();
-                                            view.error = None;
-                                            cx.notify();
-                                        }
-                                    });
-                                }));
-                        }
-                        menu
-                    }),
-                cx,
-            ))
+                                            if let Some(draft) = &mut view.editor {
+                                                draft.protocol = preset.protocol;
+                                                draft.adapter = preset.adapter.clone();
+                                                draft.changed = true;
+                                                if !matches!(
+                                                    draft.protocol,
+                                                    LanguageModelProtocol::OpenAiChat
+                                                        | LanguageModelProtocol::OpenAiResponses
+                                                ) {
+                                                    draft.authentication =
+                                                        LanguageModelAuthentication::ApiKey;
+                                                }
+                                                view.discovered.clear();
+                                                view.error = None;
+                                                cx.notify();
+                                            }
+                                        });
+                                    },
+                                ));
+                            }
+                            menu
+                        }),
+                    cx,
+                ),
+            )
             .child(self.authentication(cx))
-            .child(field(
+            .child(self.render_field(
                 "API 根地址",
                 "填写完整根地址，包含服务要求的路径。",
                 Input::new(&draft.base_url).disabled(busy),
                 cx,
             ));
         if draft.authentication == LanguageModelAuthentication::ApiKey {
-            content = content.child(field(
+            content = content.child(self.render_field(
                 "API Key",
                 if draft.has_api_key {
                     "已保存密钥；留空保留，输入新值后保存替换。"
@@ -159,7 +165,7 @@ impl SettingsPanel {
         );
         let epoch = self.epoch;
         let owner = cx.entity().downgrade();
-        field(
+        self.render_field(
             "认证方式",
             "本地 OpenAI 兼容服务可选择无需认证。",
             Button::new("provider-auth")
@@ -285,37 +291,37 @@ impl SettingsPanel {
             .p_4()
             .rounded_lg()
             .bg(cx.theme().muted)
-            .child(field(
+            .child(self.render_field(
                 "模型 ID",
                 "服务端使用的精确模型标识。",
                 Input::new(&model.id).disabled(busy),
                 cx,
             ))
-            .child(field(
+            .child(self.render_field(
                 "显示名称",
                 "模型选择器中的名称。",
                 Input::new(&model.name).disabled(busy),
                 cx,
             ))
-            .child(field(
+            .child(self.render_field(
                 "上下文容量",
                 "可选；Token 数。",
                 Input::new(&model.context).disabled(busy),
                 cx,
             ))
-            .child(field(
+            .child(self.render_field(
                 "最大输出",
                 "可选；Anthropic 协议必填。",
                 Input::new(&model.output).disabled(busy),
                 cx,
             ))
-            .child(field(
+            .child(self.render_field(
                 "Temperature",
                 "留空继承服务默认值。",
                 Input::new(&model.temperature).disabled(busy),
                 cx,
             ))
-            .child(field(
+            .child(self.render_field(
                 "Top P",
                 "留空继承服务默认值。",
                 Input::new(&model.top_p).disabled(busy),
@@ -354,13 +360,13 @@ impl SettingsPanel {
             );
         }
         form = form
-            .child(field(
+            .child(self.render_field(
                 "推理档位限制",
                 "全部留空时由服务验证所选档位。",
                 efforts,
                 cx,
             ))
-            .child(field(
+            .child(self.render_field(
                 "扩展参数",
                 "JSON 生成参数；不能替换消息、工具和认证。",
                 Textarea::new(&model.parameters).disabled(busy),
