@@ -403,16 +403,6 @@ pub fn array_to_scalars(array: &dyn Array) -> Result<Vec<TabularScalar>, Tabular
         .collect()
 }
 
-/// JSON display projection; callers needing native carriers use `array_to_scalars`.
-pub fn array_to_json(array: &dyn Array) -> Result<Vec<Value>, TabularArrowError> {
-    array_to_scalars(array)?
-        .into_iter()
-        .map(|value| {
-            serde_json::to_value(value.display_value()).map_err(|_| TabularArrowError::InvalidValue)
-        })
-        .collect()
-}
-
 /// Materialize a document literal, whose contract has no exact storage dtype. Mixed numeric
 /// columns may widen only if all their values can be represented without integer precision loss.
 pub(crate) fn scalars_to_array(values: &[TabularScalar]) -> Result<ArrayRef, TabularArrowError> {

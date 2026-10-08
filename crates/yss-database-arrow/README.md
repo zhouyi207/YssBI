@@ -10,7 +10,7 @@ projects a bounded array to the existing `TabularScalar` contract: signed and un
 integers retain their carriers and full width, and finite floats retain numeric values.
 Non-finite floats retain the page null representation. Decimal, calendar and category
 values retain their exact text; calendar normalization preserves wall-clock fields.
-`array_to_json` applies the shared display encoding for JSON consumers.
+JSON consumers apply the shared scalar display encoding at their output boundary.
 
 `json_to_array` admits edited values against an explicit physical field; `to_record_batch`
 materializes ordered document literals. Neither projection replaces the source schema.

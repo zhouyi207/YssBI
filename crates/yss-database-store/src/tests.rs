@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
-use yss_data_contract::FilterLiteral;
+use yss_data_contract::{FilterLiteral, TabularScalar};
 
 use super::*;
 use arrow::array::{Array, Decimal128Array, TimestampNanosecondArray, UInt64Array};
@@ -359,11 +359,11 @@ fn datetime_column_cast_retains_clock_values_and_forced_nulls_in_persisted_data(
         .unwrap()
         .unwrap();
     assert_eq!(
-        yss_database_arrow::array_to_json(data.column_by_name("at").unwrap().as_ref()).unwrap(),
+        yss_database_arrow::array_to_scalars(data.column_by_name("at").unwrap().as_ref()).unwrap(),
         vec![
-            serde_json::json!("2026-09-11T10:00:00"),
-            serde_json::json!("2026-09-11T10:00:00"),
-            serde_json::json!(null)
+            TabularScalar::String("2026-09-11T10:00:00".into()),
+            TabularScalar::String("2026-09-11T10:00:00".into()),
+            TabularScalar::Null,
         ]
     );
 }

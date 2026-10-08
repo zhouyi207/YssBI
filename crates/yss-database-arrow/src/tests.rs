@@ -239,13 +239,17 @@ fn column_semantics_enforce_explicit_domains_and_numeric_constraints() {
     let text = Field::new("text", DataType::Utf8, true);
     assert_eq!(column_semantic(&text).unwrap().kind, SemanticType::Text);
     assert_eq!(
-        array_to_json(
+        array_to_scalars(
             json_to_array(&text, &[json!(""), json!("001"), json!(null)])
                 .unwrap()
                 .as_ref()
         )
         .unwrap(),
-        vec![json!(""), json!("001"), json!(null)]
+        vec![
+            TabularScalar::String("".into()),
+            TabularScalar::String("001".into()),
+            TabularScalar::Null,
+        ]
     );
 }
 
@@ -295,13 +299,16 @@ fn physical_casts_reject_precision_loss_and_preserve_semantics() {
         .is_err()
     );
     assert_eq!(
-        array_to_json(
+        array_to_scalars(
             lossless_cast(&Int64Array::from(vec![1, 2]), &DataType::Float64, false)
                 .unwrap()
                 .as_ref()
         )
         .unwrap(),
-        vec![json!(1.0), json!(2.0)]
+        vec![
+            TabularScalar::Float64(1.0.try_into().unwrap()),
+            TabularScalar::Float64(2.0.try_into().unwrap()),
+        ]
     );
     let source = with_column_semantic(
         Field::new("id", DataType::Int64, true),
@@ -458,8 +465,8 @@ fn semantic_conversion_preserves_nulls_and_rejects_loss_without_requiring_text_i
         .convert(&array)
         .unwrap();
     assert_eq!(
-        array_to_json(result.as_ref()).unwrap(),
-        vec![json!(1), json!(0), json!(null)]
+        array_to_scalars(result.as_ref()).unwrap(),
+        vec![V::Integer(1), V::Integer(0), V::Null]
     );
 }
 
@@ -489,8 +496,11 @@ fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
         &DataType::Timestamp(TimeUnit::Nanosecond, None)
     );
     assert_eq!(
-        array_to_json(normalized.column(0).as_ref()).unwrap(),
-        vec![json!("1970-01-01T07:59:59.999999999"), json!(null)]
+        array_to_scalars(normalized.column(0).as_ref()).unwrap(),
+        vec![
+            TabularScalar::String("1970-01-01T07:59:59.999999999".into()),
+            TabularScalar::Null,
+        ]
     );
     let ticks = ["2024-03-10T06:30:00Z", "2024-03-10T07:30:00Z"].map(|value| {
         chrono::DateTime::parse_from_rfc3339(value)
@@ -499,8 +509,11 @@ fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
     });
     let dst = TimestampSecondArray::from(ticks.to_vec()).with_timezone("America/New_York");
     assert_eq!(
-        array_to_json(&dst).unwrap(),
-        vec![json!("2024-03-10T01:30:00"), json!("2024-03-10T03:30:00")]
+        array_to_scalars(&dst).unwrap(),
+        vec![
+            TabularScalar::String("2024-03-10T01:30:00".into()),
+            TabularScalar::String("2024-03-10T03:30:00".into()),
+        ]
     );
     assert_eq!(data_type_name(dst.data_type()), "Datetime(s)");
 }
@@ -777,14 +790,15 @@ fn storage_schema_preserves_identity_exact_types_and_category_domain() {
         )
         .unwrap();
         assert_eq!(
-            array_to_json(&array).unwrap(),
-            vec![json!(expected), json!(null)]
+            array_to_scalars(&array).unwrap(),
+            vec![TabularScalar::String(expected.into()), TabularScalar::Null]
         );
     }
 }
 
 #[test]
 fn edited_values_reject_overflow_and_decimal_truncation() {
+    use yss_data_contract::TabularScalar as V;
     for (dtype, value) in [
         (DataType::Int8, json!(300)),
         (DataType::Int8, json!(1.5)),
@@ -825,76 +839,95 @@ fn edited_values_reject_overflow_and_decimal_truncation() {
         (
             DataType::UInt64,
             u64::MAX.to_string(),
-            json!(u64::MAX.to_string()),
+            V::Unsigned(u64::MAX),
         ),
         (
             DataType::Decimal128(38, 12),
             "12345678901234567890123456.123456789012".into(),
-            json!("12345678901234567890123456.123456789012"),
+            V::String("12345678901234567890123456.123456789012".into()),
         ),
         (
             DataType::Decimal256(76, 4),
             "123456789012345678901234567890123456789012345678901234567890123456789012.3456".into(),
-            json!("123456789012345678901234567890123456789012345678901234567890123456789012.3456"),
+            V::String(
+                "123456789012345678901234567890123456789012345678901234567890123456789012.3456"
+                    .into(),
+            ),
         ),
         (
             DataType::Decimal128(5, 2),
             "1.2300e1".into(),
-            json!("12.30"),
+            V::String("12.30".into()),
         ),
-        (DataType::Decimal128(5, -2), "12300".into(), json!("12300")),
-        (DataType::Date32, "2026-09-16".into(), json!("2026-09-16")),
-        (DataType::Date32, "2026-9-6".into(), json!("2026-09-06")),
+        (
+            DataType::Decimal128(5, -2),
+            "12300".into(),
+            V::String("12300".into()),
+        ),
+        (
+            DataType::Date32,
+            "2026-09-16".into(),
+            V::String("2026-09-16".into()),
+        ),
+        (
+            DataType::Date32,
+            "2026-9-6".into(),
+            V::String("2026-09-06".into()),
+        ),
         (
             DataType::Date64,
             "20260916".into(),
-            json!("2026-09-16T00:00:00"),
+            V::String("2026-09-16T00:00:00".into()),
         ),
-        (DataType::Date32, "-0012-05-06".into(), json!("-0012-05-06")),
+        (
+            DataType::Date32,
+            "-0012-05-06".into(),
+            V::String("-0012-05-06".into()),
+        ),
         (
             DataType::Time32(TimeUnit::Second),
             "02:10".into(),
-            json!("02:10:00"),
+            V::String("02:10:00".into()),
         ),
         (
             DataType::Time64(TimeUnit::Microsecond),
             "2:10 PM".into(),
-            json!("14:10:00"),
+            V::String("14:10:00".into()),
         ),
         (
             DataType::Time32(TimeUnit::Second),
             "7800".into(),
-            json!("02:10:00"),
+            V::String("02:10:00".into()),
         ),
         (
             DataType::Time64(TimeUnit::Nanosecond),
             "02:10:00.1234567890".into(),
-            json!("02:10:00.123456789"),
+            V::String("02:10:00.123456789".into()),
         ),
         (
             DataType::Timestamp(TimeUnit::Second, None),
             "2026-09-16t12:00:00".into(),
-            json!("2026-09-16T12:00:00"),
+            V::String("2026-09-16T12:00:00".into()),
         ),
         (
             DataType::Timestamp(TimeUnit::Second, None),
             "2026-09-16T120000".into(),
-            json!("2026-09-16T12:00:00"),
+            V::String("2026-09-16T12:00:00".into()),
         ),
         (
             DataType::Date32,
             "2026-09-16T00:00:00+08:00".into(),
-            json!("2026-09-16"),
+            V::String("2026-09-16".into()),
         ),
         (
             DataType::Timestamp(TimeUnit::Nanosecond, None),
             "1969-12-31T23:59:59.999999999".into(),
-            json!("1969-12-31T23:59:59.999999999"),
+            V::String("1969-12-31T23:59:59.999999999".into()),
         ),
         (
             DataType::Timestamp(TimeUnit::Microsecond, None),
             "2026-09-16T12:00:00.123456+08:00".into(),
-            json!("2026-09-16T12:00:00.123456"),
+            V::String("2026-09-16T12:00:00.123456".into()),
         ),
     ] {
         let array = json_to_array(
@@ -903,8 +936,8 @@ fn edited_values_reject_overflow_and_decimal_truncation() {
         )
         .unwrap();
         assert_eq!(
-            array_to_json(array.as_ref()).unwrap(),
-            vec![expected, json!(null)]
+            array_to_scalars(array.as_ref()).unwrap(),
+            vec![expected, V::Null]
         );
     }
 }
@@ -957,7 +990,7 @@ fn document_literals_keep_unsigned_values_and_reject_lossy_numeric_mixing() {
     ]))
     .unwrap();
     assert_eq!(
-        array_to_json(batch.column(0).as_ref()).unwrap(),
-        vec![json!(-1), json!(10)]
+        array_to_scalars(batch.column(0).as_ref()).unwrap(),
+        vec![TabularScalar::Integer(-1), TabularScalar::Integer(10)]
     );
 }

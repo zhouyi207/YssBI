@@ -219,7 +219,7 @@ mod tests {
     fn excel_calendar_cells_reach_csv_reader_as_timestamps_with_nulls() {
         use arrow::datatypes::DataType;
         use arrow::record_batch::RecordBatchReader;
-        use yss_database_arrow::array_to_json;
+        use yss_database_arrow::array_to_scalars;
 
         struct CsvFile(PathBuf);
         impl Drop for CsvFile {
@@ -262,20 +262,12 @@ mod tests {
         assert_eq!(reader.schema().field(1).data_type(), &DataType::Float64);
         let batch = reader.collect::<Result<Vec<_>, _>>().unwrap().remove(0);
         assert_eq!(
-            array_to_json(batch.column(0).as_ref()).unwrap(),
-            vec![
-                serde_json::json!("2025-10-13T12:59:02.400"),
-                serde_json::json!("2025-10-14T00:00:00"),
-                serde_json::Value::Null,
-            ]
+            serde_json::to_value(array_to_scalars(batch.column(0).as_ref()).unwrap()).unwrap(),
+            serde_json::json!(["2025-10-13T12:59:02.400", "2025-10-14T00:00:00", null])
         );
         assert_eq!(
-            array_to_json(batch.column(1).as_ref()).unwrap(),
-            vec![
-                serde_json::json!(1.5),
-                serde_json::Value::Null,
-                serde_json::Value::Null,
-            ]
+            serde_json::to_value(array_to_scalars(batch.column(1).as_ref()).unwrap()).unwrap(),
+            serde_json::json!([1.5, null, null])
         );
     }
 }
