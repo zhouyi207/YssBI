@@ -9,14 +9,11 @@ pub fn curves(
     control: &Control,
 ) -> Result<CurveResult> {
     data(time, event, &[], control)?;
-    let levels = groups(group, time.len(), control)?;
-    let mut curves = Vec::with_capacity(levels.len());
-    for level in levels {
+    let groups = group_rows(group, time.len(), control)?;
+    let mut curves = Vec::with_capacity(groups.len());
+    for (level, indices) in groups {
         control.check()?;
-        let indices = (0..time.len())
-            .filter(|&i| group[i] == level)
-            .collect::<Vec<_>>();
-        curves.push(curve(time, event, &indices, level, method, control)?);
+        curves.push(curve(time, event, indices, level, method, control)?);
     }
     Ok(CurveResult {
         method,
@@ -28,12 +25,11 @@ pub fn curves(
 pub(super) fn curve(
     time: &[f64],
     event: &[f64],
-    indices: &[usize],
+    mut ordered: Vec<usize>,
     group: usize,
     method: CurveMethod,
     control: &Control,
 ) -> Result<SurvivalCurve> {
-    let mut ordered = indices.to_vec();
     ordered.sort_by(|&a, &b| time[a].total_cmp(&time[b]));
     control.check()?;
     let mut points = Vec::new();
@@ -107,7 +103,7 @@ pub(super) fn curve(
     }
     Ok(SurvivalCurve {
         group,
-        observations: indices.len(),
+        observations: ordered.len(),
         events: total_events,
         median_survival: median,
         points,
@@ -121,18 +117,23 @@ pub fn logrank(
     control: &Control,
 ) -> Result<LogrankResult> {
     data(time, event, &[], control)?;
-    let levels = groups(group, time.len(), control)?;
-    let k = levels.len();
+    let groups = group_rows(group, time.len(), control)?;
+    let k = groups.len();
     if k < 2 {
         return Err(invalid(Violation::DataOutOfRange));
     }
-    let codes = group
-        .iter()
-        .map(|g| levels.binary_search(g).expect("known group"))
-        .collect::<Vec<_>>();
+    let mut levels = Vec::with_capacity(k);
+    let mut codes = vec![0; time.len()];
     let mut risk = vec![0usize; k];
-    for &g in &codes {
-        risk[g] += 1;
+    for (code, (level, indices)) in groups.into_iter().enumerate() {
+        levels.push(level);
+        risk[code] = indices.len();
+        for (j, i) in indices.into_iter().enumerate() {
+            if j % 1024 == 0 {
+                control.check()?;
+            }
+            codes[i] = code;
+        }
     }
     let mut observed = vec![0; k];
     let mut expected = vec![0.0; k];
@@ -257,7 +258,14 @@ pub(super) fn risk_at(
     if indices.is_empty() {
         return Err(invalid(Violation::EmptyInput));
     }
-    let curve = curve(time, event, indices, 0, CurveMethod::KaplanMeier, control)?;
+    let curve = curve(
+        time,
+        event,
+        indices.to_vec(),
+        0,
+        CurveMethod::KaplanMeier,
+        control,
+    )?;
     let last = curve.points.iter().rev().find(|p| p.time <= horizon);
     let (s, ci) = last.map_or((1.0, [1.0; 2]), |p| (p.survival, p.confidence_interval));
     if curve.points.last().is_none_or(|p| p.time < horizon) && s > 0.0 {

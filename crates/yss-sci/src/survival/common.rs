@@ -56,18 +56,22 @@ pub(super) fn intervals(start: &[f64], stop: &[f64], control: &Control) -> Resul
     }
     Ok(())
 }
-pub(super) fn groups(group: &[usize], n: usize, control: &Control) -> Result<Vec<usize>> {
+pub(super) fn group_rows(
+    group: &[usize],
+    n: usize,
+    control: &Control,
+) -> Result<std::collections::BTreeMap<usize, Vec<usize>>> {
     if group.len() != n {
         return Err(invalid(Violation::ShapeMismatch));
     }
-    let mut levels = std::collections::BTreeSet::new();
+    let mut rows = std::collections::BTreeMap::<_, Vec<_>>::new();
     for (i, &value) in group.iter().enumerate() {
         if i % 1024 == 0 {
             control.check()?;
         }
-        levels.insert(value);
+        rows.entry(value).or_default().push(i);
     }
-    Ok(levels.into_iter().collect())
+    Ok(rows)
 }
 pub(super) fn rows(m: &Mat<f64>) -> Vec<Vec<f64>> {
     (0..m.nrows())

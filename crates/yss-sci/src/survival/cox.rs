@@ -261,7 +261,7 @@ fn fit_stratified(
         return Err(invalid(Violation::ShapeMismatch));
     }
     intervals(start, time, control)?;
-    let levels = groups(strata, time.len(), control)?;
+    let groups = group_rows(strata, time.len(), control)?;
     let events = event.iter().filter(|&&v| v == 1.0).count();
     if events == 0 {
         return Err(invalid(Violation::DataOutOfRange));
@@ -269,12 +269,9 @@ fn fit_stratified(
     let design = Design::new(predictors, time.len(), true, true, false, control)?;
     let p = predictors.len();
     let x = Mat::from_fn(time.len(), p, |i, j| design.x[(i, j + 1)]);
-    let strata = levels
+    let strata = groups
         .into_iter()
-        .map(|g| {
-            let indices = (0..time.len())
-                .filter(|&i| strata[i] == g)
-                .collect::<Vec<_>>();
+        .map(|(g, indices)| {
             let mut times = indices
                 .iter()
                 .filter(|&&i| event[i] == 1.0)
@@ -418,13 +415,13 @@ pub fn time_dependent(
 ) -> Result<CoxResult> {
     data(stop, event, predictors, control)?;
     intervals(start, stop, control)?;
-    for subject in groups(subjects, stop.len(), control)? {
+    for (_, mut indices) in group_rows(subjects, stop.len(), control)? {
         control.check()?;
-        let mut indices = (0..stop.len())
-            .filter(|&i| subjects[i] == subject)
-            .collect::<Vec<_>>();
         indices.sort_by(|&a, &b| start[a].total_cmp(&start[b]));
         for (j, &i) in indices.iter().enumerate() {
+            if j % 1024 == 0 {
+                control.check()?;
+            }
             if j + 1 < indices.len() && (event[i] == 1.0 || stop[i] > start[indices[j + 1]]) {
                 return Err(invalid(Violation::DataOutOfRange));
             }
@@ -484,30 +481,34 @@ pub fn subgroup(
 ) -> Result<SubgroupResult> {
     data(time, event, predictors, control)?;
     binary(treatment, time.len(), control)?;
-    let levels = groups(group, time.len(), control)?;
-    let k = levels.len();
+    let groups = group_rows(group, time.len(), control)?;
+    let k = groups.len();
     if k < 2 {
         return Err(invalid(Violation::DataOutOfRange));
     }
     let mut xs = Vec::new();
     let mut group_observations = Vec::new();
     let mut group_events = Vec::new();
-    for &g in &levels {
+    let mut levels = Vec::with_capacity(k);
+    for (g, indices) in groups {
         control.check()?;
-        let indices = (0..time.len())
-            .filter(|&i| group[i] == g)
-            .collect::<Vec<_>>();
-        let treated = indices.iter().filter(|&&i| treatment[i] == 1.0).count();
+        let mut x = vec![0.0; time.len()];
+        let (mut treated, mut events) = (0, 0);
+        for (j, &i) in indices.iter().enumerate() {
+            if j % 1024 == 0 {
+                control.check()?;
+            }
+            x[i] = treatment[i];
+            treated += usize::from(treatment[i] == 1.0);
+            events += usize::from(event[i] == 1.0);
+        }
         if treated == 0 || treated == indices.len() {
             return Err(invalid(Violation::DataOutOfRange));
         }
+        levels.push(g);
         group_observations.push(indices.len());
-        group_events.push(indices.iter().filter(|&&i| event[i] == 1.0).count());
-        xs.push(
-            (0..time.len())
-                .map(|i| if group[i] == g { treatment[i] } else { 0.0 })
-                .collect(),
-        );
+        group_events.push(events);
+        xs.push(x);
     }
     xs.extend_from_slice(predictors);
     let mut model = fit_stratified(

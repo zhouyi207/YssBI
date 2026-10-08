@@ -132,9 +132,47 @@ fn curves_logrank_and_competing_risks_handle_censoring_and_ties() {
         (1.0_f64 / 64.0 + 1.0 / 49.0).sqrt(),
         1e-12,
     );
-    let lr = nonparametric::logrank(&time, &event, &codes(&d["group"]), &control()).unwrap();
+    let groups = codes(&d["group"])
+        .into_iter()
+        .map(|g| usize::MAX - 1 + g)
+        .collect::<Vec<_>>();
+    let lr = nonparametric::logrank(&time, &event, &groups, &control()).unwrap();
+    assert_eq!(lr.groups, vec![usize::MAX - 1, usize::MAX]);
     close(lr.test.statistic, d["logrank"][0].as_f64().unwrap(), 1e-12);
     close(lr.test.p_value, d["logrank"][1].as_f64().unwrap(), 1e-12);
+    let grouped = nonparametric::curves(
+        &[3.0, 2.0, 1.0, 4.0],
+        &[1.0, 1.0, 0.0, 0.0],
+        &[usize::MAX, usize::MAX - 1, usize::MAX, usize::MAX - 1],
+        CurveMethod::KaplanMeier,
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(
+        grouped.curves.iter().map(|c| c.group).collect::<Vec<_>>(),
+        vec![usize::MAX - 1, usize::MAX]
+    );
+    for c in &grouped.curves {
+        assert_eq!((c.observations, c.events), (2, 1));
+    }
+    compare(
+        &grouped.curves[0]
+            .points
+            .iter()
+            .map(|p| p.survival)
+            .collect::<Vec<_>>(),
+        &[0.5, 0.5],
+        1e-12,
+    );
+    compare(
+        &grouped.curves[1]
+            .points
+            .iter()
+            .map(|p| p.survival)
+            .collect::<Vec<_>>(),
+        &[1.0, 0.0],
+        1e-12,
+    );
     let cif = nonparametric::competing_risks(&time, &[5, 9, 0, 5, 0, 9, 5, 0], &control()).unwrap();
     assert_eq!(cif.causes, vec![5, 9]);
     for (j, t) in vector(&d["cif_times"]).iter().enumerate() {
@@ -206,7 +244,10 @@ fn cox_and_counting_process_risk_sets_match_phreg() {
         &vector(&td["start"]),
         &vector(&td["stop"]),
         &vector(&td["event"]),
-        &codes(&td["subjects"]),
+        &codes(&td["subjects"])
+            .into_iter()
+            .map(|subject| usize::MAX - subject)
+            .collect::<Vec<_>>(),
         &matrix(&td["predictors"]),
         CoxOptions::default(),
         &control(),
@@ -319,13 +360,17 @@ fn subgroup_uses_stratified_baselines_and_joint_contrast_covariance() {
         &vector(&d["time"]),
         &vector(&d["event"]),
         &vector(&d["treatment"]),
-        &codes(&d["group"]),
+        &codes(&d["group"])
+            .into_iter()
+            .map(|g| usize::MAX - 1 + g)
+            .collect::<Vec<_>>(),
         &[matrix(&d["predictors"])[0].clone()],
         CoxOptions::default(),
         &control(),
     )
     .unwrap();
     model(&r.model, &f["subgroup"]);
+    assert_eq!(r.groups, vec![usize::MAX - 1, usize::MAX]);
     close(
         r.equality_test.statistic,
         f["subgroup"]["statistic"].as_f64().unwrap(),

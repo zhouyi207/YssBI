@@ -25,6 +25,10 @@ predicted probabilities. Supplied Cox model layout and numeric fields retain the
 same input roles. Invalid horizons, bin/tick counts, thresholds and iteration
 settings remain parameter violations; numerical breakdown remains computation failure.
 Event/treatment, interval, group and prediction scans check execution control in chunks.
+Curve, Log-rank, Cox stratum/subject and subgroup preparation share an exact,
+ordered group-to-row index built in one pass. They consume each group's rows
+instead of rescanning the full input per group; curve sorting reuses its owned
+row buffer. The index requires linear row storage within the admitted workspace.
 Cox baselines are centered Breslow estimates; AFT covariance includes log(scale).
 `tests/survival_category.rs` checks independently generated statsmodels/SciPy
 references and risk-set, interval, prediction and cancellation conventions.

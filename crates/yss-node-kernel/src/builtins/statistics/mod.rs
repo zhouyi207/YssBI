@@ -106,6 +106,13 @@ pub(super) fn install(
                         | "yssbi.statistics.survival.lognormal"
                         | "yssbi.statistics.survival.loglogistic"
                         | "yssbi.statistics.survival.aft"
+                        | "yssbi.statistics.survival.kaplan_meier"
+                        | "yssbi.statistics.survival.nelson_aalen"
+                        | "yssbi.statistics.survival.logrank"
+                        | "yssbi.statistics.survival.cox"
+                        | "yssbi.statistics.survival.time_dependent_cox"
+                        | "yssbi.statistics.workflow.subgroup"
+                        | "yssbi.statistics.diagnostic.ph"
                 ) {
                     5
                 } else if id == "yssbi.statistics.iv.2sls.summary" {
@@ -175,11 +182,9 @@ pub(super) fn install(
                             | "yssbi.statistics.causal.ipw"
                             | "yssbi.statistics.causal.regression_adjustment"
                             | "yssbi.statistics.causal.aipw"
-                            | "yssbi.statistics.workflow.subgroup"
                             | "yssbi.statistics.plot.nomogram"
                             | "yssbi.statistics.plot.calibration"
                             | "yssbi.statistics.plot.decision_curve"
-                            | "yssbi.statistics.diagnostic.ph"
                     )
                     || id.starts_with("yssbi.plot.")
                     || id.ends_with(".granger")
