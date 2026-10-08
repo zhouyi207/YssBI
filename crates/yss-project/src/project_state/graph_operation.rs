@@ -4,7 +4,6 @@ use crate::ProjectOperationError;
 use crate::ProjectSession;
 use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation, TransactionContext};
 use yss_graph_document::{GraphDocument, GraphResourcePath};
-use yss_project_history::ProjectGraphResidency;
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_operation::ProjectOperationReservation;
 
@@ -14,7 +13,6 @@ pub struct GraphOperationCapture {
     pub graph_path: GraphResourcePath,
     pub document: Arc<GraphDocument>,
     pub revision: ResourceRevision,
-    pub residency: ProjectGraphResidency,
     authority: GraphOperationAuthority,
 }
 
@@ -270,7 +268,6 @@ impl ProjectState {
             graph_path: graph_path.clone(),
             document,
             revision,
-            residency: ProjectGraphResidency::Loaded,
             authority: GraphOperationAuthority {
                 session,
                 graph_path: graph_path.clone(),

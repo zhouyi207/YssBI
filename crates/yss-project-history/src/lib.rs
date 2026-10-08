@@ -188,12 +188,6 @@ pub enum ProjectResourceMutationError {
     Mutation(Box<str>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ProjectGraphResidency {
-    Loaded,
-    Unloaded,
-}
-
 #[cfg(test)]
 mod wire_tests {
     use super::*;
