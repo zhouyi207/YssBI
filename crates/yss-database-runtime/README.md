@@ -51,7 +51,9 @@ CSV, Parquet, Excel, and external SQL remain separate `DatabaseImportSource` var
 A runtime instance contains `Dataset { snapshot, engine, history }` or `Failed`. Snapshots keep
 exact Arrow types, column identities, category metadata, stable RowId and independent
 DisplayOrder. All host queries share a DataFusion RuntimeEnv. There is no mutable resident
-DataFrame in this runtime.
+DataFrame in this runtime. Physical instances are shared immutable handles: ordinary reads retain
+the current instance without copying its undo/redo history. A committed edit publishes a new
+instance, and readers holding the previous instance retain its snapshot and history.
 
 `DatabaseMutationOperation::UpdateCells`, `InsertRows` and `DeleteRowIds` use the Store's
 atomic row preparations. They validate the complete batch before publication and create
@@ -68,7 +70,13 @@ operations use the same Store preparation rather than maintaining separate mutat
 
 ## Queries and display
 
-Metadata snapshots expose the Dataset Store's existing `data_revision`. Semantic-only changes preserve
+Single-database reads capture only the target declaration observation and revisions under the same
+Registry lock that admits the operation and checks the publication barrier. Their operation lease
+remains alive through materialization; revalidation borrows the target's current facts instead of
+copying the session catalog. Catalog queries continue to capture the complete catalog.
+
+Metadata schemas carry the captured runtime/schema revisions. Metadata snapshots also expose the
+Dataset Store's existing `data_revision`. Semantic-only changes preserve
 this value; row edits, physical casts and column membership changes advance it. It identifies the
 positional row payload for an already admitted page, while query admission still checks the full
 Project/Runtime revision basis.
@@ -116,7 +124,9 @@ Revision and fingerprint comparisons remain with the existing session and mutati
 Profile queries aggregate the fixed effective snapshot in DataFusion. Numeric summaries ignore
 non-finite values while reporting nulls separately; category ties sort deterministically and
 empty tables return empty summaries. Plot preparation reads Arrow directly and keeps the existing
-day/microsecond coordinate convention. Plugin snapshots use exact Arrow IPC batches.
+day/microsecond coordinate convention. The plot adapter classifies its selected fields using their
+exact Arrow types and the shared semantic adapter; timestamps and Time32/Time64 values are normalized
+to microseconds before becoming numeric coordinates. Plugin snapshots use exact Arrow IPC batches.
 
 Harness profile inspection calls `session_api::dataset_overview_with_control` with the caller's
 cancellation and query budget. Chart histograms use `session_api::column_distributions` through

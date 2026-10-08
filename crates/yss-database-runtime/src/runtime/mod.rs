@@ -213,7 +213,7 @@ impl DatabaseRuntimeSession {
     pub(crate) fn physical_instance(
         &self,
         database: &DatabaseId,
-    ) -> Result<crate::DatabaseInstance, DatabaseError> {
+    ) -> Result<Arc<crate::DatabaseInstance>, DatabaseError> {
         self.physical.required_instance(database)
     }
 
@@ -222,7 +222,7 @@ impl DatabaseRuntimeSession {
         database: &DatabaseId,
         revision: u64,
     ) -> Result<yss_relational_contract::RelationHandle, DatabaseError> {
-        let basis = self.capture_query_basis(database)?;
+        let (_lease, basis) = self.capture_query_operation(DatabaseOperation::Query, database)?;
         let relation = self
             .physical
             .required_instance(database)?
@@ -274,6 +274,33 @@ impl DatabaseRuntimeSession {
         operation: DatabaseOperation,
     ) -> Result<DatabaseOperationLease, DatabaseError> {
         self.runtime.admit_operation(operation)
+    }
+
+    pub(crate) fn capture_database_operation(
+        &self,
+        operation: DatabaseOperation,
+        database: &DatabaseId,
+    ) -> Result<
+        (
+            DatabaseOperationLease,
+            (
+                DatabaseRuntimeRevisions,
+                yss_database_contract::DatabaseDeclarationObservation,
+            ),
+        ),
+        DatabaseError,
+    > {
+        self.runtime.capture_database_operation(operation, database)
+    }
+
+    pub(crate) fn revalidate_database_query(
+        &self,
+        database: &DatabaseId,
+        expected: DatabaseRuntimeRevisions,
+        observation: &yss_database_contract::DatabaseDeclarationObservation,
+    ) -> Result<(), DatabaseError> {
+        self.runtime
+            .revalidate_query(database, expected, observation)
     }
 
     pub(crate) fn begin_prepare(

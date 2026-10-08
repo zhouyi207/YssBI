@@ -6,8 +6,9 @@ use std::num::NonZeroU64;
 
 use crate::error::{DatabaseError, DatabaseOperation};
 use crate::runtime::{
-    DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeCommittedChange,
-    DatabaseRuntimeCompensationFailureCode, DatabaseRuntimeSession, DatabaseRuntimeSnapshot,
+    DatabaseCommittedRegistration, DatabaseOperationLease, DatabasePreparedRegistration,
+    DatabaseRuntimeCommittedChange, DatabaseRuntimeCompensationFailureCode,
+    DatabaseRuntimeRevisions, DatabaseRuntimeSession, DatabaseRuntimeSnapshot,
 };
 use arrow::datatypes::DataType;
 use yss_data_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
@@ -357,7 +358,7 @@ pub fn revalidate_declaration_observations(
     expected: &DatabaseDeclarationObservationSet,
 ) -> Result<(), DatabaseError> {
     let runtime_snapshot = session.runtime_snapshot();
-    if declaration_observations_match(&runtime_snapshot.observations, expected) {
+    if &runtime_snapshot.observations == expected {
         Ok(())
     } else {
         Err(DatabaseError::conflict(
@@ -380,8 +381,7 @@ pub fn revalidate_catalog_snapshot(
         ));
     }
     let runtime_snapshot = session.runtime_snapshot();
-    if !declaration_observations_match(&runtime_snapshot.observations, &snapshot.basis.observations)
-    {
+    if runtime_snapshot.observations != snapshot.basis.observations {
         return Err(DatabaseError::conflict(
             DatabaseOperation::CatalogSnapshot,
             None,
@@ -431,8 +431,8 @@ pub fn arrow_snapshot(
     session: &DatabaseRuntimeSession,
     request: DatabaseDataSnapshotRequest,
 ) -> Result<DatabaseArrowSnapshot, DatabaseError> {
-    let (_lease, _) = session.capture_operation(DatabaseOperation::DataSnapshot)?;
-    let basis = session.capture_query_basis(&request.database)?;
+    let (_lease, basis) =
+        session.capture_query_operation(DatabaseOperation::DataSnapshot, &request.database)?;
     let instance = session.physical_instance(&request.database)?;
     let relation = instance
         .query()
@@ -506,24 +506,14 @@ pub fn metadata_snapshot(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<DatabaseMetaSnapshot, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !runtime_snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
-    let _declaration = session
-        .declarations()
-        .iter()
-        .find(|declaration| declaration.id == database)
-        .ok_or_else(|| {
-            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
-        })?;
+    let (_lease, (revisions, _)) =
+        session.capture_database_operation(DatabaseOperation::Query, &database)?;
     let physical = session.read_physical_metadata(&database)?;
     Ok(DatabaseMetaSnapshot {
         name: physical.name,
-        schema: physical.schema,
+        schema: physical
+            .schema
+            .with_revisions(revisions.runtime, revisions.schema),
         row_count: physical.row_count,
         data_revision: physical.data_revision,
     })
@@ -535,13 +525,7 @@ pub fn page_snapshot(
     offset: usize,
     limit: usize,
 ) -> Result<DatabasePageSnapshot, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !runtime_snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
+    let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
     let page = session.read_physical_page(&database, offset, limit)?;
     Ok(DatabasePageSnapshot {
         rows: page.rows,
@@ -556,13 +540,7 @@ pub fn page_query_snapshot(
     query: &yss_database_engine::DatasetRowsQuery,
     control: &yss_relational_contract::RelationControl,
 ) -> Result<DatabasePageSnapshot, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !runtime_snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
+    let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
     let page = session.read_physical_page_query(&database, query, control)?;
     Ok(DatabasePageSnapshot {
         rows: page.rows,
@@ -575,13 +553,7 @@ pub fn column_distributions(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !runtime_snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
+    let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
     session.read_physical_column_distributions(&database)
 }
 
@@ -590,13 +562,7 @@ pub fn dataset_overview_with_control(
     database: DatabaseId,
     control: &yss_relational_contract::RelationControl,
 ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !runtime_snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
+    let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
     session.read_physical_dataset_overview(&database, control)
 }
 
@@ -605,13 +571,7 @@ pub fn column_values(
     database: DatabaseId,
     column: &str,
 ) -> Result<Vec<String>, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !runtime_snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
+    let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
     session.read_physical_column_values(&database, column)
 }
 
@@ -619,13 +579,7 @@ pub fn edit_state(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<EditState, DatabaseError> {
-    let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !runtime_snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
+    let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
     session.read_physical_edit_state(&database)
 }
 
@@ -717,28 +671,14 @@ pub fn revalidate_query_basis(
             Some(basis.database.clone()),
         ));
     }
-    let runtime_snapshot = session.runtime_snapshot();
-    let Some(current) = runtime_snapshot.revisions.get(&basis.database).copied() else {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(basis.database.clone()),
-        ));
-    };
-    if current.runtime != basis.runtime_revision.get()
-        || runtime_snapshot.observations.get(&basis.database) != Some(&basis.declaration)
-    {
-        return Err(DatabaseError::conflict(
-            DatabaseOperation::Query,
-            Some(basis.database.clone()),
-        ));
-    }
-    if current.schema != basis.schema_revision.get() {
-        return Err(DatabaseError::schema(
-            DatabaseOperation::Query,
-            Some(basis.database.clone()),
-        ));
-    }
-    Ok(())
+    session.revalidate_database_query(
+        &basis.database,
+        DatabaseRuntimeRevisions {
+            runtime: basis.runtime_revision.get(),
+            schema: basis.schema_revision.get(),
+        },
+        &basis.declaration,
+    )
 }
 
 impl DatabaseRuntimeSession {
@@ -784,37 +724,29 @@ impl DatabaseRuntimeSession {
         &self,
         database: &DatabaseId,
     ) -> Result<DatabaseQueryBasis, DatabaseError> {
-        let (_lease, runtime_snapshot) = self.capture_operation(DatabaseOperation::Query)?;
-        let revisions = runtime_snapshot
-            .revisions
-            .get(database)
-            .copied()
-            .ok_or_else(|| {
-                DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
-            })?;
-        let declaration = runtime_snapshot
-            .observations
-            .get(database)
-            .cloned()
-            .ok_or_else(|| {
-                DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
-            })?;
-        Ok(DatabaseQueryBasis {
-            session: self.identity().clone(),
-            generation: self.generation(),
-            database: database.clone(),
-            runtime_revision: DatabaseRuntimeRevision::from_existing(revisions.runtime),
-            schema_revision: DatabaseSchemaRevision::from_existing(revisions.schema),
-            declaration,
-        })
+        let (_lease, basis) = self.capture_query_operation(DatabaseOperation::Query, database)?;
+        Ok(basis)
     }
-}
 
-fn declaration_observations_match(
-    current: &DatabaseDeclarationObservationSet,
-    expected: &DatabaseDeclarationObservationSet,
-) -> bool {
-    current == expected
+    pub(crate) fn capture_query_operation(
+        &self,
+        operation: DatabaseOperation,
+        database: &DatabaseId,
+    ) -> Result<(DatabaseOperationLease, DatabaseQueryBasis), DatabaseError> {
+        let (lease, (revisions, declaration)) =
+            self.capture_database_operation(operation, database)?;
+        Ok((
+            lease,
+            DatabaseQueryBasis {
+                session: self.identity().clone(),
+                generation: self.generation(),
+                database: database.clone(),
+                runtime_revision: DatabaseRuntimeRevision::from_existing(revisions.runtime),
+                schema_revision: DatabaseSchemaRevision::from_existing(revisions.schema),
+                declaration,
+            },
+        ))
+    }
 }
 
 fn compensation_failure(
@@ -1047,6 +979,32 @@ mod tests {
                 .code(),
             crate::error::DatabaseErrorCode::Schema
         );
+    }
+
+    #[test]
+    fn metadata_snapshots_bind_current_revisions_without_changing_retained_reads() {
+        let (_fixture, session) = session_with_table("metadata-revisions");
+        let database = DatabaseId::from_existing(SALES_ID.into());
+        let before = session.physical_instance(&database).unwrap();
+        let (prepared, mut physical) = prepare_change(
+            &session,
+            DatabaseMutationOperation::AddColumn {
+                name: "new_column".into(),
+                data_type: DataType::Utf8,
+            },
+            "metadata-column",
+        );
+        let committed = commit_database_runtime_change(&session, prepared).unwrap();
+        physical.commit().unwrap();
+        committed.confirm();
+        physical.confirm().unwrap();
+
+        let metadata = metadata_snapshot(&session, database).unwrap();
+        assert_eq!(metadata.schema().runtime_revision().get(), 1);
+        assert_eq!(metadata.schema().schema_revision().get(), 1);
+        assert_eq!(metadata.schema().columns().len(), 2);
+        assert_eq!(before.data_schema().unwrap().columns().len(), 1);
+        assert!(!before.edit_state().can_undo);
     }
 
     #[test]

@@ -21,7 +21,7 @@ pub(crate) struct DatabaseRuntimePageSnapshot {
 }
 
 pub(crate) struct DatabaseRuntimePhysicalState {
-    instances: Mutex<BTreeMap<DatabaseId, DatabaseInstance>>,
+    instances: Mutex<BTreeMap<DatabaseId, Arc<DatabaseInstance>>>,
 }
 
 impl DatabaseRuntimePhysicalState {
@@ -49,7 +49,7 @@ impl DatabaseRuntimePhysicalState {
                     Some(database),
                 ));
             }
-            bound.insert(database, instance);
+            bound.insert(database, Arc::new(instance));
         }
 
         Ok(Arc::new(Self {
@@ -86,7 +86,7 @@ impl DatabaseRuntimePhysicalState {
             .metadata()
             .data_revision;
         Ok(DatabaseRuntimeMetadata {
-            name: instance.decl.name,
+            name: instance.decl.name.clone(),
             schema,
             row_count,
             data_revision,
@@ -329,25 +329,25 @@ impl DatabaseRuntimePhysicalState {
         self.instances
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .insert(instance.decl.id.clone(), instance);
+            .insert(instance.decl.id.clone(), Arc::new(instance));
     }
     pub(crate) fn instances_for_replacement(&self) -> Vec<DatabaseInstance> {
         self.instances
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .values()
-            .cloned()
+            .map(|instance| instance.as_ref().clone())
             .collect()
     }
     pub(crate) fn required_instance(
         &self,
         database: &DatabaseId,
-    ) -> Result<DatabaseInstance, DatabaseError> {
+    ) -> Result<Arc<DatabaseInstance>, DatabaseError> {
         self.instance_snapshot(database).ok_or_else(|| {
             DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
         })
     }
-    fn instance_snapshot(&self, database: &DatabaseId) -> Option<DatabaseInstance> {
+    fn instance_snapshot(&self, database: &DatabaseId) -> Option<Arc<DatabaseInstance>> {
         self.instances
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

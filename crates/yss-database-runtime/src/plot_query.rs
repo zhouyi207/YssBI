@@ -100,8 +100,8 @@ pub fn read_numeric_column_pair(
     x_column: &TabularColumnName,
     y_column: &TabularColumnName,
 ) -> Result<NumericColumnPair, DatabasePlotQueryError> {
-    let basis = session
-        .capture_query_basis(database)
+    let (_lease, basis) = session
+        .capture_query_operation(DatabaseOperation::Query, database)
         .map_err(|error| map_database_error(error, database, None, ErrorContext::Capture))?;
     if basis.declaration_revision() != expected_revision {
         return Err(map_database_error(
@@ -111,29 +111,28 @@ pub fn read_numeric_column_pair(
             ErrorContext::Capture,
         ));
     }
-    let _admission = session
-        .admit_operation(DatabaseOperation::Query)
-        .map_err(|error| map_database_error(error, database, None, ErrorContext::Read))?;
     let instance = session
         .physical_instance(database)
         .map_err(|error| map_database_error(error, database, None, ErrorContext::Read))?;
-    let facts = instance.data_schema().map_err(|error| {
-        materialization_error(
-            database,
-            None,
-            DatabaseError::dataset(DatabaseOperation::Query, Some(database.clone()), error),
-        )
-    })?;
+    let schema = &instance
+        .snapshot()
+        .map_err(|error| {
+            materialization_error(
+                database,
+                None,
+                DatabaseError::dataset(DatabaseOperation::Query, Some(database.clone()), error),
+            )
+        })?
+        .metadata()
+        .schema;
     let kind = |name: &TabularColumnName| {
-        facts
-            .columns()
-            .iter()
-            .find(|column| column.name() == name)
+        schema
+            .field_with_name(name.as_str())
+            .ok()
             .and_then(|field| {
-                numeric_kind(
-                    field.semantic().map(|semantic| semantic.kind),
-                    field.physical_type(),
-                )
+                yss_database_arrow::column_semantic(field)
+                    .ok()
+                    .and_then(|semantic| numeric_kind(semantic.kind, field.data_type()))
             })
             .ok_or_else(|| {
                 materialization_error(
@@ -179,6 +178,11 @@ pub fn read_numeric_column_pair(
                             arrow::compute::cast(array.as_ref(), &ArrowDataType::Int64)
                         })
                 }
+                ArrowDataType::Time32(_) | ArrowDataType::Time64(_) => arrow::compute::cast(
+                    column.as_ref(),
+                    &ArrowDataType::Time64(TimeUnit::Microsecond),
+                )
+                .and_then(|array| arrow::compute::cast(array.as_ref(), &ArrowDataType::Int64)),
                 data_type if data_type.is_temporal() => {
                     arrow::compute::cast(column.as_ref(), &ArrowDataType::Int64)
                 }
@@ -302,13 +306,16 @@ fn materialization_error(
     }
 }
 
-fn numeric_kind(semantic: Option<SemanticType>, physical: &str) -> Option<NumericColumnKind> {
-    match semantic {
-        Some(SemanticType::Numeric) => Some(NumericColumnKind::Number),
-        Some(SemanticType::Datetime) if matches!(physical, "Date" | "Date32" | "Date64") => {
+fn numeric_kind(semantic: SemanticType, physical: &ArrowDataType) -> Option<NumericColumnKind> {
+    match (semantic, physical) {
+        (SemanticType::Numeric, dtype) if dtype.is_numeric() => Some(NumericColumnKind::Number),
+        (SemanticType::Datetime, ArrowDataType::Date32 | ArrowDataType::Date64) => {
             Some(NumericColumnKind::Date)
         }
-        Some(SemanticType::Datetime) => Some(NumericColumnKind::Datetime),
+        (
+            SemanticType::Datetime,
+            ArrowDataType::Timestamp(..) | ArrowDataType::Time32(_) | ArrowDataType::Time64(_),
+        ) => Some(NumericColumnKind::Datetime),
         _ => None,
     }
 }
@@ -318,7 +325,7 @@ mod tests {
     use super::*;
     use crate::runtime::DatabaseRuntimeRegistry;
     use crate::test_support::{DatasetFixture, SALES_ID};
-    use arrow::array::{Date32Array, TimestampMicrosecondArray};
+    use arrow::array::{Date32Array, Time32MillisecondArray, TimestampMicrosecondArray};
     use arrow::datatypes::{Field, Schema};
     use arrow::record_batch::RecordBatch;
     use std::num::NonZeroU64;
@@ -335,6 +342,11 @@ mod tests {
                 ArrowDataType::Timestamp(TimeUnit::Microsecond, None),
                 true,
             ),
+            Field::new(
+                "observed_time",
+                ArrowDataType::Time32(TimeUnit::Millisecond),
+                true,
+            ),
         ]));
         let batch = RecordBatch::try_new(
             schema,
@@ -344,6 +356,11 @@ mod tests {
                     Some(1000),
                     Some(2000),
                     None,
+                ])),
+                Arc::new(Time32MillisecondArray::from(vec![
+                    Some(1000),
+                    None,
+                    Some(2000),
                 ])),
             ],
         )
@@ -394,6 +411,23 @@ mod tests {
         assert_eq!(pair.y_kind(), NumericColumnKind::Datetime);
         assert_eq!(pair.x(), &[Some(1.0), None, Some(2.0)]);
         assert_eq!(pair.y(), &[Some(1_000.0), Some(2_000.0), None]);
+    }
+
+    #[test]
+    fn runtime_materializer_normalizes_clock_units_to_microseconds() {
+        let (_fixture, session) = session_with_temporal_data("clock-plot-session");
+        let column = TabularColumnName::try_from("observed_time").unwrap();
+        let pair = read_numeric_column_pair(
+            &session,
+            &DatabaseId::from_existing(SALES_ID.into()),
+            DatabaseDeclarationRevision::from_existing(1),
+            &column,
+            &column,
+        )
+        .unwrap();
+        assert_eq!(pair.x_kind(), NumericColumnKind::Datetime);
+        assert_eq!(pair.x(), &[Some(1_000_000.0), None, Some(2_000_000.0)]);
+        assert_eq!(pair.y(), pair.x());
     }
 
     #[test]

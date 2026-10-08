@@ -30,13 +30,7 @@ pub fn profile_snapshot(
     query: &DatabaseProfileQuery,
     control: &RelationControl,
 ) -> Result<DatabaseProfileSnapshot, DatabaseError> {
-    let (_lease, snapshot) = session.capture_operation(DatabaseOperation::Query)?;
-    if !snapshot.revisions.contains_key(&database) {
-        return Err(DatabaseError::not_found(
-            DatabaseOperation::Query,
-            Some(database),
-        ));
-    }
+    let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
     if query.columns.is_empty()
         || query.metrics.is_empty()
         || query

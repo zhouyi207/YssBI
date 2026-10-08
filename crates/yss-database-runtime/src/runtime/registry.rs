@@ -234,16 +234,52 @@ impl DatabaseSessionRuntime {
         self: &Arc<Self>,
         operation: DatabaseOperation,
     ) -> Result<(DatabaseOperationLease, DatabaseRuntimeSnapshot), DatabaseError> {
+        self.capture(operation, |state| {
+            Ok(DatabaseRuntimeSnapshot {
+                observations: state.observations.clone(),
+                revisions: state.revisions.clone(),
+            })
+        })
+    }
+
+    pub(crate) fn capture_database_operation(
+        self: &Arc<Self>,
+        operation: DatabaseOperation,
+        database: &DatabaseId,
+    ) -> Result<
+        (
+            DatabaseOperationLease,
+            (DatabaseRuntimeRevisions, DatabaseDeclarationObservation),
+        ),
+        DatabaseError,
+    > {
+        self.capture(operation, |state| {
+            let revisions = state
+                .revisions
+                .get(database)
+                .copied()
+                .ok_or_else(|| DatabaseError::not_found(operation, Some(database.clone())))?;
+            let observation = state
+                .observations
+                .get(database)
+                .cloned()
+                .ok_or_else(|| DatabaseError::not_found(operation, Some(database.clone())))?;
+            Ok((revisions, observation))
+        })
+    }
+
+    fn capture<T>(
+        self: &Arc<Self>,
+        operation: DatabaseOperation,
+        project: impl FnOnce(&DatabaseRuntimeState) -> Result<T, DatabaseError>,
+    ) -> Result<(DatabaseOperationLease, T), DatabaseError> {
         let mut state = lock_or_recover(&self.state);
         admit(&mut state, operation)?;
         if !state.changes.is_empty() {
             return Err(DatabaseError::conflict(operation, None));
         }
+        let snapshot = project(&state)?;
         state.outstanding.increment_operation_lease();
-        let snapshot = DatabaseRuntimeSnapshot {
-            observations: state.observations.clone(),
-            revisions: state.revisions.clone(),
-        };
         drop(state);
         Ok((
             DatabaseOperationLease {
@@ -252,6 +288,33 @@ impl DatabaseSessionRuntime {
             },
             snapshot,
         ))
+    }
+
+    pub(crate) fn revalidate_query(
+        &self,
+        database: &DatabaseId,
+        expected: DatabaseRuntimeRevisions,
+        observation: &DatabaseDeclarationObservation,
+    ) -> Result<(), DatabaseError> {
+        let state = lock_or_recover(&self.state);
+        let current = state.revisions.get(database).ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
+        })?;
+        if current.runtime != expected.runtime
+            || state.observations.get(database) != Some(observation)
+        {
+            return Err(DatabaseError::conflict(
+                DatabaseOperation::Query,
+                Some(database.clone()),
+            ));
+        }
+        if current.schema != expected.schema {
+            return Err(DatabaseError::schema(
+                DatabaseOperation::Query,
+                Some(database.clone()),
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) fn admit_operation(
