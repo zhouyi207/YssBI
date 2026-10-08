@@ -179,86 +179,6 @@ impl CapabilityId {
             Self::ListGraphResults => "list_graph_results",
         }
     }
-
-    pub const fn descriptor(self) -> &'static CapabilityDescriptor {
-        match self {
-            Self::InspectChart => &CAPABILITY_DESCRIPTORS[66],
-            Self::UpdateChart => &CAPABILITY_DESCRIPTORS[67],
-            Self::InspectResource => &CAPABILITY_DESCRIPTORS[11],
-            Self::CreateResource => &CAPABILITY_DESCRIPTORS[12],
-            Self::InspectDatabase => &CAPABILITY_DESCRIPTORS[50],
-            Self::InspectDatabaseSchema => &CAPABILITY_DESCRIPTORS[2],
-            Self::ProfileDatabase => &CAPABILITY_DESCRIPTORS[3],
-            Self::ReadDatabaseRows => &CAPABILITY_DESCRIPTORS[51],
-            Self::InspectDocument => &CAPABILITY_DESCRIPTORS[60],
-            Self::ReadDocument => &CAPABILITY_DESCRIPTORS[61],
-            Self::SearchDocument => &CAPABILITY_DESCRIPTORS[62],
-            Self::ReplaceDocumentText => &CAPABILITY_DESCRIPTORS[63],
-            Self::AppendDocument => &CAPABILITY_DESCRIPTORS[64],
-            Self::WriteDocument => &CAPABILITY_DESCRIPTORS[65],
-
-            Self::InspectMind => &CAPABILITY_DESCRIPTORS[52],
-            Self::FindTopics => &CAPABILITY_DESCRIPTORS[53],
-            Self::InspectTopics => &CAPABILITY_DESCRIPTORS[54],
-            Self::CreateTopics => &CAPABILITY_DESCRIPTORS[55],
-            Self::UpdateTopics => &CAPABILITY_DESCRIPTORS[56],
-            Self::MoveTopics => &CAPABILITY_DESCRIPTORS[57],
-            Self::DeleteTopics => &CAPABILITY_DESCRIPTORS[58],
-            Self::DuplicateTopics => &CAPABILITY_DESCRIPTORS[59],
-
-            Self::ImportDatabase => &CAPABILITY_DESCRIPTORS[17],
-            Self::InsertRows => &CAPABILITY_DESCRIPTORS[42],
-            Self::UpdateCells => &CAPABILITY_DESCRIPTORS[43],
-            Self::DeleteRows => &CAPABILITY_DESCRIPTORS[44],
-            Self::CreateColumns => &CAPABILITY_DESCRIPTORS[45],
-            Self::RenameColumns => &CAPABILITY_DESCRIPTORS[46],
-            Self::DeleteColumns => &CAPABILITY_DESCRIPTORS[47],
-            Self::CastColumns => &CAPABILITY_DESCRIPTORS[48],
-            Self::SetColumnSemantics => &CAPABILITY_DESCRIPTORS[49],
-            Self::RenameResource => &CAPABILITY_DESCRIPTORS[18],
-            Self::DuplicateResource => &CAPABILITY_DESCRIPTORS[19],
-            Self::DeleteResource => &CAPABILITY_DESCRIPTORS[20],
-            Self::SaveResource => &CAPABILITY_DESCRIPTORS[21],
-            Self::UndoResource => &CAPABILITY_DESCRIPTORS[40],
-            Self::RedoResource => &CAPABILITY_DESCRIPTORS[41],
-            Self::EditResource => &CAPABILITY_DESCRIPTORS[13],
-            Self::ExportDatabase => &CAPABILITY_DESCRIPTORS[14],
-            Self::InspectUiIntent => &CAPABILITY_DESCRIPTORS[9],
-            Self::RequestUiIntent => &CAPABILITY_DESCRIPTORS[10],
-            Self::InspectGraph => &CAPABILITY_DESCRIPTORS[0],
-            Self::BrowseNodes => &CAPABILITY_DESCRIPTORS[1],
-            Self::InspectNodeType => &CAPABILITY_DESCRIPTORS[22],
-            Self::FindNodes => &CAPABILITY_DESCRIPTORS[23],
-            Self::FindConstants => &CAPABILITY_DESCRIPTORS[34],
-            Self::InspectConstants => &CAPABILITY_DESCRIPTORS[35],
-            Self::CreateConstants => &CAPABILITY_DESCRIPTORS[36],
-            Self::UpdateConstants => &CAPABILITY_DESCRIPTORS[37],
-            Self::DeleteConstants => &CAPABILITY_DESCRIPTORS[38],
-
-            Self::InspectNodes => &CAPABILITY_DESCRIPTORS[24],
-            Self::FindConnections => &CAPABILITY_DESCRIPTORS[25],
-            Self::CreateNodes => &CAPABILITY_DESCRIPTORS[26],
-            Self::UpdateNodes => &CAPABILITY_DESCRIPTORS[27],
-            Self::DeleteNodes => &CAPABILITY_DESCRIPTORS[28],
-            Self::DuplicateNodes => &CAPABILITY_DESCRIPTORS[29],
-            Self::MoveNodes => &CAPABILITY_DESCRIPTORS[30],
-            Self::CreateConnections => &CAPABILITY_DESCRIPTORS[31],
-            Self::UpdateConnections => &CAPABILITY_DESCRIPTORS[32],
-            Self::DeleteConnections => &CAPABILITY_DESCRIPTORS[33],
-            Self::SearchKnowledge => &CAPABILITY_DESCRIPTORS[15],
-            Self::ReadKnowledge => &CAPABILITY_DESCRIPTORS[16],
-            Self::InspectDatasetSchema => &INTERNAL_INSPECTDATASETSCHEMA_DESCRIPTOR,
-            Self::InspectDatasetProfile => &INTERNAL_INSPECTDATASETPROFILE_DESCRIPTOR,
-            Self::InspectResult => &CAPABILITY_DESCRIPTORS[4],
-            Self::ReadResultTable => &CAPABILITY_DESCRIPTORS[39],
-            Self::ListResources => &CAPABILITY_DESCRIPTORS[5],
-            Self::ApplyGraphEdit => &INTERNAL_APPLYGRAPHEDIT_DESCRIPTOR,
-            Self::ValidateGraph => &CAPABILITY_DESCRIPTORS[6],
-            Self::ExecuteGraph => &CAPABILITY_DESCRIPTORS[7],
-            Self::SaveGraph => &INTERNAL_SAVEGRAPH_DESCRIPTOR,
-            Self::ListGraphResults => &CAPABILITY_DESCRIPTORS[8],
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -290,372 +210,113 @@ impl CapabilityDescriptor {
     }
 }
 
-// Internal owner operations and stored history retain their metadata, but are not model tools.
-const INTERNAL_APPLYGRAPHEDIT_DESCRIPTOR: CapabilityDescriptor = CapabilityDescriptor {
-    id: CapabilityId::ApplyGraphEdit,
-    effect: ToolEffect::Mutate,
-    maximum_results: 200,
-};
-const INTERNAL_SAVEGRAPH_DESCRIPTOR: CapabilityDescriptor = CapabilityDescriptor {
-    id: CapabilityId::SaveGraph,
-    effect: ToolEffect::Mutate,
-    maximum_results: 1,
-};
+macro_rules! capability_descriptors {
+    (
+        public { $($public:ident => $public_effect:ident, $public_maximum:expr;)* }
+        internal { $($internal:ident => $internal_effect:ident, $internal_maximum:expr;)* }
+    ) => {
+        impl CapabilityId {
+            pub const fn descriptor(self) -> &'static CapabilityDescriptor {
+                match self {
+                    $(Self::$public => &CapabilityDescriptor {
+                        id: Self::$public,
+                        effect: ToolEffect::$public_effect,
+                        maximum_results: $public_maximum,
+                    },)*
+                    $(Self::$internal => &CapabilityDescriptor {
+                        id: Self::$internal,
+                        effect: ToolEffect::$internal_effect,
+                        maximum_results: $internal_maximum,
+                    },)*
+                }
+            }
+        }
 
-const INTERNAL_INSPECTDATASETSCHEMA_DESCRIPTOR: CapabilityDescriptor = CapabilityDescriptor {
-    id: CapabilityId::InspectDatasetSchema,
-    effect: ToolEffect::Inspect,
-    maximum_results: 4096,
-};
+        pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor;
+            [$(stringify!($public)),*].len()
+        ] = [$( *CapabilityId::$public.descriptor(), )*];
+    };
+}
 
-const INTERNAL_INSPECTDATASETPROFILE_DESCRIPTOR: CapabilityDescriptor = CapabilityDescriptor {
-    id: CapabilityId::InspectDatasetProfile,
-    effect: ToolEffect::Inspect,
-    maximum_results: 1,
-};
-
-pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 68] = [
-    CapabilityDescriptor {
-        id: CapabilityId::InspectGraph,
-        effect: ToolEffect::Inspect,
-        maximum_results: 2_000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::BrowseNodes,
-        effect: ToolEffect::Inspect,
-        maximum_results: MAX_CATALOG_RESULTS,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectDatabaseSchema,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ProfileDatabase,
-        effect: ToolEffect::Inspect,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectResult,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ListResources,
-        effect: ToolEffect::Inspect,
-        maximum_results: 2_000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ValidateGraph,
-        effect: ToolEffect::Inspect,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ExecuteGraph,
-        effect: ToolEffect::Compute,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ListGraphResults,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectUiIntent,
-        effect: ToolEffect::Inspect,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::RequestUiIntent,
-        effect: ToolEffect::Mutate,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectResource,
-        effect: ToolEffect::Inspect,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::CreateResource,
-        effect: ToolEffect::Mutate,
-        maximum_results: 2_000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::EditResource,
-        effect: ToolEffect::Mutate,
-        maximum_results: 500,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ExportDatabase,
-        effect: ToolEffect::Mutate,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::SearchKnowledge,
-        effect: ToolEffect::Inspect,
-        maximum_results: crate::MAX_KNOWLEDGE_RESULTS,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ReadKnowledge,
-        effect: ToolEffect::Inspect,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ImportDatabase,
-        effect: ToolEffect::Mutate,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::RenameResource,
-        effect: ToolEffect::Mutate,
-        maximum_results: 2_000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DuplicateResource,
-        effect: ToolEffect::Mutate,
-        maximum_results: 2_000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DeleteResource,
-        effect: ToolEffect::Destructive,
-        maximum_results: 2_000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::SaveResource,
-        effect: ToolEffect::Mutate,
-        maximum_results: 2_000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectNodeType,
-        effect: ToolEffect::Inspect,
-        maximum_results: MAX_CATALOG_RESULTS,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::FindNodes,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectNodes,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::FindConnections,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::CreateNodes,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::UpdateNodes,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DeleteNodes,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DuplicateNodes,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::MoveNodes,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::CreateConnections,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::UpdateConnections,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DeleteConnections,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::FindConstants,
-        effect: ToolEffect::Inspect,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectConstants,
-        effect: ToolEffect::Inspect,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::CreateConstants,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::UpdateConstants,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DeleteConstants,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ReadResultTable,
-        effect: ToolEffect::Inspect,
-        maximum_results: 1000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::UndoResource,
-        effect: ToolEffect::Mutate,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::RedoResource,
-        effect: ToolEffect::Mutate,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InsertRows,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::UpdateCells,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DeleteRows,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::CreateColumns,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::RenameColumns,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DeleteColumns,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::CastColumns,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::SetColumnSemantics,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectDatabase,
-        effect: ToolEffect::Inspect,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ReadDatabaseRows,
-        effect: ToolEffect::Inspect,
-        maximum_results: 1000,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectMind,
-        effect: ToolEffect::Inspect,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::FindTopics,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectTopics,
-        effect: ToolEffect::Inspect,
-        maximum_results: 20,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::CreateTopics,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::UpdateTopics,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::MoveTopics,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DeleteTopics,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::DuplicateTopics,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectDocument,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ReadDocument,
-        effect: ToolEffect::Inspect,
-        maximum_results: 16384,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::SearchDocument,
-        effect: ToolEffect::Inspect,
-        maximum_results: 100,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::ReplaceDocumentText,
-        effect: ToolEffect::Mutate,
-        maximum_results: 200,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::AppendDocument,
-        effect: ToolEffect::Mutate,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::WriteDocument,
-        effect: ToolEffect::Mutate,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::InspectChart,
-        effect: ToolEffect::Inspect,
-        maximum_results: 1,
-    },
-    CapabilityDescriptor {
-        id: CapabilityId::UpdateChart,
-        effect: ToolEffect::Mutate,
-        maximum_results: 1,
-    },
-];
+capability_descriptors! {
+    public {
+        InspectGraph => Inspect, 2_000;
+        BrowseNodes => Inspect, MAX_CATALOG_RESULTS;
+        InspectDatabaseSchema => Inspect, 100;
+        ProfileDatabase => Inspect, 1;
+        InspectResult => Inspect, 100;
+        ListResources => Inspect, 2_000;
+        ValidateGraph => Inspect, 200;
+        ExecuteGraph => Compute, 100;
+        ListGraphResults => Inspect, 100;
+        InspectUiIntent => Inspect, 1;
+        RequestUiIntent => Mutate, 1;
+        InspectResource => Inspect, 1;
+        CreateResource => Mutate, 2_000;
+        EditResource => Mutate, 500;
+        ExportDatabase => Mutate, 1;
+        SearchKnowledge => Inspect, crate::MAX_KNOWLEDGE_RESULTS;
+        ReadKnowledge => Inspect, 1;
+        ImportDatabase => Mutate, 1;
+        RenameResource => Mutate, 2_000;
+        DuplicateResource => Mutate, 2_000;
+        DeleteResource => Destructive, 2_000;
+        SaveResource => Mutate, 2_000;
+        InspectNodeType => Inspect, MAX_CATALOG_RESULTS;
+        FindNodes => Inspect, 100;
+        InspectNodes => Inspect, 100;
+        FindConnections => Inspect, 100;
+        CreateNodes => Mutate, 200;
+        UpdateNodes => Mutate, 200;
+        DeleteNodes => Mutate, 200;
+        DuplicateNodes => Mutate, 200;
+        MoveNodes => Mutate, 200;
+        CreateConnections => Mutate, 200;
+        UpdateConnections => Mutate, 200;
+        DeleteConnections => Mutate, 200;
+        FindConstants => Inspect, 200;
+        InspectConstants => Inspect, 200;
+        CreateConstants => Mutate, 200;
+        UpdateConstants => Mutate, 200;
+        DeleteConstants => Mutate, 200;
+        ReadResultTable => Inspect, 1000;
+        UndoResource => Mutate, 1;
+        RedoResource => Mutate, 1;
+        InsertRows => Mutate, 200;
+        UpdateCells => Mutate, 200;
+        DeleteRows => Mutate, 200;
+        CreateColumns => Mutate, 200;
+        RenameColumns => Mutate, 200;
+        DeleteColumns => Mutate, 200;
+        CastColumns => Mutate, 200;
+        SetColumnSemantics => Mutate, 200;
+        InspectDatabase => Inspect, 1;
+        ReadDatabaseRows => Inspect, 1000;
+        InspectMind => Inspect, 200;
+        FindTopics => Inspect, 100;
+        InspectTopics => Inspect, 20;
+        CreateTopics => Mutate, 200;
+        UpdateTopics => Mutate, 200;
+        MoveTopics => Mutate, 200;
+        DeleteTopics => Mutate, 200;
+        DuplicateTopics => Mutate, 200;
+        InspectDocument => Inspect, 100;
+        ReadDocument => Inspect, 16384;
+        SearchDocument => Inspect, 100;
+        ReplaceDocumentText => Mutate, 200;
+        AppendDocument => Mutate, 1;
+        WriteDocument => Mutate, 1;
+        InspectChart => Inspect, 1;
+        UpdateChart => Mutate, 1;
+    }
+    // Internal owner operations and stored history have metadata but are not model tools.
+    internal {
+        ApplyGraphEdit => Mutate, 200;
+        SaveGraph => Mutate, 1;
+        InspectDatasetSchema => Inspect, 4096;
+        InspectDatasetProfile => Inspect, 1;
+    }
+}
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]

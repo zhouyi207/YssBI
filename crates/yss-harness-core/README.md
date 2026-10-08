@@ -148,7 +148,7 @@ Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各
 | Skill identity/version/source                        | Harness skill registry                              |
 | Knowledge source/citation                            | knowledge source store；Tantivy index 是 projection |
 | ordered Assistant stream                             | persisted Harness events + Rust sequence            |
-| rendered conversation/workflow cards                 | React projection，可从 replay 重建                  |
+| rendered conversation/workflow cards                 | GPUI projection，可从持久事件 replay 重建            |
 
 Harness 只保存业务资源的 opaque references、project/session binding、captured revisions、完整结果 JSON、分页数据及其他有界 capability results 和 receipts。Result payload 仍由 Execution `ResultStore` 拥有；Harness 不能复制完整 DataFrame 或成为 Project history。
 
@@ -576,6 +576,8 @@ Rig adapter 使用 `rig-core`、`rig-agent` 和 `rig-reqwest` 0.43.0，最低 Ru
 模型工具参数均为对象；`yss-harness-contract::capability_input_schema` 在生成 `ToolDescriptor.input_schema` 时统一声明根级 `type: object`，同时保留 typed schema 的 `oneOf`、`$defs` 等约束。Rig adapter 将 descriptor 中的完整 schema 序列化为 function parameters。内部参数解码契约不变。
 
 模型工具签名仅包含 capability identity 与输入 schema。共享 `CapabilityDescriptor` 只保存能力身份、效果和条目上限，并按效果提供调用时限；Core 与图编辑提交前的结果检查共用 `MAX_CAPABILITY_RESULT_BYTES`。实际幂等由工具账本和提交回执实现，权限由角色/任务范围及 Gateway 检查实现；显式批准执行由 `ApprovalService` 校验并消费精确绑定请求的 grant，不使用声明式审批元数据。
+Contract 的同一能力元数据声明生成公开描述符列表及按身份匹配的入口，不手写列表索引。
+内部 Owner 操作保留自身的描述符，但不加入公开模型能力列表；角色与执行模式继续由 Core 筛选。
 Rig streams the first text promptly and coalesces subsequent deltas at 40 ms or 4 KiB. Core owns identified tool lifecycle events. Worker summaries use the final accepted model response as plain text; Manager finalText retains the public transcript. The Host has no 1 MiB final-response admission limit. Cancellation preserves committed receipts and waits for admitted tools to settle.
 
 工具账本的 `ToolInvocationRequest` 区分已绑定的内部执行请求与执行前被拒绝的模型意图。参数解码失败、授权拒绝和基线绑定失败同样记录调用身份、公开能力名称、失败终态及开始/结束时间；绑定时间计入工具总耗时。成功解码的业务输入保留用于重放，畸形原始参数不落账本，重放该调用使用空参数和原结构化错误。被拒绝的调用不产生业务回执、不推进观察基线，启动恢复也不会把它误判为可能已提交的写入。

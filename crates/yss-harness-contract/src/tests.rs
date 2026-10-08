@@ -152,6 +152,11 @@ fn capability_registry_is_closed_and_schema_generation_is_available() {
     let _request_schema = schemars::schema_for!(AutomationCapabilityRequest);
     let _result_schema = schemars::schema_for!(AutomationCapabilityResult);
     for capability in CAPABILITY_DESCRIPTORS {
+        assert_eq!(capability.id.descriptor(), &capability);
+        assert_eq!(
+            serde_json::to_value(capability.id).unwrap(),
+            serde_json::json!(capability.id.as_str())
+        );
         let descriptor = ToolDescriptor::for_capability(capability.id);
         let schema = serde_json::to_value(&descriptor.input_schema).unwrap();
         assert_eq!(schema["type"], "object", "{}", capability.id.as_str());
