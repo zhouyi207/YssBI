@@ -641,7 +641,7 @@ fn transform_graph_edit(
     for mut operation in request.operations {
         control.check()?;
         match &operation {
-            GraphEditOperation::CreateTypedConstant { declaration } => {
+            GraphEditOperation::CreateConstant { declaration } => {
                 constants::create(
                     &mut editor,
                     declaration.clone(),
@@ -650,7 +650,7 @@ fn transform_graph_edit(
                 )?;
                 continue;
             }
-            GraphEditOperation::UpdateTypedConstant { update } => {
+            GraphEditOperation::UpdateConstant { update } => {
                 constants::update(&mut editor, update.clone())?;
                 continue;
             }
@@ -658,7 +658,6 @@ fn transform_graph_edit(
         }
         let alias = match &operation {
             GraphEditOperation::CreateNode { client_id, .. }
-            | GraphEditOperation::CreateConstant { client_id, .. }
             | GraphEditOperation::InsertConstantReference { client_id, .. }
             | GraphEditOperation::AddPortInstance { client_id, .. } => client_id.clone(),
             _ => None,
@@ -672,57 +671,6 @@ fn transform_graph_edit(
             return Err(invalid_edit_identity("clientId"));
         }
         resolve_aliases(&mut operation, &created_nodes, &created_ports)?;
-        if let GraphEditOperation::CreateConstant {
-            name,
-            value,
-            x,
-            y,
-            client_id,
-        } = operation
-        {
-            use yss_data_contract::{DataValue, ValueType};
-            let (data_type, data_value) = match value {
-                GraphConstantLiteral::Boolean(value) => (
-                    ValueType::Scalar(yss_data_contract::SemanticType::Binary),
-                    DataValue::Bool(value),
-                ),
-                GraphConstantLiteral::Integer(value) => (
-                    ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                    DataValue::Integer(value),
-                ),
-                GraphConstantLiteral::Decimal(value) => (
-                    ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                    DataValue::Decimal(
-                        yss_data_contract::DecimalLiteral::try_from(value)
-                            .map_err(|_| invalid_edit_identity("value"))?,
-                    ),
-                ),
-                GraphConstantLiteral::String(value) => (
-                    ValueType::Scalar(yss_data_contract::SemanticType::Text),
-                    DataValue::String(value.into()),
-                ),
-            };
-            let id = yss_graph_document::ConstantId::new();
-            let mutation = EditorGraphMutation::SetConstant {
-                id,
-                constant: Some(yss_graph_document::GraphConstant {
-                    id,
-                    name,
-                    data_type,
-                    data_value,
-                    tabular: None,
-                    description: String::new(),
-                    tags: Vec::new(),
-                }),
-            };
-            let _ = editor.apply(mutation).map_err(map_graph_error)?;
-            operation = GraphEditOperation::InsertConstantReference {
-                id: id.to_string(),
-                x,
-                y,
-                client_id,
-            };
-        }
         let adds_port = matches!(operation, GraphEditOperation::AddPortInstance { .. });
         let mutation = editor_mutation(operation, &localized.items)?;
         let before_nodes = editor
@@ -831,8 +779,9 @@ pub(super) fn editor_mutation(
     catalog: &[LocalizedCatalogItem],
 ) -> Result<EditorGraphMutation, CapabilityFailure> {
     match operation {
-        GraphEditOperation::CreateTypedConstant { .. }
-        | GraphEditOperation::UpdateTypedConstant { .. } => Err(invalid_edit_identity("operation")),
+        GraphEditOperation::CreateConstant { .. } | GraphEditOperation::UpdateConstant { .. } => {
+            Err(invalid_edit_identity("operation"))
+        }
         GraphEditOperation::SetNodeLabel { node_id, label } => {
             Ok(EditorGraphMutation::SetNodeLabel {
                 node_id: parse_node_id(&node_id)?,
@@ -862,7 +811,6 @@ pub(super) fn editor_mutation(
                     .collect::<Result<_, CapabilityFailure>>()?,
             })
         }
-        GraphEditOperation::CreateConstant { .. } => Err(invalid_edit_identity("operation")),
         GraphEditOperation::SetParameters {
             node_id,
             parameters,
@@ -917,15 +865,12 @@ pub(super) fn editor_mutation(
                 y: offset_y,
             },
         }),
-        GraphEditOperation::SetConstant { id, constant } => Ok(EditorGraphMutation::SetConstant {
-            id: uuid::Uuid::parse_str(&id)
-                .map(yss_graph_document::ConstantId::from_uuid)
-                .map_err(|_| invalid_edit_identity("constantId"))?,
-            constant: constant
-                .map(serde_json::from_value)
-                .transpose()
-                .map_err(|_| invalid_edit_identity("constant"))?,
-        }),
+        GraphEditOperation::DeleteConstant { constant_id } => {
+            Ok(EditorGraphMutation::SetConstant {
+                id: constants::parse_id(&constant_id)?,
+                constant: None,
+            })
+        }
         GraphEditOperation::InsertConstantReference { id, x, y, .. } => {
             Ok(EditorGraphMutation::InsertConstantReference {
                 id: uuid::Uuid::parse_str(&id)

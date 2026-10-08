@@ -216,6 +216,28 @@ fn node(kind: &str, alias: &str) -> GraphEditOperation {
         user_label: None,
     }
 }
+fn constant_node(
+    alias: &str,
+    name: &str,
+    value: ConstantValueInput,
+    position: model::NodePositionInput,
+) -> GraphEditOperation {
+    GraphEditOperation::CreateConstant {
+        declaration: ConstantDeclaration {
+            client_id: alias.into(),
+            name: name.into(),
+            value,
+            description: String::new(),
+            tags: vec![],
+            reference_node: Some(ConstantReferenceNode {
+                client_id: Some(alias.into()),
+                position,
+                label: None,
+            }),
+        },
+    }
+}
+
 fn port(node: &str, key: &str) -> GraphEditPortRef {
     GraphEditPortRef::Declared {
         node_id: node.into(),
@@ -477,13 +499,18 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         node("yssbi.dataframe.decompose", "columns"),
         node("yssbi.numeric.multiply", "product"),
         node("yssbi.debug.view", "view"),
-        GraphEditOperation::CreateConstant {
-            name: "scale".into(),
-            value: GraphConstantLiteral::Integer(3),
-            x: 0.,
-            y: 200.,
-            client_id: Some("scale".into()),
-        },
+        constant_node(
+            "scale",
+            "scale",
+            ConstantValueInput {
+                data_type: yss_data_contract::ValueType::Scalar(
+                    yss_data_contract::SemanticType::Numeric,
+                ),
+                data_value: yss_data_contract::DataValue::Integer(3),
+                tabular: None,
+            },
+            model::NodePositionInput { x: 0., y: 200. },
+        ),
         connect(port("$source", "dataframe"), port("$columns", "dataframe")),
         connect(port("$scale", "value"), port("$product", "right")),
         connect(port("$product", "result"), port("$view", "data")),
@@ -1109,13 +1136,18 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
     let mut fixture = Fixture::new();
     fixture.inspect();
     let created = fixture.edit(vec![
-        GraphEditOperation::CreateConstant {
-            name: "scale".into(),
-            value: GraphConstantLiteral::Integer(2),
-            x: 0.0,
-            y: 0.0,
-            client_id: Some("scale".into()),
-        },
+        constant_node(
+            "scale",
+            "scale",
+            ConstantValueInput {
+                data_type: yss_data_contract::ValueType::Scalar(
+                    yss_data_contract::SemanticType::Numeric,
+                ),
+                data_value: yss_data_contract::DataValue::Integer(2),
+                tabular: None,
+            },
+            model::NodePositionInput::default(),
+        ),
         node("yssbi.numeric.multiply", "product"),
         connect(port("$scale", "value"), port("$product", "left")),
         GraphEditOperation::SetLiteral {
@@ -1464,14 +1496,17 @@ fn graph_edit_receipts_include_downstream_columns_and_only_changed_entities() {
 fn graph_edit_receipts_detect_changes_to_omitted_constant_values() {
     let mut f = Fixture::new();
     f.inspect();
-    let created = f.edit(vec![GraphEditOperation::CreateConstant {
-        name: "long-text".into(),
-        value: GraphConstantLiteral::String("a".repeat(5_000)),
-        x: 0.,
-        y: 0.,
-        client_id: Some("constant".into()),
-    }]);
-    let (id, mut constant) = f
+    let created = f.edit(vec![constant_node(
+        "constant",
+        "long-text",
+        ConstantValueInput {
+            data_type: yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Text),
+            data_value: yss_data_contract::DataValue::String("a".repeat(5_000).into()),
+            tabular: None,
+        },
+        model::NodePositionInput::default(),
+    )]);
+    let (id, constant) = f
         .document
         .constants
         .iter()
@@ -1482,10 +1517,18 @@ fn graph_edit_receipts_detect_changes_to_omitted_constant_values() {
         created.changes.constants[&id.to_string()]["valueIncluded"],
         false
     );
-    constant.data_value = yss_data_contract::DataValue::String("b".repeat(5_000).into());
-    let changed = f.edit(vec![GraphEditOperation::SetConstant {
-        id: id.to_string(),
-        constant: Some(serde_json::to_value(constant).unwrap()),
+    let changed = f.edit(vec![GraphEditOperation::UpdateConstant {
+        update: ConstantUpdate {
+            constant_id: id.to_string(),
+            name: None,
+            value: Some(ConstantValueInput {
+                data_type: constant.data_type,
+                data_value: yss_data_contract::DataValue::String("b".repeat(5_000).into()),
+                tabular: None,
+            }),
+            description: None,
+            tags: None,
+        },
     }]);
     let facts = changed
         .changes

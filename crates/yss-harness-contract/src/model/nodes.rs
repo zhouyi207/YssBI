@@ -297,19 +297,19 @@ impl GraphMutationInput {
                 .constants
                 .iter()
                 .cloned()
-                .map(|declaration| GraphEditOperation::CreateTypedConstant { declaration })
+                .map(|declaration| GraphEditOperation::CreateConstant { declaration })
                 .collect(),
             Self::UpdateConstants(value) => value
                 .constants
                 .iter()
                 .cloned()
-                .map(|update| GraphEditOperation::UpdateTypedConstant { update })
+                .map(|update| GraphEditOperation::UpdateConstant { update })
                 .collect(),
             Self::DeleteConstants(value) => value
                 .constant_ids
                 .iter()
                 .cloned()
-                .map(|id| GraphEditOperation::SetConstant { id, constant: None })
+                .map(|constant_id| GraphEditOperation::DeleteConstant { constant_id })
                 .collect(),
             Self::UpdateNodes(value) => value
                 .nodes

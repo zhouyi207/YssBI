@@ -237,6 +237,8 @@ Pin 映射以原端口地址文本为键，值仍是可直接传给工具的真�
 `update_connections` 先在候选中释放本批所选连接，再整体校验新端点，因此可交换已占用输入并保留连接 ID。
 常量类型和值复用 Data Contract，整数以带标签的十进制字符串传输。列表不返回大值；定向读取的 `valuePath`
 可选择嵌套对象或列表，文本按 Unicode 字符续读，表格按列和行分页。分页内容不能作为完整常量回写。
+模型工具和内部编辑批次共用 `ConstantDeclaration`、`ConstantUpdate` 及按常量 ID 删除的契约。
+Application 只通过同一类型化常量入口创建和更新，不另接收未标记原始 JSON 值或推断常量类型。
 `apply_graph_edit` 与 `save_graph` 已从模型目录、角色工具集及可调用 schema 移除。内部批量编辑与保存用例继续服务明确工具；已存账本仍按原名称投影业务参数，历史可读不代表工具仍可调用。函数签名分支继续保留。
 
 数据库读取参数只接受 `database: {kind: "database", id}`，由 Core 将 Worker 已获准的原读取基线绑定到内部

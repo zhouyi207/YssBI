@@ -912,11 +912,24 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
             client_key: "constant".into(),
             locale: "en-US".into(),
             operations: vec![GraphEditOperation::CreateConstant {
-                name: "Value".into(),
-                value: GraphConstantLiteral::Integer(7),
-                x: 10.0,
-                y: 20.0,
-                client_id: Some("value".into()),
+                declaration: ConstantDeclaration {
+                    client_id: "value".into(),
+                    name: "Value".into(),
+                    value: ConstantValueInput {
+                        data_type: yss_data_contract::ValueType::Scalar(
+                            yss_data_contract::SemanticType::Numeric,
+                        ),
+                        data_value: yss_data_contract::DataValue::Integer(7),
+                        tabular: None,
+                    },
+                    description: String::new(),
+                    tags: vec![],
+                    reference_node: Some(ConstantReferenceNode {
+                        client_id: None,
+                        position: model::NodePositionInput { x: 10., y: 20. },
+                        label: None,
+                    }),
+                },
             }],
         },
     ))

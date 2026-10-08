@@ -14,15 +14,6 @@ pub use queries::*;
 mod constants;
 pub use constants::*;
 
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum GraphConstantLiteral {
-    Boolean(bool),
-    Integer(i64),
-    Decimal(f64),
-    String(String),
-}
-
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ValidateGraphRequest {
@@ -268,10 +259,10 @@ pub enum GraphEditPortRef {
     rename_all_fields = "camelCase"
 )]
 pub enum GraphEditOperation {
-    CreateTypedConstant {
+    CreateConstant {
         declaration: ConstantDeclaration,
     },
-    UpdateTypedConstant {
+    UpdateConstant {
         update: ConstantUpdate,
     },
     SetNodeLabel {
@@ -284,13 +275,6 @@ pub enum GraphEditOperation {
     },
     UpdateConnections {
         connections: Vec<GraphConnectionUpdate>,
-    },
-    CreateConstant {
-        name: String,
-        value: GraphConstantLiteral,
-        x: f64,
-        y: f64,
-        client_id: Option<String>,
     },
     CreateNode {
         client_id: Option<String>,
@@ -350,9 +334,8 @@ pub enum GraphEditOperation {
         offset_x: f64,
         offset_y: f64,
     },
-    SetConstant {
-        id: String,
-        constant: Option<serde_json::Value>,
+    DeleteConstant {
+        constant_id: String,
     },
     InsertConstantReference {
         id: String,
@@ -420,7 +403,7 @@ pub(crate) fn validate_graph_edit_operation(
     operation: &GraphEditOperation,
 ) -> Result<(), CapabilityContractError> {
     match operation {
-        GraphEditOperation::CreateTypedConstant { declaration } => {
+        GraphEditOperation::CreateConstant { declaration } => {
             validate_resource_id("clientId", &declaration.client_id)?;
             validate_resource_id("name", &declaration.name)?;
             if let Some(node) = &declaration.reference_node
@@ -429,7 +412,7 @@ pub(crate) fn validate_graph_edit_operation(
                 return Err(CapabilityContractError::InvalidField("position"));
             }
         }
-        GraphEditOperation::UpdateTypedConstant { update } => {
+        GraphEditOperation::UpdateConstant { update } => {
             validate_resource_id("constantId", &update.constant_id)?;
             if let Some(name) = &update.name {
                 validate_resource_id("name", name)?;
@@ -463,19 +446,6 @@ pub(crate) fn validate_graph_edit_operation(
                 {
                     return Err(CapabilityContractError::InvalidField("order"));
                 }
-            }
-        }
-        GraphEditOperation::CreateConstant {
-            name, value, x, y, ..
-        } => {
-            validate_resource_id("name", name)?;
-            validate_graph_json(value)?;
-            if !x.is_finite()
-                || !y.is_finite()
-                || matches!(value, GraphConstantLiteral::Decimal(value) if !value.is_finite())
-                || matches!(value, GraphConstantLiteral::Integer(value) if value.unsigned_abs() > 9_007_199_254_740_991)
-            {
-                return Err(CapabilityContractError::InvalidField("value"));
             }
         }
         GraphEditOperation::CreateNode {
@@ -582,9 +552,8 @@ pub(crate) fn validate_graph_edit_operation(
                 return Err(CapabilityContractError::InvalidField("nodeIds"));
             }
         }
-        GraphEditOperation::SetConstant { id, constant } => {
-            validate_resource_id("constantId", id)?;
-            validate_graph_json(constant)?;
+        GraphEditOperation::DeleteConstant { constant_id } => {
+            validate_resource_id("constantId", constant_id)?;
         }
         GraphEditOperation::InsertConstantReference { id, x, y, .. } => {
             validate_resource_id("constantId", id)?;
