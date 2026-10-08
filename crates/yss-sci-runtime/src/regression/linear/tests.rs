@@ -89,54 +89,6 @@ fn weighted_admission_classifies_observation_failures() {
 }
 
 #[test]
-fn direct_ols_admission_classifies_observation_failures() {
-    use yss_sci_contract::execution::ScientificInputViolation;
-    use yss_sci_contract::{
-        MissingValuePolicy, SciError, SciOperationCode, StatisticalObservationMetadata,
-    };
-
-    for (response, predictors, violation) in [
-        (
-            vec![1., 2.],
-            vec![vec![0., 1.]],
-            ScientificInputViolation::EmptyInput,
-        ),
-        (
-            vec![1., f64::NAN, 3.],
-            vec![vec![0., 1., 2.]],
-            ScientificInputViolation::NonFiniteInput,
-        ),
-        (
-            vec![1., 2., 3.],
-            vec![vec![0., f64::INFINITY, 2.]],
-            ScientificInputViolation::NonFiniteInput,
-        ),
-    ] {
-        let observations = response.len();
-        let error = super::fit_ols(
-            response,
-            &predictors,
-            Default::default(),
-            StatisticalObservationMetadata {
-                original_observation_count: observations,
-                used_observation_count: observations,
-                dropped_null_count: 0,
-                dropped_nan_count: 0,
-                missing_value_policy: MissingValuePolicy::Reject,
-            },
-        )
-        .unwrap_err();
-        assert_eq!(
-            error,
-            SciError::InvalidInput {
-                operation: SciOperationCode::Regression,
-                violation
-            }
-        );
-    }
-}
-
-#[test]
 fn shared_ols_options_reach_the_model_and_typed_report() {
     use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};
     use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
@@ -211,7 +163,7 @@ fn report_confidence_limits_preserve_scientific_precision_for_small_units() {
         .map(|value| value * 1e-13)
         .collect::<Vec<_>>();
     let predictors = vec![(1..=8).map(f64::from).collect::<Vec<_>>()];
-    let fit = super::fit_ols(
+    let fit = yss_sci::regression::linear::fit::fit_ols(
         response.clone(),
         &predictors,
         Default::default(),

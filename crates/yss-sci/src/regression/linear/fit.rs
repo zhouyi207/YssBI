@@ -414,3 +414,54 @@ pub(crate) fn fit_prais_design(
         metadata,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn direct_ols_admission_classifies_observation_failures() {
+        use yss_sci_contract::execution::ScientificInputViolation;
+        use yss_sci_contract::{
+            MissingValuePolicy, SciError, SciOperationCode, StatisticalObservationMetadata,
+        };
+
+        for (response, predictors, violation) in [
+            (
+                vec![1., 2.],
+                vec![vec![0., 1.]],
+                ScientificInputViolation::EmptyInput,
+            ),
+            (
+                vec![1., f64::NAN, 3.],
+                vec![vec![0., 1., 2.]],
+                ScientificInputViolation::NonFiniteInput,
+            ),
+            (
+                vec![1., 2., 3.],
+                vec![vec![0., f64::INFINITY, 2.]],
+                ScientificInputViolation::NonFiniteInput,
+            ),
+        ] {
+            let observations = response.len();
+            let error = super::fit_ols(
+                response,
+                &predictors,
+                Default::default(),
+                StatisticalObservationMetadata {
+                    original_observation_count: observations,
+                    used_observation_count: observations,
+                    dropped_null_count: 0,
+                    dropped_nan_count: 0,
+                    missing_value_policy: MissingValuePolicy::Reject,
+                },
+            )
+            .unwrap_err();
+            assert_eq!(
+                error,
+                SciError::InvalidInput {
+                    operation: SciOperationCode::Regression,
+                    violation
+                }
+            );
+        }
+    }
+}

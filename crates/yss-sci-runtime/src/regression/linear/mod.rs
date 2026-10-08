@@ -1,7 +1,6 @@
 //! Linear regression entry points with admission and execution-control checks.
 pub mod prais;
 use crate::error::{invalid, map_sci_error};
-pub use yss_sci::regression::linear::fit::fit_ols;
 use yss_sci_contract::execution::{
     ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
 };
