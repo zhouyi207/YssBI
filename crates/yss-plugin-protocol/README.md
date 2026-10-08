@@ -13,6 +13,11 @@ Manifest validation rejects duplicate IDs within each view, command and task-typ
 A task ID therefore selects one artifact-production rule before the host applies project and
 result-write admission checks; declaration order cannot select between conflicting rules.
 
+Package, executable, view and storage paths use the same portable relative-path predicate.
+It rejects reserved filename punctuation, control bytes, device names and trailing dots/spaces.
+Cache directory overlap uses ASCII case-insensitive identity and directory boundaries while
+preserving the declared spelling. A parent and child directory cannot both be cleanup roots.
+
 Run `cargo run -p yss-plugin-protocol --bin plugin-schema` from the repository root for schema output.
 `scripts/generate-plugin-contract.mjs` retains generation for the archived React contract reference;
 it is outside the native build.

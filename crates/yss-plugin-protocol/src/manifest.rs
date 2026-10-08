@@ -106,7 +106,9 @@ pub fn valid_relative_path(value: &str) -> bool {
     !value.is_empty()
         && value.len() < 512
         && value.is_ascii()
-        && !value.contains(['\\', ':', '\0'])
+        && value.bytes().all(|byte| {
+            byte >= b' ' && !matches!(byte, b'\\' | b':' | b'<' | b'>' | b'"' | b'|' | b'?' | b'*')
+        })
         && value.split('/').all(|part| {
             let stem = part
                 .split('.')
@@ -126,22 +128,27 @@ pub fn valid_relative_path(value: &str) -> bool {
 impl PluginManifest {
     pub fn validate(&self) -> Result<(), PluginFailure> {
         let invalid = || PluginFailure::new("plugin_manifest_invalid");
-        if self.cache_directories.len() > 16
-            || self
-                .cache_directories
-                .iter()
-                .any(|path| !valid_relative_path(path))
-        {
+        if self.cache_directories.len() > 16 {
             return Err(invalid());
         }
-        for (index, path) in self.cache_directories.iter().enumerate() {
-            if self.cache_directories[..index].iter().any(|other| {
-                path == other
-                    || path.starts_with(&format!("{other}/"))
-                    || other.starts_with(&format!("{path}/"))
+        let mut directories = Vec::<String>::with_capacity(self.cache_directories.len());
+        for path in &self.cache_directories {
+            if !valid_relative_path(path) {
+                return Err(invalid());
+            }
+            let path = path.to_ascii_lowercase();
+            if directories.iter().any(|other| {
+                path == *other
+                    || path
+                        .strip_prefix(other.as_str())
+                        .is_some_and(|suffix| suffix.starts_with('/'))
+                    || other
+                        .strip_prefix(path.as_str())
+                        .is_some_and(|suffix| suffix.starts_with('/'))
             }) {
                 return Err(invalid());
             }
+            directories.push(path);
         }
         if self.schema_version != 1
             || self.protocol.major != PROTOCOL_MAJOR
@@ -220,7 +227,21 @@ mod tests {
 
     #[test]
     fn task_type_identity_cannot_select_conflicting_artifact_rules_by_order() {
-        let mut manifest: PluginManifest = serde_json::from_value(serde_json::json!({
+        let mut manifest = manifest();
+        assert!(manifest.validate().is_ok());
+
+        manifest.contributes.task_types[1].id = "statistics.run".into();
+        for _ in 0..2 {
+            assert_eq!(
+                manifest.validate().unwrap_err().code,
+                "plugin_manifest_invalid"
+            );
+            manifest.contributes.task_types.reverse();
+        }
+    }
+
+    fn manifest() -> PluginManifest {
+        serde_json::from_value(serde_json::json!({
             "schemaVersion": 1,
             "id": "example.statistics",
             "name": "Statistics",
@@ -249,16 +270,44 @@ mod tests {
             "uiMethods": ["tasks.start"],
             "resourceBudget": ResourceBudget::default()
         }))
-        .unwrap();
-        assert!(manifest.validate().is_ok());
+        .unwrap()
+    }
 
-        manifest.contributes.task_types[1].id = "statistics.run".into();
-        for _ in 0..2 {
+    #[test]
+    fn portable_paths_reject_reserved_filename_characters_and_controls() {
+        for character in ['<', '>', ':', '"', '\\', '|', '?', '*']
+            .into_iter()
+            .chain((0..32).map(|code| char::from_u32(code).unwrap()))
+        {
+            let path = format!("bin/plugin{character}.exe");
+            assert!(!valid_relative_path(&path), "accepted {path:?}");
+            let mut manifest = manifest();
+            manifest.executable = path;
             assert_eq!(
                 manifest.validate().unwrap_err().code,
                 "plugin_manifest_invalid"
             );
-            manifest.contributes.task_types.reverse();
         }
+        assert!(valid_relative_path("bin/plugin-name_2.exe"));
+        assert!(valid_relative_path("views/my view.html"));
+    }
+
+    #[test]
+    fn cache_directory_overlap_uses_portable_case_insensitive_identity() {
+        for directories in [
+            ["Cache", "cache"],
+            ["Cache", "cache/results"],
+            ["Cache/results", "cache"],
+        ] {
+            let mut manifest = manifest();
+            manifest.cache_directories = directories.map(str::to_owned).into();
+            assert_eq!(
+                manifest.validate().unwrap_err().code,
+                "plugin_manifest_invalid"
+            );
+        }
+        let mut manifest = manifest();
+        manifest.cache_directories = ["Cache", "cache-results"].map(str::to_owned).into();
+        assert!(manifest.validate().is_ok());
     }
 }
