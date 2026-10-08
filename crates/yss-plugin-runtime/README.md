@@ -42,6 +42,10 @@ while retaining operation identity, parameter hash, terminal state and project r
 expiry. Known retries return the original receipt; a forgotten, expired operation ID cannot start
 new work. Protocol 2 operation IDs contain their creation time and a nonce.
 
+The task's `CallContext` owns its parameter hash. Admission compares that same
+field for active and archived retries, and Application uses it for result provenance;
+the durable task record does not store a second hash.
+
 ## Grants, cleanup and trust
 
 The host validates requested budgets and records an effective grant with the installation and

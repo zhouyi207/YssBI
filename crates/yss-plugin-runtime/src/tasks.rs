@@ -37,7 +37,6 @@ mod tests {
                 parameters_hash: Some("parameters".into()),
                 granted_budget: ResourceBudget::default(),
             },
-            parameters_hash: "parameters".into(),
         }
     }
 
@@ -95,7 +94,7 @@ mod tests {
         );
         assert!(replay.result.as_ref().unwrap().get("viewData").is_none());
         let mut conflict = first;
-        conflict.parameters_hash = "changed".into();
+        conflict.context.parameters_hash = Some("changed".into());
         assert_eq!(
             manager.admit_record(conflict, 2).unwrap_err().code,
             "plugin_operation_conflict"
@@ -161,7 +160,6 @@ mod tests {
                             progress: None,
                         },
                         context,
-                        parameters_hash: "parameters".into(),
                     },
                 );
                 Ok(())
@@ -196,7 +194,6 @@ mod tests {
 pub(super) struct TaskRecord {
     pub snapshot: TaskSnapshot,
     pub(super) context: CallContext,
-    pub(super) parameters_hash: String,
 }
 
 struct TaskExecution {
@@ -260,7 +257,7 @@ impl PluginManager {
         context.context_id = uuid::Uuid::new_v4().to_string();
         context.task_id = Some(task_id.clone());
         context.operation_id = Some(operation_id.clone());
-        context.parameters_hash = Some(parameters_hash.clone());
+        context.parameters_hash = Some(parameters_hash);
         let record = TaskRecord {
             snapshot: TaskSnapshot {
                 task_id: task_id.clone(),
@@ -274,7 +271,6 @@ impl PluginManager {
                 progress: None,
             },
             context: context.clone(),
-            parameters_hash: parameters_hash.clone(),
         };
         if let Some(snapshot) =
             self.admit_record(record.clone(), registration.granted_budget.active_tasks)?
@@ -333,7 +329,7 @@ impl PluginManager {
                     .ledger()?
                     .task_operation(&record.snapshot.plugin_id, &record.snapshot.operation_id)?);
             if let Some(previous) = previous {
-                if previous.parameters_hash != record.parameters_hash {
+                if previous.context.parameters_hash != record.context.parameters_hash {
                     return Err(fail("plugin_operation_conflict"));
                 }
                 existing = Some(previous.snapshot);
