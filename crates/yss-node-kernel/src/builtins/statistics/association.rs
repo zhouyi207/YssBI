@@ -1,12 +1,12 @@
 use super::{
     Input,
-    common::{boolean, columns, integer, number, text, value},
+    common::{Category, boolean, columns, integer, number, text, value},
 };
 use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
     KernelRegistryBuilder, RuntimeValue,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::{SemanticType, TabularScalar};
 use yss_sci_contract::association::*;
 use yss_sci_contract::execution::{
@@ -318,6 +318,7 @@ fn encode_categories(
             .map(|code| parse_like(code, example))
             .collect::<Result<_, _>>()?;
     } else {
+        let mut seen = BTreeSet::new();
         for column in columns {
             for (i, scalar) in column.values.iter().enumerate() {
                 if i.is_multiple_of(1024) {
@@ -326,10 +327,7 @@ fn encode_categories(
                 if matches!(scalar, TabularScalar::Null) {
                     return Err(KernelError::InvalidNumericInput);
                 }
-                if !labels
-                    .iter()
-                    .any(|label| label.compare(scalar) == Some(std::cmp::Ordering::Equal))
-                {
+                if seen.insert(Category(scalar)) {
                     labels.push(scalar.clone());
                 }
             }
@@ -357,6 +355,13 @@ fn encode_categories(
             .map(|(i, code)| (code.as_str(), i))
             .collect::<BTreeMap<_, _>>()
     });
+    let inferred_mapping = mapping.is_none().then(|| {
+        labels
+            .iter()
+            .enumerate()
+            .map(|(index, scalar)| (Category(scalar), index))
+            .collect::<BTreeMap<_, _>>()
+    });
     let mut output = Vec::with_capacity(columns.len());
     for column in columns {
         let mut codes = inv.control.reserve(column.values.len())?;
@@ -369,9 +374,11 @@ fn encode_categories(
                     .get(scalar_text(scalar)?.as_str())
                     .ok_or(KernelError::InvalidNumericInput)?
             } else {
-                labels
-                    .iter()
-                    .position(|label| label.compare(scalar) == Some(std::cmp::Ordering::Equal))
+                inferred_mapping
+                    .as_ref()
+                    .expect("inferred categories have an index")
+                    .get(&Category(scalar))
+                    .copied()
                     .ok_or(KernelError::InvalidNumericInput)?
             };
             codes.push(index);
@@ -458,6 +465,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
             let columns = typed_columns(inv, true)?;
             let (ratings, labels) =
                 encode_categories(inv, &columns, weighting != KappaWeighting::None)?;
+            drop(columns);
             // Cohen's contingency table and weights grow with categories squared;
             // Fleiss keeps rater/category counts instead of a dense category table.
             inv.control.check_bytes((|| {
@@ -530,6 +538,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
         Ridit => {
             let columns = typed_columns(inv, false)?;
             let (codes, labels) = encode_categories(inv, &columns, true)?;
+            drop(columns);
             inv.control.check_bytes(labels.len().checked_mul(8192))?;
             value(
                 sci::ridit(

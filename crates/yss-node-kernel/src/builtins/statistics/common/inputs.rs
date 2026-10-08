@@ -5,7 +5,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::{SemanticType, TabularScalar};
 
-struct Category<'a>(&'a TabularScalar);
+pub(in crate::builtins::statistics) struct Category<'a>(
+    pub(in crate::builtins::statistics) &'a TabularScalar,
+);
 impl PartialEq for Category<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal

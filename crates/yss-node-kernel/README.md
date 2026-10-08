@@ -298,6 +298,8 @@ ANOVA、推断、问卷、质量分析、DOE、路径、抽样、联合分析、
 元分析和问卷的纯数值输入直接复用 `series::numeric` 读取为紧凑 f64 数组，不构建原始标量列。
 数据库字段沿用数值语义校验，不把分类编码当作连续测量；共享行域共同投影，其他来源按位置配对。
 输入预算按这些数值缓冲计算，工作区与报告准入继续合并检查；元分析、Forest/Funnel 和问卷内核使用 revision 5。
+Association 的全局类别合并和逐行编码复用 `common/inputs::Category` 精确比较，以索引替代标签线性扫描；
+未声明的类别保留首次出现顺序，排序型类别沿用可比较性要求，已声明的 Ordinal 等级仍按原代码索引。
 
 Logit/Probit/Prais、IV 2SLS/LIML、Panel、TWFE DID、ADF、VAR/VEC 及阶数/协整秩检验均有执行适配。模型以不可变 Record 保存中立拟合契约，Summary 在预算及执行控制检查后解码为对应契约，交给 Runtime 组装所选报告并调用需要的 SCI 分析；Fit 不附带完整报告。Logit/Probit Predict 使用既有系数。Panel/VAR/VEC 只输出模型，DID 输出模型和报告，不把未提供或多方程的观测结果伪装为单个拟合数列。参数组合和输出含义见 [Catalog](../yss-node-catalog/README.md) 与各节点帮助。
 

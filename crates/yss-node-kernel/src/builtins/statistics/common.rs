@@ -11,7 +11,7 @@ mod models;
 pub(super) use models::{model_dimensions, regression_outputs, with_model};
 mod inputs;
 mod tables;
-pub(super) use inputs::{categories, materialize, numeric};
+pub(super) use inputs::{Category, categories, materialize, numeric};
 pub(super) use tables::{matrix_table, numeric_table, scalar_table};
 
 // Charge the temporary JSON representation and the resulting runtime containers together.
