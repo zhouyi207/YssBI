@@ -63,6 +63,8 @@ pub enum ScientificInputViolation {
     EmptyInput,
     NonFiniteInput,
     ShapeMismatch,
+    /// Observations are outside the statistic's domain or cannot identify it.
+    DataOutOfRange,
     ParameterOutOfRange,
 }
 

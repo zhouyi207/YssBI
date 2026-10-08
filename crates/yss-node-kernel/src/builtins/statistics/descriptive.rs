@@ -1,8 +1,10 @@
-use super::common::{categories, columns, group, materialize, numeric, text, value};
+use super::common::{
+    categories, columns, computation_error, group, materialize, numeric, text, value,
+};
 use super::{Input, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_data_contract::TabularScalar;
-use yss_sci_contract::execution::{ScientificComputationError, ScientificExecutionControl};
+use yss_sci_contract::execution::ScientificExecutionControl;
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
@@ -35,24 +37,12 @@ fn scientific_control(inv: &KernelInvocation<'_>) -> ScientificExecutionControl 
     ScientificExecutionControl::from_shared(inv.control.cancellation.clone(), inv.control.deadline)
 }
 
-fn scientific_error(error: ScientificComputationError) -> KernelError {
-    match error {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
-
 fn gini(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     let data = columns(&[&inv.inputs[0]], inv, 0)?;
     inv.control
         .check_bytes(data[0].len().checked_mul(size_of::<f64>() * 4))?;
     let result = yss_sci_runtime::descriptive::gini(&data[0], &scientific_control(inv))
-        .map_err(scientific_error)?;
+        .map_err(computation_error)?;
     Ok(vec![value(result, inv)?])
 }
 
@@ -82,7 +72,7 @@ fn dagum_gini(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelErr
     )?;
     let result =
         yss_sci_runtime::descriptive::dagum_gini(&numeric, &group_ids, &scientific_control(inv))
-            .map_err(scientific_error)?
+            .map_err(computation_error)?
             .map_groups(|group| labels[group].clone());
     Ok(vec![value(result, inv)?])
 }
@@ -102,6 +92,6 @@ fn execute(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
         data.get(1).map(Vec::as_slice),
         &scientific_control(inv),
     )
-    .map_err(scientific_error)?;
+    .map_err(computation_error)?;
     Ok(vec![value(report, inv)?])
 }

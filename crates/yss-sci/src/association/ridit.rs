@@ -11,7 +11,7 @@ pub fn ridit(
 ) -> Result<RiditResult, Error> {
     control.check()?;
     if sample.is_empty() || reference.is_empty() || categories == 0 {
-        return Err(invalid());
+        return Err(invalid(Violation::EmptyInput));
     }
     let mut a = vec![0usize; categories];
     let mut b = vec![0usize; categories];
@@ -19,7 +19,7 @@ pub fn ridit(
         for (i, &value) in values.iter().enumerate() {
             checkpoint(control, i)?;
             if value >= categories {
-                return Err(invalid());
+                return Err(invalid(Violation::DataOutOfRange));
             }
             counts[value] += 1;
         }

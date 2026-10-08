@@ -400,6 +400,10 @@ estimates are retained where defined; nonidentifiable coefficients fail and
 unavailable inference uses `None`. `association::ridit` compares independent ordered
 samples and uses tie-corrected rank inference. Input scans and numerical loops check
 execution control; sorts and Linalg decompositions are checked at their boundaries.
+Input failures use Contract's shared violations: confidence/coverage and unsupported
+inference/null-distribution options are `ParameterOutOfRange`; incompatible column
+layouts are `ShapeMismatch`; insufficient samples are `EmptyInput`; out-of-domain
+ratings and nonidentifiable coefficients are `DataOutOfRange`.
 Reference fixtures identify their SciPy/statsmodels versions and cover coefficient,
 test and interval values separately from kernel metadata and graph alignment tests.
 
@@ -460,6 +464,8 @@ Positive adjacent gaps in sorted, maximum-scaled values replace cancellation-pro
 weighted rank differences; compensated sums keep finite inputs usable even when
 their unscaled total would overflow. Negative/missing/nonfinite values and a zero
 overall mean are rejected.
+Negative observations and a zero overall mean report `DataOutOfRange`; empty and
+nonfinite observations retain their distinct shared input violations.
 
 `dagum_gini` returns within, net between and transvariation contributions, their
 shares, subgroup statistics and pairwise rows through `yss-sci-contract::descriptive`.
@@ -475,6 +481,8 @@ requires positive total weight and weighted income, and treats zero income as a
 zero contribution. Separate log-space normalization and compensated sums avoid
 overflow in population/income totals. Input scans and accumulation check execution
 control every 1024 rows. Group means capture between-group inequality only.
+Negative values/weights and zero weighted income report `DataOutOfRange`, independently
+of shape and nonfinite-input failures.
 
 ## Visualization
 

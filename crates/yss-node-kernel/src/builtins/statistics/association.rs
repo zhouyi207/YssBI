@@ -1,6 +1,6 @@
 use super::{
     Input,
-    common::{Category, boolean, columns, integer, number, text, value},
+    common::{Category, boolean, columns, computation_error, integer, number, text, value},
 };
 use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
@@ -9,9 +9,7 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::{SemanticType, TabularScalar};
 use yss_sci_contract::association::*;
-use yss_sci_contract::execution::{
-    ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
-};
+use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::Alternative;
 use yss_sci_runtime::association as sci;
 
@@ -124,7 +122,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(format!("yssbi.statistics.{id}").into()).expect("association ID"),
-                std::num::NonZeroU32::new(2).unwrap(),
+                std::num::NonZeroU32::new(3).unwrap(),
                 contract,
                 move |inv| execute(method, inv),
             )
@@ -132,17 +130,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-fn error(error: ScientificComputationError) -> KernelError {
-    match error {
-        ScientificComputationError::Cancelled => KernelError::Cancelled,
-        ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-        ScientificComputationError::InvalidInput {
-            violation: ScientificInputViolation::ShapeMismatch,
-        } => KernelError::ShapeMismatch,
-        ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-        ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
-    }
-}
 fn alternative(inv: &KernelInvocation<'_>) -> Result<Alternative, KernelError> {
     match text(inv, "alternative")? {
         "two_sided" => Ok(Alternative::TwoSided),
@@ -417,7 +404,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 } else {
                     sci::partial(&data[0], &data[1], &data[2..], options, &control)
                 }
-                .map_err(error)?,
+                .map_err(computation_error)?,
                 inv,
             )?
         }
@@ -439,7 +426,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 } else {
                     sci::kendall(&data[0], &data[1], options, &control)
                 }
-                .map_err(error)?,
+                .map_err(computation_error)?,
                 inv,
             )?
         }
@@ -496,7 +483,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
             };
             value(
                 sci::kappa(&ratings, labels.len(), options, &control)
-                    .map_err(error)?
+                    .map_err(computation_error)?
                     .map_categories(|category| labels[category].clone()),
                 inv,
             )?
@@ -513,7 +500,8 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 _ => return Err(KernelError::InvalidParameter),
             };
             value(
-                sci::icc(&data, kind, number(inv, "confidence_level")?, &control).map_err(error)?,
+                sci::icc(&data, kind, number(inv, "confidence_level")?, &control)
+                    .map_err(computation_error)?,
                 inv,
             )?
         }
@@ -527,12 +515,12 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                     number(inv, "confidence_level")?,
                     &control,
                 )
-                .map_err(error)?,
+                .map_err(computation_error)?,
                 inv,
             )?
         }
         KendallW => value(
-            sci::kendall_w(&rank_columns(inv)?, &control).map_err(error)?,
+            sci::kendall_w(&rank_columns(inv)?, &control).map_err(computation_error)?,
             inv,
         )?,
         Ridit => {
@@ -549,7 +537,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                     boolean(inv, "continuity_correction")?,
                     &control,
                 )
-                .map_err(error)?
+                .map_err(computation_error)?
                 .map_categories(|category| labels[category].clone()),
                 inv,
             )?
@@ -572,7 +560,10 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 },
                 _ => return Err(KernelError::InvalidParameter),
             };
-            value(sci::rwg(&data, null, &control).map_err(error)?, inv)?
+            value(
+                sci::rwg(&data, null, &control).map_err(computation_error)?,
+                inv,
+            )?
         }
     };
     Ok(vec![result])

@@ -118,21 +118,24 @@ fn gini_and_dagum_match_pairwise_definitions_and_decomposition() {
 #[test]
 fn gini_validates_inputs_supports_many_groups_and_honors_control() {
     let control = control();
-    for values in [
-        vec![],
-        vec![0., 0.],
-        vec![-1., 2.],
-        vec![f64::NAN],
-        vec![f64::INFINITY],
+    for (values, violation) in [
+        (vec![], ScientificInputViolation::EmptyInput),
+        (vec![0., 0.], ScientificInputViolation::DataOutOfRange),
+        (vec![-1., 2.], ScientificInputViolation::DataOutOfRange),
+        (vec![f64::NAN], ScientificInputViolation::NonFiniteInput),
+        (
+            vec![f64::INFINITY],
+            ScientificInputViolation::NonFiniteInput,
+        ),
     ] {
-        assert!(matches!(
+        assert_eq!(
             gini(&values, &control),
-            Err(Error::InvalidInput { .. })
-        ));
-        assert!(matches!(
+            Err(Error::InvalidInput { violation }),
+        );
+        assert_eq!(
             dagum_gini(&values, &vec![0; values.len()], &control),
-            Err(Error::InvalidInput { .. })
-        ));
+            Err(Error::InvalidInput { violation }),
+        );
     }
     assert_eq!(
         dagum_gini(&[1., 2.], &[0], &control),
@@ -206,27 +209,27 @@ fn theil_rejects_undefined_inputs_and_honors_execution_control() {
         (
             &[0., 0.][..],
             None,
-            ScientificInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::DataOutOfRange,
         ),
         (
             &[-1., 2.][..],
             None,
-            ScientificInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::DataOutOfRange,
         ),
         (
             &[1., 2.][..],
             Some(&[0., 0.][..]),
-            ScientificInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::DataOutOfRange,
         ),
         (
             &[1., 2.][..],
             Some(&[-1., 2.][..]),
-            ScientificInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::DataOutOfRange,
         ),
         (
             &[0., 2.][..],
             Some(&[1., 0.][..]),
-            ScientificInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::DataOutOfRange,
         ),
         (
             &[f64::NAN][..],

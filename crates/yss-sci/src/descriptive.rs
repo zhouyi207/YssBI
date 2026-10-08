@@ -166,14 +166,14 @@ fn normalized_values(
         }
         if value < 0.0 {
             return Err(Error::InvalidInput {
-                violation: ScientificInputViolation::ParameterOutOfRange,
+                violation: ScientificInputViolation::DataOutOfRange,
             });
         }
         scale = scale.max(value);
     }
     if scale == 0.0 {
         return Err(Error::InvalidInput {
-            violation: ScientificInputViolation::ParameterOutOfRange,
+            violation: ScientificInputViolation::DataOutOfRange,
         });
     }
     let mut sorted = Vec::new();
@@ -293,7 +293,7 @@ pub fn theil_t(
             return Err(invalid(ScientificInputViolation::NonFiniteInput));
         }
         if value < 0.0 || weight < 0.0 {
-            return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
+            return Err(invalid(ScientificInputViolation::DataOutOfRange));
         }
         if weight > 0.0 {
             let log_weight = weight.ln();
@@ -304,7 +304,7 @@ pub fn theil_t(
         }
     }
     if !max_log_income.is_finite() {
-        return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
+        return Err(invalid(ScientificInputViolation::DataOutOfRange));
     }
 
     // Normalize population and income separately in log space: both w*x and

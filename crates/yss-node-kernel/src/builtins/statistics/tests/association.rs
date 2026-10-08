@@ -1,6 +1,43 @@
 use super::*;
 
 #[test]
+fn association_failures_distinguish_parameters_from_observations() {
+    let parameters = |confidence| {
+        [
+            ("alternative", string("two_sided")),
+            ("confidence_level", number(confidence)),
+        ]
+    };
+    let error = run(
+        "yssbi.statistics.association.pearson",
+        &[("x", series(&[1., 2., 3.])), ("y", series(&[3., 1., 2.]))],
+        &parameters(1.0),
+        1,
+    )
+    .unwrap_err();
+    assert!(matches!(error, KernelError::InvalidParameter), "{error:?}");
+    let error = run(
+        "yssbi.statistics.association.pearson",
+        &[("x", series(&[1., 1., 1.])), ("y", series(&[3., 1., 2.]))],
+        &parameters(0.95),
+        1,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, KernelError::InvalidNumericInput),
+        "{error:?}"
+    );
+    let error = run(
+        "yssbi.statistics.association.pearson",
+        &[("x", series(&[1., 2., 3.])), ("y", series(&[3., 1.]))],
+        &parameters(0.95),
+        1,
+    )
+    .unwrap_err();
+    assert!(matches!(error, KernelError::ShapeMismatch), "{error:?}");
+}
+
+#[test]
 fn association_category_union_preserves_exact_numeric_identity_and_text_labels() {
     let result = run(
         "yssbi.statistics.test.kappa",

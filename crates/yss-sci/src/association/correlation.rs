@@ -62,8 +62,11 @@ pub fn partial(
     level(options.confidence_level)?;
     let q = controls.len();
     let n = x.len();
-    if q == 0 || n <= q + 2 {
-        return Err(invalid());
+    if q == 0 {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if n <= q + 2 {
+        return Err(invalid(Violation::EmptyInput));
     }
     let mut columns = Vec::with_capacity(q);
     for column in controls {
@@ -80,7 +83,7 @@ pub fn partial(
     let (rank, _) = matrix_rank(design.as_ref()).map_err(|_| Error::ComputationFailed)?;
     control.check()?;
     if rank != q {
-        return Err(invalid());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let targets = Mat::from_fn(n, 2, |i, j| if j == 0 { x[i] } else { y[i] });
     let gram = design.transpose() * design.as_ref();
@@ -103,7 +106,7 @@ pub fn partial(
     if sum(rx.iter().map(|x| x * x)).sqrt() <= tolerance
         || sum(ry.iter().map(|x| x * x)).sqrt() <= tolerance
     {
-        return Err(invalid());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let r = coefficient(&rx, &ry, control)?;
     let output = result(
@@ -124,7 +127,7 @@ fn exact_requested(method: RankInference, n: usize) -> Result<bool, Error> {
         RankInference::Auto => Ok(n <= MAX_EXACT_RANK_OBSERVATIONS),
         RankInference::Asymptotic => Ok(false),
         RankInference::PermutationExact if n <= MAX_EXACT_RANK_OBSERVATIONS => Ok(true),
-        _ => Err(invalid()),
+        _ => Err(invalid(Violation::ParameterOutOfRange)),
     }
 }
 
@@ -206,7 +209,9 @@ pub fn spearman(
     } else {
         student_test(
             r,
-            x.len().checked_sub(2).ok_or_else(invalid)?,
+            x.len()
+                .checked_sub(2)
+                .ok_or_else(|| invalid(Violation::EmptyInput))?,
             options.alternative,
             "student_t_approximation",
         )?
@@ -291,7 +296,7 @@ pub fn kendall(
     let denominator =
         ((pairs - rx.tie_pairs) as f64).sqrt() * ((pairs - ry.tie_pairs) as f64).sqrt();
     if denominator == 0.0 {
-        return Err(invalid());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let score = c as f64 - d as f64;
     let r = bounded(score / denominator, -1.0, 1.0)?;
@@ -324,7 +329,7 @@ pub fn kendall(
         }
     } else {
         if n < 3 {
-            return Err(invalid());
+            return Err(invalid(Violation::EmptyInput));
         }
         let m = (n as f64) * (n - 1) as f64;
         let variance = (m * (2 * n + 5) as f64 - rx.tie_variance - ry.tie_variance) / 18.0

@@ -1,6 +1,36 @@
 use super::*;
 
 #[test]
+fn inequality_domain_failures_remain_numeric_input_errors() {
+    for (id, inputs, parameters) in [
+        (
+            "yssbi.statistics.inequality.gini",
+            vec![("series", series(&[-1., 2.]))],
+            vec![],
+        ),
+        (
+            "yssbi.statistics.inequality.dagum_gini",
+            vec![
+                ("series", series(&[-1., 2.])),
+                ("groups", series(&[0., 1.])),
+            ],
+            vec![],
+        ),
+        (
+            "yssbi.statistics.inequality.theil",
+            vec![("series", series(&[-1., 2.]))],
+            vec![("theil_form", string("individual"))],
+        ),
+    ] {
+        let error = run(id, &inputs, &parameters, 1).unwrap_err();
+        assert!(
+            matches!(error, KernelError::InvalidNumericInput),
+            "{id}: {error:?}",
+        );
+    }
+}
+
+#[test]
 fn dagum_adapter_preserves_exact_labels_and_enforces_input_admission() {
     let id = "yssbi.statistics.inequality.dagum_gini";
     let values = series(&[1., 2., 3., 4., 2., 6.]);

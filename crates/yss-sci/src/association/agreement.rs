@@ -40,15 +40,21 @@ pub fn kappa(
     control.check()?;
     level(options.confidence_level)?;
     let m = ratings.len();
-    if m < 2 || categories < 2 {
-        return Err(invalid());
+    if m < 2 {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if categories < 2 {
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let n = ratings[0].len();
-    if n < 2
-        || (options.method == KappaMethod::Cohen && m != 2)
-        || (options.method == KappaMethod::Fleiss && options.weighting != KappaWeighting::None)
-    {
-        return Err(invalid());
+    if n < 2 {
+        return Err(invalid(Violation::EmptyInput));
+    }
+    if options.method == KappaMethod::Cohen && m != 2 {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if options.method == KappaMethod::Fleiss && options.weighting != KappaWeighting::None {
+        return Err(invalid(Violation::ParameterOutOfRange));
     }
     let mut counts = vec![vec![0usize; categories]; m];
     for (rater, column) in ratings.iter().enumerate() {
@@ -60,7 +66,7 @@ pub fn kappa(
         for (i, &category) in column.iter().enumerate() {
             checkpoint(control, i)?;
             if category >= categories {
-                return Err(invalid());
+                return Err(invalid(Violation::DataOutOfRange));
             }
             counts[rater][category] += 1;
         }
@@ -107,7 +113,7 @@ pub fn kappa(
                 bounded(expected.total, 0.0, 1.0)?,
             );
             if pe >= 1.0 {
-                return Err(invalid());
+                return Err(invalid(Violation::DataOutOfRange));
             }
             let coefficient = finite((po - pe) / (1.0 - pe))?;
             let u = (0..categories)
@@ -156,7 +162,7 @@ pub fn kappa(
                 .collect::<Vec<_>>();
             let pe = bounded(sum(p.iter().map(|p| p * p)), 0.0, 1.0)?;
             if pe >= 1.0 {
-                return Err(invalid());
+                return Err(invalid(Violation::DataOutOfRange));
             }
             let mut subject_counts = vec![0usize; categories];
             let mut agreements = Vec::with_capacity(n);
@@ -259,7 +265,7 @@ pub fn icc(
         .map(|x| x.abs())
         .fold(0.0_f64, f64::max);
     if scale == 0.0 {
-        return Err(invalid());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let column_means = ratings
         .iter()
@@ -310,7 +316,7 @@ pub fn icc(
         msb + (k - 1) as f64 * mse
     };
     if denominator <= 0.0 {
-        return Err(invalid());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let coefficient = finite((msb - if one_way { msw } else { mse }) / denominator)?;
     let error = if one_way { msw } else { mse };
@@ -490,7 +496,7 @@ pub fn kendall_w(ratings: &[Vec<f64>], control: &Control) -> Result<ConcordanceR
         }
     }
     if variance.total <= 0.0 {
-        return Err(invalid());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let r = bounded(
         sum(rank_sums.iter().map(|r| (r - m as f64 * mean).powi(2))) / (m as f64 * variance.total),
@@ -534,7 +540,7 @@ pub fn rwg(items: &[Vec<f64>], null: AgreementNull, control: &Control) -> Result
         AgreementNull::SpecifiedVariance { variance } if variance.is_finite() && variance > 0.0 => {
             (variance, "specified_variance", None)
         }
-        _ => return Err(invalid()),
+        _ => return Err(invalid(Violation::ParameterOutOfRange)),
     };
     let mut output = Vec::with_capacity(items.len());
     for (item, values) in items.iter().enumerate() {
@@ -542,7 +548,7 @@ pub fn rwg(items: &[Vec<f64>], null: AgreementNull, control: &Control) -> Result
             for (i, &value) in values.iter().enumerate() {
                 checkpoint(control, i)?;
                 if value.fract() != 0.0 || value < 1.0 || value > points as f64 {
-                    return Err(invalid());
+                    return Err(invalid(Violation::DataOutOfRange));
                 }
             }
         }

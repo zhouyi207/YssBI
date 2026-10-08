@@ -14,10 +14,8 @@ use yss_sci_contract::execution::{
 };
 use yss_sci_contract::hypothesis::Alternative;
 
-fn invalid() -> Error {
-    Error::InvalidInput {
-        violation: Violation::ParameterOutOfRange,
-    }
+fn invalid(violation: Violation) -> Error {
+    Error::InvalidInput { violation }
 }
 fn finite(value: f64) -> Result<f64, Error> {
     if value.is_finite() {
@@ -69,7 +67,7 @@ fn paired(x: &[f64], y: &[f64], minimum: usize, control: &Control) -> Result<(),
 fn matrix(columns: &[Vec<f64>], minimum_columns: usize, control: &Control) -> Result<usize, Error> {
     control.check()?;
     if columns.len() < minimum_columns {
-        return Err(invalid());
+        return Err(invalid(Violation::ShapeMismatch));
     }
     let rows = columns[0].len();
     for column in columns {
@@ -118,7 +116,7 @@ fn unit_vector(values: &[f64], control: &Control) -> Result<Vec<f64>, Error> {
     let (mut values, _, _) = centered(values, control)?;
     let norm = finite(sum(values.iter().map(|x| x * x)).sqrt())?;
     if norm <= 0.0 {
-        return Err(invalid());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     for value in &mut values {
         *value /= norm;
@@ -135,7 +133,7 @@ fn level(value: f64) -> Result<(), Error> {
     if value.is_finite() && value > 0.0 && value < 1.0 {
         Ok(())
     } else {
-        Err(invalid())
+        Err(invalid(Violation::ParameterOutOfRange))
     }
 }
 fn alternative(value: Alternative) -> &'static str {
@@ -172,7 +170,7 @@ fn student_test(
     method: &'static str,
 ) -> Result<TestInference, Error> {
     if df == 0 {
-        return Err(invalid());
+        return Err(invalid(Violation::EmptyInput));
     }
     let (statistic, p_value) = if r.abs() == 1.0 {
         let p = match alternative {

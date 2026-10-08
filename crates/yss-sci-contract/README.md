@@ -148,6 +148,12 @@ the borrowed model contract.
 map those facts at their own boundaries; this crate does not maintain a separate
 host-facing string-code mapping.
 
+`ScientificInputViolation` distinguishes missing/insufficient observations,
+nonfinite observations, incompatible input shapes, data outside the statistic's
+domain (`DataOutOfRange`, including nonidentifiable coefficients), and invalid
+options (`ParameterOutOfRange`). Both scientific error types use this vocabulary;
+data-domain failures must not be represented as invalid options.
+
 This crate owns data and execution-control contracts, not algorithms, report rendering,
 project/database state, Tauri, Polars, faer or concrete backend implementations.
 Observation metadata records row selection counts and the applied missing-value

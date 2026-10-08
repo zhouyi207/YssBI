@@ -332,18 +332,24 @@ fn concordance_ridit_and_rwg_keep_their_distinct_definitions() {
 fn association_invalid_inputs_and_execution_control_fail_explicitly() {
     let control = control();
     let options = CorrelationOptions::default();
-    assert!(pearson(&[1., 1., 1.], &[1., 2., 3.], options, &control).is_err());
-    assert!(pearson(&[1., 2., 3.], &[1., 2.], options, &control).is_err());
-    assert!(
+    assert_eq!(
+        pearson(&[1., 1., 1.], &[1., 2., 3.], options, &control),
+        Err(invalid(Violation::DataOutOfRange)),
+    );
+    assert_eq!(
+        pearson(&[1., 2., 3.], &[1., 2.], options, &control),
+        Err(invalid(Violation::ShapeMismatch)),
+    );
+    assert_eq!(
         kendall(
             &[1., 1., 1.],
             &[1., 2., 3.],
             RankCorrelationOptions::default(),
             &control
-        )
-        .is_err()
+        ),
+        Err(invalid(Violation::DataOutOfRange)),
     );
-    assert!(
+    assert_eq!(
         kappa(
             &[vec![0, 0], vec![0, 0]],
             2,
@@ -353,20 +359,23 @@ fn association_invalid_inputs_and_execution_control_fail_explicitly() {
                 confidence_level: 0.95
             },
             &control
-        )
-        .is_err()
+        ),
+        Err(invalid(Violation::DataOutOfRange)),
     );
-    assert!(icc(&[vec![1., 1.], vec![1., 1.]], IccType::Icc2, 0.95, &control).is_err());
-    assert!(
+    assert_eq!(
+        icc(&[vec![1., 1.], vec![1., 1.]], IccType::Icc2, 0.95, &control),
+        Err(invalid(Violation::DataOutOfRange)),
+    );
+    assert_eq!(
         rwg(
             &[vec![1., 1.5]],
             AgreementNull::Uniform { scale_points: 5 },
             &control
-        )
-        .is_err()
+        ),
+        Err(invalid(Violation::DataOutOfRange)),
     );
     let ordered = (0..10).map(|i| i as f64).collect::<Vec<_>>();
-    assert!(
+    assert_eq!(
         spearman(
             &ordered,
             &ordered,
@@ -375,8 +384,42 @@ fn association_invalid_inputs_and_execution_control_fail_explicitly() {
                 ..Default::default()
             },
             &control
-        )
-        .is_err()
+        ),
+        Err(invalid(Violation::ParameterOutOfRange)),
+    );
+    assert_eq!(
+        rwg(
+            &[vec![1., 2.]],
+            AgreementNull::SpecifiedVariance { variance: 0.0 },
+            &control,
+        ),
+        Err(invalid(Violation::ParameterOutOfRange)),
+    );
+    assert_eq!(
+        icc(&[vec![1., 2.]], IccType::Icc2, 0.95, &control),
+        Err(invalid(Violation::ShapeMismatch)),
+    );
+    assert_eq!(
+        partial(&[1., 2., 3.], &[3., 1., 2.], &[], options, &control),
+        Err(invalid(Violation::ShapeMismatch)),
+    );
+    assert_eq!(
+        partial(
+            &[1., 2., 3.],
+            &[3., 1., 2.],
+            &[vec![2., 3., 1.]],
+            options,
+            &control,
+        ),
+        Err(invalid(Violation::EmptyInput)),
+    );
+    assert_eq!(
+        ridit(&[2], &[0, 1], 2, Alternative::TwoSided, false, &control),
+        Err(invalid(Violation::DataOutOfRange)),
+    );
+    assert_eq!(
+        ridit(&[], &[0, 1], 2, Alternative::TwoSided, false, &control),
+        Err(invalid(Violation::EmptyInput)),
     );
     let expired = Control {
         deadline: Instant::now(),

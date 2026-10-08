@@ -73,6 +73,7 @@ fn acf_pacf_maps_results_and_rejects_invalid_requests() {
         ScientificInputViolation::EmptyInput,
         ScientificInputViolation::NonFiniteInput,
         ScientificInputViolation::ShapeMismatch,
+        ScientificInputViolation::DataOutOfRange,
         ScientificInputViolation::ParameterOutOfRange,
     ] {
         for operation in [SciOperationCode::AcfPacf, SciOperationCode::Regression] {
