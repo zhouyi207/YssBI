@@ -502,6 +502,9 @@ Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事
 
 当前 Assistant 的数据质量检查通过 DataAgent 的 `inspect_database_schema` 和 `profile_database` 能力执行。通用 Workflow runtime 接收调用方构造的 versioned definition；每个 `WorkflowStep` 直接包含 typed capability `request` 和依赖列表，compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request。Runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作；桌面没有手动工作流控制入口。
 
+Compiler 使用临时 `petgraph::graphmap::DiGraphMap` 和迭代式 `toposort` 检测依赖环，
+包含无依赖的独立步骤并合并重复依赖边。该图只用于校验，步骤定义及执行顺序仍由 Workflow 拥有。
+
 每个 run 的 advance 持有唯一执行租约；并发 advance 返回 `ConcurrentWorkflow`，状态转换使用短时异步互斥，能力调用期间不持有该转换锁。
 运行记录携带 revision；`save_run` 的创建仅允许不存在的记录，更新必须匹配预期 revision，成功返回递增版本，冲突不覆盖当前记录。
 取消先持久化 `Cancelled`，再取消正在执行的能力所共享的 token；迟到结果不能更新终态或发布步骤完成事件。

@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet};
+use petgraph::{algo::toposort, graphmap::DiGraphMap};
+use std::collections::BTreeSet;
 
 use yss_harness_contract::{
     HarnessSessionId, HarnessTurnId, ProjectSessionBinding, ToolEffect, UnixMillis,
@@ -53,30 +54,16 @@ impl CompiledWorkflow {
 }
 
 fn ensure_acyclic(steps: &[WorkflowStep]) -> Result<(), WorkflowCompileError> {
-    let mut remaining_dependencies = steps
-        .iter()
-        .map(|step| (step.id.clone(), step.depends_on.iter().cloned().collect()))
-        .collect::<BTreeMap<WorkflowStepId, BTreeSet<WorkflowStepId>>>();
-    let mut ready = remaining_dependencies
-        .iter()
-        .filter(|(_, dependencies)| dependencies.is_empty())
-        .map(|(id, _)| id.clone())
-        .collect::<BTreeSet<_>>();
-    let mut visited = 0usize;
-
-    while let Some(step_id) = ready.pop_first() {
-        visited += 1;
-        for (candidate_id, dependencies) in &mut remaining_dependencies {
-            if dependencies.remove(&step_id) && dependencies.is_empty() {
-                ready.insert(candidate_id.clone());
-            }
+    let mut dependencies = DiGraphMap::<_, ()>::new();
+    for step in steps {
+        dependencies.add_node(&step.id);
+        for dependency in &step.depends_on {
+            dependencies.add_edge(dependency, &step.id, ());
         }
     }
-    if visited == steps.len() {
-        Ok(())
-    } else {
-        Err(WorkflowCompileError::Cycle)
-    }
+    toposort(&dependencies, None)
+        .map(|_| ())
+        .map_err(|_| WorkflowCompileError::Cycle)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -428,12 +415,34 @@ mod tests {
     #[test]
     fn compiler_rejects_cycles() {
         let error = CompiledWorkflow::compile(definition(vec![
+            step("independent", &[]),
             step("inspect", &["review"]),
             step("review", &["inspect"]),
         ]))
         .unwrap_err();
 
         assert_eq!(error, WorkflowCompileError::Cycle);
+    }
+
+    #[test]
+    fn compiler_preserves_shared_dependencies_and_rejects_unknown_steps() {
+        let definition = definition(vec![
+            step("report", &["review", "inspect"]),
+            step("review", &["inspect", "inspect"]),
+            step("inspect", &[]),
+            step("independent", &[]),
+        ]);
+        let compiled = CompiledWorkflow::compile(definition.clone()).unwrap();
+        assert_eq!(compiled.definition().steps, definition.steps);
+
+        let mut invalid = definition;
+        invalid.steps[0]
+            .depends_on
+            .push(WorkflowStepId::try_new("missing").unwrap());
+        assert_eq!(
+            CompiledWorkflow::compile(invalid).unwrap_err(),
+            WorkflowCompileError::UnknownDependency
+        );
     }
 
     #[test]
