@@ -4,6 +4,7 @@ mod descriptive;
 mod diagnostics;
 mod meta;
 mod panel_models;
+mod preparation;
 mod spatial;
 mod survival;
 mod time_series;

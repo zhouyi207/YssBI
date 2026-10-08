@@ -144,16 +144,16 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
     let mut responses = Vec::new();
     let mut covariates = Vec::new();
     let mut subject_ids = None;
-    for (key, column) in inv.input_keys.iter().zip(&columns) {
+    for (key, column) in inv.input_keys.iter().zip(columns) {
         match *key {
-            "y" => responses.push(numeric(column, false, inv)?),
+            "y" => responses.push(numeric(&column, false, inv)?),
             "factors" => {
-                let (coded, levels) = factor(column, inv)?;
+                let (coded, levels) = factor(&column, inv)?;
                 factors.push(coded);
                 labels.push(levels);
             }
-            "covariates" => covariates.push(numeric(column, false, inv)?),
-            "subjects" => subject_ids = Some(subjects(column, inv)?),
+            "covariates" => covariates.push(numeric(&column, false, inv)?),
+            "subjects" => subject_ids = Some(subjects(&column, inv)?),
             _ => return Err(KernelError::InputLayoutMismatch),
         }
     }

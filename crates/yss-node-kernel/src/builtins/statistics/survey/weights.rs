@@ -25,6 +25,7 @@ fn weights(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
             .and_then(|n| n.checked_add(retained)),
     )?;
     let values = numeric(&data[0], false, inv)?;
+    drop(data);
     let control = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     let result = yss_sci_runtime::survey::sampling_weights(&values, probabilities, &control)
         .map_err(computation_error)?;

@@ -70,8 +70,8 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
             .checked_add(65536)
     })())?;
     let columns = inputs
-        .iter()
-        .map(|v| numeric(v, false, inv))
+        .into_iter()
+        .map(|v| numeric(&v, false, inv))
         .collect::<Result<Vec<_>, _>>()?;
     let c = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     match method {

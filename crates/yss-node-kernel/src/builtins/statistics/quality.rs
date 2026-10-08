@@ -66,6 +66,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
     let control = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     match method {
         Method::Chart => {
+            drop(data);
             let kind = match text(inv, "chart_kind")? {
                 "individuals" => ControlChartKind::Individuals,
                 "moving_range" => ControlChartKind::MovingRange,
@@ -106,6 +107,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                 .get(1)
                 .map(|v| categories(v, false, inv).map(|r| r.0))
                 .transpose()?;
+            drop(data);
             let limits = CapabilityLimits {
                 lower: number(inv, "lower_limit")?,
                 upper: number(inv, "upper_limit")?,
@@ -120,6 +122,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
         Method::Gage => {
             let (parts, part_labels) = categories(&data[1], false, inv)?;
             let (operators, operator_labels) = categories(&data[2], false, inv)?;
+            drop(data);
             let result = sci::measurement_system(
                 &measurements,
                 &parts,

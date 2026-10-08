@@ -58,9 +58,10 @@ fn cluster(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
     })())?;
     let response = numeric(&columns[0], false, inv)?;
     let (groups, _) = categories(&columns[1], false, inv)?;
-    let predictors = columns[2..]
-        .iter()
-        .map(|c| numeric(c, false, inv))
+    let predictors = columns
+        .into_iter()
+        .skip(2)
+        .map(|c| numeric(&c, false, inv))
         .collect::<Result<Vec<_>, _>>()?;
     let control = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     let mut result = sci::cluster::fit(response, predictors, groups, constant, &control)
@@ -146,6 +147,7 @@ fn intervals(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelErro
     workspace(n, n, 5, 16, retained, inv)?;
     let estimates = numeric(&columns[0], false, inv)?;
     let errors = numeric(&columns[1], false, inv)?;
+    drop(columns);
     let df = number(inv, "degrees_of_freedom")?;
     if df < 0. {
         return Err(KernelError::InvalidParameter);
@@ -210,6 +212,7 @@ fn comparisons(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelEr
             _ => return Err(KernelError::InvalidParameter),
         },
     };
+    drop(columns);
     let control = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     let result = sci::comparisons::pairwise(&response, &groups, options, &control)
         .map_err(computation_error)?;

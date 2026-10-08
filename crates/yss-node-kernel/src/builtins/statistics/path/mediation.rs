@@ -60,9 +60,10 @@ fn mediation(
             .checked_add(65536)
     })())?;
     let y = numeric(&data[0], false, inv)?;
-    let x = data[1..]
-        .iter()
-        .map(|v| numeric(v, false, inv))
+    let x = data
+        .into_iter()
+        .skip(1)
+        .map(|v| numeric(&v, false, inv))
         .collect::<Result<Vec<_>, _>>()?;
     let control = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     let result =

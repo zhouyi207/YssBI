@@ -39,9 +39,10 @@ fn moderation(
             .checked_add(65536)
     })())?;
     let response = numeric(&data[0], false, inv)?;
-    let columns = data[1..]
-        .iter()
-        .map(|c| numeric(c, false, inv))
+    let columns = data
+        .into_iter()
+        .skip(1)
+        .map(|c| numeric(&c, false, inv))
         .collect::<Result<Vec<_>, _>>()?;
     let c = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     let result = yss_sci_runtime::path::moderation(

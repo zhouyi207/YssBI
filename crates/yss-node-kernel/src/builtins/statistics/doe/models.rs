@@ -40,9 +40,10 @@ fn execute(inv: &KernelInvocation<'_>, surface: bool) -> Result<Vec<RuntimeValue
             .checked_add(65536)
     })())?;
     let response = numeric(&data[0], false, inv)?;
-    let predictors = data[1..]
-        .iter()
-        .map(|c| numeric(c, false, inv))
+    let predictors = data
+        .into_iter()
+        .skip(1)
+        .map(|c| numeric(&c, false, inv))
         .collect::<Result<Vec<_>, _>>()?;
     if surface {
         let result =

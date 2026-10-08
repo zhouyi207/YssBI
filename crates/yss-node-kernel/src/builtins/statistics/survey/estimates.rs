@@ -81,9 +81,9 @@ fn estimate(
         let predictors = inv
             .input_keys
             .iter()
-            .enumerate()
-            .filter(|(_, key)| **key == "x")
-            .map(|(i, _)| numeric(&data[i], false, inv))
+            .zip(data)
+            .filter(|(key, _)| **key == "x")
+            .map(|(_, column)| numeric(&column, false, inv))
             .collect::<Result<Vec<_>, _>>()?;
         let result = yss_sci_runtime::survey::regression(
             &response,
@@ -107,6 +107,7 @@ fn estimate(
             .collect();
         regression_outputs(inv, &response, &result.model, labels, &result.diagnostics)
     } else {
+        drop(data);
         let proportion = match text(inv, "statistic")? {
             "mean" => false,
             "proportion" => true,

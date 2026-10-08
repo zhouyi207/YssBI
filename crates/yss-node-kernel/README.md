@@ -292,6 +292,9 @@ Cluster 标签独立读取为精确标量，复用 `common/inputs::categories` �
 
 Dagum Gini 复用统计适配的受控物化、数值读取与精确标签编码，标签按首次出现编号，不再逐行线性扫描已有分组。原标签用于分组与组对报告；组对输出预算仍按分组数平方检查，输入缓冲在调用 SCI 前释放。
 ANOVA 的响应和协变量也通过共享数值读取入口校验；重复测量的受试者可比较性与排序编码由 ANOVA 自身约束。
+统计适配器将已物化列转换为数值数组和标签编码后，按值消费原始列或在最后一次使用后释放它们；
+ANOVA、推断、问卷、质量分析、DOE、路径与抽样计算不将这些临时列保留到 SCI 计算和报告构造阶段。
+已编码标签、输入名、数值数组及原始预算准入由各自既有 owner 持有。
 
 Logit/Probit/Prais、IV 2SLS/LIML、Panel、TWFE DID、ADF、VAR/VEC 及阶数/协整秩检验均有执行适配。模型以不可变 Record 保存中立拟合契约，Summary 在预算及执行控制检查后解码为对应契约，交给 Runtime 组装所选报告并调用需要的 SCI 分析；Fit 不附带完整报告。Logit/Probit Predict 使用既有系数。Panel/VAR/VEC 只输出模型，DID 输出模型和报告，不把未提供或多方程的观测结果伪装为单个拟合数列。参数组合和输出含义见 [Catalog](../yss-node-catalog/README.md) 与各节点帮助。
 

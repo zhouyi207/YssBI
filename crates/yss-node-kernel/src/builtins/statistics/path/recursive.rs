@@ -43,8 +43,8 @@ fn recursive(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelErro
             .checked_add(65536)
     })())?;
     let x = data
-        .iter()
-        .map(|v| numeric(v, false, inv))
+        .into_iter()
+        .map(|v| numeric(&v, false, inv))
         .collect::<Result<Vec<_>, _>>()?;
     let result = yss_sci_runtime::path::recursive_path(&x, &equations, &control)
         .map_err(computation_error)?;
