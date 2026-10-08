@@ -42,10 +42,11 @@ requested scope, and report structure.
 
 ## Markdown and mathematical notation
 
-The shared renderer uses GFM, KaTeX, Typography, and Shiki. Single `~` is literal;
-`~~text~~` is strikethrough. `$...$` is inline math; `$$...$$` is centered display
-math. Code spans have no decorative backticks. These are renderer rules, not text
-substitutions to repeat in a report.
+Use GFM Markdown for report text and LaTeX source for mathematical notation.
+Use `$...$` for inline math source and `$$...$$` for standalone math source.
+Use `~~text~~` for strikethrough and code spans for literal identifiers.
+The active viewer owns rendering; a successful document write establishes saved
+source content, without proving that formulas have been rendered.
 
 - Use inline math inside sentences and table cells, for example `$x_i$`, `$R^2$`,
   `$\hat{\beta}_{1}$`, and `$\frac{a}{b}$`. Use braces for compound indices and

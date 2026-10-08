@@ -538,7 +538,7 @@ Assistant 展开引用返回片段正文与可选原始资源定位，打开原�
 
 会话上下文由对话事件、工具账本和上下文压缩检查点重建，用户消息不另存为独立记忆。当前契约没有会话记忆类型、事件、数据库表、读写接口或前端投影；SQLite 和事件解析只接受当前契约，不保留旧记忆数据的兼容分支。
 
-当前注册并加载的 Skill 是 [statistical-report-writing](skills/statistical-report-writing/SKILL.md)，拥有统计证据、公式、表格竖线、显著性标记、金额转义及交付检查规则；Markdown 解析选项和布局仍由共享前端渲染器负责。
+当前注册并加载的 Skill 是 [statistical-report-writing](skills/statistical-report-writing/SKILL.md)，拥有统计证据、数学源码、表格竖线、显著性标记、金额转义及交付检查规则。Markdown 预览与布局由 [GPUI host](../yss-desktop-gpui/README.md) 拥有；当前提供 GFM 预览，数学预览仍待迁移，保存回执证明的是源码内容。
 
 Host 初始化时通过内置 `SkillRegistry` 精确解析 `yssbi.statistics.statistical-report-writing@1.0.0`，将 ID、版本和原始规范作为独立 System 消息预加载到每次 ManagerAgent 和 ReportAgent 请求，位于基础工具策略之后、对话历史之前；source hash 仅用于内部校验，不发送给模型。Skill 的适用条件限定为生成、修改或续写统计报告，涵盖 Assistant 正文和 Doc 内容；无需按当前消息关键词猜测，也不会因后续修改省略“报告”一词而丢失规范。ReportAgent 复用同一写作 Skill，Manager 直接撰写统计正文时同样适用。当前没有模型侧 `load_skill` 工具；内置方法包由 Core 加载。新增 Skill 文件必须同时注册并接入上下文，单独添加文件不会生效。
 
