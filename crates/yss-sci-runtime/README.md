@@ -166,6 +166,10 @@ Serial-test input/output
 records belong to `yss-sci-contract::diagnostics::serial_correlation`. No opaque JSON report crosses
 this boundary.
 
+SCI's fit admission preserves distinct shape, nonfinite-data and data-domain failures
+for WLS weights and GLS covariance data through the shared error adapter. The direct
+`fit_ols` re-export preserves the same input vocabulary without controlled admission.
+
 Binary and Prais entry points accept their shared options instead of rebuilding defaults.
 IV accepts separate exogenous, endogenous and instrument column collections, preserving
 fitted values, residuals, coefficient inference and the design needed for later analyses.

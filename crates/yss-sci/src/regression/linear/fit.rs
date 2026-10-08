@@ -28,14 +28,25 @@ pub fn fit_linear_regression(
         SciOperationCode::Regression,
     )?;
     match &method {
-        LinearRegressionMethod::Wls { weights }
-            if weights.len() != y.nrows()
-                || weights.iter().any(|w| !w.is_finite() || *w <= 0.0) =>
-        {
-            return Err(invalid_input(
-                SciOperationCode::Regression,
-                ScientificInputViolation::ParameterOutOfRange,
-            ));
+        LinearRegressionMethod::Wls { weights } => {
+            if weights.len() != y.nrows() {
+                return Err(invalid_input(
+                    SciOperationCode::Regression,
+                    ScientificInputViolation::ShapeMismatch,
+                ));
+            }
+            for &weight in weights {
+                let violation = if !weight.is_finite() {
+                    Some(ScientificInputViolation::NonFiniteInput)
+                } else if weight <= 0.0 {
+                    Some(ScientificInputViolation::DataOutOfRange)
+                } else {
+                    None
+                };
+                if let Some(violation) = violation {
+                    return Err(invalid_input(SciOperationCode::Regression, violation));
+                }
+            }
         }
         LinearRegressionMethod::Gls { sigma } => {
             if sigma.len() != y.nrows() || sigma.iter().any(|row| row.len() != y.nrows()) {
@@ -47,14 +58,26 @@ pub fn fit_linear_regression(
             if !matches!(
                 config.covariance,
                 yss_sci_contract::regression::OlsCovariance::NonRobust
-            ) || sigma.iter().enumerate().any(|(i, row)| {
-                row.iter()
-                    .enumerate()
-                    .any(|(j, v)| !v.is_finite() || *v != sigma[j][i])
-            }) {
+            ) {
                 return Err(invalid_input(
                     SciOperationCode::Regression,
                     ScientificInputViolation::ParameterOutOfRange,
+                ));
+            }
+            if sigma.iter().flatten().any(|value| !value.is_finite()) {
+                return Err(invalid_input(
+                    SciOperationCode::Regression,
+                    ScientificInputViolation::NonFiniteInput,
+                ));
+            }
+            if sigma.iter().enumerate().any(|(i, row)| {
+                row.iter()
+                    .enumerate()
+                    .any(|(j, value)| *value != sigma[j][i])
+            }) {
+                return Err(invalid_input(
+                    SciOperationCode::Regression,
+                    ScientificInputViolation::DataOutOfRange,
                 ));
             }
         }
@@ -182,15 +205,20 @@ pub fn fit_ols(
     config: OlsOptions,
     metadata: StatisticalObservationMetadata,
 ) -> Result<RegressionFit, SciError> {
-    if response.len() <= predictors.len() + usize::from(config.constant)
-        || response
-            .iter()
-            .chain(predictors.iter().flatten())
-            .any(|value| !value.is_finite())
+    if response.len() <= predictors.len() + usize::from(config.constant) {
+        return Err(invalid_input(
+            SciOperationCode::Regression,
+            ScientificInputViolation::EmptyInput,
+        ));
+    }
+    if response
+        .iter()
+        .chain(predictors.iter().flatten())
+        .any(|value| !value.is_finite())
     {
         return Err(invalid_input(
             SciOperationCode::Regression,
-            ScientificInputViolation::ParameterOutOfRange,
+            ScientificInputViolation::NonFiniteInput,
         ));
     }
     let y = Col::from_iter(response);

@@ -554,6 +554,11 @@ an inference error instead of a fabricated zero statistic and unit p-value.
 WLS uses the shared typed `OlsCovariance` selection. Named covariance callers
 are validated by `OlsOptions::from_covariance_parts`; unsupported names or missing
 required parameters never fall back to nonrobust computation.
+Linear fit admission reports auxiliary-data length mismatches as `ShapeMismatch`,
+nonfinite weights/covariances as `NonFiniteInput`, and nonpositive WLS weights or
+asymmetric GLS covariance data as `DataOutOfRange`. Unsupported GLS covariance
+options remain `ParameterOutOfRange`. Direct `fit_ols` reports insufficient samples
+as `EmptyInput` and nonfinite observations as `NonFiniteInput`.
 
 `compute_cov_beta` borrows the selected `OlsCovariance` directly. It reads cluster
 IDs, HAC kernels and lag settings from that selection rather than reconstructing

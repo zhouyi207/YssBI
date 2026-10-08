@@ -234,7 +234,7 @@ Each result is one `plot.data` record; rendering does not run inside a kernel.
 
 实现行为变化需要递增 revision。输入布局、参数或输出形状变化需要同步节点声明和消费者，并复核解析与计划缓存的能力身份。透明重路由不产生执行操作，也不注册无效的同名内核。
 
-OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。WLS/GLS 的线性 Fit 与 Prais Fit 分别使用 revision 9 和 6，Summary/Predict 不重新拟合。
+OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。统一线性 Fit（OLS/WLS/GLS）使用 revision 12，保留 WLS 权重和 GLS 协方差数据的形状、非有限及定义域错误分类；Prais Fit 使用 revision 6。Summary/Predict 不重新拟合。
 DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 6。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，实现同步使用 revision 6。
 IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；非有限模型在 JSON 编码前返回 `NonFiniteResult`，两个 Fit 使用 revision 6。Summary 仍从已存运行值解码模型并按所选内容计算报告，不改其输入或输出形状。
 IV 两个 Summary 使用 revision 7；第一阶段的多内生变量矩阵保持观测行与变量列的对应关系，修正三个及更多内生变量时的 Shea 指标。报告展示直接使用第一阶段的共享类型字段，不再从已编码的 JSON 重读系数。

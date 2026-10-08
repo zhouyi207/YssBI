@@ -592,13 +592,33 @@ mod tests {
 
     #[test]
     fn linear_fit_rejects_invalid_method_inputs_and_covariance_matrices() {
-        for (method, auxiliary, group) in [
-            ("WLS", vec![], "weights"),
-            ("WLS", vec![series(&[1.0, 0.0, 2.0])], "weights"),
-            ("WLS", vec![series(&[1.0, 2.0])], "weights"),
-            ("OLS", vec![series(&[1.0, 1.0, 1.0])], "weights"),
-            ("GLS", vec![], "sigma"),
-            ("GLS", vec![series(&[1.0, 0.0, 0.0])], "sigma"),
+        for (method, auxiliary, group, expected) in [
+            ("WLS", vec![], "weights", KernelError::InvalidParameter),
+            (
+                "WLS",
+                vec![series(&[1.0, 0.0, 2.0])],
+                "weights",
+                KernelError::InvalidNumericInput,
+            ),
+            (
+                "WLS",
+                vec![series(&[1.0, 2.0])],
+                "weights",
+                KernelError::ShapeMismatch,
+            ),
+            (
+                "OLS",
+                vec![series(&[1.0, 1.0, 1.0])],
+                "weights",
+                KernelError::InvalidParameter,
+            ),
+            ("GLS", vec![], "sigma", KernelError::InvalidParameter),
+            (
+                "GLS",
+                vec![series(&[1.0, 0.0, 0.0])],
+                "sigma",
+                KernelError::ShapeMismatch,
+            ),
             (
                 "GLS",
                 vec![
@@ -607,6 +627,7 @@ mod tests {
                     series(&[0.0, 0.0, 1.0]),
                 ],
                 "sigma",
+                KernelError::InvalidNumericInput,
             ),
             (
                 "GLS",
@@ -616,15 +637,18 @@ mod tests {
                     series(&[0.0, 0.0, 1.0]),
                 ],
                 "sigma",
+                KernelError::ScientificFailure,
             ),
         ] {
             let mut inputs = vec![series(&[1.0, 2.0, 5.0]), series(&[1.0, 2.0, 3.0])];
             let mut groups = vec![None, Some("x")];
             groups.extend(vec![Some(group); auxiliary.len()]);
             inputs.extend(auxiliary);
-            assert!(
-                run("fit", &inputs, &groups, method, 3, false).is_err(),
-                "{method} must reject invalid auxiliary inputs"
+            let error = run("fit", &inputs, &groups, method, 3, false).unwrap_err();
+            assert_eq!(
+                std::mem::discriminant(&error),
+                std::mem::discriminant(&expected),
+                "{method}: {error:?}, expected {expected:?}",
             );
         }
     }
