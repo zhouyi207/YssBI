@@ -452,7 +452,7 @@ impl RunExecutor {
                 input,
                 base_revision: basis.version.revision,
                 graph_hash: basis.hash,
-                client_key: digest.iter().map(|byte| format!("{byte:02x}")).collect(),
+                client_key: hex::encode(digest),
             },
         ))
     }

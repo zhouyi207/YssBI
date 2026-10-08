@@ -36,13 +36,8 @@ pub async fn install_builtin_statistical_knowledge(
     ];
     let digest = yss_canonical_hash::hash_canonical("yssbi.knowledge.builtin.v1", &documents)
         .map_err(|_| KnowledgeError::SourceIntegrity)?;
-    let source_hash = SourceHash::try_new(
-        digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>(),
-    )
-    .map_err(|_| KnowledgeError::SourceIntegrity)?;
+    let source_hash =
+        SourceHash::try_new(hex::encode(digest)).map_err(|_| KnowledgeError::SourceIntegrity)?;
     let source_id = KnowledgeSourceId::try_new("yssbi-statistical-methods")
         .map_err(|_| KnowledgeError::SourceIntegrity)?;
     let source = KnowledgeSourceRecord {

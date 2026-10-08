@@ -31,7 +31,7 @@ impl From<ResultRef> for String {
     fn from(value: ResultRef) -> Self {
         format!(
             "r.{}.{:016x}",
-            encode(value.execution_session_id.as_bytes()),
+            hex::encode(value.execution_session_id.as_bytes()),
             value.result_id
         )
     }
@@ -90,7 +90,7 @@ impl From<TableRef> for String {
             String::from(value.result_ref),
             value
                 .part
-                .map_or_else(|| "_".into(), |part| encode(part.as_bytes()))
+                .map_or_else(|| "_".into(), |part| hex::encode(part.as_bytes()))
         )
     }
 }
@@ -119,23 +119,8 @@ impl TryFrom<String> for TableRef {
     }
 }
 
-fn encode(bytes: &[u8]) -> String {
-    use std::fmt::Write;
-    let mut encoded = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        write!(&mut encoded, "{byte:02x}").expect("string writer");
-    }
-    encoded
-}
 fn decode(value: &str) -> Option<String> {
-    if !value.len().is_multiple_of(2) || !value.is_ascii() {
-        return None;
-    }
-    let bytes = (0..value.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&value[i..i + 2], 16).ok())
-        .collect::<Option<Vec<_>>>()?;
-    String::from_utf8(bytes).ok()
+    String::from_utf8(hex::decode(value).ok()?).ok()
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -269,6 +254,18 @@ mod tests {
     use super::*;
     #[test]
     fn opaque_references_roundtrip_exact_identities_and_reject_malformed_tokens() {
+        let unicode = ResultRef::new("阶段".into(), 7);
+        let unicode_wire = "r.e998b6e6aeb5.0000000000000007";
+        assert_eq!(String::from(unicode.clone()), unicode_wire);
+        assert_eq!(
+            ResultRef::try_from(unicode_wire.to_owned()).unwrap(),
+            unicode
+        );
+        let table = TableRef::new(unicode, Some("/阶段".into()));
+        let table_wire = format!("t.{unicode_wire}.2fe998b6e6aeb5");
+        assert_eq!(String::from(table.clone()), table_wire);
+        assert_eq!(TableRef::try_from(table_wire).unwrap(), table);
+
         let result = ResultRef::new("00000000-0000-0000-0000-000000000001".into(), u64::MAX);
         let wire = serde_json::to_value(&result).unwrap();
         assert!(wire.is_string());
@@ -286,10 +283,18 @@ mod tests {
             "",
             "r.0.0000000000000001",
             "r.ff.0000000000000001",
+            "r.6A.0000000000000001",
+            "r.éé.0000000000000001",
             "r.61.1",
             "r.61.0000000000000001.extra",
         ] {
             assert!(ResultRef::try_from(token.to_owned()).is_err(), "{token}");
+        }
+        for part in ["", "f", "ff", "2F", "éé"] {
+            assert!(
+                TableRef::try_from(format!("t.{unicode_wire}.{part}")).is_err(),
+                "{part}"
+            );
         }
         let input = crate::capability_input_schema(crate::CapabilityId::InspectResult);
         let properties = &input.as_value()["properties"];

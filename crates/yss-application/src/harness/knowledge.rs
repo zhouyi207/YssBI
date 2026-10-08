@@ -239,7 +239,7 @@ fn source_status(
 
 fn digest<T: serde::Serialize>(domain: &str, value: &T) -> Result<String, ProjectKnowledgeError> {
     let hash = yss_canonical_hash::hash_canonical(domain, value).map_err(|_| unavailable())?;
-    Ok(hash.iter().map(|byte| format!("{byte:02x}")).collect())
+    Ok(hex::encode(hash))
 }
 
 fn content_hash(text: &str) -> Result<SourceHash, ProjectKnowledgeError> {

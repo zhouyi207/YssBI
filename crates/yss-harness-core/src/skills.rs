@@ -60,7 +60,7 @@ fn builtin_statistical_report_writing() -> Result<SkillPackage, SkillError> {
         manifest: SkillManifest {
             id,
             version,
-            source_hash: SourceHash::try_new(hex(&digest))?,
+            source_hash: SourceHash::try_new(hex::encode(digest))?,
         },
         instructions: STATISTICAL_REPORT_WRITING_INSTRUCTIONS.to_owned(),
     })
@@ -71,10 +71,6 @@ fn validate_package(package: &SkillPackage) -> Result<(), SkillError> {
         return Err(SkillError::InvalidManifest);
     }
     Ok(())
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -131,6 +131,77 @@ fn signed_package(path: &Path, escape: bool, manifest: PluginManifest, key_seed:
     }
     archive.finish().unwrap();
 }
+
+#[test]
+fn package_inspection_preserves_signature_hex_validation() {
+    let root = Root::new();
+    let path = root.0.join("signed.yssplugin");
+    package(&path, false);
+    let manager = PluginManager::new(&root.0, Arc::new(Host)).unwrap();
+    let original = manager.inspect(&path).unwrap();
+    let entries = {
+        let mut archive = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        (0..archive.len())
+            .map(|index| {
+                let mut entry = archive.by_index(index).unwrap();
+                let mut bytes = Vec::new();
+                entry.read_to_end(&mut bytes).unwrap();
+                (entry.name().to_owned(), bytes)
+            })
+            .collect::<Vec<_>>()
+    };
+    let rewrite = |edit: &dyn Fn(&mut Value)| {
+        let mut archive = zip::ZipWriter::new(fs::File::create(&path).unwrap());
+        for (name, bytes) in &entries {
+            archive
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            if name == "signature.json" {
+                let mut signature: Value = serde_json::from_slice(bytes).unwrap();
+                edit(&mut signature);
+                archive
+                    .write_all(&serde_json::to_vec(&signature).unwrap())
+                    .unwrap();
+            } else {
+                archive.write_all(bytes).unwrap();
+            }
+        }
+        archive.finish().unwrap();
+    };
+    rewrite(&|signature| {
+        for field in ["publicKey", "signature"] {
+            signature[field] = signature[field]
+                .as_str()
+                .unwrap()
+                .to_ascii_uppercase()
+                .into();
+        }
+    });
+    assert_eq!(
+        manager.inspect(&path).unwrap().package_digest,
+        original.package_digest
+    );
+
+    for (field, value) in [
+        ("publicKey", "é".repeat(32)),
+        ("publicKey", "00".repeat(31)),
+        ("signature", "f".repeat(127)),
+        ("signature", "00".repeat(65)),
+    ] {
+        rewrite(&|signature| signature[field] = value.clone().into());
+        assert_eq!(
+            manager.inspect(&path).unwrap_err().code,
+            "plugin_package_invalid",
+            "{field}"
+        );
+    }
+    rewrite(&|signature| signature["signature"] = "00".repeat(64).into());
+    assert_eq!(
+        manager.inspect(&path).unwrap_err().code,
+        "plugin_signature_invalid"
+    );
+}
+
 #[test]
 fn packages_for_a_different_target_are_rejected_before_installation() {
     let root = Root::new();

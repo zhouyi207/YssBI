@@ -30,7 +30,7 @@ pub(in crate::automation::graph) fn base(
             &result.semantic_input_hash,
         ),
     )
-    .map(|hash| hex(&hash))
+    .map(hex::encode)
     .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?;
     Ok(result)
 }

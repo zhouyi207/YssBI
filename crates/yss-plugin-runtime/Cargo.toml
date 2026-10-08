@@ -10,6 +10,7 @@ yss-filesystem = { path = "../yss-filesystem" }
 yss-plugin-protocol = { path = "../yss-plugin-protocol" }
 yss-plugin-sdk = { path = "../yss-plugin-sdk" }
 atomicwrites.workspace = true
+hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

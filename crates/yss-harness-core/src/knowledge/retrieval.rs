@@ -60,10 +60,7 @@ pub(super) fn chunk_id(
         ),
     )
     .map_err(|_| KnowledgeError::SourceIntegrity)?;
-    let suffix = digest[..16]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
+    let suffix = hex::encode(&digest[..16]);
     KnowledgeChunkId::try_new(format!("chunk-{suffix}"))
         .map_err(|_| KnowledgeError::SourceIntegrity)
 }

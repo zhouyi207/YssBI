@@ -31,10 +31,7 @@ impl LayoutStore {
 
     fn file_name(project_root: &str) -> Result<String> {
         let hash = yss_canonical_hash::hash_canonical("yssbi.native.layout", &project_root)?;
-        let key = hash
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
+        let key = hex::encode(hash);
         Ok(format!("{key}.json"))
     }
 

@@ -12259,6 +12259,7 @@ dependencies = [
  "arrow",
  "atomicwrites",
  "dunce",
+ "hex",
  "jsonschema",
  "keyring",
  "serde",
@@ -12481,6 +12482,7 @@ dependencies = [
  "gpui-kit-assets",
  "gpui-pre",
  "gpui-pre-platform",
+ "hex",
  "serde_json",
  "tokio",
  "tracing",
@@ -12693,6 +12695,7 @@ dependencies = [
 name = "yss-harness-contract"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "schemars",
  "serde",
  "serde_json",
@@ -12707,6 +12710,7 @@ dependencies = [
 name = "yss-harness-core"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
@@ -12833,6 +12837,7 @@ dependencies = [
 name = "yss-node-registry"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "serde",
  "serde_json",
  "yss-canonical-hash",
@@ -12857,6 +12862,7 @@ dependencies = [
  "arrow",
  "atomicwrites",
  "ed25519-dalek",
+ "hex",
  "libc",
  "semver",
  "serde",

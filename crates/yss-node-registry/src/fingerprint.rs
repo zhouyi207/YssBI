@@ -15,7 +15,7 @@ macro_rules! fingerprint {
                 &self.0
             }
             pub fn to_hex(&self) -> String {
-                self.0.iter().map(|b| format!("{b:02x}")).collect()
+                hex::encode(self.0)
             }
         }
         impl fmt::Debug for $name {

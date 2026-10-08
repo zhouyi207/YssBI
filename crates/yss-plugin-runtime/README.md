@@ -83,6 +83,11 @@ bound to the previous fingerprint and inspected new digest, including after unin
 with equal SemVer precedence cannot replace a release with different content. Release versions
 come from the source manifest, separately from the complete signed package digest.
 
+Signed package inspection uses `hex::FromHex` to decode the public key and signature directly
+into fixed 32-byte and 64-byte arrays. Both hexadecimal letter cases are accepted; malformed
+encoding or length maps to `plugin_package_invalid`, while failed signature verification maps
+to `plugin_signature_invalid`.
+
 `current_target()` returns the exact supported build target or `None`: Windows MSVC, Linux GNU/musl,
 and macOS on x86_64/aarch64. Inspection rejects packages for any other target. This selector does
 not establish platform execution acceptance. On Unix, extraction grants mode `0700` only to the

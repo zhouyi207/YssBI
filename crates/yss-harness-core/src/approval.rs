@@ -89,13 +89,7 @@ impl ApprovalService {
 fn request_fingerprint(request: &AutomationCapabilityRequest) -> Result<SourceHash, ApprovalError> {
     let digest = yss_canonical_hash::hash_canonical("yssbi.approval.request.v1", request)
         .map_err(|_| ApprovalError::Fingerprint)?;
-    SourceHash::try_new(
-        digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>(),
-    )
-    .map_err(|_| ApprovalError::Fingerprint)
+    SourceHash::try_new(hex::encode(digest)).map_err(|_| ApprovalError::Fingerprint)
 }
 
 #[derive(Debug, thiserror::Error)]

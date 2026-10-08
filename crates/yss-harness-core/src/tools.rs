@@ -128,7 +128,7 @@ impl HarnessToolExecutor {
             .map_err(|_| persistence_unavailable())?;
         let digest = yss_canonical_hash::hash_canonical("yssbi.harness.call", &id)
             .map_err(|_| persistence_unavailable())?;
-        Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+        Ok(hex::encode(digest))
     }
 
     #[allow(
@@ -360,13 +360,7 @@ impl HarnessToolExecutor {
                 ),
             )
             .map_err(|_| persistence_unavailable())?;
-            IdempotencyKey::try_new(
-                digest
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>(),
-            )
-            .map_err(|_| persistence_unavailable())?
+            IdempotencyKey::try_new(hex::encode(digest)).map_err(|_| persistence_unavailable())?
         } else {
             IdempotencyKey::try_new(raw_invocation_id).map_err(|_| persistence_unavailable())?
         };

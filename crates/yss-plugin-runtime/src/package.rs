@@ -1,5 +1,6 @@
 use crate::{read_bounded, resolve_data_file};
 use ed25519_dalek::{Signature, VerifyingKey};
+use hex::FromHex;
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
@@ -30,15 +31,6 @@ pub(crate) fn hash(bytes: &[u8]) -> String {
 }
 fn invalid() -> PluginFailure {
     PluginFailure::new("plugin_package_invalid")
-}
-pub(crate) fn from_hex(value: &str) -> Result<Vec<u8>, PluginFailure> {
-    if !value.len().is_multiple_of(2) || !value.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return Err(invalid());
-    }
-    (0..value.len())
-        .step_by(2)
-        .map(|index| u8::from_str_radix(&value[index..index + 2], 16).map_err(|_| invalid()))
-        .collect()
 }
 pub(crate) struct InspectedPackage {
     pub description: PackageInspection,
@@ -112,18 +104,14 @@ pub(crate) fn inspect(path: &Path) -> Result<InspectedPackage, PluginFailure> {
     {
         return Err(invalid());
     }
-    let public: [u8; 32] = from_hex(&signature.public_key)?
-        .try_into()
-        .map_err(|_| invalid())?;
+    let public = <[u8; 32]>::from_hex(&signature.public_key).map_err(|_| invalid())?;
     if signature.key_id != hash(&public) {
         return Err(PluginFailure::new("plugin_signature_invalid"));
     }
     let signed = serde_jcs::to_vec(&serde_json::json!({"schemaVersion":1,"keyId":signature.key_id,"manifest":manifest,"files":files})).map_err(|_| invalid())?;
     let key = VerifyingKey::from_bytes(&public)
         .map_err(|_| PluginFailure::new("plugin_signature_invalid"))?;
-    let signature_bytes: [u8; 64] = from_hex(&signature.signature)?
-        .try_into()
-        .map_err(|_| invalid())?;
+    let signature_bytes = <[u8; 64]>::from_hex(&signature.signature).map_err(|_| invalid())?;
     key.verify_strict(&signed, &Signature::from_bytes(&signature_bytes))
         .map_err(|_| PluginFailure::new("plugin_signature_invalid"))?;
     Ok(InspectedPackage {

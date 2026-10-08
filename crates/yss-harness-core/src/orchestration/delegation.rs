@@ -14,10 +14,7 @@ impl RunExecutor {
             .ok_or_else(|| rejected("workers_cannot_delegate"))?;
         let digest = yss_canonical_hash::hash_canonical("yssbi.harness.task", &input)
             .map_err(|_| persistence_failure())?;
-        let key = digest
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
+        let key = hex::encode(digest);
         let existing = manager
             .tasks
             .lock()

@@ -125,7 +125,7 @@ pub fn invoke_graph_capability(
     }
     if context
         .graph_observation()
-        .is_some_and(|expected| expected != hex(&projection.basis.semantic_input_hash))
+        .is_some_and(|expected| expected != hex::encode(projection.basis.semantic_input_hash))
     {
         return Err(graph_failure(CapabilityFailureCode::RevisionConflict)
             .with_detail("reason", "graph_inputs_changed"));
@@ -455,7 +455,7 @@ pub fn invoke_graph_capability(
                         .as_ref()
                         .map_or_else(|| status.into(), |(status, _)| status.clone()),
                     timing: observation.map(|(_, timing)| timing),
-                    current_inputs: hex(event.identity().semantic_input_hash())
+                    current_inputs: hex::encode(event.identity().semantic_input_hash())
                         == page.semantic_input_hash,
                 },
             );
@@ -1045,7 +1045,7 @@ fn inspect_projection(
     let diagnostics = diagnostics(projection);
     Ok(GraphInspection {
         graph_path: path.as_str().into(),
-        semantic_input_hash: hex(&projection.basis.semantic_input_hash),
+        semantic_input_hash: hex::encode(projection.basis.semantic_input_hash),
         ready: matches!(projection.outcome, EditorResolutionOutcome::Complete)
             && !diagnostics.iter().any(|diagnostic| diagnostic.blocking),
         graph_hash,
@@ -1207,13 +1207,10 @@ fn diagnostics(projection: &EditorProjectionModel) -> Vec<GraphDiagnosticInspect
 
 pub fn graph_hash(document: &GraphDocument) -> Result<String, CapabilityFailure> {
     yss_canonical_hash::hash_canonical("yssbi.assistant.graph-draft.v1", document)
-        .map(|value| hex(&value))
+        .map(hex::encode)
         .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))
 }
 
-fn hex(value: &[u8]) -> String {
-    value.iter().map(|byte| format!("{byte:02x}")).collect()
-}
 fn graph_failure(code: CapabilityFailureCode) -> CapabilityFailure {
     CapabilityFailure::new(code)
 }

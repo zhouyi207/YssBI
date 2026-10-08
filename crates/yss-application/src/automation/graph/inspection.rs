@@ -46,14 +46,14 @@ pub(super) fn inspect(
     }) {
         return Err(invalid_edit_identity("portAddresses"));
     }
-    let semantic_input_hash = hex(&projection.basis.semantic_input_hash);
+    let semantic_input_hash = hex::encode(projection.basis.semantic_input_hash);
     let mut identity_query = request.clone();
     identity_query.if_unchanged = None;
     let observation_hash = yss_canonical_hash::hash_canonical(
         "yssbi.graph-inspection.v1",
         &(&identity_query, &version, &hash, &semantic_input_hash),
     )
-    .map(|value| hex(&value))
+    .map(hex::encode)
     .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?;
     let diagnostics = diagnostics(projection);
     let counts = GraphInspectionCounts {
@@ -259,7 +259,7 @@ pub(super) fn constants(
         let mut value = serde_json::json!({ "id": id, "name": constant.name, "dataType": constant.data_type, "description": constant.description, "tags": constant.tags, "hasTabularData": constant.tabular.is_some() });
         let content_hash = yss_canonical_hash::hash_canonical("yssbi.assistant.graph-constant.v1", constant)
             .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?;
-        value["contentHash"] = serde_json::json!(hex(&content_hash));
+        value["contentHash"] = serde_json::json!(hex::encode(content_hash));
         let primitive = match &constant.data_value { yss_data_contract::DataValue::Bool(_) | yss_data_contract::DataValue::Integer(_) | yss_data_contract::DataValue::Decimal(_) | yss_data_contract::DataValue::Null => true, yss_data_contract::DataValue::String(value) => value.len() <= 4096, _ => false };
         value["valueIncluded"] = serde_json::json!(primitive);
         if primitive { value["dataValue"] = serde_json::to_value(&constant.data_value).map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?; }
