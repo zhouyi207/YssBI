@@ -70,17 +70,6 @@ const METHODS: &[(&str, &str, &str)] = &[
         "生存决策曲线",
     ),
 ];
-fn union_series(ids: &[&'static str]) -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalize_type_expr(TypeExpr::Union(
-        ids.iter()
-            .map(|id| concrete(id).map(data_series_type))
-            .collect::<Result<Vec<_>, _>>()?,
-    ))
-    .map_err(|e| BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-        context: "survival input",
-        value: e.to_string().into(),
-    })
-}
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.{method}");
@@ -98,7 +87,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 | "survival.aft"
         );
         let evaluation = matches!(method, "plot.calibration" | "plot.decision_curve");
-        let binary = || union_series(&["core.numeric", "core.binary"]);
         let mut ports = if method == "plot.nomogram" {
             vec![data_input(
                 "model",
@@ -129,7 +117,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 if method == "survival.competing_risks" {
                     series_type()?
                 } else {
-                    binary()?
+                    numeric_or_binary_series()?
                 },
             )?);
             ports
@@ -144,7 +132,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             )?);
         }
         if method == "workflow.subgroup" {
-            ports.push(data_input("treatment", "Treatment", binary()?)?);
+            ports.push(data_input(
+                "treatment",
+                "Treatment",
+                numeric_or_binary_series()?,
+            )?);
         }
         if matches!(method, "workflow.subgroup" | "survival.logrank") {
             ports.push(data_input("groups", "Group", label_series()?)?);

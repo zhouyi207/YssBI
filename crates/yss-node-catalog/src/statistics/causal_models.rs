@@ -82,18 +82,6 @@ const METHODS: &[(&str, &str, &str, &[&str])] = &[
     ),
 ];
 
-fn union_series(ids: &[&'static str]) -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalize_type_expr(TypeExpr::Union(
-        ids.iter()
-            .map(|id| concrete(id).map(data_series_type))
-            .collect::<Result<Vec<_>, _>>()?,
-    ))
-    .map_err(|e| BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-        context: "causal input",
-        value: e.to_string().into(),
-    })
-}
-
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh, aliases) in METHODS {
         let id = format!("yssbi.statistics.{method}");
@@ -102,7 +90,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "causal.psm" | "causal.ipw" | "causal.regression_adjustment" | "causal.aipw"
         );
         let projection = matches!(method, "causal.ate" | "causal.att");
-        let binary = || union_series(&["core.numeric", "core.binary"]);
         let repeated =
             |key, label, min| bounded_user_data_input(key, label, series_type()?, min, None);
         let mut ports = if projection {
@@ -117,7 +104,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             vec![data_input("y", "Y", series_type()?)?]
         };
         if effect || method == "test.heterogeneity" {
-            ports.push(data_input("treatment", "Treatment", binary()?)?);
+            ports.push(data_input(
+                "treatment",
+                "Treatment",
+                numeric_or_binary_series()?,
+            )?);
         }
         if method == "test.heterogeneity" {
             ports.push(data_input("groups", "Group", label_series()?)?);
@@ -126,7 +117,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(data_input("running", "Running variable", series_type()?)?);
         }
         if method == "econometrics.heckman_two_step" {
-            ports.push(data_input("selected", "Selected", binary()?)?);
+            ports.push(data_input(
+                "selected",
+                "Selected",
+                numeric_or_binary_series()?,
+            )?);
         }
         if !projection
             && !matches!(

@@ -43,7 +43,10 @@ use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, TypeRegistration};
 
 use families::{Family, NODES, NodeSpec, Stage};
-use ports::{fitted_regression_type, fixed_numeric_table, label_series};
+use ports::{
+    fitted_regression_type, fixed_numeric_table, fixed_table, label_series,
+    numeric_or_binary_series,
+};
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut fragment = defined_provider_fragment()?;

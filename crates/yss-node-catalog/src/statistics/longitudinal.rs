@@ -54,16 +54,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             method,
             "mixed.glmm" | "mixed.logistic" | "mixed.poisson" | "mixed.negative_binomial"
         );
-        let response = normalize_type_expr(TypeExpr::Union(vec![
-            series_type()?,
-            data_series_type(concrete("core.binary")?),
-        ]))
-        .map_err(|e| BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-            context: "longitudinal response",
-            value: e.to_string().into(),
-        })?;
         let mut ports = vec![
-            data_input("y", "Y", response)?,
+            data_input("y", "Y", numeric_or_binary_series()?)?,
             bounded_user_data_input("x", "X", series_type()?, 0, None)?,
             bounded_user_data_input(
                 "groups",

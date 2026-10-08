@@ -205,7 +205,7 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
         "regression.logit.firth"
         | "regression.logit.conditional"
         | "regression.cloglog"
-        | "regression.glm" => union_series(&["core.numeric", "core.binary"])?,
+        | "regression.glm" => numeric_or_binary_series()?,
         _ => series_type()?,
     };
     let mut ports = vec![data_input("y", "Y", response)?];

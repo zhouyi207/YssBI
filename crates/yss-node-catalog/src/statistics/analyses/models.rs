@@ -34,17 +34,6 @@ const METHODS: &[(&str, &str, &str)] = &[
         "比例风险 PH 假设检验",
     ),
 ];
-fn binary_series() -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalize_type_expr(TypeExpr::Union(vec![
-        series_type()?,
-        data_series_type(concrete("core.binary")?),
-    ]))
-    .map_err(|e| BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-        context: "diagnostic outcome",
-        value: e.to_string().into(),
-    })
-}
-
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.diagnostic.{method}");
@@ -57,13 +46,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 None,
             )?],
             "nri_idi" => vec![
-                data_input("outcome", "Binary outcome", binary_series()?)?,
+                data_input("outcome", "Binary outcome", numeric_or_binary_series()?)?,
                 data_input("reference", "Reference probability", series_type()?)?,
                 data_input("new", "New probability", series_type()?)?,
             ],
             "ph" => vec![
                 data_input("time", "Time", series_type()?)?,
-                data_input("event", "Event", binary_series()?)?,
+                data_input("event", "Event", numeric_or_binary_series()?)?,
                 bounded_user_data_input("x", "X", series_type()?, 1, None)?,
             ],
             "lr" | "score_lm" | "nested_comparison" => vec![

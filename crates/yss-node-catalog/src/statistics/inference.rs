@@ -1,5 +1,6 @@
 //! Explicit estimand/SE intervals and independent-group post-hoc contrasts.
 use super::*;
+use yss_data_contract::SemanticType;
 const NODES: &[(&str, &str, &str)] = &[
     (
         "inference.confidence_interval",
@@ -60,31 +61,24 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                     &["index", "estimate", "standard_error", "lower", "upper"],
                 )?
             } else {
-                let mut port = fixed_numeric_table(
+                fixed_table(
                     "comparisons",
                     "Comparisons",
-                    &[
-                        "group_a",
-                        "group_b",
-                        "group_a_label",
-                        "group_b_label",
-                        "estimate",
-                        "standard_error",
-                        "degrees_of_freedom",
-                        "statistic",
-                        "p_value",
-                        "adjusted_p_value",
-                        "lower",
-                        "upper",
+                    [
+                        ("group_a", SemanticType::Numeric),
+                        ("group_b", SemanticType::Numeric),
+                        ("group_a_label", SemanticType::Text),
+                        ("group_b_label", SemanticType::Text),
+                        ("estimate", SemanticType::Numeric),
+                        ("standard_error", SemanticType::Numeric),
+                        ("degrees_of_freedom", SemanticType::Numeric),
+                        ("statistic", SemanticType::Numeric),
+                        ("p_value", SemanticType::Numeric),
+                        ("adjusted_p_value", SemanticType::Numeric),
+                        ("lower", SemanticType::Numeric),
+                        ("upper", SemanticType::Numeric),
                     ],
-                )?;
-                if let Some(SchemaExpr::Fixed { fields }) = &mut port.schema {
-                    for field in &mut fields[2..4] {
-                        field.scalar_type =
-                            RelationalScalarType::Known(yss_data_contract::SemanticType::Text);
-                    }
-                }
-                port
+                )?
             });
         }
         let mut parameters = if cluster {
