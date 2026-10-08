@@ -6,6 +6,42 @@ use yss_sci_contract::{
 };
 
 #[test]
+fn fisher_reports_sample_odds_ratio_and_retains_exact_p_when_ratio_is_infinite() {
+    let control = ScientificExecutionControl {
+        cancellation: ScientificCancellationToken::new(),
+        deadline: Instant::now() + Duration::from_secs(30),
+    };
+    for (counts, expected, p_value) in [
+        ([[8, 2], [1, 5]], Some(20.0), 0.034965034965034975),
+        ([[4, 0], [0, 4]], None, 1.0 / 35.0),
+        ([[0, 4], [3, 5]], Some(0.0), 0.4909090909090909),
+    ] {
+        let (mut row, mut column) = (Vec::new(), Vec::new());
+        for (r, cells) in counts.iter().enumerate() {
+            for (c, &count) in cells.iter().enumerate() {
+                for _ in 0..count {
+                    row.push(format!("r{r}").into_boxed_str());
+                    column.push(format!("c{c}").into_boxed_str());
+                }
+            }
+        }
+        let report = categorical::run(
+            CategoricalHypothesisTest::FisherExact { row, column },
+            &control,
+        )
+        .unwrap();
+        let serialized = serde_json::to_value(&report).unwrap();
+        assert_eq!(report.statistic_name, "odds_ratio");
+        assert_eq!(serialized["statistic"].as_f64(), expected);
+        assert!(
+            (report.p_value - p_value).abs() < 1e-12,
+            "{counts:?}: {}",
+            report.p_value
+        );
+    }
+}
+
+#[test]
 fn count_tables_preserve_sorted_cells_for_repeated_long_labels() {
     let control = ScientificExecutionControl {
         cancellation: ScientificCancellationToken::new(),
@@ -28,7 +64,7 @@ fn count_tables_preserve_sorted_cells_for_repeated_long_labels() {
         &control,
     )
     .unwrap();
-    assert!((independence.statistic - 384.0 / 35.0).abs() < 1e-12);
+    assert!((independence.statistic.unwrap() - 384.0 / 35.0).abs() < 1e-12);
     assert_eq!(independence.sample_sizes, vec![24]);
     let fisher = categorical::run(
         CategoricalHypothesisTest::FisherExact { row, column },

@@ -184,12 +184,17 @@ fn fisher(
     }
     let [a, b, c, d] = [table[0][0], table[0][1], table[1][0], table[1][1]];
     let p_value = fisher_two_sided(a, b, c, d, control)?;
+    let statistic = if b == 0 || c == 0 {
+        None
+    } else {
+        Some((a as f64 * d as f64) / (b as f64 * c as f64))
+    };
     Ok(ClassicalTestResult {
         method: "fisher_exact".into(),
         null_hypothesis: "row and column classifications are independent".into(),
         alternative: "two-sided".into(),
         statistic_name: "odds_ratio".into(),
-        statistic: (a as f64 * d as f64) - (b as f64 * c as f64),
+        statistic,
         degrees_of_freedom: vec![],
         p_value,
         estimate: None,
@@ -432,7 +437,7 @@ fn chi_result(
         null_hypothesis: null.into(),
         alternative: "upper-tail".into(),
         statistic_name: "chi_squared".into(),
-        statistic,
+        statistic: Some(statistic),
         degrees_of_freedom: vec![df],
         p_value,
         estimate: None,

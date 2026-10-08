@@ -35,6 +35,8 @@ error directly from SCI; Runtime does not maintain a second conversion policy.
 forwards the caller's `ScientificExecutionControl` with each neutral request to
 SCI. These entries return its typed `HypothesisError` directly, preserving
 cancellation and deadlines rather than wrapping them as invalid input text.
+Classical results retain SCI's optional finite statistic; Runtime leaves an
+unbounded Fisher odds ratio absent and preserves its exact p-value and table counts.
 
 `decision` exposes weighting/ranking, customer preferences, pricing/reach,
 judgment matrices, influence structures, membership composition and expert-round

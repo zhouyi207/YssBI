@@ -92,7 +92,8 @@ pub struct ClassicalTestResult {
     pub null_hypothesis: String,
     pub alternative: String,
     pub statistic_name: String,
-    pub statistic: f64,
+    /// Finite defined statistic; None retains a valid test with an unbounded statistic.
+    pub statistic: Option<f64>,
     pub degrees_of_freedom: Vec<f64>,
     pub p_value: f64,
     pub estimate: Option<f64>,

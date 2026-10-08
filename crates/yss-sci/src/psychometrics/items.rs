@@ -72,7 +72,7 @@ pub fn item_analysis(
             reliability,
             low_mean: lm.map(|m| finite(m.0 * analyzed.scale)).transpose()?,
             high_mean: hm.map(|m| finite(m.0 * analyzed.scale)).transpose()?,
-            t_statistic: inference.as_ref().map(|t| t.statistic),
+            t_statistic: inference.as_ref().and_then(|t| t.statistic),
             degrees_of_freedom: inference.as_ref().map(|t| t.degrees_of_freedom[0]),
             p_value: inference.as_ref().map(|t| t.p_value),
         });

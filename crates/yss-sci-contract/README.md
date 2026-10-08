@@ -172,6 +172,10 @@ regression checks between stages, without interrupting a running decomposition.
 Scheduling, concurrency and the budget remain caller-owned.
 
 `hypothesis` carries neutral requests and result records for classical mean, proportion, count-table, rank/sequence and variance-homogeneity tests. Requests encode design and alternatives; the report keeps the statistic, reference degrees of freedom, p-value, sample sizes and method-specific finite details without depending on a node ID or backend type.
+`ClassicalTestResult::statistic` is an optional finite value. An unbounded Fisher
+sample odds ratio is `None`/JSON null, while its exact p-value and table counts
+remain available. Defined statistics retain their numeric JSON representation;
+missing values are not replaced with a cross-product difference or nonfinite number.
 
 `HypothesisError::Execution` preserves the shared computation error, including
 cancellation and deadline expiry, across SCI and Runtime. Existing hypothesis

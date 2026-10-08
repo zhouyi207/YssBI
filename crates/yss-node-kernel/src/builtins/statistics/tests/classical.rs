@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn fisher_adapter_delivers_exact_result_with_unbounded_odds_ratio() {
+    let result = run(
+        "yssbi.statistics.test.fisher_exact",
+        &[
+            ("row", series(&[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0])),
+            ("column", series(&[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0])),
+        ],
+        &[],
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        field(&result[0], "statistic").unwrap(),
+        &RuntimeValue::Scalar(TabularScalar::Null)
+    );
+    let p_value =
+        crate::builtins::numeric_input(Some(field(&result[0], "p_value").unwrap())).unwrap();
+    assert!((p_value - 1.0 / 35.0).abs() < 1e-12);
+}
+
+#[test]
 fn cmh_binary_inputs_preserve_mixed_source_statistics_and_numeric_admission() {
     use arrow_array::{ArrayRef, BooleanArray, RecordBatch};
     use yss_database_engine::DataFusionRuntime;

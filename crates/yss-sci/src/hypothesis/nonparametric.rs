@@ -792,7 +792,7 @@ fn base(
         null_hypothesis: null.into(),
         alternative: "two-sided".into(),
         statistic_name: name.into(),
-        statistic: stat,
+        statistic: Some(stat),
         degrees_of_freedom: df,
         p_value: p.clamp(0.0, 1.0),
         estimate: None,

@@ -621,6 +621,9 @@ one ordered index per dimension. It keeps lexical row/column order and exact cel
 counts without cloning labels per observation or retaining separate level vectors.
 `tests/categorical_tables.rs` covers repeated long labels whose first appearance
 order differs from the table's lexical order.
+For 2x2 Fisher tests, the statistic is the sample odds ratio `a*d/(b*c)`;
+when `b` or `c` is zero it is absent, with the exact p-value and cell counts
+retained. Zero odds with a positive denominator remain a defined zero statistic.
 
 All four entrypoints also accept the caller's `ScientificExecutionControl`. Input,
 rank/tie, table and variance scans, exact binomial/Poisson/Fisher enumeration,

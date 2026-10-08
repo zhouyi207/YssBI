@@ -92,6 +92,7 @@ pub(super) fn install(
                     "yssbi.statistics.survival.competing_risks"
                         | "yssbi.statistics.plot.calibration"
                         | "yssbi.statistics.plot.decision_curve"
+                        | "yssbi.statistics.test.fisher_exact"
                 ) {
                     6
                 } else if matches!(
@@ -116,7 +117,6 @@ pub(super) fn install(
                         | "yssbi.statistics.diagnostic.ph"
                         | "yssbi.statistics.test.cmh"
                         | "yssbi.statistics.test.chisquare.crosstab"
-                        | "yssbi.statistics.test.fisher_exact"
                 ) {
                     5
                 } else if id == "yssbi.statistics.iv.2sls.summary" {

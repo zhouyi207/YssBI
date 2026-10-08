@@ -224,7 +224,7 @@ fn result(
             "F"
         }
         .into(),
-        statistic: stat,
+        statistic: Some(stat),
         degrees_of_freedom: if df2 > 0.0 { vec![df1, df2] } else { vec![df1] },
         p_value: p.clamp(0.0, 1.0),
         estimate: None,
