@@ -1,9 +1,8 @@
 use arrow::array::*;
-use futures_util::StreamExt;
 use sqlx::mysql::{MySqlConnectOptions, MySqlRow};
 use sqlx::{AssertSqlSafe, ConnectOptions, Executor, Row, SqlSafeStr, Statement, Value, ValueRef};
 
-use crate::batch::{BatchBuilder, ColumnKind, ColumnSpec, SqlSourceError, raw_column_metadata};
+use crate::batch::{ColumnKind, ColumnSpec, SqlSourceError, raw_column_metadata};
 use crate::reader::BatchSender;
 use crate::runtime;
 
@@ -40,23 +39,14 @@ pub(crate) async fn read_table(
         .await
         .map_err(|source| SqlSourceError::query(ENGINE, "prepare table read", source))?;
     let columns = column_specs(raw_column_metadata::<sqlx::MySql>(statement.columns()))?;
-    let mut builder = BatchBuilder::new(columns);
-    output.schema(builder.schema.clone()).await?;
-    let mut rows = statement.query().fetch(&mut connection);
-    while let Some(row) = rows.next().await {
-        let row = row.map_err(|source| SqlSourceError::query(ENGINE, "read table", source))?;
-        builder.append_row(&row, decode_value)?;
-        if builder.bytes > output.max_bytes() {
-            return Err(yss_relational_contract::RelationError::MemoryLimitExceeded.into());
-        }
-        if builder.rows >= 50_000 || builder.bytes >= output.max_bytes() / 2 {
-            output.batch(builder.finish()?).await?;
-        }
-    }
-    if builder.rows > 0 {
-        output.batch(builder.finish()?).await?;
-    }
-    Ok(())
+    output
+        .read_rows(
+            ENGINE,
+            columns,
+            statement.query().fetch(&mut connection),
+            decode_value,
+        )
+        .await
 }
 
 async fn connect(

@@ -6,13 +6,16 @@ use std::sync::{
 };
 use std::time::Duration;
 
+use arrow::array::ArrayBuilder;
 use arrow::datatypes::SchemaRef;
 use arrow::error::ArrowError;
 use arrow::record_batch::{RecordBatch, RecordBatchReader};
+use futures_util::{Stream, StreamExt};
 use yss_database_contract::DatabaseEngineSql;
 use yss_relational_contract::{RelationControl, RelationError};
 
 use crate::SqlSourceError;
+use crate::batch::{BatchBuilder, ColumnSpec};
 
 enum Message {
     Schema(SchemaRef),
@@ -29,7 +32,6 @@ pub struct SqlBatchReader {
     control: RelationControl,
 }
 
-#[derive(Clone)]
 pub(crate) struct BatchSender {
     sender: SyncSender<Message>,
     stop: Arc<AtomicBool>,
@@ -37,8 +39,30 @@ pub(crate) struct BatchSender {
 }
 
 impl BatchSender {
-    pub fn max_bytes(&self) -> usize {
-        self.control.max_input_bytes
+    pub async fn read_rows<R: sqlx::Row>(
+        &self,
+        engine: &'static str,
+        columns: Vec<ColumnSpec>,
+        mut rows: impl Stream<Item = Result<R, sqlx::Error>> + Unpin,
+        decode: impl Fn(&R, usize, &ColumnSpec, &mut dyn ArrayBuilder) -> Result<usize, SqlSourceError>,
+    ) -> Result<(), SqlSourceError> {
+        let mut builder = BatchBuilder::new(columns);
+        self.schema(builder.schema.clone()).await?;
+        let max_bytes = self.control.max_input_bytes;
+        while let Some(row) = rows.next().await {
+            let row = row.map_err(|source| SqlSourceError::query(engine, "read table", source))?;
+            builder.append_row(&row, &decode)?;
+            if builder.bytes > max_bytes {
+                return Err(RelationError::MemoryLimitExceeded.into());
+            }
+            if builder.rows >= 50_000 || builder.bytes >= max_bytes / 2 {
+                self.batch(builder.finish()?).await?;
+            }
+        }
+        if builder.rows > 0 {
+            self.batch(builder.finish()?).await?;
+        }
+        Ok(())
     }
     fn check(&self) -> Result<(), SqlSourceError> {
         if self.stop.load(Ordering::Acquire) {
@@ -67,11 +91,11 @@ impl BatchSender {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     }
-    pub async fn schema(&self, schema: SchemaRef) -> Result<(), SqlSourceError> {
+    async fn schema(&self, schema: SchemaRef) -> Result<(), SqlSourceError> {
         self.send(Message::Schema(schema)).await
     }
-    pub async fn batch(&self, batch: RecordBatch) -> Result<(), SqlSourceError> {
-        if batch.get_array_memory_size() > self.max_bytes() {
+    async fn batch(&self, batch: RecordBatch) -> Result<(), SqlSourceError> {
+        if batch.get_array_memory_size() > self.control.max_input_bytes {
             return Err(RelationError::MemoryLimitExceeded.into());
         }
         self.send(Message::Batch(batch)).await
