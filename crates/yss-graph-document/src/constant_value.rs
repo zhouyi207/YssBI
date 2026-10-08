@@ -34,37 +34,34 @@ impl GraphConstant {
 }
 
 fn parse_literal(payload: &str) -> Result<TabularSnapshot, ConstantValueError> {
-    let parsed: Value =
-        serde_json::from_str(payload).map_err(|_| ConstantValueError::InvalidJson)?;
-    let Value::Object(columns) = &parsed else {
+    if !payload.trim_start().starts_with('{') {
+        serde_json::from_str::<Value>(payload).map_err(|_| ConstantValueError::InvalidJson)?;
         return Err(ConstantValueError::ExpectedColumnMap);
-    };
-    for (name, values) in columns {
-        let column = yss_data_contract::TabularColumnName::try_from(name.as_str())
-            .map_err(ConstantValueError::Contract)?;
-        let Some(values) = values.as_array() else {
-            return Err(ConstantValueError::ColumnNotArray { column });
-        };
-        if let Some(row) = values.iter().position(|value| {
-            !matches!(
-                value,
-                Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_)
-            )
-        }) {
-            return Err(ConstantValueError::UnsupportedCell { column, row });
-        }
     }
-
     let columns =
         deserialize_literal_columns(payload).map_err(|_| ConstantValueError::InvalidJson)?;
-
     TabularSnapshot::try_from_columns(
         columns
             .into_iter()
             .map(|(name, values)| {
-                yss_data_contract::TabularColumnName::try_from(name.as_str())
-                    .map(|name| TabularColumn::new(name, values.into_boxed_slice()))
-                    .map_err(ConstantValueError::Contract)
+                let column = yss_data_contract::TabularColumnName::try_from(name.as_str())
+                    .map_err(ConstantValueError::Contract)?;
+                let Value::Array(values) = values else {
+                    return Err(ConstantValueError::ColumnNotArray { column });
+                };
+                let values = values
+                    .into_iter()
+                    .enumerate()
+                    .map(|(row, value)| {
+                        serde_json::from_value(value).map_err(|_| {
+                            ConstantValueError::UnsupportedCell {
+                                column: column.clone(),
+                                row,
+                            }
+                        })
+                    })
+                    .collect::<Result<Vec<TabularScalar>, _>>()?;
+                Ok(TabularColumn::new(column, values.into_boxed_slice()))
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice(),
@@ -72,13 +69,11 @@ fn parse_literal(payload: &str) -> Result<TabularSnapshot, ConstantValueError> {
     .map_err(ConstantValueError::Contract)
 }
 
-fn deserialize_literal_columns(
-    payload: &str,
-) -> Result<Vec<(String, Vec<TabularScalar>)>, serde_json::Error> {
+fn deserialize_literal_columns(payload: &str) -> Result<Vec<(String, Value)>, serde_json::Error> {
     struct LiteralColumnsVisitor;
 
     impl<'de> Visitor<'de> for LiteralColumnsVisitor {
-        type Value = Vec<(String, Vec<TabularScalar>)>;
+        type Value = Vec<(String, Value)>;
 
         fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             formatter.write_str("a tabular column map")
@@ -90,14 +85,16 @@ fn deserialize_literal_columns(
         {
             let mut columns = Vec::new();
             while let Some(name) = map.next_key::<String>()? {
-                columns.push((name, map.next_value::<Vec<TabularScalar>>()?));
+                columns.push((name, map.next_value::<Value>()?));
             }
             Ok(columns)
         }
     }
 
     let mut deserializer = serde_json::Deserializer::from_str(payload);
-    deserializer.deserialize_map(LiteralColumnsVisitor)
+    let columns = deserializer.deserialize_map(LiteralColumnsVisitor)?;
+    deserializer.end()?;
+    Ok(columns)
 }
 
 fn validate_snapshot(
@@ -275,10 +272,30 @@ mod tests {
     fn normalization_and_copy_preserve_the_snapshot_without_a_handle() {
         let mut constant = constant(
             ValueType::DataFrame,
-            DataValue::String(r#"{"value":[1,2]}"#.into()),
+            DataValue::String(
+                r#"{"z":[9007199254740993,18446744073709551615],"a":[-9007199254740993,null]}"#
+                    .into(),
+            ),
         );
         normalize_constant_value(&mut constant).unwrap();
         assert_eq!(constant.data_value, DataValue::Null);
+        let columns = constant.tabular.as_ref().unwrap().columns();
+        assert_eq!(columns[0].name().as_str(), "z");
+        assert_eq!(columns[1].name().as_str(), "a");
+        assert_eq!(
+            columns[0].values(),
+            &[
+                TabularScalar::Unsigned(9_007_199_254_740_993),
+                TabularScalar::Unsigned(u64::MAX),
+            ]
+        );
+        assert_eq!(
+            columns[1].values(),
+            &[
+                TabularScalar::Integer(-9_007_199_254_740_993),
+                TabularScalar::Null
+            ]
+        );
         let normalized = constant.clone();
         normalize_constant_value(&mut constant).unwrap();
         assert_eq!(constant, normalized);
@@ -340,5 +357,22 @@ mod tests {
                 },
             ))
         );
+    }
+
+    #[test]
+    fn tabular_literal_requires_complete_json_and_a_column_map() {
+        for (payload, error) in [
+            (
+                r#"{"value":[1]} {"extra":[2]}"#,
+                ConstantValueError::InvalidJson,
+            ),
+            (r#"[1,"#, ConstantValueError::InvalidJson),
+            ("[]", ConstantValueError::ExpectedColumnMap),
+        ] {
+            let mut constant = constant(ValueType::DataFrame, DataValue::String(payload.into()));
+            let before = constant.clone();
+            assert_eq!(normalize_constant_value(&mut constant), Err(error));
+            assert_eq!(constant, before);
+        }
     }
 }
