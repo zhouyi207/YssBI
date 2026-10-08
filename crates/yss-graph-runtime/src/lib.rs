@@ -420,9 +420,11 @@ impl GraphRuntimeState {
             observations,
         );
         let dependencies = resources.dependencies();
-        let mut resolved_basis = basis.clone();
-        resolved_basis.resource_versions.clear();
-        resolved_basis.resource_observations.clear();
+        let mut resolved_basis = GraphAnalysisBasis {
+            registry_fingerprint: basis.registry_fingerprint.clone(),
+            kernel_fingerprint: basis.kernel_fingerprint,
+            resource_observations: BTreeMap::new(),
+        };
         for (key, observed) in dependencies.entries() {
             let key = ResourceKey::new(key.storage_key());
             let observation = if let Some(fingerprint) = observed {
@@ -432,9 +434,6 @@ impl GraphRuntimeState {
                         .map(|byte| format!("{byte:02x}"))
                         .collect::<String>(),
                 );
-                resolved_basis
-                    .resource_versions
-                    .insert(key.clone(), version.clone());
                 ResourceObservedState::Present(version)
             } else {
                 ResourceObservedState::Absent(None)
@@ -577,7 +576,6 @@ impl GraphRuntimeState {
         let basis = GraphAnalysisBasis {
             kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes(self.registry_fingerprint()),
-            resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
         };
         let analysis =
@@ -790,7 +788,6 @@ mod tests {
         GraphAnalysisBasis {
             kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
-            resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
         }
     }

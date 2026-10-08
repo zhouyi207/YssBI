@@ -18,6 +18,9 @@ Graph Runtime 为最近使用的图保留一个不含本地化文本的完整 `G
 
 `ResourceCatalogSnapshot` 只保存捕获的函数和数据库 Schema 事实；缓存与执行身份使用实际依赖的读取记录，不计算或保存未被消费者使用的全目录指纹。项目会话和资源提交身份仍由 Application 在捕获与交付边界重验。
 
+Runtime 从实际读取记录构造 [分析依据](../yss-graph-analysis-contract/README.md) 的资源观测集合，
+用 `Present(version)` 与 `Absent(version)` 同时表达存在性和版本，不再另外保存存在资源的版本副本。
+
 有运行列观测时，Runtime 的同一解析缓存也核对观测指纹。`definition_input_hash` 标识文档、协议、内核和
 资源定义；`semanticInputHash` 再包含解析实际采用的输出观测版本及字段。该区分让 Execution 识别纯列反馈，
 保留输入未变的在途生产者，同时继续拒绝过时的图定义和已被替换的观测。函数定义解析不继承调用图的结果观测。

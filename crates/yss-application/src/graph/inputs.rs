@@ -381,7 +381,6 @@ impl GraphResolutionContext {
             registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
                 registry_fingerprint,
             ),
-            resource_versions: Default::default(),
             resource_observations: Default::default(),
         };
         Ok(Self {

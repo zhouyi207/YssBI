@@ -144,7 +144,6 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
         registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
             runtime.registry_fingerprint(),
         ),
-        resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),
     };
     let execute = |document: &GraphDocument| {

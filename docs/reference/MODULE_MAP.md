@@ -32,7 +32,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-filesystem` | `crates/yss-filesystem` | [Cargo.toml](../../crates/yss-filesystem/Cargo.toml) | [README](../../crates/yss-filesystem/README.md) |
 | `yss-function-editor-projection` | `crates/yss-function-editor-projection` | [Cargo.toml](../../crates/yss-function-editor-projection/Cargo.toml) | [README](../../crates/yss-function-editor-projection/README.md) |
 | `yss-graph-analysis` | `crates/yss-graph-analysis` | [Cargo.toml](../../crates/yss-graph-analysis/Cargo.toml) | [README](../../crates/yss-graph-analysis/README.md) |
-| `yss-graph-analysis-contract` | `crates/yss-graph-analysis-contract` | [Cargo.toml](../../crates/yss-graph-analysis-contract/Cargo.toml) | — |
+| `yss-graph-analysis-contract` | `crates/yss-graph-analysis-contract` | [Cargo.toml](../../crates/yss-graph-analysis-contract/Cargo.toml) | [README](../../crates/yss-graph-analysis-contract/README.md) |
 | `yss-graph-diagnostics` | `crates/yss-graph-diagnostics` | [Cargo.toml](../../crates/yss-graph-diagnostics/Cargo.toml) | [README](../../crates/yss-graph-diagnostics/README.md) |
 | `yss-graph-document` | `crates/yss-graph-document` | [Cargo.toml](../../crates/yss-graph-document/Cargo.toml) | — |
 | `yss-graph-document-edit` | `crates/yss-graph-document-edit` | [Cargo.toml](../../crates/yss-graph-document-edit/Cargo.toml) | — |

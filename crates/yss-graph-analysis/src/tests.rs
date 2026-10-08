@@ -771,7 +771,6 @@ fn analysis_accepts_neutral_document_and_basis() {
     let basis = GraphAnalysisBasis {
         kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([4; 32]),
-        resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),
     };
     let analysis = analyze(

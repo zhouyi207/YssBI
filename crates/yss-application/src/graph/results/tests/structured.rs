@@ -137,7 +137,6 @@ fn execute_report(
                 captured.graph().registry_fingerprint(),
             ),
             kernel_fingerprint: runtime.kernels().fingerprint().as_bytes(),
-            resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
         },
         &resources,

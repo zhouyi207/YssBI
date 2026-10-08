@@ -7,7 +7,8 @@ use yss_graph_analysis::{
     GraphSemanticSnapshot,
 };
 use yss_graph_analysis_contract::{
-    DiagnosticCode, DiagnosticSeverity, GraphAnalysisBasis, ResourceKey, ResourceVersion,
+    DiagnosticCode, DiagnosticSeverity, GraphAnalysisBasis, ResourceKey, ResourceObservedState,
+    ResourceVersion,
 };
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, InputState,
@@ -119,11 +120,10 @@ fn analysis_with_facts(facts: GraphSemanticSnapshot) -> yss_graph_analysis::Grap
     let basis = GraphAnalysisBasis {
         kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([6; 32]),
-        resource_versions: BTreeMap::from([(
+        resource_observations: BTreeMap::from([(
             ResourceKey::new("resource/source"),
-            ResourceVersion::new("7"),
+            ResourceObservedState::Present(ResourceVersion::new("7")),
         )]),
-        resource_observations: BTreeMap::new(),
     };
     yss_graph_analysis::analyze(&basis, facts)
 }
@@ -220,9 +220,9 @@ fn editor_projection_closes_resource_node_port_and_connection_facts() {
     assert_eq!(
         model
             .basis
-            .resource_versions
+            .resource_observations
             .get(&ResourceKey::new("resource/source")),
-        Some(&ResourceVersion::new("7"))
+        Some(&ResourceObservedState::Present(ResourceVersion::new("7")))
     );
     assert_eq!(model.nodes.len(), 2);
     assert_eq!(
@@ -407,7 +407,6 @@ fn editor_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts() {
     let basis = GraphAnalysisBasis {
         kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([9; 32]),
-        resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),
     };
     let analysis = yss_graph_analysis::analyze(

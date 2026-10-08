@@ -29,8 +29,6 @@ macro_rules! string_newtype {
 string_newtype!(ResourceKey);
 string_newtype!(ResourceVersion);
 
-pub type ResourceVersionSet = BTreeMap<ResourceKey, ResourceVersion>;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "version", rename_all = "snake_case")]
 pub enum ResourceObservedState {
@@ -44,7 +42,6 @@ pub type ResourceObservationSet = BTreeMap<ResourceKey, ResourceObservedState>;
 pub struct GraphAnalysisBasis {
     pub registry_fingerprint: RegistryFingerprint,
     pub kernel_fingerprint: [u8; 32],
-    pub resource_versions: ResourceVersionSet,
     #[serde(default)]
     pub resource_observations: ResourceObservationSet,
 }

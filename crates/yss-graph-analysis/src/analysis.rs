@@ -1,12 +1,11 @@
 //! Bind semantic facts to the captured registry and resource analysis basis.
 use crate::GraphSemanticSnapshot;
-use yss_graph_analysis_contract::{GraphAnalysisBasis, ResourceVersionSet};
+use yss_graph_analysis_contract::GraphAnalysisBasis;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphAnalysis {
     registry_fingerprint: [u8; 32],
     kernel_fingerprint: [u8; 32],
-    resource_versions: ResourceVersionSet,
     resource_observations: yss_graph_analysis_contract::ResourceObservationSet,
     semantic_snapshot: std::sync::Arc<GraphSemanticSnapshot>,
     semantic_input_hash: [u8; 32],
@@ -42,10 +41,6 @@ impl GraphAnalysis {
         &self.registry_fingerprint
     }
 
-    pub fn resource_versions(&self) -> &ResourceVersionSet {
-        &self.resource_versions
-    }
-
     pub fn semantic_snapshot(&self) -> &GraphSemanticSnapshot {
         &self.semantic_snapshot
     }
@@ -73,7 +68,6 @@ pub fn analyze(
     GraphAnalysis {
         registry_fingerprint: *basis.registry_fingerprint.as_bytes(),
         kernel_fingerprint: basis.kernel_fingerprint,
-        resource_versions: basis.resource_versions.clone(),
         resource_observations: basis.resource_observations.clone(),
         semantic_snapshot: std::sync::Arc::new(semantic_snapshot),
         semantic_input_hash: [0; 32],

@@ -1,6 +1,6 @@
 use yss_data_contract::ValueType;
 use yss_graph_analysis::GraphDiagnosticLocation;
-use yss_graph_analysis_contract::{DiagnosticArguments, ResourceVersionSet};
+use yss_graph_analysis_contract::DiagnosticArguments;
 use yss_graph_document::{ConnectionId, GraphResourcePath, NodeId, NodePosition, PortAddress};
 use yss_node_protocol::{
     ParameterKey, ParameterPresentation, PortDirection, PortKey, RelationalScalarType,
@@ -12,7 +12,6 @@ pub struct EditorProjectionBasis {
     pub graph_path: GraphResourcePath,
     pub registry_fingerprint: [u8; 32],
     pub semantic_input_hash: [u8; 32],
-    pub resource_versions: ResourceVersionSet,
     pub resource_observations: yss_graph_analysis_contract::ResourceObservationSet,
 }
 
