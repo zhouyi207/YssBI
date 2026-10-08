@@ -79,6 +79,10 @@ opt-level = 2
 [profile.dev.package.gpui-pre-wgpu]
 opt-level = 2
 
+# New WGPU windows compile shaders synchronously through Naga.
+[profile.dev.package.naga]
+opt-level = 2
+
 [profile.dev.package.lyon_tessellation]
 opt-level = 2
 

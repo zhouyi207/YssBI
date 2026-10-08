@@ -27,9 +27,10 @@ cargo run -- /absolute/path/to/project charts/example.yssbi-chart
 cargo build --release
 ```
 
-根 Cargo profile 对开发构建的宿主及 GPUI、路径细分和布局依赖做定向优化，保留调试信息；
-普通 `cargo run` 不再让这些渲染热路径全部无优化运行。首次构建受影响依赖会更慢，业务 crate
-仍沿用默认开发配置。帧率验收使用 `cargo run --release`：120Hz 每帧预算约 8.3ms，需在相同图
+根 Cargo profile 对开发构建的宿主及 GPUI、Naga 着色器编译器、路径细分和布局依赖做定向优化，保留调试信息；
+普通 `cargo run` 会直接应用这些配置。WGPU 每次新建窗口都会同步编译着色器，Naga 的定向优化
+减少设置等独立窗口打开时的主线程停顿。首次构建受影响依赖会更慢，业务 crate 仍沿用默认开发配置。
+帧率验收使用 `cargo run --release`：120Hz 每帧预算约 8.3ms，需在相同图
 规模、窗口尺寸和显示器刷新率下实测平移、缩放、节点拖动与连接，不能从 GPU 架构直接推断达标。
 
 五个示例的 catalog 和 Parquet 随源码提供，开发运行不需要下载来源。独立运行或分发时，
