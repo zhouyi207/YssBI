@@ -235,6 +235,63 @@ fn open_graph_preserves_referenced_declared_orphans_for_repair() {
             .value,
         yss_data_contract::DataValue::Bool(false)
     );
+
+    let request = |version| crate::graph::editing::GraphEditRequest {
+        project_instance_id: session.session.project_instance_id().clone(),
+        graph_path: path.clone(),
+        version,
+        operation_id: yss_project_identity::OperationId::new(),
+        locale: "en-US".into(),
+    };
+    let cleared = session
+        .application
+        .edit_graph(
+            request(receipt.editing().version),
+            yss_graph_editor::EditorGraphMutation::SetLiteral {
+                address: missing_literal.clone(),
+                literal: None,
+            },
+        )
+        .expect("an existing invalid literal can be removed without a current port declaration");
+    assert!(
+        !cleared
+            .update
+            .document
+            .input_states
+            .contains_key(&missing_literal)
+    );
+    let reopened = session
+        .application
+        .open_graph(open_request(&session, &path))
+        .unwrap();
+    assert!(
+        !reopened
+            .projection()
+            .nodes
+            .iter()
+            .flat_map(|node| &node.ports)
+            .any(|port| port.address == missing_literal)
+    );
+    assert!(
+        session
+            .application
+            .edit_graph(
+                request(cleared.editing.version),
+                yss_graph_editor::EditorGraphMutation::SetLiteral {
+                    address: missing_literal.clone(),
+                    literal: Some(serde_json::json!(false)),
+                },
+            )
+            .is_err()
+    );
+    let restored = session
+        .application
+        .change_graph_history(request(cleared.editing.version), false)
+        .expect("undo restores the exact invalid literal as authored content");
+    assert_eq!(
+        restored.update.document.input_states[&missing_literal],
+        receipt.document().input_states[&missing_literal]
+    );
 }
 
 #[test]

@@ -582,6 +582,9 @@ pub(crate) fn normalize_editor_literal_target(
     address: &PortAddress,
     literal: Option<&JsonValue>,
 ) -> Result<Option<yss_node_protocol::TypedValue>, MutationConflict> {
+    if literal.is_none() && document.input_states.contains_key(address) {
+        return Ok(None);
+    }
     let port = resolve_literal_target(document, registry, address)?;
     literal
         .map(|raw| {
