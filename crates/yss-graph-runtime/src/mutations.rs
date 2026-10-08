@@ -1,4 +1,5 @@
 use super::*;
+use crate::binding_cleanup::BindingCleanup;
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use yss_graph_document_edit::prepare_graph_document_patch_in_place;
@@ -9,6 +10,7 @@ pub(super) struct EditorMutationPlanner<'a> {
     catalog: &'a CatalogMutationValidationSnapshot,
     semantics: Option<&'a GraphSemanticSnapshot>,
     candidate: Cow<'a, GraphDocument>,
+    cleanup: BindingCleanup<'a>,
 }
 
 impl<'a> EditorMutationPlanner<'a> {
@@ -25,6 +27,7 @@ impl<'a> EditorMutationPlanner<'a> {
             catalog,
             semantics: analysis.map(GraphAnalysis::semantic_snapshot),
             candidate: Cow::Borrowed(document),
+            cleanup: BindingCleanup::new(document),
         }
     }
 
@@ -45,7 +48,7 @@ impl<'a> EditorMutationPlanner<'a> {
                 context,
             )?;
             let staged = prepare_graph_document_patch_in_place(self.candidate.to_mut(), &patch)?;
-            let cleanup = unused_binding_operations(staged.document());
+            let cleanup = self.cleanup.operations(staged.document(), &patch);
             drop(staged);
             let mut operations = patch.operations;
             operations.extend(cleanup);
@@ -60,7 +63,7 @@ impl<'a> EditorMutationPlanner<'a> {
                 context,
             )?;
             let staged = claimed.prepare(&patch)?;
-            let cleanup = unused_binding_operations(staged.document());
+            let cleanup = self.cleanup.operations(staged.document(), &patch);
             drop(staged);
             drop(claimed);
             let mut operations = claims.operations;
@@ -140,34 +143,4 @@ impl<'a> EditorMutationPlanner<'a> {
         }
         Ok(operations)
     }
-}
-
-fn unused_binding_operations(candidate: &GraphDocument) -> Vec<GraphDocumentOperation> {
-    if candidate
-        .port_bindings
-        .values()
-        .all(|binding| matches!(binding, DynamicPortBinding::UserCreated { .. }))
-    {
-        return Vec::new();
-    }
-    let referenced_ports = candidate
-        .connections
-        .values()
-        .flat_map(|connection| [&connection.output, &connection.input])
-        .chain(candidate.input_states.keys())
-        .collect::<BTreeSet<_>>();
-    candidate
-        .port_bindings
-        .iter()
-        .filter(|(address, binding)| {
-            !matches!(binding, DynamicPortBinding::UserCreated { .. })
-                && !referenced_ports.contains(address)
-        })
-        .map(
-            |(address, binding)| GraphDocumentOperation::RemovePortBinding {
-                address: address.clone(),
-                binding: binding.clone(),
-            },
-        )
-        .collect()
 }

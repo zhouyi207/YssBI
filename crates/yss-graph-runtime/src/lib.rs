@@ -31,6 +31,7 @@ use yss_node_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
 use yss_node_protocol::PortDirection;
 use yss_node_registry::{NodeRegistry, RegistryFingerprint};
 
+mod binding_cleanup;
 mod connections;
 mod mutations;
 mod parameters;

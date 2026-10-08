@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: 图解析 facade 与可丢弃的语义缓存
-> Canonical owners: 本 crate 的解析入口、mutations 与 semantic_cache 模块
+> Canonical owners: 本 crate 的解析入口、mutations、binding_cleanup 与 semantic_cache 模块
 > Update when: 本模块的公开入口、状态归属、生命周期或契约改变时
 
 ## Semantic cache
@@ -25,6 +25,9 @@ Application 在交付前继续重验项目与会话。验证失败和物化阶�
 `prepare_graph_document_patch_in_place` 按 before-state 和完整结构校验提供作用域候选；
 认领与实际编辑使用嵌套作用域，成功或失败返回时均恢复原内容。批量候选查询复用这份私有正文，
 每个目标仍从同一原文规划，返回补丁包含无引用派生绑定清理。候选只供本次规划读取，提交仍重验当前文档。
+`binding_cleanup` 在同一规划器内按需统计原文档的实例端口引用一次，再叠加本次已验证补丁中的
+连线与输入状态引用变化。引用按数量统计，任一连线或输入状态仍引用时就保留绑定；各候选只叠加
+自己的变化，用户创建绑定始终保留。此索引随规划器丢弃，不写入项目、语义缓存或图文档。
 
 Graph Runtime 为最近使用的图保留一个不含本地化文本的完整 `GraphAnalysis` 缓存，容量由 [semantic_cache.rs](src/semantic_cache.rs) 定义。复用前校验解析文档指纹、registry/kernel 指纹和之前实际读取的资源，包括传递函数正文和 absent lookup。解析缓存的身份与执行身份分开：常量名称、函数参数名称、诊断所用 connection ID 和 orphan metadata 会影响解析快照，不能仅凭 `semanticInputHash` 复用。无关资源变化不使该缓存失效。
 
