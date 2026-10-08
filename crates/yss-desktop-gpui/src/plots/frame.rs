@@ -62,7 +62,7 @@ impl Axis<'_> {
                     .step_by(step)
                     .map(|(i, label)| {
                         let text = truncate_text_to_width(
-                            &label.clone().into(),
+                            &label.replace(['\r', '\n'], " ").into(),
                             px(10.),
                             if vertical { 100. } else { 65. },
                             window,
@@ -128,6 +128,31 @@ impl<'a> Frame<'a> {
             .y_label_side(AxisLabelSide::Start)
             .x_label(x)
             .y_label(y)
+            .stroke(cx.theme().border)
+            .paint(&self.bounds, window, cx);
+    }
+    pub fn right_axis(&self, domain: AxisDomain, percent: bool, window: &mut Window, cx: &mut App) {
+        let axis = Axis::Numeric(domain);
+        let labels = axis
+            .ticks(
+                self.bounds.size.height,
+                true,
+                cx.theme().muted_foreground,
+                window,
+            )
+            .into_iter()
+            .map(|mut label| {
+                label.align = TextAlign::Left;
+                if percent {
+                    let fraction = (label.tick / self.bounds.size.height) as f64;
+                    label.text = format!("{:.0}%", domain.at(1. - fraction) * 100.).into();
+                }
+                label
+            });
+        PlotAxis::new()
+            .y(self.bounds.size.width)
+            .y_axis(true)
+            .y_label(labels)
             .stroke(cx.theme().border)
             .paint(&self.bounds, window, cx);
     }

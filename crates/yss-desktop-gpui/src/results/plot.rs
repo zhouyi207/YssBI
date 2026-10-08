@@ -3,12 +3,14 @@ mod information;
 mod render;
 use crate::plots::{
     cartesian::{CartesianData, CartesianKind, CartesianOptions, CartesianPlot},
+    composite::{Composite, CompositeData},
     correlogram::{Correlogram, CorrelogramData},
     distribution::{Distribution, DistributionData},
     histogram::{self, HistogramDatum},
     interval::{Interval, IntervalData},
     matrix::{MatrixData, MatrixPlot},
     nomogram::{Nomogram, NomogramData},
+    wordcloud::{WordCloud, WordCloudData},
 };
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
 use gpui_component::{
@@ -47,6 +49,11 @@ enum Geometry {
         data: Arc<NomogramData>,
         horizon: f64,
     },
+    Composite {
+        data: Arc<CompositeData>,
+        observations: Option<usize>,
+    },
+    WordCloud(Arc<WordCloudData>),
 }
 pub(super) struct PlotData {
     geometry: Geometry,
@@ -173,6 +180,30 @@ impl PlotData {
                 PlotDataKind::Nomogram,
                 None,
             ),
+            ResultPlotProjection::Pareto(plot) => Self::statistical(
+                Geometry::Composite {
+                    data: Arc::new(CompositeData::pareto(plot.data)),
+                    observations: Some(plot.observations),
+                },
+                PlotDataKind::Pareto,
+                None,
+            ),
+            ResultPlotProjection::Combination(plot) => {
+                let metadata = Some(plot.metadata.clone());
+                Self::statistical(
+                    Geometry::Composite {
+                        data: Arc::new(CompositeData::combination(plot)),
+                        observations: None,
+                    },
+                    PlotDataKind::Combination,
+                    metadata,
+                )
+            }
+            ResultPlotProjection::WordCloud(plot) => Self::statistical(
+                Geometry::WordCloud(Arc::new(WordCloudData::new(plot))),
+                PlotDataKind::Wordcloud,
+                None,
+            ),
         }
     }
     fn statistical(geometry: Geometry, kind: PlotDataKind, metadata: Option<PlotMetadata>) -> Self {
@@ -184,10 +215,17 @@ impl PlotData {
         }
     }
     fn page_count(&self) -> usize {
-        if let Geometry::Interval { data, .. } = &self.geometry {
-            data.page_count()
-        } else {
-            1
+        match &self.geometry {
+            Geometry::Interval { data, .. } => data.page_count(),
+            Geometry::Composite { data, .. } => data.page_count(),
+            _ => 1,
+        }
+    }
+    fn paged_count(&self) -> usize {
+        match &self.geometry {
+            Geometry::Interval { data, .. } => data.count(),
+            Geometry::Composite { data, .. } => data.count(),
+            _ => 0,
         }
     }
 }

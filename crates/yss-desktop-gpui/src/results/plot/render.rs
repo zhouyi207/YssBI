@@ -104,14 +104,7 @@ impl Render for PlotView {
                             &[
                                 ("current", (self.page + 1).to_string()),
                                 ("total", self.data.page_count().to_string()),
-                                (
-                                    "count",
-                                    if let Geometry::Interval { data, .. } = &self.data.geometry {
-                                        data.count().to_string()
-                                    } else {
-                                        "0".into()
-                                    },
-                                ),
+                                ("count", self.data.paged_count().to_string()),
                             ],
                         ))
                         .child(
@@ -194,6 +187,23 @@ impl Render for PlotView {
                         page: self.page,
                         id: format!("result-interval-{}-{}", cx.entity_id(), self.page).into(),
                     })
+                    .into_any_element(),
+                Geometry::Composite { data, .. } => div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(Composite {
+                        data: data.clone(),
+                        page: self.page,
+                        id: format!("result-composite-{}-{}", cx.entity_id(), self.page).into(),
+                    })
+                    .into_any_element(),
+                Geometry::WordCloud(data) => div()
+                    .flex_1()
+                    .min_h_0()
+                    .child(WordCloud::new(
+                        data.clone(),
+                        format!("result-wordcloud-{}", cx.entity_id()).into(),
+                    ))
                     .into_any_element(),
                 Geometry::Nomogram { data, .. } => {
                     div()

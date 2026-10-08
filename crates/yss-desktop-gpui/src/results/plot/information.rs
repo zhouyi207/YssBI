@@ -79,6 +79,10 @@ impl PlotData {
             | Geometry::Correlogram {
                 observations: count,
                 ..
+            }
+            | Geometry::Composite {
+                observations: Some(count),
+                ..
             } => information.push(crate::text::format(
                 "plot.observations",
                 &[("observations", count.to_string())],

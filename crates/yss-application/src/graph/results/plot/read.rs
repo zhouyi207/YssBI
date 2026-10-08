@@ -11,6 +11,7 @@ use yss_data_contract::TabularScalar;
 use yss_graph_execution::plan::PlotDataKind;
 use yss_node_kernel::RuntimeValue;
 use yss_sci_contract::visualization::PlotMetadata;
+mod categorical;
 mod nomogram;
 mod statistical;
 
@@ -18,29 +19,6 @@ type Record = BTreeMap<Box<str>, RuntimeValue>;
 type Invalid = ResultQueryApplicationError;
 fn invalid() -> Invalid {
     Invalid::UnrepresentableValue
-}
-
-pub(super) fn supports(kind: PlotDataKind) -> bool {
-    matches!(
-        kind,
-        PlotDataKind::Scatter
-            | PlotDataKind::Line
-            | PlotDataKind::Ecdf
-            | PlotDataKind::Kde
-            | PlotDataKind::Histogram
-            | PlotDataKind::Bubble
-            | PlotDataKind::PpQq
-            | PlotDataKind::Roc
-            | PlotDataKind::Quadrant
-            | PlotDataKind::Correlation
-            | PlotDataKind::Correlogram
-            | PlotDataKind::Boxplot
-            | PlotDataKind::Violin
-            | PlotDataKind::Heatmap
-            | PlotDataKind::Errorbar
-            | PlotDataKind::Coefficient
-            | PlotDataKind::Nomogram
-    )
 }
 
 pub(super) fn project(
@@ -58,7 +36,18 @@ pub(super) fn project(
         PlotDataKind::Errorbar => return statistical::interval(record),
         PlotDataKind::Coefficient => return statistical::coefficient(record),
         PlotDataKind::Nomogram => return nomogram::project(record),
-        _ => {}
+        PlotDataKind::Pareto => return categorical::pareto(record),
+        PlotDataKind::Combination => return categorical::combination(record),
+        PlotDataKind::Wordcloud => return categorical::word_cloud(record),
+        PlotDataKind::Scatter
+        | PlotDataKind::Line
+        | PlotDataKind::Ecdf
+        | PlotDataKind::Kde
+        | PlotDataKind::Histogram
+        | PlotDataKind::Bubble
+        | PlotDataKind::PpQq
+        | PlotDataKind::Roc
+        | PlotDataKind::Quadrant => {}
     }
     let rows = list(field(record, "data")?)?;
     if rows.is_empty() {

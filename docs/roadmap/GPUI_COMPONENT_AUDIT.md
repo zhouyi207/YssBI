@@ -110,6 +110,16 @@
 - 临时 `cargo build -p yss-desktop-gpui --example review_statistical_plots` 使用生产 PlotView/plots 目视核对八类样例，修复混色参数权重方向，复看矩阵空格/端点、置信带、分布和区间正常。当前桌面未接收合成鼠标输入，因此悬浮、翻页和滚动未记为验收通过；临时源文件在提交前移除。
 - 真实项目的结果打开/关闭、主题/语言、重挂载与租约生命周期验收仍开放。报告消费者的接入另行审查，不把共享绘制完成等同于完整报告完成。
 
+### 帕累托、组合图与词云
+
+- 已逐项阅读 CompositeChart、WordCloudChart、PlotResultView 与对应 SCI 生产函数和解析约束，接入最后三类 PlotData，结果类别覆盖达到 20/20。Application 直接复用原 SCI 类型，并改为穷尽匹配全部类别。
+- 帕累托保留完整分类和全样本累计比例，每页 100 项；组合图共用 Frame 与缓存曲线，保留负柱、重复标签、两组值及双轴选择。词频计数不经浮点转换后再展示，读取边界检查计数溢出与列对齐。
+- 词云使用 GPUI 原生字体测量，在数据、尺寸或字体变化时才排布；每个词复用同一组螺旋候选位置，主题和悬浮不触发重新排布。长词按宽度缩小，信息栏显示实际排下词数与后端总体数量。
+- `cargo test -p yss-application --lib graph::results::plot::tests -- --nocapture` 六项通过，本批两项检查完整 205 类、精确宽整数、累计比例、组合图原值及无效形状/计数；Clippy 简化表达式后单独复跑 `graph::results::plot::tests::categorical` 两项通过。
+- `cargo test -p yss-sci --lib visualization::tests::categorical_plots_count_terms_and_cumulative_shares_from_full_samples -- --exact` 一项通过；Application 与 GPUI 的聚焦严格 Clippy 通过，独立提交检出的 GPUI Clippy 同样通过。13 个 Rust 文件格式、模块索引与变更文档相对链接检查通过。未新增依赖或 UI 单元测试。
+- 临时 `cargo build -p yss-desktop-gpui --example review_categorical_plots` 复用生产 PlotView/plots，目视核对帕累托首/末页、双轴/共轴、负柱、重复标签、中文/长词/换行和拥挤词云；修正百分比刻度显示并复看。临时预览源文件在提交前移除。
+- Fedora 预览中的 `📈` 有测量和排布位置，但字形不可见；同窗口普通 GPUI 文本也复现。该字体渲染问题、真实结果打开/关闭、悬浮、分页按钮、窗口缩放和主题/字体切换验收继续开放。报告专用呈现及独立图形窗口另行审查。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -196,7 +206,7 @@
 | --- | --- | --- | --- |
 | [features/application/assistant/AssistantRuntimeProvider.tsx](../../react/src/features/application/assistant/AssistantRuntimeProvider.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [features/application/presentation/LinePlotControls.tsx](../../react/src/features/application/presentation/LinePlotControls.tsx) | 迁移：实体只拥有工具栏和点可见性，复用 Button/Switch | results/plot 普通折线局部切换，保留曲线/参考线和租约，ROC 无此开关 | 代码已覆盖；人工验收待完成 |
-| [features/application/presentation/PlotResultView.tsx](../../react/src/features/application/presentation/PlotResultView.tsx) | 分批迁移：完整结果与统计值归 Application，几何与开关归原生视图 | results/plot 已支持 17/20 类；系数每页 100 项，保留完整数据/置信水平，翻页不重新读取；帕累托/组合/词云待补齐 | 部分完成；其余图形及真实结果验收开放 |
+| [features/application/presentation/PlotResultView.tsx](../../react/src/features/application/presentation/PlotResultView.tsx) | 迁移：完整结果与统计值归 Application，几何与开关归原生视图 | results/plot 已支持 20/20 类；系数/帕累托每页 100 项，保留完整数据与原置信水平/累计比例，翻页不重新读取 | 图形已覆盖；真实结果交互和生命周期验收开放 |
 | [features/application/results/components/ReadOnlyDataGrid.tsx](../../react/src/features/application/results/components/ReadOnlyDataGrid.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [features/application/results/components/ResultPageToolbar.tsx](../../react/src/features/application/results/components/ResultPageToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [features/application/results/components/ResultReadError.tsx](../../react/src/features/application/results/components/ResultReadError.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -475,14 +485,14 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [shared/charts/ChartRenderer.tsx](../../react/src/shared/charts/ChartRenderer.tsx) | 分批迁移：共享 plots 按已验证类别分流，原生图形复用同一绘制 | 十七类结果使用共享基础/统计绘制；组合、帕累托与词云仍待迁移 | 部分完成；其余 renderer 开放 |
-| [shared/charts/cartesian/CompositeChart.tsx](../../react/src/shared/charts/cartesian/CompositeChart.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [shared/charts/ChartRenderer.tsx](../../react/src/shared/charts/ChartRenderer.tsx) | 迁移：共享 plots 按已验证类别分流，原生图形复用同一绘制 | 二十类 PlotData 结果已有共享绘制；报告的高亮/残差轴等专用选项仍随报告消费者审查 | 结果类别已覆盖；报告专用呈现及真实结果验收开放 |
+| [shared/charts/cartesian/CompositeChart.tsx](../../react/src/shared/charts/cartesian/CompositeChart.tsx) | 迁移/优化：帕累托与组合图共用原数据、Frame 轴和缓存曲线 | plots/composite 保留双轴/共轴、负柱、重复标签；帕累托每页 100 项，0–100% 轴及全样本累计不随页重算 | 代码已覆盖；真实结果与翻页验收待完成 |
 | [shared/charts/cartesian/EcdfChart.tsx](../../react/src/shared/charts/cartesian/EcdfChart.tsx) | 迁移：复用 StepAfter 曲线，累计值直接来自 Rust | plots/cartesian 从零基线绘制，Y 轴固定 [0,1]，保留点序和重复 X | 代码已覆盖；人工验收待完成 |
 | [shared/charts/cartesian/HistogramChart.tsx](../../react/src/shared/charts/cartesian/HistogramChart.tsx) | 迁移/优化：复用 BarChart；当前无生产调用的 compact 分支不单独迁移 | plots/histogram 共用原分箱次序与计数，重复标签按序号区分，悬浮计数保留精确整数 | 代码已覆盖；人工验收待完成 |
 | [shared/charts/cartesian/KdeChart.tsx](../../react/src/shared/charts/cartesian/KdeChart.tsx) | 分批迁移：复用 Area/Line，不在 GUI 估计密度 | 节点结果已绘制零基线面积与曲线；报告 Leverage 的 xMin 配置随报告迁移 | 部分完成；报告消费者开放 |
 | [shared/charts/cartesian/LineChart.tsx](../../react/src/shared/charts/cartesian/LineChart.tsx) | 迁移/优化：复用组件 Line 与路径缓存，不重算后端点 | plots/cartesian 支持参考线、显式坐标、日期格式和点开关；独立图表与结果共用 | 代码已覆盖；人工验收待完成 |
 | [shared/charts/cartesian/ScatterChart.tsx](../../react/src/shared/charts/cartesian/ScatterChart.tsx) | 分批迁移：共享坐标与主题，保持参考线和气泡面积语义 | 已接入结果散点、气泡、象限、概率图与下降轴；报告高亮/对称残差轴留待报告批次 | 部分完成；报告专用样式开放 |
-| [shared/charts/categorical/WordCloudChart.tsx](../../react/src/shared/charts/categorical/WordCloudChart.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [shared/charts/categorical/WordCloudChart.tsx](../../react/src/shared/charts/categorical/WordCloudChart.tsx) | 迁移/优化：使用 GPUI 原生字体测量，复用 Plot 的悬浮与布局状态 | plots/wordcloud 按数据/尺寸/字体缓存螺旋排布，保留原词序、频次与中文；主题变化重新着色，实际排下词数单独呈现 | 代码已覆盖；真实结果、缩放及悬浮验收待完成 |
 | [shared/charts/core/theme.tsx](../../react/src/shared/charts/core/theme.tsx) | 复用原生主题：颜色随原窗口主题读取，不另存 Context 状态 | plots 与原生组件共享主题、网格、标签和曲线颜色 | 代码已覆盖；人工验收待完成 |
 | [shared/charts/statistical/CorrelationMatrixChart.tsx](../../react/src/shared/charts/statistical/CorrelationMatrixChart.tsx) | 迁移：复用 PlotAxis/PlotLabel 与现有混色，行列身份用原位置 | plots/matrix 保留方阵、空系数/空 p、重复标签和固定 [-1,1] 色阶；悬浮给出完整标签/原值 | 代码已覆盖；真实结果验收待完成 |
 | [shared/charts/statistical/CorrelogramChart.tsx](../../react/src/shared/charts/statistical/CorrelogramChart.tsx) | 迁移：只绘制原 ACF/PACF，不重算置信带或 Ljung–Box | plots/correlogram 保留正负柱、零线、置信区及 Q/p，结果面板分上下两图；报告消费者仍待接入 | 代码已覆盖；报告接入及真实结果验收开放 |

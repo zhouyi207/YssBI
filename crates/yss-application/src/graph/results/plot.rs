@@ -16,9 +16,10 @@ pub use yss_sci_contract::visualization::PlotMetadata;
 pub use yss_sci_contract::{
     survival::{NomogramAxis, NomogramPlot, NomogramTick},
     visualization::{
-        CoefficientPlot, CoefficientPoint, CorrelationPlot, CorrelogramPlot, CorrelogramPoint,
-        DistributionGroup, DistributionPlot, HeatmapPlot, IntervalPlot, IntervalPoint,
-        PlotPoint as DensityPoint,
+        CoefficientPlot, CoefficientPoint, CombinationPlot, CorrelationPlot, CorrelogramPlot,
+        CorrelogramPoint, DistributionGroup, DistributionPlot, HeatmapPlot, IntervalPlot,
+        IntervalPoint, ParetoCategory, ParetoPlot, PlotPoint as DensityPoint, WordCloudPlot,
+        WordCount,
     },
 };
 
@@ -36,6 +37,9 @@ pub enum ResultPlotProjection {
     Interval(IntervalPlot),
     Coefficient(CoefficientPlot),
     Nomogram(NomogramPlot),
+    Pareto(ParetoPlot),
+    Combination(CombinationPlot),
+    WordCloud(WordCloudPlot),
 }
 
 #[derive(Debug, PartialEq)]
@@ -82,8 +86,8 @@ pub struct HistogramResultPlot {
 }
 
 impl ApplicationState {
-    /// Returns None for unavailable results or categories without a native plot projection.
-    /// A supported category with malformed data fails instead of falling back to a partial plot.
+    /// Returns None for unavailable results or non-plot categories.
+    /// Malformed plot data fails instead of falling back to a partial plot.
     pub fn query_result_plot(
         &self,
         reference: ResultReference,
@@ -96,7 +100,7 @@ impl ApplicationState {
             return Ok(None);
         };
         let projection = match snapshot.value().category() {
-            ResultCategory::PlotData(kind) if read::supports(kind) => {
+            ResultCategory::PlotData(kind) => {
                 // Bound traversal and allocation before projecting any rows, including full
                 // control-chart outputs that deliberately retain every observation.
                 let mut budget = MAX_RESULT_PAGE_BYTES;
