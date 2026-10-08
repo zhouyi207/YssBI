@@ -1,6 +1,5 @@
 use super::*;
-use std::borrow::Cow;
-use yss_graph_document_edit::validate_graph_document;
+use yss_graph_document_edit::validate_graph_document_connection_candidate;
 
 type MutationPort<'a> = crate::compatibility::ResolvedEditorPort<'a>;
 
@@ -138,40 +137,35 @@ pub(crate) fn move_connection_operations(
         .cloned()
         .map(|connection| (connection.id, connection))
         .collect::<BTreeMap<_, _>>();
-    let mut staged = prepare_graph_document_patch(
-        document.clone(),
-        &GraphDocumentPatch::new(
-            removals
-                .values()
-                .cloned()
-                .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
-                .collect::<Vec<_>>(),
-        ),
-    )?;
-    match endpoint_capacity(&staged, &target, target_port.spec.connections)? {
+    let mut insertions = BTreeMap::new();
+    validate_graph_document_connection_candidate(document, &removals, &insertions)?;
+    match endpoint_capacity(
+        document
+            .connections
+            .values()
+            .filter(|connection| !removals.contains_key(&connection.id)),
+        &target,
+        target_port.spec.connections,
+    )? {
         EndpointCapacity::Append => {}
         EndpointCapacity::Replace(incumbents) => {
-            let patch = GraphDocumentPatch::new(
-                incumbents
-                    .iter()
-                    .cloned()
-                    .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
-                    .collect::<Vec<_>>(),
-            );
-            staged = prepare_graph_document_patch(staged, &patch)?;
             for connection in incumbents {
                 removals.insert(connection.id, connection);
             }
         }
     }
-
     let removal_operations = removals
         .values()
         .cloned()
         .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
         .collect::<Vec<_>>();
     for proposal in &proposals {
-        if staged.connections.values().any(|connection| {
+        let mut connections = document
+            .connections
+            .values()
+            .filter(|connection| !removals.contains_key(&connection.id))
+            .chain(insertions.values());
+        if connections.any(|connection| {
             connection.output == proposal.output && connection.input == proposal.input
         }) {
             return Err(editor_error(
@@ -179,17 +173,29 @@ pub(crate) fn move_connection_operations(
                 "a moved connection endpoint pair already exists",
             ));
         }
-        let output = resolve_mutation_port(&staged, registry, &proposal.output)?;
-        let input = resolve_mutation_port(&staged, registry, &proposal.input)?;
+        let output = resolve_mutation_port(document, registry, &proposal.output)?;
+        let input = resolve_mutation_port(document, registry, &proposal.input)?;
         validate_connection_order(input.spec.connections, proposal.order.as_ref())?;
-        validate_connection_capacity(&staged, &proposal.output, output.spec.connections)?;
-        validate_connection_capacity(&staged, &proposal.input, input.spec.connections)?;
-        staged = prepare_graph_document_patch(
-            staged,
-            &GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertConnection {
-                connection: proposal.clone(),
-            }]),
+        validate_connection_capacity(
+            document
+                .connections
+                .values()
+                .filter(|connection| !removals.contains_key(&connection.id))
+                .chain(insertions.values()),
+            &proposal.output,
+            output.spec.connections,
         )?;
+        validate_connection_capacity(
+            document
+                .connections
+                .values()
+                .filter(|connection| !removals.contains_key(&connection.id))
+                .chain(insertions.values()),
+            &proposal.input,
+            input.spec.connections,
+        )?;
+        insertions.insert(proposal.id, proposal.clone());
+        validate_graph_document_connection_candidate(document, &removals, &insertions)?;
     }
 
     let mut operations = removal_operations;
@@ -358,8 +364,16 @@ pub(crate) fn validate_subgraph_connection(
     )
     .map_err(MutationConflict::Editor)?;
     validate_connection_order(input_port.spec.connections, order)?;
-    validate_connection_capacity(document, output, output_port.spec.connections)?;
-    validate_connection_capacity(document, input, input_port.spec.connections)
+    validate_connection_capacity(
+        document.connections.values(),
+        output,
+        output_port.spec.connections,
+    )?;
+    validate_connection_capacity(
+        document.connections.values(),
+        input,
+        input_port.spec.connections,
+    )
 }
 
 pub(super) fn connect_operations(
@@ -414,8 +428,10 @@ fn plan_connection_operations_after_type_validation(
     order: Option<OrderKey>,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     validate_connection_order(input_connections, order.as_ref())?;
-    let output_capacity = endpoint_capacity(document, &output, output_connections)?;
-    let input_capacity = endpoint_capacity(document, &input, input_connections)?;
+    let output_capacity =
+        endpoint_capacity(document.connections.values(), &output, output_connections)?;
+    let input_capacity =
+        endpoint_capacity(document.connections.values(), &input, input_connections)?;
     let mut incumbents = BTreeMap::new();
     for capacity in [output_capacity, input_capacity] {
         if let EndpointCapacity::Replace(connections) = capacity {
@@ -424,21 +440,27 @@ fn plan_connection_operations_after_type_validation(
             }
         }
     }
+    validate_graph_document_connection_candidate(document, &incumbents, &BTreeMap::new())?;
+    validate_connection_capacity(
+        document
+            .connections
+            .values()
+            .filter(|connection| !incumbents.contains_key(&connection.id)),
+        &output,
+        output_connections,
+    )?;
+    validate_connection_capacity(
+        document
+            .connections
+            .values()
+            .filter(|connection| !incumbents.contains_key(&connection.id)),
+        &input,
+        input_connections,
+    )?;
     let mut operations = incumbents
         .into_values()
         .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
         .collect::<Vec<_>>();
-    let staged = if operations.is_empty() {
-        validate_graph_document(document)?;
-        Cow::Borrowed(document)
-    } else {
-        Cow::Owned(prepare_graph_document_patch(
-            document.clone(),
-            &GraphDocumentPatch::new(operations.clone()),
-        )?)
-    };
-    validate_connection_capacity(&staged, &output, output_connections)?;
-    validate_connection_capacity(&staged, &input, input_connections)?;
     operations.push(GraphDocumentOperation::InsertConnection {
         connection: DocumentConnection {
             id: ConnectionId::new(),
@@ -499,16 +521,14 @@ enum EndpointCapacity {
     Replace(Vec<DocumentConnection>),
 }
 
-fn endpoint_capacity(
-    document: &GraphDocument,
+fn endpoint_capacity<'a>(
+    connections: impl Iterator<Item = &'a DocumentConnection>,
     address: &PortAddress,
     capability: ConnectionsPerPort,
 ) -> Result<EndpointCapacity, MutationConflict> {
     match capability {
         ConnectionsPerPort::Single => {
-            let connections = document
-                .connections
-                .values()
+            let connections = connections
                 .filter(|connection| connection.output == *address || connection.input == *address)
                 .cloned()
                 .collect::<Vec<_>>();
@@ -519,14 +539,14 @@ fn endpoint_capacity(
             }
         }
         ConnectionsPerPort::Multiple { .. } => {
-            validate_connection_capacity(document, address, capability)
+            validate_connection_capacity(connections, address, capability)
                 .map(|()| EndpointCapacity::Append)
         }
     }
 }
 
-fn validate_connection_capacity(
-    document: &GraphDocument,
+fn validate_connection_capacity<'a>(
+    connections: impl Iterator<Item = &'a DocumentConnection>,
     address: &PortAddress,
     capability: ConnectionsPerPort,
 ) -> Result<(), MutationConflict> {
@@ -535,9 +555,7 @@ fn validate_connection_capacity(
         ConnectionsPerPort::Multiple { max, .. } => max.map(usize::from),
     };
     if let Some(maximum) = maximum
-        && document
-            .connections
-            .values()
+        && connections
             .filter(|connection| connection.output == *address || connection.input == *address)
             .take(maximum)
             .count()
