@@ -264,6 +264,23 @@ fn output_fan_out_preserves_other_branches_when_an_input_is_replaced_and_undone(
     );
     apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
     assert_eq!(document, before);
+
+    let unused = insert_node(&mut document, document_node("yssbi.debug.view", 600.0));
+    connect(&document, replacement, unused).unwrap();
+    let mut invalid = document.clone();
+    let missing = NodeId::new();
+    invalid.input_states.insert(
+        declared(missing, "input"),
+        yss_graph_document::InputState {
+            literal_override: None,
+        },
+    );
+    assert!(matches!(
+        connect(&invalid, replacement, unused),
+        Err(crate::MutationConflict::Document(
+            yss_graph_document_edit::DocumentError::EndpointNodeNotFound(node)
+        )) if node == missing
+    ));
 }
 
 #[test]

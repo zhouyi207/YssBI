@@ -775,24 +775,6 @@ fn insert_reroute_operations(
     connection_id: ConnectionId,
     position: NodePosition,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    insert_reroute_operations_with_allocators(
-        document,
-        registry,
-        connection_id,
-        position,
-        &NodeId::new,
-        &ConnectionId::new,
-    )
-}
-
-fn insert_reroute_operations_with_allocators(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    connection_id: ConnectionId,
-    position: NodePosition,
-    allocate_node_id: &dyn Fn() -> NodeId,
-    allocate_connection_id: &dyn Fn() -> ConnectionId,
-) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     validate_position(position)?;
     let original = document
         .connections
@@ -822,9 +804,9 @@ fn insert_reroute_operations_with_allocators(
     let contract = yss_node_catalog::validate_reroute_protocol_contract(registered)
         .map_err(|detail| MutationConflict::RegistryInvariant(detail.into()))?;
 
-    let reroute_id = allocate_node_id();
-    let source_connection_id = allocate_connection_id();
-    let target_connection_id = allocate_connection_id();
+    let reroute_id = NodeId::new();
+    let source_connection_id = ConnectionId::new();
+    let target_connection_id = ConnectionId::new();
     let operations = vec![
         GraphDocumentOperation::RemoveConnection {
             connection: original.clone(),

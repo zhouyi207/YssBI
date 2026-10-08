@@ -1,4 +1,6 @@
 use super::*;
+use std::borrow::Cow;
+use yss_graph_document_edit::validate_graph_document;
 
 type MutationPort<'a> = crate::compatibility::ResolvedEditorPort<'a>;
 
@@ -426,10 +428,15 @@ fn plan_connection_operations_after_type_validation(
         .into_values()
         .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
         .collect::<Vec<_>>();
-    let staged = prepare_graph_document_patch(
-        document.clone(),
-        &GraphDocumentPatch::new(operations.clone()),
-    )?;
+    let staged = if operations.is_empty() {
+        validate_graph_document(document)?;
+        Cow::Borrowed(document)
+    } else {
+        Cow::Owned(prepare_graph_document_patch(
+            document.clone(),
+            &GraphDocumentPatch::new(operations.clone()),
+        )?)
+    };
     validate_connection_capacity(&staged, &output, output_connections)?;
     validate_connection_capacity(&staged, &input, input_connections)?;
     operations.push(GraphDocumentOperation::InsertConnection {

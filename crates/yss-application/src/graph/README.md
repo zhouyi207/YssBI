@@ -95,7 +95,7 @@ Application 将这些映射与常量创建映射一起写入 Project 原提交�
 | yss-graph-document-edit / editor                                          | structural validation、typed mutation、连接预检、端口顺序、clipboard、编辑器投影 |
 | yss-graph-analysis                                                        | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof      |
 | yss-graph-resource-contract                                               | immutable resource facts 与一次 Resolve 的 dependency observations               |
-| yss-graph-runtime                                                         | 唯一 resolve_graph_draft facade、claim 编排、编辑解析缓存                        |
+| yss-graph-runtime                                                         | 图解析 facade、派生端口认领、编辑解析缓存                                       |
 | yss-graph-diagnostics                                                     | 图诊断代码、模板与定义校验                                                       |
 | yss-project                                                               | committed authority、资源版本、文件事务与 publication                            |
 | yss-application                                                           | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
@@ -125,6 +125,7 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 Application 捕获当前编辑版本与资源事实、解析一次语义，在查询结束时重验资源、应用会话和图版本。
 查询与编辑复用同一资源输入捕获；Application 查询直接持有当前文档引用，不构造 `GraphDocumentEditor` 的原始/待编辑文档副本或累计历史补丁。
 Graph Runtime 对每个候选复用提交所用的 mutation planner，包括动态端口认领、重复连接、方向、同节点、类型、容量和顺序检查；查询不提交补丁、不写历史或 dirty。
+没有旧连接需要替换时，Editor 规划借用原文档并复用 Document Edit 的完整结构校验；需要替换时才构造私有候选。
 Graph Editor 将规划补丁映射为 append、replace 或携带稳定原因码的 invalid；迁移预览的替换列表只包含被挤掉的连接，不包含自身迁移的连接。
 桌面端口投影只交付连接数量与可用动作，不发送接受类型域、连接上限或顺序供前端再推导。Assistant 的图检查仍消费后端的接受类型说明和连接上限。
 响应携带语义输入 hash，前端按编辑版本、语义和资源发布身份接纳，并在下一次身份变化时丢弃。
