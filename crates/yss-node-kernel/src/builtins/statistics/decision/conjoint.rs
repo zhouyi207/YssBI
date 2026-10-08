@@ -39,6 +39,7 @@ fn execute(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
             )?
             .checked_add(65536)
     })())?;
+    drop(data);
     let c = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     let result = yss_sci_runtime::decision::conjoint::fit(&response, &factors, &c)
         .map_err(computation_error)?;

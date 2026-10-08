@@ -79,15 +79,15 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     let mut random_predictors = Vec::new();
     let mut groups = Vec::new();
     let mut group_labels = Vec::new();
-    for (key, column) in inv.input_keys.iter().zip(&columns) {
+    for (key, column) in inv.input_keys.iter().zip(columns) {
         match *key {
-            "y" => y = super::common::numeric(column, true, inv)?,
-            "x" => predictors.push(super::common::numeric(column, false, inv)?),
+            "y" => y = super::common::numeric(&column, true, inv)?,
+            "x" => predictors.push(super::common::numeric(&column, false, inv)?),
             "random_predictors" => {
-                random_predictors.push(super::common::numeric(column, false, inv)?)
+                random_predictors.push(super::common::numeric(&column, false, inv)?)
             }
             "groups" => {
-                let (codes, labels) = super::common::categories(column, false, inv)?;
+                let (codes, labels) = super::common::categories(&column, false, inv)?;
                 groups.push(Grouping {
                     codes,
                     levels: labels.len(),

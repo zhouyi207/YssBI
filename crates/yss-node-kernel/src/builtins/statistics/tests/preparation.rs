@@ -166,4 +166,40 @@ fn prepared_group_columns_preserve_wide_labels_and_doe_detail_rows() {
         page.data.columns()[4].values(),
         &[4.0_f64, 6.0].map(|v| TabularScalar::Float64(v.try_into().unwrap())),
     );
+    let conjoint = KernelRegistry::default()
+        .execute(
+            &KernelId::new("yssbi.statistics.decision.conjoint".into()).unwrap(),
+            &KernelInvocation {
+                relations: &factory,
+                inputs: &[
+                    series(&[2., 4., 6., 8.]),
+                    RuntimeValue::Series(source.select_series("database_factor").unwrap()),
+                ],
+                input_keys: &["ratings", "factors"],
+                parameters: Default::default(),
+                outputs: &outputs(&["observation", "observed", "fitted", "residual"]),
+                control: &control,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        field(&conjoint[0], "level_labels").unwrap(),
+        field(&result[0], "level_labels").unwrap(),
+    );
+    assert_eq!(
+        field(&conjoint[0], "factor_names").unwrap(),
+        field(&result[0], "factor_names").unwrap(),
+    );
+    let RuntimeValue::Relation(table) = &conjoint[1] else {
+        panic!("conjoint fitted observations must retain a relation");
+    };
+    let page = table.page(0, 10, &relation_control).unwrap();
+    let fitted = page.data.columns()[2].values();
+    assert_eq!(fitted.len(), 4);
+    for (actual, expected) in fitted.iter().zip([4., 6., 4., 6.]) {
+        let TabularScalar::Float64(actual) = actual else {
+            panic!("fitted observations must be numeric");
+        };
+        assert!((actual.as_f64() - expected).abs() < 1e-12);
+    }
 }

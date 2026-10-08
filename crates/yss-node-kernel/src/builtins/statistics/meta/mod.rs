@@ -44,8 +44,8 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             .checked_add(65536)
     })())?;
     let data = columns
-        .iter()
-        .map(|c| numeric(c, false, inv))
+        .into_iter()
+        .map(|c| numeric(&c, false, inv))
         .collect::<Result<Vec<_>, _>>()?;
     let control = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     if matches!(
