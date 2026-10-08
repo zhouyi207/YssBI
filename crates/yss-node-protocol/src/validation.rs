@@ -192,15 +192,12 @@ fn resolve_json_literal_type(
                 return None;
             };
             let values = raw.as_array()?;
-            let mut element_types = values
-                .iter()
-                .map(|value| resolve_json_literal_type(value, argument, nominal))
-                .collect::<Option<Vec<_>>>()?;
-            element_types.sort_by_key(super::types::type_expr_sort_key);
-            element_types.dedup();
-            let element = match element_types.as_slice() {
-                [element] => element.clone(),
-                _ => return None,
+            let element = if values.is_empty() {
+                type_expr_accepts(argument, argument, nominal).then(|| argument.clone())?
+            } else {
+                homogeneous_literal_type(values, |value| {
+                    resolve_json_literal_type(value, argument, nominal)
+                })?
             };
             Some(TypeExpr::Applied {
                 constructor: constructor.clone(),
@@ -229,23 +226,26 @@ fn infer_unconstrained_literal_type(raw: &serde_json::Value) -> Option<TypeExpr>
         serde_json::Value::Number(_) => concrete("core.numeric"),
         serde_json::Value::String(_) => concrete("core.text"),
         serde_json::Value::Array(values) => {
-            let mut element_types = values
-                .iter()
-                .map(infer_unconstrained_literal_type)
-                .collect::<Option<Vec<_>>>()?;
-            element_types.sort_by_key(super::types::type_expr_sort_key);
-            element_types.dedup();
-            let [element] = element_types.as_slice() else {
-                return None;
-            };
+            let element = homogeneous_literal_type(values, infer_unconstrained_literal_type)?;
             Some(TypeExpr::Applied {
                 constructor: TypeConstructorId::new("core.array").ok()?,
-                arguments: vec![element.clone()],
+                arguments: vec![element],
             })
         }
         serde_json::Value::Object(_) => concrete("core.object"),
         serde_json::Value::Null => None,
     }
+}
+
+fn homogeneous_literal_type(
+    values: &[serde_json::Value],
+    mut resolve: impl FnMut(&serde_json::Value) -> Option<TypeExpr>,
+) -> Option<TypeExpr> {
+    let mut values = values.iter();
+    let element = resolve(values.next()?)?;
+    values
+        .all(|value| resolve(value).as_ref() == Some(&element))
+        .then_some(element)
 }
 
 fn protocol_value_matches_type(
@@ -581,6 +581,29 @@ mod tests {
         fn type_implements_class(&self, type_id: &TypeId, class: &TypeClassId) -> Option<bool> {
             Some(class.as_str() == "core.numeric" && type_id.as_str() == "core.numeric")
         }
+    }
+
+    #[test]
+    fn empty_series_literals_use_a_resolved_declared_element_type() {
+        let declared = crate::numeric_data_series_type();
+        let expected = TypedValue {
+            value_type: declared.clone(),
+            value: DataValue::List(vec![]),
+        };
+        assert_eq!(
+            validate_typed_value(expected.clone(), &declared, &NoNominalValidator),
+            Ok(expected.clone())
+        );
+        assert_eq!(
+            normalize_json_literal(&serde_json::json!([]), &declared, &NoNominalValidator),
+            Ok(expected)
+        );
+        let unresolved =
+            crate::data_series_type(TypeExpr::Generic(TypeParameterId::new("element").unwrap()));
+        assert!(
+            normalize_json_literal(&serde_json::json!([]), &unresolved, &NoNominalValidator)
+                .is_err()
+        );
     }
 
     #[test]

@@ -62,7 +62,7 @@ fn normalize_union(members: Vec<TypeExpr>) -> Result<TypeExpr, TypeNormalization
             member => normalized.push(member),
         }
     }
-    normalized.sort_by_key(type_expr_sort_key);
+    normalized.sort_by_cached_key(type_expr_sort_key);
     normalized.dedup();
 
     match normalized.len() {

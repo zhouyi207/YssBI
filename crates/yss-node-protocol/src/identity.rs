@@ -36,7 +36,7 @@ macro_rules! semantic_id {
         impl $name {
             pub fn new(value: impl Into<Box<str>>) -> Result<Self, InvalidSemanticId> {
                 let value = value.into();
-                ($validate)(&value)?;
+                ($validate)(&value, $kind)?;
                 Ok(Self(value))
             }
 
@@ -76,10 +76,6 @@ macro_rules! semantic_id {
     };
 }
 
-fn validate_node_type_id(value: &str) -> Result<(), InvalidSemanticId> {
-    validate_namespaced(value, "node type id", 3)
-}
-
 fn validate_local(value: &str, kind: &'static str) -> Result<(), InvalidSemanticId> {
     validate_common(kind, value)?;
     if !valid_segment(value) {
@@ -98,8 +94,10 @@ fn validate_namespaced(
     minimum_segments: usize,
 ) -> Result<(), InvalidSemanticId> {
     validate_common(kind, value)?;
-    let segments: Vec<_> = value.split('.').collect();
-    if segments.len() < minimum_segments || segments.iter().any(|segment| !valid_segment(segment)) {
+    let mut segments = value.split('.');
+    if segments.clone().take(minimum_segments).count() < minimum_segments
+        || segments.any(|segment| !valid_segment(segment))
+    {
         return Err(InvalidSemanticId::new(
             kind,
             value,
@@ -130,57 +128,46 @@ fn valid_segment(segment: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
-semantic_id!(NodeTypeId, "node type id", validate_node_type_id);
-semantic_id!(PortKey, "port key", |value| validate_local(
-    value, "port key"
+semantic_id!(NodeTypeId, "node type id", |value, kind| {
+    validate_namespaced(value, kind, 3)
+});
+semantic_id!(PortKey, "port key", validate_local);
+semantic_id!(ParameterKey, "parameter key", validate_local);
+semantic_id!(ParameterGroupKey, "parameter group key", validate_local);
+semantic_id!(TypeParameterId, "type parameter id", validate_local);
+semantic_id!(NodeCategoryId, "node category id", |value, kind| {
+    validate_namespaced(value, kind, 1)
+});
+semantic_id!(I18nKey, "i18n key", |value, kind| validate_namespaced(
+    value, kind, 2
 ));
-semantic_id!(ParameterKey, "parameter key", |value| validate_local(
-    value,
-    "parameter key"
+semantic_id!(TypeId, "type id", |value, kind| validate_namespaced(
+    value, kind, 2
 ));
-semantic_id!(ParameterGroupKey, "parameter group key", |value| {
-    validate_local(value, "parameter group key")
+semantic_id!(
+    ProviderId,
+    "provider id",
+    |value, kind| validate_namespaced(value, kind, 1)
+);
+semantic_id!(IconId, "icon id", |value, kind| validate_namespaced(
+    value, kind, 1
+));
+semantic_id!(NodeStyleId, "node style id", |value, kind| {
+    validate_namespaced(value, kind, 1)
+});
+semantic_id!(TypeConstructorId, "type constructor id", |value, kind| {
+    validate_namespaced(value, kind, 2)
+});
+semantic_id!(TypeClassId, "type class id", |value, kind| {
+    validate_namespaced(value, kind, 2)
 });
 semantic_id!(
-    TypeParameterId,
-    "type parameter id",
-    |value| validate_local(value, "type parameter id")
+    InterfaceResolverId,
+    "interface resolver id",
+    |value, kind| validate_namespaced(value, kind, 2)
 );
-semantic_id!(NodeCategoryId, "node category id", |value| {
-    validate_namespaced(value, "node category id", 1)
-});
-semantic_id!(I18nKey, "i18n key", |value| validate_namespaced(
-    value, "i18n key", 2
-));
-semantic_id!(TypeId, "type id", |value| validate_namespaced(
-    value, "type id", 2
-));
-semantic_id!(ProviderId, "provider id", |value| validate_namespaced(
-    value,
-    "provider id",
-    1
-));
-semantic_id!(IconId, "icon id", |value| validate_namespaced(
-    value, "icon id", 1
-));
-semantic_id!(NodeStyleId, "node style id", |value| validate_namespaced(
-    value,
-    "node style id",
-    1
-));
-semantic_id!(TypeConstructorId, "type constructor id", |value| {
-    validate_namespaced(value, "type constructor id", 2)
-});
-semantic_id!(TypeClassId, "type class id", |value| validate_namespaced(
-    value,
-    "type class id",
-    2
-));
-semantic_id!(InterfaceResolverId, "interface resolver id", |value| {
-    validate_namespaced(value, "interface resolver id", 2)
-});
-semantic_id!(SchemaResolverId, "schema resolver id", |value| {
-    validate_namespaced(value, "schema resolver id", 2)
+semantic_id!(SchemaResolverId, "schema resolver id", |value, kind| {
+    validate_namespaced(value, kind, 2)
 });
 
 #[cfg(test)]
