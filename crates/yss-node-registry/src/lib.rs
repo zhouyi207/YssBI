@@ -14,6 +14,7 @@ pub use model::{
 };
 pub use validation::RegistryValidationError;
 
+use model::NodeRegistryData;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use yss_canonical_hash::CanonicalEncodingError;
@@ -78,7 +79,7 @@ impl NodeRegistry {
     }
 
     pub fn has_nominal_parameter_validator(&self, id: &TypeId) -> bool {
-        self.nominal_validators.contains_key(id)
+        self.inner.nominal_validators.contains_key(id)
     }
 
     pub fn validate_nominal_parameter(
@@ -86,7 +87,8 @@ impl NodeRegistry {
         id: &TypeId,
         value: &serde_json::Value,
     ) -> Option<Result<(), String>> {
-        self.nominal_validators
+        self.inner
+            .nominal_validators
             .get(id)
             .map(|validator| validator.validate(value))
     }
@@ -151,16 +153,45 @@ impl NodeRegistryBuilder {
         );
         let fingerprint = fingerprint::registry_fingerprint(&canonical)?;
         Ok(NodeRegistry {
-            by_id: parts.nodes,
-            type_index: parts.types,
-            category_index: parts.categories,
-            catalog_manifest: CatalogManifest {
-                node_protocols: protocol_fingerprints,
-                i18n: parts.i18n,
-            },
-            nominal_validators: self.nominal_validators,
-            fingerprint,
+            inner: Arc::new(NodeRegistryData {
+                by_id: parts.nodes,
+                type_index: parts.types,
+                category_index: parts.categories,
+                catalog_manifest: CatalogManifest {
+                    node_protocols: protocol_fingerprints,
+                    i18n: parts.i18n,
+                },
+                nominal_validators: self.nominal_validators,
+                fingerprint,
+            }),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_provider_registration_preserves_accepted_definitions() {
+        let provider = ProviderRegistration::new("test.provider".parse().unwrap());
+        let mut builder = NodeRegistryBuilder::new();
+        builder.register_provider(provider.clone()).unwrap();
+        let mut duplicate = provider.clone();
+        duplicate.type_classes = vec!["test.unaccepted".parse().unwrap()].into_boxed_slice();
+        assert_eq!(
+            builder.register_provider(duplicate).unwrap_err(),
+            NodeRegistrationError::InvalidRegistry(RegistryValidationError::DuplicateProvider(
+                provider.provider.clone()
+            ))
+        );
+        let actual = builder.freeze().unwrap();
+        let mut baseline = NodeRegistryBuilder::new();
+        baseline.register_provider(provider).unwrap();
+        assert_eq!(
+            actual.fingerprint(),
+            baseline.freeze().unwrap().fingerprint()
+        );
     }
 }
 

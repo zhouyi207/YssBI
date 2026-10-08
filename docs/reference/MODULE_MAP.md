@@ -52,7 +52,7 @@ The default desktop entry is `yss-desktop-gpui`. `react/` retains reference sour
 | `yss-node-catalog` | `crates/yss-node-catalog` | [Cargo.toml](../../crates/yss-node-catalog/Cargo.toml) | [README](../../crates/yss-node-catalog/README.md) |
 | `yss-node-kernel` | `crates/yss-node-kernel` | [Cargo.toml](../../crates/yss-node-kernel/Cargo.toml) | [README](../../crates/yss-node-kernel/README.md) |
 | `yss-node-protocol` | `crates/yss-node-protocol` | [Cargo.toml](../../crates/yss-node-protocol/Cargo.toml) | [README](../../crates/yss-node-protocol/README.md) |
-| `yss-node-registry` | `crates/yss-node-registry` | [Cargo.toml](../../crates/yss-node-registry/Cargo.toml) | — |
+| `yss-node-registry` | `crates/yss-node-registry` | [Cargo.toml](../../crates/yss-node-registry/Cargo.toml) | [README](../../crates/yss-node-registry/README.md) |
 | `yss-plugin-protocol` | `crates/yss-plugin-protocol` | [Cargo.toml](../../crates/yss-plugin-protocol/Cargo.toml) | [README](../../crates/yss-plugin-protocol/README.md) |
 | `yss-plugin-runtime` | `crates/yss-plugin-runtime` | [Cargo.toml](../../crates/yss-plugin-runtime/Cargo.toml) | [README](../../crates/yss-plugin-runtime/README.md) |
 | `yss-plugin-sdk` | `crates/yss-plugin-sdk` | [Cargo.toml](../../crates/yss-plugin-sdk/Cargo.toml) | [README](../../crates/yss-plugin-sdk/README.md) |

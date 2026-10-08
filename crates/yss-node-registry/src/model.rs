@@ -258,6 +258,11 @@ impl ProviderRegistration {
 
 #[derive(Debug, Clone)]
 pub struct NodeRegistry {
+    pub(super) inner: Arc<NodeRegistryData>,
+}
+
+#[derive(Debug)]
+pub(super) struct NodeRegistryData {
     pub(super) by_id: BTreeMap<NodeTypeId, Arc<RegisteredNode>>,
     pub(super) type_index: TypeRegistry,
     pub(super) category_index: CategoryRegistry,
@@ -269,27 +274,27 @@ pub struct NodeRegistry {
 
 impl NodeRegistry {
     pub fn get(&self, id: &NodeTypeId) -> Option<&Arc<RegisteredNode>> {
-        self.by_id.get(id)
+        self.inner.by_id.get(id)
     }
     pub fn iter(&self) -> impl ExactSizeIterator<Item = (&NodeTypeId, &Arc<RegisteredNode>)> {
-        self.by_id.iter()
+        self.inner.by_id.iter()
     }
     pub fn len(&self) -> usize {
-        self.by_id.len()
+        self.inner.by_id.len()
     }
     pub fn is_empty(&self) -> bool {
-        self.by_id.is_empty()
+        self.inner.by_id.is_empty()
     }
     pub fn types(&self) -> &TypeRegistry {
-        &self.type_index
+        &self.inner.type_index
     }
     pub fn categories(&self) -> &CategoryRegistry {
-        &self.category_index
+        &self.inner.category_index
     }
     pub fn catalog_manifest(&self) -> &CatalogManifest {
-        &self.catalog_manifest
+        &self.inner.catalog_manifest
     }
     pub fn fingerprint(&self) -> &RegistryFingerprint {
-        &self.fingerprint
+        &self.inner.fingerprint
     }
 }

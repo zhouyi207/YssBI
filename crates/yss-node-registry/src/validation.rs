@@ -125,7 +125,6 @@ pub(crate) fn validate(
     providers: &[ProviderRegistration],
     nominal_validators: &BTreeMap<TypeId, super::NominalParameterValidator>,
 ) -> Result<ValidatedParts, RegistryValidationError> {
-    let mut provider_ids = BTreeSet::new();
     let mut nodes = BTreeMap::new();
     let mut types = TypeRegistry::default();
     let mut categories = CategoryRegistry::default();
@@ -135,11 +134,6 @@ pub(crate) fn validate(
     let nominal_type_ids = builtin_nominal_type_ids()?;
 
     for provider in providers {
-        if !provider_ids.insert(provider.provider.clone()) {
-            return Err(RegistryValidationError::DuplicateProvider(
-                provider.provider.clone(),
-            ));
-        }
         for item in &provider.types {
             match types.types.entry(item.id.clone()) {
                 std::collections::btree_map::Entry::Vacant(entry) => {
@@ -895,10 +889,9 @@ mod nominal_schema_tests {
         }
     }
 
-    fn ports() -> BTreeMap<&'static PortKey, &'static PortSpec> {
-        let key: &'static PortKey = Box::leak(Box::new(PortKey::new("source").unwrap()));
-        let port: &'static PortSpec = Box::leak(Box::new(PortSpec {
-            key: key.clone(),
+    fn source_port() -> PortSpec {
+        PortSpec {
+            key: PortKey::new("source").unwrap(),
             title: "Source".into(),
             direction: PortDirection::Input,
             value_type: TypeExpr::Unknown,
@@ -909,8 +902,7 @@ mod nominal_schema_tests {
             production: None,
             editor: PortEditorSpec::Default,
             schema: None,
-        }));
-        BTreeMap::from([(key, port)])
+        }
     }
 
     #[test]
@@ -926,7 +918,8 @@ mod nominal_schema_tests {
             input: source(),
             predicate: Some(filter_key.clone()),
         };
-        let port_map = ports();
+        let port = source_port();
+        let port_map = BTreeMap::from([(&port.key, &port)]);
         let interface_resolvers = BTreeSet::<InterfaceResolverId>::new();
         let schema_resolvers = BTreeSet::<SchemaResolverId>::new();
         let nominal_type_ids = builtin_nominal_type_ids().unwrap();
