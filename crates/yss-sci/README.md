@@ -476,6 +476,17 @@ it does not restore an unused inverse matrix. Both tests reuse fitted buffers as
 residuals; their shared controlled accumulator supplies the zero-lag and Bartlett
 moments once. Unit regressions cover positive subnormal variances and large finite
 reports whose unnormalized intermediate sums overflow.
+Forecast reports and smoothing optimization share one controlled, scaled residual
+sum-of-squares/RMS owner, which also supplies the effective row count. Smoothing
+reuses sequence normalization and restores fitted/forecast buffers in place; its
+initial path ends before optimization and fixed-parameter calls do not allocate an
+optimizer vector. Gaussian report likelihood sums logarithms instead of forming
+`2*pi*variance`; ARIMA intervals combine standard deviations instead of forming an
+intermediate variance product. ARIMA decoding owns numerical polynomials/mean only,
+with named parameters projected once after fitting, retaining their original units.
+Public regressions cover large finite white-noise/random-walk reports and optimized
+smoothing with positive subnormal variance; existing SciPy coefficient references
+also check the final parameter projection.
 All new entry points accept execution control, reject invalid domains and preserve
 source-row alignment; admissibility comes from model identification and caller-owned
 workspace budgets rather than a fixed observation ceiling. Numerical references in

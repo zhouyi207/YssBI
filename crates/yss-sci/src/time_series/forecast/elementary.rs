@@ -113,6 +113,7 @@ pub fn grey_prediction(y: &[f64], steps: usize, control: &Control) -> Result<For
         forecast,
         vec![estimate("development_a", a), estimate("input_b", b)],
         1,
+        control,
     )
 }
 

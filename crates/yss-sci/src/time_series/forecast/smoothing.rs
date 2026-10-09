@@ -159,53 +159,73 @@ pub fn exponential_smoothing(
     if o.seasonality == Seasonality::Multiplicative && y.iter().any(|v| *v <= 0.0) {
         return Err(parameter());
     }
-    let mut raw = vec![logit(o.alpha)];
-    if o.trend {
-        raw.push(logit(o.beta));
-    }
-    if o.seasonality != Seasonality::None {
-        raw.push(logit(o.gamma / (1.0 - o.alpha).max(1e-6)));
-    }
-    if o.damped {
-        raw.push(logit(o.phi));
-    }
+    let (response, response_scale) = normalized_series(y, control)?;
+    let normalized = response.as_slice();
     let start = if o.seasonality == Seasonality::None {
         1
     } else {
         o.period
     };
-    if o.optimize && y.len() - start <= raw.len() {
-        return Err(parameter());
-    }
     let (options, iterations) = if o.optimize {
+        let mut raw = vec![logit(o.alpha)];
+        if o.trend {
+            raw.push(logit(o.beta));
+        }
+        if o.seasonality != Seasonality::None {
+            raw.push(logit(o.gamma / (1.0 - o.alpha).max(1e-6)));
+        }
+        if o.damped {
+            raw.push(logit(o.phi));
+        }
+        if y.len() - start <= raw.len() {
+            return Err(parameter());
+        }
         // Level variance grows with a trend and can flatten the normalized objective.
         // Scale by the initial one-step errors so convergence is invariant to trend length.
-        let initial = smooth(y, SmoothingOptions { horizon: 0, ..o }, control)?;
-        let mse = finite(
-            y.iter()
-                .zip(&initial.fitted)
-                .filter_map(|(v, f)| f.map(|f| (v - f).powi(2) / (y.len() - start) as f64))
-                .sum(),
-        )?;
-        let scaling = if mse > 0.0 { mse.sqrt() } else { 1.0 };
+        let scaling = {
+            let initial = smooth(normalized, SmoothingOptions { horizon: 0, ..o }, control)?;
+            let (rms, _) = root_mean_square(
+                normalized
+                    .iter()
+                    .zip(&initial.fitted)
+                    .filter_map(|(v, f)| f.map(|f| v - f)),
+                control,
+            )?;
+            if rms > 0.0 { rms } else { 1.0 }
+        };
         let objective = |b: &[f64]| {
             let mut candidate = decode(b, o);
             candidate.horizon = 0;
-            let path = smooth(y, candidate, control)?;
-            let n = path.fitted.iter().flatten().count();
-            finite(
-                y.iter()
+            let path = smooth(normalized, candidate, control)?;
+            let (rms, _) = root_mean_square(
+                normalized
+                    .iter()
                     .zip(&path.fitted)
-                    .filter_map(|(v, f)| f.map(|f| ((v - f) / scaling).powi(2) / n as f64))
-                    .sum(),
-            )
+                    .filter_map(|(v, f)| f.map(|f| (v - f) / scaling)),
+                control,
+            )?;
+            finite(rms * rms)
         };
         let fit = minimize(&objective, raw, o.iteration, control)?;
         (decode(&fit.beta, o), fit.iterations)
     } else {
         (o, 0)
     };
-    let path = smooth(y, options, control)?;
+    let mut path = smooth(normalized, options, control)?;
+    for (i, value) in path.fitted.iter_mut().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        if let Some(value) = value {
+            *value = finite(*value * response_scale)?;
+        }
+    }
+    for (i, value) in path.forecast.iter_mut().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        *value = finite(*value * response_scale)?;
+    }
     let mut parameters = vec![estimate("alpha", options.alpha)];
     if o.trend {
         parameters.push(estimate("beta", options.beta));
@@ -234,6 +254,7 @@ pub fn exponential_smoothing(
         path.forecast,
         parameters,
         iterations,
+        control,
     )?;
     if r.innovation_variance > 0.0 {
         let count = if o.optimize {

@@ -36,9 +36,8 @@ struct Model {
     ar: Vec<f64>,
     ma: Vec<f64>,
     mean: f64,
-    parameters: Vec<ParameterEstimate>,
 }
-fn decode(raw: &[f64], o: ArimaOptions, scale: f64) -> Model {
+fn decode(raw: &[f64], o: ArimaOptions) -> Model {
     let mut offset = 0;
     let mut read = |n| {
         let c = stable_coefficients(&raw[offset..offset + n]);
@@ -49,26 +48,11 @@ fn decode(raw: &[f64], o: ArimaOptions, scale: f64) -> Model {
     let ma = read(o.q);
     let sar = read(o.seasonal_p);
     let sma = read(o.seasonal_q);
-    let mut parameters = Vec::new();
-    for (name, coefs, sign) in [
-        ("ar", &ar, 1.0),
-        ("ma", &ma, -1.0),
-        ("seasonal_ar", &sar, 1.0),
-        ("seasonal_ma", &sma, -1.0),
-    ] {
-        for (j, v) in coefs.iter().enumerate() {
-            parameters.push(estimate(format!("{name}{}", j + 1), sign * v));
-        }
-    }
     let mean = if o.constant { raw[offset] } else { 0.0 };
-    if o.constant {
-        parameters.push(estimate("differenced_mean", mean * scale));
-    }
     Model {
         ar: multiply(&polynomial(&ar, 1, -1.0), &polynomial(&sar, o.period, -1.0)),
         ma: multiply(&polynomial(&ma, 1, -1.0), &polynomial(&sma, o.period, -1.0)),
         mean,
-        parameters,
     }
 }
 fn residuals(y: &[f64], model: &Model, burn: usize, control: &Control) -> Result<Vec<f64>> {
@@ -161,7 +145,7 @@ pub fn arima(y: &[f64], o: ArimaOptions, control: &Control) -> Result<ForecastRe
         initial[count - 1] = mean(&w);
     }
     let objective = |b: &[f64]| {
-        let errors = residuals(&w, &decode(b, o, scale), burn, control)?;
+        let errors = residuals(&w, &decode(b, o), burn, control)?;
         finite(
             errors[burn..]
                 .iter()
@@ -175,7 +159,26 @@ pub fn arima(y: &[f64], o: ArimaOptions, control: &Control) -> Result<ForecastRe
         let fit = minimize(&objective, initial, o.iteration, control)?;
         (fit.beta, fit.iterations)
     };
-    let model = decode(&beta, o, scale);
+    let model = decode(&beta, o);
+    let mut parameters = Vec::new();
+    let mut offset = 0;
+    for (name, width, sign) in [
+        ("ar", o.p, 1.0),
+        ("ma", o.q, -1.0),
+        ("seasonal_ar", o.seasonal_p, 1.0),
+        ("seasonal_ma", o.seasonal_q, -1.0),
+    ] {
+        for (j, value) in stable_coefficients(&beta[offset..offset + width])
+            .iter()
+            .enumerate()
+        {
+            parameters.push(estimate(format!("{name}{}", j + 1), sign * value));
+        }
+        offset += width;
+    }
+    if o.constant {
+        parameters.push(estimate("differenced_mean", model.mean * scale));
+    }
     let mut errors = residuals(&w, &model, burn, control)?;
     let mut fitted = vec![None; y.len()];
     for t in start..y.len() {
@@ -213,8 +216,9 @@ pub fn arima(y: &[f64], o: ArimaOptions, control: &Control) -> Result<ForecastRe
         y,
         fitted,
         forecasts,
-        model.parameters,
+        parameters,
         iterations,
+        control,
     )?;
     likelihood(&mut r, count + 1)?;
     r.parameters
@@ -237,7 +241,7 @@ pub fn arima(y: &[f64], o: ArimaOptions, control: &Control) -> Result<ForecastRe
                 .sum::<f64>();
         psi.push(v);
         sum = finite(sum + v * v)?;
-        let margin = z * (r.innovation_variance * sum).sqrt();
+        let margin = z * r.innovation_variance.sqrt() * sum.sqrt();
         lower.push(finite(r.forecasts[h] - margin)?);
         upper.push(finite(r.forecasts[h] + margin)?);
     }

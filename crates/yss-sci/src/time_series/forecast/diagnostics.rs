@@ -1,26 +1,5 @@
 use super::*;
 
-fn normalized_series(y: &[f64], control: &Control) -> Result<(Vec<f64>, f64)> {
-    let mut scale: f64 = 0.0;
-    for (i, value) in y.iter().enumerate() {
-        if i % 1024 == 0 {
-            control.check()?;
-        }
-        scale = scale.max(value.abs());
-    }
-    if scale == 0.0 {
-        scale = 1.0;
-    }
-    let mut response = Vec::with_capacity(y.len());
-    for (i, value) in y.iter().enumerate() {
-        if i % 1024 == 0 {
-            control.check()?;
-        }
-        response.push(value / scale);
-    }
-    Ok((response, scale))
-}
-
 fn long_run_variance(
     residuals: &[f64],
     bandwidth: usize,

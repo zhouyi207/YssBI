@@ -34,6 +34,49 @@ fn scale(y: &[f64]) -> Result<f64> {
     )?;
     if s > 0.0 { Ok(s) } else { Err(parameter()) }
 }
+fn normalized_series(y: &[f64], control: &Control) -> Result<(Vec<f64>, f64)> {
+    let mut scale: f64 = 0.0;
+    for (i, value) in y.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        scale = scale.max(value.abs());
+    }
+    if scale == 0.0 {
+        scale = 1.0;
+    }
+    let mut response = Vec::with_capacity(y.len());
+    for (i, value) in y.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        response.push(value / scale);
+    }
+    Ok((response, scale))
+}
+fn root_mean_square(values: impl Iterator<Item = f64>, control: &Control) -> Result<(f64, usize)> {
+    let mut count = 0;
+    let mut max: f64 = 0.0;
+    let mut sum = 0.0;
+    for (i, value) in values.enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        let magnitude = finite(value)?.abs();
+        if magnitude > max {
+            // Rescale the accumulated squares when a larger residual arrives.
+            sum = 1.0 + sum * (max / magnitude).powi(2);
+            max = magnitude;
+        } else if max > 0.0 {
+            sum += (magnitude / max).powi(2);
+        }
+        count += 1;
+    }
+    if count == 0 {
+        return Err(parameter());
+    }
+    Ok((finite(max * (sum / count as f64).sqrt())?, count))
+}
 fn horizon(n: usize, h: usize) -> Result<()> {
     if h == 0 || n.checked_add(h).is_none() {
         return Err(parameter());
@@ -47,24 +90,28 @@ fn report(
     forecasts: Vec<f64>,
     parameters: Vec<ParameterEstimate>,
     iterations: usize,
+    control: &Control,
 ) -> Result<ForecastResult> {
-    let residuals: Vec<_> = y
-        .iter()
-        .zip(&fitted)
-        .map(|(v, f)| f.map(|f| v - f))
-        .collect();
-    let n = residuals.iter().flatten().count();
-    if n == 0 {
-        return Err(parameter());
+    let mut residuals = Vec::with_capacity(y.len());
+    for (i, (value, fit)) in y.iter().zip(&fitted).enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        residuals.push(fit.map(|fit| value - fit));
     }
-    let variance = finite(residuals.iter().flatten().map(|v| v * v).sum::<f64>() / n as f64)?;
-    for v in fitted
+    let (rms, n) = root_mean_square(residuals.iter().flatten().copied(), control)?;
+    let variance = finite(rms * rms)?;
+    for (i, v) in fitted
         .iter()
         .flatten()
         .chain(&forecasts)
         .chain(residuals.iter().flatten())
         .chain(parameters.iter().map(|p| &p.estimate))
+        .enumerate()
     {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
         finite(*v)?;
     }
     Ok(ForecastResult {
@@ -89,7 +136,8 @@ fn likelihood(r: &mut ForecastResult, parameters: usize) -> Result<()> {
         return Err(parameter());
     }
     let n = r.effective_observations as f64;
-    let ll = finite(-0.5 * n * ((2.0 * std::f64::consts::PI * r.innovation_variance).ln() + 1.0))?;
+    let ll =
+        finite(-0.5 * n * ((2.0 * std::f64::consts::PI).ln() + r.innovation_variance.ln() + 1.0))?;
     r.log_likelihood = Some(ll);
     r.aic = Some(finite(-2.0 * ll + 2.0 * parameters as f64)?);
     r.bic = Some(finite(-2.0 * ll + n.ln() * parameters as f64)?);

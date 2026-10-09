@@ -70,6 +70,11 @@ fn time_series_arima_css_and_integrated_intervals_match_scipy_reference() {
             ..arima_options()
         };
         let r = arima(&y, o, &control()).unwrap();
+        let expected_parameters = vector(&case["coefficients"]);
+        assert_eq!(r.parameters.len(), expected_parameters.len() + 1);
+        for (actual, expected) in r.parameters.iter().zip(expected_parameters) {
+            close(actual.estimate, expected, 2e-5);
+        }
         compare(&r.forecasts, &case["forecasts"], 2e-5);
         compare(r.lower.as_ref().unwrap(), &case["lower"], 2e-5);
         close(
@@ -88,6 +93,136 @@ fn time_series_arima_css_and_integrated_intervals_match_scipy_reference() {
             );
         }
     }
+}
+
+#[test]
+fn forecast_moment_units_keep_large_variance_likelihood_and_intervals_finite() {
+    let units: f64 = 1e154;
+    for difference in [0, 1] {
+        let y = (0..640)
+            .map(|i| {
+                let value = if difference == 0 {
+                    if i % 2 == 0 { -1.0 } else { 1.0 }
+                } else {
+                    (i % 2) as f64
+                };
+                value * units
+            })
+            .collect::<Vec<_>>();
+        let result = arima(
+            &y,
+            ArimaOptions {
+                p: 0,
+                d: difference,
+                q: 0,
+                constant: false,
+                ..arima_options()
+            },
+            &control(),
+        )
+        .expect("white-noise and random-walk reports are finite in these units");
+        let n = y.len() - difference;
+        assert_eq!(result.effective_observations, n);
+        assert_eq!(result.iterations, 0);
+        close(result.innovation_variance / (units * units), 1.0, 1e-12);
+        let ll = -0.5 * n as f64 * ((2.0 * std::f64::consts::PI).ln() + 2.0 * units.ln() + 1.0);
+        close(result.log_likelihood.unwrap(), ll, 1e-12);
+        close(result.aic.unwrap(), -2.0 * ll + 2.0, 1e-12);
+        close(result.bic.unwrap(), -2.0 * ll + (n as f64).ln(), 1e-12);
+        assert_eq!(result.parameters[0].term, "innovation_variance");
+        assert_eq!(result.parameters[0].estimate, result.innovation_variance);
+        for i in 0..y.len() {
+            if i < difference {
+                assert!(result.fitted[i].is_none() && result.residuals[i].is_none());
+            } else {
+                let fitted = if difference == 0 { 0.0 } else { y[i - 1] };
+                close(result.fitted[i].unwrap() / units, fitted / units, 1e-12);
+                close(
+                    result.residuals[i].unwrap() / units,
+                    (y[i] - fitted) / units,
+                    1e-12,
+                );
+            }
+        }
+        let point = if difference == 0 {
+            0.0
+        } else {
+            *y.last().unwrap() / units
+        };
+        for (h, forecast) in result.forecasts.iter().enumerate() {
+            close(forecast / units, point, 1e-12);
+            let gain = if difference == 0 { 1.0 } else { (h + 1) as f64 };
+            let margin = 1.959963984540054 * gain.sqrt();
+            close(
+                result.lower.as_ref().unwrap()[h] / units,
+                point - margin,
+                1e-12,
+            );
+            close(
+                result.upper.as_ref().unwrap()[h] / units,
+                point + margin,
+                1e-12,
+            );
+        }
+    }
+}
+
+#[test]
+fn forecast_moment_units_keep_smoothing_optimization_with_subnormal_variance() {
+    let y = (0..640)
+        .map(|i| if i % 2 == 0 { -1.0 } else { 1.0 })
+        .collect::<Vec<_>>();
+    let options = SmoothingOptions {
+        trend: false,
+        damped: false,
+        seasonality: Seasonality::None,
+        period: 1,
+        alpha: 0.3,
+        beta: 0.1,
+        gamma: 0.1,
+        phi: 0.98,
+        optimize: true,
+        horizon: 6,
+        iteration: iteration(),
+    };
+    let baseline = exponential_smoothing(&y, options, &control()).unwrap();
+    let units = 1e-161;
+    let scaled = y.iter().map(|value| value * units).collect::<Vec<_>>();
+    let result = exponential_smoothing(&scaled, options, &control()).unwrap();
+    assert_eq!(result.parameters, baseline.parameters);
+    assert_eq!(result.iterations, baseline.iterations);
+    assert_eq!(
+        result.effective_observations,
+        baseline.effective_observations
+    );
+    for (actual, expected) in result.fitted.iter().zip(&baseline.fitted) {
+        assert_eq!(actual.is_some(), expected.is_some());
+        if let (Some(actual), Some(expected)) = (actual, expected) {
+            close(actual / units, *expected, 1e-10);
+        }
+    }
+    for (actual, expected) in result.residuals.iter().zip(&baseline.residuals) {
+        assert_eq!(actual.is_some(), expected.is_some());
+        if let (Some(actual), Some(expected)) = (actual, expected) {
+            close(actual / units, *expected, 1e-10);
+        }
+    }
+    for (actual, expected) in result.forecasts.iter().zip(&baseline.forecasts) {
+        close(actual / units, *expected, 1e-10);
+    }
+    let expected = (baseline.innovation_variance * units) * units;
+    assert!(result.innovation_variance > 0.0 && result.innovation_variance < f64::MIN_POSITIVE);
+    assert!((result.innovation_variance - expected).abs() <= 2.0 * f64::from_bits(1));
+    let ll = -0.5
+        * result.effective_observations as f64
+        * ((2.0 * std::f64::consts::PI).ln() + result.innovation_variance.ln() + 1.0);
+    close(result.log_likelihood.unwrap(), ll, 1e-12);
+    close(result.aic.unwrap(), -2.0 * ll + 4.0, 1e-12);
+    close(
+        result.bic.unwrap(),
+        -2.0 * ll + 2.0 * (result.effective_observations as f64).ln(),
+        1e-12,
+    );
 }
 
 #[test]

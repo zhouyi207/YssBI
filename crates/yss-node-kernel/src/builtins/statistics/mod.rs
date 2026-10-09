@@ -216,7 +216,8 @@ pub(super) fn install(
                 | "yssbi.statistics.survey.linear_regression"
                 | "yssbi.statistics.survey.logistic"
                 | "yssbi.statistics.survey.poisson"
-                | "yssbi.statistics.timeseries.phillips_perron" => 6,
+                | "yssbi.statistics.timeseries.phillips_perron"
+                | "yssbi.statistics.timeseries.grey_prediction" => 6,
                 "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
                 | "yssbi.statistics.diagnostic.ljung_box"
@@ -234,8 +235,12 @@ pub(super) fn install(
                 | "yssbi.statistics.spatial.moran"
                 | "yssbi.statistics.test.normality"
                 | "yssbi.statistics.workflow.delphi"
-                | "yssbi.statistics.timeseries.grey_prediction"
-                | "yssbi.statistics.timeseries.kpss" => 5,
+                | "yssbi.statistics.timeseries.kpss"
+                | "yssbi.statistics.timeseries.arima"
+                | "yssbi.statistics.timeseries.sarima"
+                | "yssbi.statistics.timeseries.exponential_smoothing"
+                | "yssbi.statistics.timeseries.ets"
+                | "yssbi.statistics.timeseries.holt_winters" => 5,
                 _ if id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks" =>
                 {
