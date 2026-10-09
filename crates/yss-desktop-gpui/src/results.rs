@@ -14,7 +14,8 @@ use gpui::{
     div, prelude::*,
 };
 use gpui_component::{
-    Icon,
+    Disableable, Icon, Sizable,
+    button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
     table::TableState,
 };
@@ -32,6 +33,7 @@ pub enum ResultEvent {
     Loaded(bool),
     Activated,
     Closed,
+    OpenWindow,
     Replaced {
         previous: ResultReference,
         current: ResultReference,
@@ -41,7 +43,7 @@ pub enum ResultEvent {
 pub struct ResultPanel {
     services: Arc<NativeServices>,
     reference: ResultReference,
-    lease: Option<ResultLease>,
+    lease: Option<Arc<ResultLease>>,
     focus: FocusHandle,
     value: Option<Arc<RuntimeValue>>,
     plot: Option<Entity<plot::PlotView>>,
@@ -100,6 +102,37 @@ impl ResultPanel {
     pub fn loaded(&self) -> bool {
         self.lease.is_some()
     }
+    pub fn reference(&self) -> ResultReference {
+        self.reference
+    }
+    pub fn retain_for_window(&self) -> Option<Arc<ResultLease>> {
+        self.lease.clone()
+    }
+    pub fn window_title(&self) -> String {
+        crate::text::translate(if self.plot.is_some() {
+            "plot.title"
+        } else {
+            "sourceInspector.title"
+        })
+    }
+    pub fn close(&mut self, cx: &mut Context<Self>) {
+        if self.closed {
+            return;
+        }
+        self.closed = true;
+        self.cancel_addition();
+        self.addition_task = None;
+        self.report_subscription = None;
+        self.generation += 1;
+        self.task = None;
+        self.replace_lease(None);
+        self.table = None;
+        self.value = None;
+        self.plot = None;
+        self.report = None;
+        self.rows.clear();
+        cx.emit(ResultEvent::Closed);
+    }
 }
 
 impl EventEmitter<PanelEvent> for ResultPanel {}
@@ -119,23 +152,23 @@ impl BasePanel for ResultPanel {
         }
     }
     fn on_removed(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.closed = true;
-        self.cancel_addition();
-        self.addition_task = None;
-        self.report_subscription = None;
-        self.generation += 1;
-        self.task = None;
-        self.replace_lease(None);
-        self.table = None;
-        self.value = None;
-        self.plot = None;
-        self.report = None;
-        self.rows.clear();
-        cx.emit(ResultEvent::Closed);
+        self.close(cx);
     }
 }
 
 impl Panel for ResultPanel {
+    fn toolbar_buttons(&mut self, _: &mut Window, cx: &mut Context<Self>) -> Option<Vec<Button>> {
+        Some(vec![
+            Button::new("open-result-window")
+                .small()
+                .ghost()
+                .icon(IconName::ExternalLink)
+                .tooltip(crate::text::translate("native.results.openWindow"))
+                .accessibility_label(crate::text::translate("native.results.openWindow"))
+                .disabled(!self.loaded() || self.closed)
+                .on_click(cx.listener(|_, _, _, cx| cx.emit(ResultEvent::OpenWindow))),
+        ])
+    }
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()

@@ -300,6 +300,7 @@ impl Workbench {
             self.rebind_session(window, cx);
             return;
         }
+        self.close_result_windows(cx);
         self.project = project;
         self.graphs.clear();
         self.conversations.clear();

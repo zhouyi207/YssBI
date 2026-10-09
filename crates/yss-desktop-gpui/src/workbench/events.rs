@@ -6,6 +6,7 @@ use yss_application::graph::editing::GraphActivity;
 
 impl Workbench {
     pub(super) fn connect_events(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_stale_result_windows(cx);
         self.event_task = None;
         self.graph_subscription = None;
         self.ui_binding = None;
@@ -49,6 +50,7 @@ impl Workbench {
                     Err(RecvError::Lagged(_)) => {
                         if view
                             .update_in(cx, |view, window, cx| {
+                                view.close_stale_result_windows(cx);
                                 view.refresh_project(window, cx);
                                 view.refresh_graphs(cx);
                                 view.refresh_documents(window, cx);

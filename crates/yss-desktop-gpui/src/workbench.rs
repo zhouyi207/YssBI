@@ -78,6 +78,7 @@ pub struct Workbench {
     output: Entity<OutputPanel>,
     results: Entity<ResultsPanel>,
     result_panels: BTreeMap<(uuid::Uuid, u64), WeakEntity<crate::results::ResultPanel>>,
+    result_windows: Vec<results::window::ResultWindowHandle>,
     graphs: BTreeMap<String, WeakEntity<GraphCanvas>>,
     documents: BTreeMap<String, WeakEntity<crate::documents::DocumentEditor>>,
     charts: BTreeMap<String, WeakEntity<crate::charts::ChartEditor>>,
@@ -156,6 +157,7 @@ impl Workbench {
             output,
             results,
             result_panels: BTreeMap::new(),
+            result_windows: vec![],
             graphs: BTreeMap::new(),
             documents: BTreeMap::new(),
             charts: BTreeMap::new(),
@@ -194,6 +196,7 @@ impl Workbench {
         view.plugin_subscription = Some(cx.observe(&view.plugins, |_, _, cx| cx.notify()));
         view.settings_subscription = Some(cx.observe(&view.settings, |_, _, cx| cx.notify()));
         cx.on_release(|view, cx| {
+            view.close_result_windows(cx);
             if let Some(handle) = view.settings_window {
                 let _ = handle.update(cx, |_, window, _| window.remove_window());
             }

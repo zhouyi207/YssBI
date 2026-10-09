@@ -1,4 +1,6 @@
 //! Current output catalogue and result-panel composition, without owning result payloads.
+pub(super) mod window;
+
 use gpui::{
     App, AppContext, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
     div, prelude::*, uniform_list,
@@ -227,7 +229,11 @@ impl Workbench {
         self.subscriptions.push(cx.subscribe_in(
             &panel,
             window,
-            move |view, panel, event, _, cx| {
+            move |view, panel, event, window, cx| {
+                if matches!(event, ResultEvent::OpenWindow) {
+                    view.open_result_window(panel, window, cx);
+                    return;
+                }
                 if view.lifecycle != lifecycle {
                     return;
                 }
@@ -287,7 +293,9 @@ impl Workbench {
                 let applied = match event {
                     ResultEvent::Loaded(applied) => *applied,
                     ResultEvent::Closed => false,
-                    ResultEvent::Activated | ResultEvent::Replaced { .. } => return,
+                    ResultEvent::Activated
+                    | ResultEvent::Replaced { .. }
+                    | ResultEvent::OpenWindow => return,
                 };
                 if view.lifecycle == lifecycle
                     && let Some(id) = pending.take()

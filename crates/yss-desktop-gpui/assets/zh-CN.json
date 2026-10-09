@@ -2755,7 +2755,9 @@
       "rowRangeKnown": "第 {{start}}–{{end}} 行，共 {{total}} 行",
       "rowRangeUnknown": "第 {{start}}–{{end}} 行",
       "pageKnown": "第 {{page}} / {{pages}} 页",
-      "pageUnknown": "第 {{page}} 页"
+      "pageUnknown": "第 {{page}} 页",
+      "openWindow": "在独立窗口中打开",
+      "windowFailed": "结果窗口未能打开，请重试。"
     },
     "projects": {
       "progress": {

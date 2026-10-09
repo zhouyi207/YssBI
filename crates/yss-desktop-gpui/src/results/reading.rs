@@ -27,6 +27,15 @@ impl ReadFailure {
 
 impl ResultPanel {
     pub fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.load_retained(None, window, cx);
+    }
+
+    pub fn load_retained(
+        &mut self,
+        handoff: Option<Arc<ResultLease>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.loading || self.closed {
             return;
         }
@@ -36,7 +45,12 @@ impl ResultPanel {
         let generation = self.generation;
         let reference = self.reference;
         let owner = self.services.clone();
-        let task = self.services.run(move |_| query::open(owner, reference));
+        let task = self.services.run(move |_| {
+            let result = query::open(owner, reference);
+            // Keep the source alive until this window has acquired its own lease.
+            drop(handoff);
+            result
+        });
         self.task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = task
                 .await
@@ -109,7 +123,7 @@ impl ResultPanel {
     }
 
     pub(super) fn replace_lease(&mut self, lease: Option<ResultLease>) {
-        if let Some(previous) = std::mem::replace(&mut self.lease, lease) {
+        if let Some(previous) = std::mem::replace(&mut self.lease, lease.map(Arc::new)) {
             self.services.run(move |_| {
                 drop(previous);
                 Ok(())

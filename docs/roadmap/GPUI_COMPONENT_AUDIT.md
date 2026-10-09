@@ -173,7 +173,7 @@
 - 页范围、页码与下一页可用性采用已接纳回执；未知总数和偏移大于零的空页分别显示实际页码与 0 行。没有新增结果缓存、领域状态、依赖或 UI 单元测试。
 - L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；临时样例用 `cargo build -p yss-desktop-gpui --example results_container_review` 构建，目视检查正常、读取中、失败和未知总数空页的静态布局，样例随后移出仓库。
 - 7 个变更 Rust 文件的局部格式、2 份变更文档的元信息与 269 个相对链接、16 个文案键及占位符、模块索引生成器与 `git diff --check` 通过。此次只改变原生呈现及读取控制，不重复运行未改动的后端统计测试；没有把静态样例算作真实交互验收。
-- 独立 Plot/Inspector 窗口的原生创建、租约交付和会话关闭仍待迁移；真实翻页、失败重试、语言、滚动、提示与关闭验收继续开放。
+- 独立 Plot/Inspector 窗口的原生创建、租约交付和会话关闭已由后续独立窗口批次接入；真实翻页、失败重试、语言、滚动、提示与关闭验收继续开放。
 
 
 ### 基础控件与框架包装
@@ -212,6 +212,16 @@
 - L2 验证：工作区及对齐最新 HEAD 的独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；4 个变更 Rust 文件的局部格式、两份文档元信息与 275 个相对链接、20 个中英文反馈键及占位符、`git diff --check` 通过。依赖未变，复用本轮模块索引检查；没有后端契约改动，不重复后端测试。
 - `cargo build -p yss-desktop-gpui --example project_feedback_review` 的临时样例目视核对无效项目、忙碌、恢复所需、会话刷新失败、部分登记和写入后打开失败；原错误码与字面量路径正常，内部诊断未出现在界面。样例随后移出仓库。真实失败、复制、恢复打开及关闭仍待人工验收，不把类型化样例或编译算作真实事务验收，不添加 UI 单元测试。
 
+
+### 独立图形与结果检查窗口
+
+- 复核 PlotWindow、SourceInspectorWindow、PresentationWindowShell 及原窗口租约/会话逻辑；必要行为归并到一个原生窗口容器，内容继续由既有 ResultPanel 分流。
+- 结果标签工具栏打开窗口；延后创建/激活并重新检查宿主和执行会话，重复请求按窗口当前引用聚焦。每个窗口有独立输入、分页和折叠，原始结果继续归 Application。
+- 临时共享原自动租约保护交接，worker 取得新窗口自己的租约后释放临时持有；关闭来源、首次读取期间关闭窗口、迟到交付均沿用自动释放。窗口与标签共用幂等关闭入口。
+- 报告追加直接改变原窗口面板的引用，窗口列表只保留句柄与弱引用；不再维护一份引用到窗口的可变索引。执行会话变化、项目实际替换和主工作台退出关闭窗口，普通重跑保留原快照。
+- L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；7 个变更 Rust 文件的局部格式、两份文档元信息与 275 个相对链接、5 个中英文文案键、模块索引（59 crates / 239 条声明）及 `git diff --check` 通过。
+- 临时 `cargo build -p yss-desktop-gpui --example result_windows_review` 构建后，隔离应用目录中通过原 Application 新建临时项目、生成 235 行结果并打开真实独立窗口；目视确认首次页面、点击下一页后的 101–200 行和窗口关闭。临时样例的模块路径与回调访问修正后构建通过，仅留下两处样例未使用变量警告；样例随后移出仓库。
+- 预览没有验证全部跨窗口操作：重复聚焦、来源关闭后的持续读取、读取中关闭、报告追加、图形、会话替换和主窗口退出仍待人工验收。截图通过调整窗口尺寸促使 X11 重绘，不能用来证明平滑刷新或其他平台表现。没有新增依赖、后端契约或 UI 单元测试，未重复运行未改动的后端统计测试。
 
 ## app
 
@@ -306,9 +316,9 @@
 | [features/application/results/components/ResultViewShell.tsx](../../react/src/features/application/results/components/ResultViewShell.tsx) | 合并到原生结果容器 | results/render 和 toolbar 统一边框、工具栏和有界内容；没有独立业务状态，无须复制 React 包装层 | 原生面板已覆盖；独立窗口另行迁移 |
 | [features/application/results/components/UnifiedResultView.tsx](../../react/src/features/application/results/components/UnifiedResultView.tsx) | 复用类型化读取分流 | results/query::open 按原 Result 类型选择分页、数值、报告和完整图形；不新增第二个路由器或预读取 | 代码已覆盖；人工验收待完成 |
 | [features/application/results/components/renderers/ResultRenderers.tsx](../../react/src/features/application/results/components/renderers/ResultRenderers.tsx) | 迁移数列与标量呈现 | 数列复用有界表格，标量与对象沿用可展开值树；保留宽整数、空值和布尔，长标量提供完整提示 | 代码已覆盖；人工验收待完成 |
-| [features/application/results/resultViewPresentation.tsx](../../react/src/features/application/results/resultViewPresentation.tsx) | 无需迁移 React Context | 原生 Panel 与窗口容器负责呈现边界；读取和租约不依赖 embedded/standalone Context | 面板已复用；独立窗口待迁移 |
+| [features/application/results/resultViewPresentation.tsx](../../react/src/features/application/results/resultViewPresentation.tsx) | 无需迁移 React Context | 原生 Panel 与窗口容器负责呈现边界；读取和租约不依赖 embedded/standalone Context | 面板与独立窗口已复用；交互待验收 |
 | [features/application/statusBar/useStatusBarItems.tsx](../../react/src/features/application/statusBar/useStatusBarItems.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [features/application/window/PresentationWindowShell.tsx](../../react/src/features/application/window/PresentationWindowShell.tsx) | 迁移窗口外壳与加载失败呈现 | 原生独立窗口应复用窗口控制和 ResultPanel；不复制 WebView 路由、SVG 图标或第二结果存储 | 待迁移独立窗口 |
+| [features/application/window/PresentationWindowShell.tsx](../../react/src/features/application/window/PresentationWindowShell.tsx) | 迁移窗口外壳与加载失败呈现 | 复用 Root、window_chrome 与 ResultPanel；标题、窗口动作、读取及重试共用原生 owner，无 WebView 路由或结果存储副本 | 已接入，人工验收待完成 |
 
 ## features/core
 
@@ -523,11 +533,11 @@
 | [modules/results/internal/ui/info/shared/ACFPACFBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/ACFPACFBlock.tsx) | 迁移/复用：报告与结果共享 correlogram | 首次展开读取原 ACF/PACF；分别从滞后 0/1 开始，保留置信带与观测数 | 代码已覆盖；真实结果验收待完成 |
 | [modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/HypothesisTestBlock.tsx) | 迁移：类型化检验与原约束文本 | 原 H₀/H₁ 支持复制，t/F、自由度及微小 p 值沿用原结果；不按变量名重写公式 | 代码已覆盖；真实结果验收待完成 |
 | [modules/results/internal/ui/info/shared/SerialTestsBlock.tsx](../../react/src/modules/results/internal/ui/info/shared/SerialTestsBlock.tsx) | 迁移：原生统计卡片 | BG、Ljung–Box 与 DW 直接显示原统计量、滞后和概率，章节共享懒加载及重试 | 代码已覆盖；真实结果验收待完成 |
-| [modules/results/internal/ui/panel/ResultContent.tsx](../../react/src/modules/results/internal/ui/panel/ResultContent.tsx) | 迁移加载、失败与类型化内容 | results/reading/render 复用自动租约并拒绝关闭后的迟到回复；已接纳内容独立于普通重跑 | 面板代码已覆盖；独立展开待迁移 |
+| [modules/results/internal/ui/panel/ResultContent.tsx](../../react/src/modules/results/internal/ui/panel/ResultContent.tsx) | 迁移加载、失败与类型化内容 | results/reading/render 复用自动租约并拒绝关闭后的迟到回复；已接纳内容独立于普通重跑 | 面板与独立展开已接入；交互待验收 |
 | [modules/results/internal/ui/panel/ResultInspector.tsx](../../react/src/modules/results/internal/ui/panel/ResultInspector.tsx) | 迁移数值/报告切换并复用同一实体 | ResultPanel 保留报告实体和局部章节状态；显式追加完整替换同一引用下的数值与报告 | 代码已覆盖；切换与追加验收待完成 |
 | [modules/results/internal/ui/panel/ResultPanel.tsx](../../react/src/modules/results/internal/ui/panel/ResultPanel.tsx) | 复用原生 ResultPanel 与 DockArea | 面板只拥有显示状态和 Application 租约；移动重挂载保留同一实体，实际关闭释放租约 | 代码已覆盖；生命周期验收待完成 |
-| [modules/results/internal/ui/plot/PlotWindow.tsx](../../react/src/modules/results/internal/ui/plot/PlotWindow.tsx) | 迁移原生独立结果窗口 | 已阅读类型路由、标题与窗口动作；图形呈现可直接复用 ResultPanel/PlotView，仍需原生创建及会话关闭接入 | 待迁移独立窗口 |
-| [modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx](../../react/src/modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx) | 迁移原生独立结果窗口 | 已阅读数值与报告路由；复用同一结果读取和报告实体设计，无须 Tauri URL 或跨 WebView 租约交接 | 待迁移独立窗口 |
+| [modules/results/internal/ui/plot/PlotWindow.tsx](../../react/src/modules/results/internal/ui/plot/PlotWindow.tsx) | 迁移原生独立结果窗口 | 结果标签工具栏打开原生窗口，直接复用 ResultPanel/PlotView；交接保留原租约，每窗独立控件，原会话结束关闭 | 已接入，人工验收待完成 |
+| [modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx](../../react/src/modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx) | 迁移原生独立结果窗口 | 复用数值/报告、分页、失败重试和追加流程；重复打开读取窗口当前引用，来源关闭不回收窗口结果，无 Tauri URL | 已接入，人工验收待完成 |
 
 ## modules/settings
 
