@@ -1,7 +1,8 @@
 //! Authored-file management captures the original version and uses Project's file commands.
+use super::super::name_form::NameForm;
 use gpui_component::{WindowExt, button::ButtonVariant};
 mod panels;
-use super::{super::Workbench, AuthoredKind, ResourceAction, names::NameForm};
+use super::{super::Workbench, AuthoredKind, ResourceAction};
 use crate::file_commands::NativeFile;
 use gpui::{ClipboardItem, Context, Entity, Window};
 use yss_project::file_resources::{FileCommand, FileSnapshot};
@@ -183,7 +184,7 @@ impl Workbench {
                         .as_ref()
                         .is_none_or(|project| project.identity != target.project)
                 {
-                    NameForm::expired(form.as_ref(), cx);
+                    NameForm::fail(form.as_ref(), "native.workbench.resourceChanged", cx);
                     return;
                 }
                 view.busy = false;

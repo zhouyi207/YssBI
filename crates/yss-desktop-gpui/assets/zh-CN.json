@@ -2874,7 +2874,11 @@
       "resourceCommittedUnavailable": "资源操作已完成，但暂时无法打开编辑器。请从项目列表重新打开。",
       "saveChartBeforeEditing": "请先保存该图表的配置，再修改图表资源。",
       "assistantDirectoryFailed": "助手目录读取失败，请重新打开助手。",
-      "activityLoadFailed": "目录读取失败，请重试。"
+      "activityLoadFailed": "目录读取失败，请重试。",
+      "conversationNameInvalid": "会话名称无效，请修改后重试。",
+      "conversationUnavailable": "此对话不可用，请刷新会话目录。",
+      "renameSession": "重命名会话",
+      "renameSessionFailed": "会话重命名未完成，请刷新目录后重试。"
     },
     "logs": {
       "copyMessage": "复制消息",
@@ -2883,6 +2887,11 @@
     "canvas": {
       "catalogFailed": "无法读取节点目录，请重试。",
       "commandFailed": "操作未完成，图状态可能已变化。请重新打开图后重试。"
+    },
+    "assistant": {
+      "alreadyRunning": "此对话已有任务运行，请等待完成或请求停止。",
+      "sessionChanged": "项目会话已变化，请重新打开对话。",
+      "timeUnavailable": "时间不可用"
     }
   }
 }

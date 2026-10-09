@@ -429,6 +429,19 @@
 - L2：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。只改变宿主显示与暂态交付，后端契约未变，不重复后端测试或全工作区检查，不增加 UI 单元测试。15 个 Rust 文件局部格式、双语键/参数（工作区 41、提交内容 30，英文沿用工作区目录）、两份文档元信息/相对链接（275/270）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。
 - 物理键鼠/IME、完整 tooltip、平台读屏、跨项目/关闭来源/忙碌目标、多窗口和 Windows/macOS 仍待验收；这批不代表 Assistant 整体、其他 Activity 业务控制器或展开持久化已完成。本批累计审查 173/265 项。
 
+### 助手会话目录与共用名称表单
+
+- 已逐项阅读 AssistantConversations、AssistantPanel、SidebarRenameDialog，连同实际会话目录/面板 hooks、Sidebar 输入表单及其生产调用者核对；Header、Toggle、消息和运行时组件保持待查。
+- ActivityPanel 继续消费原 Application 目录，52px 虚拟行补齐 lastOpenedAt 与重命名按钮，搜索匹配显示标题及已有会话 ID；空标题随当前语言回退，换语言保留输入并重建可见索引。AssistantPanel 薄包装由原 DockArea/ActivityPanel 承接。
+- 目录选中只投影根 DockArea 的活动会话，重复激活关闭该面板而保留缓存草稿；缓存重开也经过原 Application 授权和最近打开时间更新。项目/节点侧栏独立接收资源高亮，图选择、资源打开和上下文清理不覆盖会话选择。
+- `workbench/name_form` 从资源命名中提取，仅拥有输入、提交状态和本地化错误；resources/names 与 assistant/renaming 保留各自业务身份/生命周期和原 Application 用例。空白拒绝、输入聚焦、失败保留与编辑清错、重复提交/忙碌取消保护共用一个实现，不添加另一份会话状态或依赖。
+- 会话操作结束使操作前目录读取失效，再沿原查询刷新；窗口重新激活也使用同一合并刷新入口。迟到结果只允许更新原生命周期/读取代次，旧表单不会清除新项目操作状态。
+- 临时 `cargo build -p yss-desktop-gpui --example assistant_directory_review` 使用隔离应用目录和真实 Application。Linux/X11 的独立 Xwayland 窗口通过 GPUI Window 输入事件核对空目录不隐式创建、两次显式新建、两行时间、中英文默认标题搜索、换语言保留查询、重复点击关闭和缓存重开保留草稿；重开更新 lastOpenedAt，图选择/文档打开后会话高亮仍对应实际会话。
+- 同一临时入口给重命名注入 2 秒延迟及一次 ConcurrentTurn 失败：空名称不提交，连续 Enter 只产生一次请求，忙碌 Escape 不关闭；失败保留输入，编辑清除错误，移除故障后真实重命名成功。另让真实操作前目录延迟 10 秒返回，之后目录仍显示新标题。窗口失焦/激活实际触发目录重读。注入只验证宿主适配，不能代表真实模型运行中用例已验收。
+- 共享名称表单的资源消费者通过真实 Doc 重名失败后改名成功验收；名称、路径与目录更新，编辑器实体和文件会话保持。全过程原图 session/revision、1 节点、2 常量及未保存标记保持，未添加 UI 单元测试。临时预览源与数据不进入提交。
+- L2：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；针对此前 IPC 归并补跑 `cargo test -p yss-harness-contract --lib assistant::`，6 项通过。20 个 Rust 文件局部格式、双语键/参数（工作区 58、提交内容 41，英文沿用工作区目录）、两份文档元信息/相对链接（275/270）、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过；不运行全工作区验证。
+- 物理键鼠/IME、完整悬浮提示/读屏、跨项目迟到提交、真实运行中重命名、重启和 Windows/macOS 仍待验收。本批累计审查 176/265 项，不代表 Assistant 整体完成。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -540,11 +553,11 @@
 | [modules/assistant/internal/ui/AssistantConversationHeader.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationHeader.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantConversationPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantConversationToggle.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationToggle.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/assistant/internal/ui/AssistantConversations.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversations.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantConversations.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversations.tsx) | 优化 | 原 Activity 目录与虚拟列表补齐时间、名称回退搜索、重命名按钮、窗口激活刷新；DockArea 决定当前会话，重复激活关闭，缓存重开仍校验 Application | 代码已覆盖；本批交互验收见批次记录，跨项目/平台验收开放 |
 | [modules/assistant/internal/ui/AssistantExecution.tsx](../../react/src/modules/assistant/internal/ui/AssistantExecution.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantMarkdown.tsx](../../react/src/modules/assistant/internal/ui/AssistantMarkdown.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantModelPicker.tsx](../../react/src/modules/assistant/internal/ui/AssistantModelPicker.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/assistant/internal/ui/AssistantPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantPanel.tsx) | 复用原生组件 | 薄包装由既有 ActivityPanel 与根 DockArea 承接，不增加会话列表或状态 owner | 包装无独立业务；目录交互随本批验收 |
 | [modules/assistant/internal/ui/AssistantReferences.tsx](../../react/src/modules/assistant/internal/ui/AssistantReferences.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -779,7 +792,7 @@
 | [modules/workbench/internal/ui/menu/FrontendArchitecture.tsx](../../react/src/modules/workbench/internal/ui/menu/FrontendArchitecture.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/menu/WorkbenchMenuBar.tsx](../../react/src/modules/workbench/internal/ui/menu/WorkbenchMenuBar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/sidebar/SidebarEmptyState.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarEmptyState.tsx) | 迁移 | feedback 直接显示原文档空标题/说明，搜索无匹配使用原本地化文案 | 助手真实空目录与无匹配已核对；窄窗口/完整 tooltip 待验收 |
-| [modules/workbench/internal/ui/sidebar/SidebarRenameDialog.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarRenameDialog.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/workbench/internal/ui/sidebar/SidebarRenameDialog.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarRenameDialog.tsx) | 优化 | 资源 names 与 assistant/renaming 复用 NameForm；独立草稿、空白拒绝、提交互斥和失败保留，业务身份仍由各调用者捕获 | 代码已覆盖；共享表单交互及平台验收见批次记录 |
 | [modules/workbench/internal/ui/sidebar/SidebarSectionEmptyState.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarSectionEmptyState.tsx) | 优化 | Message 保持虚拟列表 28px 行，完整文本/可选说明交 tooltip 与无障碍描述；项目空分组遵循现有仅标题/工具样式 | 当前生产者未提供 Message.description；完整提示和平台无障碍待验收 |
 | [modules/workbench/internal/ui/sidebar/primitives/SidebarChevron.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarChevron.tsx) | 复用原生组件 | 原分类行复用 Kit ChevronRight/ChevronDown；展开来自原行 ID 的覆盖 | 鼠标/Enter 展开和刷新保留已核对 |
 | [modules/workbench/internal/ui/sidebar/primitives/SidebarDraggableItem.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarDraggableItem.tsx) | 复用原生组件 | ActivityDrag + GPUI on_drag，共用源文档/项目校验及原画布接收；无第二套拖放状态 | 目录刷新拒绝旧拖放已核对；源关闭/跨项目/物理拖拽待验收 |

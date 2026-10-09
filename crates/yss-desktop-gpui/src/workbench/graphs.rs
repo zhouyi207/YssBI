@@ -173,13 +173,7 @@ impl Workbench {
                     }
                     let version = canvas.read(cx).graph.editing.version;
                     let path = canvas.read(cx).path().to_owned();
-                    for panel in view
-                        .activities
-                        .values()
-                        .filter_map(gpui::WeakEntity::upgrade)
-                    {
-                        panel.update(cx, |panel, cx| panel.set_active_resource(Some(&path), cx));
-                    }
+                    view.mark_project_resource(Some(&path), cx);
                     view.details.update(cx, |details, cx| {
                         if matches!(event, CanvasEvent::Selection { .. }) {
                             details.clear_log(cx);

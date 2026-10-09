@@ -1,50 +1,8 @@
 //! Resource name drafts survive failed submissions and close only after a committed result.
+use super::super::name_form::NameForm;
 use super::{super::Workbench, ResourceAction, operations::GraphTarget};
-use gpui::{
-    AppContext, Context, Entity, IntoElement, Render, SharedString, Window, div, prelude::*,
-};
+use gpui::{Context, Entity, Focusable, ParentElement, SharedString, Window};
 use gpui_component::WindowExt;
-use gpui_component::{
-    ActiveTheme,
-    input::{Input, InputEvent, InputState},
-};
-
-pub(super) struct NameForm {
-    input: Entity<InputState>,
-    busy: bool,
-    error: Option<&'static str>,
-    _subscription: gpui::Subscription,
-}
-
-impl NameForm {
-    pub(super) fn expired(form: Option<&Entity<Self>>, cx: &mut gpui::App) {
-        if let Some(form) = form {
-            form.update(cx, |form, cx| {
-                form.busy = false;
-                form.error = Some("native.workbench.resourceChanged");
-                cx.notify();
-            });
-        }
-    }
-}
-
-impl Render for NameForm {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(Input::new(&self.input).disabled(self.busy))
-            .when_some(self.error, |body, error| {
-                body.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(crate::text::translate(error)),
-                )
-            })
-    }
-}
 
 impl Workbench {
     pub(super) fn resource_name_dialog(
@@ -69,21 +27,8 @@ impl Workbench {
         let lifecycle = self.lifecycle;
         let owner = cx.entity().downgrade();
         let submit_label = submit_label.into();
-        let input = cx.new(|cx| InputState::new(window, cx).default_value(initial));
-        let form = cx.new(|cx| {
-            let subscription = cx.subscribe(&input, |form: &mut NameForm, _, event, cx| {
-                if matches!(event, InputEvent::Change) {
-                    form.error = None;
-                    cx.notify();
-                }
-            });
-            NameForm {
-                input,
-                busy: false,
-                error: None,
-                _subscription: subscription,
-            }
-        });
+        let form = NameForm::new(initial, window, cx);
+        let focus = form.focus_handle(cx);
         let title = title.into();
         let submit = std::rc::Rc::new(submit);
         window.open_dialog(cx, move |dialog, _, _| {
@@ -104,13 +49,9 @@ impl Workbench {
                 )
                 .child(form.clone())
                 .on_ok(move |_, window, cx| {
-                    if form.read(cx).busy {
+                    let Some(name) = form.read(cx).value(cx) else {
                         return false;
-                    }
-                    let name = form.read(cx).input.read(cx).value().trim().to_owned();
-                    if name.is_empty() {
-                        return false;
-                    }
+                    };
                     let _ = owner.update(cx, |view, cx| {
                         if view.lifecycle != lifecycle
                             || view.is_closing(cx)
@@ -119,20 +60,23 @@ impl Workbench {
                                 .as_ref()
                                 .is_none_or(|current| current.identity != project)
                         {
-                            NameForm::expired(Some(&form), cx);
+                            NameForm::fail(Some(&form), "native.workbench.resourceChanged", cx);
                             return;
                         }
                         submit(view, name, form.clone(), window, cx);
                         form.update(cx, |form, cx| {
-                            form.busy = view.busy;
-                            form.error = (!view.busy).then_some("native.workbench.resourceChanged");
-                            cx.notify();
+                            if view.busy {
+                                form.submitting(cx);
+                            } else {
+                                form.finish(Some("native.workbench.resourceChanged"), cx);
+                            }
                         });
                     });
                     false
                 })
-                .on_cancel(move |_, _, cx| !cancel.read(cx).busy)
+                .on_cancel(move |_, _, cx| !cancel.read(cx).busy())
         });
+        window.focus(&focus, cx);
     }
 
     pub(super) fn finish_resource_name(
@@ -144,9 +88,7 @@ impl Workbench {
     ) {
         if let Some(form) = form {
             form.update(cx, |form, cx| {
-                form.busy = false;
-                form.error = error;
-                cx.notify();
+                form.finish(error, cx);
             });
             if error.is_none() {
                 window.close_dialog(cx);

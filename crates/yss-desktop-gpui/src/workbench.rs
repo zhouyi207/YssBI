@@ -22,6 +22,7 @@ mod lifecycle;
 mod logs;
 mod menus;
 mod minds;
+mod name_form;
 mod output;
 mod plugins;
 mod problems;
@@ -304,8 +305,8 @@ impl Workbench {
                     ActivityEvent::DatabaseResource(id, action) => {
                         view.database_resource_action(id.clone(), *action, window, cx)
                     }
-                    ActivityEvent::OpenConversation(id) => {
-                        view.open_conversation(id.clone(), window, cx)
+                    ActivityEvent::ActivateConversation(id) => {
+                        view.activate_conversation(id.clone(), window, cx)
                     }
                     ActivityEvent::RenameConversation(id, title) => {
                         view.rename_conversation(id.clone(), title.clone(), window, cx)
@@ -372,8 +373,15 @@ impl Workbench {
             results.set_graph(None);
             cx.notify();
         });
-        for panel in self.activities.values().filter_map(WeakEntity::upgrade) {
-            panel.update(cx, |panel, cx| panel.set_active_resource(Some(&path), cx));
+        self.mark_project_resource(Some(&path), cx);
+    }
+
+    fn mark_project_resource(&self, path: Option<&str>, cx: &mut Context<Self>) {
+        for panel in ["project", "nodes"]
+            .into_iter()
+            .filter_map(|id| self.activities.get(id).and_then(WeakEntity::upgrade))
+        {
+            panel.update(cx, |panel, cx| panel.set_active_resource(path, cx));
         }
     }
 

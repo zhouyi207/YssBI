@@ -79,7 +79,7 @@ impl ActivityPanel {
                 ));
             }
             ActivityRowContent::Item(ActivityItem::Conversation { session_id, .. }) => {
-                cx.emit(ActivityEvent::OpenConversation(session_id.clone()));
+                cx.emit(ActivityEvent::ActivateConversation(session_id.clone()));
             }
             _ => self.open_resource(&document, index, cx),
         }

@@ -36,7 +36,7 @@ impl ActivityPanel {
                 ActivityRowContent::Item(ActivityItem::Conversation {
                     title, session_id, ..
                 }) => {
-                    title.to_lowercase().contains(&query)
+                    conversations::title(title).to_lowercase().contains(&query)
                         || session_id.to_lowercase().contains(&query)
                 }
                 ActivityRowContent::Item(

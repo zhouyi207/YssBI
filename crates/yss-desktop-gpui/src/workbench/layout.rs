@@ -93,6 +93,7 @@ impl Workbench {
     pub(super) fn connect_layout(&mut self, cx: &mut Context<Self>) {
         self.layout_subscription = Some(cx.subscribe(&self.dock, |view, _, event, cx| {
             if matches!(event, DockEvent::LayoutChanged) {
+                view.sync_active_conversation(cx);
                 cx.notify();
             }
             if matches!(event, DockEvent::LayoutChanged) && !view.restoring_layout {

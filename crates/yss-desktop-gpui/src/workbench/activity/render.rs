@@ -2,16 +2,15 @@
 use super::*;
 use crate::text::activity_text;
 use gpui::{AnyElement, uniform_list};
-use gpui_component::{
-    ActiveTheme, Icon, Sizable,
-    input::Input,
-    menu::{ContextMenuExt, PopupMenuItem},
-    tooltip::Tooltip,
-};
+use gpui_component::{ActiveTheme, Icon, Sizable, input::Input, tooltip::Tooltip};
 use gpui_kit_assets::IconName;
 
 impl Render for ActivityPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.search.is_some() && self.search_default_title != conversations::title("") {
+            self.search_default_title = conversations::title("");
+            self.rebuild_rows(cx);
+        }
         if let Some(search) = &self.search {
             crate::text::input_placeholder(
                 search,
@@ -100,7 +99,11 @@ impl ActivityPanel {
             )
             .pl(px(16. + row.depth as f32 * 16.))
             .pr_2()
-            .h(px(28.))
+            .h(px(if self.panel_id == "assistant" {
+                52.
+            } else {
+                28.
+            }))
             .w_full()
             .min_w_0()
             .rounded_sm()
@@ -109,55 +112,8 @@ impl ActivityPanel {
             .gap_1p5()
             .text_size(px(13.));
         let item = match &row.content {
-            ActivityRowContent::Item(ActivityItem::Conversation {
-                session_id, title, ..
-            }) => {
-                let active = self.active_resource.as_deref() == Some(session_id.as_str());
-                let open_id = session_id.clone();
-                let rename_id = session_id.clone();
-                let title = title.clone();
-                let expected = document.clone();
-                let owner = cx.entity().downgrade();
-                item.child(Icon::new(IconName::MessageSquareText).size_3())
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .child(if title.is_empty() {
-                                crate::text::translate("panel.assistantNewConversation")
-                            } else {
-                                title.clone()
-                            }),
-                    )
-                    .cursor_pointer()
-                    .when(active, |view| view.bg(cx.theme().sidebar_accent))
-                    .hover(|view| view.bg(cx.theme().muted))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        cx.emit(ActivityEvent::OpenConversation(open_id.clone()))
-                    }))
-                    .context_menu(move |menu, _, _| {
-                        let owner = owner.clone();
-                        let expected = expected.clone();
-                        let id = rename_id.clone();
-                        let title = title.clone();
-                        menu.item(
-                            PopupMenuItem::new(crate::text::translate(
-                                "contextMenu.dialog.renameSubmit",
-                            ))
-                            .on_click(move |_, _, cx| {
-                                let _ = owner.update(cx, |view, cx| {
-                                    if view.accepts(&expected) {
-                                        cx.emit(ActivityEvent::RenameConversation(
-                                            id.clone(),
-                                            title.clone(),
-                                        ));
-                                    }
-                                });
-                            }),
-                        )
-                    })
-                    .into_any_element()
+            ActivityRowContent::Item(ActivityItem::Conversation { .. }) => {
+                return Some(self.render_conversation(index, item, cx));
             }
             ActivityRowContent::Category { .. } => {
                 return Some(self.render_category(index, item, cx));
@@ -200,7 +156,7 @@ fn row_label(content: &ActivityRowContent) -> String {
         | ActivityRowContent::Message { label, .. }
         | ActivityRowContent::Item(ActivityItem::Command { label, .. }) => activity_text(label),
         ActivityRowContent::Item(ActivityItem::Conversation { title, .. }) if title.is_empty() => {
-            crate::text::translate("panel.assistantNewConversation")
+            conversations::title("").to_owned()
         }
         ActivityRowContent::Item(
             ActivityItem::Conversation { title, .. } | ActivityItem::Node { title, .. },

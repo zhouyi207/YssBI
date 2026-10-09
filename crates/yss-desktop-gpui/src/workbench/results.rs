@@ -307,13 +307,7 @@ impl Workbench {
     }
 
     pub(super) fn clear_graph_context(&mut self, cx: &mut Context<Self>) {
-        for panel in self
-            .activities
-            .values()
-            .filter_map(gpui::WeakEntity::upgrade)
-        {
-            panel.update(cx, |panel, cx| panel.set_active_resource(None, cx));
-        }
+        self.mark_project_resource(None, cx);
         self.details.update(cx, |panel, cx| panel.clear(cx));
         self.problems.update(cx, |panel, cx| panel.clear(cx));
         self.output

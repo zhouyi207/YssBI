@@ -1,5 +1,6 @@
 //! Database menus capture the index declaration before the original typed use case runs.
-use super::{super::Workbench, ResourceAction, names::NameForm};
+use super::super::name_form::NameForm;
+use super::{super::Workbench, ResourceAction};
 use crate::project::DesktopProject;
 use gpui::{ClipboardItem, Context, Entity, Window};
 use gpui_component::{WindowExt, button::ButtonVariant};
@@ -181,7 +182,7 @@ impl Workbench {
                         .as_ref()
                         .is_none_or(|project| project.identity != target.project)
                 {
-                    NameForm::expired(form.as_ref(), cx);
+                    NameForm::fail(form.as_ref(), "native.workbench.resourceChanged", cx);
                     return;
                 }
                 view.busy = false;

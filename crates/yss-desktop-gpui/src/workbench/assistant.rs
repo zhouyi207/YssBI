@@ -1,4 +1,6 @@
 //! Project-scoped conversation directory and native panels; DockArea owns placement and visibility.
+mod renaming;
+
 use super::{
     Workbench,
     activity::{ActivityEvent, ActivityPanel, ReadState},
@@ -8,7 +10,6 @@ use gpui::{AppContext, Context, Window, div, prelude::*, px};
 use gpui_component::{
     WindowExt,
     dock::{DockPlacement, PaneRef, panel_handle},
-    input::{Input, InputState},
 };
 use std::sync::Arc;
 use yss_application::activity_panel::ActivityPanelDocument;
@@ -84,6 +85,13 @@ impl Workbench {
         .detach();
         cx.notify();
     }
+    fn invalidate_assistant_directory(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // A new query generation prevents a pre-mutation result from restoring old metadata.
+        self.assistant_reading = false;
+        self.assistant_again = false;
+        self.refresh_assistant_directory(window, cx);
+    }
+
     pub(super) fn install_assistant_document(
         &mut self,
         document: ActivityPanelDocument,
@@ -94,6 +102,7 @@ impl Workbench {
         panel.update(cx, |panel, cx| {
             panel.replace_document(Arc::new(document), cx)
         });
+        self.sync_active_conversation(cx);
     }
 
     fn ensure_assistant_directory(
@@ -108,13 +117,14 @@ impl Workbench {
         {
             return panel;
         }
-        let panel = cx.new(|cx| ActivityPanel::pending_conversations(window, cx));
+        let owner = cx.entity().downgrade();
+        let panel = cx.new(|cx| ActivityPanel::pending_conversations(owner, window, cx));
         self.activities.insert("assistant", panel.downgrade());
         self.subscriptions.push(
             cx.subscribe_in(&panel, window, |view, _, event, window, cx| match event {
                 ActivityEvent::RefreshResources => view.refresh_assistant_directory(window, cx),
-                ActivityEvent::OpenConversation(id) => {
-                    view.open_conversation(id.clone(), window, cx)
+                ActivityEvent::ActivateConversation(id) => {
+                    view.activate_conversation(id.clone(), window, cx)
                 }
                 ActivityEvent::RenameConversation(id, title) => {
                     view.rename_conversation(id.clone(), title.clone(), window, cx)
@@ -202,7 +212,7 @@ impl Workbench {
                 } else {
                     view.error = Some("新对话未确认，请检查会话目录后重试。".into());
                 }
-                view.refresh_assistant_directory(window, cx);
+                view.invalidate_assistant_directory(window, cx);
                 cx.notify();
             });
         })
@@ -216,16 +226,6 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         if self.busy || self.closing || self.assistant_busy {
-            return;
-        }
-        if let Some(panel) = self.conversations.get(&id) {
-            self.present_panel(
-                panel_handle(panel.clone()),
-                DockPlacement::Center,
-                window,
-                cx,
-            );
-            self.mark_conversation(&id, cx);
             return;
         }
         let Ok(session_id) = HarnessSessionId::try_new(id) else {
@@ -257,7 +257,7 @@ impl Workbench {
                 } else {
                     view.error = Some("此对话不可用，请刷新会话目录。".into());
                 }
-                view.refresh_assistant_directory(window, cx);
+                view.invalidate_assistant_directory(window, cx);
                 cx.notify();
             });
         })
@@ -272,6 +272,10 @@ impl Workbench {
     ) {
         let id = session.id.to_string();
         let panel = if let Some(panel) = self.conversations.get(&id) {
+            panel.update(cx, |panel, cx| {
+                panel.session = session;
+                cx.notify();
+            });
             panel.clone()
         } else {
             let panel =
@@ -310,109 +314,58 @@ impl Workbench {
             panel
         };
         self.present_panel(panel_handle(panel), DockPlacement::Center, window, cx);
-        self.mark_conversation(&id, cx);
+        self.sync_active_conversation(cx);
     }
-    fn mark_conversation(&self, id: &str, cx: &mut Context<Self>) {
+    fn visible_conversation(&self, cx: &gpui::App) -> Option<gpui::Entity<ConversationPanel>> {
+        let mut active = None;
+        let dock = self.dock.read(cx);
+        if let Some(tree) = dock.layout(DockPlacement::Center) {
+            tree.root().walk(&mut |node| {
+                if let PaneRef::Tabs { panels, active_ix } = node.kind()
+                    && let Some(panel) = panels.get(active_ix).and_then(|id| dock.panel(*id))
+                    && let Ok(panel) = panel.view().downcast::<ConversationPanel>()
+                {
+                    active = Some(panel);
+                }
+            });
+        }
+        active
+    }
+
+    pub(super) fn activate_conversation(
+        &mut self,
+        id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.busy || self.closing || self.assistant_busy || self.dock.read(cx).is_locked() {
+            return;
+        }
+        if let Some(panel) = self.visible_conversation(cx)
+            && panel.read(cx).session.id.as_str() == id
+        {
+            self.dock.update(cx, |dock, cx| {
+                dock.set_zoomed_out(window, cx);
+                dock.remove_panel(panel, window, cx);
+            });
+            self.sync_active_conversation(cx);
+            return;
+        }
+        self.open_conversation(id, window, cx);
+    }
+
+    pub(super) fn sync_active_conversation(&self, cx: &mut Context<Self>) {
+        let active = self
+            .visible_conversation(cx)
+            .map(|panel| panel.read(cx).session.id.to_string());
         if let Some(panel) = self
             .activities
             .get("assistant")
             .and_then(gpui::WeakEntity::upgrade)
         {
-            panel.update(cx, |view, cx| view.set_active_resource(Some(id), cx));
+            panel.update(cx, |view, cx| {
+                view.set_active_resource(active.as_deref(), cx)
+            });
         }
-    }
-    pub(super) fn rename_conversation(
-        &mut self,
-        id: String,
-        title: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.is_closing(cx) {
-            return;
-        }
-        let Ok(session) = HarnessSessionId::try_new(id.clone()) else {
-            return;
-        };
-        let input = cx.new(|cx| InputState::new(window, cx).default_value(title));
-        self.error = None;
-        let owner = cx.entity().downgrade();
-        let lifecycle = self.lifecycle;
-        window.open_dialog(cx, move |dialog, _, cx| {
-            let busy = owner
-                .upgrade()
-                .is_some_and(|view| view.read(cx).assistant_busy);
-            let error = owner.upgrade().and_then(|view| view.read(cx).error.clone());
-            let cancel = owner.clone();
-            let input = input.clone();
-            let owner = owner.clone();
-            let session = session.clone();
-            let id = id.clone();
-            dialog
-                .title("重命名会话")
-                .width(px(440.))
-                .overlay_closable(false)
-                .child(Input::new(&input).disabled(busy))
-                .when_some(error, |dialog, error| {
-                    dialog.child(div().text_sm().child(error))
-                })
-                .on_cancel(move |_, _, cx| {
-                    !cancel
-                        .upgrade()
-                        .is_some_and(|view| view.read(cx).assistant_busy)
-                })
-                .on_ok(move |_, window, cx| {
-                    let title = input.read(cx).value().trim().to_owned();
-                    if title.is_empty() {
-                        return false;
-                    }
-                    let session = session.clone();
-                    let id = id.clone();
-                    let _ = owner.update(cx, |view, cx| {
-                        if view.lifecycle != lifecycle || view.is_closing(cx) {
-                            return;
-                        }
-                        view.assistant_busy = true;
-                        let services = view.services.clone();
-                        let job = view.services.executor.spawn(async move {
-                            services
-                                .application
-                                .application
-                                .rename_harness_session(
-                                    &services.application.harness.host,
-                                    &principal(),
-                                    &session,
-                                    title,
-                                )
-                                .await
-                        });
-                        cx.spawn_in(window, async move |view, cx| {
-                            let result = job.await.ok().and_then(Result::ok);
-                            let _ = view.update_in(cx, |view, window, cx| {
-                                if view.lifecycle != lifecycle {
-                                    return;
-                                }
-                                view.assistant_busy = false;
-                                if let Some(session) = result {
-                                    window.close_dialog(cx);
-                                    if let Some(panel) = view.conversations.get(&id) {
-                                        panel.update(cx, |view, cx| {
-                                            view.session = session;
-                                            cx.notify();
-                                        });
-                                    }
-                                } else {
-                                    view.error =
-                                        Some("会话重命名未完成，请刷新目录后重试。".into());
-                                }
-                                view.refresh_assistant_directory(window, cx);
-                                cx.notify();
-                            });
-                        })
-                        .detach();
-                    });
-                    false
-                })
-        });
     }
 }

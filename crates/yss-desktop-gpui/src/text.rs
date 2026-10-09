@@ -12,7 +12,7 @@ pub fn locale() -> &'static str {
     }
 }
 
-pub fn translate(key: &str) -> String {
+pub fn t(key: &str) -> &str {
     static LOCALE: OnceLock<serde_json::Value> = OnceLock::new();
     let mut value = LOCALE.get_or_init(|| {
         serde_json::from_str(include_str!("../assets/zh-CN.json"))
@@ -20,11 +20,15 @@ pub fn translate(key: &str) -> String {
     });
     for part in key.split('.') {
         let Some(next) = value.get(part) else {
-            return key.to_owned();
+            return key;
         };
         value = next;
     }
-    value.as_str().unwrap_or(key).to_owned()
+    value.as_str().unwrap_or(key)
+}
+
+pub fn translate(key: &str) -> String {
+    t(key).to_owned()
 }
 
 pub fn input_placeholder(

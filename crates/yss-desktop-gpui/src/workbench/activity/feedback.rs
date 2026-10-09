@@ -2,7 +2,7 @@
 use super::*;
 use gpui::AnyElement;
 use gpui_component::{
-    ActiveTheme, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     spinner::Spinner,
 };
@@ -54,6 +54,7 @@ impl ActivityPanel {
                         .small()
                         .size_5()
                         .icon(tool_icon(tool.icon))
+                        .disabled(self.conversation_busy(cx))
                         .tooltip(activity_text(&tool.label))
                         .on_click(cx.listener(move |view, _, _, cx| {
                             if view.accepts(&expected) {

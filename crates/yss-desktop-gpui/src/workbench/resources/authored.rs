@@ -1,5 +1,6 @@
 //! One native name dialog; each resource retains its original typed creation command.
-use super::names::NameForm;
+use super::super::name_form::NameForm;
+
 use crate::workbench::Workbench;
 use gpui::{Context, Entity, Window};
 
@@ -127,7 +128,7 @@ impl Workbench {
                         .as_ref()
                         .is_none_or(|current| current.identity != expected)
                 {
-                    NameForm::expired(Some(&form), cx);
+                    NameForm::fail(Some(&form), "native.workbench.resourceChanged", cx);
                     return;
                 }
                 view.busy = false;

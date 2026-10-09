@@ -1,4 +1,5 @@
 mod categories;
+mod conversations;
 mod drag;
 mod feedback;
 mod navigation;
@@ -43,7 +44,7 @@ pub enum ActivityEvent {
     CreateNode(NodeCreation),
     GraphResource(String, super::resources::ResourceAction),
     DatabaseResource(String, super::resources::ResourceAction),
-    OpenConversation(String),
+    ActivateConversation(String),
     RenameConversation(String, String),
     Tool(String),
     RefreshResources,
@@ -61,7 +62,10 @@ pub struct ActivityPanel {
     focus: FocusHandle,
     active_resource: Option<String>,
     search: Option<Entity<InputState>>,
+    search_default_title: &'static str,
+    conversation_owner: Option<gpui::WeakEntity<super::Workbench>>,
     search_subscription: Option<gpui::Subscription>,
+    activation_subscription: Option<gpui::Subscription>,
 }
 
 impl ActivityPanel {
@@ -117,7 +121,10 @@ impl ActivityPanel {
             focus: cx.focus_handle(),
             active_resource: None,
             search: None,
+            search_default_title: conversations::title(""),
+            conversation_owner: None,
             search_subscription: None,
+            activation_subscription: None,
         }
     }
 
@@ -127,8 +134,13 @@ impl ActivityPanel {
             .is_some_and(|current| Arc::ptr_eq(current, document))
     }
 
-    pub fn pending_conversations(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn pending_conversations(
+        owner: gpui::WeakEntity<super::Workbench>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let mut panel = Self::pending("assistant", cx);
+        panel.conversation_owner = Some(owner);
         let search = cx.new(|cx| {
             InputState::new(window, cx).placeholder(crate::text::translate(
                 "native.workbench.searchConversations",
@@ -142,6 +154,12 @@ impl ActivityPanel {
             }
         }));
         panel.search = Some(search);
+        panel.activation_subscription =
+            Some(cx.observe_window_activation(window, |_, window, cx| {
+                if window.is_window_active() {
+                    cx.emit(ActivityEvent::RefreshResources);
+                }
+            }));
         panel
     }
 }
