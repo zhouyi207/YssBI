@@ -130,9 +130,14 @@ impl GraphCanvas {
         let path = self.graph.projection.graph_path.clone();
         let version = self.graph.editing.version;
         let hash = self.graph.projection.basis.semantic_input_hash;
+        let execution_session_id = self.graph.results.execution_session_id;
         let cancellation = Arc::new(AtomicBool::new(false));
         self.execution.submitting = Some(cancellation.clone());
-        self.execution.cleared = None;
+        self.execution.cleared = self
+            .execution
+            .runs
+            .last_key_value()
+            .map(|(_, projection)| projection.event.identity().clone());
         self.error = None;
         let task = self.services.run(move |services| {
             let application = &services.application;
@@ -141,7 +146,26 @@ impl GraphCanvas {
             let request = RunGraphRequest::new(project, path, document, hash)
                 .with_demand(demand)
                 .with_cancellation(cancellation);
-            Ok(run_graph_with_sink(application, request, |_| true)?)
+            let mut terminal_received = false;
+            let mut failed = false;
+            let result = run_graph_with_sink(application, request, |event| {
+                match event.kind() {
+                    RunApplicationEventKind::RunErrored { .. } => {
+                        terminal_received = true;
+                        failed = true;
+                    }
+                    RunApplicationEventKind::RunCompleted
+                    | RunApplicationEventKind::RunCancelled => terminal_received = true,
+                    _ => {}
+                }
+                true
+            });
+            // Application publishes the terminal fact before invoking this sink.
+            // Only failures before that publication need local command feedback.
+            if !terminal_received {
+                result?;
+            }
+            Ok(failed)
         });
         cx.spawn(async move |view, cx| {
             let result = task
@@ -150,13 +174,22 @@ impl GraphCanvas {
                 .and_then(|result| result);
             let _ = view.update(cx, |view, cx| {
                 view.execution.submitting = None;
-                if let Err(error) = result {
-                    tracing::warn!(
-                        code = "native_run_request_rejected",
-                        "Native run request rejected"
-                    );
-                    // A command rejection is feedback, not an Execution failure fact in Output.
-                    view.error = Some(run_rejection(&error));
+                if view.graph.results.execution_session_id != execution_session_id {
+                    view.resync_execution(cx);
+                    return;
+                }
+                match result {
+                    Ok(true) if view.graph.projection.basis.semantic_input_hash == hash => {
+                        cx.emit(CanvasEvent::ShowOutput);
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            code = "native_run_request_rejected",
+                            "Native run request rejected"
+                        );
+                        view.error = Some(run_rejection(&error));
+                    }
                 }
                 view.resync_execution(cx);
                 cx.emit(CanvasEvent::Execution);
@@ -226,8 +259,11 @@ impl GraphCanvas {
             buffer.push(event);
             return;
         }
+        let result_revision = event.result_revision();
         if self.execution.install(event) {
-            self.refresh(cx);
+            if result_revision > self.graph.results.revision {
+                self.refresh(cx);
+            }
             cx.emit(CanvasEvent::Execution);
             cx.notify();
         }
@@ -279,21 +315,22 @@ impl GraphCanvas {
         cx.notify();
     }
 
-    pub(crate) fn run_failure(&self) -> Option<RunApplicationEvent> {
+    pub(crate) fn run_failure(&self) -> Option<&RunApplicationEvent> {
         let (_, projection) = self.execution.runs.last_key_value()?;
         let event = &projection.event;
-        (event.identity().semantic_input_hash() == &self.graph.projection.basis.semantic_input_hash
+        (event.identity().execution_session_id() == &self.graph.results.execution_session_id
+            && event.identity().semantic_input_hash()
+                == &self.graph.projection.basis.semantic_input_hash
             && self.execution.cleared.as_ref() != Some(event.identity())
             && matches!(event.kind(), RunApplicationEventKind::RunErrored { .. }))
-        .then(|| event.clone())
+        .then_some(event)
     }
 
-    pub(crate) fn clear_run_failure(&mut self, cx: &mut Context<Self>) {
-        self.execution.cleared = self
-            .execution
-            .runs
-            .last_key_value()
-            .map(|(_, projection)| projection.event.identity().clone());
+    pub(crate) fn clear_run_failure(&mut self, run: &RunIdentity, cx: &mut Context<Self>) {
+        if self.run_failure().map(RunApplicationEvent::identity) != Some(run) {
+            return;
+        }
+        self.execution.cleared = Some(run.clone());
         cx.emit(CanvasEvent::Execution);
         cx.notify();
     }

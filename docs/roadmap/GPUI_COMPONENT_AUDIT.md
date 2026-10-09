@@ -587,6 +587,16 @@
 - 现有锁定版本保持；新增的两个 grammar 复用现有 tree-sitter runtime，lockfile 另包含 Julia grammar 的 WASM sysroot/allocator 条件依赖，原生构建不使用它们。临时入口与数据不提交；单波浪号、HTML、替代公式分隔符、脚注/锚点、图片等继续审查，三项 Markdown 与 Thread 仍未整体完成，累计 188/265 项。
 
 
+### 运行失败面板与执行反馈
+
+- 已逐项阅读 `RunFailurePanel`、执行读投影、失败清理与图定位入口；原生 Output 保留为独立面板，直接借用当前图的 Application 运行事件。固定工具栏、无图/无失败状态、禁用清除、失败标题、原因、阶段、RunId、错误码、分组及节点定位均已接入。
+- `output/failure` 集中展示与枚举文案映射，面板重绘不复制完整事件或分组。定位保留 PlanSourceIdentity，清除和定位均重验原运行身份；新请求立即隐藏旧失败，清除不删除后端终态。原生 RunFailure 无 IPC incidentId，未产生 RunId 的启动拒绝沿用 Canvas 本地反馈。
+- 本地图运行的 sink 确认终态已发布后，不再把同一次失败重复显示为通用命令拒绝；仍在当前执行会话和语义图中的失败回执打开 Output，切换其他资源后不抢占面板。执行恢复只在事件的结果版本领先当前投影时刷新图，修复“恢复快照 → 刷新图 → 再恢复快照”的循环。
+- Linux/X11 实际窗口使用隔离项目的真实除零图，核对原因、阶段、运行编号/错误码、节点定位、清除后 Rust 终态保留、连续失败的新编号、修复后成功、文档切换与关闭最后一个图。启动快照确认旧失败立即隐藏；运行后立刻切换文档，失败不重新打开底部区域；第 1 次运行捕获的清除操作不能清除第 2 次失败。
+- 工作区核对了英文与中文显示；独立提交预览另用明确的合成展示数据核对 18 层分组、空输入结构探测、长路径换行、窄面板滚动/固定工具栏、无节点来源和明暗主题。这些展示样例不代表真实分组函数已完成端到端验收。
+- L2：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过，迭代 `cargo check` 与两处临时原生预览构建通过。5 个 Rust 文件局部格式、44/33 个双语键及参数（英文沿用工作区目录）、两份文档元信息与 275/271 条相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。临时预览与数据不提交，不运行全工作区测试。
+- 后端接口、依赖和 UI 单元测试均未改动；真实函数内部失败、跨项目/执行会话切换、物理输入、读屏、Windows/macOS，以及已有嵌套 Xwayland 重绘与外观问题继续验收。问题面板的位置、阻断标识及关联导航继续迁移；累计完成源码审查 189/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -849,7 +859,7 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/output/internal/ui/RunFailurePanel.tsx](../../react/src/modules/output/internal/ui/RunFailurePanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/output/internal/ui/RunFailurePanel.tsx](../../react/src/modules/output/internal/ui/RunFailurePanel.tsx) | 迁移、优化 | 原事件借用、固定工具栏、空状态、原因/阶段/RunId/错误码、分组/实际来源；身份约束的清除/定位、启动隐藏旧失败、终态反馈与有界刷新 | Linux/X11 真实除零、清除/连续失败/成功/切图、旧清除操作已核对；合成分组/无来源及明暗窄列已核对，跨会话/真实组函数/其他平台继续验收 |
 
 ## modules/plugins
 
@@ -863,7 +873,7 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/problems/internal/ui/GraphProblemsPanel.tsx](../../react/src/modules/problems/internal/ui/GraphProblemsPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/problems/internal/ui/GraphProblemsPanel.tsx](../../react/src/modules/problems/internal/ui/GraphProblemsPanel.tsx) | 待查 | 已读参考组件、canonical diagnostics 与定位入口；原生尚缺数量、位置/代码、blocking、关联位置与导航 | 待补齐并验收 |
 
 ## modules/project-explorer
 

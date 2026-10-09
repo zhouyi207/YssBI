@@ -1,18 +1,18 @@
 //! Output presents Execution failures for the active graph, independently of Logs and Problems.
+mod failure;
+
 use gpui::{
     App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, WeakEntity, Window,
     div, prelude::*,
 };
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable,
+    ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
 };
+use gpui_kit_assets::IconName;
 use yss_application::graph::run::RunApplicationEventKind;
-use yss_graph_execution::{
-    error::{RunFailureCode, RunPhase},
-    plan::PlanSourceIdentity,
-};
+use yss_graph_execution::plan::PlanSourceIdentity;
 
 use crate::canvas::{CanvasEvent, GraphCanvas};
 
@@ -69,116 +69,80 @@ impl Render for OutputPanel {
         let event = graph
             .as_ref()
             .and_then(|graph| graph.read(cx).run_failure());
-        let failure = event.as_ref().and_then(|event| match event.kind() {
-            RunApplicationEventKind::RunErrored { failure } => Some(failure),
+        let failure = event.and_then(|event| match event.kind() {
+            RunApplicationEventKind::RunErrored { failure } => Some((event.identity(), failure)),
             _ => None,
         });
+        let clear_run = failure.map(|(run, _)| run.clone());
+        let body = match failure {
+            Some((run, failure)) => failure::render(run, failure, cx),
+            None => div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .p_4()
+                .text_color(cx.theme().muted_foreground)
+                .child(crate::text::t(if graph.is_some() {
+                    "panel.outputEmpty"
+                } else {
+                    "panel.outputNoGraph"
+                }))
+                .into_any_element(),
+        };
         div()
             .id("output")
             .track_focus(&self.focus)
             .size_full()
-            .overflow_y_scroll()
-            .px_3()
-            .py_2()
+            .flex()
+            .flex_col()
             .bg(cx.theme().background)
-            .text_sm()
+            .text_color(cx.theme().foreground)
+            .text_xs()
             .child(
                 div()
+                    .h_8()
+                    .px_2()
                     .flex()
-                    .justify_between()
+                    .flex_shrink_0()
                     .items_center()
-                    .child(
-                        graph
-                            .as_ref()
-                            .map(|graph| graph.read(cx).run_status())
-                            .unwrap_or("请打开图以查看运行状态"),
-                    )
+                    .gap_2()
+                    .border_b_1()
+                    .border_color(cx.theme().border)
+                    .child(div().flex_1().child(crate::text::t("panel.output")))
+                    .when_some(graph.as_ref(), |view, graph| {
+                        view.child(
+                            div()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(graph.read(cx).run_status()),
+                        )
+                    })
                     .child(
                         Button::new("clear-run-failure")
                             .small()
                             .ghost()
-                            .icon(IconName::Delete)
-                            .label("清除运行错误")
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                if let Some(graph) =
-                                    view.graph.as_ref().and_then(WeakEntity::upgrade)
+                            .icon(IconName::Trash)
+                            .tooltip(crate::text::t("panel.outputClear"))
+                            .disabled(clear_run.is_none())
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                if let Some(run) = &clear_run
+                                    && let Some(graph) =
+                                        view.graph.as_ref().and_then(WeakEntity::upgrade)
                                 {
-                                    graph.update(cx, |graph, cx| graph.clear_run_failure(cx));
+                                    graph.update(cx, |graph, cx| graph.clear_run_failure(run, cx));
                                 }
                             })),
                     ),
             )
-            .when_some(failure, |view, failure| {
-                let source = failure.source.clone();
-                view.child(div().py_2().text_color(cx.theme().danger).child(
-                    crate::text::translate(&format!(
-                        "runFailure.causes.{}",
-                        failure_key(failure.code)
-                    )),
-                ))
-                .child(div().child(crate::text::translate(&format!(
-                    "runFailure.phases.{}",
-                    phase_key(failure.phase)
-                ))))
-                .children(failure.groups.iter().map(|group| {
-                    div().py_1().child(match group.ordinal {
-                        Some(ordinal) => format!("第 {ordinal} 组 · {}", group.function.as_str()),
-                        None => format!("空输入结构探测 · {}", group.function.as_str()),
-                    })
-                }))
-                .when_some(source, |view, source| {
-                    view.child(
-                        Button::new("locate-run-failure")
-                            .small()
-                            .ghost()
-                            .label("定位失败节点")
-                            .on_click(cx.listener(move |_, _, _, cx| {
-                                cx.emit(OutputEvent::Locate(source.clone()))
-                            })),
-                    )
-                })
-            })
-            .when(failure.is_none(), |view| {
-                view.child(
-                    div()
-                        .py_2()
-                        .text_color(cx.theme().muted_foreground)
-                        .child("当前图暂无运行错误"),
-                )
-            })
-    }
-}
-
-fn failure_key(code: RunFailureCode) -> &'static str {
-    match code {
-        RunFailureCode::KernelFailed => "kernelFailed",
-        RunFailureCode::KernelNotFound => "kernelNotFound",
-        RunFailureCode::InvalidNumericInput => "invalidNumericInput",
-        RunFailureCode::ShapeMismatch => "shapeMismatch",
-        RunFailureCode::GroupSchemaMismatch => "groupSchemaMismatch",
-        RunFailureCode::GroupKeyCollision => "groupKeyCollision",
-        RunFailureCode::InvalidParameter => "invalidParameter",
-        RunFailureCode::UnalignedSeries => "unalignedSeries",
-        RunFailureCode::BudgetExceeded => "budgetExceeded",
-        RunFailureCode::InputLayoutMismatch => "inputLayoutMismatch",
-        RunFailureCode::OutputContractMismatch => "outputContractMismatch",
-        RunFailureCode::ScientificFailure => "scientificFailure",
-        RunFailureCode::DivisionByZero => "divisionByZero",
-        RunFailureCode::NonFiniteResult => "nonFiniteResult",
-        RunFailureCode::DeadlineExceeded => "deadlineExceeded",
-        RunFailureCode::ResourceUnavailable => "resourceUnavailable",
-        RunFailureCode::InputResultUnavailable => "inputResultUnavailable",
-        RunFailureCode::FinalizationFailed => "finalizationFailed",
-    }
-}
-
-fn phase_key(phase: RunPhase) -> &'static str {
-    match phase {
-        RunPhase::Admission => "admission",
-        RunPhase::PlanValidation => "planValidation",
-        RunPhase::ResourcePreparation => "resourcePreparation",
-        RunPhase::Execution => "execution",
-        RunPhase::Finalization => "finalization",
+            .child(
+                div()
+                    .id("output-body")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .overflow_x_scroll()
+                    .child(body),
+            )
     }
 }
 
@@ -205,7 +169,7 @@ impl Panel for OutputPanel {
             .items_center()
             .gap_2()
             .child(Icon::new(IconName::SquareTerminal).size_3())
-            .child("运行")
+            .child(crate::text::t("panel.output"))
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

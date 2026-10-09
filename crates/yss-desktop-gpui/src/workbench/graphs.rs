@@ -156,76 +156,91 @@ impl Workbench {
         self.subscriptions.push(cx.subscribe_in(
             &canvas,
             window,
-            move |view, canvas, event, window, cx| match event {
-                CanvasEvent::Selection { nodes, projection }
-                | CanvasEvent::Projection { nodes, projection } => {
-                    if diagnostic_count != projection.diagnostics.len() {
-                        diagnostic_count = projection.diagnostics.len();
-                        view.refresh_resource_rows(cx);
-                    }
-                    if matches!(event, CanvasEvent::Projection { .. })
-                        && view
-                            .details
-                            .read(cx)
-                            .graph()
-                            .is_none_or(|current| current.entity_id() != canvas.entity_id())
-                    {
-                        return;
-                    }
-                    let version = canvas.read(cx).graph.editing.version;
-                    let path = canvas.read(cx).path().to_owned();
-                    view.mark_project_resource(Some(&path), cx);
-                    view.details.update(cx, |details, cx| {
-                        if matches!(event, CanvasEvent::Selection { .. }) {
-                            details.clear_log(cx);
+            move |view, canvas, event, window, cx| {
+                match event {
+                    CanvasEvent::Selection { nodes, projection }
+                    | CanvasEvent::Projection { nodes, projection } => {
+                        if diagnostic_count != projection.diagnostics.len() {
+                            diagnostic_count = projection.diagnostics.len();
+                            view.refresh_resource_rows(cx);
                         }
-                        details.set_selection(
-                            canvas.downgrade(),
-                            nodes.clone(),
-                            projection.clone(),
-                            version,
-                            window,
-                            cx,
-                        );
-                        if matches!(event, CanvasEvent::Selection { .. }) {
-                            details.show_node_properties(cx);
+                        if matches!(event, CanvasEvent::Projection { .. })
+                            && view
+                                .details
+                                .read(cx)
+                                .graph()
+                                .is_none_or(|current| current.entity_id() != canvas.entity_id())
+                        {
+                            return;
                         }
-                    });
-                    view.problems.update(cx, |problems, cx| {
-                        problems.set_projection(projection.clone(), cx)
-                    });
-                    view.output.update(cx, |output, cx| {
-                        output.set_graph(Some(canvas.downgrade()), cx)
-                    });
-                    view.results.update(cx, |results, cx| {
-                        results.set_graph(Some(canvas.read(cx)));
-                        cx.notify();
-                    });
-                }
-                CanvasEvent::Execution => {
-                    if view
-                        .details
-                        .read(cx)
-                        .graph()
-                        .is_some_and(|graph| graph.entity_id() == canvas.entity_id())
-                    {
+                        let version = canvas.read(cx).graph.editing.version;
+                        let path = canvas.read(cx).path().to_owned();
+                        view.mark_project_resource(Some(&path), cx);
+                        view.details.update(cx, |details, cx| {
+                            if matches!(event, CanvasEvent::Selection { .. }) {
+                                details.clear_log(cx);
+                            }
+                            details.set_selection(
+                                canvas.downgrade(),
+                                nodes.clone(),
+                                projection.clone(),
+                                version,
+                                window,
+                                cx,
+                            );
+                            if matches!(event, CanvasEvent::Selection { .. }) {
+                                details.show_node_properties(cx);
+                            }
+                        });
+                        view.problems.update(cx, |problems, cx| {
+                            problems.set_projection(projection.clone(), cx)
+                        });
+                        view.output.update(cx, |output, cx| {
+                            output.set_graph(Some(canvas.downgrade()), cx)
+                        });
                         view.results.update(cx, |results, cx| {
                             results.set_graph(Some(canvas.read(cx)));
                             cx.notify();
                         });
                     }
-                    cx.notify();
+                    CanvasEvent::Execution => {
+                        if view
+                            .details
+                            .read(cx)
+                            .graph()
+                            .is_some_and(|graph| graph.entity_id() == canvas.entity_id())
+                        {
+                            view.results.update(cx, |results, cx| {
+                                results.set_graph(Some(canvas.read(cx)));
+                                cx.notify();
+                            });
+                        }
+                        cx.notify();
+                    }
+                    CanvasEvent::ShowOutput => {
+                        if view
+                            .active_editor_panel(cx)
+                            .is_some_and(|panel| panel.view().entity_id() == canvas.entity_id())
+                        {
+                            view.present_panel(
+                                gpui_component::dock::panel_handle(view.output.clone()),
+                                DockPlacement::Bottom,
+                                window,
+                                cx,
+                            );
+                        }
+                    }
+                    CanvasEvent::ShowResults => {
+                        view.present_panel(
+                            gpui_component::dock::panel_handle(view.results.clone()),
+                            DockPlacement::Bottom,
+                            window,
+                            cx,
+                        );
+                    }
+                    CanvasEvent::Edited => cx.notify(),
+                    CanvasEvent::OpenGraph(path) => view.open_graph(path.clone(), window, cx),
                 }
-                CanvasEvent::ShowResults => {
-                    view.present_panel(
-                        gpui_component::dock::panel_handle(view.results.clone()),
-                        DockPlacement::Bottom,
-                        window,
-                        cx,
-                    );
-                }
-                CanvasEvent::Edited => cx.notify(),
-                CanvasEvent::OpenGraph(path) => view.open_graph(path.clone(), window, cx),
             },
         ));
         self.graphs.insert(path, canvas.downgrade());
