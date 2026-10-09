@@ -5,6 +5,7 @@ mod assets;
 mod assistant;
 mod canvas;
 mod charts;
+mod constant_values;
 mod databases;
 mod documents;
 mod file_commands;

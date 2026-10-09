@@ -2766,7 +2766,8 @@
       "pageKnown": "第 {{page}} / {{pages}} 页",
       "pageUnknown": "第 {{page}} 页",
       "openWindow": "在独立窗口中打开",
-      "windowFailed": "结果窗口未能打开，请重试。"
+      "windowFailed": "结果窗口未能打开，请重试。",
+      "fieldCount": "{{value0}} 个字段"
     },
     "projects": {
       "progress": {
@@ -2802,11 +2803,20 @@
       "markdownDocument": "Markdown 文档",
       "loadingOrSaving": "正在读取或保存…",
       "unsavedChanges": "有未保存的更改",
-      "saved": "已保存"
+      "saved": "已保存",
+      "constantDimensions": "{{value0}} 列 · {{value1}} 行",
+      "constantsHint": "添加常量后可在画布插入引用节点",
+      "editConstantValue": "编辑值 · {{value0}}",
+      "elementCount": "{{value0}} 个元素",
+      "structuredValue": "结构化值",
+      "textBytes": "{{value0}} 字节文本"
     },
     "logs": {
       "copyMessage": "复制消息",
       "copyRecord": "复制完整日志（JSON）"
+    },
+    "canvas": {
+      "commandFailed": "操作未完成，图状态可能已变化。请重新打开图后重试。"
     }
   }
 }

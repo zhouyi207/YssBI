@@ -25,6 +25,8 @@ pub(super) struct GraphProperties {
     loading: bool,
     ready: bool,
     constants: Vec<ConstantDraft>,
+    constants_page: usize,
+    constants_open: bool,
     signature: Option<SignatureDraft>,
     error: Option<String>,
     graph_observer: Option<Subscription>,
@@ -40,6 +42,8 @@ impl GraphProperties {
             loading: false,
             ready: false,
             constants: vec![],
+            constants_page: 0,
+            constants_open: true,
             signature: None,
             error: None,
             graph_observer: None,
@@ -61,6 +65,8 @@ impl GraphProperties {
         self.graph = None;
         self.version = None;
         self.constants.clear();
+        self.constants_page = 0;
+        self.constants_open = true;
         self.signature = None;
         self.graph_observer = None;
         self.generation = self.generation.wrapping_add(1);
@@ -110,29 +116,41 @@ impl GraphProperties {
             })
     }
 
-    fn install_constants(
-        &mut self,
-        constants: Vec<ConstantOverview>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let mut previous = std::mem::take(&mut self.constants);
+    fn install_constants(&mut self, constants: Vec<ConstantOverview>) {
+        let mut previous = std::mem::take(&mut self.constants)
+            .into_iter()
+            .map(|field| (field.model.id, field))
+            .collect::<std::collections::HashMap<_, _>>();
         self.constants = constants
             .into_iter()
-            .map(|model| {
-                if let Some(index) = previous.iter().position(|field| field.model == model) {
-                    previous.remove(index)
-                } else {
-                    ConstantDraft::new(model, window, cx)
-                }
+            .map(|model| match previous.remove(&model.id) {
+                Some(field) if field.model == model => field,
+                _ => ConstantDraft::new(model),
             })
             .collect();
+        self.constants_page = self
+            .constants_page
+            .min(self.constants.len().saturating_sub(1) / constants::PAGE_CONSTANTS);
     }
 }
 
 impl Render for GraphProperties {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.constants_open {
+            for field in self
+                .constants
+                .iter_mut()
+                .skip(self.constants_page * constants::PAGE_CONSTANTS)
+                .take(constants::PAGE_CONSTANTS)
+            {
+                field.ensure_inputs(window, cx);
+            }
+        }
         let busy = !self.accepts_input(self.generation, cx);
+        let error = self.error.clone().or_else(|| {
+            self.graph()
+                .and_then(|graph| graph.read(cx).command_error().map(str::to_owned))
+        });
         let title = self
             .graph()
             .map(|graph| graph.read(cx).title_text())
@@ -171,6 +189,12 @@ impl Render for GraphProperties {
                             })),
                     ),
             )
+            .when(self.signature.is_some(), |view| {
+                view.child(super::controls::hint(
+                    crate::text::translate("detail.typeLabels.function_graph"),
+                    cx,
+                ))
+            })
             .when(self.loading, |view| {
                 view.child(
                     div()
@@ -179,17 +203,19 @@ impl Render for GraphProperties {
                         .child("正在读取图属性…"),
                 )
             })
+            .children(error.as_ref().map(|error| {
+                div()
+                    .id("graph-properties-error")
+                    .role(gpui::accesskit::Role::Alert)
+                    .text_xs()
+                    .text_color(cx.theme().danger)
+                    .child(error.clone())
+            }))
             .children(
                 self.signature
                     .as_ref()
                     .map(|signature| self.render_signature(signature, busy, cx)),
             )
             .child(self.render_constants(busy, cx))
-            .children(self.error.as_ref().map(|error| {
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().danger)
-                    .child(error.clone())
-            }))
     }
 }

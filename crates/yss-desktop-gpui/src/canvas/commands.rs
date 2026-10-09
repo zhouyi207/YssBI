@@ -138,13 +138,16 @@ impl GraphCanvas {
                 view.busy = false;
                 match result {
                     Ok(response) => view.install_response(response, cx),
-                    Err(_error) => {
+                    Err(error) => {
                         tracing::error!(
                             code = "native_graph_command_failed",
                             "Native graph command failed"
                         );
-                        view.error =
-                            Some("操作未完成，图状态可能已变化。请重新打开图后重试。".into());
+                        view.error = Some(crate::text::translate(
+                            error
+                                .downcast_ref::<crate::constant_values::InputError>()
+                                .map_or("native.canvas.commandFailed", |error| error.0),
+                        ));
                         view.preview.clear();
                         view.refresh_pending = true;
                     }

@@ -12475,6 +12475,7 @@ name = "yss-desktop-gpui"
 version = "0.4.0"
 dependencies = [
  "anyhow",
+ "bigdecimal",
  "chrono",
  "directories",
  "gpui-base",
@@ -12483,6 +12484,7 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "hex",
+ "serde",
  "serde_json",
  "tokio",
  "tracing",

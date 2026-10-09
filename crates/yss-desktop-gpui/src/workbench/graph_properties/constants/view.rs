@@ -10,55 +10,7 @@ use gpui_component::{
 };
 
 impl GraphProperties {
-    pub(in crate::workbench::graph_properties) fn render_constants(
-        &self,
-        busy: bool,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let generation = self.generation;
-        div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("图常量"),
-                    )
-                    .child(
-                        Button::new("add-graph-constant")
-                            .small()
-                            .ghost()
-                            .icon(IconName::Plus)
-                            .tooltip("创建常量")
-                            .disabled(busy)
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                if view.accepts_input(generation, cx) {
-                                    view.add_constant(cx);
-                                }
-                            })),
-                    ),
-            )
-            .when(self.constants.is_empty(), |view| {
-                view.child(controls::hint("添加常量后可在画布插入引用节点", cx))
-            })
-            .children(
-                self.constants
-                    .iter()
-                    .enumerate()
-                    .map(|(row, field)| self.render_constant(row, field, busy, cx)),
-            )
-            .into_any_element()
-    }
-
-    fn render_constant(
+    pub(super) fn render_constant(
         &self,
         row: usize,
         field: &ConstantDraft,
@@ -76,12 +28,15 @@ impl GraphProperties {
             .border_1()
             .border_color(cx.theme().border)
             .rounded_md()
-            .child(Input::new(&field.name).small().disabled(disabled))
-            .child(controls::choice(
+            .child(
+                Input::new(field.name.as_ref().expect("visible constant input"))
+                    .small()
+                    .disabled(disabled),
+            )
+            .child(value::type_picker(
                 ("constant-type", row),
                 field.data_type.to_string(),
                 Some(field.data_type.to_string()),
-                value::type_options(),
                 disabled,
                 cx.listener(move |view, source: &String, window, cx| {
                     if !view.accepts_input(generation, cx) {
@@ -125,11 +80,8 @@ impl GraphProperties {
                     })),
             );
         if let Some(input) = &field.input {
-            if matches!(field.data_type, ValueType::Array(_) | ValueType::Object) {
-                content = content.child(controls::hint(
-                    "类型化 JSON：整数、小数使用字符串保留精度",
-                    cx,
-                ));
+            if let Some(key) = value::json_hint(&field.data_type) {
+                content = content.child(controls::hint(crate::text::translate(key), cx));
             }
             if field.data_type == ValueType::Scalar(SemanticType::Binary) {
                 content = content.child(
@@ -156,7 +108,10 @@ impl GraphProperties {
                     .small()
                     .ghost()
                     .icon(IconName::Settings2)
-                    .label(format!("编辑值 · {}", field.model.summary))
+                    .label(crate::text::format(
+                        "native.workbench.editConstantValue",
+                        &[("value0", field.model.summary.label())],
+                    ))
                     .disabled(disabled || field.is_null)
                     .on_click(cx.listener(move |view, _, window, cx| {
                         if view.accepts_input(generation, cx) {
@@ -206,6 +161,24 @@ impl GraphProperties {
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 if view.accepts_input(generation, cx) {
                                     view.apply_constant(id, cx);
+                                }
+                            })),
+                    )
+                    .child(
+                        Button::new(("restore-constant", row))
+                            .small()
+                            .ghost()
+                            .icon(IconName::Undo2)
+                            .tooltip(crate::text::translate("common.restore"))
+                            .disabled(disabled)
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                if view.accepts_input(generation, cx)
+                                    && let Some(field) =
+                                        view.constants.iter_mut().find(|field| field.model.id == id)
+                                {
+                                    *field = ConstantDraft::new(field.model.clone());
+                                    view.error = None;
+                                    cx.notify();
                                 }
                             })),
                     )

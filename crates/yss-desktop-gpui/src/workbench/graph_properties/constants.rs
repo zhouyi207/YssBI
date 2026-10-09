@@ -1,4 +1,7 @@
+mod list;
 mod view;
+
+pub(super) const PAGE_CONSTANTS: usize = 50;
 use super::{GraphProperties, value};
 use crate::canvas::{ConstantValueInput, GraphCommand};
 use gpui::{AppContext, Context, Entity, Window};
@@ -14,35 +17,25 @@ pub(super) struct ConstantOverview {
     data_type: ValueType,
     scalar: Option<String>,
     is_null: bool,
-    summary: String,
+    summary: ConstantSummary,
     // Display-cache equality only; mutation authorization still uses GraphEditVersion.
     fingerprint: [u8; 32],
 }
 
 impl ConstantOverview {
     pub fn from_constant(constant: &GraphConstant) -> anyhow::Result<Self> {
-        let tabular = matches!(
-            constant.data_type,
-            ValueType::DataFrame | ValueType::DataSeries(_)
-        );
-        let scalar = if tabular {
-            None
-        } else {
-            value::scalar_text(&constant.data_value)
-        };
+        let scalar = matches!(constant.data_type, ValueType::Scalar(_))
+            .then(|| value::scalar_text(&constant.data_value))
+            .flatten();
         let summary = if let Some(snapshot) = &constant.tabular {
-            format!(
-                "{} 列 · {} 行",
-                snapshot.columns().len(),
-                snapshot.row_count()
-            )
+            ConstantSummary::Tabular(snapshot.columns().len(), snapshot.row_count())
         } else {
             match &constant.data_value {
-                DataValue::Null => "空值".into(),
-                DataValue::List(values) => format!("{} 个元素", values.len()),
-                DataValue::Object(values) => format!("{} 个字段", values.len()),
-                DataValue::String(value) if scalar.is_none() => format!("{} 字节文本", value.len()),
-                _ => scalar.clone().unwrap_or_else(|| "结构化值".into()),
+                DataValue::Null => ConstantSummary::Empty,
+                DataValue::List(values) => ConstantSummary::Elements(values.len()),
+                DataValue::Object(values) => ConstantSummary::Fields(values.len()),
+                DataValue::String(value) => ConstantSummary::TextBytes(value.len()),
+                _ => ConstantSummary::Structured,
             }
         };
         Ok(Self {
@@ -57,9 +50,47 @@ impl ConstantOverview {
     }
 }
 
+#[derive(Clone, PartialEq)]
+enum ConstantSummary {
+    Empty,
+    Tabular(usize, usize),
+    Elements(usize),
+    Fields(usize),
+    TextBytes(usize),
+    Structured,
+}
+
+impl ConstantSummary {
+    fn label(&self) -> String {
+        match self {
+            Self::Empty => crate::text::translate("detail.constantValue.empty"),
+            Self::Tabular(columns, rows) => crate::text::format(
+                "native.workbench.constantDimensions",
+                &[
+                    ("value0", columns.to_string()),
+                    ("value1", rows.to_string()),
+                ],
+            ),
+            Self::Elements(count) => crate::text::format(
+                "native.workbench.elementCount",
+                &[("value0", count.to_string())],
+            ),
+            Self::Fields(count) => crate::text::format(
+                "native.results.fieldCount",
+                &[("value0", count.to_string())],
+            ),
+            Self::TextBytes(count) => crate::text::format(
+                "native.workbench.textBytes",
+                &[("value0", count.to_string())],
+            ),
+            Self::Structured => crate::text::translate("native.workbench.structuredValue"),
+        }
+    }
+}
+
 pub(super) struct ConstantDraft {
     pub model: ConstantOverview,
-    name: Entity<InputState>,
+    name: Option<Entity<InputState>>,
     data_type: ValueType,
     is_null: bool,
     input: Option<crate::workbench::input::TextField>,
@@ -80,25 +111,32 @@ fn input_state(
 }
 
 impl ConstantDraft {
-    pub fn new(
-        model: ConstantOverview,
-        window: &mut Window,
-        cx: &mut Context<GraphProperties>,
-    ) -> Self {
+    pub fn new(model: ConstantOverview) -> Self {
         Self {
-            name: cx.new(|cx| InputState::new(window, cx).default_value(model.name.clone())),
+            name: None,
             data_type: model.data_type.clone(),
             is_null: model.is_null,
-            input: model
-                .scalar
-                .as_ref()
-                .map(|text| input_state(text.clone(), &model.data_type, window, cx)),
-            original_input: model.scalar.clone(),
+            input: None,
+            original_input: None,
             value_changed_type: false,
             value_loading: false,
             load_token: 0,
             model,
         }
+    }
+
+    pub fn ensure_inputs(&mut self, window: &mut Window, cx: &mut Context<GraphProperties>) {
+        if self.name.is_some() {
+            return;
+        }
+        self.name =
+            Some(cx.new(|cx| InputState::new(window, cx).default_value(self.model.name.clone())));
+        self.input = self
+            .model
+            .scalar
+            .as_ref()
+            .map(|text| input_state(text.clone(), &self.data_type, window, cx));
+        self.original_input = self.model.scalar.clone();
     }
 
     fn value_input(&self, cx: &gpui::App) -> Option<ConstantValueInput> {
@@ -169,7 +207,8 @@ impl GraphProperties {
         let Some(field) = self.constants.iter().find(|field| field.model.id == id) else {
             return;
         };
-        let name = field.name.read(cx).value().to_string();
+        let Some(name) = &field.name else { return };
+        let name = name.read(cx).value().to_string();
         let value = field.value_input(cx);
         if name == field.model.name && field.data_type == field.model.data_type && value.is_none() {
             return;

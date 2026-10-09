@@ -152,6 +152,10 @@ impl GraphCanvas {
         self.graph.projection.graph_path.as_str()
     }
 
+    pub(crate) fn command_error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
     pub fn dirty(&self) -> bool {
         self.graph.editing.dirty
     }

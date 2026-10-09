@@ -67,7 +67,7 @@ impl GraphProperties {
                 }
                 match result {
                     Ok((constants, function)) => {
-                        view.install_constants(constants, window, cx);
+                        view.install_constants(constants);
                         if view.signature.as_ref().map(|draft| &draft.baseline) != function.as_ref()
                         {
                             view.signature =

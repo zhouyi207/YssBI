@@ -266,6 +266,16 @@
 - 实际输入父子主题草稿后删除整支，回执中相应脏输入清空并选中父主题；随后编辑另一主题并通过文件菜单保存，核对磁盘中的现行 Mind 内容。临时入口在新增请求发出后改选另一主题，真实回执保持后来的选择；当前工作区英文切换也保留主题内容。
 - 预览没有登记生产快捷键，保存使用实际文件菜单，未据此声称快捷键验收通过。X11 截图依赖调整尺寸触发重绘，自动重绘、真实失败/外部变化、提交期间新输入、多窗口、长树性能与完整资源生命周期验收仍开放；临时样例不提交，不增加 UI 单元测试。
 
+### Event/Function 属性、常量与签名
+
+- 逐项阅读 EventDetailPanel、FunctionDetailPanel、GraphConstantsPanel、ConstantValueFields、ConstantValueEditorModal 和 PinEditor，并跟随常量值转换及签名协调器。GraphProperties 继续持有读取投影和未提交输入，Project/Application 保留提交、版本、历史与保存。
+- 目录默认展开并按 50 项分页，只为访问过的页创建输入实体；稳定 ConstantId 查表复用未变化草稿，替代逐项线性查找。类型菜单按打开时创建，重复选择当前类型保留草稿，常量摘要在渲染时翻译。
+- 数组/对象使用普通 JSON 编辑，RawValue 和已锁定的 bigdecimal 精确处理嵌套整数、小数及指数，不把 DataValue 的持久化标签暴露给用户；输入限制深度和指数展开预算。解析与形状错误复用现有双语键，属性面板显示失败并保留输入。
+- 结构值在原常量卡片展开，复用同一份草稿的显式应用/恢复及 Null 开关，不增设弹窗草稿 owner。函数表单补齐恢复和无输入提示；当前 FunctionSignature 只有一个可选返回类型，React 协调器同样只提交首个有效输出，不迁移无效的多输出编辑状态。
+- 临时 `cargo build -p yss-desktop-gpui --example graph_properties_review` 使用隔离项目、53 个真实常量和函数图。Linux/X11 目视核对首次 50 个输入/翻页后 53 个、分页/折叠/当前工作区语言切换保留输入、非法 JSON 不改变原值、对象形状错误的前置提示、Null 提交读回、常量与签名恢复、类型菜单当前项勾选和签名提交后的原生端口。
+- 实际提交后从 Project 读回 `18446744073709551615`、`9007199254740993`、精确小数及指数归一值，确认未经过 f64；短超大指数在展开前拒绝。截图依赖调整尺寸触发重绘，自动重绘、多窗口、全部类型、调用者传播及完整保存/撤销/引用拖动仍开放；不添加 UI 单元测试，临时样例不提交。
+- L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过。`cargo test -p yss-graph-editor --lib tests::constant_edits_preserve_reference_identity_and_reject_duplicate_names_atomically -- --exact` 与 `cargo test -p yss-application --lib automation::resources::tests::function_signatures_and_graph_history_share_the_current_project_editing_state -- --exact` 各实际运行 1 项并通过；12 个 Rust 文件局部格式、26 个当前工作区双语键、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 239 条依赖声明）与 `git diff --check` 通过。累计审查 141/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -430,7 +440,7 @@
 | --- | --- | --- | --- |
 | [modules/details/internal/ui/DetailEmptyState.tsx](../../react/src/modules/details/internal/ui/DetailEmptyState.tsx) | 复用原生空状态与文件图标 | 没有存活资源目标时使用通用未选择文案，不再提示只选择图节点；状态直接由现有弱绑定判断 | 代码已接入；真实切换验收待完成 |
 | [modules/details/internal/ui/DetailsPane.tsx](../../react/src/modules/details/internal/ui/DetailsPane.tsx) | 优化既有 Details 协调层，不迁入 React 模型 store | 单个有效节点借用原投影渲染，多选/无节点/失效节点回到原 GraphProperties；资源显示委派给实际编辑器，日志检查沿用前批弱引用 | 路由已修正；各分支专项及生命周期继续单独验收 |
-| [modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx](../../react/src/modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx](../../react/src/modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx) | 迁移到现有常量卡片的按需 JSON 编辑，复用同一草稿和应用/恢复 | `constant_values` 用 RawValue 与 bigdecimal 保留精确数值；无效输入保留，Null 仍走原类型化事务 | 样例精确 JSON、对象形状错误与 Null 已核对；完整生命周期待验收 |
 | [modules/details/internal/ui/node/DescriptionResultSection.tsx](../../react/src/modules/details/internal/ui/node/DescriptionResultSection.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/NodeCreationForm.tsx](../../react/src/modules/details/internal/ui/node/NodeCreationForm.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/NodeDocumentationPanel.tsx](../../react/src/modules/details/internal/ui/node/NodeDocumentationPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -441,16 +451,16 @@
 | [modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/ChartDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/ChartDetailPanel.tsx) | 优化：共享当前草稿及元数据，菜单按需生成，列清单有界呈现 | `charts/details` 数据源/类型/编码和清除入口；重复选择保留配置，旧菜单版本校验，列清单分页 | 代码已覆盖；人工验收待完成 |
-| [modules/details/internal/ui/panels/ConstantValueFields.tsx](../../react/src/modules/details/internal/ui/panels/ConstantValueFields.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/ConstantValueFields.tsx](../../react/src/modules/details/internal/ui/panels/ConstantValueFields.tsx) | 优化原生标量、布尔、Null 和结构值入口，复用原 Input/Checkbox | 普通 JSON 取代 Rust 枚举格式；摘要保留原始数量并在渲染时本地化；常量逐行恢复 | 样例结构值/恢复已核对；其余类型和失败场景待验收 |
 | [modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx) | 迁移/优化：复用当前对话框宿主与类型化提交，视图只拥有未提交草稿 | `semantic` 补齐类别切换保留映射、失败重试、重复/数量校验、未修改直接关闭与过期保护 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/DataColumnSemanticFields.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticFields.tsx) | 迁移：复用原生 Input、Checkbox 与图标按钮；控件数量限定在当前页 | `semantic/fields` 与 `semantic/inputs` 补齐值/标签编辑、增删、跨页排序、正值清除和精确数值输入 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/DataColumnSettings.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSettings.tsx) | 优化：只挂载当前页展开项，设置目标来自列名和捕获版本 | `details/columns` 复用原类型转换/语义用例；补齐直接编辑映射入口，菜单点击时借用权威元数据 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/DataDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/DataDetailPanel.tsx) | 迁移/优化：元数据沿用编辑器同一投影，局部折叠与分页只属于 Details | `details` 信息与 `details/columns` 分页目录；移除 100 列截断，空表可独立配置列，失败可重试 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/DataSelectionPreview.tsx](../../react/src/modules/details/internal/ui/panels/DataSelectionPreview.tsx) | 迁移/优化：从当前数据库面板的同一选区派生主要单元格，不新增全局面板状态 | `databases/details` 补齐默认收起的预览、行号、列名与可选择的只读内容，区分 NULL/空字符串/未选择；覆盖行列与全页选择 | 代码已覆盖；人工验收待完成 |
-| [modules/details/internal/ui/panels/EventDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/EventDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/EventDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/EventDetailPanel.tsx) | 复用当前 GraphProperties 与图编辑 owner，无需增加 Event 属性实体 | 图名称沿用画布标题，默认展开常量；错误在属性内容前显示，保留版本化读取/提交 | 已接入；真实失败与资源生命周期验收开放 |
 | [modules/details/internal/ui/panels/FileDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FileDetailPanel.tsx) | 文件信息由对应编辑器负责，Details 只委派 | 文档信息移入 documents/details，沿用同一快照、草稿和错误；首次读取仍由工作台资源打开流程负责，完整加载/缺失/重试体验继续检查 | 已打开文档已接入；初次读取及失效反馈待复核 |
-| [modules/details/internal/ui/panels/FunctionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FunctionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/GraphConstantsPanel.tsx](../../react/src/modules/details/internal/ui/panels/GraphConstantsPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/FunctionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FunctionDetailPanel.tsx) | 复用同一 GraphProperties，函数接口仍由 Application 当前文档持有 | 函数类型、参数及可选单返回类型；原事务更新端口与调用者，无额外签名 store | 样例输入/返回值提交已核对；调用方传播及外部变化待验收 |
+| [modules/details/internal/ui/panels/GraphConstantsPanel.tsx](../../react/src/modules/details/internal/ui/panels/GraphConstantsPanel.tsx) | 优化为默认展开的 50 项目录，访问页面时创建输入实体 | 稳定 ID 线性复用草稿，分页/折叠/语言切换不丢输入；原创建/引用/删除事务继续复用 | 53 项样例与草稿保留已核对；拖动/删除/保存完整验收开放 |
 | [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 复用原 Details 容器与原生只读控件 | 当前日志实体唯一归 LogsPanel，Details 弱引用展示时间/流/序列/领域/来源及原消息/字段；默认展开、文本选择与复制不解析 Markdown | 代码已接入；完整交互验收待完成 |
 | [modules/details/internal/ui/panels/MindDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/MindDetailPanel.tsx) | 优化现有原生表单，复用同一输入草稿与 MindEdit 提交 | 按回执跟随新增/删除选择、确认提交草稿、排序边界禁用、父主题勾选与无变化保护；保留显式应用/恢复和保存 | 样例新增/删除/排序/保存已核对；完整生命周期与长树性能待完成 |
 | [modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -461,7 +471,7 @@
 | [modules/details/internal/ui/shared/DetailForm.tsx](../../react/src/modules/details/internal/ui/shared/DetailForm.tsx) | 只读字段复用 Input，长文本复用 Textarea | 日志原值可选择复制；可编辑 DetailCommitInput 的 Enter/失焦提交与 Escape 恢复须由各参数 owner 继续核对 | 只读日志已接入；编辑提交语义待参数批次 |
 | [modules/details/internal/ui/shared/DetailPanelShell.tsx](../../react/src/modules/details/internal/ui/shared/DetailPanelShell.tsx) | 复用既有 Details 滚动容器 | 日志详情在原面板展示，沿用根 DockArea 的位置和尺寸，不加入第二套布局或 ScrollArea 包装 | 已采用；跨面板交互待验收 |
 | [modules/details/internal/ui/shared/DetailText.tsx](../../react/src/modules/details/internal/ui/shared/DetailText.tsx) | 复用 ActiveTheme、字体与只读原生文本 | 日志级别/领域、元信息和正文来自原记录；原生主题替代 CSS tone，全文按纯文本显示 | 日志已接入；其他消费者随功能验收 |
-| [modules/details/internal/ui/shared/PinEditor.tsx](../../react/src/modules/details/internal/ui/shared/PinEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/shared/PinEditor.tsx](../../react/src/modules/details/internal/ui/shared/PinEditor.tsx) | 复用原生参数草稿和按需类型菜单，保留当前单返回值契约 | 参数名/类型/容器与增删排序继续走原签名事务，补齐恢复与无输入提示；不复制 React 无法提交的额外输出 | 样例类型选择/提交/恢复已核对；排序/调用方/失败交互待验收 |
 
 ## modules/document-editor
 

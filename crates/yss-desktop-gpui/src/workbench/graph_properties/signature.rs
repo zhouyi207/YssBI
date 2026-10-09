@@ -1,4 +1,4 @@
-use super::{GraphProperties, value::type_options};
+use super::{GraphProperties, value::type_picker};
 use crate::workbench::controls;
 use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*};
 use gpui_component::{
@@ -156,6 +156,27 @@ impl GraphProperties {
                             .child("函数接口"),
                     )
                     .child(
+                        Button::new("restore-function-signature")
+                            .small()
+                            .ghost()
+                            .icon(IconName::Undo2)
+                            .tooltip(crate::text::translate("common.restore"))
+                            .disabled(busy)
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                if view.accepts_input(generation, cx)
+                                    && let Some(draft) = &view.signature
+                                {
+                                    view.signature = Some(SignatureDraft::new(
+                                        draft.baseline.clone(),
+                                        window,
+                                        cx,
+                                    ));
+                                    view.error = None;
+                                    cx.notify();
+                                }
+                            })),
+                    )
+                    .child(
                         controls::apply("apply-function-signature", busy)
                             .label("应用接口")
                             .on_click(cx.listener(move |view, _, _, cx| {
@@ -169,6 +190,12 @@ impl GraphProperties {
                 "输入参数保持身份，修改接口会更新调用节点",
                 cx,
             ))
+            .when(draft.parameters.is_empty(), |view| {
+                view.child(controls::hint(
+                    crate::text::translate("detail.pinEditor.noInputs"),
+                    cx,
+                ))
+            })
             .children(draft.parameters.iter().enumerate().map(|(row, parameter)| {
                 let id = parameter.id.clone();
                 let choose_id = id.clone();
@@ -196,31 +223,25 @@ impl GraphProperties {
                                     .min_w_0()
                                     .disabled(busy),
                             )
-                            .child(
-                                div()
-                                    .w(gpui::px(62.))
-                                    .flex_shrink_0()
-                                    .child(controls::choice(
-                                        ("function-parameter-type", row),
-                                        "类型".into(),
-                                        None,
-                                        type_options(),
-                                        busy,
-                                        cx.listener(move |view, value: &String, window, cx| {
-                                            if view.accepts_input(generation, cx)
-                                                && let Some(draft) = &mut view.signature
-                                                && let Some(parameter) = draft
-                                                    .parameters
-                                                    .iter()
-                                                    .find(|parameter| parameter.id == choose_id)
-                                            {
-                                                parameter.data_type.update(cx, |input, cx| {
-                                                    input.set_value(value.clone(), window, cx)
-                                                });
-                                            }
-                                        }),
-                                    )),
-                            ),
+                            .child(div().w(gpui::px(62.)).flex_shrink_0().child(type_picker(
+                                ("function-parameter-type", row),
+                                crate::text::translate("detail.fields.type"),
+                                Some(parameter.data_type.read(cx).value().to_string()),
+                                busy,
+                                cx.listener(move |view, value: &String, window, cx| {
+                                    if view.accepts_input(generation, cx)
+                                        && let Some(draft) = &mut view.signature
+                                        && let Some(parameter) = draft
+                                            .parameters
+                                            .iter()
+                                            .find(|parameter| parameter.id == choose_id)
+                                    {
+                                        parameter.data_type.update(cx, |input, cx| {
+                                            input.set_value(value.clone(), window, cx)
+                                        });
+                                    }
+                                }),
+                            ))),
                     )
                     .child(
                         div()
@@ -329,27 +350,21 @@ impl GraphProperties {
                                 .min_w_0()
                                 .disabled(busy),
                         )
-                        .child(
-                            div()
-                                .w(gpui::px(62.))
-                                .flex_shrink_0()
-                                .child(controls::choice(
-                                    "function-return-type",
-                                    "类型".into(),
-                                    None,
-                                    type_options(),
-                                    busy,
-                                    cx.listener(move |view, value: &String, window, cx| {
-                                        if view.accepts_input(generation, cx)
-                                            && let Some(draft) = &view.signature
-                                        {
-                                            draft.return_type.update(cx, |input, cx| {
-                                                input.set_value(value.clone(), window, cx)
-                                            });
-                                        }
-                                    }),
-                                )),
-                        ),
+                        .child(div().w(gpui::px(62.)).flex_shrink_0().child(type_picker(
+                            "function-return-type",
+                            crate::text::translate("detail.fields.type"),
+                            Some(draft.return_type.read(cx).value().to_string()),
+                            busy,
+                            cx.listener(move |view, value: &String, window, cx| {
+                                if view.accepts_input(generation, cx)
+                                    && let Some(draft) = &view.signature
+                                {
+                                    draft.return_type.update(cx, |input, cx| {
+                                        input.set_value(value.clone(), window, cx)
+                                    });
+                                }
+                            }),
+                        ))),
                 )
             })
             .into_any_element()

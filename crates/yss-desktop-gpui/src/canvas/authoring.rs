@@ -1,6 +1,6 @@
 //! Graph-wide authoring commands keep their original Project transaction owners.
 use gpui::Context;
-use yss_data_contract::{DataValue, DecimalLiteral, ValueType};
+use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::ConstantId;
 use yss_graph_editor::EditorGraphMutation;
 use yss_project::GraphEditVersion;
@@ -25,41 +25,31 @@ pub(super) fn parse_constant_input(
         ConstantValueInput::Boolean(value) => DataValue::Bool(value),
         ConstantValueInput::Text(value) => DataValue::String(value.into()),
         ConstantValueInput::Numeric(value) => {
-            let text = value.trim();
-            if let Ok(integer) = text.parse::<i64>() {
-                DataValue::Integer(integer)
-            } else if let Ok(integer) = text.parse::<u64>() {
-                DataValue::Unsigned(integer)
-            } else {
-                // Normalize ordinary decimal input without a binary64 precision round trip.
-                let mut canonical = text.trim_start_matches('+').to_owned();
-                if canonical.contains('.') {
-                    while canonical.ends_with('0') {
-                        canonical.pop();
-                    }
-                    if canonical.ends_with('.') {
-                        canonical.pop();
-                    }
-                }
-                if canonical.starts_with('.') {
-                    canonical.insert(0, '0');
-                }
-                if canonical.starts_with("-.") {
-                    canonical.insert(1, '0');
-                }
-                if canonical == "-0" {
-                    canonical = "0".into();
-                }
-                let decimal = DecimalLiteral::new(canonical)?;
-                DataValue::Decimal(decimal)
-            }
+            crate::constant_values::number(&value).map_err(|_| {
+                crate::constant_values::InputError("detail.constantValue.errors.invalidValue")
+            })?
         }
         ConstantValueInput::Json(source)
             if matches!(data_type, ValueType::DataFrame | ValueType::DataSeries(_)) =>
         {
             DataValue::String(source.into())
         }
-        ConstantValueInput::Json(source) => serde_json::from_str::<DataValue>(&source)?,
+        ConstantValueInput::Json(source) => {
+            let value = crate::constant_values::parse_json(&source)?;
+            let invalid = match data_type {
+                ValueType::Array(_) if !matches!(value, DataValue::List(_)) => {
+                    Some("detail.constantValue.errors.notArray")
+                }
+                ValueType::Object if !matches!(value, DataValue::Object(_)) => {
+                    Some("detail.constantValue.errors.notObject")
+                }
+                _ => None,
+            };
+            if let Some(key) = invalid {
+                return Err(crate::constant_values::InputError(key).into());
+            }
+            value
+        }
     })
 }
 

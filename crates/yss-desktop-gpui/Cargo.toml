@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 hex.workspace = true
 anyhow = "1"
+bigdecimal = "0.4.10"
 gpui = { package = "gpui-pre", version = "=0.3.8" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "wayland", "x11"] }
 yss-graph-document = { path = "../yss-graph-document" }
@@ -40,7 +41,8 @@ yss-harness-core = { path = "../yss-harness-core" }
 yss-ui-contract = { path = "../yss-ui-contract" }
 yss-filesystem = { path = "../yss-filesystem" }
 tokio = { workspace = true, features = ["sync", "time"] }
-serde_json.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 uuid.workspace = true
 url.workspace = true
 directories = "6"
