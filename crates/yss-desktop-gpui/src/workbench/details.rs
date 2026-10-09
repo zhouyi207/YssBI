@@ -1,4 +1,5 @@
 use super::controls;
+mod connections;
 mod domain;
 mod parameters;
 mod ports;
@@ -29,6 +30,12 @@ use parameters::ParameterField;
 use ports::PortField;
 
 pub struct DetailsPanel {
+    services: Arc<NativeServices>,
+    connection_picker: Option<(
+        yss_graph_document::PortAddress,
+        Entity<gpui_component::list::ListState<connections::ConnectionPicker>>,
+    )>,
+    ports_open: [bool; 2],
     properties: Entity<super::graph_properties::GraphProperties>,
     _properties_observer: gpui::Subscription,
     focus: FocusHandle,
@@ -50,9 +57,13 @@ pub struct DetailsPanel {
 
 impl DetailsPanel {
     pub fn new(services: Arc<NativeServices>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let properties = cx.new(|_| super::graph_properties::GraphProperties::new(services));
+        let properties =
+            cx.new(|_| super::graph_properties::GraphProperties::new(services.clone()));
         let properties_observer = cx.observe(&properties, |_, _, cx| cx.notify());
         Self {
+            services,
+            connection_picker: None,
+            ports_open: [false; 2],
             properties,
             _properties_observer: properties_observer,
             focus: cx.focus_handle(),
@@ -78,6 +89,8 @@ impl DetailsPanel {
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
+        self.connection_picker = None;
+        self.ports_open = [false; 2];
         self.graph = None;
         self.document = None;
         self.mind = None;
@@ -105,6 +118,7 @@ impl DetailsPanel {
         log: &Entity<super::logs::LogDetails>,
         cx: &mut Context<Self>,
     ) {
+        self.connection_picker = None;
         self.log = Some(log.downgrade());
         // Keep the editor binding and drafts, but invalidate menus from the hidden form.
         self.epoch = self.epoch.wrapping_add(1);
@@ -197,6 +211,10 @@ impl DetailsPanel {
                 .graph
                 .as_ref()
                 .is_some_and(|current| current.entity_id() == graph.entity_id());
+        self.connection_picker = None;
+        if !same_node {
+            self.ports_open = [false; 2];
+        }
         let old_label = self.node().map(|node| node.display.user_label.clone());
         self.graph = Some(graph.clone());
         self.selected = nodes;
@@ -250,6 +268,7 @@ impl DetailsPanel {
                 }
             })
             .collect();
+        self.install_connections();
         let needed = node.is_none()
             || self
                 .fields
@@ -275,7 +294,15 @@ impl DetailsPanel {
     fn accepts_input(&self, epoch: u64, cx: &App) -> bool {
         self.log.as_ref().and_then(WeakEntity::upgrade).is_none()
             && epoch == self.epoch
-            && self.graph().is_some_and(|graph| !graph.read(cx).busy())
+            && self.graph().is_some_and(|graph| {
+                let graph = graph.read(cx);
+                !graph.busy()
+                    && self.version == Some(graph.graph.editing.version)
+                    && self
+                        .projection
+                        .as_ref()
+                        .is_some_and(|projection| Arc::ptr_eq(projection, &graph.graph.projection))
+            })
     }
 
     fn submit(&self, command: GraphCommand, cx: &mut Context<Self>) {
@@ -400,6 +427,19 @@ impl DetailsPanel {
                                     })),
                             ),
                     ),
+            )
+            .children(
+                self.graph()
+                    .and_then(|graph| graph.read(cx).command_error().map(str::to_owned))
+                    .map(|error| {
+                        div()
+                            .id("node-command-error")
+                            .role(gpui::accesskit::Role::Alert)
+                            .px_4()
+                            .text_xs()
+                            .text_color(cx.theme().danger)
+                            .child(error)
+                    }),
             )
             .child(self.render_parameters(busy, cx))
             .child(self.render_ports(busy, cx))

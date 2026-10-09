@@ -276,6 +276,17 @@
 - 实际提交后从 Project 读回 `18446744073709551615`、`9007199254740993`、精确小数及指数归一值，确认未经过 f64；短超大指数在展开前拒绝。截图依赖调整尺寸触发重绘，自动重绘、多窗口、全部类型、调用者传播及完整保存/撤销/引用拖动仍开放；不添加 UI 单元测试，临时样例不提交。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过。`cargo test -p yss-graph-editor --lib tests::constant_edits_preserve_reference_identity_and_reject_duplicate_names_atomically -- --exact` 与 `cargo test -p yss-application --lib automation::resources::tests::function_signatures_and_graph_history_share_the_current_project_editing_state -- --exact` 各实际运行 1 项并通过；12 个 Rust 文件局部格式、26 个当前工作区双语键、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 239 条依赖声明）与 `git diff --check` 通过。累计审查 141/265 项。
 
+### 节点端口与连接属性
+
+- 逐项阅读 NodePinInterfacePanel、NodePinConnectionField、NodePortInstanceControls 及其候选 hook、连接选项、增删和反馈入口，复核默认折叠、已有连接、输入/输出方向与实例控制。
+- 新增 `details/connections` 的对端名称和逐条删除；连接行按选择投影安装，超过 50 条分页，渲染不重新扫描整张图。候选复用原生虚拟 List，只在打开时调用已有 Application 查询；类型、容量和替换仍由原 planner 判定。
+- 候选标签来自查询捕获的同一投影；交付校验语义快照、图版本、投影身份、选择代次和当前控件。确认调用原 Connect，逐条删除调用 DisconnectConnections；参数、字面量与实例操作共享原提交入口，节点表单补齐失败提示。
+- 输入、输出默认折叠，展开才创建内容，更换节点重新收起；端口实例的增删与重排复用原实现，不复制 React 每个按钮的业务状态和输出空选择槽。
+- 临时 `cargo build -p yss-desktop-gpui --example port_details_review` 使用隔离项目和五个真实节点。Linux/X11 已核对首次打开即输入搜索/Enter、无匹配/Escape、输入侧选源、替换保留其他分支、逐条删除以及加法端口从 2 个增加、带连接重排和删除后恢复最小数量；连接结果从当前图投影读回。
+- 截图依赖调整尺寸触发重绘；自动重绘、旧查询/旧操作、失败重试、大列表、分组实例联动、多窗口和完整历史/保存验收仍开放。未增加 UI 单元测试，临时样例不提交。
+- 现有业务回归 `cargo test -p yss-graph-runtime --lib resolution_tests::connection_candidates_match_append_replace_and_type_rejections_without_editing -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::bounded_connection_limits_reject_overflow_and_reopen_after_disconnect -- --exact` 各实际运行 1 项并通过。本批累计审查 144/265 项。
+- 工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；5 个 Rust 文件局部格式、15 个复用文案双语键、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 239 条依赖声明）和 `git diff --check` 通过。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -444,9 +455,9 @@
 | [modules/details/internal/ui/node/DescriptionResultSection.tsx](../../react/src/modules/details/internal/ui/node/DescriptionResultSection.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/NodeCreationForm.tsx](../../react/src/modules/details/internal/ui/node/NodeCreationForm.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/NodeDocumentationPanel.tsx](../../react/src/modules/details/internal/ui/node/NodeDocumentationPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/node/NodePinConnectionField.tsx](../../react/src/modules/details/internal/ui/node/NodePinConnectionField.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/node/NodePinInterfacePanel.tsx](../../react/src/modules/details/internal/ui/node/NodePinInterfacePanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/node/NodePortInstanceControls.tsx](../../react/src/modules/details/internal/ui/node/NodePortInstanceControls.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/node/NodePinConnectionField.tsx](../../react/src/modules/details/internal/ui/node/NodePinConnectionField.tsx) | 迁移/优化：连接选择复用原生虚拟 List，Application 决定候选和替换 | `connections` 安装对端名称和逐条删除，50 条分页；picker 按需查询、搜索、键盘确认和失败重试，版本/投影/控件拒绝过期操作 | 样例已核对双向连接、替换与分支保留；失败/过期/大列表验收开放 |
+| [modules/details/internal/ui/node/NodePinInterfacePanel.tsx](../../react/src/modules/details/internal/ui/node/NodePinInterfacePanel.tsx) | 迁移/优化：输入、输出默认折叠，内容按展开构建 | `ports/list` 分组及空状态；原字面量与实例操作复用原事务，提交失败直接呈现在节点属性 | 样例已核对折叠、连接与实例操作；完整字面量/多窗口验收开放 |
+| [modules/details/internal/ui/node/NodePortInstanceControls.tsx](../../react/src/modules/details/internal/ui/node/NodePortInstanceControls.tsx) | 复核原生实现：增删/顺序由投影与原编辑事务控制 | 复用 `ports`，分组添加入口沿用 can_add/can_remove 与捕获版本；不迁移每按钮独立业务状态 | 样例已核对最小数量、增删及带连接重排/删除；分组联动与失败验收开放 |
 | [modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

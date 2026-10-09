@@ -1,4 +1,5 @@
 //! Input literals and instance operations share the graph's existing typed edit transaction.
+mod list;
 use super::{DetailsPanel, controls};
 use crate::{appearance, canvas::GraphCommand};
 use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
@@ -19,6 +20,8 @@ use yss_node_protocol::PortDirection;
 
 pub(super) struct PortField {
     pub model: EditorPortModel,
+    pub(super) peers: Vec<super::connections::ConnectedPort>,
+    pub(super) connections_page: usize,
     input: Option<(SemanticType, Entity<InputState>)>,
     error: Option<String>,
 }
@@ -60,6 +63,8 @@ impl PortField {
         };
         Self {
             model,
+            peers: vec![],
+            connections_page: 0,
             input,
             error: None,
         }
@@ -91,68 +96,7 @@ impl DetailsPanel {
         cx.notify();
     }
 
-    pub(super) fn render_ports(&self, busy: bool, cx: &mut Context<Self>) -> AnyElement {
-        let Some(node) = self.node() else {
-            return div().into_any_element();
-        };
-        let epoch = self.epoch;
-        div()
-            .p_4()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(
-                div()
-                    .text_xs()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(cx.theme().muted_foreground)
-                    .child("连接端口"),
-            )
-            .children(
-                self.ports
-                    .iter()
-                    .enumerate()
-                    .map(|(index, field)| self.render_port_field(index, field, busy, cx)),
-            )
-            .children(
-                node.port_instance_additions
-                    .iter()
-                    .enumerate()
-                    .map(|(index, addition)| {
-                        let node_id = node.node_id;
-                        let template_key = addition.template_key.clone();
-                        Button::new(("add-port", index))
-                            .small()
-                            .ghost()
-                            .icon(IconName::Plus)
-                            .label(format!(
-                                "添加{} · {}",
-                                if addition.direction == PortDirection::Input {
-                                    "输入"
-                                } else {
-                                    "输出"
-                                },
-                                addition.label
-                            ))
-                            .disabled(busy || !addition.can_add)
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                if view.accepts_input(epoch, cx) {
-                                    view.submit(
-                                        GraphCommand::Edit(EditorGraphMutation::AddPortInstance {
-                                            node_id,
-                                            template_key: template_key.clone(),
-                                            placement: PortPlacement::Append,
-                                        }),
-                                        cx,
-                                    );
-                                }
-                            }))
-                    }),
-            )
-            .into_any_element()
-    }
-
-    fn render_port_field(
+    pub(super) fn render_port_field(
         &self,
         index: usize,
         field: &PortField,
@@ -270,6 +214,7 @@ impl DetailsPanel {
                 cx,
             ));
         }
+        content = content.child(self.render_port_connections(index, field, busy, cx));
         let mut actions = div().flex().items_center().gap_1();
         if port
             .input
