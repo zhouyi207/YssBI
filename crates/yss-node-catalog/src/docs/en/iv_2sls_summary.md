@@ -12,4 +12,13 @@ With `overidentification`, the null is that the instruments are orthogonal to th
 
 With `first_stage`, each endogenous variable is regressed on the included regressors and instruments using the selected covariance. Coefficient tests use Student-t with $n-k_Z$ degrees regardless of structural `small`. For one endogenous variable, $H_0:\pi_2=0$ tests all excluded-instrument coefficients against at least one nonzero coefficient: $F=\hat\pi_2^{\mathsf T}V_2^{-1}\hat\pi_2/q$ uses $F(q,n-k_Z)$. Here $k_Z$ counts all first-stage coefficients, $q$ counts excluded instruments and $V_2$ is their selected covariance. `firstStage.equations` retains `inference` and `df_residual`. Without an intercept, R² is uncentered. Undefined first-stage inference fails the requested analysis; omit it to retain the structural summary.
 
+With `endogeneity`, the null is that all tested endogenous regressors can be treated as exogenous; the alternative is that at least one cannot. Let $R_0$ be OLS residual sum of squares, $R_1$ the residual sum after adding the first-stage residuals, and $L=R_0-R_1$. With $q$ tested endogenous regressors,
+
+$$
+D=\frac{nL}{R_0}\sim\chi^2(q),\qquad
+F_{\mathrm{WH}}=\frac{L/q}{R_1/(n-k-q)}\sim F(q,n-k-q).
+$$
+
+`endogeneity.endogenous` retains `durbin_stat`, `durbin_p_value`, `wu_stat`, `wu_p_value`, `df` and `wu_df_denom`. Small p-values reject exogeneity. Wu fields are null without positive residual degrees or resolved augmented residual variation; Durbin remains available. Missing test directions make this combined record null. `endogeneity.hausman` is the independently available comparison with common OLS variance and effective contrast rank. Changing response units preserves the tests; robust covariance remains unsupported for this endogeneity analysis.
+
 Reports retain actual coefficient/instrument names and show structural and first-stage equations, named first-stage coefficients and weak-instrument critical values. Unavailable identification or covariance-dependent tests have explicit reasons. Optional `hypothesis_test`/`hypothesis` tests arbitrary independent coefficient restrictions: z/χ² by default, t/F with `small=true`, using the selected model covariance.

@@ -345,9 +345,25 @@ of the structural `small` option. No-constant equations use uncentered total var
 and its corresponding adjusted R². Zero or undefined variance returns a scientific
 failure when first-stage analysis is requested; positive tiny variances retain their
 units without a fixed floor. Summaries omitting first-stage analysis remain available.
-Rank-zero traditional Hausman tests and endogeneity bundles without positive
-Wu denominator degrees of freedom likewise remain unavailable in the existing
-typed options, rather than returning NaN for later JSON conversion.
+2SLS endogeneity borrows the validated fitted model and normalizes its retained
+structural residuals. The OLS coefficient adjustment comes from those residuals;
+no response or structural residual is reconstructed from fitted coefficients.
+The shared IV design owner prepares instruments and first-stage projections,
+and its regressor builder accepts borrowed columns. Observed design columns and
+their first-stage residuals share column scales. A thin SVD of the residualized
+first-stage columns supplies test directions with linear observation storage.
+Its rank tolerance uses the normalized parent-column norm, preserving genuine
+directions across response units while excluding projection roundoff for exact
+first-stage fits. The same explained residual variation supplies sigmamore
+Hausman and Durbin/Wu statistics; augmented residual variation is computed
+directly instead of subtracting nearly equal sums. Hausman uses the actual
+contrast rank. A complete Durbin/Wu test requires all endogenous directions;
+rank zero leaves both analyses absent. Within `EndogenousTest`, Durbin remains
+available when Wu has no positive residual degrees or its augmented residuals
+are within the relative projection-error bound; only the Wu statistic/probability
+pair is null. Nonrobust covariance is required, and numerical/decomposition
+failure returns scientific failure. The numerical `IvModel::endogeneity(betas)`
+method is removed; the existing neutral fitted-model entry owns this analysis.
 First-stage residualization preserves observation rows when excluding each endogenous
 regressor, including models with three or more endogenous columns; reordering those
 columns reorders their Shea partial-R² results without changing their identities.

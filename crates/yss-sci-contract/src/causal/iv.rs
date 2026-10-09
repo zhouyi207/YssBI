@@ -171,8 +171,10 @@ pub struct HausmanTest {
 pub struct EndogenousTest {
     pub durbin_stat: f64,
     pub durbin_p_value: f64,
-    pub wu_stat: f64,
-    pub wu_p_value: f64,
+    /// Unavailable without positive augmented residual degrees and variation;
+    /// the independently available Durbin pair remains present.
+    pub wu_stat: Option<f64>,
+    pub wu_p_value: Option<f64>,
     pub df: usize,
     pub wu_df_denom: usize,
 }

@@ -16,6 +16,148 @@ fn iv_summary_parameters(kind: &str, first_stage: bool) -> Vec<(&'static str, Ru
 }
 
 #[test]
+fn independent_hausman_admits_linear_workspace_without_gls_covariance() {
+    let n = 1024;
+    let signal = |i: usize, bit: usize| {
+        if i & (1_usize << bit) == 0_usize {
+            -1.0
+        } else {
+            1.0
+        }
+    };
+    let endogenous = (0..n)
+        .map(|i| 2.0 * signal(i, 0) + signal(i, 2))
+        .collect::<Vec<_>>();
+    let instruments = (0..n).map(|i| signal(i, 0)).collect::<Vec<_>>();
+    let fit = yss_sci_runtime::causal::iv::fit_instrumental_variables(
+        yss_sci_contract::causal::iv::InstrumentalVariableKind::TwoStageLeastSquares,
+        (0..n)
+            .map(|i| 1.0 + 0.5 * endogenous[i] + signal(i, 2) + 2.0 * signal(i, 3))
+            .collect(),
+        &[],
+        &[endogenous],
+        &[instruments],
+        Default::default(),
+        false,
+    )
+    .unwrap();
+    let mut control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(30),
+    );
+    control.max_input_bytes = 8 * 1024 * 1024;
+    let outputs = [KernelOutputSpec {
+        data_type: ValueType::Struct("statistics.report".into()),
+        fields: None,
+    }];
+    let relations = crate::tests::relations();
+    let build = KernelInvocation {
+        relations: &relations,
+        inputs: &[],
+        input_keys: &[],
+        parameters: Default::default(),
+        outputs: &outputs,
+        control: &control,
+    };
+    let inputs = [super::super::common::value(fit, &build).unwrap()];
+    let invocation = KernelInvocation {
+        inputs: &inputs,
+        input_keys: &["model"],
+        ..build
+    };
+    let result = KernelRegistry::default()
+        .execute(
+            &KernelId::new("yssbi.statistics.diagnostic.hausman".into()).unwrap(),
+            &invocation,
+        )
+        .expect("The residual diagnostic fits its linear workspace within eight MiB");
+    let numeric = |value: &RuntimeValue| super::super::super::numeric_input(Some(value)).unwrap();
+    let hausman = field(&result[0], "hausman").unwrap();
+    assert!((numeric(field(hausman, "stat").unwrap()) - (n - 2) as f64 / 6.0).abs() < 1e-9);
+}
+
+#[test]
+fn iv_endogeneity_summary_and_hausman_preserve_scaled_residual_diagnostics() {
+    let signal = |i: usize, bit: usize| {
+        if i & (1_usize << bit) == 0_usize {
+            -1.0
+        } else {
+            1.0
+        }
+    };
+    let endogenous = (0..16)
+        .map(|i| 2.0 * signal(i, 0) + signal(i, 2))
+        .collect::<Vec<_>>();
+    let instrument = (0..16).map(|i| signal(i, 0)).collect::<Vec<_>>();
+    let numeric = |value: &RuntimeValue| super::super::super::numeric_input(Some(value)).unwrap();
+    let mut parameters = iv_summary_parameters("2sls", false);
+    parameters
+        .iter_mut()
+        .find(|(key, _)| *key == "endogeneity")
+        .unwrap()
+        .1 = flag(true);
+    for noise in [2.0, 0.0] {
+        let (h, d, w) = if noise == 0.0 {
+            (14.0, 16.0, None)
+        } else {
+            (7.0 / 3.0, 8.0 / 3.0, Some(13.0 / 5.0))
+        };
+        for unit in [1.0, 1e-151] {
+            let response = (0..16)
+                .map(|i| unit * (1.0 + 0.5 * endogenous[i] + signal(i, 2) + noise * signal(i, 3)))
+                .collect::<Vec<_>>();
+            let fit = run(
+                "yssbi.statistics.iv.2sls.fit",
+                &[
+                    ("y", series(&response)),
+                    ("endogenous", series(&endogenous)),
+                    ("instruments", series(&instrument)),
+                ],
+                &[
+                    ("constant", flag(true)),
+                    ("covariance", string("nonrobust")),
+                    ("small", flag(false)),
+                ],
+                3,
+            )
+            .unwrap();
+            let summary = run(
+                "yssbi.statistics.iv.2sls.summary",
+                &[("model", fit[0].clone())],
+                &parameters,
+                1,
+            )
+            .unwrap();
+            let endogeneity = field(&summary[0], "endogeneity").unwrap();
+            let hausman = field(endogeneity, "hausman").unwrap();
+            let endogenous = field(endogeneity, "endogenous").unwrap();
+            assert!((numeric(field(hausman, "stat").unwrap()) - h).abs() < 1e-10);
+            assert!((numeric(field(endogenous, "durbin_stat").unwrap()) - d).abs() < 1e-10);
+            if let Some(w) = w {
+                assert!((numeric(field(endogenous, "wu_stat").unwrap()) - w).abs() < 1e-10);
+            } else {
+                assert_eq!(
+                    field(endogenous, "wu_stat").unwrap(),
+                    &RuntimeValue::Scalar(TabularScalar::Null)
+                );
+                assert_eq!(
+                    field(endogenous, "wu_p_value").unwrap(),
+                    &RuntimeValue::Scalar(TabularScalar::Null)
+                );
+            }
+            let independent = run(
+                "yssbi.statistics.diagnostic.hausman",
+                &[("model", fit[0].clone())],
+                &[],
+                1,
+            )
+            .unwrap();
+            assert_eq!(field(&independent[0], "hausman").unwrap(), hausman);
+        }
+    }
+}
+
+#[test]
 fn iv_fit_summary_preserves_microscopic_response_goodness_of_fit() {
     let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
     let endogenous = (0..8)

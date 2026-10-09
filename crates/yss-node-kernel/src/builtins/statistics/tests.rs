@@ -1126,12 +1126,10 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         &RuntimeValue::Scalar(TabularScalar::Null),
         "zero-rank Hausman is unavailable"
     );
-    assert!(
-        !matches!(
-            field(field(&summary[0], "endogeneity").unwrap(), "endogenous").unwrap(),
-            RuntimeValue::Scalar(TabularScalar::Null)
-        ),
-        "the independent endogenous test remains available"
+    assert_eq!(
+        field(field(&summary[0], "endogeneity").unwrap(), "endogenous").unwrap(),
+        &RuntimeValue::Scalar(TabularScalar::Null),
+        "exact first-stage fits supply no testable residual direction"
     );
     assert!(matches!(
         run(
@@ -1142,7 +1140,7 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         ),
         Err(KernelError::ScientificFailure)
     ));
-    for (design, has_hausman) in [([1.0, 1.0], true), ([1.0, 0.0], false)] {
+    for design in [[1.0, 1.0], [1.0, 0.0]] {
         let fit = run(
             "yssbi.statistics.iv.2sls.fit",
             &[
@@ -1180,18 +1178,13 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
             "zero denominator degrees of freedom makes the combined test unavailable"
         );
         assert_eq!(
-            !matches!(
-                field(endogeneity, "hausman").unwrap(),
-                RuntimeValue::Scalar(TabularScalar::Null)
-            ),
-            has_hausman
+            field(endogeneity, "hausman").unwrap(),
+            &RuntimeValue::Scalar(TabularScalar::Null)
         );
-        if !has_hausman {
-            assert_eq!(
-                field(&summary[0], "endogeneityUnavailable").unwrap(),
-                &string("insufficient_residual_variation_or_degrees_of_freedom")
-            );
-        }
+        assert_eq!(
+            field(&summary[0], "endogeneityUnavailable").unwrap(),
+            &string("insufficient_residual_variation_or_degrees_of_freedom")
+        );
     }
 }
 

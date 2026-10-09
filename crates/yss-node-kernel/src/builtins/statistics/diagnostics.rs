@@ -80,7 +80,7 @@ fn postestimation(
             fit.residuals.len(),
             fit.design.exogenous.len() + fit.design.endogenous.len() + fit.design.instruments.len(),
             fit.options.constant,
-            "GLS",
+            "OLS",
             inv,
         )?;
         #[derive(serde::Serialize)]

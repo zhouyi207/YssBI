@@ -12,4 +12,13 @@
 
 开启 `first_stage` 后，每个内生变量对已包含自变量和工具变量进行回归，采用所选协方差。系数检验参考自由度为 $n-k_Z$ 的 Student-t，不受结构模型 `small` 控制。单个内生变量时，$H_0:\pi_2=0$ 检验全部排除工具变量系数为零，对至少一个非零系数；$F=\hat\pi_2^{\mathsf T}V_2^{-1}\hat\pi_2/q$ 参考 $F(q,n-k_Z)$。其中 $k_Z$ 为全部第一阶段系数数目，$q$ 为排除工具变量数，$V_2$ 为其所选协方差。`firstStage.equations` 保留 `inference` 和 `df_residual`。无截距时 R² 不中心化。未定义的第一阶段推断使所选分析失败；关闭该选项仍可汇总结构模型。
 
+开启 `endogeneity` 后，原假设为全部被检内生变量可视为外生，备择为至少一个不能视为外生。令 $R_0$ 为 OLS 残差平方和，$R_1$ 为加入第一阶段残差后的残差平方和，$L=R_0-R_1$；$q$ 为被检内生变量数：
+
+$$
+D=\frac{nL}{R_0}\sim\chi^2(q),\qquad
+F_{\mathrm{WH}}=\frac{L/q}{R_1/(n-k-q)}\sim F(q,n-k-q).
+$$
+
+`endogeneity.endogenous` 保留 `durbin_stat`、`durbin_p_value`、`wu_stat`、`wu_p_value`、`df` 和 `wu_df_denom`。较小的 p 值拒绝外生性。剩余自由度非正或增广残差变异无法分辨时，Wu 字段为 null，Durbin 仍可报告；缺少可估计的检验方向时，这个联合记录为 null。`endogeneity.hausman` 独立保留采用共同 OLS 方差、实际协方差差秩的比较检验。响应量纲变化保持检验结果；本项内生性分析仍不支持稳健协方差。
+
 报告保留实际系数/工具变量名，展示结构方程、第一阶段方程及命名系数、弱工具变量临界值。不可用的识别检验或依赖协方差的方法显示明确原因。可选 `hypothesis_test`/`hypothesis` 使用模型协方差检验任意独立系数约束：默认 z/χ²，`small=true` 时为 t/F。

@@ -6,6 +6,173 @@ use std::f64::consts::PI;
 use yss_sci::causal::iv::IvModel;
 use yss_sci::diagnostics;
 use yss_sci::regression::linear::{OLS, WLS, WLSConfig};
+
+#[test]
+fn iv_endogeneity_preserves_units_and_joint_references() {
+    use yss_sci::causal::iv::fit::{endogeneity, fit_instrumental_variables};
+    use yss_sci_contract::causal::iv::InstrumentalVariableKind;
+    let signal = |i: usize, bit: usize| {
+        if i & (1_usize << bit) == 0_usize {
+            -1.0
+        } else {
+            1.0
+        }
+    };
+    for joint in [false, true] {
+        let n = if joint { 64 } else { 16 };
+        let endogenous: Vec<Vec<f64>> = if joint {
+            vec![
+                (0..n)
+                    .map(|i| 2.0 * signal(i, 0) + 0.5 * signal(i, 1) + signal(i, 3))
+                    .collect(),
+                (0..n)
+                    .map(|i| 3.0 * signal(i, 1) + 0.75 * signal(i, 2) + signal(i, 4))
+                    .collect(),
+            ]
+        } else {
+            vec![(0..n).map(|i| 2.0 * signal(i, 0) + signal(i, 2)).collect()]
+        };
+        let instruments = (0..if joint { 3 } else { 2 })
+            .map(|bit| (0..n).map(|i| signal(i, bit)).collect())
+            .collect::<Vec<Vec<f64>>>();
+        let response = (0..n)
+            .map(|i| {
+                if joint {
+                    1.0 + 0.5 * endogenous[0][i] - 0.25 * endogenous[1][i]
+                        + signal(i, 2)
+                        + 2.0 * signal(i, 5)
+                        + 0.5 * signal(i, 3)
+                        - 0.25 * signal(i, 4)
+                } else {
+                    1.0 + 0.5 * endogenous[0][i] + signal(i, 2) + 2.0 * signal(i, 3)
+                }
+            })
+            .collect::<Vec<_>>();
+        let (h, h_p, d, d_p, w, w_p, df, denominator) = if joint {
+            (
+                19026083.0 / 5207839.0,
+                0.16094745373279293,
+                19961792.0 / 5207839.0,
+                0.14711893581364474,
+                18402277.0 / 9791872.0,
+                0.1617172631057404,
+                2,
+                59,
+            )
+        } else {
+            (
+                7.0 / 3.0,
+                0.12663045794761715,
+                8.0 / 3.0,
+                0.10247043485974945,
+                13.0 / 5.0,
+                0.13086478412099029,
+                1,
+                13,
+            )
+        };
+        for unit in [1.0, 1e-151, 1e100] {
+            let fit = fit_instrumental_variables(
+                InstrumentalVariableKind::TwoStageLeastSquares,
+                response.iter().map(|value| value * unit).collect(),
+                &[],
+                &endogenous,
+                &instruments,
+                Default::default(),
+                false,
+            )
+            .unwrap();
+            let (hausman, endogenous) = endogeneity(&fit).unwrap();
+            let hausman =
+                hausman.unwrap_or_else(|| panic!("positive variation, joint={joint} unit={unit}"));
+            let endogenous = endogenous
+                .unwrap_or_else(|| panic!("positive variation, joint={joint} unit={unit}"));
+            assert_eq!(hausman.df, df);
+            assert_eq!(endogenous.df, df);
+            assert_eq!(endogenous.wu_df_denom, denominator);
+            let values = serde_json::to_value(&endogenous).unwrap();
+            for (actual, expected) in [
+                (hausman.stat, h),
+                (hausman.p_value, h_p),
+                (endogenous.durbin_stat, d),
+                (endogenous.durbin_p_value, d_p),
+                (values["wu_stat"].as_f64().unwrap(), w),
+                (values["wu_p_value"].as_f64().unwrap(), w_p),
+            ] {
+                assert!(
+                    (actual - expected).abs() < 1e-10,
+                    "joint={joint} unit={unit}: {actual} != {expected}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn iv_endogeneity_uses_augmented_residual_variation_and_partial_availability() {
+    use yss_sci::causal::iv::fit::{endogeneity, fit_instrumental_variables};
+    use yss_sci_contract::causal::iv::InstrumentalVariableKind;
+    let signal = |i: usize, bit: usize| {
+        if i & (1_usize << bit) == 0_usize {
+            -1.0
+        } else {
+            1.0
+        }
+    };
+    let x = (0..16)
+        .map(|i| 2.0 * signal(i, 0) + signal(i, 2))
+        .collect::<Vec<_>>();
+    let z = (0..16).map(|i| signal(i, 0)).collect::<Vec<_>>();
+    for eta in [1.0, 1e-6, 0.0] {
+        let fit = fit_instrumental_variables(
+            InstrumentalVariableKind::TwoStageLeastSquares,
+            (0..16)
+                .map(|i| 1.0 + 0.5 * x[i] + signal(i, 2) + eta * signal(i, 3))
+                .collect(),
+            &[],
+            std::slice::from_ref(&x),
+            std::slice::from_ref(&z),
+            Default::default(),
+            false,
+        )
+        .unwrap();
+        let (hausman, endogenous) = endogeneity(&fit).unwrap();
+        let endogenous = endogenous.unwrap();
+        assert!((endogenous.durbin_stat - 16.0 * 0.8 / (0.8 + eta * eta)).abs() < 1e-10);
+        assert!((hausman.unwrap().stat - 14.0 * 0.8 / (0.8 + eta * eta)).abs() < 1e-10);
+        let values = serde_json::to_value(endogenous).unwrap();
+        if eta == 0.0 {
+            assert!(
+                values["wu_stat"].is_null() && values["wu_p_value"].is_null(),
+                "{values}"
+            );
+        } else {
+            let expected = 10.4 / (eta * eta);
+            let actual = values["wu_stat"].as_f64().unwrap();
+            assert!(
+                (actual / expected - 1.0).abs() < 1e-9,
+                "eta={eta}: {actual} != {expected}"
+            );
+        }
+    }
+    let fit = fit_instrumental_variables(
+        InstrumentalVariableKind::TwoStageLeastSquares,
+        vec![0.0, 0.0, 3.0],
+        &[],
+        &[vec![0.0, -2.0, 2.0]],
+        &[vec![-1.0, 0.0, 1.0]],
+        Default::default(),
+        false,
+    )
+    .unwrap();
+    let (hausman, endogenous) = endogeneity(&fit).unwrap();
+    assert!((hausman.unwrap().stat - 1.0).abs() < 1e-10);
+    let endogenous = endogenous.expect("Durbin remains available without Wu residual degrees");
+    assert!((endogenous.durbin_stat - 3.0).abs() < 1e-10);
+    assert_eq!(endogenous.wu_df_denom, 0);
+    let values = serde_json::to_value(endogenous).unwrap();
+    assert!(values["wu_stat"].is_null() && values["wu_p_value"].is_null());
+}
 use yss_sci_linalg::{Col, Mat};
 
 const TOL: f64 = 1e-10;
@@ -206,38 +373,32 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
         },
         small: false,
     };
-    let fit = estimator.fit_2sls().unwrap();
+    estimator.fit_2sls().unwrap();
     assert!(estimator.first_stage(false).is_err());
-    let (hausman, endogenous) = estimator.endogeneity(&fit.betas).unwrap();
-    let endogenous = endogenous.unwrap();
-    assert!(
-        [
-            endogenous.durbin_stat,
-            endogenous.durbin_p_value,
-            endogenous.wu_stat,
-            endogenous.wu_p_value,
-        ]
-        .into_iter()
-        .all(f64::is_finite)
-    );
-    assert!(hausman.is_none(), "rank-zero Hausman must stay unavailable");
-
-    let short = IvModel {
-        endog: Col::from_iter([1.0, 2.0]),
-        exog: Mat::zeros(2, 0),
-        endog_reg: Mat::from_fn(2, 1, |_, _| 1.0),
-        instruments: Mat::from_fn(2, 1, |_, _| 1.0),
-        ..estimator
+    let neutral_fit = |response: Vec<f64>| {
+        let n = response.len();
+        yss_sci::causal::iv::fit::fit_instrumental_variables(
+            yss_sci_contract::causal::iv::InstrumentalVariableKind::TwoStageLeastSquares,
+            response,
+            &[],
+            &[vec![1.0; n]],
+            &[vec![1.0; n]],
+            yss_sci_contract::regression::OlsOptions {
+                constant: false,
+                ..Default::default()
+            },
+            false,
+        )
+        .unwrap()
     };
-    let fit = short.fit_2sls().unwrap();
-    let (hausman, endogenous) = short.endogeneity(&fit.betas).unwrap();
-    assert!(
-        endogenous.is_none(),
-        "zero denominator degrees of freedom must be unavailable: {endogenous:?}, Hausman={hausman:?}"
-    );
-    let hausman = hausman.unwrap();
-    assert!(hausman.stat.is_finite() && hausman.p_value.is_finite());
-    assert!(hausman.df > 0);
+    for response in [(1..=16).map(f64::from).collect(), vec![1.0, 2.0]] {
+        let fit = neutral_fit(response);
+        let (hausman, endogenous) = yss_sci::causal::iv::fit::endogeneity(&fit).unwrap();
+        assert!(
+            hausman.is_none() && endogenous.is_none(),
+            "an exactly instrumented constant supplies no testable residual direction"
+        );
+    }
 }
 
 #[test]

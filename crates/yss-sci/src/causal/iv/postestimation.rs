@@ -1,7 +1,7 @@
 use super::estimate::{coefficient_inference, goodness_of_fit};
 use super::first_stage::{compute_first_stage_summary, is_robust_covariance};
 use super::{
-    design::{PreparedIvDesign, prepare_instruments, project_endogenous, regressor_design},
+    design::{prepare_instruments, project_endogenous, regressor_design},
     model::IvModel,
 };
 use crate::regression::covariance::{compute_cov_beta, score_covariance};
@@ -63,194 +63,174 @@ impl IvModel {
 
         Ok((first_stage, first_stage_summary))
     }
+}
 
-    pub fn endogeneity(
-        &self,
-        betas_nd: &Col<f64>,
-    ) -> Result<(Option<HausmanTest>, Option<EndogenousTest>), String> {
-        let n = self.endog.nrows();
-        let k_exog = self.exog.ncols();
-        let k_endog = self.endog_reg.ncols();
-        let PreparedIvDesign {
-            z,
-            ztz_inverse: ztz_inv_nd,
-            x,
-            x_struct,
-            ..
-        } = self.design()?;
-        let k_z = z.ncols();
-        let k_x = x.ncols();
-        let df_residual = n.saturating_sub(k_x);
-        let covariance = &self.options.covariance;
-        let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas_nd.as_ref());
-        let xtx = x.transpose() * x.as_ref();
-        let xtx_inv_nd = xtx
-            .checked_cholesky()
-            .map_err(|_| "IV endogeneity: singular projected design")?
-            .solve(&Mat::identity(k_x, k_x));
-        // Hausman tests (traditional + Durbin-Wu-Hausman): only for nonrobust VCE
-        let (hausman, endogenous) = if !is_robust_covariance(covariance) {
-            // OLS on y ~ X_struct (treating endog as exogenous): β_ols, u_ols
-            let x_struct_tx = x_struct.transpose() * x_struct.as_ref();
-            let x_struct_tx_inv: Option<yss_sci_linalg::Mat<f64>> = x_struct_tx
-                .as_ref()
-                .to_owned()
-                .checked_cholesky()
-                .ok()
-                .map(|llt| llt.solve(&Mat::identity(x_struct_tx.nrows(), x_struct_tx.nrows())));
-            let (beta_ols, u_ols, sigma2_ols, xtx_struct_inv_nd) =
-                if let Some(ref inv) = x_struct_tx_inv {
-                    let inv_nd = inv.as_ref().to_owned();
-                    let xty_struct = x_struct.transpose() * self.endog.as_ref();
-                    let beta_ols_nd = inv_nd.as_ref() * xty_struct.as_ref();
-                    let u_ols: Col<f64> = &self.endog - &(x_struct.as_ref() * beta_ols_nd.as_ref());
-                    let sigma2_ols = (u_ols.transpose() * u_ols.as_ref()) / df_residual as f64;
-                    (beta_ols_nd, u_ols, sigma2_ols, inv_nd)
-                } else {
-                    (
-                        Col::<f64>::zeros(k_x),
-                        Col::<f64>::zeros(n),
-                        0.0,
-                        Mat::zeros(k_x, k_x),
-                    )
-                };
-
-            // Traditional Hausman (sigmamore): H = (β_iv - β_ols)'(V_iv - V_ols)^{-1}(β_iv - β_ols)
-            // V_iv = σ²_ols * (X̂'X̂)^{-1}, V_ols = σ²_ols * (X_struct'X_struct)^{-1}
-            let hausman = if sigma2_ols > 1e-300 {
-                let v_iv = yss_sci_linalg::Scale(sigma2_ols) * &xtx_inv_nd; // X̂'X̂ from stage 2
-                let v_ols = sigma2_ols * &xtx_struct_inv_nd;
-                let v_diff: Mat<f64> = &v_iv - &v_ols;
-                let diff_beta = betas_nd - &beta_ols;
-                let v_diff_matrix = v_diff.as_ref().to_owned();
-                let svd = yss_sci_linalg::Svd::factor(v_diff_matrix.as_ref()).ok();
-                let (h_stat, h_df) = if let Some(svd) = svd {
-                    let s = svd.values();
-                    let u = svd.left_vectors();
-                    let v = svd.right_vectors();
-                    let max_s = s.iter().cloned().fold(0.0f64, f64::max);
-                    let tol = max_s * (k_x as f64) * f64::EPSILON;
-                    let rank = s.iter().filter(|&&si| si > tol).count();
-                    if rank == 0 {
-                        (0.0, 0)
-                    } else {
-                        // H = diff' * V_diff^{-} * diff via SVD: V_diff = U S V', inv = V S^{-1} U' (Moore-Penrose)
-                        let diff_col = diff_beta.as_ref().to_owned();
-                        let ut_diff =
-                            u.submatrix(0, 0, u.nrows(), k_x).transpose() * diff_col.as_ref();
-                        let ut_diff_nd = ut_diff.as_ref().to_owned();
-                        let mut st_inv_ut_diff = Mat::zeros(k_x, 1);
-                        for i in 0..k_x {
-                            let si = s[i];
-                            let val = if si > tol { ut_diff_nd[i] / si } else { 0.0 };
-                            st_inv_ut_diff.as_mut()[(i, 0)] = val;
-                        }
-                        let vinv_diff = v.subcols(0, k_x) * st_inv_ut_diff.as_ref();
-                        let h: f64 = diff_beta.transpose() * vinv_diff.as_ref().col(0).as_ref();
-                        (h.max(0.0), rank)
-                    }
-                } else {
-                    (0.0, 0)
-                };
-                ChiSquared::new(h_df as f64)
-                    .ok()
-                    .map(|distribution| HausmanTest {
-                        stat: h_stat,
-                        p_value: distribution.sf(h_stat),
-                        df: h_df,
-                    })
-            } else {
-                None
-            };
-
-            // Durbin-Wu-Hausman (estat endogenous): D = num/(û'ₑ ûₑ/N), WH = (num/p1)/(denom/(N-k1-p-p1))
-            // ûₗ = u_structural, ûₑ = u_ols; P_Z = Z(Z'Z)^{-1}Z'; P_{ZY1} = [Z Y1]([Z Y1]'[Z Y1])^{-1}[Z Y1]'
-            // Testing all endog: Y1 = Y, [Z Y1] = [Z endog_reg]
-            let endogenous = if sigma2_ols > 1e-300 && (u_ols.transpose() * u_ols.as_ref()) > 1e-300
-            {
-                let p1 = k_endog;
-                let k1 = if self.options.constant {
-                    k_exog + 1
-                } else {
-                    k_exog
-                };
-                let wudf_denom = n
-                    .saturating_sub(k1)
-                    .saturating_sub(k_endog)
-                    .saturating_sub(p1);
-
-                // Build [Z Y1] = [Z, endog_reg] = [exog, instruments, endog_reg] with constant
-                let mut zy1_raw = Vec::with_capacity(n * (k_z + k_endog));
-                for i in 0..n {
-                    for j in 0..k_z {
-                        zy1_raw.push(z[(i, j)]);
-                    }
-                    for j in 0..k_endog {
-                        zy1_raw.push(self.endog_reg[(i, j)]);
-                    }
-                }
-                let zy1 =
-                    yss_sci_linalg::MatRef::from_row_major_slice(&(zy1_raw), n, k_z + k_endog)
-                        .to_owned();
-                let zy1_matrix = zy1.as_ref().to_owned();
-                let zy1t_zy1 = zy1_matrix.transpose() * zy1_matrix.as_ref();
-                let zy1t_zy1_inv: Option<yss_sci_linalg::Mat<f64>> = zy1t_zy1
-                    .checked_cholesky()
-                    .ok()
-                    .map(|llt| llt.solve(&Mat::identity(zy1t_zy1.nrows(), zy1t_zy1.nrows())));
-
-                let (num, u_ols_sq) = if let Some(zy1_inv) = zy1t_zy1_inv {
-                    let zy1_inv_nd = zy1_inv.as_ref().to_owned();
-                    let p_zy1_u_ols = zy1.as_ref()
-                        * (zy1_inv_nd.as_ref() * (zy1.transpose() * u_ols.as_ref()).as_ref())
-                            .as_ref();
-                    let p_z_u_iv = z.as_ref()
-                        * (ztz_inv_nd.as_ref() * (z.transpose() * u_structural.as_ref()).as_ref())
-                            .as_ref();
-                    let num = (u_ols.transpose() * p_zy1_u_ols.as_ref())
-                        - (u_structural.transpose() * p_z_u_iv.as_ref());
-                    let u_ols_sq = u_ols.transpose() * u_ols.as_ref();
-                    (num, u_ols_sq)
-                } else {
-                    (0.0, (u_ols.transpose() * u_ols.as_ref()))
-                };
-
-                let denom = u_ols_sq - num;
-                let durbin_stat: f64 = if u_ols_sq > 1e-300 {
-                    n as f64 * num / u_ols_sq
-                } else {
-                    0.0
-                };
-                let durbin_stat = durbin_stat.max(0.0);
-                let chi2_d = ChiSquared::new(p1 as f64).ok();
-                let durbin_p = chi2_d.map(|c| c.sf(durbin_stat)).unwrap_or(f64::NAN);
-
-                let wu_stat: f64 = if wudf_denom > 0 && denom > 1e-300 {
-                    ((num / p1 as f64) / (denom / wudf_denom as f64)).max(0.0)
-                } else {
-                    0.0
-                };
-                FisherSnedecor::new(p1 as f64, wudf_denom as f64)
-                    .ok()
-                    .map(|distribution| EndogenousTest {
-                        durbin_stat,
-                        durbin_p_value: durbin_p,
-                        wu_stat,
-                        wu_p_value: crate::distribution::fisher_snedecor_sf(&distribution, wu_stat),
-                        df: p1,
-                        wu_df_denom: wudf_denom,
-                    })
-            } else {
-                None
-            };
-
-            (hausman, endogenous)
-        } else {
-            (None, None)
-        };
-
-        Ok((hausman, endogenous))
+pub(super) fn endogeneity(
+    fit: &InstrumentalVariableFit,
+) -> Result<(Option<HausmanTest>, Option<EndogenousTest>), String> {
+    if is_robust_covariance(&fit.options.covariance) {
+        return Ok((None, None));
     }
+    let n = fit.residuals.len();
+    let included = fit.design.exogenous.len() + usize::from(fit.options.constant);
+    let p = fit.design.endogenous.len();
+    let k = included + p;
+    let scale = fit
+        .residuals
+        .iter()
+        .fold(0.0_f64, |largest, u| largest.max(u.abs()));
+    if scale == 0.0 {
+        return Ok((None, None));
+    }
+    let instrument_columns = fit
+        .design
+        .exogenous
+        .iter()
+        .chain(&fit.design.instruments)
+        .map(|column| ColRef::from_slice(column))
+        .collect::<Vec<_>>();
+    let endogenous_columns = fit
+        .design
+        .endogenous
+        .iter()
+        .map(|column| ColRef::from_slice(column))
+        .collect::<Vec<_>>();
+    let (z, inverse) = prepare_instruments(n, &instrument_columns, fit.options.constant)?;
+    let (_, mut v) = project_endogenous(&z, &inverse, &endogenous_columns);
+    let mut x = regressor_design(z.subcols(0, included), &endogenous_columns);
+    let column_scales = (0..k)
+        .map(|j| {
+            x.col(j)
+                .iter()
+                .fold(0.0_f64, |largest, value| largest.max(value.abs()))
+        })
+        .collect::<Vec<_>>();
+    if column_scales.contains(&0.0) {
+        return Err("IV endogeneity: undefined observed design".into());
+    }
+    for j in 0..k {
+        for i in 0..n {
+            x[(i, j)] /= column_scales[j];
+        }
+    }
+    let parent_norm = (included..k)
+        .map(|j| x.col(j).iter().map(|value| value * value).sum::<f64>())
+        .sum::<f64>()
+        .sqrt();
+    for j in 0..p {
+        for i in 0..n {
+            v[(i, j)] = (endogenous_columns[j][i] - v[(i, j)]) / column_scales[included + j];
+        }
+    }
+    drop(z);
+    drop(inverse);
+    let ols = (x.transpose() * x.as_ref())
+        .checked_cholesky()
+        .map_err(|_| "IV endogeneity: singular observed design")?;
+    let mut residuals = Col::from_iter(fit.residuals.iter().map(|u| u / scale));
+    // beta_OLS - beta_IV = (X'X)^-1 X'u_IV. Reuse fitted residuals instead
+    // of rebuilding response or subtracting fitted coefficients in their units.
+    let adjustment = x.as_ref() * ols.solve(&(x.transpose() * residuals.as_ref())).as_ref();
+    for i in 0..n {
+        residuals[i] -= adjustment[i];
+    }
+    drop(adjustment);
+    let ols_ss = residuals.iter().map(|value| value * value).sum::<f64>();
+    if !ols_ss.is_finite() {
+        return Err("IV endogeneity: nonfinite OLS residual variation".into());
+    }
+    if ols_ss == 0.0 {
+        return Ok((None, None));
+    }
+    let projected_controls = x.as_ref() * ols.solve(&(x.transpose() * v.as_ref())).as_ref();
+    for j in 0..p {
+        for i in 0..n {
+            v[(i, j)] -= projected_controls[(i, j)];
+        }
+    }
+    drop(projected_controls);
+    drop(x);
+    drop(ols);
+    let basis = Svd::factor_thin(v.as_ref())
+        .map_err(|_| "IV endogeneity: residual direction decomposition failed")?;
+    drop(v);
+    if basis.values().iter().any(|value| !value.is_finite()) {
+        return Err("IV endogeneity: nonfinite residual directions".into());
+    }
+    // Measure projection rank against the normalized parent columns, so exact
+    // first-stage fits do not turn roundoff-sized residuals into test directions.
+    let tolerance = n.max(p) as f64 * f64::EPSILON * parent_norm;
+    let rank = basis
+        .values()
+        .iter()
+        .filter(|&&value| value > tolerance)
+        .count();
+    if rank == 0 {
+        return Ok((None, None));
+    }
+    let directions = basis.left_vectors().subcols(0, rank);
+    let scores = directions.transpose() * residuals.as_ref();
+    let explained = scores.iter().map(|value| value * value).sum::<f64>();
+    // The residual-augmentation quadratic equals the sigmamore covariance
+    // contrast; its common OLS variance gives H=(n-k)*explained/OLS_RSS.
+    let statistic = (n - k) as f64 * explained / ols_ss;
+    if !statistic.is_finite() {
+        return Err("IV endogeneity: nonfinite Hausman statistic".into());
+    }
+    let chi = ChiSquared::new(rank as f64).map_err(|_| "IV endogeneity: invalid test rank")?;
+    let hausman = Some(HausmanTest {
+        stat: statistic,
+        p_value: chi.sf(statistic),
+        df: rank,
+    });
+    let endogenous = if rank == p {
+        for i in 0..n {
+            residuals[i] -= (0..rank)
+                .map(|j| directions[(i, j)] * scores[j])
+                .sum::<f64>();
+        }
+        let augmented_ss = residuals.iter().map(|value| value * value).sum::<f64>();
+        if !augmented_ss.is_finite() {
+            return Err("IV endogeneity: nonfinite augmented residual variation".into());
+        }
+        let denominator = n.saturating_sub(k + p);
+        // A direct residual sum avoids cancellation when the augmentation nearly
+        // explains all OLS residuals. Only its projection-error bound is excluded.
+        let relative_error = n.max(k + p) as f64 * f64::EPSILON;
+        let (wu_stat, wu_p_value) =
+            if denominator > 0 && augmented_ss > relative_error.powi(2) * ols_ss {
+                let statistic = (explained / p as f64) / (augmented_ss / denominator as f64);
+                if !statistic.is_finite() {
+                    return Err("IV endogeneity: nonfinite Wu-Hausman statistic".into());
+                }
+                let distribution = FisherSnedecor::new(p as f64, denominator as f64)
+                    .map_err(|_| "IV endogeneity: invalid Wu-Hausman degrees")?;
+                (
+                    Some(statistic),
+                    Some(crate::distribution::fisher_snedecor_sf(
+                        &distribution,
+                        statistic,
+                    )),
+                )
+            } else {
+                (None, None)
+            };
+        let statistic = n as f64 * explained / ols_ss;
+        if !statistic.is_finite() {
+            return Err("IV endogeneity: nonfinite Durbin statistic".into());
+        }
+        Some(EndogenousTest {
+            durbin_stat: statistic,
+            durbin_p_value: chi.sf(statistic),
+            wu_stat,
+            wu_p_value,
+            df: p,
+            wu_df_denom: denominator,
+        })
+    } else {
+        None
+    };
+    Ok((hausman, endogenous))
 }
 
 pub(super) fn overidentification(
@@ -336,7 +316,8 @@ fn wooldridge_score(
         .collect::<Vec<_>>();
     let (_, projected) = project_endogenous(z, inverse, &columns);
     let included = fit.design.exogenous.len() + usize::from(fit.options.constant);
-    let w = regressor_design(z.subcols(0, included), projected.as_ref());
+    let projected_columns = projected.col_iter().collect::<Vec<_>>();
+    let w = regressor_design(z.subcols(0, included), &projected_columns);
     let restrictions = fit.design.instruments.len() - fit.design.endogenous.len();
     // A restriction direction Z*c must be orthogonal to the nuisance design W.
     // Decompose W'Z in parameter coordinates; its right nullspace spans every

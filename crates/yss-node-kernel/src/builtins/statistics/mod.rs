@@ -82,7 +82,8 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(match id {
-                "yssbi.statistics.iv.2sls.summary" => 19,
+                "yssbi.statistics.iv.2sls.summary" => 20,
+                "yssbi.statistics.diagnostic.hausman" => 8,
                 "yssbi.statistics.iv.liml.summary" => 17,
                 "yssbi.statistics.iv.2sls.fit" => 11,
                 "yssbi.statistics.iv.liml.fit" => 13,
@@ -127,8 +128,7 @@ pub(super) fn install(
                 | "yssbi.statistics.test.t.paired"
                 | "yssbi.statistics.workflow.mediation"
                 | "yssbi.statistics.workflow.moderated_mediation" => 8,
-                "yssbi.statistics.diagnostic.hausman"
-                | "yssbi.statistics.diagnostic.wald"
+                "yssbi.statistics.diagnostic.wald"
                 | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
                 | "yssbi.statistics.econometrics.panel.unit_root"

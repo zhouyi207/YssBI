@@ -134,6 +134,12 @@ the borrowed model contract.
   Robust score fields retain the chi-square statistic/probability and restriction
   count. The fit's stored HC/cluster/HAC/Newey choice supplies the score covariance;
   coefficient finite-sample/leverage adjustments are separate inference facts.
+  `EndogenousTest` retains the Durbin statistic/probability independently of its
+  nullable Wu statistic/probability pair. Wu is unavailable without positive
+  augmented residual degrees and numerically resolved residual variation;
+  `wu_df_denom` retains the actual count, including zero. A nonrobust comparison
+  with no estimable residual direction leaves both Hausman and the combined
+  endogenous-test record absent; lower-rank Hausman remains independently optional.
 - `causal::did`: DID inputs, inference results and typed unavailable/error codes.
 - `causal::models`: linear IV GMM, sharp RDD, treatment-group interaction tests,
   Heckman two-step, half-normal frontiers, SUR and synthetic-control options/results.

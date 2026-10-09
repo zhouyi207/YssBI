@@ -54,15 +54,18 @@ pub(super) fn project_endogenous(
     (coefficients, fitted)
 }
 
-pub(super) fn regressor_design(included: MatRef<'_, f64>, endogenous: MatRef<'_, f64>) -> Mat<f64> {
+pub(super) fn regressor_design(
+    included: MatRef<'_, f64>,
+    endogenous: &[ColRef<'_, f64>],
+) -> Mat<f64> {
     Mat::from_fn(
         included.nrows(),
-        included.ncols() + endogenous.ncols(),
+        included.ncols() + endogenous.len(),
         |row, col| {
             if col < included.ncols() {
                 included[(row, col)]
             } else {
-                endogenous[(row, col - included.ncols())]
+                endogenous[col - included.ncols()][row]
             }
         },
     )
@@ -93,8 +96,9 @@ impl IvModel {
         let (first_stage_coefficients, endog_hat) =
             project_endogenous(&z, &ztz_inv, &endogenous_columns);
         let included_design = z.subcols(0, included);
-        let x = regressor_design(included_design, endog_hat.as_ref());
-        let x_struct = regressor_design(included_design, self.endog_reg.as_ref());
+        let projected_columns = endog_hat.col_iter().collect::<Vec<_>>();
+        let x = regressor_design(included_design, &projected_columns);
+        let x_struct = regressor_design(included_design, &endogenous_columns);
         Ok(PreparedIvDesign {
             z,
             ztz_inverse: ztz_inv,

@@ -179,6 +179,10 @@ IV accepts separate exogenous, endogenous and instrument column collections, pre
 fitted values, residuals, coefficient inference and the design needed for later analyses.
 Its Fit entry returns the shared `InstrumentalVariableFit` directly; Kernel restores
 source labels and applies its existing finite-value output conversion before JSON encoding.
+Endogeneity Summary and the independent Hausman entry reuse SCI's fitted-residual
+analysis. Summary preserves independently nullable Wu fields alongside an available
+Durbin result, and retains the existing reason when both analyses are absent.
+Runtime adds no reconstructed response, coefficient comparison or variance floor.
 Coefficient probabilities and 95% intervals retain SCI's normal reference by
 default and Student-t reference with structural residual degrees for `small=true`.
 Summary projects the typed `statistics.modelTest` joint result, including its

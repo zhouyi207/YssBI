@@ -188,7 +188,7 @@ pub fn endogeneity(
             ScientificInputViolation::ParameterOutOfRange,
         ));
     }
-    diagnostic_model(fit)?
-        .endogeneity(&Col::from_iter(fit.coefficients.iter().copied()))
+    validate_diagnostic_fit(fit)?;
+    super::postestimation::endogeneity(fit)
         .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))
 }

@@ -25,5 +25,6 @@ $V_{\mathrm{IV}}$ and $V_{\mathrm{OLS}}$ use a common OLS disturbance variance, 
 `result` contains the structured result, containing `hausman` with `stat`, `df` and `p_value`. P-values use the chi-square upper tail; $p<\alpha$ rejects exogeneity.
 
 Inference requires valid, relevant instruments and identification. Non-rejection does not establish exogeneity. Robust/clustered covariance or an unavailable valid OLS comparison fails.
+An exactly instrumented regressor supplies no residual comparison direction. The test requires a positive effective contrast rank; changing response units preserves its statistic and p-value.
 
 Method details: [Hausman test](https://www.stata.com/manuals/rhausman.pdf).
