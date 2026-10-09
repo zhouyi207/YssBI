@@ -24,10 +24,24 @@ pub fn gmm(
     if q < p {
         return Err(parameter());
     }
+    let mut response_scale = 0.0_f64;
+    for (i, &value) in y.iter().enumerate() {
+        if i.is_multiple_of(256) {
+            control.check()?;
+        }
+        response_scale = response_scale.max(value.abs());
+    }
+    if response_scale == 0.0 {
+        response_scale = 1.0;
+    }
     let cross = Mat::from_fn(q, p, |j, k| {
         (0..n).map(|i| z[(i, j)] * x[(i, k)] / n as f64).sum()
     });
-    let zy = Col::from_fn(q, |j| (0..n).map(|i| z[(i, j)] * y[i] / n as f64).sum());
+    let zy = Col::from_fn(q, |j| {
+        (0..n)
+            .map(|i| z[(i, j)] * (y[i] / response_scale) / n as f64)
+            .sum()
+    });
     let gram = Mat::from_fn(q, q, |j, k| {
         (0..n).map(|i| z[(i, j)] * z[(i, k)] / n as f64).sum()
     });
@@ -56,19 +70,27 @@ pub fn gmm(
     let (mut beta, mut bread) = solve(&weight)?;
     if options.two_step {
         let f = fitted(x, &beta);
-        let residuals = y.iter().zip(f).map(|(y, f)| y - f).collect::<Vec<_>>();
+        let residuals = y
+            .iter()
+            .zip(f)
+            .map(|(y, f)| y / response_scale - f)
+            .collect::<Vec<_>>();
         weight = inverse(&score_cov(&residuals)?)?;
         (beta, bread) = solve(&weight)?;
     }
-    let predicted = fitted(x, &beta);
-    let residuals = y
+    let mut predicted = fitted(x, &beta);
+    let mut residuals = y
         .iter()
         .zip(&predicted)
-        .map(|(y, f)| y - f)
+        .map(|(y, f)| y / response_scale - f)
         .collect::<Vec<_>>();
     let a = bread.as_ref() * cross.transpose() * weight.as_ref();
-    let cov = a.as_ref() * score_cov(&residuals)?.as_ref() * a.transpose();
-    let cov = Mat::from_fn(p, p, |i, j| cov[(i, j)] / n as f64);
+    let mut cov = a.as_ref() * score_cov(&residuals)?.as_ref() * a.transpose();
+    for j in 0..p {
+        for k in 0..p {
+            cov[(j, k)] /= n as f64;
+        }
+    }
     let g = Col::from_fn(q, |j| {
         (0..n).map(|i| z[(i, j)] * residuals[i] / n as f64).sum()
     });
@@ -91,8 +113,34 @@ pub fn gmm(
             .map(|(z, e)| z * e / n as f64)
             .sum::<f64>()
     }));
-    let (beta, covariance) = design.raw(&beta, Some(cov));
+    // Restore response and predictor units in one coordinate map. A separate
+    // response-scale square or raw-design covariance can overflow unnecessarily.
+    let mut coordinates = design.raw_jacobian();
+    for j in 0..p {
+        control.check()?;
+        for k in 0..p {
+            coordinates[(j, k)] = finite(coordinates[(j, k)] * response_scale)?;
+        }
+    }
+    let (beta, covariance) = transform(&beta, Some(cov), &coordinates);
     let covariance = covariance.expect("covariance");
+    for j in 0..p {
+        control.check()?;
+        for k in 0..p {
+            finite(covariance[(j, k)])?;
+        }
+    }
+    for (i, value) in predicted
+        .iter_mut()
+        .chain(&mut residuals)
+        .chain(&mut moments)
+        .enumerate()
+    {
+        if i.is_multiple_of(256) {
+            control.check()?;
+        }
+        *value = finite(*value * response_scale)?;
+    }
     Ok(GmmResult {
         observations: n,
         instruments: q,

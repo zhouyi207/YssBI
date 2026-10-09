@@ -129,6 +129,7 @@ pub(super) fn install(
                 | "yssbi.statistics.workflow.mediation"
                 | "yssbi.statistics.workflow.moderated_mediation" => 8,
                 "yssbi.statistics.diagnostic.wald"
+                | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
                 | "yssbi.statistics.econometrics.panel.unit_root"
@@ -175,7 +176,6 @@ pub(super) fn install(
                 | "yssbi.statistics.diagnostic.ph"
                 | "yssbi.statistics.diagnostic.white"
                 | "yssbi.statistics.doe.response_surface"
-                | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.heckman_two_step"
                 | "yssbi.statistics.econometrics.sfa"
                 | "yssbi.statistics.econometrics.sur"

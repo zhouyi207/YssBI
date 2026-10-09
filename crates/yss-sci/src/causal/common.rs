@@ -1,6 +1,6 @@
 pub(super) use crate::regression::models::common::{
     Design, Result, check_iteration, coefficient_table, failed, finite, fitted, hessian, inverse,
-    least_squares, minimize, names, parameter, validate,
+    least_squares, minimize, names, parameter, transform, validate,
 };
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 use statrs::distribution::{ChiSquared, ContinuousCDF};

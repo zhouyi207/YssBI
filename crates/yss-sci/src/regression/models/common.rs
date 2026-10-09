@@ -169,7 +169,7 @@ impl Design {
         transform(beta, covariance, &self.raw_jacobian())
     }
 }
-pub(super) fn transform(
+pub(crate) fn transform(
     beta: &[f64],
     covariance: Option<Mat<f64>>,
     j: &Mat<f64>,

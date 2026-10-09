@@ -81,7 +81,7 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 使用 revision 5；两个非线性入口与 Deming 使用 revision 4。Ridge/Lasso/PLS 不输出系数 p 值，
 沿用各自能力版本。共享设计校验的五个参数生存拟合内核
 （Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 9。
-复用该准备的 Mixed/GEE 及返回正态 Wald 推断的因果估计采用 revision 6；共线性诊断使用
+复用该准备的 Mixed/GEE 及除 GMM 外返回正态 Wald 推断的因果估计采用 revision 6；共线性诊断使用
 revision 5。Meta 模型、逐项排除和敏感性使用 revision 8，Egger 与 Begg 使用 revision 7；
 绘图和仅返回异质性统计的入口维护各自的能力版本。能力指纹涵盖共享输入错误契约和实际尾概率计算。中介 bootstrap 采用 revision 8，同时涵盖稳定分位数二分点和
 共享 Student-t 尾概率。
@@ -108,6 +108,8 @@ Markov 恢复原始状态标签，时序图可省略时间列并使用从 1 开�
 精确分组编码和有限结果序列化。Heckman 仅在未入选行允许空结果；其余输入不静默删行。
 SUR 将方程自变量索引解析为中立列表，并按所有方程的总参数规模预算密集系统。
 数值工作区、bootstrap 顺序重拟合、结构化输出与常驻输入合并准入，取消和期限传递给 SCI。
+GMM 使用 revision 7，涵盖 SCI 的响应尺度规范化及响应/自变量单位的联合坐标恢复；
+系数、协方差、观测结果和原工具变量矩仍沿用现有中立结果与有限值转换。
 ATE/ATT 复用预算化结果解码，保留上游处理效应的方法、目标样本数及可空推断，
 不会将普通报告或原始数列解释为处理效应结果。
 

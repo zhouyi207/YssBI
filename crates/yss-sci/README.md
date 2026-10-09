@@ -483,6 +483,18 @@ HC3 inference, HC3 treatment-by-group Wald tests and pre-period-only simplex
 synthetic controls. SUR solves block normal equations without an observation-square
 Kronecker covariance; synthetic controls retain all periods only for predictions.
 
+Linear GMM normalizes the response before moment covariance and two-step weighting,
+then combines that scale with the existing design coordinate map. Coefficients and
+covariance retain their original response/predictor units without squaring the scale
+or first forming an overflowing raw-design covariance. Fitted values, residuals and
+raw-instrument moments restore response units once; the Hansen statistic retains its
+normalized score quadratic. Zero responses use the identity scale, and nonfinite
+restored values remain computation failures. The controlled scans retain existing
+workspace ownership. `tests/causal_category.rs` covers large response units and small
+response/predictor units against the existing independent statsmodels references.
+The [GMM estimator and sandwich equations](https://www.stata.com/manuals/rivregress.pdf)
+define the retained one/two-step inference contract.
+
 `causal::treatment` reuses controlled Logit and OLS for nearest-neighbour propensity
 matching with replacement, normalized Hájek IPW, RA and AIPW. Matching includes exact
 distance ties and rejects caliper failures instead of changing the estimand by

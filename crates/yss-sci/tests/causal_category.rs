@@ -159,6 +159,95 @@ fn gmm_matches_statsmodels_robust_covariance_and_hansen_test() {
     assert!(r.hansen_j.is_none());
 }
 
+fn assert_gmm_response_units(scale: f64, predictor_scale: f64) {
+    let f = fixture();
+    let d = &f["gmm"];
+    let y = vector(&d["response"]);
+    let x = matrix(&d["predictors"]);
+    let z = matrix(&d["instruments"]);
+    let scaled = y.iter().map(|value| value * scale).collect::<Vec<_>>();
+    let scaled_predictors = x
+        .iter()
+        .map(|column| column.iter().map(|value| value * predictor_scale).collect())
+        .collect::<Vec<Vec<f64>>>();
+    for case in d["cases"].as_array().unwrap() {
+        let two_step = case["steps"] == 2;
+        let result = econometrics::gmm(
+            &scaled,
+            &scaled_predictors,
+            &z,
+            GmmOptions {
+                constant: true,
+                two_step,
+            },
+            &control(),
+        )
+        .expect("representable GMM inference must retain its response units");
+        let beta = vector(&case["coefficients"]);
+        let covariance = matrix(&case["covariance"]);
+        let units = |j: usize| {
+            if j == 0 {
+                scale
+            } else {
+                scale / predictor_scale
+            }
+        };
+        for (j, coefficient) in result.coefficients.iter().enumerate() {
+            close(coefficient.estimate / units(j), beta[j], 1e-8);
+            let standard_error = covariance[j][j].sqrt();
+            close(
+                coefficient.standard_error.unwrap() / units(j),
+                standard_error,
+                1e-8,
+            );
+            close(
+                coefficient.statistic.unwrap(),
+                beta[j] / standard_error,
+                1e-8,
+            );
+            for (k, &value) in result.covariance[j].iter().enumerate() {
+                assert!(value.is_finite());
+                close(value / units(j) / units(k), covariance[j][k], 1e-8);
+            }
+        }
+        let predicted = (0..y.len())
+            .map(|i| beta[0] + (0..x.len()).map(|j| x[j][i] * beta[j + 1]).sum::<f64>())
+            .collect::<Vec<_>>();
+        for (i, (&prediction, &residual)) in result.fitted.iter().zip(&result.residuals).enumerate()
+        {
+            close(prediction / scale, predicted[i], 1e-8);
+            close(residual / scale, y[i] - predicted[i], 1e-8);
+        }
+        for (j, &moment) in result.moments.iter().enumerate() {
+            let expected = (0..y.len())
+                .map(|i| {
+                    let instrument = if j == 0 { 1.0 } else { z[j - 1][i] };
+                    instrument * (y[i] - predicted[i]) / y.len() as f64
+                })
+                .sum::<f64>();
+            close(moment / scale, expected, 1e-8);
+        }
+        if two_step {
+            let test = result.hansen_j.unwrap();
+            close(test.statistic, case["j"].as_f64().unwrap(), 1e-8);
+            assert_eq!(test.degrees_of_freedom, 1);
+            assert!(test.p_value.is_finite());
+        } else {
+            assert!(result.hansen_j.is_none());
+        }
+    }
+}
+
+#[test]
+fn gmm_large_response_units_keep_finite_inference() {
+    assert_gmm_response_units(1e154, 1.0);
+}
+
+#[test]
+fn gmm_small_response_units_keep_two_step_weights() {
+    assert_gmm_response_units(1e-155, 1e-160);
+}
+
 #[test]
 fn discontinuity_and_group_interactions_match_hc3_inference() {
     let f = fixture();
