@@ -1,46 +1,9 @@
 use super::palette::{NodePalette, PaletteEvent, PaletteTarget};
-use super::{Gesture, GraphCanvas, Palette};
+use super::{GraphCanvas, Palette};
 use gpui::{AppContext, Context, Pixels, Point, Window};
 use yss_graph_document::PortAddress;
-use yss_graph_editor::projection::ConnectionIntent;
 
 impl GraphCanvas {
-    pub(super) fn query_connections(
-        &mut self,
-        source: PortAddress,
-        moving: bool,
-        cx: &mut Context<Self>,
-    ) {
-        let project = self.graph.project.clone();
-        let path = self.graph.projection.graph_path.clone();
-        let version = self.graph.editing.version;
-        let query = source.clone();
-        let task = self.services.run(move |services| {
-            Ok(services.application.graph_connection_candidates(
-                &project,
-                &path,
-                version,
-                &query,
-                if moving {
-                    ConnectionIntent::MoveConnections
-                } else {
-                    ConnectionIntent::Connect
-                },
-            )?)
-        });
-        cx.spawn(async move |view,cx| {
-            let result=task.await.map_err(anyhow::Error::from).and_then(|result|result);
-            let _=view.update(cx,|view,cx| {
-                if view.graph.editing.version!=version || !matches!(&view.gesture,Some(Gesture::Connection{source:current,..}) if current==&source){return;}
-                match result {
-                    Ok(candidates)=>view.connection_candidates=Some(candidates.candidates.into_iter().map(|candidate|(candidate.port,candidate.decision)).collect()),
-                    Err(_error)=>tracing::debug!(code="native_connection_candidates_rejected","Native connection candidates rejected"),
-                }
-                cx.notify();
-            });
-        }).detach();
-    }
-
     pub(super) fn show_palette(
         &mut self,
         point: Point<Pixels>,

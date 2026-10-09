@@ -4,10 +4,7 @@ use gpui::{
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName, Sizable};
-use yss_graph_editor::{
-    EditorGraphMutation,
-    projection::{EditorNodeModel, EditorPortModel},
-};
+use yss_graph_editor::{EditorGraphMutation, projection::EditorNodeModel};
 use yss_node_protocol::PortDirection;
 
 use super::{Gesture, GraphCanvas, commands::*, geometry};
@@ -22,15 +19,25 @@ impl Render for GraphCanvas {
         let preview = self.preview.clone();
         let selected_connections = self.selected_connections.clone();
         let hovered_connection = self.hovered_connection;
-        let pending = match &self.gesture {
-            Some(Gesture::Connection {
-                source, current, ..
-            }) => connection_layer
-                .borrow()
-                .port_position(source, &self.preview)
-                .map(|start| (offset + start * zoom, *current)),
-            _ => None,
-        };
+        let pending = self.pending_connection(cx);
+        let feedback = pending
+            .as_ref()
+            .and_then(|pending| pending.feedback(self.bounds.get().size));
+        let replacements = pending.as_ref().map(|_| {
+            self.connection_drag()
+                .map(|drag| drag.replaced.clone())
+                .unwrap_or_default()
+        });
+        let label = self
+            .hovered_connection
+            .and_then(|id| connection_layer.borrow().label(id));
+        let running_visible = connection_layer.borrow().has_visible_running(
+            self.bounds.get(),
+            offset,
+            zoom,
+            &self.preview,
+        );
+        let activity = running_visible.then(|| self.render_connection_activity(pending.is_some()));
         let projection = self.graph.projection.clone();
         let visible = self.bounds.get().size;
         let nodes = projection
@@ -223,18 +230,35 @@ impl Render for GraphCanvas {
                             offset,
                             zoom,
                             &preview,
-                            (&selected_connections, hovered_connection),
+                            super::connections::Interaction {
+                                selected: &selected_connections,
+                                hovered: hovered_connection,
+                                replacements: replacements.as_ref(),
+                            },
                             window,
                         );
-                        if let Some((start, current)) = pending {
-                            layer.paint_pending(bounds.origin + start, current, window);
+                        if let Some(pending) = pending {
+                            layer.paint_pending(
+                                bounds.origin + pending.start,
+                                bounds.origin + pending.end,
+                                pending.from_input,
+                                pending.color,
+                                window,
+                            );
                         }
                     },
                 )
                 .absolute()
                 .size_full(),
             )
+            .children(activity)
             .children(nodes)
+            .children(feedback)
+            .when_some(label, |view, label| {
+                view.tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+                })
+            })
             .when_some(self.connection_menu.as_ref(), |view, menu| {
                 view.child(menu.render())
             })
@@ -395,87 +419,6 @@ impl GraphCanvas {
                             .children(outputs.get(index).map(|port| self.render_port(port, cx))),
                     )
             }))
-    }
-
-    fn render_port(
-        &self,
-        port: &EditorPortModel,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
-        let start = port.address.clone();
-        let end = start.clone();
-        let output = port.direction == PortDirection::Output;
-        let label = port
-            .display
-            .instance_label
-            .as_deref()
-            .unwrap_or(&port.display.label)
-            .to_owned();
-        let color = if port.orphan {
-            0xf7768e
-        } else if matches!(self.gesture, Some(Gesture::Connection { .. })) {
-            self.connection_candidates
-                .as_ref()
-                .and_then(|candidates| candidates.get(&port.address))
-                .map_or(0x536079, |decision| match decision {
-                    yss_graph_editor::projection::ConnectionDecision::Append => 0x9ece6a,
-                    yss_graph_editor::projection::ConnectionDecision::Replace { .. } => 0xe0af68,
-                    yss_graph_editor::projection::ConnectionDecision::Invalid { .. } => 0x536079,
-                })
-        } else {
-            if output {
-                appearance::GREEN
-            } else {
-                appearance::BLUE
-            }
-        };
-        let dot = || {
-            div()
-                .size(px(10. * self.zoom))
-                .flex_shrink_0()
-                .rounded_full()
-                .bg(rgb(color))
-                .border_1()
-                .border_color(rgb(appearance::CANVAS))
-        };
-        div()
-            .id(gpui::SharedString::from(format!(
-                "port-{}-{:?}",
-                port.address.node_id, port.address.port
-            )))
-            .flex()
-            .items_center()
-            .gap(px(6. * self.zoom))
-            .w_full()
-            .min_w_0()
-            .text_size(px(12. * self.zoom))
-            .text_color(rgb(appearance::MUTED))
-            .when(self.located_port.as_ref() == Some(&port.address), |view| {
-                view.track_focus(&self.port_focus)
-                    .bg(rgb(appearance::BLUE).opacity(0.2))
-            })
-            .cursor_crosshair()
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |view, event, window, cx| {
-                    view.begin_port(start.clone(), event, window, cx)
-                }),
-            )
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(move |view, _, _, cx| view.end_port(end.clone(), cx)),
-            )
-            .when(!output, |view| {
-                view.ml(px(-5. * self.zoom))
-                    .child(dot())
-                    .child(div().min_w_0().flex_1().truncate().child(label.clone()))
-            })
-            .when(output, |view| {
-                view.mr(px(-5. * self.zoom))
-                    .justify_end()
-                    .child(div().min_w_0().truncate().child(label))
-                    .child(dot())
-            })
     }
 
     fn selection_bounds(&self) -> Option<Bounds<Pixels>> {

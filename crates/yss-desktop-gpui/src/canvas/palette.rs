@@ -128,6 +128,17 @@ impl NodePalette {
                 .is_some_and(|graph| !graph.read(cx).busy())
     }
 
+    pub(in crate::canvas) fn connection_source(
+        &self,
+        graph: &crate::project::OpenedGraph,
+    ) -> Option<&PortAddress> {
+        (self.target.project == graph.project
+            && self.target.path == graph.projection.graph_path
+            && self.target.version == graph.editing.version)
+            .then_some(self.target.source.as_ref())
+            .flatten()
+    }
+
     pub(super) fn configuring(&self) -> bool {
         self.configuration.is_some()
     }

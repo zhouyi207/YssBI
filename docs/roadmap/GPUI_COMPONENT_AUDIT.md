@@ -619,6 +619,17 @@
 - 聚焦验证：两份内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；临时窗口使用 `cargo build -p yss-desktop-gpui --example edges_review --locked` 构建。另检查本批 8 个 Rust 文件格式、两份文档的声明/相对链接、复用的中英文键及参数、265 项目录与 `git diff --check`；模块索引检查通过。本批未运行全工作区验证，未增加 UI 单元测试；物理输入、读屏及 Windows/macOS 仍待验收。
 - 连线运行/缓存外观、类型配色、连接预览方向和候选反馈继续迁移；相关 Edge、GraphFlowEdge、GraphFlowConnection 和 GraphFlowCanvas 不标记整体完成。累计完成源码审查 191/265 项。
 
+### 连线外观、执行状态与连接预览
+
+- 已逐项完成 `Edge`、`GraphFlowEdge`、`GraphFlowConnection`（含 `PendingFlowConnection`），并核对曲线 helper、类型主题、结果呈现 selector、候选反馈与 CSS。这些能力保留；SVG、React Flow 状态订阅和动画改用现有 GPUI 绘制与实体生命周期，没有新增依赖。
+- `connections/curve` 共用带方向的曲线、裁剪和命中几何；端口与连线共用语义类型配色。`connections/appearance` 只随投影/执行事实更新，以后端阻断、当前运行身份和缓存事实派生未运行、运行中、可用、过期及错误外观；结果消费者复用同一等待判据。
+- 原生运行标记沿静态曲线移动，避免每帧重建虚线；隐藏画布和无可见运行连线时不挂载动画，减少动态效果时静态显示。输入端向左出线，空白松键后节点菜单继续显示来源曲线。
+- `connections/drag` 让当前手势拥有候选查询、捕获版本、悬停目标及替换集合，取消即释放交付任务。端口悬停使用 GPUI 原命中；预览显示追加、替换、无效颜色与原因，并突出将替换的连线。候选失败或已知无效不提交，未返回候选时仍由原图事务校验捕获版本。
+- 工作区和独立提交副本通过临时 `styles_review` Linux/X11 窗口核对输入侧曲线、替换与撤销、无效反馈及节点菜单预览；执行使用真实 Application。独立副本核对 Ctrl 移动替换和一次撤销，以及未运行、真实执行中、成功、上游修改过期、除零失败和清除失败后的状态变化。
+- 工作区另核对英文追加/替换/查询失败、失败不写图，以及临时延迟后取消并从同一端口开始新手势：旧失败没有覆盖新判定。临时绘制计数显示运行帧没有新增曲线细分，隐藏图标签时计数保持，减少动态效果使用静态标记；这不代表目标桌面帧率已达标。
+- 聚焦验证：两份内容通过本包 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口入口使用 `cargo build -p yss-desktop-gpui --example styles_review --locked`。另检查本批 Rust 格式、文档声明与相对链接、复用中英文键及 265 项清单；模块索引与 `git diff --check` 通过。
+- 临时入口、故障/延迟、计数和隔离数据不提交，未新增 UI 单元测试或运行全工作区验证。物理输入、读屏、Windows/macOS、目标刷新率及大图验收继续开放；GraphFlowCanvas、GraphFlowNode、GraphPin 和 Reroute 的剩余职责继续逐项审查。累计完成源码审查 194/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -830,13 +841,13 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 待查 | 已读曲线、命中、选择/悬停与状态样式；原生命中/高亮已补齐，运行/缓存外观继续迁移 | 连线交互窗口验收见本批；整体未完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 迁移 | connections 共用曲线、命中、选择/悬停、状态虚线、类型实线与运行标记；复用原路径缓存及 GPUI Animation | Linux/X11 窗口核对；物理输入、读屏及目标平台/帧率待验收 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 已核对连线选择、菜单、删除与双击入口并接入原生；其他画布手势、框选和连接反馈继续审查 | 连线交互窗口验收见本批；整体未完成 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 待查 | 已读正式手势及节点菜单中的预览；原生输入侧曲线方向、候选颜色/理由与替换反馈仍待补齐 | 整体待完成 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 待查 | 已读几何、端口类型/阻断、运行/缓存和替换反馈 selector；原生选择与命中已接入，其余外观继续迁移 | 整体待完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 迁移 | connections/drag、render 共用方向曲线、目标吸附、后端候选颜色/原因及替换集合；PendingFlowConnection 读取当前菜单来源 | 窗口核对输入侧、追加/替换/无效、移动与撤销、菜单及迟到失败隔离 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 迁移 | connections/appearance 按当前投影、执行身份与缓存派生外观，ports 共用类型配色；选择、替换及状态提示保留 | 真实执行核对运行/可用/过期/失败与清除；平台和大图验收开放 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

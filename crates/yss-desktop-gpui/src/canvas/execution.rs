@@ -34,6 +34,35 @@ struct RunProjection {
 }
 
 impl ExecutionView {
+    fn current_runs<'a>(
+        &'a self,
+        graph: &'a crate::project::OpenedGraph,
+    ) -> impl Iterator<Item = &'a RunProjection> {
+        self.runs.values().filter(|run| {
+            let identity = run.event.identity();
+            identity.graph_path() == &graph.projection.graph_path
+                && identity.execution_session_id() == &graph.results.execution_session_id
+                && identity.semantic_input_hash() == &graph.projection.basis.semantic_input_hash
+        })
+    }
+
+    pub(super) fn running_outputs<'a>(
+        &'a self,
+        graph: &'a crate::project::OpenedGraph,
+    ) -> impl Iterator<Item = &'a PlanOutputRef> {
+        self.current_runs(graph)
+            .filter(|run| matches!(run.event.kind(), RunApplicationEventKind::RunStarted { .. }))
+            .flat_map(|run| run.outputs.iter())
+    }
+
+    pub(super) fn pending_outputs<'a>(
+        &'a self,
+        graph: &'a crate::project::OpenedGraph,
+    ) -> impl Iterator<Item = &'a PlanOutputRef> {
+        self.current_runs(graph)
+            .filter(|run| run.event.result_revision() > graph.results.revision)
+            .flat_map(|run| run.outputs.iter())
+    }
     pub fn running(&self) -> bool {
         self.submitting.is_some() || self.active().is_some()
     }
@@ -139,6 +168,7 @@ impl GraphCanvas {
             .last_key_value()
             .map(|(_, projection)| projection.event.identity().clone());
         self.error = None;
+        self.refresh_connection_states();
         let task = self.services.run(move |services| {
             let application = &services.application;
             // Capture the document matching the displayed projection, never a later revision.
@@ -261,6 +291,7 @@ impl GraphCanvas {
         }
         let result_revision = event.result_revision();
         if self.execution.install(event) {
+            self.refresh_connection_states();
             if result_revision > self.graph.results.revision {
                 self.refresh(cx);
             }
@@ -306,6 +337,7 @@ impl GraphCanvas {
                         }
                     }
                 }
+                view.refresh_connection_states();
                 cx.emit(CanvasEvent::Execution);
                 cx.notify();
             });
@@ -331,6 +363,7 @@ impl GraphCanvas {
             return;
         }
         self.execution.cleared = Some(run.clone());
+        self.refresh_connection_states();
         cx.emit(CanvasEvent::Execution);
         cx.notify();
     }
@@ -340,12 +373,9 @@ impl GraphCanvas {
     }
 
     pub(crate) fn result_waiting(&self, output: &PlanOutputRef) -> bool {
-        self.execution.runs.values().any(|projection| {
-            projection.event.identity().semantic_input_hash()
-                == &self.graph.projection.basis.semantic_input_hash
-                && projection.event.result_revision() > self.graph.results.revision
-                && projection.outputs.contains(output)
-        })
+        self.execution
+            .pending_outputs(&self.graph)
+            .any(|pending| pending == output)
     }
 }
 

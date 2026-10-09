@@ -1,25 +1,40 @@
+mod appearance;
+mod curve;
+mod drag;
 mod hit;
 mod interaction;
 mod menu;
+mod render;
 
+pub(super) use drag::ConnectionDrag;
 pub(super) use interaction::ConnectionClick;
 pub(super) use menu::ConnectionMenu;
 
-use std::collections::{BTreeMap, BTreeSet};
-
-use gpui::{Bounds, Path, PathBuilder, Pixels, Point, Window, point, px, rgb};
+use gpui::{Bounds, PathBuilder, Pixels, Point, Window, fill, point, px, rgb, size};
 use gpui_base::plot::{PathCache, ShapeKey};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
+use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::{ConnectionId, NodeId, NodePosition, PortAddress};
 use yss_graph_editor::projection::EditorProjectionModel;
+use yss_node_protocol::PortDirection;
 
-use super::geometry;
-use crate::appearance;
+use super::{geometry, ports};
+use crate::appearance as theme;
+use appearance::State;
+use curve::Curve;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct PortAnchor {
     node_id: NodeId,
     node_position: Point<Pixels>,
     offset: Point<Pixels>,
+    key: Arc<str>,
+    direction: PortDirection,
+    color: u32,
+    orphan: bool,
 }
 
 impl PortAnchor {
@@ -37,9 +52,35 @@ struct Connection {
     id: ConnectionId,
     output: PortAnchor,
     input: PortAnchor,
+    blocked: bool,
+    state: State,
     path: PathCache,
     highlight: PathCache,
     hit: hit::HitPath,
+}
+
+impl Connection {
+    fn geometry(
+        &self,
+        offset: Point<Pixels>,
+        zoom: f32,
+        preview: &BTreeMap<NodeId, NodePosition>,
+    ) -> (Point<Pixels>, Curve) {
+        let output = self.output.position(preview) * zoom;
+        (
+            offset + output,
+            Curve {
+                delta: self.input.position(preview) * zoom - output,
+                from_input: self.output.direction == PortDirection::Input,
+            },
+        )
+    }
+}
+
+pub(super) struct Interaction<'a> {
+    pub selected: &'a BTreeSet<ConnectionId>,
+    pub hovered: Option<ConnectionId>,
+    pub replacements: Option<&'a BTreeSet<ConnectionId>>,
 }
 
 pub(super) struct ConnectionLayer {
@@ -55,29 +96,50 @@ impl ConnectionLayer {
             .nodes
             .iter()
             .flat_map(|node| {
-                geometry::port_offsets(node).map(|(address, offset)| {
-                    (
-                        address,
-                        PortAnchor {
-                            node_id: node.node_id,
-                            node_position: point(
-                                px(node.position.x as f32),
-                                px(node.position.y as f32),
-                            ),
-                            offset,
-                        },
-                    )
-                })
+                geometry::port_offsets(node).zip(node.ports.iter()).map(
+                    |((address, offset), port)| {
+                        (
+                            address.clone(),
+                            PortAnchor {
+                                node_id: node.node_id,
+                                node_position: point(
+                                    px(node.position.x as f32),
+                                    px(node.position.y as f32),
+                                ),
+                                offset,
+                                key: address.to_string().into(),
+                                direction: port.direction,
+                                color: ports::type_color(port),
+                                orphan: port.orphan,
+                            },
+                        )
+                    },
+                )
             })
             .collect::<BTreeMap<_, _>>();
+        let blocked = projection
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.blocking)
+            .filter_map(|diagnostic| match diagnostic.location {
+                DiagnosticLocation::Connection(id) => Some(id),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
         let connections = projection
             .connections
             .iter()
             .filter_map(|connection| {
+                let output = anchors.get(&connection.output)?.clone();
+                let input = anchors.get(&connection.input)?.clone();
                 Some(Connection {
                     id: connection.connection_id,
-                    output: *anchors.get(&connection.output)?,
-                    input: *anchors.get(&connection.input)?,
+                    blocked: output.orphan
+                        || input.orphan
+                        || blocked.contains(&connection.connection_id),
+                    output,
+                    input,
+                    state: State::Unexecuted,
                     path: PathCache::default(),
                     highlight: PathCache::default(),
                     hit: hit::HitPath::default(),
@@ -102,53 +164,79 @@ impl ConnectionLayer {
             .map(|anchor| anchor.position(preview))
     }
 
+    pub fn port_direction(&self, address: &PortAddress) -> Option<PortDirection> {
+        self.anchors.get(address).map(|anchor| anchor.direction)
+    }
+
+    pub fn label(&self, id: ConnectionId) -> Option<&'static str> {
+        self.connections
+            .iter()
+            .find(|connection| connection.id == id)
+            .map(|connection| connection.state.label())
+    }
+
     pub fn paint(
         &mut self,
         bounds: Bounds<Pixels>,
         offset: Point<Pixels>,
         zoom: f32,
         preview: &BTreeMap<NodeId, NodePosition>,
-        (selected, hovered): (&BTreeSet<ConnectionId>, Option<ConnectionId>),
+        interaction: Interaction<'_>,
         window: &mut Window,
     ) {
         self.paint_grid(bounds, offset, zoom, window);
         for connection in &mut self.connections {
-            let output = connection.output.position(preview) * zoom;
-            let delta = connection.input.position(preview) * zoom - output;
-            let a = bounds.origin + offset + output;
-            let b = a + delta;
-            let bend = connection_bend(delta);
-            // Both endpoints can be outside while the curve crosses the viewport.
-            let curve_bounds = Bounds::from_corners(
-                point(a.x.min(b.x - bend), a.y.min(b.y)),
-                point((a.x + bend).max(b.x), a.y.max(b.y)),
-            )
-            .dilate(px(8.));
-            if curve_bounds.intersects(&bounds) {
-                if selected.contains(&connection.id) || hovered == Some(connection.id) {
-                    let width = if selected.contains(&connection.id) {
-                        16.
-                    } else {
-                        7.
-                    };
-                    paint_connection(
-                        &mut connection.highlight,
-                        a,
-                        delta,
-                        px(width),
-                        rgb(appearance::BLUE).opacity(0.35),
-                        window,
-                    );
-                }
+            let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
+            if !visible(curve, origin, bounds) {
+                continue;
+            }
+            let selected = interaction.selected.contains(&connection.id);
+            let hovered = interaction.hovered == Some(connection.id);
+            let replaced = interaction
+                .replacements
+                .is_some_and(|ids| ids.contains(&connection.id));
+            let opacity = if interaction.replacements.is_some() && !replaced {
+                0.25
+            } else {
+                1.
+            };
+            if selected || hovered || connection.state == State::Valid {
+                let (width, color, alpha) = if selected {
+                    (16., theme::BLUE, 0.55)
+                } else if hovered {
+                    (7., theme::BLUE, 0.35)
+                } else {
+                    (6., connection.output.color, 0.16)
+                };
                 paint_connection(
-                    &mut connection.path,
-                    a,
-                    delta,
-                    px(1.8),
-                    rgb(appearance::BLUE),
+                    &mut connection.highlight,
+                    origin,
+                    curve,
+                    (px(width), State::Valid),
+                    rgb(color).opacity(alpha * opacity),
                     window,
                 );
             }
+            let color = if replaced {
+                theme::AMBER
+            } else if connection.state == State::Error {
+                theme::RED
+            } else {
+                connection.output.color
+            };
+            let width = if replaced || connection.state == State::Valid {
+                3.
+            } else {
+                2.
+            };
+            paint_connection(
+                &mut connection.path,
+                origin,
+                curve,
+                (px(width), connection.state),
+                rgb(color).opacity(connection.state.opacity() * opacity),
+                window,
+            );
         }
     }
 
@@ -158,26 +246,82 @@ impl ConnectionLayer {
         zoom: f32,
         preview: &BTreeMap<NodeId, NodePosition>,
     ) -> Option<ConnectionId> {
-        // Reverse paint order makes overlapping lines select the visible top line.
         self.connections.iter_mut().rev().find_map(|connection| {
-            let output = connection.output.position(preview) * zoom;
-            let delta = connection.input.position(preview) * zoom - output;
+            let (origin, curve) = connection.geometry(Point::default(), zoom, preview);
             connection
                 .hit
-                .contains(delta, point - output)
+                .contains(curve, point - origin)
                 .then_some(connection.id)
         })
     }
 
-    pub fn paint_pending(&mut self, a: Point<Pixels>, b: Point<Pixels>, window: &mut Window) {
+    pub fn paint_pending(
+        &mut self,
+        a: Point<Pixels>,
+        b: Point<Pixels>,
+        from_input: bool,
+        color: u32,
+        window: &mut Window,
+    ) {
         paint_connection(
             &mut self.pending,
             a,
-            b - a,
-            px(1.8),
-            rgb(appearance::AMBER),
+            Curve {
+                delta: b - a,
+                from_input,
+            },
+            (px(2.), State::Valid),
+            rgb(color),
             window,
         );
+    }
+
+    pub fn has_visible_running(
+        &self,
+        bounds: Bounds<Pixels>,
+        offset: Point<Pixels>,
+        zoom: f32,
+        preview: &BTreeMap<NodeId, NodePosition>,
+    ) -> bool {
+        self.connections
+            .iter()
+            .filter(|connection| connection.state == State::Running)
+            .any(|connection| {
+                let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
+                visible(curve, origin, bounds)
+            })
+    }
+
+    pub fn paint_activity(
+        &self,
+        bounds: Bounds<Pixels>,
+        offset: Point<Pixels>,
+        zoom: f32,
+        preview: &BTreeMap<NodeId, NodePosition>,
+        progress: f32,
+        window: &mut Window,
+    ) {
+        for connection in self
+            .connections
+            .iter()
+            .filter(|connection| connection.state == State::Running)
+        {
+            let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
+            if !visible(curve, origin, bounds) {
+                continue;
+            }
+            for marker in 0..3 {
+                let t = (progress + marker as f32 / 3.) % 1.;
+                let position = origin + curve.position(t);
+                window.paint_quad(
+                    fill(
+                        Bounds::new(position - point(px(3.), px(3.)), size(px(6.), px(6.))),
+                        rgb(connection.output.color),
+                    )
+                    .corner_radii(px(3.)),
+                );
+            }
+        }
     }
 
     fn paint_grid(
@@ -210,33 +354,30 @@ impl ConnectionLayer {
             }
             path.build().ok()
         }) {
-            window.paint_path(path, gpui::rgba((appearance::BORDER_STRONG << 8) | 0x66));
+            window.paint_path(path, gpui::rgba((theme::BORDER_STRONG << 8) | 0x66));
         }
     }
 }
 
-fn connection_bend(delta: Point<Pixels>) -> Pixels {
-    (delta.x.abs() * 0.45).max(px(45.))
-}
-
-fn build_connection(delta: Point<Pixels>, width: Pixels) -> Option<Path<Pixels>> {
-    let bend = connection_bend(delta);
-    let mut path = PathBuilder::stroke(width);
-    path.move_to(Point::default());
-    path.cubic_bezier_to(delta, point(bend, px(0.)), delta - point(bend, px(0.)));
-    path.build().ok()
+fn visible(curve: Curve, origin: Point<Pixels>, bounds: Bounds<Pixels>) -> bool {
+    let mut curve_bounds = curve.bounds().dilate(px(8.));
+    curve_bounds.origin += origin;
+    curve_bounds.intersects(&bounds)
 }
 
 fn paint_connection(
     cache: &mut PathCache,
     origin: Point<Pixels>,
-    delta: Point<Pixels>,
-    width: Pixels,
+    curve: Curve,
+    (width, state): (Pixels, State),
     color: gpui::Rgba,
     window: &mut Window,
 ) {
-    let key = ShapeKey::new(()).point(delta).f32(width.into()).finish();
-    if let Some(path) = cache.get(key, origin, || build_connection(delta, width)) {
+    let key = ShapeKey::new((curve.from_input, state))
+        .point(curve.delta)
+        .f32(width.into())
+        .finish();
+    if let Some(path) = cache.get(key, origin, || curve.build(width, state.dashes())) {
         window.paint_path(path, color);
     }
 }

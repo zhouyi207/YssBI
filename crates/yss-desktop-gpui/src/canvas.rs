@@ -7,6 +7,7 @@ mod execution;
 mod geometry;
 mod navigation;
 mod palette;
+mod ports;
 mod render;
 mod toolbar;
 
@@ -26,7 +27,6 @@ use yss_application::activity_panel::ActivityPanelDocument;
 use yss_graph_document::{ConnectionId, NodeId, NodePosition, PortAddress};
 use yss_graph_editor::projection::EditorProjectionModel;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
-use yss_node_protocol::PortDirection;
 use yss_project::GraphEditVersion;
 
 use crate::{project::OpenedGraph, services::NativeServices};
@@ -68,11 +68,7 @@ enum Gesture {
         previous_connections: BTreeSet<ConnectionId>,
         additive: bool,
     },
-    Connection {
-        source: PortAddress,
-        moving: bool,
-        current: Point<Pixels>,
-    },
+    Connection(connections::ConnectionDrag),
 }
 
 struct Palette {
@@ -104,8 +100,6 @@ pub struct GraphCanvas {
     busy: bool,
     refreshing: bool,
     refresh_pending: bool,
-    connection_candidates:
-        Option<BTreeMap<PortAddress, yss_graph_editor::projection::ConnectionDecision>>,
     error: Option<String>,
     execution: execution::ExecutionView,
 }
@@ -145,11 +139,11 @@ impl GraphCanvas {
             busy: false,
             refreshing: false,
             refresh_pending: false,
-            connection_candidates: None,
             error: None,
             execution: Default::default(),
         };
         view.reset_view();
+        view.refresh_connection_states();
         cx.defer_in(window, |view, _, cx| view.resync_execution(cx));
         view
     }
@@ -290,7 +284,6 @@ impl GraphCanvas {
         if !self.busy {
             self.preview.clear();
         }
-        self.connection_candidates = None;
         self.hovered_connection = None;
         self.connection_menu = None;
     }
@@ -336,85 +329,6 @@ impl GraphCanvas {
         });
         self.emit_selection(cx);
         cx.notify();
-    }
-
-    fn begin_port(
-        &mut self,
-        address: PortAddress,
-        event: &MouseDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        cx.stop_propagation();
-        if self.busy && event.button == MouseButton::Left {
-            return;
-        }
-        self.located_port = None;
-        self.selected_connections.clear();
-        self.connection_click = None;
-        window.focus(&self.focus, cx);
-        self.hovered_connection = None;
-        self.connection_menu = None;
-        if event.modifiers.alt {
-            self.submit(
-                GraphCommand::Edit(EditorGraphMutation::DisconnectPort { address }),
-                None,
-                cx,
-            );
-        } else {
-            self.connection_candidates = None;
-            self.gesture = Some(Gesture::Connection {
-                source: address.clone(),
-                moving: event.modifiers.control || event.modifiers.platform,
-                current: event.position,
-            });
-            self.query_connections(
-                address,
-                event.modifiers.control || event.modifiers.platform,
-                cx,
-            );
-            cx.notify();
-        }
-    }
-
-    fn end_port(&mut self, address: PortAddress, cx: &mut Context<Self>) {
-        if !matches!(self.gesture, Some(Gesture::Connection { .. })) {
-            return;
-        }
-        let Some(Gesture::Connection { source, moving, .. }) = self.gesture.take() else {
-            return;
-        };
-        cx.stop_propagation();
-        if source == address {
-            cx.notify();
-            return;
-        }
-        let mutation = if moving {
-            EditorGraphMutation::MoveConnections {
-                source,
-                target: address,
-            }
-        } else {
-            let output = self
-                .graph
-                .projection
-                .nodes
-                .iter()
-                .flat_map(|node| node.ports.iter())
-                .find(|port| port.address == source)
-                .is_some_and(|port| port.direction == PortDirection::Output);
-            let (output, input) = if output {
-                (source, address)
-            } else {
-                (address, source)
-            };
-            EditorGraphMutation::Connect {
-                output,
-                input,
-                order: None,
-            }
-        };
-        self.submit(GraphCommand::Edit(mutation), None, cx);
     }
 
     fn begin_pane(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -529,7 +443,7 @@ impl GraphCanvas {
                     self.emit_selection(cx);
                 }
             }
-            Gesture::Connection { current, .. } => *current = event.position,
+            Gesture::Connection(drag) => drag.current = event.position,
         }
         self.gesture = Some(gesture);
         cx.notify();
@@ -557,12 +471,8 @@ impl GraphCanvas {
             Some(Gesture::Pan { moved: false, .. }) if event.button == MouseButton::Right => {
                 self.show_palette(event.position, None, window, cx);
             }
-            Some(Gesture::Connection {
-                source,
-                moving: false,
-                ..
-            }) => {
-                self.show_palette(event.position, Some(source), window, cx);
+            Some(Gesture::Connection(drag)) if !drag.moving => {
+                self.show_palette(event.position, Some(drag.source), window, cx);
             }
             _ => {}
         }

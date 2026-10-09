@@ -205,6 +205,7 @@ impl GraphCanvas {
         }
         *self.connection_layer.borrow_mut() =
             super::connections::ConnectionLayer::new(&self.graph.projection);
+        self.refresh_connection_states();
         self.retain_located();
         self.selected.retain(|id| {
             self.graph
@@ -285,6 +286,7 @@ impl GraphCanvas {
         self.graph.replace(graph);
         *self.connection_layer.borrow_mut() =
             super::connections::ConnectionLayer::new(&self.graph.projection);
+        self.refresh_connection_states();
         self.cancel_gesture();
         self.retain_located();
         self.selected.retain(|id| {

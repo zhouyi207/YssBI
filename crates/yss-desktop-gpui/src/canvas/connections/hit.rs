@@ -1,26 +1,22 @@
 //! Picking uses GPUI's tessellation of the same curve at a 12px interaction width.
-use gpui::{Bounds, Path, Pixels, Point, point, px};
+use super::curve::Curve;
+use gpui::{Path, Pixels, Point, px};
 
 #[derive(Default)]
 pub(super) struct HitPath {
-    delta: Option<Point<Pixels>>,
+    curve: Option<Curve>,
     path: Option<Path<Pixels>>,
 }
 
 impl HitPath {
-    pub fn contains(&mut self, delta: Point<Pixels>, position: Point<Pixels>) -> bool {
-        let bend = super::connection_bend(delta);
-        let bounds = Bounds::from_corners(
-            point(px(0.).min(delta.x - bend), px(0.).min(delta.y)),
-            point(bend.max(delta.x), px(0.).max(delta.y)),
-        )
-        .dilate(px(6.));
+    pub fn contains(&mut self, curve: Curve, position: Point<Pixels>) -> bool {
+        let bounds = curve.bounds().dilate(px(6.));
         if !bounds.contains(&position) {
             return false;
         }
-        if self.delta != Some(delta) {
-            self.delta = Some(delta);
-            self.path = super::build_connection(delta, px(12.));
+        if self.curve != Some(curve) {
+            self.curve = Some(curve);
+            self.path = curve.build(px(12.), &[]);
         }
         self.path.as_ref().is_some_and(|path| {
             path.vertices.chunks_exact(3).any(|triangle| {
