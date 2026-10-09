@@ -184,7 +184,10 @@ impl Workbench {
                             version,
                             window,
                             cx,
-                        )
+                        );
+                        if matches!(event, CanvasEvent::Selection { .. }) {
+                            details.show_node_properties(cx);
+                        }
                     });
                     view.problems.update(cx, |problems, cx| {
                         problems.set_projection(projection.clone(), cx)

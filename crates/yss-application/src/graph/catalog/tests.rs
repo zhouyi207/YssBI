@@ -1,4 +1,5 @@
 use super::*;
+mod documentation;
 mod function_calls;
 mod schema_feedback;
 

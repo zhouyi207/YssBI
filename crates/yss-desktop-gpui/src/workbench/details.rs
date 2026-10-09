@@ -1,5 +1,6 @@
 use super::controls;
 mod connections;
+mod documentation;
 mod domain;
 mod parameters;
 mod ports;
@@ -22,6 +23,7 @@ use yss_graph_editor::{
     EditorGraphMutation,
     projection::{EditorNodeModel, EditorProjectionModel},
 };
+use yss_node_protocol::NodeTypeId;
 use yss_project::GraphEditVersion;
 
 use crate::canvas::{GraphCanvas, GraphCommand};
@@ -37,6 +39,8 @@ pub struct DetailsPanel {
     )>,
     ports_open: [bool; 2],
     properties: Entity<super::graph_properties::GraphProperties>,
+    documentation: Entity<documentation::NodeDocumentation>,
+    node_definition: Option<NodeTypeId>,
     _properties_observer: gpui::Subscription,
     focus: FocusHandle,
     graph: Option<WeakEntity<GraphCanvas>>,
@@ -59,12 +63,15 @@ impl DetailsPanel {
     pub fn new(services: Arc<NativeServices>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let properties =
             cx.new(|_| super::graph_properties::GraphProperties::new(services.clone()));
+        let documentation = cx.new(|_| documentation::NodeDocumentation::new(services.clone()));
         let properties_observer = cx.observe(&properties, |_, _, cx| cx.notify());
         Self {
             services,
             connection_picker: None,
             ports_open: [false; 2],
             properties,
+            documentation,
+            node_definition: None,
             _properties_observer: properties_observer,
             focus: cx.focus_handle(),
             graph: None,
@@ -89,6 +96,7 @@ impl DetailsPanel {
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
+        self.clear_documentation(cx);
         self.connection_picker = None;
         self.ports_open = [false; 2];
         self.graph = None;
@@ -118,6 +126,8 @@ impl DetailsPanel {
         log: &Entity<super::logs::LogDetails>,
         cx: &mut Context<Self>,
     ) {
+        self.node_definition = None;
+        self.refresh_node_documentation(cx);
         self.connection_picker = None;
         self.log = Some(log.downgrade());
         // Keep the editor binding and drafts, but invalidate menus from the hidden form.
@@ -284,6 +294,7 @@ impl DetailsPanel {
         self.properties.update(cx, |properties, cx| {
             properties.set_graph(graph, needed, window, cx)
         });
+        self.refresh_node_documentation(cx);
         cx.notify();
     }
 
@@ -299,7 +310,8 @@ impl DetailsPanel {
     }
 
     fn accepts_input(&self, epoch: u64, cx: &App) -> bool {
-        self.log.as_ref().and_then(WeakEntity::upgrade).is_none()
+        self.node_definition.is_none()
+            && self.log.as_ref().and_then(WeakEntity::upgrade).is_none()
             && epoch == self.epoch
             && self.graph().is_some_and(|graph| {
                 let graph = graph.read(cx);
@@ -362,6 +374,7 @@ impl DetailsPanel {
         let node_id = node.node_id;
         let epoch = self.epoch;
         div()
+            .min_w_0()
             .flex()
             .flex_col()
             .child(
@@ -454,6 +467,7 @@ impl DetailsPanel {
             )
             .child(self.render_parameters(busy, cx))
             .child(self.render_ports(busy, cx))
+            .child(self.documentation.clone())
     }
 }
 impl Render for DetailsPanel {
@@ -464,6 +478,11 @@ impl Render for DetailsPanel {
             .size_full()
             .overflow_y_scroll()
             .bg(cx.theme().background);
+        if let Some(node_type) = &self.node_definition {
+            return panel
+                .child(self.render_node_definition(node_type, cx))
+                .into_any_element();
+        }
         if let Some(log) = self.log.as_ref().and_then(WeakEntity::upgrade) {
             return panel.child(log).into_any_element();
         }

@@ -304,6 +304,14 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   防止导入后被迟到查询覆盖。查询代次只用于宿主异步交付，不形成新的业务版本权威。
 - `workbench/intents`：复用 WorkbenchBinding，先认领请求，再打开图/定位节点或显示已实现面板，
   成功后结算 applied；未实现的目标结算 failed。
+- `workbench/details/documentation`：通过 Application 按类型读取本地化节点帮助，在节点参数与端口之后呈现默认展开的“文档”折叠区，
+  样式对照 [React 节点文档面板](../../react/src/modules/details/internal/ui/node/NodeDocumentationPanel.tsx)。
+  复用原生 `TextView` 展示可选择的 Markdown，窄面板中的表格横向滚动。
+  不生成或扫描整份节点目录；只保留当前项目、类型与语言的读取投影，项目/类型变化取消旧交付并重新展开。
+  `documentation/render` 仅在展开时构造正文视图；语言变化与重试保留折叠状态，旧语言交付拒绝安装。
+  参数编辑不重复读取文档，缺少正文时隐藏区块，失败可重试；日志检查结束后恢复当前图节点的帮助。
+  节点目录单击在已有 Details 面板预览类型与文档，不改动图或丢弃属性草稿；不可用节点仍可查看说明。
+  可用目录项的“添加到当前图”按钮保留节点创建入口；图的显式选择恢复节点属性，后台投影更新不抢占文档预览。
 - `canvas/geometry` 与 `canvas/render`：端口锚点、节点、连线、视口、可见节点裁剪和 GPU 路径。
   节点行固定保留左右两列，input 在左、output 在右；缺少一侧端口时另一侧仍贴对应边缘。
   节点尺寸与连线锚点共用 geometry，标签过长只截断显示，不改变端口身份或连接规则。

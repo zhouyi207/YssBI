@@ -283,9 +283,31 @@ impl Workbench {
                         view.new_conversation(window, cx)
                     }
                     ActivityEvent::Tool(_) => {}
+                    ActivityEvent::InspectNode(node_type) => {
+                        if view.is_closing(cx) {
+                            return;
+                        }
+                        if let Some(project) = &view.project {
+                            let project = project.identity.clone();
+                            view.details.update(cx, |details, cx| {
+                                details.show_node_definition(project, node_type.clone(), cx);
+                            });
+                            view.show_panel(menus::WorkbenchPanel::Details, window, cx);
+                        }
+                    }
                     ActivityEvent::CreateNode(creation) => {
+                        if view.is_closing(cx) {
+                            return;
+                        }
                         if let Some(graph) = view.details.read(cx).graph() {
+                            view.details.update(cx, |details, cx| {
+                                details.show_node_properties(cx);
+                            });
                             graph.update(cx, |graph, cx| graph.create_node(creation.clone(), cx));
+                        } else {
+                            view.error =
+                                Some(crate::text::translate("native.workbench.openGraphFirst"));
+                            cx.notify();
                         }
                     }
                 },

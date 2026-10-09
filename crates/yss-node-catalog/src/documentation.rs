@@ -15,7 +15,8 @@ macro_rules! markdown {
     };
 }
 
-pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<Box<str>> {
+/// Localized help for one built-in definition, independent of project resources.
+pub fn node_documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<Box<str>> {
     mapped_documentation(node_type_id.as_str())
         .map(|documentation| select_locale(documentation, locale).into())
         .or_else(|| super::statistics::inventory_documentation(node_type_id.as_str(), locale))

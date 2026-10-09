@@ -331,7 +331,7 @@ impl BuiltinCatalog {
         creation: NodeCreation,
     ) -> LocalizedCatalogItem {
         let title = self.text(locale, &protocol.catalog.title_key);
-        let documentation = super::documentation::documentation(&protocol.type_id, locale);
+        let documentation = super::node_documentation(&protocol.type_id, locale);
         let aliases = match protocol.catalog.aliases_key.as_ref() {
             Some(key) => self.aliases(locale, key),
             None => Vec::new(),
@@ -368,7 +368,7 @@ impl BuiltinCatalog {
         locale: &str,
     ) -> LocalizedCatalogItem {
         let title = entry.name.clone();
-        let documentation = super::documentation::documentation(&protocol.type_id, locale);
+        let documentation = super::node_documentation(&protocol.type_id, locale);
         let aliases = match protocol.catalog.aliases_key.as_ref() {
             Some(key) => self.aliases(locale, key),
             None => Vec::new(),

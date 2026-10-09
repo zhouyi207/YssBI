@@ -492,6 +492,23 @@ pub(crate) fn capture_compatible_project_facts(
 }
 
 impl ApplicationState {
+    pub fn node_documentation(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        node_type: &yss_node_protocol::NodeTypeId,
+        locale: &str,
+    ) -> Result<Option<Box<str>>, CatalogQueryApplicationError> {
+        let captured = self.capture_session()?;
+        ensure_requested_project(&captured, project_instance_id)?;
+        let documentation = captured
+            .graph()
+            .registry()
+            .get(node_type)
+            .and_then(|_| yss_node_catalog::node_documentation(node_type, locale));
+        revalidate_application_session(self, &captured)?;
+        Ok(documentation)
+    }
+
     pub fn node_creation_form(
         &self,
         project_instance_id: &ProjectInstanceId,

@@ -12,6 +12,7 @@ use gpui_component::{
 use std::{collections::BTreeSet, sync::Arc};
 use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, ActivityRowContent};
 use yss_node_catalog::NodeCreation;
+use yss_node_protocol::NodeTypeId;
 
 use crate::{appearance, assets::NativeIcon, text::activity_text};
 
@@ -22,6 +23,7 @@ pub enum ActivityEvent {
     OpenDatabase(String),
     OpenChart(String),
     ChartResource(String, super::resources::ResourceAction),
+    InspectNode(NodeTypeId),
     CreateNode(NodeCreation),
     GraphResource(String, super::resources::ResourceAction),
     DatabaseResource(String, super::resources::ResourceAction),
@@ -263,23 +265,50 @@ impl Render for ActivityPanel {
                     title,
                     creation,
                 }) => {
+                    let node_type = match creation {
+                        NodeCreation::Static { node_type_id }
+                        | NodeCreation::ParameterizedStatic { node_type_id, .. }
+                        | NodeCreation::ResourceBound { node_type_id, .. } => node_type_id.clone(),
+                    };
                     let creation = creation.clone();
                     let available = *available;
+                    let expected = self.document.clone();
+                    let expected_creation = expected.clone();
                     item.child(
-                        Icon::new(IconName::Frame)
+                        Icon::new(gpui_kit_assets::IconName::Frame)
                             .size_3()
                             .text_color(cx.theme().muted_foreground),
                     )
                     .child(div().flex_1().min_w_0().truncate().child(title.clone()))
                     .when(!available, |view| {
-                        view.text_color(cx.theme().muted_foreground)
+                        view.text_color(cx.theme().muted_foreground).child(
+                            div()
+                                .text_xs()
+                                .child(crate::text::translate("bayes.results.ratings.unavailable")),
+                        )
                     })
+                    .cursor_pointer()
+                    .hover(|style| style.bg(cx.theme().muted))
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        if Arc::ptr_eq(&view.document, &expected) {
+                            cx.emit(ActivityEvent::InspectNode(node_type.clone()));
+                        }
+                    }))
                     .when(available, |view| {
-                        view.cursor_pointer()
-                            .hover(|style| style.bg(cx.theme().muted))
-                            .on_click(cx.listener(move |_, _, _, cx| {
-                                cx.emit(ActivityEvent::CreateNode(creation.clone()))
-                            }))
+                        view.child(
+                            Button::new(gpui::SharedString::from(format!("add-{id}")))
+                                .small()
+                                .ghost()
+                                .size_5()
+                                .icon(gpui_kit_assets::IconName::Plus)
+                                .tooltip(crate::text::translate("native.workbench.addToGraph"))
+                                .on_click(cx.listener(move |view, _, _, cx| {
+                                    cx.stop_propagation();
+                                    if Arc::ptr_eq(&view.document, &expected_creation) {
+                                        cx.emit(ActivityEvent::CreateNode(creation.clone()));
+                                    }
+                                })),
+                        )
                     })
                     .into_any_element()
                 }

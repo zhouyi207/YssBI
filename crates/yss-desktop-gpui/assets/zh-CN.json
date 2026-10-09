@@ -2838,7 +2838,11 @@
       "trueValue": "真",
       "applyMapping": "应用完整映射",
       "domainMappingFailed": "无法提交编码映射",
-      "invalidDomainMapping": "请检查重复编码、正值选择及映射长度"
+      "invalidDomainMapping": "请检查重复编码、正值选择及映射长度",
+      "addToGraph": "添加到当前图",
+      "loadingNodeDocumentation": "正在读取节点文档…",
+      "nodeDocumentationFailed": "无法读取节点文档，请重试。",
+      "openGraphFirst": "请先打开事件图或函数图，再添加节点。"
     },
     "logs": {
       "copyMessage": "复制消息",

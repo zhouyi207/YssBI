@@ -207,6 +207,9 @@ Chart 预览和图结果复用前端渲染器，各自保留数据持有与失�
 
 Application 的 GUI 创建目录和兼容节点目录保留完整定义，按会话 KernelRegistry 标注 `available`，未接入的节点置灰且禁止目录创建；AI 搜索只返回可用节点。结构节点和透明节点无需叶内核。完整定义注册表仍用于已有图的解析及缺少实现诊断。目录可创建不代表具体图已满足端口、资源或函数依赖要求，最终运行准入仍由语义解析决定。
 
+`graph/catalog::node_documentation` 捕获当前会话、核对项目身份和冻结 Registry 后，按类型读取 Node Catalog 的同一本地化帮助，交付前重验会话。
+未注册类型或没有帮助的定义返回 None；没有执行内核的已注册定义仍可阅读说明。查询不加载图、不读取项目资源目录，也不生成整份创建目录。
+
 Harness 的 `browse_nodes` 复用该目录的搜索与类别过滤，分页只交付类型、名称、短说明和资源绑定；`inspect_node_type` 按精确类型 ID 批量投影 Protocol 的配置 Schema 与端口数量约束。两者均不要求打开图或运行节点，完整定义不随目录页重复传输。
 
 能力指纹进入 Graph 的语义输入哈希和 Execution 的 `PlanBasis`。Execution 在计划准备、资源准备和执行入口

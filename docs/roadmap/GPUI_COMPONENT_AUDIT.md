@@ -322,6 +322,17 @@
 - 预览沿用 GPUI 事件分发，截图依赖尺寸变化；物理键鼠/IME、滚轮、过期菜单/迟到回执、后端失败、多窗口及完整撤销/保存继续开放。临时入口不提交。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；`cargo test -p yss-database-arrow --lib tests::semantic_domains_and_identifiers_keep_codes_and_reject_undeclared_levels -- --exact` 和 `cargo test -p yss-database-arrow --lib tests::categorical_conversion_infers_complete_exact_domains_without_replacing_values -- --exact` 各实际运行 1 项并通过，覆盖编码/顺序/正值、重复与未声明等级、域继承及数量/字节限制。5 个 Rust 文件局部格式、18 个双语键/参数、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过；累计审查 147/265 项。
 
+### 节点文档与目录定义预览
+
+- 逐项阅读 NodeDocumentationPanel、NodeDefinitionDetailPanel 及本地化目录 hook，核对默认展开、类型标识、缺失文档隐藏和项目/语言来源；共享 MarkdownRenderer 与公式扩展仍按独立组件项继续审查。
+- Node Catalog 的 `node_documentation` 直接读取已有嵌入/生成帮助，完整目录也复用同一入口。Application 捕获当前会话、校验项目和已注册类型、交付前重验会话；没有内核的定义仍可读取文档。查询不生成整份目录、不捕获项目资源或载入图。
+- `details/documentation` 只保留当前目标、请求和 Markdown 视图，参数编辑与后台图刷新不重读；`documentation/render` 使用 TextView 和 Collapsible，收起时不构造正文。切换类型默认展开，语言变化/重试保留折叠，旧目标和旧语言的回执不能安装；缺少文档隐藏，失败可重试。
+- 节点目录单击在同一 Details 预览类型与帮助，可用项的“＋”调用原创建事务；行与按钮均核对原目录投影，不在视图生成创建描述。预览保留图绑定和参数草稿，显式图选择恢复属性，后台投影不抢占预览；日志检查与目录预览切换时清除旧展示归属，并恢复当前节点文档。
+- 临时 `cargo build -p yss-desktop-gpui --example node_documentation_review` 使用隔离项目与真实 Application。GPUI Window 事件分发核对默认展开、折叠/中英文切换、参数草稿及后台刷新期间请求代次和 TextView 实体不变、目录预览往返保留草稿、真实目录单击预览和“＋”创建节点。
+- 同一预览核对不可执行类型的生成帮助、缺失帮助隐藏、错误项目导致的读取失败与重试、回到有效节点后恢复；从目录说明打开实际日志再 Escape 恢复当前图节点，反向切换后旧日志取消不关闭目录预览。标题、段落、列表、代码和表格已目视核对；物理键鼠/IME、文字复制、宽表滚动、迟到查询、多窗口与完整项目切换仍开放，截图继续依赖尺寸变化。
+- L2 验证：`cargo test -p yss-application --lib graph::catalog::tests::documentation:: -- --nocapture` 实际运行 2 项并通过，覆盖本地化目录一致性/不可执行定义/缺失类型，以及错误项目/无活动会话；`cargo test -p yss-node-catalog --lib localization::tests::node_help_uses_the_same_locale_as_its_metadata -- --exact` 实际运行 1 项并通过。
+- `cargo clippy -p yss-application -p yss-node-catalog --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。12 个 Rust 文件局部格式、8 个双语键/参数、294 条文档相对链接（工作区 299 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。不新增依赖或 UI 单元测试，临时入口不提交；未运行全工作区验证。累计审查 149/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -489,7 +500,7 @@
 | [modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx](../../react/src/modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx) | 迁移到现有常量卡片的按需 JSON 编辑，复用同一草稿和应用/恢复 | `constant_values` 用 RawValue 与 bigdecimal 保留精确数值；无效输入保留，Null 仍走原类型化事务 | 样例精确 JSON、对象形状错误与 Null 已核对；完整生命周期待验收 |
 | [modules/details/internal/ui/node/DescriptionResultSection.tsx](../../react/src/modules/details/internal/ui/node/DescriptionResultSection.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/NodeCreationForm.tsx](../../react/src/modules/details/internal/ui/node/NodeCreationForm.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/node/NodeDocumentationPanel.tsx](../../react/src/modules/details/internal/ui/node/NodeDocumentationPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/node/NodeDocumentationPanel.tsx](../../react/src/modules/details/internal/ui/node/NodeDocumentationPanel.tsx) | 迁移/优化：复用 TextView、Collapsible 和单类型文档查询 | documentation 持有当前目标与视图；render 展示正文/折叠/重试，参数编辑不重读，项目/语言隔离 | 常规 Markdown 与文档生命周期预览通过；共享公式组件及其余人工验收开放 |
 | [modules/details/internal/ui/node/NodePinConnectionField.tsx](../../react/src/modules/details/internal/ui/node/NodePinConnectionField.tsx) | 迁移/优化：连接选择复用原生虚拟 List，Application 决定候选和替换 | `connections` 安装对端名称和逐条删除，50 条分页；picker 按需查询、搜索、键盘确认和失败重试，版本/投影/控件拒绝过期操作 | 样例已核对双向连接、替换与分支保留；失败/过期/大列表验收开放 |
 | [modules/details/internal/ui/node/NodePinInterfacePanel.tsx](../../react/src/modules/details/internal/ui/node/NodePinInterfacePanel.tsx) | 迁移/优化：输入、输出默认折叠，内容按展开构建 | `ports/list` 分组及空状态；原字面量与实例操作复用原事务，提交失败直接呈现在节点属性 | 样例已核对折叠、连接与实例操作；完整字面量/多窗口验收开放 |
 | [modules/details/internal/ui/node/NodePortInstanceControls.tsx](../../react/src/modules/details/internal/ui/node/NodePortInstanceControls.tsx) | 复核原生实现：增删/顺序由投影与原编辑事务控制 | 复用 `ports`，分组添加入口沿用 can_add/can_remove 与捕获版本；不迁移每按钮独立业务状态 | 样例已核对最小数量、增删及带连接重排/删除；分组联动与失败验收开放 |
@@ -509,7 +520,7 @@
 | [modules/details/internal/ui/panels/GraphConstantsPanel.tsx](../../react/src/modules/details/internal/ui/panels/GraphConstantsPanel.tsx) | 优化为默认展开的 50 项目录，访问页面时创建输入实体 | 稳定 ID 线性复用草稿，分页/折叠/语言切换不丢输入；原创建/引用/删除事务继续复用 | 53 项样例与草稿保留已核对；拖动/删除/保存完整验收开放 |
 | [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 复用原 Details 容器与原生只读控件 | 当前日志实体唯一归 LogsPanel，Details 弱引用展示时间/流/序列/领域/来源及原消息/字段；默认展开、文本选择与复制不解析 Markdown | 代码已接入；完整交互验收待完成 |
 | [modules/details/internal/ui/panels/MindDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/MindDetailPanel.tsx) | 优化现有原生表单，复用同一输入草稿与 MindEdit 提交 | 按回执跟随新增/删除选择、确认提交草稿、排序边界禁用、父主题勾选与无变化保护；保留显式应用/恢复和保存 | 样例新增/删除/排序/保存已核对；完整生命周期与长树性能待完成 |
-| [modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx) | 迁移/优化：在既有 Details 预览类型与同一文档实体 | Activity 单击预览，创建按钮沿用原图事务；保留参数草稿，显式选择恢复节点属性，后台刷新不抢占 | 目录预览、创建、草稿保留及日志往返已核对；过期交付和多窗口仍待验收 |
 | [modules/details/internal/ui/panels/NodeDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/shared/DetailCollapsibleSection.tsx](../../react/src/modules/details/internal/ui/shared/DetailCollapsibleSection.tsx) | 复用原生 Collapsible/Button 与既有局部折叠状态 | 日志消息/字段默认展开，同条记录重选保留状态；其余 Details 消费者按各自初始展开策略核对 | 日志已接入；其他消费者随功能验收 |
 | [modules/details/internal/ui/shared/DetailColumnList.tsx](../../react/src/modules/details/internal/ui/shared/DetailColumnList.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

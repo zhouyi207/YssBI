@@ -37,6 +37,7 @@ pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
 pub use core_nodes::reroute::validate_reroute_protocol_contract;
 pub use creation::{NodeCreationPort, PortCountPolicy, node_creation_ports};
 pub use dataframe::{DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER};
+pub use documentation::node_documentation;
 pub fn reroute_node_type() -> yss_node_protocol::NodeTypeId {
     yss_node_protocol::NodeTypeId::new(REROUTE_NODE_TYPE)
         .expect("built-in reroute identifier is valid")
