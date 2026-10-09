@@ -4,6 +4,131 @@ use crate::regression::models::glm;
 use yss_sci_contract::causal::models::*;
 use yss_sci_contract::regression::models::{GlmFamily, GlmLink, GlmOptions};
 
+#[derive(Clone, Copy, Default)]
+struct OutcomeAverage {
+    mean: f64,
+    count: usize,
+}
+
+impl OutcomeAverage {
+    fn combine(self, other: Self) -> Self {
+        if self.count == 0 {
+            return other;
+        }
+        if other.count == 0 {
+            return self;
+        }
+        let count = self.count + other.count;
+        Self {
+            mean: if self.mean == other.mean {
+                self.mean
+            } else {
+                self.mean * (self.count as f64 / count as f64)
+                    + other.mean * (other.count as f64 / count as f64)
+            },
+            count,
+        }
+    }
+}
+
+fn matched_outcomes(
+    y: &[f64],
+    treatment: &[f64],
+    scores: &[f64],
+    caliper: f64,
+    control: &Control,
+) -> Result<(Vec<f64>, Vec<usize>, f64)> {
+    let n = y.len();
+    let mut cohorts = [Vec::new(), Vec::new()];
+    for (i, &level) in treatment.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            control.check()?;
+        }
+        cohorts[level as usize].push(i);
+    }
+    for indices in &mut cohorts {
+        control.check()?;
+        indices.sort_unstable_by(|&i, &j| scores[i].total_cmp(&scores[j]).then(i.cmp(&j)));
+        control.check()?;
+    }
+
+    let mut matched = vec![0.0; n];
+    let mut counts = vec![0; n];
+    let mut maximum = 0.0_f64;
+    for level in 0..2 {
+        let candidates = &cohorts[1 - level];
+        let offset = candidates.len();
+        // A range-mean tree pools all ties without rescanning their outcomes or
+        // subtracting prefix sums, which can lose small local outcome means.
+        let mut averages = vec![OutcomeAverage::default(); 2 * offset];
+        for (i, &row) in candidates.iter().enumerate() {
+            if i.is_multiple_of(1024) {
+                control.check()?;
+            }
+            averages[offset + i] = OutcomeAverage {
+                mean: y[row],
+                count: 1,
+            };
+        }
+        for i in (1..offset).rev() {
+            if i.is_multiple_of(1024) {
+                control.check()?;
+            }
+            averages[i] = averages[2 * i].combine(averages[2 * i + 1]);
+        }
+
+        let mut previous: Option<(f64, OutcomeAverage, f64)> = None;
+        for &row in &cohorts[level] {
+            control.check()?;
+            let score = scores[row];
+            let (average, distance) = if let Some((previous_score, average, distance)) = previous
+                && previous_score == score
+            {
+                (average, distance)
+            } else {
+                let split = candidates.partition_point(|&i| scores[i] < score);
+                let distance = split
+                    .checked_sub(1)
+                    .map(|i| (score - scores[candidates[i]]).abs())
+                    .into_iter()
+                    .chain(candidates.get(split).map(|&i| (score - scores[i]).abs()))
+                    .fold(f64::INFINITY, f64::min);
+                if distance > caliper {
+                    return Err(parameter());
+                }
+                // Subtraction can round several distinct scores to the same
+                // nearest distance; retain the full interval on both sides.
+                let first =
+                    candidates[..split].partition_point(|&i| (score - scores[i]).abs() > distance);
+                let last = split
+                    + candidates[split..]
+                        .partition_point(|&i| (score - scores[i]).abs() <= distance);
+                let (mut left, mut right) = (offset + first, offset + last);
+                let mut average = OutcomeAverage::default();
+                while left < right {
+                    if left % 2 == 1 {
+                        average = average.combine(averages[left]);
+                        left += 1;
+                    }
+                    if right % 2 == 1 {
+                        right -= 1;
+                        average = average.combine(averages[right]);
+                    }
+                    left /= 2;
+                    right /= 2;
+                }
+                finite(average.mean)?;
+                previous = Some((score, average, distance));
+                (average, distance)
+            };
+            matched[row] = average.mean;
+            counts[row] = average.count;
+            maximum = maximum.max(distance);
+        }
+    }
+    Ok((matched, counts, maximum))
+}
+
 pub fn estimate(
     y: &[f64],
     treatment: &[f64],
@@ -126,35 +251,8 @@ fn point(
                 return Err(parameter());
             }
             let e = scores.as_ref().expect("propensity");
-            let mut matched = vec![0.0; n];
-            let mut matched_counts = vec![0; n];
-            let mut maximum = 0.0_f64;
-            // Replacement is allowed; all exact nearest-distance ties receive equal weight.
-            for i in 0..n {
-                control.check()?;
-                let mut best = f64::INFINITY;
-                for j in 0..n {
-                    if j.is_multiple_of(1024) {
-                        control.check()?;
-                    }
-                    if treatment[i] == treatment[j] {
-                        continue;
-                    }
-                    let distance = (e[i] - e[j]).abs();
-                    if distance < best {
-                        best = distance;
-                        matched[i] = y[j];
-                        matched_counts[i] = 1;
-                    } else if distance == best {
-                        matched_counts[i] += 1;
-                        matched[i] += (y[j] - matched[i]) / matched_counts[i] as f64;
-                    }
-                }
-                if best > options.caliper {
-                    return Err(parameter());
-                }
-                maximum = maximum.max(best);
-            }
+            let (matched, matched_counts, maximum) =
+                matched_outcomes(y, treatment, e, options.caliper, control)?;
             let effects = (0..n)
                 .map(|i| {
                     if treatment[i] == 1.0 {
@@ -248,4 +346,75 @@ fn point(
         match_counts: counts,
         maximum_match_distance: maximum_distance,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+    use yss_sci_contract::execution::{ScientificCancellationToken, ScientificComputationError};
+
+    fn control() -> Control {
+        Control {
+            cancellation: ScientificCancellationToken::new(),
+            deadline: Instant::now() + Duration::from_secs(60),
+        }
+    }
+
+    #[test]
+    fn matching_keeps_all_nearest_ties_across_score_groups() {
+        let y = [10.0, 2.0, 4.0, 12.0, 6.0];
+        let treatment = [1.0, 0.0, 0.0, 0.0, 1.0];
+        let scores = [0.5, 0.25, 0.25, 0.75, 0.125];
+        let expected = [6.0, 6.0, 6.0, 10.0, 3.0];
+        let expected_counts = [3, 1, 1, 1, 2];
+        for order in [[0, 1, 2, 3, 4], [4, 0, 3, 2, 1]] {
+            let sample = |values: &[f64]| order.map(|i| values[i]);
+            let (matched, counts, maximum) = matched_outcomes(
+                &sample(&y),
+                &sample(&treatment),
+                &sample(&scores),
+                0.25,
+                &control(),
+            )
+            .unwrap();
+            for (row, &index) in order.iter().enumerate() {
+                assert!((matched[row] - expected[index]).abs() < 1e-12);
+                assert_eq!(counts[row], expected_counts[index]);
+            }
+            assert_eq!(maximum, 0.25);
+        }
+    }
+
+    #[test]
+    fn matching_keeps_rounded_distance_ties_and_caliper_boundary() {
+        let y = [4.0, 10.0, 16.0, 20.0, 30.0];
+        let treatment = [0.0, 0.0, 0.0, 1.0, 1.0];
+        let scores = [1e-20, 2e-20, 3e-20, 0.5, 0.75];
+        let (matched, counts, maximum) =
+            matched_outcomes(&y, &treatment, &scores, 0.75, &control()).unwrap();
+        assert_eq!(matched, [20.0, 20.0, 20.0, 10.0, 10.0]);
+        assert_eq!(counts, [1, 1, 1, 3, 3]);
+        assert_eq!(maximum, 0.75);
+        assert_eq!(
+            matched_outcomes(&y, &treatment, &scores, 0.75_f64.next_down(), &control())
+                .unwrap_err(),
+            parameter()
+        );
+        let cancelled = control();
+        cancelled.cancellation.cancel();
+        let expired = Control {
+            deadline: Instant::now(),
+            ..control()
+        };
+        for (control, expected) in [
+            (cancelled, ScientificComputationError::Cancelled),
+            (expired, ScientificComputationError::DeadlineExceeded),
+        ] {
+            assert_eq!(
+                matched_outcomes(&y, &treatment, &scores, 0.75, &control).unwrap_err(),
+                expected
+            );
+        }
+    }
 }

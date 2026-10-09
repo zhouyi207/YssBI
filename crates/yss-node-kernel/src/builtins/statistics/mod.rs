@@ -128,7 +128,8 @@ pub(super) fn install(
                 | "yssbi.statistics.test.t.paired"
                 | "yssbi.statistics.workflow.mediation"
                 | "yssbi.statistics.workflow.moderated_mediation" => 8,
-                "yssbi.statistics.diagnostic.wald"
+                "yssbi.statistics.causal.psm"
+                | "yssbi.statistics.diagnostic.wald"
                 | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
@@ -170,7 +171,6 @@ pub(super) fn install(
                 | "yssbi.plot.violin"
                 | "yssbi.statistics.causal.aipw"
                 | "yssbi.statistics.causal.ipw"
-                | "yssbi.statistics.causal.psm"
                 | "yssbi.statistics.causal.rdd"
                 | "yssbi.statistics.causal.regression_adjustment"
                 | "yssbi.statistics.diagnostic.information_matrix"

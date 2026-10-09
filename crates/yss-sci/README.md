@@ -512,6 +512,17 @@ and Heckman optionally resample independent rows and refit all nuisance stages;
 failed bootstrap fits abort rather than biasing inference by being discarded.
 The default is point estimation; bootstrap inference uses normal intervals.
 
+Matching sorts row indices within each treatment cohort and locates the complete
+nearest-distance interval with binary searches on both sides of the query score.
+This includes distinct scores whose subtractions round to equal distances. A
+count/mean range tree pools all matched outcomes without scanning their rows again
+or subtracting prefix sums; repeated query scores reuse their match. Matching takes
+O(n log n) time and O(n) extra workspace, including fully tied scores, and restores
+all observation results to input order. Sorting checks execution control before and
+after each native sort; index construction and queries retain controlled scans.
+Focused backend tests cover both-sided ties, unequal tie counts, rounded distance
+ties, the caliper boundary and interruption.
+
 Shared regression designs, coefficient tables, stable normal log-CDF and controlled
 optimization remain owned by `regression::models::common`; all matrix arithmetic
 stays behind Linalg. Algorithms check cancellation/deadlines between scans and
