@@ -245,6 +245,16 @@
 - 临时 `cargo build -p yss-desktop-gpui --example log_details_review` 使用隔离项目、真实 LogRuntime 和原生工作台。Linux/X11 窗口目视核对点击/方向键选中、折叠后重选和当前工作区的中英文切换、筛选无匹配时保留详情、搜索焦点不触发行切换，以及 Escape/清空/回到画布恢复图属性。
 - 原消息及完整 JSON 复制通过只识别样例内容的预览检查核对，完整记录保留 `9007199254740993`；日志详情仍保留图绑定。消息里的 Markdown 符号和换行按原文显示，只读输入不能改写正文。右键菜单显示和复制已核对；X11 截图需要调整尺寸触发刷新，不代表自动重绘、真实项目完整交互或其他平台验收通过。临时样例不提交，不添加 UI 单元测试。
 
+### Details 选择回退与文档信息
+
+- 逐项阅读 DetailsPane、DetailEmptyState、FileDetailPanel，跟随 `useDetailPanelModel`、模型分支和编辑器选择策略。复用现有 Details 弱绑定与编辑器 owner，不引入新的目标解析 store 或读取服务。
+- 修复多选和失效节点的回退：是否显示/读取图属性由当前投影中有无唯一节点决定，继续使用已有 GraphProperties、版本查询与草稿控件。只有一个有效节点时渲染参数和端口，视图直接借用节点，不在每次渲染复制整份模型。
+- `documents/details` 拥有文档文件信息，从 DocumentEditor 的同一快照、输入脏状态、忙碌和错误派生展示；工作台只委派。无存活资源时复用通用未选择提示，原生读取/保存状态使用现有双语键与可访问性角色。
+- 本批只调整已打开资源的 Details 路由；首次资源读取、缺失资源的完整加载/重试体验以及各节点/图属性表单的专项迁移仍分别跟踪。
+- L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；3 个 Rust 文件格式、2 份文档元信息、269 条相对链接（工作区 275 条）、4 个文档状态双语键和通用空状态文案、模块索引（59 crates / 239 条依赖声明）、`git diff --check` 通过。后端契约未改动，不重复后端测试；累计审查 134/265 项。
+- 临时 `cargo build -p yss-desktop-gpui --example details_routing_review` 使用独立项目和两个真实数学常量节点。Linux/X11 目视核对单选节点表单、多选图属性、清空绑定的通用空状态；另用临时失效节点投影核对图属性回退。文档实际输入后显示未保存状态，切换预览保留路径和状态，注入的忙碌/错误样例按同一编辑器状态显示。
+- 该预览不覆盖真实外部删除、保存失败、函数签名/常量草稿及多窗口完整交互；X11 截图仍依赖调整尺寸触发重绘，自动重绘与其他平台验收开放。临时样例已移出仓库，没有增加 UI 单元测试。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -407,8 +417,8 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/details/internal/ui/DetailEmptyState.tsx](../../react/src/modules/details/internal/ui/DetailEmptyState.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/DetailsPane.tsx](../../react/src/modules/details/internal/ui/DetailsPane.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/DetailEmptyState.tsx](../../react/src/modules/details/internal/ui/DetailEmptyState.tsx) | 复用原生空状态与文件图标 | 没有存活资源目标时使用通用未选择文案，不再提示只选择图节点；状态直接由现有弱绑定判断 | 代码已接入；真实切换验收待完成 |
+| [modules/details/internal/ui/DetailsPane.tsx](../../react/src/modules/details/internal/ui/DetailsPane.tsx) | 优化既有 Details 协调层，不迁入 React 模型 store | 单个有效节点借用原投影渲染，多选/无节点/失效节点回到原 GraphProperties；资源显示委派给实际编辑器，日志检查沿用前批弱引用 | 路由已修正；各分支专项及生命周期继续单独验收 |
 | [modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx](../../react/src/modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/DescriptionResultSection.tsx](../../react/src/modules/details/internal/ui/node/DescriptionResultSection.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/NodeCreationForm.tsx](../../react/src/modules/details/internal/ui/node/NodeCreationForm.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -427,7 +437,7 @@
 | [modules/details/internal/ui/panels/DataDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/DataDetailPanel.tsx) | 迁移/优化：元数据沿用编辑器同一投影，局部折叠与分页只属于 Details | `details` 信息与 `details/columns` 分页目录；移除 100 列截断，空表可独立配置列，失败可重试 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/DataSelectionPreview.tsx](../../react/src/modules/details/internal/ui/panels/DataSelectionPreview.tsx) | 迁移/优化：从当前数据库面板的同一选区派生主要单元格，不新增全局面板状态 | `databases/details` 补齐默认收起的预览、行号、列名与可选择的只读内容，区分 NULL/空字符串/未选择；覆盖行列与全页选择 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/EventDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/EventDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/FileDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FileDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/FileDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FileDetailPanel.tsx) | 文件信息由对应编辑器负责，Details 只委派 | 文档信息移入 documents/details，沿用同一快照、草稿和错误；首次读取仍由工作台资源打开流程负责，完整加载/缺失/重试体验继续检查 | 已打开文档已接入；初次读取及失效反馈待复核 |
 | [modules/details/internal/ui/panels/FunctionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FunctionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/GraphConstantsPanel.tsx](../../react/src/modules/details/internal/ui/panels/GraphConstantsPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 复用原 Details 容器与原生只读控件 | 当前日志实体唯一归 LogsPanel，Details 弱引用展示时间/流/序列/领域/来源及原消息/字段；默认展开、文本选择与复制不解析 Markdown | 代码已接入；完整交互验收待完成 |

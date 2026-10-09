@@ -2795,7 +2795,11 @@
       "clearDisplay": "清空显示",
       "logConnectionFailed": "无法连接日志存储",
       "logStorageUnavailable": "日志存储不可用",
-      "logsEmpty": "应用运行记录会显示在这里"
+      "logsEmpty": "应用运行记录会显示在这里",
+      "markdownDocument": "Markdown 文档",
+      "loadingOrSaving": "正在读取或保存…",
+      "unsavedChanges": "有未保存的更改",
+      "saved": "已保存"
     },
     "logs": {
       "copyMessage": "复制消息",

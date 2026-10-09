@@ -1,5 +1,6 @@
 //! Native Markdown input and preview; Project owns the committed document and version.
 pub(crate) mod commands;
+mod details;
 mod render;
 
 use crate::services::NativeServices;

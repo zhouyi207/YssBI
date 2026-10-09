@@ -250,7 +250,7 @@ impl DetailsPanel {
                 }
             })
             .collect();
-        let needed = self.selected.is_empty()
+        let needed = node.is_none()
             || self
                 .fields
                 .iter()
@@ -317,7 +317,7 @@ impl DetailsPanel {
 impl DetailsPanel {
     fn render_node_details(
         &self,
-        node: EditorNodeModel,
+        node: &EditorNodeModel,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let busy = self.graph().is_some_and(|graph| graph.read(cx).busy());
@@ -416,82 +416,31 @@ impl Render for DetailsPanel {
         if let Some(log) = self.log.as_ref().and_then(WeakEntity::upgrade) {
             return panel.child(log).into_any_element();
         }
-        let node = self.node().cloned();
-        panel
-            .when_some(node, |view, node| {
-                view.child(self.render_node_details(node, cx))
-            })
-            .when(self.selected.is_empty() && self.graph.is_some(), |view| {
-                view.child(self.properties.clone())
-            })
-            .when_some(self.document(), |view, document| {
-                let document = document.read(cx);
-                view.child(
-                    div()
-                        .p_4()
-                        .flex()
-                        .flex_col()
-                        .gap_3()
-                        .child(
-                            div()
-                                .text_sm()
-                                .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child(document.snapshot.path.name().to_owned()),
-                        )
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("Markdown 文档"),
-                        )
-                        .child(div().text_sm().child(document.path().to_owned()))
-                        .child(
-                            div()
-                                .text_xs()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(if document.busy() {
-                                    "正在读取或保存…"
-                                } else if document.dirty() {
-                                    "有未保存的更改"
-                                } else {
-                                    "已保存"
-                                }),
-                        ),
-                )
-            })
-            .when_some(self.mind(), |view, mind| {
-                view.child(mind.update(cx, |mind, cx| mind.render_details(window, cx)))
-            })
-            .when_some(self.database(), |view, editor| {
-                view.child(editor.update(cx, |editor, cx| editor.render_details(window, cx)))
-            })
-            .when_some(self.chart(), |view, chart| {
-                view.child(chart.update(cx, |chart, cx| chart.render_details(cx)))
-            })
-            .when(
-                self.document.is_none()
-                    && self.mind.is_none()
-                    && self.database.is_none()
-                    && self.chart.is_none()
-                    && self.selected.len() != 1
-                    && !(self.selected.is_empty() && self.graph.is_some()),
-                |view| {
-                    view.child(appearance::empty_state(
-                        IconName::Inspector,
-                        if self.selected.is_empty() {
-                            "节点属性".into()
-                        } else {
-                            format!("已选择 {} 个节点", self.selected.len())
-                        },
-                        if self.selected.is_empty() {
-                            "在画布中选择节点，查看参数与端口"
-                        } else {
-                            "拖动可一起移动，Esc 取消当前操作"
-                        },
-                        cx,
-                    ))
-                },
+        let content = if self.graph().is_some() {
+            if let Some(node) = self.node() {
+                self.render_node_details(node, cx).into_any_element()
+            } else {
+                self.properties.clone().into_any_element()
+            }
+        } else if let Some(document) = self.document() {
+            document.read(cx).render_details(cx).into_any_element()
+        } else if let Some(mind) = self.mind() {
+            mind.update(cx, |mind, cx| mind.render_details(window, cx))
+        } else if let Some(database) = self.database() {
+            database.update(cx, |editor, cx| editor.render_details(window, cx))
+        } else if let Some(chart) = self.chart() {
+            chart.update(cx, |editor, cx| editor.render_details(cx))
+        } else {
+            appearance::empty_state(
+                IconName::FileText,
+                crate::text::translate("detail.noSelection"),
+                crate::text::translate("detail.noSelectionHint"),
+                cx,
             )
+            .into_any_element()
+        };
+        panel
+            .child(content)
             .when_some(self.error.clone(), |view, error| {
                 view.child(
                     div()
