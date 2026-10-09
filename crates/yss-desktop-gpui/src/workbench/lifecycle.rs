@@ -3,6 +3,7 @@ use super::{
     Workbench,
     projects::{ProjectCommand, ProjectOperation},
 };
+use crate::projects::progress::{ProjectProgress, ProjectStage};
 use gpui::{AppContext, Context, Window};
 
 pub(super) enum AfterSave {
@@ -47,6 +48,11 @@ impl Workbench {
         };
         self.closing = matches!(after, AfterSave::Project(_));
         self.busy = true;
+        let (progress, _) = ProjectProgress::start(ProjectStage::Saving, None, cx);
+        if let AfterSave::Project(operation) = &after {
+            operation.show_progress(progress.clone(), cx);
+        }
+        self.project_progress = Some(progress);
         self.error = None;
         let lifecycle = self.lifecycle;
         window.focus(&self.focus, cx);
@@ -64,6 +70,7 @@ impl Workbench {
                     return;
                 }
                 view.busy = false;
+                view.project_progress = None;
                 view.closing = false;
                 let failed = if let Some(responses) = result {
                     targets

@@ -1,5 +1,5 @@
 //! Commit project commands off-thread, then observe and install the actual authority.
-use super::{ProjectCommand, ProjectOperation};
+use super::{ProjectCommand, ProjectOperation, ProjectStage};
 use crate::{project::DesktopProject, workbench::Workbench};
 use gpui::{Context, Window};
 use gpui_component::WindowExt;
@@ -56,6 +56,7 @@ fn commit(
     expected: Option<yss_project_identity::ProjectInstanceId>,
     services: &ApplicationServices,
     executor: &tokio::runtime::Handle,
+    progress: &tokio::sync::watch::Sender<ProjectStage>,
 ) -> ProjectObservation {
     let mut receipt = None;
     let register = matches!(&command, ProjectCommand::Open(_));
@@ -88,6 +89,7 @@ fn commit(
                 receipt = Some(created);
                 let created = receipt.as_ref().unwrap();
                 lifecycle_receipt(created).map_err(anyhow::Error::msg)?;
+                progress.send_replace(ProjectStage::Opening);
                 services.application.load_project_for_application(
                     created
                         .path
@@ -139,6 +141,7 @@ fn commit(
             })
             .to_owned()
     });
+    progress.send_replace(ProjectStage::Reading);
     let (active, project) = read_project(services);
     if recovery.is_none() && (error.is_some() || project.is_err()) {
         recovery = receipt
@@ -157,15 +160,18 @@ fn commit(
         && error.is_none()
         && let Ok(Some(project)) = &project
         && let Ok(activation) = services.application.query_current_project_activation()
-        && executor
+    {
+        progress.send_replace(ProjectStage::Registering);
+        if executor
             .block_on(
                 services
                     .projects
                     .register_project(&project.index.project_name, &activation.path),
             )
             .is_err()
-    {
-        error = Some("项目已打开，但最近项目列表未更新。请刷新或重新扫描登记。".into());
+        {
+            error = Some("项目已打开，但最近项目列表未更新。请刷新或重新扫描登记。".into());
+        }
     }
     ProjectObservation {
         active,
@@ -193,6 +199,9 @@ impl Workbench {
         }
         self.persist_layout(cx);
         self.busy = true;
+        let (progress, delivery) = operation.command.progress(cx);
+        operation.show_progress(progress.clone(), cx);
+        self.project_progress = Some(progress);
         self.error = None;
         self.lifecycle = self.lifecycle.wrapping_add(1);
         let lifecycle = self.lifecycle;
@@ -210,8 +219,15 @@ impl Workbench {
         let watcher = self.services.clone();
         let dialog = operation.dialog;
         let job = self.services.run(move |services| {
-            let observation = commit(operation.command, operation.project, services, &executor);
+            let observation = commit(
+                operation.command,
+                operation.project,
+                services,
+                &executor,
+                &delivery,
+            );
             if let Some(identity) = &observation.active {
+                delivery.send_replace(ProjectStage::Watching);
                 let _ = watcher.watch_project(identity);
             }
             Ok(observation)
@@ -223,6 +239,7 @@ impl Workbench {
                     return;
                 }
                 view.busy = false;
+                view.project_progress = None;
                 let (mut error, recovery) = if let Some(observation) = result {
                     match observation.project {
                         Ok(project) => view.install_project(project, window, cx),

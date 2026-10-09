@@ -2756,6 +2756,16 @@
       "rowRangeUnknown": "第 {{start}}–{{end}} 行",
       "pageKnown": "第 {{page}} / {{pages}} 页",
       "pageUnknown": "第 {{page}} 页"
+    },
+    "projects": {
+      "progress": {
+        "saving": "正在保存更改",
+        "copying": "正在另存为项目",
+        "closing": "正在关闭项目",
+        "reading": "正在读取项目内容",
+        "registering": "正在更新最近项目",
+        "watching": "正在准备工作区"
+      }
     }
   }
 }

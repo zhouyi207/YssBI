@@ -1,4 +1,5 @@
 //! Destination input is a draft; the existing Project use case validates and commits it.
+use super::progress::ProjectProgress;
 use crate::{
     services::NativeServices,
     workbench::{
@@ -44,6 +45,7 @@ pub(crate) struct ProjectForm {
     original_name: String,
     original_parent: String,
     pub(crate) busy: bool,
+    progress: Option<Entity<ProjectProgress>>,
     error: Option<String>,
     recovery: Option<PathBuf>,
     confirming: bool,
@@ -93,6 +95,7 @@ impl ProjectForm {
             original_name: default_name,
             original_parent: String::new(),
             busy: false,
+            progress: None,
             error: None,
             recovery: None,
             confirming: false,
@@ -201,10 +204,19 @@ impl ProjectForm {
     ) {
         self.lifecycle = lifecycle;
         self.busy = false;
+        self.progress = None;
         self.error = error;
         if recovery.is_some() || self.error.is_none() {
             self.recovery = recovery;
         }
+        cx.notify();
+    }
+    pub(crate) fn show_progress(
+        &mut self,
+        progress: Entity<ProjectProgress>,
+        cx: &mut Context<Self>,
+    ) {
+        self.progress = Some(progress);
         cx.notify();
     }
     pub(crate) fn cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -242,6 +254,15 @@ impl ProjectForm {
 }
 impl Render for ProjectForm {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(progress) = &self.progress {
+            return div()
+                .w_full()
+                .min_h(gpui::px(230.))
+                .flex()
+                .items_center()
+                .child(progress.clone())
+                .into_any_element();
+        }
         div()
             .flex()
             .flex_col()
@@ -329,5 +350,6 @@ impl Render for ProjectForm {
                             })),
                     ),
             )
+            .into_any_element()
     }
 }

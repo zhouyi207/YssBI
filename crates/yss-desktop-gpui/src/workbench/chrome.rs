@@ -234,19 +234,40 @@ impl Workbench {
                     .when(self.busy || self.closing, |view| {
                         view.child(
                             div()
+                                .id("workbench-operation-overlay")
+                                .occlude()
                                 .absolute()
                                 .inset_0()
                                 .bg(cx.theme().overlay)
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .gap_2()
-                                .child(
-                                    Icon::new(IconName::LoaderCircle)
-                                        .size_4()
-                                        .text_color(cx.theme().muted_foreground),
-                                )
-                                .child("正在处理…"),
+                                .p_6()
+                                .map(|view| {
+                                    if let Some(progress) = &self.project_progress {
+                                        view.child(
+                                            div()
+                                                .w_full()
+                                                .max_w(px(420.))
+                                                .min_w_0()
+                                                .p_5()
+                                                .rounded_lg()
+                                                .border_1()
+                                                .border_color(cx.theme().border)
+                                                .bg(cx.theme().background)
+                                                .shadow_lg()
+                                                .child(progress.clone()),
+                                        )
+                                    } else {
+                                        view.gap_2()
+                                            .child(
+                                                Icon::new(IconName::LoaderCircle)
+                                                    .size_4()
+                                                    .text_color(cx.theme().muted_foreground),
+                                            )
+                                            .child("正在处理…")
+                                    }
+                                }),
                         )
                     }),
             )

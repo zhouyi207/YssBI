@@ -5,6 +5,7 @@ use super::{Workbench, lifecycle::AfterSave};
 use crate::projects::{
     RecentDelegate, RecentProjectEvent,
     form::{ProjectForm, ProjectFormKind},
+    progress::{ProjectProgress, ProjectStage},
 };
 use gpui::{
     AppContext, Context, PathPromptOptions, PromptLevel, WeakEntity, Window, prelude::*, px,
@@ -30,6 +31,15 @@ pub(crate) struct ProjectOperation {
     dialog: Option<WeakEntity<ProjectForm>>,
 }
 impl ProjectOperation {
+    pub(super) fn show_progress(
+        &self,
+        progress: gpui::Entity<ProjectProgress>,
+        cx: &mut Context<Workbench>,
+    ) {
+        if let Some(dialog) = &self.dialog {
+            let _ = dialog.update(cx, |form, cx| form.show_progress(progress, cx));
+        }
+    }
     pub(crate) fn new(
         command: ProjectCommand,
         dialog: Option<WeakEntity<ProjectForm>>,
@@ -50,6 +60,24 @@ impl ProjectOperation {
                 view.finish(lifecycle, Some(message.into()), None, cx)
             });
         }
+    }
+}
+impl ProjectCommand {
+    fn progress(
+        &self,
+        cx: &mut gpui::App,
+    ) -> (
+        gpui::Entity<ProjectProgress>,
+        tokio::sync::watch::Sender<ProjectStage>,
+    ) {
+        let (stage, target) = match self {
+            Self::Open(path) => (ProjectStage::Opening, Some(path)),
+            Self::Create { destination, .. } => (ProjectStage::Creating, Some(destination)),
+            Self::SaveAs(path) => (ProjectStage::Copying, Some(path)),
+            Self::Close => (ProjectStage::Closing, None),
+            Self::Exit => unreachable!("window exit has no project commit"),
+        };
+        ProjectProgress::start(stage, target.map(|path| path.display().to_string()), cx)
     }
 }
 impl Workbench {
