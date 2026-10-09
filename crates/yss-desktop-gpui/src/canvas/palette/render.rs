@@ -4,11 +4,10 @@ use gpui::{
     AnyElement, IntoElement, MouseButton, Render, SharedString, div, prelude::*, px, uniform_list,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::Input,
-    tooltip::Tooltip,
 };
 use gpui_kit_assets::IconName;
 
@@ -191,17 +190,11 @@ impl NodePalette {
             .text_sm();
         Some(match &row.content {
             ActivityRowContent::Category { label, .. } => body
-                .child(
-                    Icon::new(
-                        if !self.browser.searching() && self.browser.collapsed.contains(&row.id) {
-                            IconName::ChevronRight
-                        } else {
-                            IconName::ChevronDown
-                        },
-                    )
-                    .size_3(),
-                )
-                .child(div().min_w_0().truncate().child(activity_text(label)))
+                .child(crate::catalog_rows::category(
+                    activity_text(label),
+                    self.browser.searching() || !self.browser.collapsed.contains(&row.id),
+                    cx,
+                ))
                 .when(!self.browser.searching() && !self.creating, |body| {
                     body.cursor_pointer()
                         .hover(|s| s.bg(cx.theme().muted))
@@ -219,44 +212,21 @@ impl NodePalette {
                 available,
                 creation,
                 ..
-            }) => {
-                let node_type = match creation {
-                    NodeCreation::Static { node_type_id }
-                    | NodeCreation::ParameterizedStatic { node_type_id, .. }
-                    | NodeCreation::ResourceBound { node_type_id, .. } => node_type_id,
-                };
-                let hint = format!("{title}\n{node_type}");
-                body.tooltip(move |window, cx| Tooltip::new(hint.clone()).build(window, cx))
-                    .child(
-                        Icon::new(if matches!(creation, NodeCreation::ResourceBound { .. }) {
-                            IconName::Braces
-                        } else {
-                            IconName::Frame
-                        })
-                        .size_3(),
-                    )
-                    .child(div().flex_1().min_w_0().truncate().child(title.clone()))
-                    .when(!available, |body| {
-                        body.text_color(cx.theme().muted_foreground).child(
-                            div()
-                                .text_xs()
-                                .child(translate("canvas.nodePalette.unavailable")),
-                        )
-                    })
-                    .when(*available && self.browser.active == Some(index), |body| {
-                        body.bg(cx.theme().accent)
-                    })
-                    .when(*available && enabled, |body| {
-                        body.cursor_pointer()
-                            .hover(|s| s.bg(cx.theme().muted))
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                if view.browser.generation == generation {
-                                    view.choose(index, window, cx);
-                                }
-                            }))
-                    })
-                    .into_any_element()
-            }
+            }) => body
+                .child(crate::catalog_rows::node(title, creation, *available, cx))
+                .when(*available && self.browser.active == Some(index), |body| {
+                    body.bg(cx.theme().accent)
+                })
+                .when(*available && enabled, |body| {
+                    body.cursor_pointer()
+                        .hover(|s| s.bg(cx.theme().muted))
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            if view.browser.generation == generation {
+                                view.choose(index, window, cx);
+                            }
+                        }))
+                })
+                .into_any_element(),
             _ => return None,
         })
     }

@@ -383,6 +383,17 @@
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。修改仅限原生显示和暂态复用，不改变后端契约；未运行后端单元测试或全工作区验证，不新增 UI 单元测试。局部 Rust 格式、双语键/参数、文档元信息/链接、模块索引及 `git diff --check` 通过。
 - 物理键鼠/IME、完整名称 tooltip 的实际悬浮显示、端口草稿与复杂实例重排、多窗口、跨图同 ID 和完整项目切换仍开放；临时预览入口不提交。本批累计审查 154/265 项。
 
+### 节点侧栏拖放与共享目录行
+
+- 逐项阅读 SidebarNodesTab、LocalizedCatalogTreeRow 及 Activity 文档/分类行、拖拽包装、创建模板路径和资源身份参考用例。节点侧栏继续分类浏览，搜索由画布节点菜单提供；原 ActivityPanelDocument 是唯一目录投影。
+- `activity/rows` 只在文档、展开或助手搜索变化时重建源行索引；`render` 使用原生 `uniform_list` 按可见范围构建 28px 行。展开只记录稳定分类 ID 的用户覆盖，新增分类遵循后端默认值，删除分类和项目替换清理失效覆盖。
+- `activity/nodes` 单击预览定义，可用项通过原按钮或原生拖拽创建；拖拽持有源面板弱引用、Arc 文档和行索引，落下重验源目录、项目及可用性，并将原创建描述和画布坐标交给现有图编辑事务。目标在接收时捕获原图版本，资源版本、历史及显式保存仍由 Application/Project 校验。
+- `catalog_rows` 共用分类图标、节点标题、类型提示、资源绑定图标和不可用标记；各宿主继续管理展开、菜单选择、文档预览和创建，不复制目录或新建业务状态。拖放使用普通图编辑入口，与节点菜单的配置会话解耦。
+- 临时 `cargo build -p yss-desktop-gpui --example node_sidebar_review` 使用隔离项目与真实 Application。Linux/X11 的 GPUI Window 事件注入核对普通节点/不可用节点文档、不可用项不能拖动、同类型的两个函数保持不同资源路径、目录刷新拒绝仍在进行的旧拖拽；512 行全部展开时一帧约 33 次行构建（含测量），不逐帧构建全部条目。
+- 最终命令入口在 127% 缩放和已有平移下核对落点、单次 Undo/Redo 及显式 Save：磁盘在保存前仍无节点，保存后包含真实当前文档与函数绑定。分类折叠在英文目录刷新后保留；共享列表核对真实会话的大小写搜索、无匹配与清空恢复，以及从项目目录打开 Markdown。侧栏“＋”只创建一次，节点菜单共享行的搜索与 Enter 创建保留实际函数绑定；最后核对拖拽浮层主题色与落在侧栏时不创建。
+- 物理键鼠/IME、完整 tooltip 悬浮、跨项目/关闭源面板/忙碌目标、资源并发冲突、新增/删除分类和多窗口仍需实际验收；截图沿用尺寸变化触发重绘。公共 Activity 外壳与侧栏基础组件继续独立审查，不以本批替代其完整验收。临时预览入口不提交，不增加 UI 单元测试。
+- L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；9 个 Rust 文件局部格式、21 个工作区双语键、两份文档的元信息/相对链接（工作区 275、提交内容 270）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。后端契约未改动，不重复后端测试或全工作区验证。本批累计审查 156/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -638,8 +649,8 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/node-catalog/internal/ui/activity/LocalizedCatalogTreeRow.tsx](../../react/src/modules/node-catalog/internal/ui/activity/LocalizedCatalogTreeRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/node-catalog/internal/ui/activity/SidebarNodesTab.tsx](../../react/src/modules/node-catalog/internal/ui/activity/SidebarNodesTab.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/node-catalog/internal/ui/activity/LocalizedCatalogTreeRow.tsx](../../react/src/modules/node-catalog/internal/ui/activity/LocalizedCatalogTreeRow.tsx) | 优化 | `catalog_rows` 共用分类/节点展示，菜单保留搜索期间分类禁用与原选择入口；资源绑定图标/标题/类型提示及不可用状态沿用原目录 | 共享行已抽取；原生显示已核对，完整悬浮/物理键盘仍待验收 |
+| [modules/node-catalog/internal/ui/activity/SidebarNodesTab.tsx](../../react/src/modules/node-catalog/internal/ui/activity/SidebarNodesTab.tsx) | 迁移 / 优化 | `workbench/activity` 虚拟化源行索引、按文档默认值管理展开；`nodes` 单击预览与原生拖放，使用原描述并拒绝过期来源 | 隔离项目核对文档、资源身份、过期拒绝、缩放落点、历史与保存；多窗口/项目切换仍待验收 |
 
 ## modules/output
 

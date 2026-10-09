@@ -2848,7 +2848,15 @@
       "nodeDocumentationFailed": "无法读取节点文档，请重试。",
       "openGraphFirst": "请先打开事件图或函数图，再添加节点。",
       "creationChanged": "图已更改，请重新打开节点菜单。",
-      "portCountRange": "请输入 {{min}} 到 {{max}} 之间的整数。"
+      "portCountRange": "请输入 {{min}} 到 {{max}} 之间的整数。",
+      "copyChart": "复制图表",
+      "copyRelativePath": "复制相对路径",
+      "copyResourcePath": "复制资源路径",
+      "delete": "删除…",
+      "deleteDatabase": "删除数据库",
+      "deleteGraph": "删除图",
+      "rename": "重命名…",
+      "searchConversations": "搜索会话"
     },
     "logs": {
       "copyMessage": "复制消息",

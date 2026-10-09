@@ -145,6 +145,28 @@ impl Render for GraphCanvas {
             .on_mouse_down(MouseButton::Left, cx.listener(Self::begin_pane))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::begin_pane))
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::begin_pane))
+            .on_drop(
+                cx.listener(|view, drag: &crate::workbench::NodeDrag, window, cx| {
+                    if view.busy() {
+                        return;
+                    }
+                    let Some(creation) = drag.creation(&view.graph.project, cx) else {
+                        return;
+                    };
+                    view.submit(
+                        GraphCommand::Edit(EditorGraphMutation::CreateNode {
+                            descriptor: creation.clone(),
+                            position: view.world(window.mouse_position()),
+                            connect_from: None,
+                            parameters: Default::default(),
+                            port_counts: Default::default(),
+                            user_label: None,
+                        }),
+                        Some(view.graph.editing.version),
+                        cx,
+                    );
+                }),
+            )
             .on_drop(cx.listener(|view, drag: &super::ConstantDrag, window, cx| {
                 if view.busy
                     || view.graph.project != drag.project

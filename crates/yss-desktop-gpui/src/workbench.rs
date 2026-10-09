@@ -46,6 +46,7 @@ use std::{
 };
 
 use crate::{canvas::GraphCanvas, project::DesktopProject, services::NativeServices};
+pub(crate) use activity::NodeDrag;
 use activity::{ActivityEvent, ActivityPanel};
 use details::DetailsPanel;
 use logs::LogsPanel;

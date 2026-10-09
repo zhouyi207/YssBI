@@ -4,6 +4,7 @@ mod appearance;
 mod assets;
 mod assistant;
 mod canvas;
+mod catalog_rows;
 mod charts;
 mod constant_values;
 mod databases;
