@@ -85,7 +85,7 @@ pub fn kpss(
     if y.len() < 3 || deterministic == Deterministic::None {
         return Err(parameter());
     }
-    let x = if deterministic == Deterministic::Trend {
+    let x: Vec<Vec<f64>> = if deterministic == Deterministic::Trend {
         vec![(1..=y.len()).map(|i| i as f64).collect()]
     } else {
         vec![]

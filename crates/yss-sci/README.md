@@ -594,6 +594,14 @@ failures; tuning and iteration settings retain parameter violations. Regression
 estimators, parametric survival, mixed/GEE, causal, Meta and mediation-bootstrap
 models and collinearity diagnostics use this same preparation contract.
 
+The existing `Design` constructor accepts owned or borrowed numeric columns and
+materializes one matrix with its centers/scales. SUR borrows selected columns;
+Heckman borrows its exclusion columns and Mills vector, releasing temporary rank
+and selected-row workspaces after preparation. Its coordinate map accepts the
+response scale and forms response/predictor ratios directly, avoiding overflowing
+predictor reciprocals in GMM/SUR. Other model consumers use unit response scaling.
+The joint-unit regressions retain finite inference with subnormal predictors.
+
 `regression::models` owns controlled estimators over neutral numeric columns:
 Huber/Tukey M-estimation with MAD/H1 inference, Ridge/Lasso with an unpenalized
 intercept, PLS1, quantile IRLS with IID density covariance, curve families, bounded

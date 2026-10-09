@@ -298,7 +298,7 @@ fn fit_blocks(
         theta.push(variance.ln());
         let h = hessian(&|theta| likelihood.full(theta), &theta, control)?;
         let inv = inverse(&h)?;
-        let raw_j = design.raw_jacobian();
+        let raw_j = design.raw_jacobian(1.0);
         let jacobian = Mat::from_fn(p + s, p + s + 1, |i, j| {
             if i < p && j < p {
                 raw_j[(i, j)]

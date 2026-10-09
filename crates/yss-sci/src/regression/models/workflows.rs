@@ -351,7 +351,7 @@ pub fn threshold(
     let (rss, cutoff, beta, inv, matrix, left) = best.ok_or_else(parameter)?;
     let df = y.len() - 2 * p;
     let cov = Mat::from_fn(2 * p, 2 * p, |i, j| inv[(i, j)] * rss / df as f64);
-    let j = design.raw_jacobian();
+    let j = design.raw_jacobian(1.0);
     let transform = Mat::from_fn(2 * p, 2 * p, |i, k| {
         if i / p == k / p {
             j[(i % p, k % p)]

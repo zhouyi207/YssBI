@@ -89,7 +89,7 @@ pub fn fit(
     let q = theta.len();
     let h = hessian(&objective, theta, control)?;
     let standardized = inverse(&Mat::from_fn(q, q, |j, k| h[(j, k)] * n as f64))?;
-    let raw_jacobian = design.raw_jacobian();
+    let raw_jacobian = design.raw_jacobian(1.0);
     let jacobian = Mat::from_fn(q, q, |j, k| {
         if j < p && k < p {
             raw_jacobian[(j, k)]

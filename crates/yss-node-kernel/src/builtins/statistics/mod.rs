@@ -111,7 +111,9 @@ pub(super) fn install(
                 | "yssbi.statistics.var.summary"
                 | "yssbi.statistics.workflow.subgroup" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
+                | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.heckman_two_step"
+                | "yssbi.statistics.econometrics.sur"
                 | "yssbi.statistics.meta.fixed_effect"
                 | "yssbi.statistics.meta.inverse_variance"
                 | "yssbi.statistics.meta.leave_one_out"
@@ -134,8 +136,6 @@ pub(super) fn install(
                 | "yssbi.statistics.causal.psm"
                 | "yssbi.statistics.causal.regression_adjustment"
                 | "yssbi.statistics.diagnostic.wald"
-                | "yssbi.statistics.econometrics.gmm"
-                | "yssbi.statistics.econometrics.sur"
                 | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
                 | "yssbi.statistics.econometrics.panel.unit_root"

@@ -374,6 +374,11 @@ fn gmm_small_response_units_keep_two_step_weights() {
 }
 
 #[test]
+fn gmm_joint_units_keep_finite_maps_without_predictor_reciprocals() {
+    assert_gmm_response_units(1e-156, 1e-310);
+}
+
+#[test]
 fn discontinuity_and_group_interactions_match_hc3_inference() {
     let f = fixture();
     let d = &f["rdd"];
@@ -662,12 +667,12 @@ fn selection_and_frontier_match_probit_and_likelihood_references() {
 
 #[test]
 fn sur_response_units_keep_large_residual_covariance_finite() {
-    check_sur_response_units([5e153, 5e153]);
+    check_sur_response_units([5e153, 5e153], 1.0);
 }
 
 #[test]
 fn sur_response_units_keep_subnormal_equation_covariance_identified() {
-    let result = check_sur_response_units([1e-155, 1e153]);
+    let result = check_sur_response_units([1e-155, 1e153], 1.0);
     assert!(result.error_covariance[0][0].is_subnormal());
     assert!(result.error_covariance[0][0] > 0.0);
     for j in 0..result.equations[0].coefficients.len() {
@@ -676,7 +681,12 @@ fn sur_response_units_keep_subnormal_equation_covariance_identified() {
     }
 }
 
-fn check_sur_response_units(scales: [f64; 2]) -> SurResult {
+#[test]
+fn sur_joint_units_keep_finite_maps_without_predictor_reciprocals() {
+    check_sur_response_units([1e-156, 1e-156], 1e-310);
+}
+
+fn check_sur_response_units(scales: [f64; 2], predictor_scale: f64) -> SurResult {
     let f = fixture();
     let d = &f["sur"];
     let responses = matrix(&d["responses"]);
@@ -688,6 +698,10 @@ fn check_sur_response_units(scales: [f64; 2]) -> SurResult {
         .iter()
         .zip(scales)
         .map(|(values, scale)| values.iter().map(|value| value * scale).collect())
+        .collect::<Vec<_>>();
+    let predictors = predictors
+        .iter()
+        .map(|values| values.iter().map(|value| value * predictor_scale).collect())
         .collect::<Vec<_>>();
     let result = econometrics::sur(&responses, &predictors, &selections, true, &control())
         .expect("SUR covariance and inference are finite in these equation units");
@@ -709,11 +723,24 @@ fn check_sur_response_units(scales: [f64; 2]) -> SurResult {
             .enumerate()
         {
             let axis = offset + j;
+            let coefficient_scale = if j == 0 {
+                scale
+            } else {
+                scale / predictor_scale
+            };
             let standard_error = reference_covariance[axis][axis].sqrt();
             assert_eq!(actual.term, baseline.term);
             assert!(actual.estimate.is_finite());
-            close(actual.estimate / scale, reference_coefficients[axis], 1e-8);
-            close(actual.standard_error.unwrap() / scale, standard_error, 1e-8);
+            close(
+                actual.estimate / coefficient_scale,
+                reference_coefficients[axis],
+                1e-8,
+            );
+            close(
+                actual.standard_error.unwrap() / coefficient_scale,
+                standard_error,
+                1e-8,
+            );
             close(
                 actual.statistic.unwrap(),
                 reference_coefficients[axis] / standard_error,
@@ -726,9 +753,9 @@ fn check_sur_response_units(scales: [f64; 2]) -> SurResult {
                 .into_iter()
                 .zip(baseline.confidence_interval.unwrap())
             {
-                close(actual / scale, baseline, 1e-8);
+                close(actual / coefficient_scale, baseline, 1e-8);
             }
-            coefficient_scales.push(scale);
+            coefficient_scales.push(coefficient_scale);
         }
         offset += equation.coefficients.len();
         assert_eq!(equation.fitted.len(), baseline.fitted.len());

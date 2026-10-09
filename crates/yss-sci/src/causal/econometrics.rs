@@ -115,11 +115,11 @@ pub fn gmm(
     }));
     // Restore response and predictor units in one coordinate map. A separate
     // response-scale square or raw-design covariance can overflow unnecessarily.
-    let mut coordinates = design.raw_jacobian();
+    let coordinates = design.raw_jacobian(response_scale);
     for j in 0..p {
         control.check()?;
         for k in 0..p {
-            coordinates[(j, k)] = finite(coordinates[(j, k)] * response_scale)?;
+            finite(coordinates[(j, k)])?;
         }
     }
     let (beta, covariance) = transform(&beta, Some(cov), &coordinates);
@@ -227,13 +227,18 @@ fn heckman_point(
         return Err(parameter());
     }
     let n = y.len();
-    let base = Design::new(predictors, n, true, true, true, control)?;
-    let mut all = predictors.to_vec();
-    all.extend_from_slice(selection_predictors);
-    let full = Design::new(&all, n, true, true, false, control)?;
-    let (rank, _) = matrix_rank(full.x.as_ref()).map_err(|_| failed())?;
-    if rank <= base.x.ncols() {
-        return Err(parameter());
+    {
+        let base = Design::new(predictors, n, true, true, true, control)?;
+        let all = predictors
+            .iter()
+            .chain(selection_predictors)
+            .map(Vec::as_slice)
+            .collect::<Vec<_>>();
+        let full = Design::new(&all, n, true, true, false, control)?;
+        let (rank, _) = matrix_rank(full.x.as_ref()).map_err(|_| failed())?;
+        if rank <= base.x.ncols() {
+            return Err(parameter());
+        }
     }
     let selection = glm(
         selected,
@@ -271,12 +276,18 @@ fn heckman_point(
             .exp()
         })
         .collect::<Vec<_>>();
-    let mut xs = predictors
-        .iter()
-        .map(|v| indices.iter().map(|&i| v[i]).collect::<Vec<_>>())
-        .collect::<Vec<_>>();
-    xs.push(mills.clone());
-    let design = Design::new(&xs, count, true, true, true, control)?;
+    let design = {
+        let predictor_rows = predictors
+            .iter()
+            .map(|v| indices.iter().map(|&i| v[i]).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let columns = predictor_rows
+            .iter()
+            .map(Vec::as_slice)
+            .chain(std::iter::once(mills.as_slice()))
+            .collect::<Vec<_>>();
+        Design::new(&columns, count, true, true, true, control)?
+    };
     let (beta, _) = least_squares(&design.x, &response, None, control)?;
     let predicted = fitted(&design.x, &beta);
     let residuals = response
@@ -483,7 +494,7 @@ pub fn sur(
         }
         let xs = indices
             .iter()
-            .map(|&j| predictors[j].clone())
+            .map(|&j| predictors[j].as_slice())
             .collect::<Vec<_>>();
         let design = Design::new(&xs, n, constant, true, true, control)?;
         let mut scale = 0.0_f64;
@@ -571,10 +582,10 @@ pub fn sur(
         control.check()?;
         let start = offsets[i];
         let p = offsets[i + 1] - start;
-        let j = designs[i].raw_jacobian();
+        let j = designs[i].raw_jacobian(response_scales[i]);
         for a in 0..p {
             for b in 0..p {
-                jacobian[(start + a, start + b)] = finite(j[(a, b)] * response_scales[i])?;
+                jacobian[(start + a, start + b)] = finite(j[(a, b)])?;
             }
         }
         if constant {

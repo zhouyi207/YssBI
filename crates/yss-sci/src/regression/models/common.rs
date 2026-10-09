@@ -96,7 +96,7 @@ pub(crate) struct Design {
 }
 impl Design {
     pub fn new(
-        predictors: &[Vec<f64>],
+        predictors: &[impl AsRef<[f64]>],
         n: usize,
         constant: bool,
         standardize: bool,
@@ -113,7 +113,8 @@ impl Design {
         }
         let mut means = Vec::with_capacity(predictors.len());
         let mut scales = Vec::with_capacity(predictors.len());
-        for x in predictors {
+        for column in predictors {
+            let x = column.as_ref();
             let m = if constant { mean(x) } else { 0.0 };
             let max = x.iter().map(|v| (v - m).abs()).fold(0.0, f64::max);
             let s = if standardize && max > 0.0 {
@@ -132,7 +133,7 @@ impl Design {
                 1.0
             } else {
                 let k = j - usize::from(constant);
-                (predictors[k][i] - means[k]) / scales[k]
+                (predictors[k].as_ref()[i] - means[k]) / scales[k]
             }
         });
         if rank {
@@ -149,24 +150,26 @@ impl Design {
             constant,
         })
     }
-    pub fn raw_jacobian(&self) -> Mat<f64> {
+    pub fn raw_jacobian(&self, response_scale: f64) -> Mat<f64> {
         let p = self.x.ncols();
         Mat::from_fn(p, p, |i, j| {
             if self.constant && i == 0 {
                 if j == 0 {
-                    1.0
+                    response_scale
                 } else {
-                    -self.means[j - 1] / self.scales[j - 1]
+                    -self.means[j - 1] / self.scales[j - 1] * response_scale
                 }
             } else if i == j {
-                1.0 / self.scales[j - usize::from(self.constant)]
+                // The joint unit ratio can be finite even when the predictor
+                // reciprocal overflows before response units are applied.
+                response_scale / self.scales[j - usize::from(self.constant)]
             } else {
                 0.0
             }
         })
     }
     pub fn raw(&self, beta: &[f64], covariance: Option<Mat<f64>>) -> (Vec<f64>, Option<Mat<f64>>) {
-        transform(beta, covariance, &self.raw_jacobian())
+        transform(beta, covariance, &self.raw_jacobian(1.0))
     }
 }
 pub(crate) fn transform(

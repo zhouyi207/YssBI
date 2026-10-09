@@ -485,7 +485,7 @@ pub fn likelihood(
     let mut output_beta = b.clone();
     if options.method == LikelihoodMethod::MultinomialLogit {
         terms.clear();
-        let j = design.raw_jacobian();
+        let j = design.raw_jacobian(1.0);
         for c in 0..categories - 1 {
             for i in 0..p {
                 for k in 0..p {
@@ -519,7 +519,7 @@ pub fn likelihood(
             }
         }
     } else {
-        let j = design.raw_jacobian();
+        let j = design.raw_jacobian(1.0);
         for i in 0..p {
             for k in 0..p {
                 jacobian[(i, k)] = j[(i, k)];
@@ -528,7 +528,7 @@ pub fn likelihood(
         let raw = design.raw(&b[..p], None).0;
         output_beta[..p].copy_from_slice(&raw);
         if let Some(inflate) = &inflate {
-            let j = inflate.raw_jacobian();
+            let j = inflate.raw_jacobian(1.0);
             for i in 0..zp {
                 for k in 0..zp {
                     jacobian[(p + i, p + k)] = j[(i, k)];
