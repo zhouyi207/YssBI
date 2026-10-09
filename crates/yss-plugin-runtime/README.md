@@ -140,6 +140,11 @@ confirmed remote completion fails only that task, while transport faults retain 
 policy. Budget, cancellation and observation failures use the same instance-failure owner once.
 Backend task lifecycle regressions live in [tasks/tests.rs](src/tasks/tests.rs).
 
+Task replies decode their optional failure through the Protocol-owned `PluginFailure` before
+confirming a terminal state. Invalid failure objects and failures attached to successful or
+nonterminal states are protocol faults, retaining `outcomeUnknown` and retiring that instance.
+Valid failures on `failed`, `cancelled` or `outcomeUnknown` preserve the reported reason.
+
 Startup and active polling cap their RPC waits by the remaining absolute task deadline.
 Cancellation creates one absolute grace deadline shared by cancellation requests, polling and
 polling pauses; individual requests cannot renew it. Replies processed after that deadline cannot

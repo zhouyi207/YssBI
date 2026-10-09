@@ -284,6 +284,23 @@ impl PluginManager {
                 {
                     return Err(fail("plugin_response_invalid"));
                 }
+                let error = snapshot
+                    .get("error")
+                    .filter(|value| !value.is_null())
+                    .map(|value| serde_json::from_value::<PluginFailure>(value.clone()))
+                    .transpose()
+                    .map_err(|_| fail("plugin_response_invalid"))?;
+                if error.is_some()
+                    && !matches!(
+                        remote,
+                        TaskState::Failed | TaskState::Cancelled | TaskState::OutcomeUnknown
+                    )
+                {
+                    return Err(fail("plugin_response_invalid"));
+                }
+                if Instant::now() >= reply_deadline {
+                    return Err(fail("plugin_request_timeout"));
+                }
                 // Retire started remote work only after a validated terminal reply.
                 remote_may_run = !remote.terminal();
                 self.update_progress(&task_id, progress)?;
@@ -291,10 +308,11 @@ impl PluginManager {
                     if invalid {
                         return Err(fail("plugin_stale_context"));
                     }
+                    let handoff_timeout = Duration::from_secs(30);
                     let result = lease.process.request(
                         "tasks.result",
-                        json!({"context":wire_context(Instant::now() + Duration::from_secs(30)),"input":{"taskId":task_id}}),
-                        Duration::from_secs(30),
+                        json!({"context":wire_context(Instant::now() + handoff_timeout),"input":{"taskId":task_id}}),
+                        handoff_timeout,
                     )?;
                     self.context(&context.context_id)?;
                     let receipt = if produces_artifacts {
@@ -316,10 +334,6 @@ impl PluginManager {
                     return Ok(());
                 }
                 if remote.terminal() {
-                    let error = snapshot
-                        .get("error")
-                        .filter(|value| !value.is_null())
-                        .and_then(|value| serde_json::from_value(value.clone()).ok());
                     self.update_task(&task_id, remote, error, None)?;
                     return Ok(());
                 }

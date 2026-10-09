@@ -605,4 +605,51 @@ mod observation {
         assert_eq!(fixture.snapshot(0).state, TaskState::OutcomeUnknown);
         assert!(!fixture.process.is_running());
     }
+
+    fn task_reply_fixture(reply: Value) -> Fixture {
+        Fixture::new(Arc::new(move |_, request| match request.method.as_str() {
+            "tasks.start" => Ok(Value::Null),
+            "tasks.get" => Ok(reply.clone()),
+            "tasks.result" => Ok(json!({"viewData":{"value":42}})),
+            _ => Err(fail("plugin_method_unknown")),
+        }))
+    }
+
+    #[test]
+    fn task_reply_malformed_failure_cannot_confirm_a_terminal_state() {
+        let fixture =
+            task_reply_fixture(json!({"taskId":"task-0","state":"failed","error":{"code":99}}));
+        fixture.run();
+        let task = fixture.snapshot(0);
+        assert_eq!(task.state, TaskState::OutcomeUnknown);
+        assert_eq!(task.error.unwrap().code, "plugin_response_invalid");
+        assert_eq!(fixture.snapshot(1).state, TaskState::OutcomeUnknown);
+        assert!(!fixture.process.is_running());
+    }
+
+    #[test]
+    fn task_reply_success_cannot_include_a_failure() {
+        let fixture = task_reply_fixture(
+            json!({"taskId":"task-0","state":"succeeded","error":fail("plugin_compute_failed")}),
+        );
+        fixture.run();
+        let task = fixture.snapshot(0);
+        assert_eq!(task.state, TaskState::OutcomeUnknown);
+        assert_eq!(task.error.unwrap().code, "plugin_response_invalid");
+        assert_eq!(fixture.snapshot(1).state, TaskState::OutcomeUnknown);
+        assert!(!fixture.process.is_running());
+    }
+
+    #[test]
+    fn task_reply_valid_failure_keeps_its_reason_and_the_instance() {
+        let fixture = task_reply_fixture(
+            json!({"taskId":"task-0","state":"failed","error":fail("plugin_compute_failed")}),
+        );
+        fixture.run();
+        let task = fixture.snapshot(0);
+        assert_eq!(task.state, TaskState::Failed);
+        assert_eq!(task.error.unwrap().code, "plugin_compute_failed");
+        assert_eq!(fixture.snapshot(1).state, TaskState::Admitted);
+        assert!(fixture.process.is_running());
+    }
 }
