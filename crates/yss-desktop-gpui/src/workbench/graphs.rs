@@ -174,6 +174,9 @@ impl Workbench {
                         panel.update(cx, |panel, cx| panel.set_active_resource(Some(&path), cx));
                     }
                     view.details.update(cx, |details, cx| {
+                        if matches!(event, CanvasEvent::Selection { .. }) {
+                            details.clear_log(cx);
+                        }
                         details.set_selection(
                             canvas.downgrade(),
                             nodes.clone(),

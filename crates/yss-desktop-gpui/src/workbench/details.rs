@@ -37,6 +37,7 @@ pub struct DetailsPanel {
     mind: Option<WeakEntity<crate::minds::MindCanvas>>,
     database: Option<WeakEntity<crate::databases::DatabaseEditor>>,
     chart: Option<WeakEntity<crate::charts::ChartEditor>>,
+    log: Option<WeakEntity<super::logs::LogDetails>>,
     projection: Option<Arc<EditorProjectionModel>>,
     selected: Vec<NodeId>,
     version: Option<GraphEditVersion>,
@@ -60,6 +61,7 @@ impl DetailsPanel {
             mind: None,
             database: None,
             chart: None,
+            log: None,
             projection: None,
             selected: vec![],
             version: None,
@@ -81,6 +83,7 @@ impl DetailsPanel {
         self.mind = None;
         self.database = None;
         self.chart = None;
+        self.log = None;
         self.projection = None;
         self.selected.clear();
         self.version = None;
@@ -95,6 +98,29 @@ impl DetailsPanel {
 
     pub fn document(&self) -> Option<Entity<crate::documents::DocumentEditor>> {
         self.document.as_ref().and_then(WeakEntity::upgrade)
+    }
+
+    pub(super) fn show_log(
+        &mut self,
+        log: &Entity<super::logs::LogDetails>,
+        cx: &mut Context<Self>,
+    ) {
+        self.log = Some(log.downgrade());
+        // Keep the editor binding and drafts, but invalidate menus from the hidden form.
+        self.epoch = self.epoch.wrapping_add(1);
+        cx.notify();
+    }
+
+    pub(super) fn clear_log(&mut self, cx: &mut Context<Self>) {
+        if self.log.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    pub(super) fn clear_log_if(&mut self, id: gpui::EntityId, cx: &mut Context<Self>) {
+        if self.log.as_ref().is_some_and(|log| log.entity_id() == id) {
+            self.clear_log(cx);
+        }
     }
 
     pub fn set_document(
@@ -247,7 +273,9 @@ impl DetailsPanel {
     }
 
     fn accepts_input(&self, epoch: u64, cx: &App) -> bool {
-        epoch == self.epoch && self.graph().is_some_and(|graph| !graph.read(cx).busy())
+        self.log.as_ref().and_then(WeakEntity::upgrade).is_none()
+            && epoch == self.epoch
+            && self.graph().is_some_and(|graph| !graph.read(cx).busy())
     }
 
     fn submit(&self, command: GraphCommand, cx: &mut Context<Self>) {
@@ -379,13 +407,17 @@ impl DetailsPanel {
 }
 impl Render for DetailsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let node = self.node().cloned();
-        div()
+        let panel = div()
             .id("details")
             .track_focus(&self.focus)
             .size_full()
             .overflow_y_scroll()
-            .bg(cx.theme().background)
+            .bg(cx.theme().background);
+        if let Some(log) = self.log.as_ref().and_then(WeakEntity::upgrade) {
+            return panel.child(log).into_any_element();
+        }
+        let node = self.node().cloned();
+        panel
             .when_some(node, |view, node| {
                 view.child(self.render_node_details(node, cx))
             })
@@ -471,6 +503,7 @@ impl Render for DetailsPanel {
                         .child(error),
                 )
             })
+            .into_any_element()
     }
 }
 impl EventEmitter<PanelEvent> for DetailsPanel {}

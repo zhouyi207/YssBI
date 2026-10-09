@@ -216,6 +216,7 @@ impl Workbench {
     }
 
     fn connect_panels(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.connect_logs(window, cx);
         self.subscriptions.push(cx.subscribe_in(
             &self.output,
             window,

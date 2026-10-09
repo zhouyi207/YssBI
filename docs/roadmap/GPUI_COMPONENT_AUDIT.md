@@ -229,11 +229,21 @@
 - `entry` 按需缓存搜索文本，同流快照复用原记录；`filter` 维护唯一显示索引，新增批次只检查新增记录。列表和计数共用结果，保留 1,000 条上限，前缀裁剪调整现有滚动句柄。
 - `stream` 保留原有界队列和订阅释放，缺口/积压连续恢复最多三次，新批次或手动刷新重置预算；存储失败停止交付。清空只清显示并保留 watermark，刷新重新读取原 recent snapshot。
 - 工具栏复用原生 Input/Button/PopupMenu，语言变化保留输入。固定高度行缓存单行摘要并保留全文提示；跟随沿用参考的 80px 底部阈值，浏览旧记录不会被新增记录拉回。
-- 日志详情选择、文本复制、多领域并列布局及独立窗口生命周期优化继续分别跟踪，不将列表控制完成等同于整个 Logs 模块迁移完毕。
+- 日志详情选择与文本复制见下一批；多领域并列布局及独立窗口生命周期优化继续分别跟踪，不将列表控制完成等同于整个 Logs 模块迁移完毕。
 - L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；6 个变更 Rust 文件格式、2 份文档元信息及独立提交的 269 条相对链接（当前工作区 275 条）、24 个中英文文案键与参数、模块索引（59 crates / 239 条依赖声明）和 `git diff --check` 通过。没有后端契约变化，不重复未改动的后端测试。
 - 临时 `cargo build -p yss-desktop-gpui --example logs_controls_review` 在隔离应用目录使用真实 LogRuntime 提交样例。Linux/X11 窗口目视核对结构化字段搜索、领域/级别组合、无匹配、清空、刷新恢复，当前工作区中英文切换保留输入；新增、裁剪和连续两批 1,200 条记录的底部跟随/手动浏览均已核对。
 - 预览发现并修复多行消息挤出固定行高、严格底部判定在缩放后失效、前缀裁剪与尚未完成的底部滚动相互影响；同流搜索缓存与原生滚动句柄继续复用。截图需调整窗口尺寸触发 X11 重绘，不能用来证明自动重绘、性能或其他平台表现。临时样例已移出仓库；断流、存储失败、关闭订阅、真实业务日志与跨窗口验收仍开放，不添加 UI 单元测试。
 
+### 日志选择与只读详情
+
+- 复核 LogDetailPanel/LogItemRow 的选择、清空及原文本行为，并逐项阅读 DetailPanelShell、DetailForm、DetailFieldRow、DetailCollapsibleSection、DetailText。这些包装复用原生 Details/Input/Textarea/Collapsible；可编辑字段的提交语义仍由后续参数批次核对。
+- LogsPanel 只持有一个选中记录实体，Details 弱引用该实体；同一 stream/sequence 重选复用输入与折叠，筛选、刷新和缓冲裁剪保留不可变检查快照。清空/Escape 只撤销仍指向该实体的检查，不影响后来显示的资源。
+- 显式检查保留原图/资源绑定和未提交表单，旧表单菜单失效；后台图投影不抢占日志展示，显式节点选择恢复属性。原窗口与 DockArea 仍拥有布局，未创建日志业务 store 或 IPC 接口。
+- 列表提供高亮、上下键/Home/End/Enter、右键复制；详情提供原始元信息、可选择的消息与字段、完整 JSON 复制。只为选中记录创建控件，不把日志正文当 Markdown，也不为全部虚拟行分配输入实体。
+- 多领域并列布局与独立窗口详情/生命周期仍待处理，故障和跨窗口专项验收保持开放。
+- L2 验证：当前工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；8 个 Rust 文件局部格式、两份文档元信息与 269 条相对链接（当前工作区 275 条）、8 个新增双语键及 22 个相关文案引用、模块索引（59 crates / 239 条依赖声明）和 `git diff --check` 通过。未变更后端契约，不重复后端测试；本批审查清单累计 131/265 项。
+- 临时 `cargo build -p yss-desktop-gpui --example log_details_review` 使用隔离项目、真实 LogRuntime 和原生工作台。Linux/X11 窗口目视核对点击/方向键选中、折叠后重选和当前工作区的中英文切换、筛选无匹配时保留详情、搜索焦点不触发行切换，以及 Escape/清空/回到画布恢复图属性。
+- 原消息及完整 JSON 复制通过只识别样例内容的预览检查核对，完整记录保留 `9007199254740993`；日志详情仍保留图绑定。消息里的 Markdown 符号和换行按原文显示，只读输入不能改写正文。右键菜单显示和复制已核对；X11 截图需要调整尺寸触发刷新，不代表自动重绘、真实项目完整交互或其他平台验收通过。临时样例不提交，不添加 UI 单元测试。
 
 ## app
 
@@ -420,16 +430,16 @@
 | [modules/details/internal/ui/panels/FileDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FileDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/FunctionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FunctionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/GraphConstantsPanel.tsx](../../react/src/modules/details/internal/ui/panels/GraphConstantsPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 必要：日志只读详情应复用原生 Details | 已核对时间、stream/sequence、级别、领域、来源、target/event、消息及 JSON 字段；原生尚无日志选择联动 | 已审查；待迁移 |
+| [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 复用原 Details 容器与原生只读控件 | 当前日志实体唯一归 LogsPanel，Details 弱引用展示时间/流/序列/领域/来源及原消息/字段；默认展开、文本选择与复制不解析 Markdown | 代码已接入；完整交互验收待完成 |
 | [modules/details/internal/ui/panels/MindDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/MindDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/NodeDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/shared/DetailCollapsibleSection.tsx](../../react/src/modules/details/internal/ui/shared/DetailCollapsibleSection.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/shared/DetailCollapsibleSection.tsx](../../react/src/modules/details/internal/ui/shared/DetailCollapsibleSection.tsx) | 复用原生 Collapsible/Button 与既有局部折叠状态 | 日志消息/字段默认展开，同条记录重选保留状态；其余 Details 消费者按各自初始展开策略核对 | 日志已接入；其他消费者随功能验收 |
 | [modules/details/internal/ui/shared/DetailColumnList.tsx](../../react/src/modules/details/internal/ui/shared/DetailColumnList.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/shared/DetailFieldRow.tsx](../../react/src/modules/details/internal/ui/shared/DetailFieldRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/shared/DetailForm.tsx](../../react/src/modules/details/internal/ui/shared/DetailForm.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/shared/DetailPanelShell.tsx](../../react/src/modules/details/internal/ui/shared/DetailPanelShell.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/shared/DetailText.tsx](../../react/src/modules/details/internal/ui/shared/DetailText.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/shared/DetailFieldRow.tsx](../../react/src/modules/details/internal/ui/shared/DetailFieldRow.tsx) | 复用原生 flex 布局与 Input 标签 | 日志元信息使用有界标签/值列与只读输入，长内容可选择和水平查看；无需另建 CSS wrapper 层 | 日志已接入；其他消费者随功能验收 |
+| [modules/details/internal/ui/shared/DetailForm.tsx](../../react/src/modules/details/internal/ui/shared/DetailForm.tsx) | 只读字段复用 Input，长文本复用 Textarea | 日志原值可选择复制；可编辑 DetailCommitInput 的 Enter/失焦提交与 Escape 恢复须由各参数 owner 继续核对 | 只读日志已接入；编辑提交语义待参数批次 |
+| [modules/details/internal/ui/shared/DetailPanelShell.tsx](../../react/src/modules/details/internal/ui/shared/DetailPanelShell.tsx) | 复用既有 Details 滚动容器 | 日志详情在原面板展示，沿用根 DockArea 的位置和尺寸，不加入第二套布局或 ScrollArea 包装 | 已采用；跨面板交互待验收 |
+| [modules/details/internal/ui/shared/DetailText.tsx](../../react/src/modules/details/internal/ui/shared/DetailText.tsx) | 复用 ActiveTheme、字体与只读原生文本 | 日志级别/领域、元信息和正文来自原记录；原生主题替代 CSS tone，全文按纯文本显示 | 日志已接入；其他消费者随功能验收 |
 | [modules/details/internal/ui/shared/PinEditor.tsx](../../react/src/modules/details/internal/ui/shared/PinEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 
 ## modules/document-editor
@@ -476,8 +486,8 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [modules/logs/internal/ui/LogDomainLayoutHost.tsx](../../react/src/modules/logs/internal/ui/LogDomainLayoutHost.tsx) | 复用根 DockArea；不迁入第二个 FlexLayout 拓扑 | 当前用原生领域选择器访问全部及六个领域；原多领域并列对照的承载仍待处理 | 领域筛选已接入；并列布局待迁移 |
-| [modules/logs/internal/ui/LogDomainPanel.tsx](../../react/src/modules/logs/internal/ui/LogDomainPanel.tsx) | 迁移领域过滤与跟随行为到已有 LogsPanel | 同一有界记录集合上使用领域/级别/查询索引；选中记录与 Details 联动另行迁移 | 筛选已接入；选择联动待迁移 |
-| [modules/logs/internal/ui/LogItemRow.tsx](../../react/src/modules/logs/internal/ui/LogItemRow.tsx) | 复用固定高度原生行，保留等级/领域/来源 | 显示缓存时间、级别、领域、来源与单行摘要，悬停全文；记录选择与文本复制尚未接入 | 显示已接入；选择与复制待迁移 |
+| [modules/logs/internal/ui/LogDomainPanel.tsx](../../react/src/modules/logs/internal/ui/LogDomainPanel.tsx) | 迁移领域过滤、选择与跟随到已有 LogsPanel | 同一有界集合和筛选索引；显式选择显示既有 Details，清空仅撤销对应日志检查 | 代码已接入；多领域并列承载另行处理 |
+| [modules/logs/internal/ui/LogItemRow.tsx](../../react/src/modules/logs/internal/ui/LogItemRow.tsx) | 复用固定高度原生行，按需检查与复制 | 列表高亮单选并支持键盘导航；右键复制消息/完整记录，部分文本选择在原 Details 只读控件完成，不为每条行创建输入实体 | 代码已接入；完整交互验收待完成 |
 | [modules/logs/internal/ui/LogPanelList.tsx](../../react/src/modules/logs/internal/ui/LogPanelList.tsx) | 复用 UniformList 与已有空状态 | 计数和列表共享筛选索引，区分加载、无记录、无匹配及失败 | 代码已接入；真实交互验收待完成 |
 | [modules/logs/internal/ui/LogPanelStatus.tsx](../../react/src/modules/logs/internal/ui/LogPanelStatus.tsx) | 迁移连接/计数/截断提示 | 同一 LogsPanel 展示当前过滤/总数、连接状态和截断警告；存储失败停止交付 | 代码已接入；故障验收待完成 |
 | [modules/logs/internal/ui/LogPanelToolbar.tsx](../../react/src/modules/logs/internal/ui/LogPanelToolbar.tsx) | 复用 Input、Button、PopupMenu | 刷新、自动跟随、领域、五种级别、搜索与清空显示；保留领域所有者和序列水位 | 代码已接入；真实交互验收待完成 |

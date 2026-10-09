@@ -1,11 +1,14 @@
 //! Native log controls and bounded read projections; LogRuntime owns persisted records.
+mod details;
 mod entry;
 mod filter;
 mod render;
+mod selection;
 mod stream;
 mod toolbar;
 
 use crate::services::NativeServices;
+pub(super) use details::LogDetails;
 use entry::LogEntry;
 use gpui::{
     App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
@@ -30,11 +33,17 @@ const LEVELS: [LogLevel; 5] = [
     LogLevel::Trace,
 ];
 
+pub(super) enum LogsEvent {
+    Inspect(Entity<LogDetails>),
+    Clear(gpui::EntityId),
+}
+
 pub struct LogsPanel {
     services: Arc<NativeServices>,
     focus: FocusHandle,
     entries: VecDeque<Rc<LogEntry>>,
     visible: Vec<usize>,
+    selected: Option<Entity<LogDetails>>,
     domain: Option<LogDomain>,
     levels: Vec<LogLevel>,
     search: Entity<InputState>,
@@ -74,6 +83,7 @@ impl LogsPanel {
             focus: cx.focus_handle(),
             entries: VecDeque::new(),
             visible: vec![],
+            selected: None,
             domain: None,
             levels: LEVELS.to_vec(),
             search,
@@ -97,6 +107,7 @@ impl LogsPanel {
     }
 }
 impl EventEmitter<PanelEvent> for LogsPanel {}
+impl EventEmitter<LogsEvent> for LogsPanel {}
 impl Focusable for LogsPanel {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()

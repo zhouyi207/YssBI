@@ -2495,7 +2495,13 @@
       "time": "时间",
       "level": "级别",
       "message": "消息",
-      "column": "列名"
+      "column": "列名",
+      "stream": "日志流",
+      "sequence": "序列",
+      "origin": "记录来源",
+      "target": "目标",
+      "event": "事件",
+      "fields": "字段"
     },
     "itemTypes": {
       "event_graph": "事件图",
@@ -2790,6 +2796,10 @@
       "logConnectionFailed": "无法连接日志存储",
       "logStorageUnavailable": "日志存储不可用",
       "logsEmpty": "应用运行记录会显示在这里"
+    },
+    "logs": {
+      "copyMessage": "复制消息",
+      "copyRecord": "复制完整日志（JSON）"
     }
   }
 }

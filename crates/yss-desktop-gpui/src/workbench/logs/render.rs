@@ -1,7 +1,11 @@
 //! Only visible rows are built; the toolbar and count share the same filtered indices.
 use super::*;
 use gpui::{Render, uniform_list};
-use gpui_component::{ActiveTheme, tooltip::Tooltip};
+use gpui_component::{
+    ActiveTheme,
+    menu::{ContextMenuExt, PopupMenuItem},
+    tooltip::Tooltip,
+};
 
 impl Render for LogsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -23,7 +27,9 @@ impl Render for LogsPanel {
             });
         }
         div()
+            .id("logs")
             .track_focus(&self.focus)
+            .on_key_down(cx.listener(|view, event, window, cx| view.key_down(event, window, cx)))
             .size_full()
             .flex()
             .flex_col()
@@ -79,13 +85,23 @@ impl Render for LogsPanel {
                         "logs-list",
                         self.visible.len(),
                         cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
+                            let selected = view
+                                .selected
+                                .as_ref()
+                                .map(|selected| selected.read(cx).key().clone());
                             range
                                 .filter_map(|index| {
                                     view.visible
                                         .get(index)
                                         .and_then(|index| view.entries.get(*index))
                                 })
-                                .map(|entry| log_row(entry, cx))
+                                .map(|entry| {
+                                    log_row(
+                                        entry.clone(),
+                                        selected.as_ref() == Some(&entry.key),
+                                        cx,
+                                    )
+                                })
                                 .collect::<Vec<_>>()
                         }),
                     )
@@ -113,9 +129,15 @@ impl Render for LogsPanel {
     }
 }
 
-fn log_row(entry: &LogEntry, cx: &App) -> impl IntoElement + use<> {
+fn log_row(
+    entry: Rc<LogEntry>,
+    selected: bool,
+    cx: &mut Context<LogsPanel>,
+) -> impl IntoElement + use<> {
     let record = &entry.record;
     let message = entry.message.clone();
+    let inspected = entry.clone();
+    let copied = entry.clone();
     let color = match record.level {
         LogLevel::Error => cx.theme().danger,
         LogLevel::Warn => cx.theme().warning,
@@ -123,6 +145,15 @@ fn log_row(entry: &LogEntry, cx: &App) -> impl IntoElement + use<> {
     };
     div()
         .id(entry.key.clone())
+        .role(gpui::accesskit::Role::ListItem)
+        .aria_label(entry.preview.clone())
+        .aria_selected(selected)
+        .cursor_pointer()
+        .when(selected, |row| row.bg(cx.theme().accent))
+        .hover(|row| row.bg(cx.theme().muted))
+        .on_click(
+            cx.listener(move |view, _, window, cx| view.inspect(inspected.clone(), window, cx)),
+        )
         .h(px(ROW_HEIGHT))
         .flex()
         .items_center()
@@ -173,4 +204,20 @@ fn log_row(entry: &LogEntry, cx: &App) -> impl IntoElement + use<> {
                 .child(entry.preview.clone()),
         )
         .tooltip(move |window, cx| Tooltip::new(message.clone()).build(window, cx))
+        .context_menu(move |menu, _, _| {
+            let message = copied.message.clone();
+            let record = copied.clone();
+            menu.item(
+                PopupMenuItem::new(crate::text::translate("native.logs.copyMessage"))
+                    .icon(IconName::Copy)
+                    .on_click(move |_, _, cx| {
+                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(message.to_string()))
+                    }),
+            )
+            .item(
+                PopupMenuItem::new(crate::text::translate("native.logs.copyRecord"))
+                    .icon(IconName::Copy)
+                    .on_click(move |_, _, cx| super::selection::copy_record(&record, cx)),
+            )
+        })
 }

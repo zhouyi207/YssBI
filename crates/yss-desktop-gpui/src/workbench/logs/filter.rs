@@ -14,10 +14,13 @@ impl LogsPanel {
         let scroll = self.scroll.0.borrow();
         // Match the reference viewport's tolerance for partial rows and resize rounding.
         self.auto_scroll
-            && (scroll
-                .deferred_scroll_to_item
-                .is_some_and(|target| target.item_index == usize::MAX)
-                || scroll.base_handle.max_offset().y + scroll.base_handle.offset().y < px(80.))
+            && (self.visible.is_empty()
+                || match scroll.deferred_scroll_to_item {
+                    Some(target) => target.item_index == usize::MAX,
+                    None => {
+                        scroll.base_handle.max_offset().y + scroll.base_handle.offset().y < px(80.)
+                    }
+                })
     }
 
     pub(super) fn refilter(&mut self) {
@@ -58,6 +61,7 @@ impl LogsPanel {
     }
 
     pub(super) fn clear_display(&mut self, cx: &mut Context<Self>) {
+        self.clear_selection(cx);
         self.entries.clear();
         self.visible.clear();
         self.truncated = false;
