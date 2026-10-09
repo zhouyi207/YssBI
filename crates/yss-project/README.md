@@ -85,11 +85,13 @@ Graph、Chart、Mind、Doc 和 Database 的复制接受可选目标名称，在�
 事务提交，复用路径检查、回滚、暂存清理与 Project 恢复标记。准备后重验会话和目标缺席，
 提交后再确认当前会话；失败不能留下半份结果或沿目录跳转在项目之外创建目录。
 
-所有项目写入在暂存阶段显式调用 Project 的文档校验器；通用 FS prepare 默认不限制文件格式。项目删除前对 metadata.yssbi 的校验也由 Project 执行。FilesystemError 在 Project 边界映射为既有业务错误类别，前端错误 wire 不变。
+项目文档写入在暂存阶段显式调用 Project 的文档校验器；通用 FS prepare 默认不限制文件格式。项目删除前对 metadata.yssbi 的校验也由 Project 执行。FilesystemError 在 Project 边界映射为既有业务错误类别，前端错误 wire 不变。
 
 创建、Save As 与资源 Writer 共用同一个文档校验入口。图文件复用正式读取解析器，
 同时核对路径种类、函数文档形态和常量定义；未加载图的复制也必须通过校验，
 校验不会把其正文安装为驻留状态。非项目文档资产保留普通文件复制路径。
+Event/Function 资源创建也复用该入口，不能仅凭 JSON 可解码就提交无效常量或函数形态；
+正文校验失败时不发布资源、文件或版本变更。
 
 ## Graph resource revisions
 

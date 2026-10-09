@@ -99,11 +99,7 @@ impl ProjectState {
                 relative_path: path.as_str().into(),
                 contents,
             }],
-            |_, bytes| {
-                serde_json::from_slice::<crate::GraphResourceFile>(bytes)
-                    .map(|_| ())
-                    .map_err(|error| error.to_string())
-            },
+            crate::project_writers::validate_document,
         )?;
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
@@ -1004,6 +1000,51 @@ mod tests {
     use yss_graph_document::GraphResourceKind;
     use yss_project_history::ResourceDocumentPatch;
     use yss_project_model::ProjectData;
+
+    #[test]
+    fn graph_creation_rejects_invalid_constants_before_publication() {
+        use yss_data_contract::{DataValue, ValueType};
+        use yss_graph_document::{ConstantId, GraphConstant};
+
+        let fixture =
+            fixtures::TempProject::activate("create-invalid-constant", ProjectData::new());
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let path = GraphResourcePath::new("events/Invalid.yssbi-event").unwrap();
+        let mut resource = GraphResourceDocument::new("Invalid", GraphResourceKind::EventGraph);
+        let id = ConstantId::new();
+        Arc::make_mut(&mut resource.document).constants.insert(
+            id,
+            GraphConstant {
+                id,
+                name: "invalid_table".into(),
+                data_type: ValueType::DataFrame,
+                data_value: DataValue::String("not-json".into()),
+                tabular: None,
+                description: String::new(),
+                tags: vec![],
+            },
+        );
+        let before = state.read_project_index(&session.instance_id).unwrap();
+        let result = state.create_graph_resource(
+            &session.instance_id,
+            "Invalid",
+            resource,
+            yss_project_identity::OperationId::new(),
+        );
+        assert!(
+            matches!(
+                result,
+                Err(ProjectOperationError::TransactionPrepareFailed { .. })
+            ),
+            "invalid graph constants were committed: {result:?}"
+        );
+        assert!(!session.root.as_path().join(path.as_str()).exists());
+        assert!(!state.has_resident_graph(&path).unwrap());
+        let after = state.read_project_index(&session.instance_id).unwrap();
+        assert_eq!(after.publication_revision, before.publication_revision);
+        assert_eq!(after.authority_generation(), before.authority_generation());
+    }
 
     #[test]
     fn graph_writers_reject_changed_revision_and_occupied_or_missing_paths() {
