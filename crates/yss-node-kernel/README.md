@@ -407,7 +407,9 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 The built-in classical hypothesis-test adapters live in `builtins/statistics/classical.rs`. They translate node inputs into neutral `yss-sci-contract::hypothesis` requests, invoke stateless SCI runtime functions, and expose one structured `result` output. The catalog owns localized node definitions and help; kernels do not duplicate formulas.
 
 Classical adapters forward the invocation's cancellation/deadline control into all
-four SCI families and retain typed execution failures. Before SCI dispatch they
+four SCI families and use the common computation-error conversion to retain
+observation, option, numerical-failure and interruption classifications.
+Before SCI dispatch they
 admit retained numeric columns, ranks/order/ties and sort scratch, deviations,
 per-condition rows and report sizes. Categorical encoding admits retained prior
 columns and batch/scalar temporaries before allocation. Dictionary/Utf8View labels
@@ -415,9 +417,10 @@ are expanded one row at a time through the existing Arrow converter, so repeated
 references do not create an unadmitted full-column string expansion. Count-table preparation
 admits linear category indexes before constructing them, then uses actual row and
 column cardinalities for the dense table. These are conservative workspace
-estimates, not process RSS limits. Classical kernels use revision 5, except the
-paired t, McNemar, CMH and categorical independence kernels, which use revision 6;
-Fisher exact uses revision 7.
+estimates, not process RSS limits. Classical kernels use revision 6, except the
+paired t, McNemar, CMH and categorical independence kernels, which use revision 7;
+Fisher exact uses revision 8.
+Item discrimination reuses the same Welch computation errors and uses revision 6.
 CMH exposure and outcome reuse the controlled scalar-column and binary numeric
 reader, without encoding numeric observations as category strings. Each temporary
 column is released after conversion; admission includes retained earlier columns,

@@ -3,7 +3,7 @@ mod content;
 mod items;
 mod reliability;
 pub use crate::multivariate::sampling_adequacy as validity;
-use crate::regression::models::common::{Result, failed, finite, parameter, validate};
+use crate::regression::models::common::{Result, finite, parameter, validate};
 pub use content::content_validity;
 pub use items::item_analysis;
 pub use reliability::reliability;

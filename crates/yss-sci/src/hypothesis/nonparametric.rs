@@ -1,13 +1,13 @@
 //! Rank, sign, and sequence tests with explicit small-sample and tie handling.
-use super::checkpoint;
+use super::{Error, Violation, checkpoint, failed, finite, invalid, parameter};
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
+use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{Alternative, ClassicalTestResult, RankHypothesisTest as Input};
-use yss_sci_contract::{execution::ScientificExecutionControl, hypothesis::HypothesisError};
 
 pub fn run(
     input: Input,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     control.check()?;
     let result = match input {
         Input::WilcoxonOneSample {
@@ -16,16 +16,17 @@ pub fn run(
             alternative,
         } => {
             if !null_median.is_finite() {
-                return Err("Wilcoxon null median must be finite".into());
+                return Err(parameter());
             }
+            validate(&values, control)?;
             let differences = values
                 .into_iter()
                 .enumerate()
                 .map(|(i, v)| {
                     checkpoint(control, i)?;
-                    Ok(v - null_median)
+                    finite(v - null_median)
                 })
-                .collect::<Result<Vec<_>, HypothesisError>>()?;
+                .collect::<Result<Vec<_>, Error>>()?;
             wilcoxon(differences, alternative, "wilcoxon.one_sample", control)
         }
         Input::WilcoxonPaired {
@@ -34,8 +35,10 @@ pub fn run(
             alternative,
         } => {
             if before.len() != after.len() {
-                return Err("paired Wilcoxon inputs must align".into());
+                return Err(invalid(Violation::ShapeMismatch));
             }
+            validate(&before, control)?;
+            validate(&after, control)?;
             wilcoxon(
                 before
                     .iter()
@@ -43,9 +46,9 @@ pub fn run(
                     .enumerate()
                     .map(|(i, (a, b))| {
                         checkpoint(control, i)?;
-                        Ok(a - b)
+                        finite(a - b)
                     })
-                    .collect::<Result<_, HypothesisError>>()?,
+                    .collect::<Result<_, Error>>()?,
                 alternative,
                 "wilcoxon.paired",
                 control,
@@ -75,8 +78,7 @@ fn wilcoxon(
     alternative: Alternative,
     method: &str,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    validate(&differences, control)?;
+) -> Result<ClassicalTestResult, Error> {
     let mut nonzero = Vec::new();
     for (i, value) in differences.into_iter().enumerate() {
         checkpoint(control, i)?;
@@ -86,7 +88,7 @@ fn wilcoxon(
     }
     let n = nonzero.len();
     if n < 2 {
-        return Err("Wilcoxon signed-rank test requires at least two non-zero differences".into());
+        return Err(invalid(Violation::EmptyInput));
     }
     let abs = nonzero
         .iter()
@@ -95,7 +97,7 @@ fn wilcoxon(
             checkpoint(control, i)?;
             Ok(v.abs())
         })
-        .collect::<Result<Vec<_>, HypothesisError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     let (ranks, _) = ranks(&abs, control)?;
     let mut observed = 0.0;
     let mut mean = 0.0;
@@ -111,7 +113,7 @@ fn wilcoxon(
     let mean = mean / 2.0;
     let variance = variance / 4.0;
     if variance <= 0.0 {
-        return Err("Wilcoxon rank variance is zero".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let exact = if n <= 20 {
         Some(wilcoxon_exact(&ranks, observed, alternative, control)?)
@@ -143,7 +145,7 @@ fn wilcoxon_exact(
     observed: f64,
     alternative: Alternative,
     control: &ScientificExecutionControl,
-) -> Result<f64, HypothesisError> {
+) -> Result<f64, Error> {
     let observed2 = (observed * 2.0).round() as u64;
     let ranks2 = ranks
         .iter()
@@ -178,12 +180,9 @@ fn mann_whitney(
     second: Vec<f64>,
     alternative: Alternative,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     validate(&first, control)?;
     validate(&second, control)?;
-    if first.is_empty() || second.is_empty() {
-        return Err("Mann–Whitney requires two non-empty samples".into());
-    }
     let n1 = first.len();
     let n2 = second.len();
     let combined = first
@@ -195,7 +194,7 @@ fn mann_whitney(
             checkpoint(control, i)?;
             Ok(v)
         })
-        .collect::<Result<Vec<_>, HypothesisError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     let values = combined
         .iter()
         .enumerate()
@@ -203,7 +202,7 @@ fn mann_whitney(
             checkpoint(control, i)?;
             Ok(x.0)
         })
-        .collect::<Result<Vec<_>, HypothesisError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     let (rank, ties) = ranks(&values, control)?;
     let mut rank1 = 0.0;
     for (i, (_, group)) in combined.iter().enumerate() {
@@ -220,12 +219,12 @@ fn mann_whitney(
         .enumerate()
         .try_fold(0.0, |sum, (i, v)| {
             checkpoint(control, i)?;
-            Ok::<_, HypothesisError>(sum + v)
+            Ok::<_, Error>(sum + v)
         })?;
     let variance = n1 as f64 * n2 as f64 / 12.0
         * ((total + 1) as f64 - tie_term / (total * (total - 1)) as f64);
     if variance <= 0.0 {
-        return Err("Mann–Whitney rank variance is zero".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let z = (u1 - (n1 * n2) as f64 / 2.0) / variance.sqrt();
     let mut result = base(
@@ -247,14 +246,14 @@ fn mann_whitney(
 fn kruskal_wallis(
     groups: Vec<Vec<f64>>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     if groups.len() < 2
         || groups.iter().enumerate().try_fold(false, |empty, (i, g)| {
             checkpoint(control, i)?;
-            Ok::<_, HypothesisError>(empty || g.is_empty())
+            Ok::<_, Error>(empty || g.is_empty())
         })?
     {
-        return Err("Kruskal–Wallis requires at least two non-empty groups".into());
+        return Err(invalid(Violation::EmptyInput));
     }
     groups.iter().enumerate().try_for_each(|(i, g)| {
         checkpoint(control, i)?;
@@ -267,7 +266,7 @@ fn kruskal_wallis(
             checkpoint(control, i)?;
             Ok(g.len())
         })
-        .collect::<Result<Vec<_>, HypothesisError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     let vals = groups
         .iter()
         .flatten()
@@ -276,7 +275,7 @@ fn kruskal_wallis(
             checkpoint(control, i)?;
             Ok(*v)
         })
-        .collect::<Result<Vec<_>, HypothesisError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     let (rank, ties) = ranks(&vals, control)?;
     let n = vals.len();
     let mut offset = 0;
@@ -289,7 +288,7 @@ fn kruskal_wallis(
                 .enumerate()
                 .try_fold(0.0, |sum, (j, value)| {
                     checkpoint(control, j)?;
-                    Ok::<_, HypothesisError>(sum + value)
+                    Ok::<_, Error>(sum + value)
                 })?;
         sum += rs * rs / *size as f64;
         offset += size;
@@ -302,18 +301,16 @@ fn kruskal_wallis(
             .enumerate()
             .try_fold(0.0, |sum, (i, v)| {
                 checkpoint(control, i)?;
-                Ok::<_, HypothesisError>(sum + v)
+                Ok::<_, Error>(sum + v)
             })?
             / ((n * n * n - n) as f64);
     if corr <= 0.0 {
-        return Err("Kruskal–Wallis tie correction is zero".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let statistic = raw / corr;
     let df = (groups.len() - 1) as f64;
     control.check()?;
-    let p = ChiSquared::new(df)
-        .map_err(|_| "invalid Kruskal–Wallis chi-square")?
-        .sf(statistic);
+    let p = ChiSquared::new(df).map_err(|_| failed())?.sf(statistic);
     control.check()?;
     Ok(base(
         "kruskal_wallis",
@@ -329,17 +326,17 @@ fn kruskal_wallis(
 fn friedman(
     conditions: Vec<Vec<f64>>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     if conditions.len() < 3
         || conditions
             .iter()
             .enumerate()
             .try_fold(false, |empty, (i, g)| {
                 checkpoint(control, i)?;
-                Ok::<_, HypothesisError>(empty || g.is_empty())
+                Ok::<_, Error>(empty || g.is_empty())
             })?
     {
-        return Err("Friedman test requires at least three non-empty repeated conditions".into());
+        return Err(invalid(Violation::EmptyInput));
     }
     conditions.iter().enumerate().try_for_each(|(i, g)| {
         checkpoint(control, i)?;
@@ -347,16 +344,18 @@ fn friedman(
     })?;
     let k = conditions.len();
     let n = conditions[0].len();
-    if n < 2
-        || conditions
-            .iter()
-            .enumerate()
-            .try_fold(false, |invalid, (i, g)| {
-                checkpoint(control, i)?;
-                Ok::<_, HypothesisError>(invalid || g.len() != n)
-            })?
+    if conditions
+        .iter()
+        .enumerate()
+        .try_fold(false, |invalid, (i, g)| {
+            checkpoint(control, i)?;
+            Ok::<_, Error>(invalid || g.len() != n)
+        })?
     {
-        return Err("Friedman conditions must contain at least two aligned subjects".into());
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if n < 2 {
+        return Err(invalid(Violation::EmptyInput));
     }
     let mut sums = vec![0.0; k];
     let mut tie_total = 0.0;
@@ -369,7 +368,7 @@ fn friedman(
                 checkpoint(control, i)?;
                 Ok(g[row])
             })
-            .collect::<Result<Vec<_>, HypothesisError>>()?;
+            .collect::<Result<Vec<_>, Error>>()?;
         let (r, t) = ranks(&values, control)?;
         for j in 0..k {
             checkpoint(control, j)?;
@@ -381,7 +380,7 @@ fn friedman(
             .enumerate()
             .try_fold(0.0, |sum, (i, v)| {
                 checkpoint(control, i)?;
-                Ok::<_, HypothesisError>(sum + v)
+                Ok::<_, Error>(sum + v)
             })?;
     }
     let raw = 12.0 / (n * k * (k + 1)) as f64
@@ -391,19 +390,17 @@ fn friedman(
             .enumerate()
             .try_fold(0.0, |sum, (i, v)| {
                 checkpoint(control, i)?;
-                Ok::<_, HypothesisError>(sum + v)
+                Ok::<_, Error>(sum + v)
             })?
         - 3.0 * n as f64 * (k + 1) as f64;
     let correction = 1.0 - tie_total / (n as f64 * k as f64 * ((k * k - 1) as f64));
     if correction <= 0.0 {
-        return Err("Friedman tie correction is zero".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let statistic = raw / correction;
     let df = (k - 1) as f64;
     control.check()?;
-    let p = ChiSquared::new(df)
-        .map_err(|_| "invalid Friedman chi-square")?
-        .sf(statistic);
+    let p = ChiSquared::new(df).map_err(|_| failed())?.sf(statistic);
     control.check()?;
     Ok(base(
         "friedman",
@@ -419,22 +416,22 @@ fn friedman(
 fn cochran_q(
     conditions: Vec<Vec<f64>>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     if conditions.len() < 3
         || conditions
             .iter()
             .enumerate()
             .try_fold(false, |empty, (i, g)| {
                 checkpoint(control, i)?;
-                Ok::<_, HypothesisError>(empty || g.is_empty())
+                Ok::<_, Error>(empty || g.is_empty())
             })?
     {
-        return Err("Cochran Q requires at least three non-empty paired conditions".into());
+        return Err(invalid(Violation::EmptyInput));
     }
     let n = conditions[0].len();
     let k = conditions.len();
     if n < 2 {
-        return Err("Cochran Q requires aligned binary condition values".into());
+        return Err(invalid(Violation::EmptyInput));
     }
     let mut col = Vec::with_capacity(k);
     let mut rows = vec![0.0; n];
@@ -442,13 +439,16 @@ fn cochran_q(
     for (i, group) in conditions.iter().enumerate() {
         checkpoint(control, i)?;
         if group.len() != n {
-            return Err("Cochran Q requires aligned binary condition values".into());
+            return Err(invalid(Violation::ShapeMismatch));
         }
         let mut sum = 0.0;
         for (j, value) in group.iter().enumerate() {
             checkpoint(control, j)?;
+            if !value.is_finite() {
+                return Err(invalid(Violation::NonFiniteInput));
+            }
             if *value != 0.0 && *value != 1.0 {
-                return Err("Cochran Q requires aligned binary condition values".into());
+                return Err(invalid(Violation::DataOutOfRange));
             }
             sum += value;
             rows[j] += value;
@@ -463,10 +463,10 @@ fn cochran_q(
             .enumerate()
             .try_fold(0.0, |sum, (i, v)| {
                 checkpoint(control, i)?;
-                Ok::<_, HypothesisError>(sum + v)
+                Ok::<_, Error>(sum + v)
             })?;
     if denom <= 0.0 {
-        return Err("Cochran Q has no outcome variation".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let statistic = (k - 1) as f64
         * (k as f64
@@ -476,15 +476,13 @@ fn cochran_q(
                 .enumerate()
                 .try_fold(0.0, |sum, (i, v)| {
                     checkpoint(control, i)?;
-                    Ok::<_, HypothesisError>(sum + v)
+                    Ok::<_, Error>(sum + v)
                 })?
             - total * total)
         / denom;
     let df = (k - 1) as f64;
     control.check()?;
-    let p = ChiSquared::new(df)
-        .map_err(|_| "invalid Cochran Q chi-square")?
-        .sf(statistic);
+    let p = ChiSquared::new(df).map_err(|_| failed())?.sf(statistic);
     control.check()?;
     Ok(base(
         "cochran_q",
@@ -500,20 +498,19 @@ fn cochran_q(
 fn runs(
     values: Vec<f64>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     if values.len() < 2 {
-        return Err(
-            "runs test requires at least two binary 0/1 observations in sequence order".into(),
-        );
+        return Err(invalid(Violation::EmptyInput));
     }
     let mut n1 = 0;
     let mut observed = 1;
     for (i, value) in values.iter().enumerate() {
         checkpoint(control, i)?;
+        if !value.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
         if *value != 0.0 && *value != 1.0 {
-            return Err(
-                "runs test requires at least two binary 0/1 observations in sequence order".into(),
-            );
+            return Err(invalid(Violation::DataOutOfRange));
         }
         n1 += usize::from(*value == 1.0);
         if i > 0 && values[i - 1] != *value {
@@ -523,13 +520,13 @@ fn runs(
     let n0 = values.len() - n1;
     let n = values.len();
     if n0 == 0 || n1 == 0 {
-        return Err("runs test requires both categories".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let mean = 1.0 + 2.0 * n0 as f64 * n1 as f64 / n as f64;
     let variance = 2.0 * n0 as f64 * n1 as f64 * (2.0 * n0 as f64 * n1 as f64 - n as f64)
         / (n * n * (n - 1)) as f64;
     if variance <= 0.0 {
-        return Err("runs variance is zero".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let z = (observed as f64 - mean) / variance.sqrt();
     Ok(base(
@@ -546,14 +543,14 @@ fn runs(
 fn mood_median(
     groups: Vec<Vec<f64>>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     if groups.len() < 2
         || groups.iter().enumerate().try_fold(false, |empty, (i, g)| {
             checkpoint(control, i)?;
-            Ok::<_, HypothesisError>(empty || g.is_empty())
+            Ok::<_, Error>(empty || g.is_empty())
         })?
     {
-        return Err("Mood median test requires at least two non-empty groups".into());
+        return Err(invalid(Violation::EmptyInput));
     }
     groups.iter().enumerate().try_for_each(|(i, g)| {
         checkpoint(control, i)?;
@@ -567,7 +564,7 @@ fn mood_median(
             checkpoint(control, i)?;
             Ok(*v)
         })
-        .collect::<Result<Vec<_>, HypothesisError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     control.check()?;
     all.sort_by(f64::total_cmp);
     control.check()?;
@@ -611,7 +608,7 @@ fn mood_median(
             checkpoint(control, i)?;
             Ok(g.len())
         })
-        .collect::<Result<_, HypothesisError>>()?;
+        .collect::<Result<_, Error>>()?;
     Ok(result)
 }
 
@@ -619,11 +616,11 @@ fn mann_kendall(
     values: Vec<f64>,
     alternative: Alternative,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     validate(&values, control)?;
     let n = values.len();
     if n < 3 {
-        return Err("Mann–Kendall requires at least three ordered observations".into());
+        return Err(invalid(Violation::EmptyInput));
     }
     let mut ordered = values
         .iter()
@@ -632,7 +629,7 @@ fn mann_kendall(
             checkpoint(control, i)?;
             Ok(*v)
         })
-        .collect::<Result<Vec<_>, HypothesisError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     control.check()?;
     ordered.sort_by(f64::total_cmp);
     control.check()?;
@@ -669,11 +666,11 @@ fn mann_kendall(
         .enumerate()
         .try_fold(0.0, |sum, (i, v)| {
             checkpoint(control, i)?;
-            Ok::<_, HypothesisError>(sum + v)
+            Ok::<_, Error>(sum + v)
         })?;
     let variance = (n * (n - 1) * (2 * n + 5)) as f64 / 18.0 - tie / 18.0;
     if variance <= 0.0 {
-        return Err("Mann–Kendall variance is zero".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let corrected = if s > 0 {
         (s - 1) as f64
@@ -713,14 +710,14 @@ fn fenwick_sum(tree: &[i64], mut index: usize) -> i64 {
 fn ranks(
     values: &[f64],
     control: &ScientificExecutionControl,
-) -> Result<(Vec<f64>, Vec<usize>), HypothesisError> {
+) -> Result<(Vec<f64>, Vec<usize>), Error> {
     validate(values, control)?;
     let mut order = (0..values.len())
         .map(|i| {
             checkpoint(control, i)?;
             Ok(i)
         })
-        .collect::<Result<Vec<_>, HypothesisError>>()?;
+        .collect::<Result<Vec<_>, Error>>()?;
     control.check()?;
     order.sort_by(|a, b| values[*a].total_cmp(&values[*b]));
     control.check()?;
@@ -745,21 +742,22 @@ fn ranks(
     Ok((output, ties))
 }
 
-fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<(), HypothesisError> {
+fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<(), Error> {
+    control.check()?;
+    if values.is_empty() {
+        return Err(invalid(Violation::EmptyInput));
+    }
     for (i, value) in values.iter().enumerate() {
         checkpoint(control, i)?;
         if !value.is_finite() {
-            return Err("rank test input contains non-finite values".into());
+            return Err(invalid(Violation::NonFiniteInput));
         }
     }
     Ok(())
 }
 
-fn normal_p(
-    z: f64,
-    a: Alternative,
-    control: &ScientificExecutionControl,
-) -> Result<f64, HypothesisError> {
+fn normal_p(z: f64, a: Alternative, control: &ScientificExecutionControl) -> Result<f64, Error> {
+    finite(z)?;
     let n = Normal::new(0.0, 1.0).expect("standard normal");
     control.check()?;
     let p = match a {
@@ -808,7 +806,7 @@ fn chi_table(
     rows: usize,
     cols: usize,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     let mut n = 0.0;
     let mut rt = vec![0.0; rows];
     let mut ct = vec![0.0; cols];
@@ -824,14 +822,14 @@ fn chi_table(
             checkpoint(control, r * cols + c)?;
             let e = rt[r] * ct[c] / n;
             if e <= 0.0 {
-                return Err("Mood median table has an empty margin".into());
+                return Err(invalid(Violation::DataOutOfRange));
             }
             x += (observed[r * cols + c] - e).powi(2) / e;
         }
     }
     let df = ((rows - 1) * (cols - 1)) as f64;
     control.check()?;
-    let p = ChiSquared::new(df).map_err(|_| "invalid chi-square")?.sf(x);
+    let p = ChiSquared::new(df).map_err(|_| failed())?.sf(x);
     control.check()?;
     Ok(base(method, null, "chi_squared", x, vec![df], p, vec![]))
 }
@@ -856,17 +854,13 @@ mod tests {
         cancellation.cancel();
         assert!(matches!(
             wilcoxon_exact(&[1.0; 20], 20.0, Alternative::TwoSided, &control),
-            Err(HypothesisError::Execution(
-                ScientificComputationError::Cancelled
-            ))
+            Err(ScientificComputationError::Cancelled)
         ));
         control.cancellation = ScientificCancellationToken::new();
         control.deadline = Instant::now();
         assert!(matches!(
             wilcoxon_exact(&[1.0; 20], 20.0, Alternative::TwoSided, &control),
-            Err(HypothesisError::Execution(
-                ScientificComputationError::DeadlineExceeded
-            ))
+            Err(ScientificComputationError::DeadlineExceeded)
         ));
     }
 }

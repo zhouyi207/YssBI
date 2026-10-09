@@ -1,15 +1,15 @@
 //! Pearson, exact 2x2, and stratified categorical tests.
-use super::checkpoint;
+use super::{Error, Violation, checkpoint, failed, invalid};
 use statrs::distribution::{Binomial, ChiSquared, ContinuousCDF, DiscreteCDF};
 use statrs::function::gamma::ln_gamma;
 use std::collections::BTreeMap;
+use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{CategoricalHypothesisTest as Input, ClassicalTestResult};
-use yss_sci_contract::{execution::ScientificExecutionControl, hypothesis::HypothesisError};
 
 pub fn run(
     input: Input,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     control.check()?;
     let result = match input {
         Input::Independence { row, column } => independence(row, column, control),
@@ -38,15 +38,18 @@ fn independence(
     row: Vec<Box<str>>,
     column: Vec<Box<str>>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    if row.len() != column.len() || row.is_empty() {
-        return Err("crosstab requires aligned non-empty categorical columns".into());
+) -> Result<ClassicalTestResult, Error> {
+    if row.len() != column.len() {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if row.is_empty() {
+        return Err(invalid(Violation::EmptyInput));
     }
     let table = count_table(row, column, control)?;
     let rows = table.len();
     let cols = table.first().map_or(0, Vec::len);
     if rows < 2 || cols < 2 {
-        return Err("independence test requires at least two levels in both variables".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let mut n = 0u64;
     let mut row_totals = vec![0.0; rows];
@@ -67,7 +70,7 @@ fn independence(
             checkpoint(control, r * cols + c)?;
             let expected = row_totals[r] * col_totals[c] / n;
             if expected <= 0.0 {
-                return Err("crosstab contains an empty marginal".into());
+                return Err(invalid(Violation::DataOutOfRange));
             }
             min_expected = min_expected.min(expected);
             statistic += (table[r][c] as f64 - expected).powi(2) / expected;
@@ -91,19 +94,22 @@ fn goodness(
     observed: Vec<f64>,
     expected: Vec<f64>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    if observed.len() != expected.len() || observed.len() < 2 {
-        return Err(
-            "goodness-of-fit requires matching positive expected and non-negative observed counts"
-                .into(),
-        );
+) -> Result<ClassicalTestResult, Error> {
+    if observed.len() != expected.len() {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if observed.len() < 2 {
+        return Err(invalid(Violation::EmptyInput));
     }
     let mut statistic = 0.0;
     let mut n = 0.0;
     for (i, (o, e)) in observed.iter().zip(&expected).enumerate() {
         checkpoint(control, i)?;
-        if !o.is_finite() || *o < 0.0 || !e.is_finite() || *e <= 0.0 {
-            return Err("goodness-of-fit requires matching positive expected and non-negative observed counts".into());
+        if !o.is_finite() || !e.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
+        if *o < 0.0 || *e <= 0.0 {
+            return Err(invalid(Violation::DataOutOfRange));
         }
         statistic += (o - e).powi(2) / e;
         n += o;
@@ -124,20 +130,23 @@ fn pearson_table(
     rows: usize,
     columns: usize,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    if rows < 2 || columns < 2 || rows.checked_mul(columns) != Some(observed.len()) {
-        return Err(
-            "Pearson table requires a rectangular count table with at least two rows and columns"
-                .into(),
-        );
+) -> Result<ClassicalTestResult, Error> {
+    if rows.checked_mul(columns) != Some(observed.len()) {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if rows < 2 || columns < 2 {
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let mut n = 0.0;
     let mut row_totals = vec![0.0; rows];
     let mut col_totals = vec![0.0; columns];
     for (i, count) in observed.iter().enumerate() {
         checkpoint(control, i)?;
-        if !count.is_finite() || *count < 0.0 || count.fract() != 0.0 {
-            return Err("Pearson table requires a rectangular count table with at least two rows and columns".into());
+        if !count.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
+        if *count < 0.0 || count.fract() != 0.0 {
+            return Err(invalid(Violation::DataOutOfRange));
         }
         n += count;
         row_totals[i / columns] += count;
@@ -150,7 +159,7 @@ fn pearson_table(
             checkpoint(control, r * columns + c)?;
             let expected = row_totals[r] * col_totals[c] / n;
             if expected <= 0.0 {
-                return Err("Pearson table contains an empty marginal".into());
+                return Err(invalid(Violation::DataOutOfRange));
             }
             min_expected = min_expected.min(expected);
             statistic += (observed[r * columns + c] - expected).powi(2) / expected;
@@ -174,13 +183,16 @@ fn fisher(
     row: Vec<Box<str>>,
     column: Vec<Box<str>>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    if row.len() != column.len() || row.is_empty() {
-        return Err("Fisher exact test requires aligned categorical columns".into());
+) -> Result<ClassicalTestResult, Error> {
+    if row.len() != column.len() {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if row.is_empty() {
+        return Err(invalid(Violation::EmptyInput));
     }
     let table = count_table(row, column, control)?;
     if table.len() != 2 || table[0].len() != 2 {
-        return Err("Fisher exact test currently requires a 2 by 2 table".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let [a, b, c, d] = [table[0][0], table[0][1], table[1][0], table[1][1]];
     let p_value = fisher_two_sided(a, b, c, d, control)?;
@@ -199,9 +211,7 @@ fn fisher(
         p_value,
         estimate: None,
         standard_error: None,
-        sample_sizes: vec![
-            usize::try_from(a + b + c + d).map_err(|_| "Fisher table count overflow")?,
-        ],
+        sample_sizes: vec![usize::try_from(a + b + c + d).map_err(|_| failed())?],
         details: [
             ("a".into(), a as f64),
             ("b".into(), b as f64),
@@ -216,15 +226,21 @@ fn mcnemar(
     before: Vec<f64>,
     after: Vec<f64>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    if before.is_empty() || before.len() != after.len() {
-        return Err("McNemar test requires aligned paired binary observations".into());
+) -> Result<ClassicalTestResult, Error> {
+    if before.len() != after.len() {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if before.is_empty() {
+        return Err(invalid(Violation::EmptyInput));
     }
     let (mut b, mut c) = (0u64, 0u64);
     for (i, (x, y)) in before.iter().zip(&after).enumerate() {
         checkpoint(control, i)?;
+        if !x.is_finite() || !y.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
         if (*x != 0.0 && *x != 1.0) || (*y != 0.0 && *y != 1.0) {
-            return Err("McNemar test requires aligned paired binary observations".into());
+            return Err(invalid(Violation::DataOutOfRange));
         }
         if *x == 0.0 && *y == 1.0 {
             b += 1;
@@ -234,11 +250,10 @@ fn mcnemar(
     }
     let discordant = b + c;
     if discordant == 0 {
-        return Err("McNemar test has no discordant pairs".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let statistic = (b as f64 - c as f64).powi(2) / discordant as f64;
-    let binomial =
-        Binomial::new(0.5, discordant).map_err(|_| "invalid McNemar exact distribution")?;
+    let binomial = Binomial::new(0.5, discordant).map_err(|_| failed())?;
     control.check()?;
     let tail = binomial.cdf(b.min(c));
     control.check()?;
@@ -265,19 +280,21 @@ fn cmh(
     outcome: Vec<f64>,
     strata: Vec<Box<str>>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    if exposed.len() != outcome.len() || outcome.len() != strata.len() || strata.is_empty() {
-        return Err(
-            "CMH test requires aligned binary exposure, outcome and stratum columns".into(),
-        );
+) -> Result<ClassicalTestResult, Error> {
+    if exposed.len() != outcome.len() || outcome.len() != strata.len() {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if strata.is_empty() {
+        return Err(invalid(Violation::EmptyInput));
     }
     let mut groups: BTreeMap<Box<str>, [f64; 4]> = BTreeMap::new();
     for (i, ((x, y), stratum)) in exposed.iter().zip(&outcome).zip(strata).enumerate() {
         checkpoint(control, i)?;
+        if !x.is_finite() || !y.is_finite() {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
         if (*x != 0.0 && *x != 1.0) || (*y != 0.0 && *y != 1.0) {
-            return Err(
-                "CMH test requires aligned binary exposure, outcome and stratum columns".into(),
-            );
+            return Err(invalid(Violation::DataOutOfRange));
         }
         let table = groups.entry(stratum).or_default();
         let index = match (*x, *y) {
@@ -302,7 +319,7 @@ fn cmh(
         variance += row1 * (n - row1) * col1 * (n - col1) / (n * n * (n - 1.0));
     }
     if variance <= 0.0 {
-        return Err("CMH test has no within-stratum information".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     chi_result(
         "cmh",
@@ -317,9 +334,12 @@ fn cmh(
 fn multiple_proportions(
     values: Vec<f64>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    if values.len() < 6 || !values.len().is_multiple_of(2) {
-        return Err("multiple-proportion test requires at least three success/total pairs".into());
+) -> Result<ClassicalTestResult, Error> {
+    if !values.len().is_multiple_of(2) {
+        return Err(invalid(Violation::ShapeMismatch));
+    }
+    if values.len() < 6 {
+        return Err(invalid(Violation::EmptyInput));
     }
     let groups = values.len() / 2;
     let mut counts = Vec::with_capacity(groups * 2);
@@ -327,18 +347,16 @@ fn multiple_proportions(
     let mut successes = 0.0;
     for (i, pair) in values.chunks_exact(2).enumerate() {
         checkpoint(control, i)?;
-        if pair
-            .iter()
-            .any(|v| !v.is_finite() || *v < 0.0 || v.fract() != 0.0)
-        {
-            return Err(
-                "multiple-proportion test requires at least three success/total pairs".into(),
-            );
+        if pair.iter().any(|v| !v.is_finite()) {
+            return Err(invalid(Violation::NonFiniteInput));
+        }
+        if pair.iter().any(|v| *v < 0.0 || v.fract() != 0.0) {
+            return Err(invalid(Violation::DataOutOfRange));
         }
         let success = pair[0];
         let n = pair[1];
         if n == 0.0 || success > n {
-            return Err("invalid success and total counts".into());
+            return Err(invalid(Violation::DataOutOfRange));
         }
         counts.push(success);
         counts.push(n - success);
@@ -360,7 +378,7 @@ fn count_table(
     row: Vec<Box<str>>,
     column: Vec<Box<str>>,
     control: &ScientificExecutionControl,
-) -> Result<Vec<Vec<u64>>, HypothesisError> {
+) -> Result<Vec<Vec<u64>>, Error> {
     let mut rows = BTreeMap::<&str, usize>::new();
     let mut columns = BTreeMap::<&str, usize>::new();
     for (i, (r, c)) in row.iter().zip(&column).enumerate() {
@@ -394,7 +412,7 @@ fn fisher_two_sided(
     c: u64,
     d: u64,
     control: &ScientificExecutionControl,
-) -> Result<f64, HypothesisError> {
+) -> Result<f64, Error> {
     let r1 = a + b;
     let r2 = c + d;
     let c1 = a + c;
@@ -424,11 +442,11 @@ fn chi_result(
     df: f64,
     observations: usize,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     if !statistic.is_finite() || statistic < 0.0 || df <= 0.0 || !df.is_finite() {
-        return Err("invalid chi-square statistic or degrees of freedom".into());
+        return Err(failed());
     }
-    let distribution = ChiSquared::new(df).map_err(|_| "invalid chi-square distribution")?;
+    let distribution = ChiSquared::new(df).map_err(|_| failed())?;
     control.check()?;
     let p_value = distribution.sf(statistic).clamp(0.0, 1.0);
     control.check()?;

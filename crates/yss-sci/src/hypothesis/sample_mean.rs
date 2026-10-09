@@ -1,17 +1,17 @@
-//! Independent sample mean tests. Inputs are already filtered to complete, finite observations.
-use super::checkpoint;
+//! Mean/count tests with explicit data and option admission; observations are not dropped.
+use super::{Error, Violation, checkpoint, failed, finite, invalid, parameter};
 use statrs::distribution::{
     Binomial, ContinuousCDF, Discrete, DiscreteCDF, Normal, Poisson, StudentsT,
 };
 use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{
-    Alternative, ClassicalHypothesisTest, ClassicalTestResult, HypothesisError, SummaryTDesign,
+    Alternative, ClassicalHypothesisTest, ClassicalTestResult, SummaryTDesign,
 };
 
 pub fn run(
     input: ClassicalHypothesisTest,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     control.check()?;
     let result = match input {
         ClassicalHypothesisTest::OneSample {
@@ -20,11 +20,11 @@ pub fn run(
             alternative,
         } => {
             validate(&values, control)?;
-            if !null_mean.is_finite() || values.len() < 2 {
-                return Err(
-                    "one-sample t test requires a finite null mean and at least two observations"
-                        .into(),
-                );
+            if values.len() < 2 {
+                return Err(invalid(Violation::EmptyInput));
+            }
+            if !null_mean.is_finite() {
+                return Err(parameter());
             }
             let n = values.len();
             let mean = sample_sum(&values, control)? / n as f64;
@@ -48,9 +48,7 @@ pub fn run(
             validate(&first, control)?;
             validate(&second, control)?;
             if first.len() < 2 || second.len() < 2 {
-                return Err(
-                    "independent t test requires at least two observations per group".into(),
-                );
+                return Err(invalid(Violation::EmptyInput));
             }
             independent(
                 &first,
@@ -67,10 +65,13 @@ pub fn run(
             after,
             alternative,
         } => {
+            if before.len() != after.len() {
+                return Err(invalid(Violation::ShapeMismatch));
+            }
             validate(&before, control)?;
             validate(&after, control)?;
-            if before.len() != after.len() || before.len() < 2 {
-                return Err("paired t test requires at least two aligned pairs".into());
+            if before.len() < 2 {
+                return Err(invalid(Violation::EmptyInput));
             }
             let differences = before
                 .iter()
@@ -78,10 +79,9 @@ pub fn run(
                 .enumerate()
                 .map(|(index, (a, b))| {
                     checkpoint(control, index)?;
-                    Ok(a - b)
+                    finite(a - b)
                 })
-                .collect::<Result<Vec<_>, HypothesisError>>()?;
-            validate(&differences, control)?;
+                .collect::<Result<Vec<_>, Error>>()?;
             let n = differences.len();
             let mean = sample_sum(&differences, control)? / n as f64;
             let variance = sample_variance(&differences, mean, control)?;
@@ -107,13 +107,9 @@ pub fn run(
             equal_variance,
             alternative,
         } => {
-            if first_count < 2
-                || !first_mean.is_finite()
-                || !first_sd.is_finite()
-                || first_sd < 0.0
-                || !null_difference.is_finite()
-            {
-                return Err("summary t test has invalid first-group summary values".into());
+            validate_summary(first_count, first_mean, first_sd)?;
+            if !null_difference.is_finite() {
+                return Err(parameter());
             }
             match (design, second_count, second_mean, second_sd) {
                 (SummaryTDesign::Paired, None, None, None) => {
@@ -140,9 +136,8 @@ pub fn run(
                         control,
                     )
                 }
-                (SummaryTDesign::Independent, Some(n2), Some(mean2), Some(sd2))
-                    if n2 >= 2 && mean2.is_finite() && sd2.is_finite() && sd2 >= 0.0 =>
-                {
+                (SummaryTDesign::Independent, Some(n2), Some(mean2), Some(sd2)) => {
+                    validate_summary(n2, mean2, sd2)?;
                     let estimate = first_mean - mean2;
                     let (se, df) =
                         summary_independent_se_df(first_count, first_sd, n2, sd2, equal_variance)?;
@@ -157,9 +152,7 @@ pub fn run(
                     )
                 }
                 _ => {
-                    return Err(
-                        "summary t test requires all or none of the second-group summary".into(),
-                    );
+                    return Err(invalid(Violation::ShapeMismatch));
                 }
             }
         }
@@ -170,15 +163,8 @@ pub fn run(
             alternative,
         } => {
             validate(&values, control)?;
-            if values.is_empty()
-                || !null_mean.is_finite()
-                || !population_sd.is_finite()
-                || population_sd <= 0.0
-            {
-                return Err(
-                    "one-sample z test requires observations and a positive finite population SD"
-                        .into(),
-                );
+            if !null_mean.is_finite() || !population_sd.is_finite() || population_sd <= 0.0 {
+                return Err(parameter());
             }
             let n = values.len();
             let estimate = sample_sum(&values, control)? / n as f64 - null_mean;
@@ -246,7 +232,7 @@ pub fn run(
             validate_proportion(first_successes, first_trials, 0.5)?;
             validate_proportion(second_successes, second_trials, 0.5)?;
             if !null_difference.is_finite() {
-                return Err("two-proportion test null difference must be finite".into());
+                return Err(parameter());
             }
             let p1 = first_successes as f64 / first_trials as f64;
             let p2 = second_successes as f64 / second_trials as f64;
@@ -275,28 +261,23 @@ pub fn run(
             alternative,
         } => {
             validate(&counts, control)?;
-            if counts.is_empty()
-                || !null_rate_per_observation.is_finite()
-                || null_rate_per_observation < 0.0
-            {
-                return Err("Poisson rate test requires non-negative integer counts and a non-negative finite null rate".into());
+            if !null_rate_per_observation.is_finite() || null_rate_per_observation < 0.0 {
+                return Err(parameter());
             }
             for (index, count) in counts.iter().enumerate() {
                 checkpoint(control, index)?;
                 if *count < 0.0 || count.fract() != 0.0 {
-                    return Err("Poisson rate test requires non-negative integer counts and a non-negative finite null rate".into());
+                    return Err(invalid(Violation::DataOutOfRange));
                 }
             }
             let events_f = sample_sum(&counts, control)?;
             if events_f >= u64::MAX as f64 {
-                return Err("Poisson event count overflow".into());
+                return Err(failed());
             }
             let events = events_f as u64;
-            let expected = null_rate_per_observation * counts.len() as f64;
-            if !expected.is_finite() || expected > 500_000.0 || events > 1_000_000 {
-                return Err(
-                    "Poisson exact test input exceeds the supported event-count bound".into(),
-                );
+            let expected = finite(null_rate_per_observation * counts.len() as f64)?;
+            if expected > 500_000.0 || events > 1_000_000 {
+                return Err(invalid(Violation::DataOutOfRange));
             }
             let p_value = poisson_p_value(events, expected, alternative, control)?;
             let rate = events as f64 / counts.len() as f64;
@@ -325,27 +306,23 @@ pub fn run(
             upper_bound,
         } => {
             validate(&values, control)?;
-            if values.len() < 2
-                || !lower_bound.is_finite()
-                || !upper_bound.is_finite()
-                || lower_bound >= upper_bound
-            {
-                return Err(
-                    "equivalence test requires at least two observations and ordered finite bounds"
-                        .into(),
-                );
+            if values.len() < 2 {
+                return Err(invalid(Violation::EmptyInput));
+            }
+            if !lower_bound.is_finite() || !upper_bound.is_finite() || lower_bound >= upper_bound {
+                return Err(parameter());
             }
             let n = values.len();
             let mean = sample_sum(&values, control)? / n as f64;
             let se = (sample_variance(&values, mean, control)? / n as f64).sqrt();
-            if se <= 0.0 || !se.is_finite() {
-                return Err("equivalence standard error is zero or non-finite".into());
+            finite(se)?;
+            if se <= 0.0 {
+                return Err(invalid(Violation::DataOutOfRange));
             }
             let df = (n - 1) as f64;
-            let dist =
-                StudentsT::new(0.0, 1.0, df).map_err(|_| "invalid equivalence t distribution")?;
-            let lower_stat = (mean - lower_bound) / se;
-            let upper_stat = (mean - upper_bound) / se;
+            let dist = StudentsT::new(0.0, 1.0, df).map_err(|_| failed())?;
+            let lower_stat = finite((mean - lower_bound) / se)?;
+            let upper_stat = finite((mean - upper_bound) / se)?;
             control.check()?;
             let lower_p = dist.sf(lower_stat);
             control.check()?;
@@ -384,7 +361,7 @@ fn independent(
     alternative: Alternative,
     method: &str,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     let n1 = first.len();
     let n2 = second.len();
     let mean1 = sample_sum(first, control)? / n1 as f64;
@@ -409,7 +386,7 @@ fn summary_independent_se_df(
     n2: usize,
     sd2: f64,
     equal_variance: bool,
-) -> Result<(f64, f64), HypothesisError> {
+) -> Result<(f64, f64), Error> {
     let a = sd1 * sd1 / n1 as f64;
     let b = sd2 * sd2 / n2 as f64;
     let variance = if equal_variance {
@@ -419,8 +396,9 @@ fn summary_independent_se_df(
     } else {
         a + b
     };
-    if !variance.is_finite() || variance <= 0.0 {
-        return Err("t test standard error is zero or non-finite".into());
+    finite(variance)?;
+    if variance <= 0.0 {
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let df = if equal_variance {
         (n1 + n2 - 2) as f64
@@ -428,28 +406,25 @@ fn summary_independent_se_df(
         variance * variance / (a * a / (n1 - 1) as f64 + b * b / (n2 - 1) as f64)
     };
     if !df.is_finite() || df <= 0.0 {
-        return Err("t test degrees of freedom are invalid".into());
+        return Err(failed());
     }
     Ok((variance.sqrt(), df))
 }
 
-fn sample_sum(
-    values: &[f64],
-    control: &ScientificExecutionControl,
-) -> Result<f64, HypothesisError> {
+fn sample_sum(values: &[f64], control: &ScientificExecutionControl) -> Result<f64, Error> {
     let mut sum = -0.0;
     for (index, value) in values.iter().enumerate() {
         checkpoint(control, index)?;
         sum += value;
     }
-    Ok(sum)
+    finite(sum)
 }
 
 fn sample_variance(
     values: &[f64],
     mean: f64,
     control: &ScientificExecutionControl,
-) -> Result<f64, HypothesisError> {
+) -> Result<f64, Error> {
     let mut sum = -0.0;
     for (index, value) in values.iter().enumerate() {
         checkpoint(control, index)?;
@@ -459,15 +434,19 @@ fn sample_variance(
     if variance.is_finite() {
         Ok(variance)
     } else {
-        Err("sample variance is non-finite".into())
+        Err(failed())
     }
 }
 
-fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<(), HypothesisError> {
+fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<(), Error> {
+    control.check()?;
+    if values.is_empty() {
+        return Err(invalid(Violation::EmptyInput));
+    }
     for (index, value) in values.iter().enumerate() {
         checkpoint(control, index)?;
         if !value.is_finite() {
-            return Err("t test input contains a non-finite observation".into());
+            return Err(invalid(Violation::NonFiniteInput));
         }
     }
     Ok(())
@@ -481,19 +460,19 @@ fn finish_t(
     alternative: Alternative,
     sample_sizes: Vec<usize>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     let (standard_error, df) = standard_error_df;
-    if !estimate.is_finite()
-        || !standard_error.is_finite()
-        || standard_error <= 0.0
-        || !df.is_finite()
-        || df <= 0.0
-    {
-        return Err("t test has an invalid statistic, standard error or degrees of freedom".into());
+    finite(estimate)?;
+    finite(standard_error)?;
+    finite(df)?;
+    if standard_error <= 0.0 {
+        return Err(invalid(Violation::DataOutOfRange));
     }
-    let statistic = estimate / standard_error;
-    let distribution =
-        StudentsT::new(0.0, 1.0, df).map_err(|_| "invalid t distribution parameters")?;
+    if df <= 0.0 {
+        return Err(failed());
+    }
+    let statistic = finite(estimate / standard_error)?;
+    let distribution = StudentsT::new(0.0, 1.0, df).map_err(|_| failed())?;
     control.check()?;
     let p_value = match alternative {
         Alternative::TwoSided => 2.0 * (1.0 - distribution.cdf(statistic.abs())),
@@ -530,12 +509,14 @@ fn finish_normal(
     alternative: Alternative,
     sample_sizes: Vec<usize>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
-    if !estimate.is_finite() || !standard_error.is_finite() || standard_error <= 0.0 {
-        return Err("z test has a zero or non-finite standard error".into());
+) -> Result<ClassicalTestResult, Error> {
+    finite(estimate)?;
+    finite(standard_error)?;
+    if standard_error <= 0.0 {
+        return Err(invalid(Violation::DataOutOfRange));
     }
-    let statistic = estimate / standard_error;
-    let distribution = Normal::new(0.0, 1.0).map_err(|_| "invalid standard normal parameters")?;
+    let statistic = finite(estimate / standard_error)?;
+    let distribution = Normal::new(0.0, 1.0).map_err(|_| failed())?;
     control.check()?;
     let p_value = match alternative {
         Alternative::TwoSided => 2.0 * distribution.sf(statistic.abs()),
@@ -567,15 +548,30 @@ fn alternative_name(alternative: Alternative) -> &'static str {
     }
 }
 
-fn validate_proportion(successes: usize, trials: usize, p: f64) -> Result<(), HypothesisError> {
-    if trials == 0 || successes > trials || !p.is_finite() || !(0.0..=1.0).contains(&p) {
-        Err(
-            "proportion test requires valid successes, trials and a null probability in [0, 1]"
-                .into(),
-        )
-    } else {
-        Ok(())
+fn validate_proportion(successes: usize, trials: usize, p: f64) -> Result<(), Error> {
+    if trials == 0 {
+        return Err(invalid(Violation::EmptyInput));
     }
+    if successes > trials {
+        return Err(invalid(Violation::DataOutOfRange));
+    }
+    if !p.is_finite() || !(0.0..=1.0).contains(&p) {
+        return Err(parameter());
+    }
+    Ok(())
+}
+
+fn validate_summary(count: usize, mean: f64, sd: f64) -> Result<(), Error> {
+    if count < 2 {
+        return Err(invalid(Violation::EmptyInput));
+    }
+    if !mean.is_finite() || !sd.is_finite() {
+        return Err(invalid(Violation::NonFiniteInput));
+    }
+    if sd < 0.0 {
+        return Err(invalid(Violation::DataOutOfRange));
+    }
+    Ok(())
 }
 
 fn binomial_p_value(
@@ -584,9 +580,9 @@ fn binomial_p_value(
     p: f64,
     alternative: Alternative,
     control: &ScientificExecutionControl,
-) -> Result<f64, HypothesisError> {
+) -> Result<f64, Error> {
     if trials > 1_000_000 {
-        return Err("exact binomial test supports at most 1,000,000 trials".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     if p == 0.0 {
         return Ok(if successes == 0 { 1.0 } else { 0.0 });
@@ -594,8 +590,7 @@ fn binomial_p_value(
     if p == 1.0 {
         return Ok(if successes == trials { 1.0 } else { 0.0 });
     }
-    let distribution =
-        Binomial::new(p, trials as u64).map_err(|_| "invalid binomial parameters")?;
+    let distribution = Binomial::new(p, trials as u64).map_err(|_| failed())?;
     control.check()?;
     let value = match alternative {
         Alternative::Less => distribution.cdf(successes as u64),
@@ -622,11 +617,11 @@ fn poisson_p_value(
     mean: f64,
     alternative: Alternative,
     control: &ScientificExecutionControl,
-) -> Result<f64, HypothesisError> {
+) -> Result<f64, Error> {
     if mean == 0.0 {
         return Ok(if observed == 0 { 1.0 } else { 0.0 });
     }
-    let distribution = Poisson::new(mean).map_err(|_| "invalid Poisson parameters")?;
+    let distribution = Poisson::new(mean).map_err(|_| failed())?;
     control.check()?;
     let p_value = match alternative {
         Alternative::Less => distribution.cdf(observed),

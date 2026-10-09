@@ -1,6 +1,68 @@
 use super::*;
 
 #[test]
+fn classical_admission_preserves_option_observation_and_computation_roles() {
+    for (id, values, parameters) in [
+        (
+            "yssbi.statistics.test.poisson",
+            vec![1.0, 2.0, 3.0],
+            vec![
+                ("null_rate", number(-1.0)),
+                ("alternative", string("two_sided")),
+            ],
+        ),
+        (
+            "yssbi.statistics.test.z.mean",
+            vec![1.0, 2.0, 3.0],
+            vec![
+                ("null_mean", number(0.0)),
+                ("population_sd", number(0.0)),
+                ("alternative", string("two_sided")),
+            ],
+        ),
+        (
+            "yssbi.statistics.test.binomial",
+            vec![0.0, 1.0, 0.0],
+            vec![
+                ("null_probability", number(1.2)),
+                ("alternative", string("two_sided")),
+            ],
+        ),
+    ] {
+        let error = run(id, &[("series", series(&values))], &parameters, 1).unwrap_err();
+        assert!(
+            matches!(error, KernelError::InvalidParameter),
+            "{id}: {error:?}"
+        );
+    }
+    let error = run(
+        "yssbi.statistics.test.poisson",
+        &[("series", series(&[1.0, -1.0, 2.0]))],
+        &[
+            ("null_rate", number(1.0)),
+            ("alternative", string("two_sided")),
+        ],
+        1,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, KernelError::InvalidNumericInput),
+        "{error:?}"
+    );
+    let error = run(
+        "yssbi.statistics.test.t.one_sample",
+        &[("series", series(&[f64::MAX, f64::MAX, f64::MAX]))],
+        &[
+            ("null_mean", number(0.0)),
+            ("alternative", string("two_sided")),
+        ],
+        1,
+    )
+    .unwrap_err();
+    assert!(matches!(error, KernelError::ScientificFailure), "{error:?}");
+}
+
+#[test]
 fn fisher_adapter_delivers_exact_result_with_unbounded_odds_ratio() {
     let result = run(
         "yssbi.statistics.test.fisher_exact",

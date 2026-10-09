@@ -177,10 +177,12 @@ sample odds ratio is `None`/JSON null, while its exact p-value and table counts
 remain available. Defined statistics retain their numeric JSON representation;
 missing values are not replaced with a cross-product difference or nonfinite number.
 
-`HypothesisError::Execution` preserves the shared computation error, including
-cancellation and deadline expiry, across SCI and Runtime. Existing hypothesis
-input details remain `InvalidInput(String)` and numerical model errors remain
-`Scientific(SciError)`; interruption is not converted to invalid input text.
+Classical SCI and Runtime entrypoints return `ScientificComputationError`
+directly. `ScientificInputViolation` distinguishes observation shape/domain,
+nonfinite observations and invalid options; finite-input numerical breakdowns
+are `ComputationFailed`. Cancellation and deadlines retain their shared variants.
+Named linear-hypothesis parsing and inference retain `HypothesisError`, including
+`InvalidInput(String)`, `Scientific(SciError)` and `Execution`.
 
 Binary effect/classification records retain nullable inference for undefined rates;
 regression fits retain named numeric designs for postestimation. Panel estimation

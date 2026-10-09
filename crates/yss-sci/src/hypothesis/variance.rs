@@ -1,13 +1,13 @@
 //! Tests for equality of group variances.
-use super::checkpoint;
+use super::{Error, Violation, checkpoint, failed, finite, invalid};
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
+use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{ClassicalTestResult, VarianceHomogeneityTest as Input};
-use yss_sci_contract::{execution::ScientificExecutionControl, hypothesis::HypothesisError};
 
 pub fn run(
     input: Input,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     control.check()?;
     let result = match input {
         Input::Levene { groups } => levene(groups, false, control),
@@ -22,7 +22,7 @@ fn levene(
     groups: Vec<Vec<f64>>,
     median_center: bool,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     validate_groups(&groups, control)?;
     let k = groups.len();
     let mut n = 0;
@@ -67,16 +67,17 @@ fn levene(
         }
         within += group_within;
     }
+    finite(within)?;
     if within <= 0.0 {
-        return Err("Levene within-group deviation is zero".into());
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let df1 = (k - 1) as f64;
     let df2 = (n - k) as f64;
-    let statistic = (between / df1) / (within / df2);
+    let statistic = finite((between / df1) / (within / df2))?;
     control.check()?;
     let p = 1.0
         - FisherSnedecor::new(df1, df2)
-            .map_err(|_| "invalid Levene F distribution")?
+            .map_err(|_| failed())?
             .cdf(statistic);
     control.check()?;
     Ok(result(
@@ -96,14 +97,14 @@ fn levene(
                 checkpoint(control, i)?;
                 Ok(g.len())
             })
-            .collect::<Result<_, HypothesisError>>()?,
+            .collect::<Result<_, Error>>()?,
     ))
 }
 
 fn bartlett(
     groups: Vec<Vec<f64>>,
     control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, HypothesisError> {
+) -> Result<ClassicalTestResult, Error> {
     validate_groups(&groups, control)?;
     let k = groups.len();
     let mut n = 0;
@@ -125,9 +126,9 @@ fn bartlett(
             squares += (value - mean).powi(2);
         }
         let df = (group.len() - 1) as f64;
-        let variance = squares / df;
-        if variance <= 0.0 || !variance.is_finite() {
-            return Err("Bartlett requires positive finite group variances".into());
+        let variance = finite(squares / df)?;
+        if variance <= 0.0 {
+            return Err(invalid(Violation::DataOutOfRange));
         }
         weighted_variance += df * variance;
         weighted_log += df * variance.ln();
@@ -136,13 +137,10 @@ fn bartlett(
     let pooled = weighted_variance / (n - k) as f64;
     let numerator = (n - k) as f64 * pooled.ln() - weighted_log;
     let correction = 1.0 + (reciprocal_df - 1.0 / (n - k) as f64) / (3.0 * (k - 1) as f64);
-    let statistic = numerator / correction;
+    let statistic = finite(numerator / correction)?;
     let df = (k - 1) as f64;
     control.check()?;
-    let p = 1.0
-        - ChiSquared::new(df)
-            .map_err(|_| "invalid Bartlett chi-square")?
-            .cdf(statistic);
+    let p = 1.0 - ChiSquared::new(df).map_err(|_| failed())?.cdf(statistic);
     control.check()?;
     Ok(result(
         "bartlett",
@@ -157,40 +155,29 @@ fn bartlett(
                 checkpoint(control, i)?;
                 Ok(g.len())
             })
-            .collect::<Result<_, HypothesisError>>()?,
+            .collect::<Result<_, Error>>()?,
     ))
 }
 
-fn validate_groups(
-    groups: &[Vec<f64>],
-    control: &ScientificExecutionControl,
-) -> Result<(), HypothesisError> {
+fn validate_groups(groups: &[Vec<f64>], control: &ScientificExecutionControl) -> Result<(), Error> {
     if groups.len() < 2 {
-        return Err(
-            "variance test requires at least two groups with two finite observations each".into(),
-        );
+        return Err(invalid(Violation::DataOutOfRange));
     }
     for (i, group) in groups.iter().enumerate() {
         checkpoint(control, i)?;
         if group.len() < 2 {
-            return Err(
-                "variance test requires at least two groups with two finite observations each"
-                    .into(),
-            );
+            return Err(invalid(Violation::EmptyInput));
         }
         for (j, value) in group.iter().enumerate() {
             checkpoint(control, j)?;
             if !value.is_finite() {
-                return Err(
-                    "variance test requires at least two groups with two finite observations each"
-                        .into(),
-                );
+                return Err(invalid(Violation::NonFiniteInput));
             }
         }
     }
     Ok(())
 }
-fn median(values: &[f64], control: &ScientificExecutionControl) -> Result<f64, HypothesisError> {
+fn median(values: &[f64], control: &ScientificExecutionControl) -> Result<f64, Error> {
     let mut v = Vec::with_capacity(values.len());
     for (i, value) in values.iter().enumerate() {
         checkpoint(control, i)?;

@@ -6,8 +6,8 @@ use std::mem::size_of;
 use yss_data_contract::TabularScalar;
 use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{
-    Alternative, CategoricalHypothesisTest, ClassicalHypothesisTest, HypothesisError,
-    RankHypothesisTest, VarianceHomogeneityTest,
+    Alternative, CategoricalHypothesisTest, ClassicalHypothesisTest, RankHypothesisTest,
+    VarianceHomogeneityTest,
 };
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
@@ -607,7 +607,7 @@ fn execute(
     numeric_workspace(observations, 2, inv)?;
     let control = scientific_control(inv);
     let report =
-        yss_sci_runtime::hypothesis::sample_mean_test(test, &control).map_err(hypothesis_error)?;
+        yss_sci_runtime::hypothesis::sample_mean_test(test, &control).map_err(computation_error)?;
     let report = value(report, inv)?;
     Ok(vec![report])
 }
@@ -652,7 +652,7 @@ fn execute_categorical(
     }
     let control = scientific_control(inv);
     let report =
-        yss_sci_runtime::hypothesis::categorical_test(test, &control).map_err(hypothesis_error)?;
+        yss_sci_runtime::hypothesis::categorical_test(test, &control).map_err(computation_error)?;
     let report = value(report, inv)?;
     Ok(vec![report])
 }
@@ -739,7 +739,7 @@ fn execute_rank(
     numeric_workspace(observations, groups, inv)?;
     let control = scientific_control(inv);
     let report =
-        yss_sci_runtime::hypothesis::rank_test(test, &control).map_err(hypothesis_error)?;
+        yss_sci_runtime::hypothesis::rank_test(test, &control).map_err(computation_error)?;
     let report = value(report, inv)?;
     Ok(vec![report])
 }
@@ -756,22 +756,13 @@ fn execute_variance(
     numeric_workspace(group_observations(groups, inv)?, groups.len(), inv)?;
     let control = scientific_control(inv);
     let report =
-        yss_sci_runtime::hypothesis::variance_test(test, &control).map_err(hypothesis_error)?;
+        yss_sci_runtime::hypothesis::variance_test(test, &control).map_err(computation_error)?;
     let report = value(report, inv)?;
     Ok(vec![report])
 }
 
 fn scientific_control(inv: &KernelInvocation<'_>) -> ScientificExecutionControl {
     ScientificExecutionControl::from_shared(inv.control.cancellation.clone(), inv.control.deadline)
-}
-
-fn hypothesis_error(error: HypothesisError) -> KernelError {
-    match error {
-        HypothesisError::Execution(error) => computation_error(error),
-        HypothesisError::InvalidInput(_) | HypothesisError::Scientific(_) => {
-            KernelError::InvalidNumericInput
-        }
-    }
 }
 
 fn group_observations(

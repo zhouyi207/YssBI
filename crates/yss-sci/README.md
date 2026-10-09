@@ -81,6 +81,7 @@ boundary ties together. `multivariate/adequacy` owns KMO, per-item MSA and Bartl
 diagnostics shared by validity screening and exploratory factor extraction.
 Neither screening nor alpha is reported as proof of construct validity. Undefined
 correlations, deleted-item alpha and tail tests remain optional values.
+Item discrimination propagates Welch's shared computation errors directly.
 
 `quality/process` shares scaled measurement moments, moving-range variation and
 pooled subgroup sigma. `quality/control` builds complete I/MR plots and signal
@@ -629,9 +630,10 @@ All four entrypoints also accept the caller's `ScientificExecutionControl`. Inpu
 rank/tie, table and variance scans, exact binomial/Poisson/Fisher enumeration,
 Wilcoxon sign enumeration, and Mann-Kendall observations sample cancellation and
 deadline during work. Sorting and distribution-library calls have checks at their
-boundaries; their internals are not interruptible. `HypothesisError::Execution`
-preserves typed cancellation/deadline errors, while existing input/scientific
-failures retain their categories. Kernel owns admission of retained inputs,
+boundaries; their internals are not interruptible. The four entrypoints return
+`ScientificComputationError` directly, distinguishing observation shape/domain,
+nonfinite observations, invalid options, computation failures and interruption.
+Kernel owns admission of retained inputs,
 algorithm workspaces and reports; SCI does not introduce a second memory budget.
 
 Binary postestimation lives in `regression::discrete::postestimation`: Logit odds

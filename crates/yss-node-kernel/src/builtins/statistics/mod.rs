@@ -85,14 +85,52 @@ pub(super) fn install(
                 1 + if (id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks")
                     || id == "yssbi.statistics.workflow.subgroup"
+                    || id == "yssbi.statistics.test.fisher_exact"
                 {
                     7
+                } else if matches!(
+                    id,
+                    "yssbi.statistics.test.t.paired"
+                        | "yssbi.statistics.test.mcnemar"
+                        | "yssbi.statistics.test.cmh"
+                        | "yssbi.statistics.test.chisquare.crosstab"
+                ) {
+                    6
+                } else if matches!(
+                    id,
+                    "yssbi.statistics.test.t.one_sample"
+                        | "yssbi.statistics.test.t.independent"
+                        | "yssbi.statistics.test.t.summary_input"
+                        | "yssbi.statistics.test.z.mean"
+                        | "yssbi.statistics.test.z.proportion"
+                        | "yssbi.statistics.test.binomial"
+                        | "yssbi.statistics.test.proportion.two"
+                        | "yssbi.statistics.test.chisquare.general"
+                        | "yssbi.statistics.test.chisquare.goodness_of_fit"
+                        | "yssbi.statistics.test.proportion.multiple"
+                        | "yssbi.statistics.test.poisson"
+                        | "yssbi.statistics.test.equivalence"
+                        | "yssbi.statistics.test.wilcoxon.one_sample"
+                        | "yssbi.statistics.test.wilcoxon.paired"
+                        | "yssbi.statistics.test.mann_whitney"
+                        | "yssbi.statistics.test.kruskal_wallis"
+                        | "yssbi.statistics.test.mood_median"
+                        | "yssbi.statistics.test.friedman"
+                        | "yssbi.statistics.test.cochran_q"
+                        | "yssbi.statistics.test.runs"
+                        | "yssbi.statistics.test.mann_kendall"
+                        | "yssbi.statistics.test.nonparametric.family"
+                        | "yssbi.statistics.test.levene"
+                        | "yssbi.statistics.test.brown_forsythe"
+                        | "yssbi.statistics.test.bartlett"
+                        | "yssbi.statistics.psychometrics.item_analysis"
+                ) {
+                    5
                 } else if matches!(
                     id,
                     "yssbi.statistics.survival.competing_risks"
                         | "yssbi.statistics.plot.calibration"
                         | "yssbi.statistics.plot.decision_curve"
-                        | "yssbi.statistics.test.fisher_exact"
                 ) {
                     6
                 } else if matches!(
@@ -115,8 +153,6 @@ pub(super) fn install(
                         | "yssbi.statistics.workflow.mediation"
                         | "yssbi.statistics.workflow.moderated_mediation"
                         | "yssbi.statistics.diagnostic.ph"
-                        | "yssbi.statistics.test.cmh"
-                        | "yssbi.statistics.test.chisquare.crosstab"
                 ) {
                     5
                 } else if id == "yssbi.statistics.iv.2sls.summary" {
@@ -161,12 +197,7 @@ pub(super) fn install(
                     || id.contains(".adf.")
                     || id.ends_with(".irf")
                     || id.ends_with(".fevd")
-                    || matches!(
-                        id,
-                        "yssbi.statistics.test.t.paired"
-                            | "yssbi.statistics.test.mcnemar"
-                            | "yssbi.statistics.diagnostic.hausman"
-                    )
+                    || matches!(id, "yssbi.statistics.diagnostic.hausman")
                 {
                     5
                 } else if id.starts_with("yssbi.statistics.meta.")
@@ -198,31 +229,6 @@ pub(super) fn install(
                             | "yssbi.statistics.sem.path"
                             | "yssbi.statistics.doe.response_surface"
                             | "yssbi.statistics.timeseries.ecm"
-                            | "yssbi.statistics.test.t.one_sample"
-                            | "yssbi.statistics.test.t.independent"
-                            | "yssbi.statistics.test.t.summary_input"
-                            | "yssbi.statistics.test.z.mean"
-                            | "yssbi.statistics.test.z.proportion"
-                            | "yssbi.statistics.test.binomial"
-                            | "yssbi.statistics.test.proportion.two"
-                            | "yssbi.statistics.test.chisquare.general"
-                            | "yssbi.statistics.test.chisquare.goodness_of_fit"
-                            | "yssbi.statistics.test.proportion.multiple"
-                            | "yssbi.statistics.test.poisson"
-                            | "yssbi.statistics.test.equivalence"
-                            | "yssbi.statistics.test.wilcoxon.one_sample"
-                            | "yssbi.statistics.test.wilcoxon.paired"
-                            | "yssbi.statistics.test.mann_whitney"
-                            | "yssbi.statistics.test.kruskal_wallis"
-                            | "yssbi.statistics.test.mood_median"
-                            | "yssbi.statistics.test.friedman"
-                            | "yssbi.statistics.test.cochran_q"
-                            | "yssbi.statistics.test.runs"
-                            | "yssbi.statistics.test.mann_kendall"
-                            | "yssbi.statistics.test.nonparametric.family"
-                            | "yssbi.statistics.test.levene"
-                            | "yssbi.statistics.test.brown_forsythe"
-                            | "yssbi.statistics.test.bartlett"
                     )
                 {
                     4

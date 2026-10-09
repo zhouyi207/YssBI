@@ -33,8 +33,8 @@ error directly from SCI; Runtime does not maintain a second conversion policy.
 
 `hypothesis::{sample_mean_test, categorical_test, rank_test, variance_test}`
 forwards the caller's `ScientificExecutionControl` with each neutral request to
-SCI. These entries return its typed `HypothesisError` directly, preserving
-cancellation and deadlines rather than wrapping them as invalid input text.
+SCI. These entries return its shared `ScientificComputationError` directly,
+preserving observation, option, computation and interruption classifications.
 Classical results retain SCI's optional finite statistic; Runtime leaves an
 unbounded Fisher odds ratio absent and preserves its exact p-value and table counts.
 

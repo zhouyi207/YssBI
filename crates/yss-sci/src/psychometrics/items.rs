@@ -1,7 +1,7 @@
 use super::reliability::{analyze, moments};
 use super::*;
 use crate::{descriptive::quantile_sorted, hypothesis::sample_mean};
-use yss_sci_contract::hypothesis::{Alternative, ClassicalHypothesisTest, HypothesisError};
+use yss_sci_contract::hypothesis::{Alternative, ClassicalHypothesisTest};
 pub fn item_analysis(
     columns: &[Vec<f64>],
     tail_fraction: f64,
@@ -50,21 +50,15 @@ pub fn item_analysis(
         let hm = (!upper.is_empty()).then(|| moments(&upper));
         let inference =
             if lower.len() >= 2 && upper.len() >= 2 && lm.unwrap().1 + hm.unwrap().1 > 0. {
-                Some(
-                    sample_mean::run(
-                        ClassicalHypothesisTest::Independent {
-                            first: upper,
-                            second: lower,
-                            equal_variance: false,
-                            alternative: Alternative::TwoSided,
-                        },
-                        control,
-                    )
-                    .map_err(|error| match error {
-                        HypothesisError::Execution(error) => error,
-                        _ => failed(),
-                    })?,
-                )
+                Some(sample_mean::run(
+                    ClassicalHypothesisTest::Independent {
+                        first: upper,
+                        second: lower,
+                        equal_variance: false,
+                        alternative: Alternative::TwoSided,
+                    },
+                    control,
+                )?)
             } else {
                 None
             };
