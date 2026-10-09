@@ -467,6 +467,15 @@ offset or allocating differences, including for direct SCI and Runtime callers.
 ECM suppresses ordinary long-run OLS inference for cointegrating equations.
 EGARCH averages simulated variances with an explicit seed; other volatility models
 use analytic conditional-variance forecasts. KPSS reports its table-tail bounds.
+Volatility fitting and forecasting retain normalized response coordinates. Variance
+reports and non-EGARCH intercepts apply the response scale twice in succession,
+without first squaring it; EGARCH restores its log intercept using
+`(1 - sum(beta)) * 2 * ln(scale)`. Forecast histories retain only the required
+observed lag tail and future steps. EGARCH reuses those buffers between simulations
+without altering its observed prefix or random draw order; final residual and
+variance buffers restore units in place. Public unit regressions cover representable
+positive variances when the empirical scale squared underflows and EGARCH intercept
+rounding near subnormal variance, alongside the existing arch references.
 PP/KPSS normalize the series once before fitting and moment accumulation, retaining
 dimensionless statistics and the existing MacKinnon/table calibration. They restore
 only the reported long-run variance, applying response units after the normalized

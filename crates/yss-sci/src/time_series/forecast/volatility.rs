@@ -173,14 +173,20 @@ pub fn volatility(y: &[f64], o: VolatilityOptions, control: &Control) -> Result<
     let objective = |b: &[f64]| path(&scaled, &decode(b, o)?, o, backcast, control).map(|v| v.2);
     let fit = minimize(&objective, initial, o.iteration, control)?;
     let m = decode(&fit.beta, o)?;
-    let (e, variance, loss) = path(&scaled, &m, o, backcast, control)?;
+    let (mut e, mut variance, loss) = path(&scaled, &m, o, backcast, control)?;
     let mut forecasts = vec![0.0; o.horizon];
+    let lookback = o.p.max(o.q);
+    let observed_residuals = &e[y.len() - lookback..];
+    let observed_variances = &variance[y.len() - lookback..];
     if o.method == VolatilityMethod::Egarch {
         let mut rng = StdRng::seed_from_u64(o.seed);
+        let mut residuals = observed_residuals.to_vec();
+        let mut h = observed_variances.to_vec();
         for _ in 0..o.simulations {
             control.check()?;
-            let mut residuals = e.clone();
-            let mut h = variance.clone();
+            // Only the simulated suffix changes; the observed lag prefix remains intact.
+            residuals.truncate(lookback);
+            h.truncate(lookback);
             for forecast in &mut forecasts {
                 if h.len() % 256 == 0 {
                     control.check()?;
@@ -195,20 +201,27 @@ pub fn volatility(y: &[f64], o: VolatilityOptions, control: &Control) -> Result<
             }
         }
     } else {
-        let mut h = variance.clone();
-        let n = y.len();
+        let mut h = observed_variances.to_vec();
         for forecast in &mut forecasts {
             control.check()?;
             let t = h.len();
             let mut v = m.omega;
             for (j, a) in m.alpha.iter().enumerate() {
                 let lag = t - j - 1;
-                let shock = if lag < n { e[lag] * e[lag] } else { h[lag] };
+                let shock = if lag < lookback {
+                    observed_residuals[lag] * observed_residuals[lag]
+                } else {
+                    h[lag]
+                };
                 v += a * shock;
                 if !m.gamma.is_empty() {
                     v += m.gamma[j]
-                        * if lag < n {
-                            if e[lag] < 0.0 { shock } else { 0.0 }
+                        * if lag < lookback {
+                            if observed_residuals[lag] < 0.0 {
+                                shock
+                            } else {
+                                0.0
+                            }
                         } else {
                             0.5 * shock
                         };
@@ -221,7 +234,7 @@ pub fn volatility(y: &[f64], o: VolatilityOptions, control: &Control) -> Result<
             *forecast = v;
         }
     }
-    let variance_scale = finite(scale * scale)?;
+    let restore_variance = |value: f64| finite((value * scale) * scale);
     let ll =
         finite(-(loss + scale.ln() + 0.5 * (2.0 * std::f64::consts::PI).ln()) * y.len() as f64)?;
     let mut parameters = Vec::new();
@@ -229,11 +242,11 @@ pub fn volatility(y: &[f64], o: VolatilityOptions, control: &Control) -> Result<
         parameters.push(estimate("mean", finite(m.mean * scale)?));
     }
     let omega = if o.method == VolatilityMethod::Egarch {
-        m.omega + (1.0 - m.beta.iter().sum::<f64>()) * variance_scale.ln()
+        finite(m.omega + (1.0 - m.beta.iter().sum::<f64>()) * (2.0 * scale.ln()))?
     } else {
-        m.omega * variance_scale
+        restore_variance(m.omega)?
     };
-    parameters.push(estimate("omega", finite(omega)?));
+    parameters.push(estimate("omega", omega));
     for (name, coefs) in [("alpha", &m.alpha), ("gamma", &m.gamma), ("beta", &m.beta)] {
         for (j, v) in coefs.iter().enumerate() {
             parameters.push(estimate(format!("{name}{}", j + 1), *v));
@@ -242,29 +255,36 @@ pub fn volatility(y: &[f64], o: VolatilityOptions, control: &Control) -> Result<
     let standardized_residuals = e
         .iter()
         .zip(&variance)
-        .map(|(v, h)| finite(v / h.sqrt()))
+        .enumerate()
+        .map(|(i, (v, h))| {
+            if i % 256 == 0 {
+                control.check()?;
+            }
+            finite(v / h.sqrt())
+        })
         .collect::<Result<Vec<_>>>()?;
-    let residuals = e
-        .iter()
-        .map(|v| finite(v * scale))
-        .collect::<Result<Vec<_>>>()?;
-    let conditional_variances = variance
-        .iter()
-        .map(|v| finite(v * variance_scale))
-        .collect::<Result<Vec<_>>>()?;
-    let forecast_variances = forecasts
-        .iter()
-        .map(|v| finite(v * variance_scale))
-        .collect::<Result<Vec<_>>>()?;
+    for (i, (residual, conditional_variance)) in e.iter_mut().zip(&mut variance).enumerate() {
+        if i % 256 == 0 {
+            control.check()?;
+        }
+        *residual = finite(*residual * scale)?;
+        *conditional_variance = restore_variance(*conditional_variance)?;
+    }
+    for (i, forecast) in forecasts.iter_mut().enumerate() {
+        if i % 256 == 0 {
+            control.check()?;
+        }
+        *forecast = restore_variance(*forecast)?;
+    }
     control.check()?;
     Ok(VolatilityResult {
         method: o.method,
         observations: y.len(),
         parameters,
-        residuals,
+        residuals: e,
         standardized_residuals,
-        conditional_variances,
-        forecast_variances,
+        conditional_variances: variance,
+        forecast_variances: forecasts,
         log_likelihood: ll,
         aic: finite(-2.0 * ll + 2.0 * count as f64)?,
         bic: finite(-2.0 * ll + (y.len() as f64).ln() * count as f64)?,

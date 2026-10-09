@@ -240,7 +240,11 @@ pub(super) fn install(
                 | "yssbi.statistics.timeseries.sarima"
                 | "yssbi.statistics.timeseries.exponential_smoothing"
                 | "yssbi.statistics.timeseries.ets"
-                | "yssbi.statistics.timeseries.holt_winters" => 5,
+                | "yssbi.statistics.timeseries.holt_winters"
+                | "yssbi.statistics.timeseries.arch"
+                | "yssbi.statistics.timeseries.garch"
+                | "yssbi.statistics.timeseries.egarch"
+                | "yssbi.statistics.timeseries.gjr_garch" => 5,
                 _ if id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks" =>
                 {

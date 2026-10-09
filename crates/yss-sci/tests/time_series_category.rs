@@ -413,6 +413,121 @@ fn time_series_ecm_and_grey_forecast_match_independent_least_squares() {
 }
 
 #[test]
+fn volatility_response_units_restore_variance_when_empirical_scale_square_underflows() {
+    let data = fixture();
+    let cases = data["volatility"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case["method"] != "egarch")
+        .collect::<Vec<_>>();
+    // The offset makes conditional variances larger than the centered empirical scale squared.
+    check_volatility_response_units(&cases, true, 2.0f64.powi(-536));
+}
+
+#[test]
+fn volatility_response_units_keep_egarch_log_intercept_unrounded() {
+    let data = fixture();
+    let case = data["volatility"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["method"] == "egarch")
+        .unwrap();
+    check_volatility_response_units(&[case], false, 2.0f64.powi(-532));
+}
+
+fn check_volatility_response_units(cases: &[&Value], shifted: bool, units: f64) {
+    for case in cases {
+        let method = match case["method"].as_str().unwrap() {
+            "arch" => VolatilityMethod::Arch,
+            "garch" => VolatilityMethod::Garch,
+            "egarch" => VolatilityMethod::Egarch,
+            _ => VolatilityMethod::GjrGarch,
+        };
+        let options = VolatilityOptions {
+            method,
+            p: 1,
+            q: usize::from(method != VolatilityMethod::Arch),
+            constant: false,
+            horizon: 6,
+            simulations: 1000,
+            seed: 42,
+            iteration: iteration(),
+        };
+        let y = vector(&case["y"])
+            .into_iter()
+            .map(|value| if shifted { 2.0 + 0.1 * value } else { value })
+            .collect::<Vec<_>>();
+        let baseline = volatility(&y, options, &control())
+            .unwrap_or_else(|error| panic!("baseline {method:?}: {error:?}"));
+        // Power-of-two units preserve the normalized fit exactly.
+        let scaled = y.iter().map(|value| value * units).collect::<Vec<_>>();
+        let result = volatility(&scaled, options, &control())
+            .unwrap_or_else(|error| panic!("scaled {:?}: {error:?}", options.method));
+        let beta_sum = baseline
+            .parameters
+            .iter()
+            .filter(|parameter| parameter.term.starts_with("beta"))
+            .map(|parameter| parameter.estimate)
+            .sum::<f64>();
+        for (actual, expected) in result.parameters.iter().zip(&baseline.parameters) {
+            assert_eq!(actual.term, expected.term);
+            if actual.term == "omega" && options.method == VolatilityMethod::Egarch {
+                close(
+                    actual.estimate,
+                    expected.estimate + (1.0 - beta_sum) * 2.0 * units.ln(),
+                    1e-12,
+                );
+            } else if actual.term == "omega" {
+                let expected = (expected.estimate * units) * units;
+                assert!(actual.estimate.is_finite());
+                assert!((actual.estimate - expected).abs() <= 2.0 * f64::from_bits(1));
+            } else {
+                close(actual.estimate, expected.estimate, 1e-12);
+            }
+        }
+        for (actual, expected) in result
+            .conditional_variances
+            .iter()
+            .zip(&baseline.conditional_variances)
+            .chain(
+                result
+                    .forecast_variances
+                    .iter()
+                    .zip(&baseline.forecast_variances),
+            )
+        {
+            let expected = (expected * units) * units;
+            assert!(expected > 0.0);
+            assert!(actual.is_finite() && *actual > 0.0);
+            assert!((actual - expected).abs() <= 2.0 * f64::from_bits(1));
+        }
+        for (actual, expected) in result.residuals.iter().zip(&baseline.residuals) {
+            close(actual / units, *expected, 1e-12);
+        }
+        for (actual, expected) in result
+            .standardized_residuals
+            .iter()
+            .zip(&baseline.standardized_residuals)
+        {
+            close(*actual, *expected, 1e-12);
+        }
+        close(
+            result.log_likelihood,
+            baseline.log_likelihood - y.len() as f64 * units.ln(),
+            1e-12,
+        );
+        let shift = 2.0 * y.len() as f64 * units.ln();
+        close(result.aic, baseline.aic + shift, 1e-12);
+        close(result.bic, baseline.bic + shift, 1e-12);
+        assert_eq!(result.iterations, baseline.iterations);
+        assert_eq!(result.simulations, baseline.simulations);
+        assert_eq!(result.seed, baseline.seed);
+    }
+}
+
+#[test]
 fn time_series_volatility_likelihood_and_recursions_match_arch() {
     let f = fixture();
     for case in f["volatility"].as_array().unwrap() {
