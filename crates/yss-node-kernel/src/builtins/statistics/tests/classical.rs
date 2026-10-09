@@ -60,6 +60,20 @@ fn classical_admission_preserves_option_observation_and_computation_roles() {
     )
     .unwrap_err();
     assert!(matches!(error, KernelError::ScientificFailure), "{error:?}");
+
+    let result = run(
+        "yssbi.statistics.test.chisquare.goodness_of_fit",
+        &[
+            ("observed", series(&[10.0, 20.0])),
+            ("expected", series(&[10.0, 10.0])),
+        ],
+        &[],
+        1,
+    );
+    assert!(
+        matches!(result, Err(KernelError::InvalidNumericInput)),
+        "invalid frequency totals crossed the kernel boundary: {result:?}"
+    );
 }
 
 #[test]

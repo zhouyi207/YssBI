@@ -103,6 +103,7 @@ fn goodness(
     }
     let mut statistic = 0.0;
     let mut n = 0.0;
+    let mut expected_total = 0.0;
     for (i, (o, e)) in observed.iter().zip(&expected).enumerate() {
         checkpoint(control, i)?;
         if !o.is_finite() || !e.is_finite() {
@@ -113,6 +114,13 @@ fn goodness(
         }
         statistic += (o - e).powi(2) / e;
         n += o;
+        expected_total += e;
+    }
+    if !n.is_finite() || !expected_total.is_finite() {
+        return Err(failed());
+    }
+    if n <= 0.0 || (n - expected_total).abs() / n.min(expected_total) > f64::EPSILON.sqrt() {
+        return Err(invalid(Violation::DataOutOfRange));
     }
     let df = (observed.len() - 1) as f64;
     chi_result(

@@ -6,7 +6,7 @@ Compares observed category counts with specified expected counts.
 
 `observed` and `expected` are numeric series in matching category order, of equal length with at least 2 entries. Observed counts must be nonnegative and expected counts strictly positive. All values must be finite and nonmissing. Database and in-memory series may be mixed and pair by current position, with equal lengths. There are no parameters.
 
-Supply counts, not probabilities. Expected counts should correspond to the observed total. The node does not normalize them or deduct degrees of freedom for parameters estimated from the data.
+Supply counts, not probabilities. The observed total must be positive and match the expected total, allowing floating-point rounding. The node does not normalize them or deduct degrees of freedom for parameters estimated from the data.
 
 ## Hypotheses and statistic
 

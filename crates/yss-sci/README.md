@@ -626,6 +626,10 @@ zero corrected z for zero scores, including constant observations.
 Categorical count-table preparation borrows labels from its owned input arrays in
 one ordered index per dimension. It keeps lexical row/column order and exact cell
 counts without cloning labels per observation or retaining separate level vectors.
+Chi-square goodness-of-fit requires a positive observed total matching the expected
+total within floating-point roundoff. Mismatched totals retain the existing data-domain
+input violation rather than producing a p-value; finite-input total overflow remains
+a computation failure.
 `tests/categorical_tables.rs` covers repeated long labels whose first appearance
 order differs from the table's lexical order.
 For 2x2 Fisher tests, the statistic is the sample odds ratio `a*d/(b*c)`;
