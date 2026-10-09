@@ -30,20 +30,44 @@ impl ListDraft {
         window: &mut Window,
         cx: &mut Context<DetailsPanel>,
     ) -> Self {
-        let mut draft = Self {
-            rows: model
+        Self::from_strings(
+            &model.key,
+            model
                 .value
                 .as_ref()
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
-                .map(|value| Row::Text(display(value)))
-                .collect(),
-            numeric: model.value_type
+                .map(display),
+            model.value_type
                 == Some(ValueType::DataSeries(Box::new(ValueType::Scalar(
                     SemanticType::Numeric,
                 )))),
-            key: model.key.clone(),
+            window,
+            cx,
+        )
+    }
+
+    pub(in crate::workbench::details) fn text(
+        key: &ParameterKey,
+        values: impl IntoIterator<Item = String>,
+        window: &mut Window,
+        cx: &mut Context<DetailsPanel>,
+    ) -> Self {
+        Self::from_strings(key, values, false, window, cx)
+    }
+
+    fn from_strings(
+        key: &ParameterKey,
+        values: impl IntoIterator<Item = String>,
+        numeric: bool,
+        window: &mut Window,
+        cx: &mut Context<DetailsPanel>,
+    ) -> Self {
+        let mut draft = Self {
+            rows: values.into_iter().map(Row::Text).collect(),
+            numeric,
+            key: key.clone(),
             page: 0,
         };
         draft.show_page(0, window, cx);
@@ -127,16 +151,13 @@ impl ListDraft {
         }
     }
 
-    pub(in crate::workbench::details::parameters) fn owns_input(&self, id: EntityId) -> bool {
+    pub(in crate::workbench::details) fn owns_input(&self, id: EntityId) -> bool {
         self.rows
             .iter()
             .any(|row| matches!(row, Row::Input { input, .. } if input.entity_id() == id))
     }
 
-    pub(in crate::workbench::details::parameters) fn value(
-        &self,
-        cx: &App,
-    ) -> Result<Value, String> {
+    pub(in crate::workbench::details) fn value(&self, cx: &App) -> Result<Value, String> {
         self.rows
             .iter()
             .map(|row| {

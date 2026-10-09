@@ -278,6 +278,13 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   `parameters/list` 每页 50 行，按访问页创建输入；排序、分页及增删保留同一草稿，应用时完整解析，整数不经过 f64。
   `parameters/render` 按当前节点与参数键展示原诊断，复用 Problems 文案格式化；不在视图重做图分析。
   关系选列/筛选与语义域继续委派原独立草稿；资源/其他结构值保留已有文本/JSON 编辑方式，最终校验归后端。
+- `workbench/details/relational`：列选择只保留有序名称或手动列表中的一份草稿；已知结构每页最多 50 项，
+  显示类型、选择顺序及失效名称，缺失列保留到用户显式移除。未知结构复用 `parameters/list` 的分页、排序和输入事件。
+  清空列选择时遵循投影的 `allow_empty`：允许为空提交空数组，必填选择提交原 Null 重置；名称原文及最终校验归后端。
+  `relational/predicate/draft` 持有类型化筛选输入，直接消费当前列下发的运算符与值类型；宽整数和十进制保留精确值。
+  `predicate/choices` 打开时才生成选项，选择前核验当前列及字段代次；显示语言不作为选项身份，重复选同一类型保留输入。
+  列变化只调整不再允许的运算符/值类型；空值运算不提交比较值。筛选和手动列名 Enter 复用原应用入口，
+  显式应用、Escape 恢复、默认值和字段诊断沿用 `parameters`，不在失焦或菜单选择时隐式提交。
 - `workbench/details/connections`：从当前选择的图投影安装端口连接行，逐条断开按 ConnectionId 提交，超过 50 条分页。
   `connections/picker` 复用原生 List 的搜索、键盘选择与虚拟列表；打开时才从 Application 查询当前端口的候选，
   只呈现后端允许的 append/replace，并提示替换。候选及其标签来自同一语义快照，不在视图推断类型或容量。

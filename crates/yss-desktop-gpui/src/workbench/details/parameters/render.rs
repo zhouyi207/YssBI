@@ -115,7 +115,9 @@ impl DetailsPanel {
             }
             ParameterDraft::Relational(draft) => self.render_relational(index, draft, busy, cx),
             ParameterDraft::Domain(draft) => self.render_domain(index, draft, busy, cx),
-            ParameterDraft::List(draft) => self.render_list_parameter(index, draft, busy, cx),
+            ParameterDraft::List(draft) => {
+                self.render_list_parameter(index, draft, busy, "conversion.addValue", cx)
+            }
             ParameterDraft::Text { input, .. } => div()
                 .flex()
                 .items_start()

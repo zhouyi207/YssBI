@@ -1,6 +1,6 @@
 //! Native input drafts consume the existing parameter projection, never a node schema copy.
 mod choices;
-mod list;
+pub(super) mod list;
 mod render;
 use super::{DetailsPanel, controls, domain::DomainDraft, relational::RelationalDraft};
 use crate::workbench::input::TextField;
@@ -101,7 +101,7 @@ impl ParameterField {
         let draft = if let Some(configuration) = &model.configuration {
             match configuration {
                 EditorParameterConfiguration::SelectOptions { .. } => ParameterDraft::Select,
-                _ => ParameterDraft::Relational(RelationalDraft::new(configuration, window, cx)),
+                _ => ParameterDraft::Relational(RelationalDraft::new(&model, window, cx)),
             }
         } else if model.editor == ParameterEditorKind::Toggle
             || (model.editor == ParameterEditorKind::Auto
@@ -186,23 +186,13 @@ impl ParameterField {
                 }
             }
             ParameterDraft::List(draft) => draft.value(cx),
-            ParameterDraft::Relational(RelationalDraft::Columns { manual, .. })
-                if matches!(
-                    self.model.configuration,
-                    Some(EditorParameterConfiguration::ProjectColumns {
-                        schema_known: false,
-                        ..
-                    })
-                ) =>
-            {
-                Ok(Value::Array(
-                    manual
-                        .iter()
-                        .map(|input| Value::String(input.read(cx).value().to_string()))
-                        .collect(),
-                ))
-            }
-            ParameterDraft::Relational(draft) => draft.value(cx),
+            ParameterDraft::Relational(draft) => draft.value(
+                self.model
+                    .configuration
+                    .as_ref()
+                    .expect("relational configuration"),
+                cx,
+            ),
             ParameterDraft::Domain(draft) => draft.value(cx),
             _ => Err(crate::text::translate("native.workbench.chooseParameter")),
         }
@@ -216,7 +206,7 @@ fn display(value: &Value) -> String {
     }
 }
 
-fn subscribe_input<T: EventEmitter<InputEvent> + 'static>(
+pub(super) fn subscribe_input<T: EventEmitter<InputEvent> + 'static>(
     input: &Entity<T>,
     key: ParameterKey,
     window: &mut Window,
@@ -243,6 +233,14 @@ fn subscribe_input<T: EventEmitter<InputEvent> + 'static>(
 }
 
 impl ParameterField {
+    fn list_mut(&mut self) -> Option<&mut ListDraft> {
+        match &mut self.draft {
+            ParameterDraft::List(draft) => Some(draft),
+            ParameterDraft::Relational(draft) => draft.list_mut(),
+            _ => None,
+        }
+    }
+
     fn owns_input(&self, id: EntityId) -> bool {
         match &self.draft {
             ParameterDraft::Text {
@@ -250,6 +248,7 @@ impl ParameterField {
                 ..
             } => input.entity_id() == id,
             ParameterDraft::List(draft) => draft.owns_input(id),
+            ParameterDraft::Relational(draft) => draft.owns_input(id),
             _ => false,
         }
     }

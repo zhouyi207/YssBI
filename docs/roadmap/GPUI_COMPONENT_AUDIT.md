@@ -299,6 +299,18 @@
 - 桌面的 XTest 输入未稳定送达，因此样例手动操作使用 GPUI 事件分发；截图依赖尺寸变化触发重绘。物理键鼠、IME、多行、失效菜单/迟到回执、后端失败、多窗口和完整撤销/保存仍待验收；不增加 UI 单元测试，临时入口不提交。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过。`cargo test -p yss-graph-editor --lib tests::creation_and_partial_edits_share_parameter_rules_without_requiring_complete_values -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::grouped_parameters_merge_reset_and_undo_atomically -- --exact` 各实际运行 1 项并通过；9 个 Rust 文件格式、41 个复用双语键/参数、文档元信息/相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。累计审查 145/265 项。
 
+### 关系参数列选择与筛选条件
+
+- 逐项阅读 RelationalParameterEditors 的两个编辑器及其测试：区分未知结构与已知空结构，有序选择/缺失列、`allowEmpty`、列名原文，以及下发的筛选运算符、值类型和空值分支。语义域继续独立审查。
+- `relational/columns` 删除已知列与手动输入的双份状态；已知结构每页 50 项，在同一行显示类型、选择序号及移动操作，保留失效名称供用户移除。未知结构复用 `parameters/list` 的按访问页创建输入、排序、增删和 Enter 事件；结构修改同时清除本地输入错误。
+- 清空必填列选择提交 Null 重置，允许为空时提交空数组；其余参数、图版本、诊断和历史仍由原参数事务负责。名称与后端列兼容规则保持原契约，视图不推导输入结构。
+- `predicate/draft` 持有类型化草稿并检查当前列下发的选择；`predicate/choices` 打开菜单时才构造选项，使用枚举而非本地化标签作为身份，选择时核验列和字段代次。重复选择当前类型保留输入，换列只调整不再可用的运算符/值类型，空值运算省略比较值。
+- 保留原生显式应用，单行 Enter 提交、Escape/按钮恢复、默认值和字段诊断复用 `parameters`；失焦和菜单选择不隐式提交。未新增依赖或 UI 单元测试。
+- 临时 `cargo build -p yss-desktop-gpui --example relational_parameters_review` 使用隔离项目、真实 Application、两份表格常量和八个节点。GPUI Window 事件分发与目视核对 53 列的分页/输出顺序、移除缺失列后诊断消失、已知空结构与未知结构、手动列名空格/排序/Enter、必填清空重置和可选清空数组；均从当前图投影读回。
+- 同一预览核对筛选重复类型选择保留未提交输入、宽整数 `9007199254740995` 与精确小数 `9007199254740995.125`、非法小数错误/继续输入清除、语言切换保留草稿、布尔提交、换至文本列重置输入、Escape 恢复及空值运算省略 value。共享数值/文本列表的 Enter 与重排提交亦已读回。
+- 预览沿用 GPUI 事件分发，截图仍依赖尺寸变化；物理键鼠/IME、未知结构筛选、过期菜单/迟到回执、后端失败、多窗口及完整撤销/保存继续开放。临时入口不提交。
+- L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；`cargo test -p yss-graph-analysis --lib schema_resolution::tests::column_parameters_preserve_intent_across_unknown_empty_and_replaced_schemas -- --exact` 和 `cargo test -p yss-graph-analysis --lib semantic_validation::tests::nominal_parameters_are_revalidated_against_changed_input_schema -- --exact` 各实际运行 1 项并通过。9 个 Rust 文件局部格式、41 个双语键/参数、文档元信息及 269 条相对链接（工作区 275 条）、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过；累计审查 146/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -471,7 +483,7 @@
 | [modules/details/internal/ui/node/NodePinInterfacePanel.tsx](../../react/src/modules/details/internal/ui/node/NodePinInterfacePanel.tsx) | 迁移/优化：输入、输出默认折叠，内容按展开构建 | `ports/list` 分组及空状态；原字面量与实例操作复用原事务，提交失败直接呈现在节点属性 | 样例已核对折叠、连接与实例操作；完整字面量/多窗口验收开放 |
 | [modules/details/internal/ui/node/NodePortInstanceControls.tsx](../../react/src/modules/details/internal/ui/node/NodePortInstanceControls.tsx) | 复核原生实现：增删/顺序由投影与原编辑事务控制 | 复用 `ports`，分组添加入口沿用 can_add/can_remove 与捕获版本；不迁移每按钮独立业务状态 | 样例已核对最小数量、增删及带连接重排/删除；分组联动与失败验收开放 |
 | [modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx) | 优化：草稿按参数键复用，菜单与列表输入按需构建，提交/默认值/诊断沿用原 owner | `parameters` 拆分草稿、选择、分页与渲染；补齐 Enter/恢复、选项翻译和字段诊断，保留显式应用及原文本/JSON 后端校验 | 隔离图的 GPUI 事件与回执已核对；物理输入、IME、多行和失效/失败交互仍待验收 |
-| [modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 优化既有关系参数编辑器 | 已知列按 50 项分页并显示输出顺序/失效列，未知列复用共享列表；筛选使用类型化草稿与按需菜单，复用原提交/恢复/诊断入口 | 主要原生交互已核对；未知结构筛选、失效交付与完整历史/保存待验收 |
 | [modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/ChartDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/ChartDetailPanel.tsx) | 优化：共享当前草稿及元数据，菜单按需生成，列清单有界呈现 | `charts/details` 数据源/类型/编码和清除入口；重复选择保留配置，旧菜单版本校验，列清单分页 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/ConstantValueFields.tsx](../../react/src/modules/details/internal/ui/panels/ConstantValueFields.tsx) | 优化原生标量、布尔、Null 和结构值入口，复用原 Input/Checkbox | 普通 JSON 取代 Rust 枚举格式；摘要保留原始数量并在渲染时本地化；常量逐行恢复 | 样例结构值/恢复已核对；其余类型和失败场景待验收 |

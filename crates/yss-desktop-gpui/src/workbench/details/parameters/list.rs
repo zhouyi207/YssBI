@@ -1,8 +1,8 @@
 //! Bounded series pages reuse the same draft for input, reordering and submission.
 mod draft;
-use super::{DetailsPanel, ParameterDraft, controls};
+use super::{DetailsPanel, controls};
 use crate::text::translate;
-pub(super) use draft::ListDraft;
+pub(in crate::workbench::details) use draft::ListDraft;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use gpui_component::{
     Disableable, Sizable,
@@ -12,11 +12,12 @@ use gpui_component::{
 use gpui_kit_assets::IconName;
 
 impl DetailsPanel {
-    pub(in crate::workbench::details::parameters) fn render_list_parameter(
+    pub(in crate::workbench::details) fn render_list_parameter(
         &self,
         index: usize,
         draft: &ListDraft,
         busy: bool,
+        add_label: &str,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let epoch = self.epoch;
@@ -57,10 +58,10 @@ impl DetailsPanel {
                             .on_click(cx.listener(
                                 move |view, _, window, cx| {
                                     if view.accepts_input(epoch, cx)
-                                        && let ParameterDraft::List(draft) =
-                                            &mut view.fields[index].draft
+                                        && let Some(draft) = view.fields[index].list_mut()
                                     {
                                         draft.move_row(row, direction, window, cx);
+                                        view.fields[index].error = None;
                                         cx.notify();
                                     }
                                 },
@@ -79,10 +80,10 @@ impl DetailsPanel {
                         .on_click(cx.listener(
                             move |view, _, window, cx| {
                                 if view.accepts_input(epoch, cx)
-                                    && let ParameterDraft::List(draft) =
-                                        &mut view.fields[index].draft
+                                    && let Some(draft) = view.fields[index].list_mut()
                                 {
                                     draft.remove(row, window, cx);
+                                    view.fields[index].error = None;
                                     cx.notify();
                                 }
                             },
@@ -104,14 +105,14 @@ impl DetailsPanel {
                             .small()
                             .ghost()
                             .icon(IconName::Plus)
-                            .label(translate("conversion.addValue"))
+                            .label(translate(add_label))
                             .disabled(busy)
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 if view.accepts_input(epoch, cx)
-                                    && let ParameterDraft::List(draft) =
-                                        &mut view.fields[index].draft
+                                    && let Some(draft) = view.fields[index].list_mut()
                                 {
                                     draft.add(window, cx);
+                                    view.fields[index].error = None;
                                     cx.notify();
                                 }
                             })),
@@ -135,8 +136,7 @@ impl DetailsPanel {
                                 .disabled(busy || page == 0)
                                 .on_click(cx.listener(move |view, _, window, cx| {
                                     if view.accepts_input(epoch, cx)
-                                        && let ParameterDraft::List(draft) =
-                                            &mut view.fields[index].draft
+                                        && let Some(draft) = view.fields[index].list_mut()
                                     {
                                         draft.show_page(page.saturating_sub(1), window, cx);
                                         cx.notify();
@@ -153,8 +153,7 @@ impl DetailsPanel {
                                 .disabled(busy || page + 1 == pages)
                                 .on_click(cx.listener(move |view, _, window, cx| {
                                     if view.accepts_input(epoch, cx)
-                                        && let ParameterDraft::List(draft) =
-                                            &mut view.fields[index].draft
+                                        && let Some(draft) = view.fields[index].list_mut()
                                     {
                                         draft.show_page(page + 1, window, cx);
                                         cx.notify();
