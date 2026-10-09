@@ -80,6 +80,9 @@ Graph、Chart、Mind、Doc 和 Database 的复制接受可选目标名称，在�
 
 项目尚未发布，只支持当前格式。打开其他格式版本的项目会在 manifest 校验时失败，不执行旧变量资源或节点的兼容转换，也不改写原文件。新建和保存项目继续写入当前 `schemaVersion`。
 
+Manifest 只接受当前 `schemaVersion`、`projectName` 和 `exportTime` 字段；已经删除的计算
+设置及其他未知字段在读取与写入校验时拒绝，不静默忽略。
+
 常量增删改使用当前图编辑、Save 与后端图历史，项目查询不再发布独立变量集合。复制图时为常量分配新身份，并通过 Document Edit 共享规则重写注册的 `GraphConstant` 参数引用。格式、复制、类型和执行语义由 [Graph 与 Execution](../yss-application/src/graph/README.md) 维护。
 
 `graph_resource_revisions` 是 Project-owned `GraphResourcePath → ResourceRevision` 索引，不是 editor projection 的请求计数器。它仍有生产读写方：

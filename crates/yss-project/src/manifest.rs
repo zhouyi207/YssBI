@@ -16,7 +16,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectManifest {
     #[serde(deserialize_with = "deserialize_current_project_schema_version")]
     schema_version: u32,
@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_project_settings_are_ignored_by_the_manifest_boundary() {
+    fn manifest_rejects_removed_project_computation_settings() {
         let value = json!({
             "schemaVersion": CURRENT_PROJECT_SCHEMA_VERSION,
             "projectName": "Example",
@@ -102,7 +102,11 @@ mod tests {
                 "missingValues": { "statistics": "listwise" }
             }
         });
-        let manifest = serde_json::from_value::<ProjectManifest>(value).unwrap();
-        assert_eq!(manifest.project_name, "Example");
+        let error = serde_json::from_value::<ProjectManifest>(value).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("unknown field `computationSettings`")
+        );
     }
 }

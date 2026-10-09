@@ -75,18 +75,14 @@ pub struct ProjectIndex {
     pub minds: Vec<crate::minds::MindIndexEntry>,
     pub docs: Vec<crate::docs::DocIndexEntry>,
     pub project_instance_id: String,
-    #[serde(default)]
     pub publication_revision: u64,
     #[serde(skip)]
     pub(crate) authority_generation: u64,
-    #[serde(default)]
     pub project_name: String,
     pub export_time: String,
     pub event_graphs: Vec<ProjectEventGraphIndexEntry>,
     pub function_graphs: Vec<ProjectFunctionGraphIndexEntry>,
-    #[serde(default)]
     pub charts: Vec<ProjectChartIndexEntry>,
-    #[serde(default)]
     pub databases: Vec<ProjectDatabaseIndexEntry>,
 }
 
@@ -97,14 +93,14 @@ impl ProjectIndex {
 }
 
 pub fn serialize_project_manifest(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
-    serde_json::to_vec_pretty(&project_manifest_from_data(data)?).map_err(ProjectError::Serialize)
+    serde_json::to_vec_pretty(&project_manifest_from_data(data)).map_err(ProjectError::Serialize)
 }
 
-fn project_manifest_from_data(data: &ProjectData) -> Result<ProjectManifest, ProjectError> {
-    Ok(ProjectManifest::new(
+fn project_manifest_from_data(data: &ProjectData) -> ProjectManifest {
+    ProjectManifest::new(
         data.metadata.project_name.clone(),
         data.metadata.export_time.clone(),
-    ))
+    )
 }
 
 pub fn serialize_graph_document(
@@ -211,7 +207,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         )?;
     }
 
-    let manifest = project_manifest_from_data(project_data)?;
+    let manifest = project_manifest_from_data(project_data);
     write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
     Ok(())
 }
