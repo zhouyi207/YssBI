@@ -260,6 +260,62 @@ fn anova_adapters_preserve_exact_labels_and_enforce_shapes_and_parameters() {
 #[test]
 fn classical_count_tables_admit_their_actual_workspace_before_computation() {
     let relations = crate::tests::relations();
+    let large_inputs = [series(&vec![10.0; 2002])];
+    let large_outputs = [KernelOutputSpec {
+        data_type: ValueType::Struct("statistics.report".into()),
+        fields: None,
+    }];
+    let large_control = KernelControl {
+        cancellation: Arc::new(AtomicBool::new(false)),
+        deadline: Instant::now() + Duration::from_secs(30),
+        max_input_bytes: 256 * 1024,
+    };
+    let kernels = KernelRegistry::default();
+    let pearson = KernelId::new("yssbi.statistics.test.chisquare.general".into()).unwrap();
+    for (rows, columns) in [(2, 1001), (1001, 2)] {
+        let large_invocation = KernelInvocation {
+            relations: &relations,
+            inputs: &large_inputs,
+            input_keys: &["counts"],
+            parameters: [
+                (
+                    KernelParameterKey::new("rows".into()).unwrap(),
+                    std::borrow::Cow::Owned(int(rows)),
+                ),
+                (
+                    KernelParameterKey::new("columns".into()).unwrap(),
+                    std::borrow::Cow::Owned(int(columns)),
+                ),
+            ]
+            .into(),
+            outputs: &large_outputs,
+            control: &large_control,
+        };
+        let result = kernels.execute(&pearson, &large_invocation).unwrap();
+        assert_eq!(
+            super::super::numeric_input(Some(field(&result[0], "statistic").unwrap())).unwrap(),
+            0.0
+        );
+        assert_eq!(
+            super::super::numeric_input(Some(field(&result[0], "p_value").unwrap())).unwrap(),
+            1.0
+        );
+        let limited = KernelControl {
+            cancellation: large_control.cancellation.clone(),
+            deadline: large_control.deadline,
+            max_input_bytes: 4096,
+        };
+        assert!(matches!(
+            kernels.execute(
+                &pearson,
+                &KernelInvocation {
+                    control: &limited,
+                    ..large_invocation
+                }
+            ),
+            Err(KernelError::BudgetExceeded)
+        ));
+    }
     let distinct = RuntimeValue::List((0..96).map(int).collect());
     let inputs = [distinct.clone(), distinct];
     let mut control = KernelControl::new(
@@ -279,7 +335,6 @@ fn classical_count_tables_admit_their_actual_workspace_before_computation() {
         outputs: &outputs,
         control: &control,
     };
-    let kernels = KernelRegistry::default();
     let id = KernelId::new("yssbi.statistics.test.chisquare.crosstab".into()).unwrap();
     // Encoded columns fit, but the actual 96 by 96 count matrix alone exceeds the budget.
     assert!(matches!(

@@ -4,7 +4,7 @@ Tests independence using an existing contingency table of counts.
 
 ## Inputs and parameters
 
-`counts` is a row-major sequence of nonnegative integer frequencies. `rows` and `columns` both default to `2` and accept integers from `2–1000`. Input length must equal their product.
+`counts` is a row-major sequence of nonnegative integer frequencies. `rows` and `columns` both default to `2` and accept integers of at least `2`. Input length must equal their product, and table size remains subject to available execution resources.
 
 For `rows=2` and `columns=3`, the order is `[row1_col1, row1_col2, row1_col3, row2_col1, row2_col2, row2_col3]`. Values must be finite with no missing entries; every row and column total must be positive.
 

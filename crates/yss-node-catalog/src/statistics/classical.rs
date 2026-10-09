@@ -254,8 +254,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 alternative_parameter()?,
             ],
             "pearson_table" => vec![
-                bounded_integer_parameter("rows", 2, 2, 1000)?,
-                bounded_integer_parameter("columns", 2, 2, 1000)?,
+                minimum_integer_parameter("rows", 2, 2)?,
+                minimum_integer_parameter("columns", 2, 2)?,
             ],
             "poisson" => vec![
                 decimal_parameter(id, "null_rate", "1")?,
@@ -584,4 +584,39 @@ fn category_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
             value: error.to_string().into(),
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_node_protocol::{ParameterIssueKind, ParameterValues, validate_parameter_values};
+
+    #[test]
+    fn pearson_dimensions_accept_resource_admitted_tables_above_one_thousand() {
+        let system = crate::build_builtin_node_system().unwrap();
+        let protocol = system
+            .registry
+            .protocol(&"yssbi.statistics.test.chisquare.general".parse().unwrap())
+            .unwrap();
+        let rows = ParameterKey::new("rows").unwrap();
+        let columns = ParameterKey::new("columns").unwrap();
+        for (row_count, column_count) in [(2, 1001), (1001, 2)] {
+            let values = ParameterValues::from([
+                (rows.clone(), row_count.into()),
+                (columns.clone(), column_count.into()),
+            ]);
+            let issues = validate_parameter_values(protocol, &values, system.registry.as_ref());
+            assert!(
+                issues.is_empty(),
+                "resource-admitted {row_count} by {column_count} table rejected: {issues:?}"
+            );
+        }
+        let values = ParameterValues::from([(rows.clone(), 1.into()), (columns, 2.into())]);
+        assert!(
+            validate_parameter_values(protocol, &values, system.registry.as_ref())
+                .iter()
+                .any(|issue| issue.key == rows
+                    && matches!(issue.kind, ParameterIssueKind::Constraint))
+        );
+    }
 }
