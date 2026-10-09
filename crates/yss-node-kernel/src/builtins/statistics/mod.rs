@@ -81,121 +81,125 @@ pub(super) fn install(
     builder
         .register(
             KernelId::new(id.into()).expect("kernel id"),
-            std::num::NonZeroU32::new(
-                1 + if id == "yssbi.statistics.iv.2sls.summary" {
-                    9
-                } else if matches!(
-                    id,
-                    "yssbi.statistics.test.nonparametric.family"
-                        | "yssbi.statistics.test.brown_forsythe"
-                        | "yssbi.statistics.iv.liml.summary"
-                        | "yssbi.statistics.panel.fit"
-                ) {
-                    8
-                } else if (id.starts_with("yssbi.statistics.survival.")
-                    && id != "yssbi.statistics.survival.competing_risks")
-                    || id == "yssbi.statistics.workflow.subgroup"
-                    || id == "yssbi.statistics.test.fisher_exact"
-                    || id == "yssbi.statistics.test.binomial"
-                    || id == "yssbi.statistics.test.poisson"
-                    || id == "yssbi.statistics.test.mood_median"
-                    || id == "yssbi.statistics.test.levene"
-                    || matches!(
-                        id,
-                        "yssbi.statistics.prais.fit"
-                            | "yssbi.statistics.prais.summary"
-                            | "yssbi.statistics.panel.did.twfe"
-                            | "yssbi.statistics.econometrics.panel.fe"
-                            | "yssbi.statistics.econometrics.panel.re"
-                            | "yssbi.statistics.econometrics.panel.fd"
-                            | "yssbi.statistics.econometrics.panel.between"
-                    )
+            std::num::NonZeroU32::new(match id {
+                "yssbi.statistics.iv.2sls.summary" => 11,
+                "yssbi.statistics.iv.liml.summary" | "yssbi.statistics.panel.fit" => 10,
+                "yssbi.statistics.econometrics.panel.between"
+                | "yssbi.statistics.econometrics.panel.fd"
+                | "yssbi.statistics.econometrics.panel.fe"
+                | "yssbi.statistics.econometrics.panel.re"
+                | "yssbi.statistics.panel.did.twfe"
+                | "yssbi.statistics.prais.fit"
+                | "yssbi.statistics.prais.summary"
+                | "yssbi.statistics.test.brown_forsythe"
+                | "yssbi.statistics.test.nonparametric.family" => 9,
+                "yssbi.statistics.adf.test"
+                | "yssbi.statistics.logit.summary"
+                | "yssbi.statistics.panel.compare"
+                | "yssbi.statistics.probit.summary"
+                | "yssbi.statistics.test.binomial"
+                | "yssbi.statistics.test.fisher_exact"
+                | "yssbi.statistics.test.levene"
+                | "yssbi.statistics.test.mood_median"
+                | "yssbi.statistics.test.poisson"
+                | "yssbi.statistics.test.t.paired"
+                | "yssbi.statistics.var.summary"
+                | "yssbi.statistics.workflow.mediation"
+                | "yssbi.statistics.workflow.moderated_mediation"
+                | "yssbi.statistics.workflow.subgroup" => 8,
+                "yssbi.statistics.diagnostic.breusch_pagan"
+                | "yssbi.statistics.diagnostic.wald"
+                | "yssbi.statistics.iv.2sls.fit"
+                | "yssbi.statistics.iv.liml.fit"
+                | "yssbi.statistics.meta.egger"
+                | "yssbi.statistics.meta.fixed_effect"
+                | "yssbi.statistics.meta.inverse_variance"
+                | "yssbi.statistics.meta.leave_one_out"
+                | "yssbi.statistics.meta.random_effect"
+                | "yssbi.statistics.meta.regression"
+                | "yssbi.statistics.meta.sensitivity"
+                | "yssbi.statistics.panel.did.randomization"
+                | "yssbi.statistics.plot.calibration"
+                | "yssbi.statistics.plot.decision_curve"
+                | "yssbi.statistics.psychometrics.item_analysis"
+                | "yssbi.statistics.survival.competing_risks"
+                | "yssbi.statistics.test.bartlett"
+                | "yssbi.statistics.test.chisquare.crosstab"
+                | "yssbi.statistics.test.chisquare.general"
+                | "yssbi.statistics.test.chisquare.goodness_of_fit"
+                | "yssbi.statistics.test.cmh"
+                | "yssbi.statistics.test.equivalence"
+                | "yssbi.statistics.test.friedman"
+                | "yssbi.statistics.test.kruskal_wallis"
+                | "yssbi.statistics.test.mann_kendall"
+                | "yssbi.statistics.test.mann_whitney"
+                | "yssbi.statistics.test.mcnemar"
+                | "yssbi.statistics.test.proportion.multiple"
+                | "yssbi.statistics.test.runs"
+                | "yssbi.statistics.test.t.independent"
+                | "yssbi.statistics.test.t.one_sample"
+                | "yssbi.statistics.test.t.summary_input"
+                | "yssbi.statistics.timeseries.fevd"
+                | "yssbi.statistics.timeseries.irf" => 7,
+                "yssbi.plot.boxplot"
+                | "yssbi.plot.violin"
+                | "yssbi.statistics.diagnostic.hausman"
+                | "yssbi.statistics.diagnostic.ph"
+                | "yssbi.statistics.doe.response_surface"
+                | "yssbi.statistics.inference.cluster_robust"
+                | "yssbi.statistics.meta.begg"
+                | "yssbi.statistics.meta.cochran_q"
+                | "yssbi.statistics.meta.forest"
+                | "yssbi.statistics.meta.funnel"
+                | "yssbi.statistics.meta.i_squared"
+                | "yssbi.statistics.meta.tau_squared"
+                | "yssbi.statistics.plot.forest"
+                | "yssbi.statistics.plot.funnel"
+                | "yssbi.statistics.sem.path"
+                | "yssbi.statistics.test.cochran_q"
+                | "yssbi.statistics.test.proportion.two"
+                | "yssbi.statistics.test.wilcoxon.one_sample"
+                | "yssbi.statistics.test.wilcoxon.paired"
+                | "yssbi.statistics.test.z.mean"
+                | "yssbi.statistics.test.z.proportion"
+                | "yssbi.statistics.timeseries.ecm"
+                | "yssbi.statistics.workflow.moderation"
+                | "yssbi.statistics.workflow.moderation_advanced" => 6,
+                "yssbi.statistics.causal.aipw"
+                | "yssbi.statistics.causal.ipw"
+                | "yssbi.statistics.causal.psm"
+                | "yssbi.statistics.causal.regression_adjustment"
+                | "yssbi.statistics.diagnostic.collinearity"
+                | "yssbi.statistics.diagnostic.information_matrix"
+                | "yssbi.statistics.diagnostic.nested_comparison"
+                | "yssbi.statistics.diagnostic.reset"
+                | "yssbi.statistics.diagnostic.white"
+                | "yssbi.statistics.doe.dose_response"
+                | "yssbi.statistics.econometrics.gmm"
+                | "yssbi.statistics.econometrics.heckman_two_step"
+                | "yssbi.statistics.econometrics.sfa"
+                | "yssbi.statistics.econometrics.sur"
+                | "yssbi.statistics.longitudinal.gee"
+                | "yssbi.statistics.plot.nomogram"
+                | "yssbi.statistics.posthoc.multiple_comparisons"
+                | "yssbi.statistics.power.anova"
+                | "yssbi.statistics.power.cluster_randomized"
+                | "yssbi.statistics.power.linear_regression"
+                | "yssbi.statistics.power.mean_difference"
+                | "yssbi.statistics.power.paired"
+                | "yssbi.statistics.quality.measurement_system"
+                | "yssbi.statistics.spatial.ols"
+                | "yssbi.statistics.spatial.slx"
+                | "yssbi.statistics.survey.linear_regression"
+                | "yssbi.statistics.survey.logistic"
+                | "yssbi.statistics.survey.poisson"
+                | "yssbi.statistics.workflow.delphi" => 5,
+                _ if id.starts_with("yssbi.statistics.survival.")
+                    && id != "yssbi.statistics.survival.competing_risks" =>
                 {
-                    7
-                } else if matches!(
-                    id,
-                    "yssbi.statistics.test.t.paired"
-                        | "yssbi.statistics.test.mcnemar"
-                        | "yssbi.statistics.test.cmh"
-                        | "yssbi.statistics.test.chisquare.crosstab"
-                        | "yssbi.statistics.test.chisquare.general"
-                        | "yssbi.statistics.test.chisquare.goodness_of_fit"
-                        | "yssbi.statistics.test.proportion.multiple"
-                        | "yssbi.statistics.test.mann_whitney"
-                        | "yssbi.statistics.test.kruskal_wallis"
-                        | "yssbi.statistics.test.friedman"
-                        | "yssbi.statistics.test.runs"
-                        | "yssbi.statistics.test.mann_kendall"
-                        | "yssbi.statistics.test.bartlett"
-                        | "yssbi.statistics.psychometrics.item_analysis"
-                        | "yssbi.statistics.workflow.mediation"
-                        | "yssbi.statistics.workflow.moderated_mediation"
-                ) {
-                    6
-                } else if matches!(
-                    id,
-                    "yssbi.statistics.test.t.one_sample"
-                        | "yssbi.statistics.test.t.independent"
-                        | "yssbi.statistics.test.t.summary_input"
-                        | "yssbi.statistics.test.z.mean"
-                        | "yssbi.statistics.test.z.proportion"
-                        | "yssbi.statistics.test.proportion.two"
-                        | "yssbi.statistics.test.equivalence"
-                        | "yssbi.statistics.test.wilcoxon.one_sample"
-                        | "yssbi.statistics.test.wilcoxon.paired"
-                        | "yssbi.statistics.test.cochran_q"
-                        | "yssbi.plot.boxplot"
-                        | "yssbi.plot.violin"
-                        | "yssbi.statistics.diagnostic.wald"
-                ) {
-                    5
-                } else if matches!(
-                    id,
-                    "yssbi.statistics.survival.competing_risks"
-                        | "yssbi.statistics.plot.calibration"
-                        | "yssbi.statistics.plot.decision_curve"
-                ) {
-                    6
-                } else if matches!(
-                    id,
-                    "yssbi.statistics.meta.inverse_variance"
-                        | "yssbi.statistics.meta.fixed_effect"
-                        | "yssbi.statistics.meta.random_effect"
-                        | "yssbi.statistics.meta.cochran_q"
-                        | "yssbi.statistics.meta.i_squared"
-                        | "yssbi.statistics.meta.tau_squared"
-                        | "yssbi.statistics.meta.regression"
-                        | "yssbi.statistics.meta.egger"
-                        | "yssbi.statistics.meta.begg"
-                        | "yssbi.statistics.meta.leave_one_out"
-                        | "yssbi.statistics.meta.sensitivity"
-                        | "yssbi.statistics.meta.forest"
-                        | "yssbi.statistics.meta.funnel"
-                        | "yssbi.statistics.plot.forest"
-                        | "yssbi.statistics.plot.funnel"
-                        | "yssbi.statistics.diagnostic.ph"
-                ) {
-                    5
-                } else if matches!(
-                    id,
-                    "yssbi.statistics.panel.compare"
-                        | "yssbi.statistics.logit.summary"
-                        | "yssbi.statistics.probit.summary"
-                        | "yssbi.statistics.var.summary"
-                ) {
-                    7
-                } else if matches!(
-                    id,
-                    "yssbi.statistics.diagnostic.breusch_pagan"
-                        | "yssbi.statistics.panel.did.randomization"
-                        | "yssbi.statistics.iv.2sls.fit"
-                        | "yssbi.statistics.iv.liml.fit"
-                        | "yssbi.statistics.adf.test"
-                        | "yssbi.statistics.timeseries.irf"
-                        | "yssbi.statistics.timeseries.fevd"
-                ) {
-                    6
-                } else if id.contains(".logit.")
+                    8
+                }
+                _ if id.contains(".logit.")
                     || id.contains(".probit.")
                     || id.contains(".prais.")
                     || id.contains(".iv.")
@@ -204,53 +208,21 @@ pub(super) fn install(
                     || id.contains(".vec.")
                     || id.contains(".adf.")
                     || id.ends_with(".irf")
-                    || id.ends_with(".fevd")
-                    || matches!(id, "yssbi.statistics.diagnostic.hausman")
+                    || id.ends_with(".fevd") =>
                 {
-                    5
-                } else if id.starts_with("yssbi.statistics.meta.")
+                    6
+                }
+                _ if id.starts_with("yssbi.statistics.meta.")
                     || id.starts_with("yssbi.statistics.psychometrics.")
-                    || id == "yssbi.statistics.inference.cluster_robust"
                     || id.starts_with("yssbi.statistics.mixed.")
-                    || matches!(
-                        id,
-                        "yssbi.statistics.longitudinal.gee"
-                            | "yssbi.statistics.diagnostic.collinearity"
-                            | "yssbi.statistics.econometrics.gmm"
-                            | "yssbi.statistics.econometrics.heckman_two_step"
-                            | "yssbi.statistics.econometrics.sfa"
-                            | "yssbi.statistics.econometrics.sur"
-                            | "yssbi.statistics.causal.psm"
-                            | "yssbi.statistics.causal.ipw"
-                            | "yssbi.statistics.causal.regression_adjustment"
-                            | "yssbi.statistics.causal.aipw"
-                            | "yssbi.statistics.plot.nomogram"
-                    )
                     || id.starts_with("yssbi.plot.")
                     || id.starts_with("yssbi.statistics.anova.")
-                    || id.ends_with(".granger")
-                    || matches!(
-                        id,
-                        "yssbi.statistics.workflow.moderation"
-                            | "yssbi.statistics.workflow.delphi"
-                            | "yssbi.statistics.diagnostic.reset"
-                            | "yssbi.statistics.diagnostic.nested_comparison"
-                            | "yssbi.statistics.quality.measurement_system"
-                            | "yssbi.statistics.power.anova"
-                            | "yssbi.statistics.power.linear_regression"
-                            | "yssbi.statistics.diagnostic.white"
-                            | "yssbi.statistics.diagnostic.information_matrix"
-                            | "yssbi.statistics.workflow.moderation_advanced"
-                            | "yssbi.statistics.sem.path"
-                            | "yssbi.statistics.doe.response_surface"
-                            | "yssbi.statistics.timeseries.ecm"
-                    )
+                    || id.ends_with(".granger") =>
                 {
-                    4
-                } else {
-                    3
-                },
-            )
+                    5
+                }
+                _ => 4,
+            })
             .unwrap(),
             contract,
             execute,

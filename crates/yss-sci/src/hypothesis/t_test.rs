@@ -2,7 +2,7 @@
 //!
 //! 仅支持 q=1，t = (Rβ - r) / se(Rβ - r) ~ t(df_residual)，支持单侧。
 
-use statrs::distribution::{ContinuousCDF, StudentsT};
+use statrs::distribution::StudentsT;
 use yss_sci_linalg::{Col, Mat};
 
 use yss_sci_contract::hypothesis::{Alternative, TTestResult};
@@ -47,11 +47,7 @@ pub(super) fn t_test(
     let dist = StudentsT::new(0.0, 1.0, df_residual as f64)
         .map_err(|e| format!("t 分布参数错误: {}", e))?;
 
-    let p_value = match alternative {
-        Alternative::TwoSided => 2.0 * (1.0 - dist.cdf(t_stat.abs())),
-        Alternative::Greater => 1.0 - dist.cdf(t_stat),
-        Alternative::Less => dist.cdf(t_stat),
-    };
+    let p_value = crate::distribution::student_t_probability(&dist, t_stat, alternative);
 
     let alt_str = match alternative {
         Alternative::TwoSided => "two_sided",
@@ -97,5 +93,37 @@ mod tests {
         assert!((result.r_beta_minus_r - 2.0).abs() < 1e-10);
         assert!((result.stat - 2.0 / 0.05_f64.sqrt()).abs() < 1e-6);
         assert!(result.p_value > 0.0 && result.p_value <= 1.0);
+
+        for (statistic, df, expected) in [
+            (1e308, 1, 2.0 * (1e-308 / std::f64::consts::PI)),
+            // The exact df=2 two-sided tail is 1 - t/sqrt(t^2 + 2).
+            // Rationalizing gives 2 / (hypot(t, sqrt(2)) * (hypot(t, sqrt(2)) + t)).
+            (1e155, 2, 1e-310),
+            // Rounding a one-sided tail first would incorrectly erase this value.
+            (9e107, 3, f64::from_bits(1)),
+            (1e108, 3, 0.0),
+            (1e100, 5, 0.0),
+            (1e308, 1_000_000, 0.0),
+        ] {
+            let result = t_test(
+                &col![statistic],
+                &mat![[1.0]],
+                &mat![[1.0]],
+                &col![0.0],
+                df,
+                Alternative::TwoSided,
+                "x = 0",
+            )
+            .unwrap();
+            if expected == 0.0 {
+                assert_eq!(result.p_value, 0.0);
+                continue;
+            }
+            assert!(
+                (result.p_value / expected - 1.0).abs() < 2e-12,
+                "df={df}, t={statistic}: {}, expected {expected}",
+                result.p_value
+            );
+        }
     }
 }

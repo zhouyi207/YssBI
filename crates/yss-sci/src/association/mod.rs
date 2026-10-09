@@ -195,11 +195,7 @@ fn student_test(
         let statistic = finite(r * ((df as f64) / ((1.0 - r) * (1.0 + r))).sqrt())?;
         let distribution =
             StudentsT::new(0.0, 1.0, df as f64).map_err(|_| Error::ComputationFailed)?;
-        let p = match alternative {
-            Alternative::TwoSided => 2.0 * distribution.sf(statistic.abs()),
-            Alternative::Greater => distribution.sf(statistic),
-            Alternative::Less => distribution.cdf(statistic),
-        };
+        let p = crate::distribution::student_t_probability(&distribution, statistic, alternative);
         (Some(statistic), bounded(p, 0.0, 1.0)?)
     };
     Ok(TestInference {

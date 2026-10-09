@@ -129,7 +129,13 @@ impl WLS {
             .map_err(|e| format!("WLS: StudentsT: {}", e))?;
         let p_values: Vec<f64> = t_values
             .iter()
-            .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
+            .map(|&t| {
+                crate::distribution::student_t_probability(
+                    &t_dist,
+                    t,
+                    yss_sci_contract::hypothesis::Alternative::TwoSided,
+                )
+            })
             .collect();
 
         let t_crit = t_dist.inverse_cdf(0.975);

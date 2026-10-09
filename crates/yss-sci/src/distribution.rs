@@ -4,10 +4,54 @@ use rand::{
     distr::{Distribution, Open01},
 };
 use statrs::distribution::{self as native, ContinuousCDF};
+use statrs::function::beta::ln_beta;
 use yss_sci_contract::distribution::{SampleValue, SamplingDistribution};
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl, ScientificInputViolation,
 };
+use yss_sci_contract::hypothesis::Alternative;
+
+/// Directed probabilities for validated standard Student-t reference distributions.
+pub(crate) fn student_t_probability(
+    distribution: &native::StudentsT,
+    statistic: f64,
+    alternative: Alternative,
+) -> f64 {
+    let magnitude = statistic.abs();
+    let df = distribution.freedom();
+    if df.is_finite() && magnitude > df.sqrt() / f64::EPSILON.sqrt() {
+        // I_h(a, 1/2) = h^a / (a B(a, 1/2)) * (1 + O(h)), with
+        // h = df/(df+t^2) < EPSILON. Avoid both t^2 overflow and h underflow,
+        // and include the one-sided factor before rounding subnormal probabilities.
+        let log_magnitude = magnitude.ln();
+        let log_tail = if df >= 5.0
+            && 25.0_f64.ln() - 4.0 * log_magnitude < f64::from_bits(1).ln() - std::f64::consts::LN_2
+        {
+            // E[T^4] <= 25 for df >= 5: Markov bounds even the two-sided
+            // probability below half the smallest representable positive value.
+            f64::NEG_INFINITY
+        } else {
+            let a = df / 2.0;
+            a * (df.ln() - 2.0 * log_magnitude) - a.ln() - ln_beta(a, 0.5)
+        };
+        return match alternative {
+            Alternative::TwoSided => log_tail.exp(),
+            Alternative::Greater | Alternative::Less => {
+                let tail = (log_tail - std::f64::consts::LN_2).exp();
+                if (statistic >= 0.0) == (alternative == Alternative::Greater) {
+                    tail
+                } else {
+                    1.0 - tail
+                }
+            }
+        };
+    }
+    match alternative {
+        Alternative::TwoSided => 2.0 * distribution.sf(magnitude),
+        Alternative::Greater => distribution.sf(statistic),
+        Alternative::Less => distribution.cdf(statistic),
+    }
+}
 
 /// F upper tails avoid the native SF's subtraction when its beta argument is near one.
 pub(crate) fn fisher_snedecor_sf(distribution: &native::FisherSnedecor, statistic: f64) -> f64 {

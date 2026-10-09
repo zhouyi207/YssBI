@@ -32,7 +32,14 @@ pub(super) fn estimate(
         .filter(|&s| s > 0.)
         .map(|s| finite(estimate / s))
         .transpose()?;
-    let p_value = statistic.map(|v| (2. * t.sf(v.abs())).clamp(0., 1.));
+    let p_value = statistic.map(|v| {
+        (crate::distribution::student_t_probability(
+            t,
+            v,
+            yss_sci_contract::hypothesis::Alternative::TwoSided,
+        ))
+        .clamp(0., 1.)
+    });
     let confidence_interval = se
         .map(|s| -> Result<_> {
             let width = t.inverse_cdf(0.975) * s;

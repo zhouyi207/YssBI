@@ -141,7 +141,11 @@ pub fn fit_panel_lsdv(
         let mut cr = Col::zeros(n_full);
         for i in 0..n_full {
             let t = result.tvalues[i];
-            pv[i] = 2.0 * (1.0 - t_dist.cdf(t.abs()));
+            pv[i] = crate::distribution::student_t_probability(
+                &t_dist,
+                t,
+                yss_sci_contract::hypothesis::Alternative::TwoSided,
+            );
             cl[i] = result.betas[i] - t_crit * result.stds[i];
             cr[i] = result.betas[i] + t_crit * result.stds[i];
         }
@@ -375,7 +379,11 @@ pub fn fit_panel_lsdv_time(
         let mut cr = Col::zeros(n_full);
         for i in 0..n_full {
             let t = result.tvalues[i];
-            pv[i] = 2.0 * (1.0 - t_dist.cdf(t.abs()));
+            pv[i] = crate::distribution::student_t_probability(
+                &t_dist,
+                t,
+                yss_sci_contract::hypothesis::Alternative::TwoSided,
+            );
             cl[i] = result.betas[i] - t_crit * result.stds[i];
             cr[i] = result.betas[i] + t_crit * result.stds[i];
         }
@@ -621,7 +629,11 @@ pub fn fit_panel_lsdv_twoway(
         let mut cr = Col::zeros(n_full);
         for i in 0..n_full {
             let t = result.tvalues[i];
-            pv[i] = 2.0 * (1.0 - t_dist.cdf(t.abs()));
+            pv[i] = crate::distribution::student_t_probability(
+                &t_dist,
+                t,
+                yss_sci_contract::hypothesis::Alternative::TwoSided,
+            );
             cl[i] = result.betas[i] - t_crit * result.stds[i];
             cr[i] = result.betas[i] + t_crit * result.stds[i];
         }

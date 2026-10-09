@@ -266,10 +266,18 @@ pub(crate) fn coefficient_table(
                     .transpose()?
             };
             let p_value = statistic.map(|v| {
-                (2.0 * t
-                    .as_ref()
-                    .map_or_else(|| normal.sf(v.abs()), |d| d.sf(v.abs())))
-                .clamp(0.0, 1.0)
+                t.as_ref()
+                    .map_or_else(
+                        || 2.0 * normal.sf(v.abs()),
+                        |d| {
+                            crate::distribution::student_t_probability(
+                                d,
+                                v,
+                                yss_sci_contract::hypothesis::Alternative::TwoSided,
+                            )
+                        },
+                    )
+                    .clamp(0.0, 1.0)
             });
             let confidence_interval = se
                 .map(|s| -> Result<[f64; 2]> {

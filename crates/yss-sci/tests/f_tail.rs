@@ -40,6 +40,17 @@ fn factor_and_linear_tests_retain_representable_f_tails() {
     .unwrap();
     assert_eq!((factor_fit.table[0].df, factor_fit.error.df), (2, 6));
     assert_eq!((linear_fit.df_model, linear_fit.df_residual), (2, 6));
+    for index in [1, 2] {
+        let t = linear_fit.tvalues[index];
+        let p = linear_fit.pvalues[index];
+        // For df=6 at these magnitudes, integrating the Student density gives
+        // two-sided tail (5/16) * (6/t^2)^3 with negligible higher terms.
+        let expected = (5.0 / 16.0) * (6.0 / t.powi(2)).powi(3);
+        assert!(
+            (p / expected - 1.0).abs() < 2e-12,
+            "OLS coefficient t={t}: p={p}, expected {expected}"
+        );
+    }
     let reports = [
         (
             "anova",

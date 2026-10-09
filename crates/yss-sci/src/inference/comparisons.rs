@@ -1,7 +1,7 @@
 //! Pooled-ANOVA or Welch pair contrasts, followed by one family-wise adjustment.
 use super::intervals::{critical, critical_tail};
 use crate::regression::models::common::{Result, finite, parameter};
-use statrs::distribution::{ContinuousCDF, StudentsT};
+use statrs::distribution::StudentsT;
 use std::collections::BTreeMap;
 use yss_sci_contract::{execution::*, inference::*};
 
@@ -66,7 +66,11 @@ fn contrast(
     let statistic = finite(estimate / se)?;
     let distribution = StudentsT::new(0., 1., df).map_err(|_| parameter())?;
     let q = critical_tail(tail, Some(df))?;
-    let p_value = finite(2. * distribution.sf(statistic.abs()))?;
+    let p_value = finite(crate::distribution::student_t_probability(
+        &distribution,
+        statistic,
+        yss_sci_contract::hypothesis::Alternative::TwoSided,
+    ))?;
     Ok(PairwiseRow {
         group_a: 0,
         group_b: 0,

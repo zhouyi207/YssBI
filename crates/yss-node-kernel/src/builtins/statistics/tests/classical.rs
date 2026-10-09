@@ -1,6 +1,33 @@
 use super::*;
 
 #[test]
+fn student_t_node_preserves_extreme_directed_tails() {
+    for (null_mean, alternative, multiplier) in [
+        (1e308, "two_sided", 2.0),
+        (1e308, "less", 1.0),
+        (-1e308, "greater", 1.0),
+    ] {
+        let outputs = run(
+            "yssbi.statistics.test.t.one_sample",
+            &[("series", series(&[0.0, 2.0]))],
+            &[
+                ("null_mean", number(null_mean)),
+                ("alternative", string(alternative)),
+            ],
+            1,
+        )
+        .unwrap();
+        let p =
+            crate::builtins::numeric_input(Some(field(&outputs[0], "p_value").unwrap())).unwrap();
+        let expected = multiplier * (1e-308 / std::f64::consts::PI);
+        assert!(
+            (p / expected - 1.0).abs() < 2e-12,
+            "{null_mean}, {alternative}: actual {p}, expected {expected}"
+        );
+    }
+}
+
+#[test]
 fn classical_admission_preserves_option_observation_and_computation_roles() {
     for (id, values, parameters) in [
         (

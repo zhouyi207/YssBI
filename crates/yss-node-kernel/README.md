@@ -75,13 +75,15 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 原始观测通过共享物化路径按位置核对长度；聚类标识保留精确类型。输入、工作区和输出合并
 预算准入，不设置行数上限。调整预测按已存设计评估，不隐式重建交互项。
 聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
-不归为参数错误。`inference.cluster_robust` 使用 revision 5。
+不归为参数错误。`inference.cluster_robust` 使用 revision 6，并复用 SCI 的稳定 Student-t 尾概率。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
-直接使用该准备的其余回归模型内核采用 revision 4，层次和逐步回归采用 revision 5；五个参数生存拟合内核
+回归模型按其实际参考分布维护能力版本：层次和逐步使用 revision 6；曲线、RCS、阈值、Gaussian GLM
+及回归流程使用 revision 5；两个非线性入口使用 revision 4。共享设计校验的五个参数生存拟合内核
 （Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 8。
 复用该准备的 Mixed/GEE、因果估计和共线性诊断采用 revision 5；Meta 模型/诊断/绘图
-采用 revision 6，能力指纹涵盖共享输入错误契约。中介 bootstrap 采用 revision 7，
-同时涵盖稳定分位数二分点。
+维护各自的能力版本，能力指纹涵盖共享输入错误契约。返回 Student-t 系数推断的 Meta 模型、Egger、
+逐项排除和敏感性使用 revision 7。中介 bootstrap 采用 revision 8，同时涵盖稳定分位数二分点和
+共享 Student-t 尾概率。
 
 `builtins/statistics/diagnostics/models` 接入共线性、Harman、NRI/IDI、残差/Cook、
 AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线性值或预算化的二元模型
@@ -240,7 +242,7 @@ native OLS/WLS/GLS models. Adapters share controlled materialization, budgets an
 finite-result encoding, then call `yss-sci-runtime::visualization`.
 Each result is one `plot.data` record; rendering does not run inside a kernel.
 Boxplot and violin use revision 6 for stable shared quantile midpoints; Delphi
-uses revision 5, and both mediation bootstrap kernels use revision 7.
+uses revision 5, and both mediation bootstrap kernels use revision 8.
 
 `KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明有序输入键及数量范围、实际参数键集合和输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
 
@@ -255,17 +257,21 @@ uses revision 5, and both mediation bootstrap kernels use revision 7.
 
 实现行为变化需要递增 revision。输入布局、参数或输出形状变化需要同步节点声明和消费者，并复核解析与计划缓存的能力身份。透明重路由不产生执行操作，也不注册无效的同名内核。
 
-OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。统一线性 Fit（OLS/WLS/GLS）使用 revision 13，保留 WLS 权重和 GLS 协方差数据的形状、非有限及定义域错误分类，以及 SCI 的稳定 F 尾概率；Prais Fit 使用 revision 8。Summary/Predict 不重新拟合。
-DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 7。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，稳定 F 尾概率的实现使用 revision 8。
+OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。统一线性 Fit（OLS/WLS/GLS）使用 revision 14，保留 WLS 权重和 GLS 协方差数据的形状、非有限及定义域错误分类，以及 SCI 的稳定 F/Student-t 尾概率；Prais Fit 使用 revision 9。Summary/Predict 不重新拟合。
+DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 7。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，稳定 F/Student-t 尾概率的实现使用 revision 9。
 IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；非有限模型在 JSON 编码前返回 `NonFiniteResult`，两个 Fit 使用 revision 7。Summary 仍从已存运行值解码模型并按所选内容计算报告，不改其输入或输出形状。
-IV 2SLS Summary 使用 revision 10，LIML Summary 使用 revision 9，保留 SCI 第一阶段、内生性、过度识别及 Wald 检验的稳定 F 尾概率。第一阶段的多内生变量矩阵保持观测行与变量列的对应关系，修正三个及更多内生变量时的 Shea 指标。报告展示直接使用第一阶段的共享类型字段，不再从已编码的 JSON 重读系数。
-ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 7。Drift 的 Student-t 约定、辅助回归与临界值保持原契约。
-Panel Fit 使用 revision 9，Compare 使用 revision 8：双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Fit 保留 SCI 的稳定整体 F 尾概率；Summary/Predict 沿用已拟合模型。
+IV 2SLS Summary 使用 revision 11，LIML Summary 使用 revision 10，保留 SCI 第一阶段、内生性、过度识别及 Wald 检验的稳定 F 尾概率。第一阶段的多内生变量矩阵保持观测行与变量列的对应关系，修正三个及更多内生变量时的 Shea 指标。报告展示直接使用第一阶段的共享类型字段，不再从已编码的 JSON 重读系数。
+ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 8。Drift 和辅助回归复用 SCI 的稳定 Student-t 尾概率，
+其参考分布约定与临界值保持原契约。
+Panel Fit 使用 revision 10，Compare 使用 revision 8：双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Fit 保留 SCI 的稳定整体 F 和系数 Student-t 尾概率；Summary/Predict 沿用已拟合模型。
 系数约束的负或 NaN 对比方差在原 SCI 校验边界返回计算失败，不再把开方后的 NaN 交给参考分布。线性、Logit/Probit/Prais、IV Summary 和实际复用 Summary 检验的 diagnostic.wald 同步更新实现 revision。普通样本均值 t 检验使用另一算法入口。
-稳定 F 尾概率由 SCI 分布模块统一计算。线性 Summary 使用 revision 12，Prais Summary 使用
-revision 8，独立 Wald 使用 revision 6；RESET、嵌套模型比较、测量系统、ANOVA 与线性回归
+稳定 F 尾概率由 SCI 分布模块统一计算。线性 Summary 使用 revision 13，Prais Summary 使用
+revision 9，独立 Wald 使用 revision 7；RESET、嵌套模型比较、测量系统、ANOVA 与线性回归
 效能规划使用 revision 5；七个 ANOVA 入口使用 revision 5；ICC 使用 revision 4；
-独立 FE/RE/FD/Between 面板入口使用 revision 8。参数、控制和报告形状保持各适配器的原契约。
+独立 FE/RE/FD/Between 面板入口使用 revision 9。参数、控制和报告形状保持各适配器的原契约。
+共享 Student-t 尾概率也用于样本均值/等效检验、Pearson/Partial/Spearman、多重比较、路径效果、
+响应面/剂量反应、ECM、OLS/SLX 空间回归、调查回归以及均值/配对/整群效能规划。
+注册实现拥有各入口的能力版本；返回这些推断结果的内核随计算行为更新指纹。
 
 ## 验证
 

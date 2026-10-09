@@ -192,6 +192,21 @@ beta argument near one. The lower-statistic branch retains native SF, including
 zero statistics, without overflowing a reciprocal. Domain callers retain their
 parameter/error and execution-control boundaries; none duplicates the tail calculation.
 
+`distribution::student_t_probability` owns directed probabilities for standard
+Student-t references used by sample-mean/equivalence tests, coefficient constraints,
+regression and panel/IV inference, correlation, pairwise comparisons, path effects
+and central-t power. Ordinary tails use SF/CDF directly. When the incomplete-beta
+argument is below floating-point epsilon, the shared owner evaluates its leading
+integral term in log space, avoiding statistic-square overflow and premature
+subnormal rounding. A fourth-moment bound handles probabilities below the
+representable range without replacing positive tails with a fixed cutoff.
+The shared calculation retains fractional Welch degrees. Model coefficient tables
+also reuse it for Student references, including Knapp–Hartung Meta and
+design-based survey inference.
+[The beta integral](https://dlmf.nist.gov/8.17) and
+[Student density](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.t.html)
+define the calculation; native quantiles and noncentral algorithms retain their owners.
+
 These neutral fit entries consume shared binary/Prais and panel options, and IV
 accepts multiple endogenous and excluded-instrument columns. Panel dispatch covers
 FE/LSDV, entity first differences, entity/time/two-way RE FGLS and MLE, and

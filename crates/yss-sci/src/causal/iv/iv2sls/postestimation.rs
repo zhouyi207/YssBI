@@ -71,7 +71,13 @@ impl IV2SLS {
             let t_values: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] / stds[i]).collect();
             let p_values: Vec<f64> = t_values
                 .iter()
-                .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
+                .map(|&t| {
+                    crate::distribution::student_t_probability(
+                        &t_dist,
+                        t,
+                        yss_sci_contract::hypothesis::Alternative::TwoSided,
+                    )
+                })
                 .collect();
             let t_crit = t_dist.inverse_cdf(0.975);
             let ci_left: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] - t_crit * stds[i]).collect();

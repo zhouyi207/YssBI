@@ -154,10 +154,23 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
                 std::num::NonZeroU32::new(
                     1 + if matches!(method, "regression.stepwise" | "regression.hierarchical") {
+                        5
+                    } else if matches!(
+                        method,
+                        "regression.curve"
+                            | "regression.threshold"
+                            | "regression.glm"
+                            | "workflow.regression.baseline"
+                            | "workflow.regression.univariate_multivariable"
+                            | "workflow.regression.grouped"
+                            | "transform.rcs"
+                    ) {
                         4
                     } else if matches!(
                         method,
-                        "regression.robust"
+                        "regression.nonlinear"
+                            | "regression.nonlinear_formula"
+                            | "regression.robust"
                             | "regression.ridge"
                             | "regression.lasso"
                             | "regression.pls"
@@ -171,18 +184,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                             | "regression.tobit"
                             | "regression.logit.conditional"
                             | "regression.quantile"
-                            | "regression.threshold"
-                            | "regression.glm"
                             | "regression.gamma"
                             | "regression.inverse_gaussian"
                             | "regression.cloglog"
                             | "regression.beta"
                             | "regression.fractional_response"
-                            | "regression.curve"
-                            | "workflow.regression.baseline"
-                            | "workflow.regression.univariate_multivariable"
-                            | "workflow.regression.grouped"
-                            | "transform.rcs"
                     ) {
                         3
                     } else {

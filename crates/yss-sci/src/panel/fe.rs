@@ -654,7 +654,11 @@ pub fn fit_panel_fe(
     let t_dist =
         StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
-    let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
+    let const_p = crate::distribution::student_t_probability(
+        &t_dist,
+        const_t,
+        yss_sci_contract::hypothesis::Alternative::TwoSided,
+    );
     let t_crit = t_dist.inverse_cdf(0.975);
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
@@ -682,7 +686,11 @@ pub fn fit_panel_fe(
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {
-            2.0 * (1.0 - t_dist.cdf(result.tvalues[i].abs()))
+            crate::distribution::student_t_probability(
+                &t_dist,
+                result.tvalues[i],
+                yss_sci_contract::hypothesis::Alternative::TwoSided,
+            )
         } else {
             result.pvalues[i]
         };
@@ -957,7 +965,11 @@ pub fn fit_panel_fe_time(
     let t_dist =
         StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
-    let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
+    let const_p = crate::distribution::student_t_probability(
+        &t_dist,
+        const_t,
+        yss_sci_contract::hypothesis::Alternative::TwoSided,
+    );
     let t_crit = t_dist.inverse_cdf(0.975);
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
@@ -985,7 +997,11 @@ pub fn fit_panel_fe_time(
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {
-            2.0 * (1.0 - t_dist.cdf(result.tvalues[i].abs()))
+            crate::distribution::student_t_probability(
+                &t_dist,
+                result.tvalues[i],
+                yss_sci_contract::hypothesis::Alternative::TwoSided,
+            )
         } else {
             result.pvalues[i]
         };
@@ -1253,7 +1269,11 @@ pub fn fit_panel_fe_twoway(
     let t_dist =
         StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel FE StudentsT: {}", e))?;
     let const_t = const_coef / const_std_err;
-    let const_p = 2.0 * (1.0 - t_dist.cdf(const_t.abs()));
+    let const_p = crate::distribution::student_t_probability(
+        &t_dist,
+        const_t,
+        yss_sci_contract::hypothesis::Alternative::TwoSided,
+    );
     let t_crit = t_dist.inverse_cdf(0.975);
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
@@ -1281,7 +1301,11 @@ pub fn fit_panel_fe_twoway(
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {
-            2.0 * (1.0 - t_dist.cdf(result.tvalues[i].abs()))
+            crate::distribution::student_t_probability(
+                &t_dist,
+                result.tvalues[i],
+                yss_sci_contract::hypothesis::Alternative::TwoSided,
+            )
         } else {
             result.pvalues[i]
         };

@@ -49,7 +49,12 @@ fn t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64> {
         return Err(failed());
     }
     if delta == 0. {
-        return probability(StudentsT::new(0., 1., df).map_err(|_| parameter())?.sf(t));
+        let distribution = StudentsT::new(0., 1., df).map_err(|_| parameter())?;
+        return probability(crate::distribution::student_t_probability(
+            &distribution,
+            t,
+            yss_sci_contract::hypothesis::Alternative::Greater,
+        ));
     }
     if t < 0. {
         return probability(1. - t_tail(-t, df, -delta, control)?);

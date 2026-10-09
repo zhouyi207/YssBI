@@ -321,9 +321,11 @@ pub fn run(
             let lower_stat = finite((mean - lower_bound) / se)?;
             let upper_stat = finite((mean - upper_bound) / se)?;
             control.check()?;
-            let lower_p = dist.sf(lower_stat);
+            let lower_p =
+                crate::distribution::student_t_probability(&dist, lower_stat, Alternative::Greater);
             control.check()?;
-            let upper_p = dist.cdf(upper_stat);
+            let upper_p =
+                crate::distribution::student_t_probability(&dist, upper_stat, Alternative::Less);
             control.check()?;
             let p_value = lower_p.max(upper_p).clamp(0.0, 1.0);
             Ok(ClassicalTestResult {
@@ -471,12 +473,8 @@ fn finish_t(
     let statistic = finite(estimate / standard_error)?;
     let distribution = StudentsT::new(0.0, 1.0, df).map_err(|_| failed())?;
     control.check()?;
-    let p_value = match alternative {
-        Alternative::TwoSided => 2.0 * (1.0 - distribution.cdf(statistic.abs())),
-        Alternative::Greater => 1.0 - distribution.cdf(statistic),
-        Alternative::Less => distribution.cdf(statistic),
-    }
-    .clamp(0.0, 1.0);
+    let p_value = crate::distribution::student_t_probability(&distribution, statistic, alternative)
+        .clamp(0.0, 1.0);
     control.check()?;
     let alternative = match alternative {
         Alternative::TwoSided => "two-sided",

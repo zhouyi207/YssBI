@@ -223,7 +223,11 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
         let cv_1 = t_dist.inverse_cdf(0.01);
         let cv_5 = t_dist.inverse_cdf(0.05);
         let cv_10 = t_dist.inverse_cdf(0.10);
-        let p_val = t_dist.cdf(test_statistic);
+        let p_val = crate::distribution::student_t_probability(
+            &t_dist,
+            test_statistic,
+            yss_sci_contract::hypothesis::Alternative::Less,
+        );
         (cv_1, cv_5, cv_10, p_val, true)
     } else {
         let cv_1 = mackinnon_critical_value(reg, n_obs, 0);
@@ -260,7 +264,11 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
         let t_val = coef / se;
         let dist = StudentsT::new(0.0, 1.0, df_resid as f64)
             .unwrap_or_else(|_| StudentsT::new(0.0, 1.0, 1.0).unwrap());
-        let p_val = 2.0 * (1.0 - dist.cdf(t_val.abs()));
+        let p_val = crate::distribution::student_t_probability(
+            &dist,
+            t_val,
+            yss_sci_contract::hypothesis::Alternative::TwoSided,
+        );
         let t_crit = dist.inverse_cdf(0.975);
         let ci_lower = coef - t_crit * se;
         let ci_upper = coef + t_crit * se;
