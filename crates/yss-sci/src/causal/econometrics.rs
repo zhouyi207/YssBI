@@ -468,6 +468,7 @@ pub fn sur(
     validate(&responses[0], predictors, control)?;
     let mut designs = Vec::with_capacity(m);
     let mut errors = Vec::with_capacity(m);
+    let mut response_scales = Vec::with_capacity(m);
     let mut offsets = vec![0usize];
     for (i, indices) in equation_predictors.iter().enumerate() {
         control.check()?;
@@ -485,14 +486,33 @@ pub fn sur(
             .map(|&j| predictors[j].clone())
             .collect::<Vec<_>>();
         let design = Design::new(&xs, n, constant, true, true, control)?;
-        let (beta, _) = least_squares(&design.x, &responses[i], None, control)?;
-        errors.push(
-            responses[i]
-                .iter()
-                .zip(fitted(&design.x, &beta))
-                .map(|(y, f)| y - f)
-                .collect::<Vec<_>>(),
-        );
+        let mut scale = 0.0_f64;
+        for (row, value) in responses[i].iter().enumerate() {
+            if row.is_multiple_of(256) {
+                control.check()?;
+            }
+            scale = scale.max(value.abs());
+        }
+        if scale == 0.0 {
+            scale = 1.0;
+        }
+        let mut residuals = responses[i]
+            .iter()
+            .map(|value| value / scale)
+            .collect::<Vec<_>>();
+        let (beta, _) = least_squares(&design.x, &residuals, None, control)?;
+        for (row, (residual, fitted)) in residuals
+            .iter_mut()
+            .zip(fitted(&design.x, &beta))
+            .enumerate()
+        {
+            if row.is_multiple_of(256) {
+                control.check()?;
+            }
+            *residual = finite(*residual - fitted)?;
+        }
+        errors.push(residuals);
+        response_scales.push(scale);
         offsets.push(
             offsets[i]
                 .checked_add(design.x.ncols())
@@ -500,69 +520,113 @@ pub fn sur(
         );
         designs.push(design);
     }
-    let sigma = Mat::from_fn(m, m, |i, j| {
-        errors[i]
-            .iter()
-            .zip(&errors[j])
-            .map(|(a, b)| a * b / n as f64)
-            .sum()
-    });
-    let precision = inverse(&sigma)?;
-    let width = offsets[m];
-    let mut gram = Mat::zeros(width, width);
-    let mut rhs = Col::zeros(width);
+    let mut sigma = Mat::zeros(m, m);
     for a in 0..m {
-        for b in 0..m {
-            control.check()?;
-            let xa = &designs[a].x;
-            let xb = &designs[b].x;
-            for j in 0..xa.ncols() {
-                rhs[offsets[a] + j] +=
-                    precision[(a, b)] * (0..n).map(|i| xa[(i, j)] * responses[b][i]).sum::<f64>();
-                for k in 0..xb.ncols() {
-                    gram[(offsets[a] + j, offsets[b] + k)] =
-                        precision[(a, b)] * (0..n).map(|i| xa[(i, j)] * xb[(i, k)]).sum::<f64>();
+        for b in 0..=a {
+            let mut covariance = 0.0;
+            for (row, (ea, eb)) in errors[a].iter().zip(&errors[b]).enumerate() {
+                if row.is_multiple_of(256) {
+                    control.check()?;
+                }
+                covariance += ea * eb / n as f64;
+            }
+            sigma[(a, b)] = finite(covariance)?;
+            sigma[(b, a)] = covariance;
+        }
+    }
+    drop(errors);
+    let width = offsets[m];
+    // Per-equation response coordinates keep the residual precision finite;
+    // restoring units before this solve can overflow even for finite output.
+    let (beta, covariance) = {
+        let precision = inverse(&sigma)?;
+        let mut gram = Mat::zeros(width, width);
+        let mut rhs = Col::zeros(width);
+        for a in 0..m {
+            for b in 0..m {
+                let xa = &designs[a].x;
+                let xb = &designs[b].x;
+                for row in 0..n {
+                    if row.is_multiple_of(256) {
+                        control.check()?;
+                    }
+                    let response = responses[b][row] / response_scales[b];
+                    for j in 0..xa.ncols() {
+                        let weighted = precision[(a, b)] * xa[(row, j)];
+                        rhs[offsets[a] + j] += weighted * response;
+                        for k in 0..xb.ncols() {
+                            gram[(offsets[a] + j, offsets[b] + k)] += weighted * xb[(row, k)];
+                        }
+                    }
                 }
             }
         }
-    }
-    let covariance = inverse(&gram)?;
-    let beta = covariance.as_ref() * rhs.as_ref();
+        let covariance = inverse(&gram)?;
+        let beta = covariance.as_ref() * rhs.as_ref();
+        (beta.iter().copied().collect::<Vec<_>>(), covariance)
+    };
     let mut jacobian = Mat::zeros(width, width);
-    let mut equations = vec![];
+    let mut terms = Vec::with_capacity(width);
     for i in 0..m {
         control.check()?;
         let start = offsets[i];
         let p = offsets[i + 1] - start;
-        let b = (0..p).map(|j| beta[start + j]).collect::<Vec<_>>();
-        let cov = Mat::from_fn(p, p, |j, k| covariance[(start + j, start + k)]);
-        let predicted = fitted(&designs[i].x, &b);
-        let residuals = responses[i]
-            .iter()
-            .zip(&predicted)
-            .map(|(y, f)| y - f)
-            .collect();
         let j = designs[i].raw_jacobian();
         for a in 0..p {
             for b in 0..p {
-                jacobian[(start + a, start + b)] = j[(a, b)];
+                jacobian[(start + a, start + b)] = finite(j[(a, b)] * response_scales[i])?;
             }
         }
-        let (b, cov) = designs[i].raw(&b, Some(cov));
-        let mut terms = if constant {
-            vec!["intercept".into()]
-        } else {
-            vec![]
-        };
+        if constant {
+            terms.push("intercept".into());
+        }
         terms.extend(equation_predictors[i].iter().map(|j| format!("x{}", j + 1)));
+    }
+    let (raw_beta, covariance) = transform(&beta, Some(covariance), &jacobian);
+    let covariance = covariance.expect("SUR coefficient covariance");
+    for i in 0..width {
+        control.check()?;
+        finite(raw_beta[i])?;
+        for j in 0..width {
+            finite(covariance[(i, j)])?;
+        }
+    }
+    let mut coefficients =
+        coefficient_table(&raw_beta, terms, Some(&covariance), None)?.into_iter();
+    let mut equations = Vec::with_capacity(m);
+    for i in 0..m {
+        control.check()?;
+        let start = offsets[i];
+        let end = offsets[i + 1];
+        let mut predicted = fitted(&designs[i].x, &beta[start..end]);
+        let mut residuals = Vec::with_capacity(n);
+        for (row, (value, response)) in predicted.iter_mut().zip(&responses[i]).enumerate() {
+            if row.is_multiple_of(256) {
+                control.check()?;
+            }
+            *value = finite(*value * response_scales[i])?;
+            residuals.push(finite(response - *value)?);
+        }
         equations.push(SurEquation {
             predictors: equation_predictors[i].iter().map(|j| j + 1).collect(),
-            coefficients: coefficient_table(&b, terms, cov.as_ref(), None)?,
+            coefficients: coefficients.by_ref().take(end - start).collect(),
             fitted: predicted,
             residuals,
         });
     }
-    let covariance = jacobian.as_ref() * covariance.as_ref() * jacobian.transpose();
+    for a in 0..m {
+        control.check()?;
+        for b in 0..=a {
+            let covariance = finite(
+                sigma[(a, b)]
+                    * response_scales[a].max(response_scales[b])
+                    * response_scales[a].min(response_scales[b]),
+            )?;
+            sigma[(a, b)] = covariance;
+            sigma[(b, a)] = covariance;
+        }
+    }
+    control.check()?;
     Ok(SurResult {
         observations: n,
         equations,

@@ -513,6 +513,17 @@ correction mean directly without another observation vector. Large and small
 response-unit regressions retain fitted/residual units, selection facts and the
 existing independent sigma/rho reference.
 
+SUR normalizes each equation's response before the first-stage residual covariance
+and block GLS solve. The existing design coordinate maps include those response
+scales and project the complete coefficient covariance once; equation tables use
+that same covariance, including its cross-equation entries. Initial residual buffers
+and solve workspaces are released before output projection. Error covariance and
+fitted/residual values retain original equation units, with controlled scans and
+finite-output checks. Large residual-product and mixed subnormal/large equation-unit
+regressions retain the independent coefficient, covariance and inference references.
+The [two-step SUR contract](https://www.stata.com/manuals/rsureg.pdf) uses the sample
+size as the residual-covariance divisor and rejects singular residual systems.
+
 `causal::treatment` reuses controlled Logit and OLS for nearest-neighbour propensity
 matching with replacement, normalized Hájek IPW, RA and AIPW. Matching includes exact
 distance ties and rejects caliper failures instead of changing the estimand by

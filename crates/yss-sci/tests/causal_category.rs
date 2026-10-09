@@ -661,6 +661,116 @@ fn selection_and_frontier_match_probit_and_likelihood_references() {
 }
 
 #[test]
+fn sur_response_units_keep_large_residual_covariance_finite() {
+    check_sur_response_units([5e153, 5e153]);
+}
+
+#[test]
+fn sur_response_units_keep_subnormal_equation_covariance_identified() {
+    let result = check_sur_response_units([1e-155, 1e153]);
+    assert!(result.error_covariance[0][0].is_subnormal());
+    assert!(result.error_covariance[0][0] > 0.0);
+    for j in 0..result.equations[0].coefficients.len() {
+        assert!(result.coefficient_covariance[j][j].is_subnormal());
+        assert!(result.coefficient_covariance[j][j] > 0.0);
+    }
+}
+
+fn check_sur_response_units(scales: [f64; 2]) -> SurResult {
+    let f = fixture();
+    let d = &f["sur"];
+    let responses = matrix(&d["responses"]);
+    let predictors = matrix(&d["predictors"]);
+    let selections = [vec![0, 1], vec![0, 2]];
+    let baseline =
+        econometrics::sur(&responses, &predictors, &selections, true, &control()).unwrap();
+    let responses = responses
+        .iter()
+        .zip(scales)
+        .map(|(values, scale)| values.iter().map(|value| value * scale).collect())
+        .collect::<Vec<_>>();
+    let result = econometrics::sur(&responses, &predictors, &selections, true, &control())
+        .expect("SUR covariance and inference are finite in these equation units");
+    let reference_coefficients = vector(&d["coefficients"]);
+    let reference_covariance = matrix(&d["covariance"]);
+    assert_eq!(result.observations, baseline.observations);
+    assert_eq!(result.equations.len(), baseline.equations.len());
+    let mut offset = 0;
+    let mut coefficient_scales = Vec::new();
+    for ((equation, baseline), scale) in
+        result.equations.iter().zip(&baseline.equations).zip(scales)
+    {
+        assert_eq!(equation.predictors, baseline.predictors);
+        assert_eq!(equation.coefficients.len(), baseline.coefficients.len());
+        for (j, (actual, baseline)) in equation
+            .coefficients
+            .iter()
+            .zip(&baseline.coefficients)
+            .enumerate()
+        {
+            let axis = offset + j;
+            let standard_error = reference_covariance[axis][axis].sqrt();
+            assert_eq!(actual.term, baseline.term);
+            assert!(actual.estimate.is_finite());
+            close(actual.estimate / scale, reference_coefficients[axis], 1e-8);
+            close(actual.standard_error.unwrap() / scale, standard_error, 1e-8);
+            close(
+                actual.statistic.unwrap(),
+                reference_coefficients[axis] / standard_error,
+                1e-8,
+            );
+            close(actual.p_value.unwrap(), baseline.p_value.unwrap(), 1e-8);
+            for (actual, baseline) in actual
+                .confidence_interval
+                .unwrap()
+                .into_iter()
+                .zip(baseline.confidence_interval.unwrap())
+            {
+                close(actual / scale, baseline, 1e-8);
+            }
+            coefficient_scales.push(scale);
+        }
+        offset += equation.coefficients.len();
+        assert_eq!(equation.fitted.len(), baseline.fitted.len());
+        assert_eq!(equation.residuals.len(), baseline.residuals.len());
+        for (actual, baseline) in equation
+            .fitted
+            .iter()
+            .chain(&equation.residuals)
+            .zip(baseline.fitted.iter().chain(&baseline.residuals))
+        {
+            assert!(actual.is_finite());
+            close(actual / scale, *baseline, 1e-8);
+        }
+    }
+    let check_covariance = |actual: &[Vec<f64>], reference: &[Vec<f64>], scales: &[f64]| {
+        assert_eq!(actual.len(), reference.len());
+        for (i, (actual, reference)) in actual.iter().zip(reference).enumerate() {
+            assert_eq!(actual.len(), reference.len());
+            for (j, (&actual, &reference)) in actual.iter().zip(reference).enumerate() {
+                assert!(actual.is_finite());
+                close(
+                    actual / scales[i].max(scales[j]) / scales[i].min(scales[j]),
+                    reference,
+                    1e-8,
+                );
+            }
+        }
+    };
+    check_covariance(
+        &result.error_covariance,
+        &matrix(&d["error_covariance"]),
+        &scales,
+    );
+    check_covariance(
+        &result.coefficient_covariance,
+        &reference_covariance,
+        &coefficient_scales,
+    );
+    result
+}
+
+#[test]
 fn sur_equation_designs_and_synthetic_preperiod_fit_match_references() {
     let f = fixture();
     let d = &f["sur"];
