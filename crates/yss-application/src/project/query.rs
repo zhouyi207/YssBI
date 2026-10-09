@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use thiserror::Error;
 
@@ -11,6 +11,9 @@ use yss_project::ProjectOperationError;
 use yss_project::{ProjectError, ProjectIndex, RevealProjectResourceRequest, resolve_reveal_path};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry::normalize_existing_path;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Error)]
 pub enum ProjectQueryApplicationError {
@@ -26,8 +29,6 @@ pub enum ProjectQueryApplicationError {
     Catalog(#[from] crate::graph::catalog::CatalogQueryApplicationError),
     #[error("database catalog could not be read")]
     Database(#[from] yss_database_runtime::error::DatabaseError),
-    #[error("project resource reference is invalid")]
-    InvalidResourceReference,
     #[error("project resource was not found")]
     ResourceNotFound,
     #[error("captured application session changed during project query")]
@@ -209,19 +210,17 @@ impl ApplicationState {
 
     pub fn reveal_project_resource(
         &self,
-        kind: String,
-        resource_id: String,
-    ) -> Result<String, ProjectQueryApplicationError> {
-        let captured = self.capture_session()?;
-        let request = RevealProjectResourceRequest::from_parts(&kind, resource_id)
-            .map_err(|_| ProjectQueryApplicationError::InvalidResourceReference)?;
+        project_instance_id: ProjectInstanceId,
+        request: RevealProjectResourceRequest,
+    ) -> Result<PathBuf, ProjectQueryApplicationError> {
+        let captured = self.capture_project_session(&project_instance_id)?;
         let path = resolve_reveal_path(captured.project(), request)?;
         if !path.exists() {
             return Err(ProjectQueryApplicationError::ResourceNotFound);
         }
         self.revalidate_captured_session(&captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
-        Ok(dunce::simplified(&path).to_string_lossy().into_owned())
+        Ok(dunce::simplified(&path).to_path_buf())
     }
 
     fn capture_project_session(

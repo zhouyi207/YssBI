@@ -1,12 +1,8 @@
 //! Chart file menus capture the original typed resource path and Project revision.
-use super::{super::Workbench, ResourceAction};
-use gpui::{AppContext, ClipboardItem, Context, ParentElement, Window};
-use gpui_component::{
-    WindowExt,
-    button::ButtonVariant,
-    dialog::DialogButtonProps,
-    input::{Input, InputState},
-};
+use super::{super::Workbench, ResourceAction, names::NameForm};
+use gpui::{ClipboardItem, Context, Entity, Window};
+use gpui_component::{WindowExt, button::ButtonVariant};
+
 use yss_chart_document::ChartResourcePath;
 use yss_project_history::ResourceDocumentPatch;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -58,47 +54,31 @@ impl Workbench {
             .and_then(gpui::WeakEntity::upgrade)
             .is_some_and(|chart| chart.read(cx).dirty())
         {
-            self.error = Some("请先保存该图表的配置，再修改图表资源。".into());
+            self.error = Some(crate::text::translate(
+                "native.workbench.saveChartBeforeEditing",
+            ));
             cx.notify();
             return;
         }
         match action {
             ResourceAction::Rename => {
-                let input =
-                    cx.new(|cx| InputState::new(window, cx).default_value(target.name.clone()));
-                let owner = cx.entity().downgrade();
-                window.open_dialog(cx, move |dialog, _, _| {
-                    let input = input.clone();
-                    let value = input.clone();
-                    let owner = owner.clone();
-                    let target = target.clone();
-                    dialog
-                        .title("重命名图表")
-                        .button_props(
-                            DialogButtonProps::default()
-                                .ok_text("重命名")
-                                .cancel_text("取消")
-                                .show_cancel(true),
-                        )
-                        .child(Input::new(&input))
-                        .on_ok(move |_, window, cx| {
-                            let name = value.read(cx).value().to_string();
-                            if name.trim().is_empty() {
-                                return false;
-                            }
-                            owner
-                                .update(cx, |view, cx| {
-                                    view.mutate_chart_resource(
-                                        target.clone(),
-                                        action,
-                                        Some(name),
-                                        window,
-                                        cx,
-                                    )
-                                })
-                                .unwrap_or(false)
-                        })
-                });
+                self.resource_name_dialog(
+                    crate::text::translate("contextMenu.dialog.renameChartTitle"),
+                    target.name.clone(),
+                    crate::text::translate("contextMenu.dialog.renameSubmit"),
+                    window,
+                    cx,
+                    move |view, name, form, window, cx| {
+                        view.mutate_chart_resource(
+                            target.clone(),
+                            action,
+                            Some(name),
+                            Some(form),
+                            window,
+                            cx,
+                        );
+                    },
+                );
             }
             ResourceAction::Delete => {
                 let owner = cx.entity().downgrade();
@@ -114,14 +94,21 @@ impl Workbench {
                         .cancel_text("取消")
                         .on_ok(move |_, window, cx| {
                             let _ = owner.update(cx, |view, cx| {
-                                view.mutate_chart_resource(target.clone(), action, None, window, cx)
+                                view.mutate_chart_resource(
+                                    target.clone(),
+                                    action,
+                                    None,
+                                    None,
+                                    window,
+                                    cx,
+                                )
                             });
                             true
                         })
                 });
             }
             ResourceAction::Duplicate => {
-                self.mutate_chart_resource(target, action, None, window, cx);
+                self.mutate_chart_resource(target, action, None, None, window, cx);
             }
             ResourceAction::CopyPath => {}
         }
@@ -131,6 +118,7 @@ impl Workbench {
         target: ChartTarget,
         action: ResourceAction,
         name: Option<String>,
+        form: Option<Entity<NameForm>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -163,7 +151,7 @@ impl Workbench {
                     captured.path.clone(),
                     captured.revision,
                     name.ok_or_else(|| anyhow::anyhow!("chart name missing"))?,
-                    captured.lifecycle,
+                    0,
                 )?,
                 ResourceAction::Duplicate => services.application.duplicate_chart_resource(
                     captured.project,
@@ -210,9 +198,18 @@ impl Workbench {
                         .as_ref()
                         .is_none_or(|project| project.identity != target.project)
                 {
+                    NameForm::expired(form.as_ref(), cx);
                     return;
                 }
                 view.busy = false;
+                view.finish_resource_name(
+                    form,
+                    result
+                        .is_none()
+                        .then_some("native.workbench.chartResourceFailed"),
+                    window,
+                    cx,
+                );
                 if let Some(path) = result {
                     if matches!(action, ResourceAction::Delete)
                         || (matches!(action, ResourceAction::Rename) && path.is_some())
@@ -222,8 +219,6 @@ impl Workbench {
                     if let Some(path) = path {
                         view.open_chart(path, None, window, cx);
                     }
-                } else {
-                    view.error = Some("图表资源未修改，请刷新目录后检查实际状态。".into());
                 }
                 view.refresh_project(window, cx);
                 view.persist_layout(cx);

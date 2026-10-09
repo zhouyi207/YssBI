@@ -2,8 +2,10 @@
 mod authored;
 mod charts;
 mod databases;
+mod files;
 mod names;
 mod operations;
+mod reveal;
 use super::Workbench;
 pub(super) use authored::AuthoredKind;
 use gpui::{Context, Window};
@@ -78,7 +80,16 @@ impl Workbench {
                 }
                 view.busy = false;
                 match result {
-                    Ok(Some(path)) => view.open_graph(path, window, cx),
+                    Ok(Some(path)) => {
+                        view.expand_project_category(
+                            match kind {
+                                GraphResourceKind::EventGraph => "project.eventGraphs",
+                                GraphResourceKind::FunctionGraph => "project.functionGraphs",
+                            },
+                            cx,
+                        );
+                        view.open_graph(path, window, cx);
+                    }
                     Ok(None) => {
                         view.error = Some("图已创建，请刷新项目目录后打开。".into());
                         view.refresh_project(window, cx);

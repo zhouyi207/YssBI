@@ -239,20 +239,10 @@ impl ActivityPanel {
                     cx.listener(|_, _, _, cx| cx.emit(ActivityEvent::RefreshResources)),
                 )
             });
-        if matches!(
-            item,
-            ActivityItem::EventGraph { .. }
-                | ActivityItem::FunctionGraph { .. }
-                | ActivityItem::Database { .. }
-                | ActivityItem::Chart { .. }
-        ) {
-            row.context_menu(move |menu, _, _| {
-                menu::resource_menu(menu, owner.clone(), expected_menu.clone(), index)
-            })
-            .into_any_element()
-        } else {
-            row.into_any_element()
-        }
+        row.context_menu(move |menu, _, _| {
+            menu::resource_menu(menu, owner.clone(), expected_menu.clone(), index)
+        })
+        .into_any_element()
     }
 }
 

@@ -1,3 +1,4 @@
+mod categories;
 mod drag;
 mod nodes;
 mod render;
@@ -32,11 +33,13 @@ pub enum ActivityEvent {
     OpenDatabase(String),
     OpenChart(String),
     ChartResource(String, super::resources::ResourceAction),
+    DocumentResource(String, super::resources::ResourceAction),
+    MindResource(String, super::resources::ResourceAction),
+    RevealResource(yss_project::RevealProjectResourceRequest),
     InspectNode(NodeTypeId),
     CreateNode(NodeCreation),
     GraphResource(String, super::resources::ResourceAction),
     DatabaseResource(String, super::resources::ResourceAction),
-    ImportData,
     OpenConversation(String),
     RenameConversation(String, String),
     Tool(String),

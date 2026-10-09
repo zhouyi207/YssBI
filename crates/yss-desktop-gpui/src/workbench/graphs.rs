@@ -85,7 +85,7 @@ impl Workbench {
                 return;
             }
         };
-        let request = OpenGraphRequest::new(identity.clone(), graph_path, lifecycle, "zh-CN");
+        let request = OpenGraphRequest::new(identity.clone(), graph_path, 0, "zh-CN");
         let task = self.services.run(move |services| {
             Ok(OpenedGraph::from_open(
                 services.application.open_graph(request)?,

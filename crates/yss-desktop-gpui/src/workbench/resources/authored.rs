@@ -1,11 +1,8 @@
 //! One native name dialog; each resource retains its original typed creation command.
+use super::names::NameForm;
 use crate::workbench::Workbench;
-use gpui::{AppContext, Context, Window, prelude::*};
-use gpui_component::{
-    WindowExt,
-    dialog::DialogButtonProps,
-    input::{Input, InputState},
-};
+use gpui::{Context, Entity, Window};
+
 use yss_project::{
     docs::{DocCommand, DocSnapshot},
     minds::{MindCommand, MindSnapshot},
@@ -19,9 +16,9 @@ pub(in crate::workbench) enum AuthoredKind {
     Chart,
 }
 enum CreatedFile {
-    Document(DocSnapshot),
-    Mind(MindSnapshot),
-    Chart(crate::charts::query::ChartRead),
+    Document(Option<DocSnapshot>),
+    Mind(Option<MindSnapshot>),
+    Chart(Option<crate::charts::query::ChartRead>),
 }
 
 impl Workbench {
@@ -38,63 +35,37 @@ impl Workbench {
             return;
         }
         let project = project.identity.clone();
-        let lifecycle = self.lifecycle;
         let (title, default_name) = match kind {
-            AuthoredKind::Document => ("新建 Markdown 文档", "新建文档"),
-            AuthoredKind::Mind => ("新建思维导图", "新建思维导图"),
-            AuthoredKind::Chart => ("新建图表", "新建图表"),
+            AuthoredKind::Document => (
+                crate::text::translate("native.workbench.newMarkdown"),
+                crate::text::translate("documents.newDoc"),
+            ),
+            AuthoredKind::Mind => (
+                crate::text::translate("documents.newMind"),
+                crate::text::translate("documents.newMind"),
+            ),
+            AuthoredKind::Chart => (
+                crate::text::translate("menubar.newChart"),
+                crate::text::translate("menubar.newChart"),
+            ),
         };
-        let input = cx.new(|cx| InputState::new(window, cx).default_value(default_name));
-        let owner = cx.entity().downgrade();
-        window.open_dialog(cx, move |dialog, _, _| {
-            let input = input.clone();
-            let value = input.clone();
-            let owner = owner.clone();
-            let project = project.clone();
-            dialog
-                .title(title)
-                .button_props(
-                    DialogButtonProps::default()
-                        .ok_text("创建")
-                        .cancel_text("取消")
-                        .show_cancel(true),
-                )
-                .child(Input::new(&input))
-                .on_ok(move |_, window, cx| {
-                    let name = value.read(cx).value().to_string();
-                    if name.trim().is_empty() {
-                        return false;
-                    }
-                    owner
-                        .update(cx, |view, cx| {
-                            if view.lifecycle != lifecycle
-                                || view.busy
-                                || view.closing
-                                || view
-                                    .project
-                                    .as_ref()
-                                    .is_none_or(|current| current.identity != project)
-                            {
-                                return false;
-                            }
-                            view.create_authored_file(
-                                kind,
-                                project.clone(),
-                                name.clone(),
-                                window,
-                                cx,
-                            );
-                            true
-                        })
-                        .unwrap_or(false)
-                })
-        });
+        self.resource_name_dialog(
+            title,
+            default_name,
+            crate::text::translate("contextMenu.dialog.createSubmit"),
+            window,
+            cx,
+            move |view, name, form, window, cx| {
+                view.create_authored_file(kind, project.clone(), name, form, window, cx);
+            },
+        );
     }
     fn create_authored_file(
         &mut self,
         kind: AuthoredKind,
         project: ProjectInstanceId,
         name: String,
+        form: Entity<NameForm>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -123,10 +94,10 @@ impl Workbench {
                         _ => None,
                     });
                 owner.publish_resource(receipt);
-                let path = yss_chart_document::ChartResourcePath::parse(
-                    &path.ok_or_else(|| anyhow::anyhow!("created chart path unavailable"))?,
-                )?;
-                crate::charts::query::read(services, project, path).map(CreatedFile::Chart)
+                let read = path
+                    .and_then(|path| yss_chart_document::ChartResourcePath::parse(&path).ok())
+                    .and_then(|path| crate::charts::query::read(services, project, path).ok());
+                Ok(CreatedFile::Chart(read))
             }
             AuthoredKind::Document => {
                 let receipt = services.application.apply_doc_command(
@@ -135,9 +106,7 @@ impl Workbench {
                     DocCommand::Create { name },
                 )?;
                 owner.publish_resource(receipt.mutation);
-                Ok(CreatedFile::Document(receipt.snapshot.ok_or_else(
-                    || anyhow::anyhow!("created document snapshot unavailable"),
-                )?))
+                Ok(CreatedFile::Document(receipt.snapshot))
             }
             AuthoredKind::Mind => {
                 let receipt = services.application.apply_mind_command(
@@ -146,9 +115,7 @@ impl Workbench {
                     MindCommand::Create { name },
                 )?;
                 owner.publish_resource(receipt.mutation);
-                Ok(CreatedFile::Mind(receipt.snapshot.ok_or_else(|| {
-                    anyhow::anyhow!("created mind snapshot unavailable")
-                })?))
+                Ok(CreatedFile::Mind(receipt.snapshot))
             }
         });
         cx.spawn_in(window, async move |view, cx| {
@@ -160,18 +127,46 @@ impl Workbench {
                         .as_ref()
                         .is_none_or(|current| current.identity != expected)
                 {
+                    NameForm::expired(Some(&form), cx);
                     return;
                 }
                 view.busy = false;
+                view.finish_resource_name(
+                    Some(form),
+                    result
+                        .is_none()
+                        .then_some("native.workbench.fileCreateFailed"),
+                    window,
+                    cx,
+                );
+                if result.is_some() {
+                    view.expand_project_category(
+                        match kind {
+                            AuthoredKind::Document => "project.docs",
+                            AuthoredKind::Mind => "project.minds",
+                            AuthoredKind::Chart => "project.charts",
+                        },
+                        cx,
+                    );
+                }
                 match result {
-                    Some(CreatedFile::Document(snapshot)) => view
+                    Some(CreatedFile::Document(Some(snapshot))) => view
                         .install_document(snapshot, window, cx)
                         .update(cx, |document, cx| document.focus_editor(window, cx)),
-                    Some(CreatedFile::Mind(snapshot)) => view
+                    Some(CreatedFile::Mind(Some(snapshot))) => view
                         .install_mind(snapshot, window, cx)
                         .update(cx, |mind, cx| mind.focus_canvas(window, cx)),
-                    None => view.error = Some("无法创建文件，请检查名称和当前项目。".into()),
-                    Some(CreatedFile::Chart(read)) => view
+                    None => {}
+                    Some(
+                        CreatedFile::Document(None)
+                        | CreatedFile::Mind(None)
+                        | CreatedFile::Chart(None),
+                    ) => {
+                        view.error = Some(crate::text::translate(
+                            "native.workbench.resourceCommittedUnavailable",
+                        ));
+                    }
+                    Some(CreatedFile::Chart(Some(read))) => view
                         .install_chart(read, window, cx)
                         .update(cx, |chart, cx| chart.focus_chart(window, cx)),
                 }

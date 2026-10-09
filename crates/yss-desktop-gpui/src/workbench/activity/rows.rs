@@ -29,7 +29,7 @@ impl ActivityPanel {
                     }
                     true
                 }
-                ActivityRowContent::Message { .. } => true,
+                ActivityRowContent::Message { .. } => self.document.panel_id != "project",
                 ActivityRowContent::Item(ActivityItem::Conversation {
                     title, session_id, ..
                 }) => {

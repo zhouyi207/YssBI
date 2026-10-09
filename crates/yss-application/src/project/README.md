@@ -70,6 +70,7 @@ GUI 的数据库列表请求还必须携带项目身份与已取得索引的 pub
 复用 Project 的 `validate_project_index_version`，使用声明快照捕获的 authority generation，避免把另一次
 发布的数据拼入首次项目加载。插件没有索引基线时显式使用同会话的当前声明快照，继续重验原读取依据。
 项目路径查询也要求调用方项目身份，规范化在 Application 完成；原生宿主使用返回的路径投影，不重复访问文件系统做同一次规范化。
+`reveal_project_resource` 接收捕获的 `ProjectInstanceId` 和类型化 `RevealProjectResourceRequest`，复用 Project 的资源路径解析与存在性检查，并在返回前重验应用会话。结果保留原生 `PathBuf`，由宿主交给平台文件管理器，不经字符串损失性转换。
 
 工作台保存逐一提交当前脏 Graph 和 Chart，使用各资源的保存回执；项目事件流交付生命周期、资源提交和索引失效事实，不再另设整项目保存命令及无消费者的保存完成事件。
 

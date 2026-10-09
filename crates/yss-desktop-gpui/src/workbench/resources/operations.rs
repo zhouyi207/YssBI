@@ -1,7 +1,7 @@
 //! Graph resource commands capture the existing Project version before a menu/dialog is used.
 use super::super::Workbench;
-use super::ResourceAction;
-use gpui::{ClipboardItem, Context, Window};
+use super::{ResourceAction, names::NameForm};
+use gpui::{ClipboardItem, Context, Entity, Window};
 use gpui_component::{WindowExt, button::ButtonVariant};
 use yss_application::graph::open::OpenGraphRequest;
 use yss_graph_document::GraphResourcePath;
@@ -52,7 +52,9 @@ impl Workbench {
             if graph.is_running()
                 && matches!(action, ResourceAction::Rename | ResourceAction::Delete)
             {
-                self.error = Some("请先停止该图的运行，再修改图资源。".into());
+                self.error = Some(crate::text::translate(
+                    "native.workbench.stopGraphBeforeEditing",
+                ));
                 cx.notify();
                 return;
             }
@@ -71,7 +73,7 @@ impl Workbench {
         match action {
             ResourceAction::Rename => self.rename_graph_dialog(target, window, cx),
             ResourceAction::Duplicate => {
-                self.mutate_graph_resource(target, action, None, window, cx)
+                self.mutate_graph_resource(target, action, None, None, window, cx)
             }
             ResourceAction::CopyPath => {
                 cx.write_to_clipboard(ClipboardItem::new_string(target.path.as_str().into()))
@@ -92,7 +94,14 @@ impl Workbench {
                         .cancel_text("取消")
                         .on_ok(move |_, window, cx| {
                             let _ = owner.update(cx, |view, cx| {
-                                view.mutate_graph_resource(target.clone(), action, None, window, cx)
+                                view.mutate_graph_resource(
+                                    target.clone(),
+                                    action,
+                                    None,
+                                    None,
+                                    window,
+                                    cx,
+                                )
                             });
                             true
                         })
@@ -106,6 +115,7 @@ impl Workbench {
         target: GraphTarget,
         action: ResourceAction,
         name: Option<String>,
+        form: Option<Entity<NameForm>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -125,7 +135,9 @@ impl Workbench {
             && graph.read(cx).is_running()
             && matches!(action, ResourceAction::Rename | ResourceAction::Delete)
         {
-            self.error = Some("请先停止该图的运行，再修改图资源。".into());
+            self.error = Some(crate::text::translate(
+                "native.workbench.stopGraphBeforeEditing",
+            ));
             cx.notify();
             return;
         }
@@ -142,7 +154,7 @@ impl Workbench {
                     request.path.clone(),
                     request.revision,
                     name.unwrap_or_default(),
-                    request.lifecycle,
+                    0,
                     OperationId::new(),
                 )?,
                 ResourceAction::Duplicate => application.duplicate_graph_resource(
@@ -160,42 +172,41 @@ impl Workbench {
                 )?,
                 ResourceAction::CopyPath => unreachable!(),
             };
-            let path = receipt.deltas.iter().find_map(|delta| {
-                if let yss_project_history::ResourceDocumentPatch::ResourceLifecycle(patch) =
-                    &delta.payload
-                    && match action {
-                        ResourceAction::Rename => patch
-                            .before
-                            .as_ref()
-                            .is_some_and(|before| before.path.as_ref() == request.path.as_str()),
-                        ResourceAction::Duplicate => patch.before.is_none(),
-                        _ => false,
-                    }
-                {
-                    patch
-                        .after
-                        .as_ref()
-                        .filter(|after| after.path.as_ref() != request.path.as_str())
-                        .map(|after| after.path.to_string())
-                } else {
-                    None
+            let path = match action {
+                ResourceAction::Rename => receipt
+                    .moves
+                    .iter()
+                    .find(|moved| moved.from.as_ref() == request.path.as_str())
+                    .map(|moved| moved.to.to_string()),
+                ResourceAction::Duplicate => {
+                    receipt
+                        .deltas
+                        .iter()
+                        .find_map(|delta| match &delta.payload {
+                            yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
+                                patch,
+                            ) if patch.before.is_none() => {
+                                patch.after.as_ref().map(|after| after.path.to_string())
+                            }
+                            _ => None,
+                        })
                 }
-            });
+                _ => None,
+            };
             publisher.publish_resource(receipt);
-            let projection = if matches!(action, ResourceAction::Rename) {
-                path.as_ref()
-                    .map(|path| {
-                        application
-                            .open_graph(OpenGraphRequest::new(
-                                request.project.clone(),
-                                GraphResourcePath::new(path.clone())?,
-                                request.lifecycle,
-                                "zh-CN",
-                            ))
-                            .map(crate::project::OpenedGraph::from_open)
-                            .map_err(anyhow::Error::from)
-                    })
-                    .transpose()
+            let language = crate::text::locale();
+            let projection = if matches!(action, ResourceAction::Rename)
+                && let Some(path) = &path
+            {
+                application
+                    .open_graph(OpenGraphRequest::new(
+                        request.project.clone(),
+                        GraphResourcePath::new(path.clone())?,
+                        0,
+                        language,
+                    ))
+                    .map(|receipt| Some(crate::project::OpenedGraph::from_open(receipt)))
+                    .map_err(anyhow::Error::from)
             } else {
                 Ok(None)
             };
@@ -214,9 +225,18 @@ impl Workbench {
                         .as_ref()
                         .is_none_or(|project| project.identity != target.project)
                 {
+                    NameForm::expired(form.as_ref(), cx);
                     return;
                 }
                 view.busy = false;
+                view.finish_resource_name(
+                    form,
+                    result
+                        .is_err()
+                        .then_some("native.workbench.graphResourceFailed"),
+                    window,
+                    cx,
+                );
                 match result {
                     Ok((path, projection)) => match action {
                         ResourceAction::Rename => {
@@ -242,9 +262,9 @@ impl Workbench {
                                     if let Some(path) = path {
                                         view.open_graph(path, window, cx);
                                     }
-                                    view.error = Some(
-                                        "图已重命名，视图未能恢复，请从项目目录重新打开。".into(),
-                                    );
+                                    view.error = Some(crate::text::translate(
+                                        "native.workbench.renamedGraphUnavailable",
+                                    ));
                                 }
                             }
                         }
@@ -264,11 +284,7 @@ impl Workbench {
                         }
                         ResourceAction::CopyPath => {}
                     },
-                    Err(_) => {
-                        view.error =
-                            Some("图资源未能修改，资源可能已变化，请刷新目录后重试。".into());
-                        view.refresh_project(window, cx);
-                    }
+                    Err(_) => view.refresh_project(window, cx),
                 }
                 view.persist_layout(cx);
                 cx.notify();

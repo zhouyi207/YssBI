@@ -110,7 +110,10 @@ impl Workbench {
                 // Import can commit before a failed session refresh; re-query the actual owners in either case.
                 view.rebind_session(window, cx);
                 match &imported {
-                    Ok(id) => view.open_database(id.clone(), None, window, cx),
+                    Ok(id) => {
+                        view.expand_project_category("project.data", cx);
+                        view.open_database(id.clone(), None, window, cx);
+                    }
                     Err(key) => view.error = Some(crate::text::translate(key)),
                 }
                 let _ = dialog.update(cx, |dialog, cx| {

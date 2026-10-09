@@ -2857,7 +2857,22 @@
       "deleteDatabase": "删除数据库",
       "deleteGraph": "删除图",
       "rename": "重命名…",
-      "searchConversations": "搜索会话"
+      "searchConversations": "搜索会话",
+      "resourceOperationUnconfirmed": "资源操作未完成，提交可能已生效，请检查目录后再试。",
+      "graphResourceFailed": "图资源未能修改，资源可能已变化，请刷新目录后重试。",
+      "stopGraphBeforeEditing": "请先停止该图的运行，再修改图资源。",
+      "renameGraph": "重命名图",
+      "fileCreateFailed": "无法创建文件，请检查名称和当前项目。",
+      "newMarkdown": "新建 Markdown 文档",
+      "resourceChanged": "资源状态已改变或正在忙碌，请关闭后重试。",
+      "saveFileBeforeManaging": "请先保存文档或思维导图，再重命名、复制或删除。",
+      "revealResourceFailed": "无法定位资源，请刷新项目后重试。",
+      "fileResourceFailed": "文件操作失败，请检查名称或刷新项目后重试。",
+      "renameDatabase": "重命名数据库",
+      "chartResourceFailed": "图表资源未修改，请刷新目录后检查实际状态。",
+      "renamedGraphUnavailable": "图已重命名，视图未能恢复，请从项目目录重新打开。",
+      "resourceCommittedUnavailable": "资源操作已完成，但暂时无法打开编辑器。请从项目列表重新打开。",
+      "saveChartBeforeEditing": "请先保存该图表的配置，再修改图表资源。"
     },
     "logs": {
       "copyMessage": "复制消息",

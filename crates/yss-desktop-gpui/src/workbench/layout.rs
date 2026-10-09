@@ -175,7 +175,7 @@ impl Workbench {
                 match services.application.open_graph(OpenGraphRequest::new(
                     identity.clone(),
                     path,
-                    lifecycle,
+                    0,
                     "zh-CN",
                 )) {
                     Ok(receipt) => graphs.push(OpenedGraph::from_open(receipt)),

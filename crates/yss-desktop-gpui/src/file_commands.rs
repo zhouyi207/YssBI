@@ -14,6 +14,11 @@ use yss_project_model::{
 };
 
 pub(crate) trait NativeFile: FileContent {
+    fn read(
+        services: &ApplicationServices,
+        project: ProjectInstanceId,
+        path: FilePath<Self>,
+    ) -> Result<FileSnapshot<Self>, FileApplicationError>;
     fn apply_command(
         services: &ApplicationServices,
         project: ProjectInstanceId,
@@ -22,6 +27,13 @@ pub(crate) trait NativeFile: FileContent {
 }
 
 impl NativeFile for DocDocument {
+    fn read(
+        services: &ApplicationServices,
+        project: ProjectInstanceId,
+        path: FilePath<Self>,
+    ) -> Result<FileSnapshot<Self>, FileApplicationError> {
+        services.application.read_doc(project, path)
+    }
     fn apply_command(
         services: &ApplicationServices,
         project: ProjectInstanceId,
@@ -34,6 +46,13 @@ impl NativeFile for DocDocument {
 }
 
 impl NativeFile for MindDocument {
+    fn read(
+        services: &ApplicationServices,
+        project: ProjectInstanceId,
+        path: FilePath<Self>,
+    ) -> Result<FileSnapshot<Self>, FileApplicationError> {
+        services.application.read_mind(project, path)
+    }
     fn apply_command(
         services: &ApplicationServices,
         project: ProjectInstanceId,

@@ -1,13 +1,8 @@
 //! Database menus capture the index declaration before the original typed use case runs.
-use super::{super::Workbench, ResourceAction};
+use super::{super::Workbench, ResourceAction, names::NameForm};
 use crate::project::DesktopProject;
-use gpui::{AppContext, ClipboardItem, Context, Window, div, prelude::*};
-use gpui_component::{
-    WindowExt,
-    button::ButtonVariant,
-    dialog::DialogButtonProps,
-    input::{Input, InputState},
-};
+use gpui::{ClipboardItem, Context, Entity, Window};
+use gpui_component::{WindowExt, button::ButtonVariant};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
 #[derive(Clone)]
@@ -50,7 +45,7 @@ impl Workbench {
             }
             ResourceAction::Rename => self.rename_database_dialog(target, window, cx),
             ResourceAction::Duplicate => {
-                self.mutate_database_resource(target, action, None, window, cx)
+                self.mutate_database_resource(target, action, None, None, window, cx)
             }
             ResourceAction::Delete => {
                 let owner = cx.entity().downgrade();
@@ -70,6 +65,7 @@ impl Workbench {
                                     target.clone(),
                                     action,
                                     None,
+                                    None,
                                     window,
                                     cx,
                                 )
@@ -86,64 +82,31 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.error = None;
-        let input = cx.new(|cx| InputState::new(window, cx).default_value(target.name.clone()));
-        let owner = cx.entity().downgrade();
-        window.open_dialog(cx, move |dialog, _, cx| {
-            let busy = owner
-                .upgrade()
-                .is_none_or(|owner| owner.read(cx).is_closing(cx));
-            let error = owner
-                .upgrade()
-                .and_then(|owner| owner.read(cx).error.clone());
-            let mut body = div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .child(Input::new(&input).disabled(busy));
-            if let Some(error) = error {
-                body = body.child(div().text_xs().child(error));
-            }
-            let value = input.clone();
-            let target = target.clone();
-            let confirm = owner.clone();
-            let cancel = owner.clone();
-            dialog
-                .title("重命名数据库")
-                .close_button(false)
-                .overlay_closable(false)
-                .button_props(
-                    DialogButtonProps::default()
-                        .ok_text("重命名")
-                        .show_cancel(true)
-                        .cancel_text("取消"),
-                )
-                .child(body)
-                .on_ok(move |_, window, cx| {
-                    let name = value.read(cx).value().trim().to_owned();
-                    if !name.is_empty() {
-                        let _ = confirm.update(cx, |view, cx| {
-                            view.mutate_database_resource(
-                                target.clone(),
-                                ResourceAction::Rename,
-                                Some(name),
-                                window,
-                                cx,
-                            )
-                        });
-                    }
-                    false
-                })
-                .on_cancel(move |_, _, cx| {
-                    cancel.upgrade().is_none_or(|owner| !owner.read(cx).busy)
-                })
-        });
+        self.resource_name_dialog(
+            crate::text::translate("native.workbench.renameDatabase"),
+            target.name.clone(),
+            crate::text::translate("contextMenu.dialog.renameSubmit"),
+            window,
+            cx,
+            move |view, name, form, window, cx| {
+                view.mutate_database_resource(
+                    target.clone(),
+                    ResourceAction::Rename,
+                    Some(name),
+                    Some(form),
+                    window,
+                    cx,
+                );
+            },
+        );
     }
+
     fn mutate_database_resource(
         &mut self,
         target: DatabaseTarget,
         action: ResourceAction,
         name: Option<String>,
+        form: Option<Entity<NameForm>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -201,9 +164,10 @@ impl Workbench {
             } else {
                 false
             };
+            let language = crate::text::locale();
             let index = services
                 .application
-                .query_project_index(request.project.clone(), "zh-CN", true)
+                .query_project_index(request.project.clone(), language, true)
                 .ok()
                 .map(|snapshot| DesktopProject::new(request.project, snapshot));
             Ok((success, created, index))
@@ -217,10 +181,17 @@ impl Workbench {
                         .as_ref()
                         .is_none_or(|project| project.identity != target.project)
                 {
+                    NameForm::expired(form.as_ref(), cx);
                     return;
                 }
                 view.busy = false;
                 let (success, created, index) = result.unwrap_or((false, None, None));
+                view.finish_resource_name(
+                    form,
+                    (!success).then_some("native.workbench.resourceOperationUnconfirmed"),
+                    window,
+                    cx,
+                );
                 if let Some(index) = index {
                     view.install_project_index(index, window, cx);
                 }
@@ -231,7 +202,7 @@ impl Workbench {
                 }
                 if success {
                     match action {
-                        ResourceAction::Rename => window.close_dialog(cx),
+                        ResourceAction::Rename => {}
                         ResourceAction::Duplicate => {
                             if let Some(id) = created {
                                 view.open_database(id, None, window, cx);
@@ -254,8 +225,6 @@ impl Workbench {
                         }
                         ResourceAction::CopyPath => {}
                     }
-                } else {
-                    view.error = Some("资源操作未完成，提交可能已生效，请检查目录后再试。".into());
                 }
                 view.persist_layout(cx);
                 cx.notify();

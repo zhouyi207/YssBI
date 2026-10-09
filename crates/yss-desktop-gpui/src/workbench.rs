@@ -50,9 +50,11 @@ pub(crate) use activity::{ActivityDrag, ActivityDrop};
 use activity::{ActivityEvent, ActivityPanel};
 use details::DetailsPanel;
 use logs::LogsPanel;
+use menus::MenuCommand;
 use output::OutputPanel;
 use problems::ProblemsPanel;
 use results::ResultsPanel;
+use yss_graph_document::GraphResourceKind;
 
 pub struct Workbench {
     services: Arc<NativeServices>,
@@ -281,13 +283,29 @@ impl Workbench {
                     ActivityEvent::ChartResource(path, action) => {
                         view.chart_resource_action(path.clone(), *action, window, cx)
                     }
+                    ActivityEvent::DocumentResource(path, action) => view.file_resource_action(
+                        resources::AuthoredKind::Document,
+                        path.clone(),
+                        *action,
+                        window,
+                        cx,
+                    ),
+                    ActivityEvent::MindResource(path, action) => view.file_resource_action(
+                        resources::AuthoredKind::Mind,
+                        path.clone(),
+                        *action,
+                        window,
+                        cx,
+                    ),
+                    ActivityEvent::RevealResource(request) => {
+                        view.reveal_resource(request.clone(), window, cx)
+                    }
                     ActivityEvent::GraphResource(path, action) => {
                         view.graph_resource_action(path.clone(), *action, window, cx)
                     }
                     ActivityEvent::DatabaseResource(id, action) => {
                         view.database_resource_action(id.clone(), *action, window, cx)
                     }
-                    ActivityEvent::ImportData => view.import_dialog(window, cx),
                     ActivityEvent::OpenConversation(id) => {
                         view.open_conversation(id.clone(), window, cx)
                     }
@@ -297,7 +315,20 @@ impl Workbench {
                     ActivityEvent::Tool(id) if id == "newConversation" => {
                         view.new_conversation(window, cx)
                     }
-                    ActivityEvent::Tool(_) => {}
+                    ActivityEvent::Tool(id) => {
+                        let command = match id.as_str() {
+                            "newEventGraph" => MenuCommand::NewGraph(GraphResourceKind::EventGraph),
+                            "newFunctionGraph" => {
+                                MenuCommand::NewGraph(GraphResourceKind::FunctionGraph)
+                            }
+                            "newChart" => MenuCommand::NewChart,
+                            "newMind" => MenuCommand::NewMind,
+                            "newDoc" => MenuCommand::NewDocument,
+                            "importData" => MenuCommand::ImportData,
+                            _ => return,
+                        };
+                        view.dispatch_menu(&command, window, cx);
+                    }
                     ActivityEvent::InspectNode(node_type) => {
                         if view.is_closing(cx) {
                             return;

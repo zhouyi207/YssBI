@@ -406,6 +406,17 @@
 - 完整 tooltip、物理拖放/IME、跨项目/关闭来源/忙碌目标、后台图诊断更新、资源读写并发、关闭失败面板后重开及多窗口仍需专项人工验收。临时预览不提交，不增加 UI 单元测试；公共侧栏和菜单缺口继续保持开放。
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；16 个 Rust 文件局部格式、文案键（工作区 28、提交内容 21，英文沿用工作区目录）、两份文档的元信息/相对链接（275/270）、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。后端接口与类型未改动，不重复后端测试或全工作区检查。本批累计审查 160/265 项。
 
+### 项目分类工具与资源菜单
+
+- 已逐项阅读 ProjectActivityPanelController、SidebarProjectTab、buildProjectSidebarContextMenuSections，连同项目操作 hook、资源分派和名称表单契约。复用 ActivityPanel 原目录、PopupMenu、统一名称草稿与现有 Application/Project 用例，不迁入第二份控制器状态或资源列表。
+- 六类资源提供打开、定位文件、重命名和危险删除；Doc/Mind 补齐复制与复制路径，原生已有的数据库复制/复制路径继续保留。分类工具与右键菜单直接取原 tools，新建或导入成功才展开对应分类；移除独立的数据导入按钮，空分类只保留标题及工具。
+- 名称提交期间拒绝重复确认和取消，失败保留输入与错误，继续编辑清除错误，提交成功才关闭。Doc/Mind 沿原 FileCommand 和捕获的版本提交；原编辑器暂时锁定，重命名沿原实体更新路径及快照，保持 DockArea 位置。未保存文件先要求显式保存，与原生 Chart 一致，不在资源管理操作中隐式保存。
+- 图打开/恢复和 Graph/Chart 重命名使用 Project 已有的内部生命周期序号分配入口；工作台 lifecycle 仅保护迟到 UI 交付，避免打开或失败请求后重试被判为重放。图重命名从回执 moves 读取实际路径，保留原图会话、脏状态和画布投影。
+- 文件定位接口改为捕获 ProjectInstanceId、使用 RevealProjectResourceRequest 并返回 PathBuf；Project 继续解析资源路径，Application 校验原项目和实际文件，原生宿主接纳后调用平台定位。删除无消费者的旧字符串参数与错误分支。
+- Linux/X11 临时实际窗口验收：六类菜单和分类入口；文档重名失败后改名成功且编辑器实体不变；未保存文档的复制被拒绝，显式保存后复制保留正文；文档删除取消/确认、Mind 重命名/复制/删除；新建名称非法时保留输入并可重试；分类“＋”新建后展开；Graph 名称冲突后重试保留节点、常量和脏标记；Chart 非法名称后重试、数据库重命名及目录更新通过。临时预览和数据不进入提交。
+- L2 定向业务验证：`cargo test -p yss-application --lib project::query::tests::resource_reveal_uses_the_requested_project_and_an_existing_native_path -- --exact`（1 项），`cargo test -p yss-project --lib resource_reveal::tests::`（3 项），`cargo test -p yss-project --lib file_resources::tests::authored_document_lifecycle_preserves_unsaved_content_and_rejects_stale_edits -- --exact`（1 项），`cargo test -p yss-resource-lifecycle --lib tests::abandoned_internal_owner_does_not_reuse_its_issued_token -- --exact`（1 项）通过，保护原项目/路径、文件版本及内部序号分配。
+- 工作区和独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`，Application 通过 `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings`。三份文档的元信息/相对链接（278/273）、模块索引（59 crates / 240 条依赖声明）、双语文案键（52/39，英文沿用工作区目录）、22 个 Rust 文件局部格式和 `git diff --check` 通过；不运行全工作区验证，不添加 UI 单元测试。Linux 定位已实际调起 Dolphin 并传入所选文件路径，系统窗口的可视选中、Windows/macOS、项目切换期间迟到提交和外部并发修改的完整交互验收继续开放。本批累计审查 163/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -688,12 +699,12 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/project-explorer/internal/ui/activity/ProjectActivityPanelController.tsx](../../react/src/modules/project-explorer/internal/ui/activity/ProjectActivityPanelController.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/project-explorer/internal/ui/activity/ProjectActivityPanelController.tsx](../../react/src/modules/project-explorer/internal/ui/activity/ProjectActivityPanelController.tsx) | 迁移：Activity 意图与原资源用例分层 | 共用名称草稿/错误与项目交付保护；Doc/Mind 接入原 FileCommand 和编辑器实体，后端负责提交与版本 | Linux 名称失败重试、复制/删除与原实体保留已核对；并发和跨平台专项开放 |
 | [modules/project-explorer/internal/ui/activity/SidebarDataRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarDataRow.tsx) | 迁移：复用原目录描述和数据库编辑器 | activity/resources 展示读取失败/打开按钮；原目录索引与 activity/drag 保留数据库绑定；首次失败保留原编辑器并可重试 | 拖放/首次失败/恢复已核对；完整 tooltip、并发与平台验收开放 |
-| [modules/project-explorer/internal/ui/activity/SidebarFileRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarFileRow.tsx) | 迁移：统一资源行，复用图投影与打开入口 | activity/resources/drag 覆盖五类文件图标、高亮、打开、图诊断与 Event/Function 拖放；Doc/Mind 资源菜单待控制器批次 | 六类打开、图标/诊断更新、函数自调用拒绝已核对；菜单缺口及平台专项开放 |
-| [modules/project-explorer/internal/ui/activity/SidebarProjectTab.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarProjectTab.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx) | 优化：直接匹配 Rust ActivityItem，无需组件转发层 | activity/render 以原行索引分派 resources，保留深度、资源身份和选中；类别工具与菜单控制器仍独立审查 | 六类资源分派与高亮已核对；剩余控制器及公共外壳开放 |
-| [modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections.tsx](../../react/src/modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/project-explorer/internal/ui/activity/SidebarFileRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarFileRow.tsx) | 迁移：统一资源行，复用图投影与打开入口 | activity/resources/drag 覆盖五类文件图标、高亮、打开、图诊断与 Event/Function 拖放；Doc/Mind 菜单见项目资源菜单批次 | 六类打开、图标/诊断更新、函数自调用拒绝已核对；平台专项开放 |
+| [modules/project-explorer/internal/ui/activity/SidebarProjectTab.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarProjectTab.tsx) | 优化：复用原 Activity 目录和工作台入口 | 分类 tools 直接派发原新建/导入命令，成功展开原分类；保留原行选中及虚拟列表 | 分类菜单、＋新建和目录选中已核对；公共 Activity 外壳继续独立审查 |
+| [modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx) | 优化：直接匹配 Rust ActivityItem，无需组件转发层 | activity/render 以原行索引分派 resources，保留深度、资源身份和选中；分类工具及菜单复用同一目录 | 六类资源分派、高亮与分类工具已核对；公共外壳继续独立审查 |
+| [modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections.tsx](../../react/src/modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections.tsx) | 迁移：复用 PopupMenu 与原目录身份保护 | 六类资源打开/定位/重命名/复制/删除和分类操作；危险删除分组，不另存菜单业务模型 | Linux 资源操作与失败输入保留已核对；平台文件定位和专项并发验收开放 |
 | [modules/project-explorer/internal/ui/picker/DeleteProjectConfirmDialog.tsx](../../react/src/modules/project-explorer/internal/ui/picker/DeleteProjectConfirmDialog.tsx) | 无需迁移已移除的项目回收站入口 | 当前项目入口只提供打开/新建/另存为/关闭；没有项目文件删除动作，不新增确认状态或删除授权 | 已审查；无需对应原生组件 |
 | [modules/project-explorer/internal/ui/picker/NewProjectModal.tsx](../../react/src/modules/project-explorer/internal/ui/picker/NewProjectModal.tsx) | 复用原生项目表单并接入进度 | projects/form 使用路径组件校验、系统目录选择、原生命周期与部分提交恢复；提交保留输入，失败返回同一表单；默认目录只回填未编辑父目录 | 代码已覆盖；真实交互待验收 |
 | [modules/project-explorer/internal/ui/picker/ProjectLibrary.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectLibrary.tsx) | 以欢迎页和最近项目替代独立项目库 | projects/recent 直接消费 registry 记录，ListState 拥有搜索/键盘/虚拟列表；选择校验原记录与代次，不复刻收藏和排序草稿 | 替代入口及重试已实现；真实交互待验收 |
