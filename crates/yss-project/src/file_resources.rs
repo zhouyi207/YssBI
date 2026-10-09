@@ -204,15 +204,15 @@ fn snapshot<T: ResourceFile>(
     project: &ProjectInstanceId,
     path: &FilePath<T>,
     document: &FileState<T>,
-) -> Result<FileSnapshot<T>, ProjectOperationError> {
-    Ok(FileSnapshot {
+) -> FileSnapshot<T> {
+    FileSnapshot {
         project_instance_id: project.clone(),
         path: path.clone(),
         version: document.version.clone(),
         kind: T::KIND,
         content: document.content().clone(),
         dirty: document.dirty(),
-    })
+    }
 }
 
 impl ProjectState {
@@ -272,11 +272,8 @@ impl ProjectState {
         let data = self.project_data.read().unwrap();
         let document = T::files(&data)
             .get(path)
-            .cloned()
             .ok_or_else(|| error("document not found"))?;
-        drop(data);
-        drop(publication);
-        snapshot(project, path, &document)
+        Ok(snapshot(project, path, document))
     }
 
     /// GUI and automation both edit the same current document; only Save writes its body.
@@ -286,18 +283,39 @@ impl ProjectState {
         operation_id: OperationId,
         command: FileCommand<T>,
     ) -> Result<FileCommandResult<T>, ProjectOperationError> {
-        let captured = self.capture_writer_snapshot(project)?;
+        let source_path = match &command {
+            FileCommand::Create { .. } => None,
+            FileCommand::Edit { path, .. }
+            | FileCommand::Save { path, .. }
+            | FileCommand::Discard { path, .. }
+            | FileCommand::Rename { path, .. }
+            | FileCommand::Duplicate { path, .. }
+            | FileCommand::Delete { path, .. } => Some(path),
+        };
+        let needs_names = matches!(
+            &command,
+            FileCommand::Create { .. } | FileCommand::Rename { .. } | FileCommand::Duplicate { .. }
+        );
+        let (session, authority_generation, (source, resident_paths)) =
+            self.capture_writer_input(project, |data| {
+                let source = source_path.and_then(|path| T::files(data).get(path).cloned());
+                let resident_paths = if needs_names {
+                    T::files(data).keys().cloned().collect::<Vec<_>>()
+                } else {
+                    vec![]
+                };
+                (source, resident_paths)
+            })?;
         let reservation = self.reserve_resource_operation(project, operation_id)?;
-        let lease = self.filesystem().acquire(captured.session.root.clone())?;
+        let lease = self.filesystem().acquire(session.root.clone())?;
         let empty_context = context(
             self,
-            captured.session.clone(),
+            session.clone(),
             operation_id,
             BTreeMap::new(),
             BTreeSet::new(),
         );
-        self.validate_writer_context(&empty_context, captured.authority_generation)?;
-        let data = &captured.data;
+        self.validate_writer_context(&empty_context, authority_generation)?;
         let mut expected = BTreeMap::new();
         let mut absent = BTreeSet::new();
         let mut writes = Vec::new();
@@ -310,24 +328,22 @@ impl ProjectState {
             | FileCommand::Rename { path, version, .. }
             | FileCommand::Duplicate { path, version, .. }
             | FileCommand::Delete { path, version } => {
-                let current = T::files(data)
-                    .get(path)
-                    .ok_or_else(|| error("document not found"))?;
+                let current = source.ok_or_else(|| error("document not found"))?;
                 if &current.version != version {
                     return Err(ProjectOperationError::ResourceRevisionConflict {
                         message: "document edit version changed".into(),
                     });
                 }
                 expected.insert(key(path), version.revision);
-                Some((path.clone(), current.clone()))
+                Some((path.clone(), current))
             }
         };
         let unique_path = |name: &str| -> Result<FilePath<T>, ProjectOperationError> {
             let requested = ResourceName::parse(name).map_err(ProjectOperationError::from)?;
-            let names = scan_file_paths::<T>(captured.session.root.as_path())
+            let names = scan_file_paths::<T>(session.root.as_path())
                 .map_err(error)?
                 .iter()
-                .chain(T::files(data).keys())
+                .chain(resident_paths.iter())
                 .map(|path| ResourceName::parse(path.name()).map_err(error))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(FilePath::<T>::from_name(&allocate_unique_resource_name(
@@ -346,7 +362,7 @@ impl ProjectState {
                 .map_err(error)?;
                 absent.insert(key(&path));
                 writes.push(write(&path, &document)?);
-                result_snapshot = Some(snapshot(project, &path, &document)?);
+                result_snapshot = Some(snapshot(project, &path, &document));
                 FilePatch::Put { path, document }
             }
             FileCommand::Duplicate { name, .. } => {
@@ -359,7 +375,7 @@ impl ProjectState {
                     FileState::<T>::new(body, uuid::Uuid::new_v4().to_string()).map_err(error)?;
                 absent.insert(key(&path));
                 writes.push(write(&path, &document)?);
-                result_snapshot = Some(snapshot(project, &path, &document)?);
+                result_snapshot = Some(snapshot(project, &path, &document));
                 FilePatch::Put { path, document }
             }
             command => {
@@ -376,12 +392,12 @@ impl ProjectState {
                         FilePatch::Remove { path }
                     }
                     FileCommand::Discard { .. } => {
-                        match read_file_content(captured.session.root.as_path(), &path) {
+                        match read_file_content(session.root.as_path(), &path) {
                             Ok(body) => {
                                 document.replace_content(body).map_err(error)?;
                                 document.saved_hash =
                                     document.content().fingerprint().map_err(error)?;
-                                result_snapshot = Some(snapshot(project, &path, &document)?);
+                                result_snapshot = Some(snapshot(project, &path, &document));
                                 FilePatch::Put { path, document }
                             }
                             Err(ProjectError::Io(cause))
@@ -397,10 +413,10 @@ impl ProjectState {
                             ResourceName::parse(&name).map_err(ProjectOperationError::from)?;
                         let target = FilePath::<T>::from_name(&name);
                         if target != path {
-                            if scan_file_paths::<T>(captured.session.root.as_path())
+                            if scan_file_paths::<T>(session.root.as_path())
                                 .map_err(error)?
                                 .iter()
-                                .chain(T::files(data).keys())
+                                .chain(resident_paths.iter())
                                 .any(|other| {
                                     other != &path
                                         && ResourceName::parse(other.name())
@@ -417,7 +433,7 @@ impl ProjectState {
                                 to: target.as_str().into(),
                             });
                         }
-                        result_snapshot = Some(snapshot(project, &target, &document)?);
+                        result_snapshot = Some(snapshot(project, &target, &document));
                         if target == path {
                             FilePatch::Put { path, document }
                         } else {
@@ -441,7 +457,7 @@ impl ProjectState {
                                 document.replace_content(content).map_err(error)?;
                             }
                             FileCommand::Save { .. } => {
-                                if read_file_content(captured.session.root.as_path(), &path)
+                                if read_file_content(session.root.as_path(), &path)
                                     .map_err(error)?
                                     .fingerprint()
                                     .map_err(error)?
@@ -455,24 +471,18 @@ impl ProjectState {
                             }
                             _ => unreachable!(),
                         }
-                        result_snapshot = Some(snapshot(project, &path, &document)?);
+                        result_snapshot = Some(snapshot(project, &path, &document));
                         FilePatch::Put { path, document }
                     }
                 }
             }
         };
-        let context = context(
-            self,
-            captured.session.clone(),
-            operation_id,
-            expected,
-            absent,
-        );
+        let context = context(self, session.clone(), operation_id, expected, absent);
         if writes.is_empty() && matches!(&patch, FilePatch::Remove { .. }) {
             // Discarding resident edits must remain possible after external file removal.
-            self.validate_writer_authority(&context, captured.authority_generation)?;
+            self.validate_writer_authority(&context, authority_generation)?;
         } else {
-            self.validate_writer_context(&context, captured.authority_generation)?;
+            self.validate_writer_context(&context, authority_generation)?;
         }
         let mutation = if writes.is_empty() {
             self.apply_project_resource_document_patch(&context, T::patch(patch), None, vec![])?
@@ -483,7 +493,7 @@ impl ProjectState {
                 writes,
                 crate::project_writers::validate_document,
             )?;
-            self.validate_writer_context(&context, captured.authority_generation)?;
+            self.validate_writer_context(&context, authority_generation)?;
             let committed = prepared.commit()?;
             match self.apply_project_resource_document_patch(
                 &context,
@@ -616,8 +626,13 @@ pub(crate) fn external_changes<T: ResourceFile>(
     data: &ProjectData,
 ) -> Result<Vec<FilePatch<T>>, ProjectOperationError> {
     let incoming = load_files::<T>(root).map_err(error)?;
+    let removed = T::files(data)
+        .iter()
+        .filter(|(path, previous)| !incoming.contains_key(*path) && !previous.dirty())
+        .map(|(path, _)| FilePatch::Remove { path: path.clone() })
+        .collect::<Vec<_>>();
     let mut changes = Vec::new();
-    for (path, mut document) in incoming.clone() {
+    for (path, mut document) in incoming {
         if let Some(previous) = T::files(data).get(&path) {
             if previous.dirty() || previous.content() == document.content() {
                 continue;
@@ -630,11 +645,7 @@ pub(crate) fn external_changes<T: ResourceFile>(
         }
         changes.push(FilePatch::Put { path, document });
     }
-    for (path, previous) in T::files(data) {
-        if !incoming.contains_key(path) && !previous.dirty() {
-            changes.push(FilePatch::Remove { path: path.clone() });
-        }
-    }
+    changes.extend(removed);
     Ok(changes)
 }
 #[cfg(test)]

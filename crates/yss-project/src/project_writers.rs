@@ -159,6 +159,28 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
     ) -> Result<WriterSnapshot, ProjectOperationError> {
+        let (session, authority_generation, (data, graph_resource_revisions, chart_revisions)) =
+            self.capture_writer_input(expected_project_instance_id, |data| {
+                (
+                    data.clone(),
+                    self.graph_resource_revisions.read().unwrap().clone(),
+                    self.chart_revisions.read().unwrap().clone(),
+                )
+            })?;
+        Ok(WriterSnapshot {
+            session,
+            data,
+            graph_resource_revisions,
+            chart_revisions,
+            authority_generation,
+        })
+    }
+
+    pub(crate) fn capture_writer_input<T>(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        capture: impl FnOnce(&ProjectData) -> T,
+    ) -> Result<(ProjectSession, u64, T), ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
             return Err(ProjectOperationError::StaleProjectLifecycle {
@@ -171,18 +193,8 @@ impl ProjectState {
                 message: "project changed during writer snapshot".into(),
             });
         }
-        let data = self.project_data.read().unwrap().clone();
-        let graph_resource_revisions = self.graph_resource_revisions.read().unwrap().clone();
-        let chart_revisions = self.chart_revisions.read().unwrap().clone();
-        let snapshot = WriterSnapshot {
-            session,
-            data,
-            graph_resource_revisions,
-            chart_revisions,
-            authority_generation: publication.authority_generation(),
-        };
-        drop(publication);
-        Ok(snapshot)
+        let data = self.project_data.read().unwrap();
+        Ok((session, publication.authority_generation(), capture(&data)))
     }
 
     pub(crate) fn validate_writer_authority(
