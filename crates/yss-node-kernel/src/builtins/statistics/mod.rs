@@ -94,6 +94,8 @@ pub(super) fn install(
                         | "yssbi.statistics.test.mcnemar"
                         | "yssbi.statistics.test.cmh"
                         | "yssbi.statistics.test.chisquare.crosstab"
+                        | "yssbi.statistics.test.binomial"
+                        | "yssbi.statistics.test.poisson"
                 ) {
                     6
                 } else if matches!(
@@ -103,12 +105,10 @@ pub(super) fn install(
                         | "yssbi.statistics.test.t.summary_input"
                         | "yssbi.statistics.test.z.mean"
                         | "yssbi.statistics.test.z.proportion"
-                        | "yssbi.statistics.test.binomial"
                         | "yssbi.statistics.test.proportion.two"
                         | "yssbi.statistics.test.chisquare.general"
                         | "yssbi.statistics.test.chisquare.goodness_of_fit"
                         | "yssbi.statistics.test.proportion.multiple"
-                        | "yssbi.statistics.test.poisson"
                         | "yssbi.statistics.test.equivalence"
                         | "yssbi.statistics.test.wilcoxon.one_sample"
                         | "yssbi.statistics.test.wilcoxon.paired"

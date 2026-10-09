@@ -625,6 +625,9 @@ order differs from the table's lexical order.
 For 2x2 Fisher tests, the statistic is the sample odds ratio `a*d/(b*c)`;
 when `b` or `c` is zero it is absent, with the exact p-value and cell counts
 retained. Zero odds with a positive denominator remain a defined zero statistic.
+Exact Binomial and Poisson tails include the observed count: `Greater` uses
+`P(X >= k)` and `Less` uses `P(X <= k)`. Zero counts and point-mass nulls
+(probability 0/1 or rate 0) respect the selected alternative.
 
 All four entrypoints also accept the caller's `ScientificExecutionControl`. Input,
 rank/tie, table and variance scans, exact binomial/Poisson/Fisher enumeration,

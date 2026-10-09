@@ -63,6 +63,48 @@ fn classical_admission_preserves_option_observation_and_computation_roles() {
 }
 
 #[test]
+fn discrete_adapters_preserve_inclusive_and_degenerate_exact_tails() {
+    for (id, values, parameter, null, alternative, expected) in [
+        (
+            "binomial",
+            [0.0, 0.0],
+            "null_probability",
+            0.5,
+            "greater",
+            1.0,
+        ),
+        ("binomial", [1.0, 0.0], "null_probability", 0.0, "less", 1.0),
+        (
+            "binomial",
+            [1.0, 0.0],
+            "null_probability",
+            1.0,
+            "greater",
+            1.0,
+        ),
+        ("poisson", [0.0, 0.0], "null_rate", 1.0, "greater", 1.0),
+        ("poisson", [1.0, 0.0], "null_rate", 0.0, "less", 1.0),
+    ] {
+        let result = run(
+            &format!("yssbi.statistics.test.{id}"),
+            &[("series", series(&values))],
+            &[
+                (parameter, number(null)),
+                ("alternative", string(alternative)),
+            ],
+            1,
+        )
+        .unwrap();
+        let p_value =
+            crate::builtins::numeric_input(Some(field(&result[0], "p_value").unwrap())).unwrap();
+        assert!(
+            (p_value - expected).abs() < 1e-12,
+            "{id}, {alternative}, null={null}: {p_value} != {expected}"
+        );
+    }
+}
+
+#[test]
 fn fisher_adapter_delivers_exact_result_with_unbounded_odds_ratio() {
     let result = run(
         "yssbi.statistics.test.fisher_exact",

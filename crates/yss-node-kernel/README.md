@@ -418,7 +418,8 @@ references do not create an unadmitted full-column string expansion. Count-table
 admits linear category indexes before constructing them, then uses actual row and
 column cardinalities for the dense table. These are conservative workspace
 estimates, not process RSS limits. Classical kernels use revision 6, except the
-paired t, McNemar, CMH and categorical independence kernels, which use revision 7;
+paired t, McNemar, CMH, categorical independence, exact Binomial and Poisson kernels,
+which use revision 7;
 Fisher exact uses revision 8.
 Item discrimination reuses the same Welch computation errors and uses revision 6.
 CMH exposure and outcome reuse the controlled scalar-column and binary numeric

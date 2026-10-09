@@ -585,16 +585,29 @@ fn binomial_p_value(
         return Err(invalid(Violation::DataOutOfRange));
     }
     if p == 0.0 {
-        return Ok(if successes == 0 { 1.0 } else { 0.0 });
+        return Ok(
+            if matches!(alternative, Alternative::Less) || successes == 0 {
+                1.0
+            } else {
+                0.0
+            },
+        );
     }
     if p == 1.0 {
-        return Ok(if successes == trials { 1.0 } else { 0.0 });
+        return Ok(
+            if matches!(alternative, Alternative::Greater) || successes == trials {
+                1.0
+            } else {
+                0.0
+            },
+        );
     }
     let distribution = Binomial::new(p, trials as u64).map_err(|_| failed())?;
     control.check()?;
     let value = match alternative {
         Alternative::Less => distribution.cdf(successes as u64),
-        Alternative::Greater => distribution.sf(successes.saturating_sub(1) as u64),
+        Alternative::Greater if successes == 0 => 1.0,
+        Alternative::Greater => distribution.sf((successes - 1) as u64),
         Alternative::TwoSided => {
             let observed = distribution.pmf(successes as u64);
             let mut sum = -0.0;
@@ -619,13 +632,20 @@ fn poisson_p_value(
     control: &ScientificExecutionControl,
 ) -> Result<f64, Error> {
     if mean == 0.0 {
-        return Ok(if observed == 0 { 1.0 } else { 0.0 });
+        return Ok(
+            if matches!(alternative, Alternative::Less) || observed == 0 {
+                1.0
+            } else {
+                0.0
+            },
+        );
     }
     let distribution = Poisson::new(mean).map_err(|_| failed())?;
     control.check()?;
     let p_value = match alternative {
         Alternative::Less => distribution.cdf(observed),
-        Alternative::Greater => distribution.sf(observed.saturating_sub(1)),
+        Alternative::Greater if observed == 0 => 1.0,
+        Alternative::Greater => distribution.sf(observed - 1),
         Alternative::TwoSided => {
             let observed_mass = distribution.pmf(observed);
             let limit = ((mean + 12.0 * mean.sqrt() + 100.0).ceil() as u64).max(observed);
