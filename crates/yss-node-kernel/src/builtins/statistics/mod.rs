@@ -86,7 +86,8 @@ pub(super) fn install(
                 "yssbi.statistics.iv.liml.summary" | "yssbi.statistics.panel.fit" => 11,
                 "yssbi.statistics.econometrics.panel.re"
                 | "yssbi.statistics.test.nonparametric.family" => 10,
-                "yssbi.statistics.econometrics.panel.between"
+                "yssbi.statistics.adf.test"
+                | "yssbi.statistics.econometrics.panel.between"
                 | "yssbi.statistics.econometrics.panel.fd"
                 | "yssbi.statistics.econometrics.panel.fe"
                 | "yssbi.statistics.logit.summary"
@@ -105,8 +106,7 @@ pub(super) fn install(
                 | "yssbi.statistics.test.brown_forsythe"
                 | "yssbi.statistics.var.summary"
                 | "yssbi.statistics.workflow.subgroup" => 9,
-                "yssbi.statistics.adf.test"
-                | "yssbi.statistics.diagnostic.breusch_pagan"
+                "yssbi.statistics.diagnostic.breusch_pagan"
                 | "yssbi.statistics.iv.2sls.fit"
                 | "yssbi.statistics.iv.liml.fit"
                 | "yssbi.statistics.meta.fixed_effect"
@@ -127,7 +127,9 @@ pub(super) fn install(
                 | "yssbi.statistics.workflow.mediation"
                 | "yssbi.statistics.workflow.moderated_mediation" => 8,
                 "yssbi.statistics.diagnostic.wald"
+                | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
+                | "yssbi.statistics.econometrics.panel.unit_root"
                 | "yssbi.statistics.logit.fit"
                 | "yssbi.statistics.meta.begg"
                 | "yssbi.statistics.meta.egger"

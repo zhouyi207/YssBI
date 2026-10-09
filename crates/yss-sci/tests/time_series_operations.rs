@@ -85,6 +85,83 @@ fn test_adf_preserves_drift_and_matches_mackinnon_reference() {
 }
 
 #[test]
+fn adf_requires_residual_degrees_and_valid_deterministic_terms() {
+    let values = [0., 1., 4., 2., 5., 3.];
+    for (sample, lags, constant, trend, statistic, standard_error) in [
+        (
+            &values[..4],
+            0,
+            true,
+            false,
+            -1.3121597027036949,
+            0.7327907262791404,
+        ),
+        (
+            &values[..5],
+            1,
+            false,
+            false,
+            0.47905316946566634,
+            0.9310227300423423,
+        ),
+        (
+            &values[..5],
+            0,
+            true,
+            true,
+            -2.44476765539977,
+            0.7136387162233372,
+        ),
+        (
+            &values[..6],
+            1,
+            true,
+            false,
+            -3.0542361089076304,
+            0.35485633404071315,
+        ),
+    ] {
+        // Independent exact-rational least squares; each regression has one residual degree.
+        let result = adf_test(sample, lags, constant, trend).unwrap();
+        assert!((result.test_statistic - statistic).abs() < 1e-11);
+        assert!((result.std_err_lagged - standard_error).abs() < 1e-11);
+        if result.use_t_distribution {
+            let expected = 0.5 + statistic.atan() / std::f64::consts::PI;
+            assert!((result.p_value - expected).abs() < 1e-12);
+            assert!((result.critical_value_5pct + 6.313751514675044).abs() < 1e-11);
+        }
+    }
+    let original = adf_test(&values[..4], 0, true, false).unwrap();
+    let scaled = values[..4]
+        .iter()
+        .map(|value| value * 1e-20)
+        .collect::<Vec<_>>();
+    let rescaled = adf_test(&scaled, 0, true, false).unwrap();
+    for (original, rescaled) in original
+        .regression_table
+        .iter()
+        .zip(&rescaled.regression_table)
+    {
+        assert!((original.t - rescaled.t).abs() < 1e-11);
+        assert!((original.p_value - rescaled.p_value).abs() < 1e-12);
+    }
+    for (sample, lags, constant, trend) in [
+        (&values[..4], 0, true, true),
+        (&values[..5], 1, true, false),
+        (&values[..6], 2, false, false),
+        (&values[..6], 0, false, true),
+    ] {
+        let outcome = std::panic::catch_unwind(|| adf_test(sample, lags, constant, trend));
+        assert!(
+            matches!(outcome, Ok(Err(_))),
+            "invalid ADF specification must fail without panicking: {outcome:?}"
+        );
+    }
+    let undefined = std::panic::catch_unwind(|| adf_test(&[1., 2., 4., 8.], 0, false, false));
+    assert!(matches!(undefined, Ok(Err(_))), "{undefined:?}");
+}
+
+#[test]
 fn test_vec_estimate_rejects_invalid_config() {
     let n = 80usize;
     let y = Mat::from_fn(n, 2, |i, j| {

@@ -1,6 +1,62 @@
 use super::*;
 
 #[test]
+fn adf_node_reports_saturated_regressions_as_scientific_failures() {
+    let id = "yssbi.statistics.adf.test";
+    let saturated = [0., 1., 4., 2.];
+    assert!(matches!(
+        run(
+            id,
+            &[("series", series(&saturated))],
+            &[("lags", int(0)), ("regression", string("trend"))],
+            1,
+        ),
+        Err(KernelError::ScientificFailure)
+    ));
+    let output = run(
+        id,
+        &[("series", series(&saturated))],
+        &[("lags", int(0)), ("regression", string("constant"))],
+        1,
+    )
+    .unwrap();
+    assert_eq!(field(&output[0], "observations").unwrap(), &int(3));
+    let p = super::super::super::numeric_input(Some(field(&output[0], "pValue").unwrap())).unwrap();
+    assert!((p - 0.2072839483021362).abs() < 1e-12);
+    assert!(matches!(
+        run(
+            id,
+            &[("series", series(&[1., 2., 4., 8.]))],
+            &[("lags", int(0)), ("regression", string("none"))],
+            1,
+        ),
+        Err(KernelError::ScientificFailure)
+    ));
+
+    let output = run(
+        id,
+        &[
+            ("series", series(&saturated)),
+            ("series", series(&[1., 1., 1., 1.])),
+        ],
+        &[("lags", int(0)), ("regression", string("trend"))],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(rows) = field(&output[0], "test_rows").unwrap() else {
+        panic!("ADF collection outcomes")
+    };
+    assert_eq!(rows.len(), 2);
+    for row in rows.iter() {
+        assert_eq!(field(row, "status").unwrap(), &string("failed"));
+    }
+    let RuntimeValue::List(tests) = field(&output[0], "tests").unwrap() else {
+        panic!("ADF collection tests")
+    };
+    assert!(tests.is_empty());
+}
+
+#[test]
 fn time_series_adapters_preserve_state_labels_and_enforce_alignment_and_budgets() {
     let id = "yssbi.statistics.timeseries.markov_prediction";
     let states = RuntimeValue::List(

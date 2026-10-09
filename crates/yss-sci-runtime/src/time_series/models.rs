@@ -126,5 +126,15 @@ mod tests {
                 }
             );
         }
+        for (values, lags, regression) in
+            [(&series[..4], 0, "trend"), (&series[..5], 1, "constant")]
+        {
+            assert_eq!(
+                augmented_dickey_fuller(values, lags, regression).unwrap_err(),
+                SciError::ComputationFailed {
+                    operation: SciOperationCode::Adf,
+                }
+            );
+        }
     }
 }

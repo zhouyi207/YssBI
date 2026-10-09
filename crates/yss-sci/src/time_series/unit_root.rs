@@ -21,16 +21,6 @@ pub enum AdfRegression {
     Trend,
 }
 
-impl AdfRegression {
-    pub fn from_flags(constant: bool, trend: bool) -> Self {
-        match (constant, trend) {
-            (false, _) => AdfRegression::NoConstant,
-            (true, false) => AdfRegression::Drift,
-            (true, true) => AdfRegression::Trend,
-        }
-    }
-}
-
 /// MacKinnon (1994) 响应面系数: c_α(T) = φ_∞ + φ_1/T + φ_2/T²
 /// (phi_inf, phi_1, phi_2) for 1%, 5%, 10%
 const MACKINNON_COEFFS: [[[f64; 3]; 3]; 3] = [
@@ -123,63 +113,42 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
         return Err("ADF: 滞后阶数过大，有效样本不足".to_string());
     }
 
-    let reg = AdfRegression::from_flags(constant, trend);
-
-    // Δy_t = y_t - y_{t-1}
-    let dy: Vec<f64> = (1..n_raw).map(|i| y[i] - y[i - 1]).collect();
-    let n_dy = dy.len();
+    let reg = match (constant, trend) {
+        (false, false) => AdfRegression::NoConstant,
+        (true, false) => AdfRegression::Drift,
+        (true, true) => AdfRegression::Trend,
+        (false, true) => return Err("ADF: 时间趋势需要同时包含常数项".into()),
+    };
 
     // 有效样本: 需要 y_{t-1} 和最多 lags 个 Δy_{t-j}，所以从 t = 1 + lags 开始
     let start = 1 + lags; // t=start 时，y_{t-1}=y[start-1] 存在，Δy_{t-1}..Δy_{t-lags} 都存在
 
-    let n = n_raw - start; // 有效观测数
-    if n < 2 {
-        return Err("ADF: 有效观测数不足".to_string());
+    let n_obs = n_raw - start;
+    let lagged_col = usize::from(constant) + usize::from(trend);
+    let ncols = lagged_col + 1 + lags;
+    if n_obs <= ncols {
+        return Err("ADF: 回归剩余自由度不足".into());
     }
+    let df_resid = n_obs - ncols;
 
-    // 因变量: Δy_t, t = start .. n_raw-1
-    // dy 的索引: dy[i] = y[i+1]-y[i]，所以 dy[start-1] = y[start]-y[start-1] 对应 t=start
-    let y_endog: Vec<f64> = (start - 1..n_dy.min(n_raw - 1)).map(|i| dy[i]).collect();
-    let n_obs = y_endog.len();
+    // dy[i] = Δy_{i+1}; the admitted lag window guarantees every index below exists.
+    let dy: Vec<f64> = y.windows(2).map(|pair| pair[1] - pair[0]).collect();
+    let y_col = Col::from_iter(dy[start - 1..].iter().copied());
 
     // 自变量: [const?, trend?, y_{t-1}, Δy_{t-1}, ..., Δy_{t-lags}]
-    let ncols = {
-        let mut k = 1; // y_{t-1}
-        if constant {
-            k += 1;
+    let x = Mat::from_fn(n_obs, ncols, |row, col| {
+        if constant && col == 0 {
+            1.0
+        } else if col < lagged_col {
+            (start + row) as f64
+        } else if col == lagged_col {
+            y[start - 1 + row]
+        } else {
+            dy[start - 1 + row - (col - lagged_col)]
         }
-        if trend {
-            k += 1;
-        }
-        k += lags;
-        k
-    };
-
-    // 按行填充（row-major）：每行 [const?, trend?, y_{t-1}, Δy_{t-1}, ..., Δy_{t-lags}]
-    let mut exog_data = Vec::with_capacity(n_obs * ncols);
-
-    for i in 0..n_obs {
-        if constant {
-            exog_data.push(1.0);
-        }
-        if trend {
-            exog_data.push((start + i) as f64);
-        }
-        exog_data.push(y[start - 1 + i]);
-        for j in 1..=lags {
-            let idx = start - 1 + i - j;
-            exog_data.push(if idx < n_dy { dy[idx] } else { 0.0 });
-        }
-    }
-    let lagged_col = (if constant { 1 } else { 0 }) + (if trend { 1 } else { 0 });
-
-    let exog = Mat::from_fn(n_obs, ncols, |row, col| exog_data[row * ncols + col]);
-    let endog = Col::from_iter(y_endog);
+    });
 
     // OLS: β = (X'X)^{-1} X'y
-    let x = exog.as_ref().to_owned();
-    let y_col = endog.as_ref().to_owned();
-
     let xtx = x.transpose() * x.as_ref();
     let xty = x.transpose() * y_col.as_ref();
 
@@ -193,33 +162,24 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     let u = y_col.as_ref() - y_hat.as_ref();
 
     let rss: f64 = u.iter().map(|v| v * v).sum();
-    let df_resid = (n_obs - ncols).max(1);
     let sigma2 = rss / df_resid as f64;
 
-    let xtx_inv_nd = xtx_inv.as_ref().to_owned();
-    let cov_beta = yss_sci_linalg::Scale(sigma2) * &xtx_inv_nd;
+    let cov_beta = yss_sci_linalg::Scale(sigma2) * &xtx_inv;
 
     // y_{t-1} 的系数在列 lagged_col
-    let betas_nd = betas.as_ref().to_owned();
-    let coef_lagged = betas_nd[lagged_col];
+    let coef_lagged = betas[lagged_col];
     let var_lagged = cov_beta[(lagged_col, lagged_col)];
-    let std_err_lagged = if var_lagged > 0.0 {
-        var_lagged.sqrt()
-    } else {
-        0.0
-    };
+    let std_err_lagged = var_lagged.sqrt();
 
-    let test_statistic = if std_err_lagged > 1e-15 {
-        coef_lagged / std_err_lagged
-    } else {
-        f64::NAN
-    };
+    let test_statistic = coef_lagged / std_err_lagged;
+    if !test_statistic.is_finite() {
+        return Err("ADF: 单位根检验统计量无定义或非有限".into());
+    }
+    let t_dist =
+        StudentsT::new(0.0, 1.0, df_resid as f64).map_err(|error| format!("ADF: {error}"))?;
 
     // drift 情形用 t 分布临界值和 p-value（Stata 第三情形）
     let (cv_1, cv_5, cv_10, p_value, use_t_dist) = if reg == AdfRegression::Drift {
-        let df = df_resid as f64;
-        let t_dist =
-            StudentsT::new(0.0, 1.0, df).unwrap_or_else(|_| StudentsT::new(0.0, 1.0, 1.0).unwrap());
         let cv_1 = t_dist.inverse_cdf(0.01);
         let cv_5 = t_dist.inverse_cdf(0.05);
         let cv_10 = t_dist.inverse_cdf(0.10);
@@ -243,8 +203,8 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     };
 
     // 构建回归表（变量顺序与设计矩阵列一致）
-    let mut reg_table = Vec::new();
-    let mut col_names: Vec<String> = Vec::new();
+    let mut reg_table = Vec::with_capacity(ncols);
+    let mut col_names: Vec<String> = Vec::with_capacity(ncols);
     if constant {
         col_names.push("const".to_string());
     }
@@ -255,25 +215,23 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     for j in 1..=lags {
         col_names.push(format!("L{}D.", j));
     }
-    for (c, name) in col_names.iter().enumerate() {
-        if c >= betas_nd.nrows() {
-            break;
-        }
-        let coef = betas_nd[c];
-        let se = cov_beta[(c, c)].sqrt().max(1e-15);
+    let t_crit = t_dist.inverse_cdf(0.975);
+    for (c, name) in col_names.into_iter().enumerate() {
+        let coef = betas[c];
+        let se = cov_beta[(c, c)].sqrt();
         let t_val = coef / se;
-        let dist = StudentsT::new(0.0, 1.0, df_resid as f64)
-            .unwrap_or_else(|_| StudentsT::new(0.0, 1.0, 1.0).unwrap());
+        if !t_val.is_finite() {
+            return Err("ADF: 辅助回归统计量无定义或非有限".into());
+        }
         let p_val = crate::distribution::student_t_probability(
-            &dist,
+            &t_dist,
             t_val,
             yss_sci_contract::hypothesis::Alternative::TwoSided,
         );
-        let t_crit = dist.inverse_cdf(0.975);
         let ci_lower = coef - t_crit * se;
         let ci_upper = coef + t_crit * se;
         reg_table.push(AdfRegRow {
-            variable: name.clone(),
+            variable: name,
             coef,
             std_err: se,
             t: t_val,

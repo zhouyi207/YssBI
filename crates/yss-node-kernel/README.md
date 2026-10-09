@@ -262,8 +262,7 @@ OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit �
 DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 7。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，稳定 F/Student-t 尾概率的实现使用 revision 9。
 IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；非有限模型在 JSON 编码前返回 `NonFiniteResult`，两个 Fit 使用 revision 8，并保留共享正态和稳定卡方尾概率。Summary 仍从已存运行值解码模型并按所选内容计算报告，不改其输入或输出形状。
 IV 2SLS Summary 使用 revision 12，LIML Summary 使用 revision 11，保留 SCI 第一阶段、内生性、过度识别及 Wald 检验的稳定 F 尾概率。第一阶段的多内生变量矩阵保持观测行与变量列的对应关系，修正三个及更多内生变量时的 Shea 指标。报告展示直接使用第一阶段的共享类型字段，不再从已编码的 JSON 重读系数。
-ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 8。Drift 和辅助回归复用 SCI 的稳定 Student-t 尾概率，
-其参考分布约定与临界值保持原契约。
+ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 9。SCI 在构建设计矩阵前要求正的剩余自由度，饱和回归和未定义推断返回 `ScientificFailure`，多序列报告保留逐序列失败信息。Drift 和辅助回归复用同一个 Student-t 分布及稳定尾概率，不再将自由度改为 1 或钳制标准误；参考分布约定与临界值保持原契约。复用该回归的面板单位根和协整检验使用 revision 7，并保留其 MacKinnon 校准。
 Panel Fit 使用 revision 11，Compare 使用 revision 9：双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Fit 保留 SCI 的稳定整体 F 和系数 Student-t 尾概率；Summary/Predict 沿用已拟合模型。
 系数约束的负或 NaN 对比方差在原 SCI 校验边界返回计算失败，不再把开方后的 NaN 交给参考分布。线性、Logit/Probit/Prais、IV Summary 和实际复用 Summary 检验的 diagnostic.wald 同步更新实现 revision。普通样本均值 t 检验使用另一算法入口。
 稳定 F 尾概率由 SCI 分布模块统一计算。线性 Summary 使用 revision 14，Prais Summary 使用

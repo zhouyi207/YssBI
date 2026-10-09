@@ -176,6 +176,15 @@ their generator live in `tests/fixtures/spatial_category_reference.*`.
 Numerical entry points live in `regression::linear::fit`,
 `regression::discrete::fit`, `panel::fit` and
 `causal::iv::fit`. `time_series::models` prepares ADF/VAR/VEC computations.
+ADF admits its retained observations against the actual regression-column count
+before constructing the design, requiring positive residual degrees. Its trend
+specification includes a constant. Undefined or nonfinite regression statistics
+return a fit error before probability evaluation. Auxiliary coefficient inference
+uses the computed standard errors without an absolute floor, preserving results
+when the response unit changes. One Student-t reference serves both Drift and
+the auxiliary table; the design is built directly without duplicate row buffers
+or matrix copies. Panel Fisher tests reuse this same regression owner while
+retaining their existing MacKinnon calibration and panel admission.
 `regression::design`, covariance and collinearity calculations are reused by
 the estimators that need them. DID calls the existing panel estimator, which
 continues to reuse OLS. `causal::did::fit_did` takes an explicit treatment vector;

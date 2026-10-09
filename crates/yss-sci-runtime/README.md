@@ -194,6 +194,9 @@ VAR/VEC Summary likewise selects report contents and calls SCI for requested
 serial tests, lag exclusion or stability. Granger, IRF and FEVD are independent
 postestimation calls; IRF/FEVD take their horizon at that stage. Summaries reuse the
 fitted model without refitting it, and fits do not cache full reports.
+ADF forwards SCI's residual-degree and undefined-inference failures before JSON
+report encoding. Runtime does not replace unavailable statistics with null or
+select a fallback reference distribution.
 VAR model-summary projection checks innovation-covariance dimensions against the
 variable names before labeling cells, including when no diagnostic is selected;
 malformed decoded shapes return the existing scientific failure.
