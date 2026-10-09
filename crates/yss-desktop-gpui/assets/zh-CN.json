@@ -2785,7 +2785,11 @@
       "projectCopyOpenFailed": "副本已写入并登记，但未打开；请打开已写入的项目。",
       "projectTrashPartial": "项目已移到回收站，但项目登记尚未更新。请检查最近项目列表。",
       "projectOperationFailed": "项目操作未完成，原有输入已保留；请检查名称、目录或当前项目。",
-      "recentProjectsUpdateFailed": "项目已打开，但最近项目列表未更新。请稍后重新打开该目录以更新记录。"
+      "recentProjectsUpdateFailed": "项目已打开，但最近项目列表未更新。请稍后重新打开该目录以更新记录。",
+      "clearDisplay": "清空显示",
+      "logConnectionFailed": "无法连接日志存储",
+      "logStorageUnavailable": "日志存储不可用",
+      "logsEmpty": "应用运行记录会显示在这里"
     }
   }
 }

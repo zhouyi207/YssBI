@@ -223,6 +223,18 @@
 - 临时 `cargo build -p yss-desktop-gpui --example result_windows_review` 构建后，隔离应用目录中通过原 Application 新建临时项目、生成 235 行结果并打开真实独立窗口；目视确认首次页面、点击下一页后的 101–200 行和窗口关闭。临时样例的模块路径与回调访问修正后构建通过，仅留下两处样例未使用变量警告；样例随后移出仓库。
 - 预览没有验证全部跨窗口操作：重复聚焦、来源关闭后的持续读取、读取中关闭、报告追加、图形、会话替换和主窗口退出仍待人工验收。截图通过调整窗口尺寸促使 X11 重绘，不能用来证明平滑刷新或其他平台表现。没有新增依赖、后端契约或 UI 单元测试，未重复运行未改动的后端统计测试。
 
+### 日志列表控制与订阅恢复
+
+- 逐项阅读 Logs 的十个 TSX 入口及 LogDetailPanel，核对原订阅、buffer、筛选和滚动契约。必要的领域/级别筛选、搜索、跟随、清空及状态提示接入现有 LogsPanel；React Context 和虚拟化 wrapper 无需另建原生对应层。
+- `entry` 按需缓存搜索文本，同流快照复用原记录；`filter` 维护唯一显示索引，新增批次只检查新增记录。列表和计数共用结果，保留 1,000 条上限，前缀裁剪调整现有滚动句柄。
+- `stream` 保留原有界队列和订阅释放，缺口/积压连续恢复最多三次，新批次或手动刷新重置预算；存储失败停止交付。清空只清显示并保留 watermark，刷新重新读取原 recent snapshot。
+- 工具栏复用原生 Input/Button/PopupMenu，语言变化保留输入。固定高度行缓存单行摘要并保留全文提示；跟随沿用参考的 80px 底部阈值，浏览旧记录不会被新增记录拉回。
+- 日志详情选择、文本复制、多领域并列布局及独立窗口生命周期优化继续分别跟踪，不将列表控制完成等同于整个 Logs 模块迁移完毕。
+- L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；6 个变更 Rust 文件格式、2 份文档元信息及独立提交的 269 条相对链接（当前工作区 275 条）、24 个中英文文案键与参数、模块索引（59 crates / 239 条依赖声明）和 `git diff --check` 通过。没有后端契约变化，不重复未改动的后端测试。
+- 临时 `cargo build -p yss-desktop-gpui --example logs_controls_review` 在隔离应用目录使用真实 LogRuntime 提交样例。Linux/X11 窗口目视核对结构化字段搜索、领域/级别组合、无匹配、清空、刷新恢复，当前工作区中英文切换保留输入；新增、裁剪和连续两批 1,200 条记录的底部跟随/手动浏览均已核对。
+- 预览发现并修复多行消息挤出固定行高、严格底部判定在缩放后失效、前缀裁剪与尚未完成的底部滚动相互影响；同流搜索缓存与原生滚动句柄继续复用。截图需调整窗口尺寸触发 X11 重绘，不能用来证明自动重绘、性能或其他平台表现。临时样例已移出仓库；断流、存储失败、关闭订阅、真实业务日志与跨窗口验收仍开放，不添加 UI 单元测试。
+
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -408,7 +420,7 @@
 | [modules/details/internal/ui/panels/FileDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FileDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/FunctionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FunctionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/GraphConstantsPanel.tsx](../../react/src/modules/details/internal/ui/panels/GraphConstantsPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 必要：日志只读详情应复用原生 Details | 已核对时间、stream/sequence、级别、领域、来源、target/event、消息及 JSON 字段；原生尚无日志选择联动 | 已审查；待迁移 |
 | [modules/details/internal/ui/panels/MindDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/MindDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/NodeDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -463,16 +475,16 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/logs/internal/ui/LogDomainLayoutHost.tsx](../../react/src/modules/logs/internal/ui/LogDomainLayoutHost.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/LogDomainPanel.tsx](../../react/src/modules/logs/internal/ui/LogDomainPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/LogItemRow.tsx](../../react/src/modules/logs/internal/ui/LogItemRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/LogPanelList.tsx](../../react/src/modules/logs/internal/ui/LogPanelList.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/LogPanelStatus.tsx](../../react/src/modules/logs/internal/ui/LogPanelStatus.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/LogPanelToolbar.tsx](../../react/src/modules/logs/internal/ui/LogPanelToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/LogPanelVirtualList.tsx](../../react/src/modules/logs/internal/ui/LogPanelVirtualList.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/LogWindow.tsx](../../react/src/modules/logs/internal/ui/LogWindow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/LogWorkspaceActions.tsx](../../react/src/modules/logs/internal/ui/LogWorkspaceActions.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/logs/internal/ui/logWorkspaceContext.tsx](../../react/src/modules/logs/internal/ui/logWorkspaceContext.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/logs/internal/ui/LogDomainLayoutHost.tsx](../../react/src/modules/logs/internal/ui/LogDomainLayoutHost.tsx) | 复用根 DockArea；不迁入第二个 FlexLayout 拓扑 | 当前用原生领域选择器访问全部及六个领域；原多领域并列对照的承载仍待处理 | 领域筛选已接入；并列布局待迁移 |
+| [modules/logs/internal/ui/LogDomainPanel.tsx](../../react/src/modules/logs/internal/ui/LogDomainPanel.tsx) | 迁移领域过滤与跟随行为到已有 LogsPanel | 同一有界记录集合上使用领域/级别/查询索引；选中记录与 Details 联动另行迁移 | 筛选已接入；选择联动待迁移 |
+| [modules/logs/internal/ui/LogItemRow.tsx](../../react/src/modules/logs/internal/ui/LogItemRow.tsx) | 复用固定高度原生行，保留等级/领域/来源 | 显示缓存时间、级别、领域、来源与单行摘要，悬停全文；记录选择与文本复制尚未接入 | 显示已接入；选择与复制待迁移 |
+| [modules/logs/internal/ui/LogPanelList.tsx](../../react/src/modules/logs/internal/ui/LogPanelList.tsx) | 复用 UniformList 与已有空状态 | 计数和列表共享筛选索引，区分加载、无记录、无匹配及失败 | 代码已接入；真实交互验收待完成 |
+| [modules/logs/internal/ui/LogPanelStatus.tsx](../../react/src/modules/logs/internal/ui/LogPanelStatus.tsx) | 迁移连接/计数/截断提示 | 同一 LogsPanel 展示当前过滤/总数、连接状态和截断警告；存储失败停止交付 | 代码已接入；故障验收待完成 |
+| [modules/logs/internal/ui/LogPanelToolbar.tsx](../../react/src/modules/logs/internal/ui/LogPanelToolbar.tsx) | 复用 Input、Button、PopupMenu | 刷新、自动跟随、领域、五种级别、搜索与清空显示；保留领域所有者和序列水位 | 代码已接入；真实交互验收待完成 |
+| [modules/logs/internal/ui/LogPanelVirtualList.tsx](../../react/src/modules/logs/internal/ui/LogPanelVirtualList.tsx) | 复用原生 UniformList 与滚动句柄 | 只绘制可见行；按参考 80px 阈值跟随，浏览旧记录和前缀裁剪保持视口，不增加 DOM 虚拟化层 | 代码已接入；滚动验收待完成 |
+| [modules/logs/internal/ui/LogWindow.tsx](../../react/src/modules/logs/internal/ui/LogWindow.tsx) | 复用既有原生日志窗口与 LogsPanel | 当前工作区已有单例句柄和独立订阅；共享 LogsPanel 获得新工具栏，窗口接入提交、延后创建/激活与跨窗口详情仍待核对 | 工作区已有实现；窗口生命周期优化待处理 |
+| [modules/logs/internal/ui/LogWorkspaceActions.tsx](../../react/src/modules/logs/internal/ui/LogWorkspaceActions.tsx) | 并入已有面板工具栏和状态条 | 同一实体协调原生控件，日志批次只增量更新有界显示索引，无额外业务控制器 | 代码已接入；人工验收待完成 |
+| [modules/logs/internal/ui/logWorkspaceContext.tsx](../../react/src/modules/logs/internal/ui/logWorkspaceContext.tsx) | React Context 无需迁移 | 操作与暂态状态归 LogsPanel；记录、持久化及序列归 LogRuntime，跨窗口各有独立输入实体 | 已归并；无需独立适配层 |
 
 ## modules/node-catalog
 
