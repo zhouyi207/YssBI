@@ -27,7 +27,8 @@ use yss_node_kernel::RuntimeValue;
 use crate::services::NativeServices;
 use gpui_kit_assets::IconName;
 use query::{ResultContent, ResultLease};
-use table::ResultGrid;
+pub(crate) use report::format_number;
+pub(crate) use table::ResultGrid;
 
 pub enum ResultEvent {
     Loaded(bool),

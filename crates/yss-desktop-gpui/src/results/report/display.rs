@@ -7,7 +7,7 @@ use yss_application::graph::results::report::presentation::{
 
 use crate::results::table::ResultGrid;
 
-pub(super) fn number(value: f64, decimals: usize) -> String {
+pub(crate) fn number(value: f64, decimals: usize) -> String {
     if value.is_nan() {
         "—".into()
     } else if value.is_infinite() {

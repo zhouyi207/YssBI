@@ -1,5 +1,6 @@
 use super::controls;
 mod connections;
+mod description;
 mod documentation;
 mod domain;
 mod parameters;
@@ -40,6 +41,7 @@ pub struct DetailsPanel {
     ports_open: [bool; 2],
     properties: Entity<super::graph_properties::GraphProperties>,
     documentation: Entity<documentation::NodeDocumentation>,
+    description: Entity<description::NodeDescription>,
     node_definition: Option<NodeTypeId>,
     _properties_observer: gpui::Subscription,
     focus: FocusHandle,
@@ -64,6 +66,7 @@ impl DetailsPanel {
         let properties =
             cx.new(|_| super::graph_properties::GraphProperties::new(services.clone()));
         let documentation = cx.new(|_| documentation::NodeDocumentation::new(services.clone()));
+        let description = cx.new(|_| description::NodeDescription::new(services.clone()));
         let properties_observer = cx.observe(&properties, |_, _, cx| cx.notify());
         Self {
             services,
@@ -71,6 +74,7 @@ impl DetailsPanel {
             ports_open: [false; 2],
             properties,
             documentation,
+            description,
             node_definition: None,
             _properties_observer: properties_observer,
             focus: cx.focus_handle(),
@@ -97,6 +101,8 @@ impl DetailsPanel {
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
         self.clear_documentation(cx);
+        self.description
+            .update(cx, |description, cx| description.clear(cx));
         self.connection_picker = None;
         self.ports_open = [false; 2];
         self.graph = None;
@@ -295,6 +301,7 @@ impl DetailsPanel {
             properties.set_graph(graph, needed, window, cx)
         });
         self.refresh_node_documentation(cx);
+        self.refresh_node_description(window, cx);
         cx.notify();
     }
 
@@ -466,6 +473,7 @@ impl DetailsPanel {
                     }),
             )
             .child(self.render_parameters(busy, cx))
+            .child(self.description.clone())
             .child(self.render_ports(busy, cx))
             .child(self.documentation.clone())
     }

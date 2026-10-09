@@ -466,6 +466,21 @@ fn description_result_returns_complete_numeric_and_categorical_json() {
         "events/describe.yssbi-event",
         "yssbi.statistics.describe",
     );
+    let super::super::ResultValueProjection::Value(native) =
+        app.query_result_projection(reference).unwrap().unwrap()
+    else {
+        panic!("description value")
+    };
+    let native = super::super::description::columns(&native).unwrap();
+    assert_eq!(
+        native
+            .iter()
+            .map(|column| column.name.as_str())
+            .collect::<Vec<_>>(),
+        [" amount/~ ", "b", "c"]
+    );
+    assert_eq!(native[0].count, 2);
+    assert_eq!(native[0].missing, 1);
     let snapshot = app.query_result(reference).unwrap().unwrap();
     assert!(supports(&snapshot));
     assert!(matches!(snapshot.value().value(), RuntimeValue::Record(_)));
@@ -563,6 +578,22 @@ fn description_result_returns_complete_numeric_and_categorical_json() {
     let result = crate::result_encoding::query_result_json(&app, reference)
         .unwrap()
         .unwrap();
+    let super::super::ResultValueProjection::Value(native) =
+        app.query_result_projection(reference).unwrap().unwrap()
+    else {
+        panic!("description value")
+    };
+    let native = super::super::description::columns(&native).unwrap();
+    let super::super::description::DescriptionStatistics::Categorical { categories, .. } =
+        &native[0].statistics
+    else {
+        panic!("categorical description")
+    };
+    assert_eq!(categories.len(), 205);
+    assert_eq!(
+        categories[204].value,
+        yss_data_contract::TabularScalar::Unsigned(204)
+    );
     let categories = &result["columns"]["value"]["categories"];
     assert_eq!(categories.as_object().unwrap().len(), 205);
     assert_eq!(

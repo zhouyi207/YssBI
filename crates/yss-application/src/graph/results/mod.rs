@@ -13,6 +13,7 @@ use yss_graph_execution::result::{
 use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
 
+pub mod description;
 pub mod plot;
 pub mod report;
 mod retention;

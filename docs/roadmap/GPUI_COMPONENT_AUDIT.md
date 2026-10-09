@@ -333,6 +333,17 @@
 - L2 验证：`cargo test -p yss-application --lib graph::catalog::tests::documentation:: -- --nocapture` 实际运行 2 项并通过，覆盖本地化目录一致性/不可执行定义/缺失类型，以及错误项目/无活动会话；`cargo test -p yss-node-catalog --lib localization::tests::node_help_uses_the_same_locale_as_its_metadata -- --exact` 实际运行 1 项并通过。
 - `cargo clippy -p yss-application -p yss-node-catalog --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。12 个 Rust 文件局部格式、8 个双语键/参数、294 条文档相对链接（工作区 299 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。不新增依赖或 UI 单元测试，临时入口不提交；未运行全工作区验证。累计审查 149/265 项。
 
+### 节点描述统计结果
+
+- 逐项阅读 DescriptionResultSection（含 ColumnSummary/CategoryFrequencies）、useDescriptionResult、descriptionResult 与结果查询契约；NodeDetailPanel、NodeCreationForm、DetailColumnList 已阅读相关路径，但其各自完整缺口仍按独立组件项处理。
+- Application 的 `results/description` 校验原有界 RuntimeValue 投影，按连续 position 恢复列与分类顺序，严格区分数值与分类/顺序/二分类字段；保留原列名、空值、空字符串、标签和完整整数载体，不经 JSON 往返或重算。原查询继续负责会话和载荷预算。
+- Details 的 `description` 只绑定当前画布/输出及 ResultReference，订阅原投影与执行通知，检查语义身份、结果有效性和等待中的运行。失效、节点切换或清理取消旧交付；不获取历史租约、不另建结果缓存。默认收起，首次展开才查询，相同结果不重复读取。
+- `description/render` 与 `description/column` 负责折叠、最多 50 列/100 类的显示页，频数表仅在展开时构造，复用 Results 的虚拟表格、原字段顺序和数值格式。多页列目录有界滚动，翻页重置目录滚动位置；标题复用 Button 并左对齐。语言变化保留展开和页码，不重读统计结果；空字符串编码与空值分别呈现，编码不使用统计量舍入规则。
+- 临时 `cargo build -p yss-desktop-gpui --example description_result_review` 使用隔离项目、五组常量/描述节点和真实 Application。GPUI Window 事件分发已核对未执行提示、真实运行后的列序/均值/标准差/空值，205 类的 100/100/5 行分页与语言切换后的第三页；原请求代次在刷新和语言切换中保持不变。
+- 同一预览核对空字符串/前导零/宽整数文本编码、全空分类没有伪造 Null 类别、上游编辑立即隐藏旧摘要、撤销恢复当前结果，以及未展开新节点保持 Unloaded。53 列按 50/3 项分页，末页与返回第一页的顶部可见；切换普通节点后的重复清理不再发出状态通知。物理键鼠/IME、嵌套滚动传递、表格复制/拖动、迟到查询/读取失败、多窗口及完整项目切换继续开放；截图依赖尺寸变化，临时入口不提交。
+- `cargo test -p yss-application --lib description_ -- --nocapture` 在工作区与独立提交内容均运行 3 项并通过：2 项新增投影契约测试，以及扩展的真实描述节点结果测试。覆盖源顺序、Null/精确整数/标签与不完整或混合字段拒绝；不新增 UI 单元测试。
+- `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。11 个 Rust 文件局部格式、25 个双语键/参数、288 条文档相对链接（工作区 293 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。不新增依赖，未运行全工作区验证。累计审查 150/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -498,7 +509,7 @@
 | [modules/details/internal/ui/DetailEmptyState.tsx](../../react/src/modules/details/internal/ui/DetailEmptyState.tsx) | 复用原生空状态与文件图标 | 没有存活资源目标时使用通用未选择文案，不再提示只选择图节点；状态直接由现有弱绑定判断 | 代码已接入；真实切换验收待完成 |
 | [modules/details/internal/ui/DetailsPane.tsx](../../react/src/modules/details/internal/ui/DetailsPane.tsx) | 优化既有 Details 协调层，不迁入 React 模型 store | 单个有效节点借用原投影渲染，多选/无节点/失效节点回到原 GraphProperties；资源显示委派给实际编辑器，日志检查沿用前批弱引用 | 路由已修正；各分支专项及生命周期继续单独验收 |
 | [modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx](../../react/src/modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx) | 迁移到现有常量卡片的按需 JSON 编辑，复用同一草稿和应用/恢复 | `constant_values` 用 RawValue 与 bigdecimal 保留精确数值；无效输入保留，Null 仍走原类型化事务 | 样例精确 JSON、对象形状错误与 Null 已核对；完整生命周期待验收 |
-| [modules/details/internal/ui/node/DescriptionResultSection.tsx](../../react/src/modules/details/internal/ui/node/DescriptionResultSection.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/node/DescriptionResultSection.tsx](../../react/src/modules/details/internal/ui/node/DescriptionResultSection.tsx) | 迁移：Details 按当前有效结果延迟读取描述统计，复用 Application 投影和 Results 表格 | 默认折叠、数值/分类字段、源顺序与精确原值；每页 50 列/100 类，后台刷新及语言切换不重读 | 数值、空值、205 类分页、编码、失效与撤销已预览核对；物理输入、迟到查询及多窗口仍开放 |
 | [modules/details/internal/ui/node/NodeCreationForm.tsx](../../react/src/modules/details/internal/ui/node/NodeCreationForm.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/NodeDocumentationPanel.tsx](../../react/src/modules/details/internal/ui/node/NodeDocumentationPanel.tsx) | 迁移/优化：复用 TextView、Collapsible 和单类型文档查询 | documentation 持有当前目标与视图；render 展示正文/折叠/重试，参数编辑不重读，项目/语言隔离 | 常规 Markdown 与文档生命周期预览通过；共享公式组件及其余人工验收开放 |
 | [modules/details/internal/ui/node/NodePinConnectionField.tsx](../../react/src/modules/details/internal/ui/node/NodePinConnectionField.tsx) | 迁移/优化：连接选择复用原生虚拟 List，Application 决定候选和替换 | `connections` 安装对端名称和逐条删除，50 条分页；picker 按需查询、搜索、键盘确认和失败重试，版本/投影/控件拒绝过期操作 | 样例已核对双向连接、替换与分支保留；失败/过期/大列表验收开放 |

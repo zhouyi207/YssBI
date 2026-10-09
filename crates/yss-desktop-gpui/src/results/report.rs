@@ -7,6 +7,8 @@ mod page;
 mod residual;
 mod section;
 
+pub(crate) use display::number as format_number;
+
 use std::sync::Arc;
 
 use gpui::{Context, Entity, EventEmitter, IntoElement, Render, Window, div, prelude::*};
