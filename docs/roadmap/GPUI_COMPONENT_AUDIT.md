@@ -370,6 +370,19 @@
 - `cargo clippy -p yss-node-catalog -p yss-application --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。复用缓存前启动的重复冷编译已取消，不计为通过。17 个 Rust 文件局部格式、11 个双语键/参数、4 份文档元信息、335 条工作区相对链接（独立提交内容 330 条）、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过；未运行全工作区验证。
 - 物理键鼠/IME、多窗口、完整项目切换、跨边界复合参数菜单与大资源目录压力验收仍开放；临时预览入口不提交。本批累计审查 152/265 项。
 
+
+### 节点详情诊断与图表列清单
+
+- 逐项阅读 NodeDetailPanel、NodeParameterSection、位置标签解析及图路径隔离/参数/端口标题参考测试；组合视图继续复用已审查的 ParameterForm、端口、描述统计和文档实体。
+- `details/node` 负责正文组合，`details/diagnostics` 补齐 React 的默认展开诊断区。消息复用 `text::graph_diagnostic`，不重新分析图；严重程度按原投影显示图标、颜色和标签，位置从同一投影解析节点、参数、端口及连线两端名称。原诊断消息中的后端参数保持不变。
+- 诊断每页最多 50 条，多页正文有界滚动；选择变化重新展开，同节点刷新保留折叠及有效页码，数量减少修正页码，翻页和页码收敛重置内部滚动。旧回调由选择代次拒绝。
+- 选择安装借用 Arc 中的节点，删除整节点复制；端口草稿按地址映射查找，沿用原字段事实匹配，不再逐项扫描并移除旧数组。名称及参数输入的原提交入口保持不变。
+- DetailColumnList 唯一实际消费者为 ChartDetailPanel 的 list 变体；未调用的 table 变体无需建立原生包装。`charts/details/columns` 沿用接受的元数据与 50 列分页，补齐无元数据/空列提示、列表标题、等宽类型和完整名称 tooltip；翻页回调验证元数据身份。
+- 临时 `cargo build -p yss-desktop-gpui --example node_details_review` 使用独立项目与真实 Application。通过 GPUI Window 注入点击/键盘核对未绑定端口诊断、中英文刷新保留折叠和未提交名称、投影变化保留参数输入、节点切换重置及清空选择返回图属性。
+- 同一预览注入只读样例投影，核对节点/端口/参数/连接/资源位置及三类严重程度；105 条诊断逐页访问到最后 5 条，减少为 2 条后页码回到首页。图表只读元数据样例覆盖无数据集、零列、105 列分页及最后 5 列；类型保留原文，长列名收束在面板内。测试图正文未显式保存，磁盘仍为空节点/空连线。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。修改仅限原生显示和暂态复用，不改变后端契约；未运行后端单元测试或全工作区验证，不新增 UI 单元测试。局部 Rust 格式、双语键/参数、文档元信息/链接、模块索引及 `git diff --check` 通过。
+- 物理键鼠/IME、完整名称 tooltip 的实际悬浮显示、端口草稿与复杂实例重排、多窗口、跨图同 ID 和完整项目切换仍开放；临时预览入口不提交。本批累计审查 154/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -558,9 +571,9 @@
 | [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 复用原 Details 容器与原生只读控件 | 当前日志实体唯一归 LogsPanel，Details 弱引用展示时间/流/序列/领域/来源及原消息/字段；默认展开、文本选择与复制不解析 Markdown | 代码已接入；完整交互验收待完成 |
 | [modules/details/internal/ui/panels/MindDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/MindDetailPanel.tsx) | 优化现有原生表单，复用同一输入草稿与 MindEdit 提交 | 按回执跟随新增/删除选择、确认提交草稿、排序边界禁用、父主题勾选与无变化保护；保留显式应用/恢复和保存 | 样例新增/删除/排序/保存已核对；完整生命周期与长树性能待完成 |
 | [modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx) | 迁移/优化：在既有 Details 预览类型与同一文档实体 | Activity 单击预览，创建按钮沿用原图事务；保留参数草稿，显式选择恢复节点属性，后台刷新不抢占 | 目录预览、创建、草稿保留及日志往返已核对；过期交付和多窗口仍待验收 |
-| [modules/details/internal/ui/panels/NodeDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/NodeDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDetailPanel.tsx) | 迁移/优化：补齐完整节点诊断，复用参数、端口、描述结果与文档 owner | `details/node` 组合正文；`diagnostics` 默认展开、按原 severity/消息/位置展示并按 50 条分页；选择安装借用节点并按地址复用端口草稿 | 未绑定输入、名称/参数草稿及语言刷新已预览核对；复杂生命周期和物理输入继续开放 |
 | [modules/details/internal/ui/shared/DetailCollapsibleSection.tsx](../../react/src/modules/details/internal/ui/shared/DetailCollapsibleSection.tsx) | 复用原生 Collapsible/Button 与既有局部折叠状态 | 日志消息/字段默认展开，同条记录重选保留状态；其余 Details 消费者按各自初始展开策略核对 | 日志已接入；其他消费者随功能验收 |
-| [modules/details/internal/ui/shared/DetailColumnList.tsx](../../react/src/modules/details/internal/ui/shared/DetailColumnList.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/shared/DetailColumnList.tsx](../../react/src/modules/details/internal/ui/shared/DetailColumnList.tsx) | 优化既有图表列目录；未使用的 table 变体无需迁移 | 唯一消费者 ChartDetailPanel 沿用元数据和 50 列分页；`charts/details/columns` 补齐空状态、等宽类型、完整名称提示与旧元数据点击保护 | 原生列表代码接入；预览与物理输入的实际验收范围见本批记录 |
 | [modules/details/internal/ui/shared/DetailFieldRow.tsx](../../react/src/modules/details/internal/ui/shared/DetailFieldRow.tsx) | 复用原生 flex 布局与 Input 标签 | 日志元信息使用有界标签/值列与只读输入，长内容可选择和水平查看；无需另建 CSS wrapper 层 | 日志已接入；其他消费者随功能验收 |
 | [modules/details/internal/ui/shared/DetailForm.tsx](../../react/src/modules/details/internal/ui/shared/DetailForm.tsx) | 只读字段复用 Input，长文本复用 Textarea；参数草稿由原 owner 提交 | 日志原值可选择复制；参数单行/列表 Enter 应用、Escape 恢复，保留显式应用且不做失焦自动提交 | 日志已接入；参数事件样例已核对，物理键盘/IME 和多行仍待验收 |
 | [modules/details/internal/ui/shared/DetailPanelShell.tsx](../../react/src/modules/details/internal/ui/shared/DetailPanelShell.tsx) | 复用既有 Details 滚动容器 | 日志详情在原面板展示，沿用根 DockArea 的位置和尺寸，不加入第二套布局或 ScrollArea 包装 | 已采用；跨面板交互待验收 |

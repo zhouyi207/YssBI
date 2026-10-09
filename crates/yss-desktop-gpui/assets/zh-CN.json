@@ -2791,6 +2791,10 @@
       "copyWrittenPath": "复制已写入项目的路径"
     },
     "workbench": {
+      "applyName": "应用名称",
+      "diagnosticError": "错误",
+      "diagnosticWarning": "警告",
+      "diagnosticInformation": "信息",
       "projectRegistrationFailed": "项目文件已写入，但登记未完成；请打开已写入的项目。",
       "projectCopyOpenFailed": "副本已写入并登记，但未打开；请打开已写入的项目。",
       "projectTrashPartial": "项目已移到回收站，但项目登记尚未更新。请检查最近项目列表。",

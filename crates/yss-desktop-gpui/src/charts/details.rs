@@ -1,8 +1,8 @@
+mod columns;
+pub(super) use columns::PAGE_COLUMNS;
+
 use super::ChartEditor;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_kit_assets::IconName;
-
-pub(super) const PAGE_COLUMNS: usize = 50;
 
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
@@ -144,88 +144,7 @@ impl ChartEditor {
             view = view.child(self.axis_field(true, cx));
         }
         view = view.child(self.axis_field(false, cx));
-        if let Some(meta) = &self.meta {
-            view = view.child(
-                div()
-                    .border_t_1()
-                    .border_color(cx.theme().border)
-                    .pt_3()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(format!("{} 行 · {} 列", meta.row_count, meta.column_count)),
-            );
-            for column in meta
-                .columns
-                .iter()
-                .skip(self.columns_page * PAGE_COLUMNS)
-                .take(PAGE_COLUMNS)
-            {
-                view = view.child(
-                    div()
-                        .flex()
-                        .justify_between()
-                        .gap_2()
-                        .text_xs()
-                        .child(
-                            div()
-                                .flex_1()
-                                .truncate()
-                                .child(column.name().as_str().to_owned()),
-                        )
-                        .child(
-                            div()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(column.display_type().to_owned()),
-                        ),
-                );
-            }
-            let pages = meta.columns.len().div_ceil(PAGE_COLUMNS).max(1);
-            if meta.columns.is_empty() {
-                view = view.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(crate::text::translate("chartsSidebar.noColumns")),
-                );
-            } else if pages > 1 {
-                view = view.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .gap_2()
-                        .child(
-                            Button::new("chart-columns-previous")
-                                .small()
-                                .ghost()
-                                .icon(IconName::ChevronLeft)
-                                .tooltip(crate::text::translate("databaseEditor.previousPage"))
-                                .disabled(self.columns_page == 0)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.columns_page = view.columns_page.saturating_sub(1);
-                                    view.changed(cx);
-                                })),
-                        )
-                        .child(
-                            div()
-                                .text_xs()
-                                .child(format!("{} / {pages}", self.columns_page + 1)),
-                        )
-                        .child(
-                            Button::new("chart-columns-next")
-                                .small()
-                                .ghost()
-                                .icon(IconName::ChevronRight)
-                                .tooltip(crate::text::translate("databaseEditor.nextPage"))
-                                .disabled(self.columns_page + 1 >= pages)
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.columns_page = (view.columns_page + 1).min(pages - 1);
-                                    view.changed(cx);
-                                })),
-                        ),
-                );
-            }
-        }
+        view = view.child(self.render_columns(cx));
         view = view.child(
             div()
                 .border_t_1()

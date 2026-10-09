@@ -1,32 +1,31 @@
 use super::controls;
 mod connections;
 mod description;
+mod diagnostics;
 mod documentation;
+mod node;
 mod ports;
 
 use gpui::{
     App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, WeakEntity,
     Window, div, prelude::*,
 };
+use gpui_component::Icon;
+use gpui_component::IconName;
 use gpui_component::{
     ActiveTheme,
-    button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
-    input::{Input, InputState},
+    input::InputState,
 };
-use gpui_component::{Disableable, Icon, IconName, Sizable};
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 use yss_graph_document::NodeId;
-use yss_graph_editor::{
-    EditorGraphMutation,
-    projection::{EditorNodeModel, EditorProjectionModel},
-};
+use yss_graph_editor::projection::{EditorNodeModel, EditorProjectionModel};
 use yss_node_protocol::NodeTypeId;
 use yss_project::GraphEditVersion;
 
 use super::parameters::{ParameterChange, ParameterForm};
 use crate::canvas::{GraphCanvas, GraphCommand};
-use crate::{appearance, assets::NativeIcon, services::NativeServices};
+use crate::{appearance, services::NativeServices};
 use ports::PortField;
 
 pub struct DetailsPanel {
@@ -36,6 +35,9 @@ pub struct DetailsPanel {
         Entity<gpui_component::list::ListState<connections::ConnectionPicker>>,
     )>,
     ports_open: [bool; 2],
+    diagnostics_open: bool,
+    diagnostics_page: usize,
+    diagnostics_scroll: gpui::ScrollHandle,
     properties: Entity<super::graph_properties::GraphProperties>,
     documentation: Entity<documentation::NodeDocumentation>,
     description: Entity<description::NodeDescription>,
@@ -101,6 +103,9 @@ impl DetailsPanel {
             services,
             connection_picker: None,
             ports_open: [false; 2],
+            diagnostics_open: true,
+            diagnostics_page: 0,
+            diagnostics_scroll: gpui::ScrollHandle::new(),
             properties,
             documentation,
             description,
@@ -135,6 +140,9 @@ impl DetailsPanel {
             .update(cx, |description, cx| description.clear(cx));
         self.connection_picker = None;
         self.ports_open = [false; 2];
+        self.diagnostics_open = true;
+        self.diagnostics_page = 0;
+        self.diagnostics_scroll.set_offset(gpui::Point::default());
         self.graph = None;
         self.document = None;
         self.mind = None;
@@ -261,15 +269,25 @@ impl DetailsPanel {
         self.connection_picker = None;
         if !same_node {
             self.ports_open = [false; 2];
+            self.diagnostics_open = true;
+            self.diagnostics_page = 0;
+            self.diagnostics_scroll.set_offset(gpui::Point::default());
         }
         let old_label = self.node().map(|node| node.display.user_label.clone());
         self.graph = Some(graph.clone());
         self.selected = nodes;
-        self.projection = Some(projection);
+        self.projection = Some(projection.clone());
         self.version = Some(version);
         self.error = None;
         self.epoch = self.epoch.wrapping_add(1);
-        let node = self.node().cloned();
+        let node = self.node_in(&projection);
+        let diagnostics_page = self.diagnostics_page.min(node.map_or(0, |node| {
+            node.diagnostics.len().saturating_sub(1) / diagnostics::PAGE_DIAGNOSTICS
+        }));
+        if diagnostics_page != self.diagnostics_page {
+            self.diagnostics_scroll.set_offset(gpui::Point::default());
+        }
+        self.diagnostics_page = diagnostics_page;
         if !same_node || old_label != node.as_ref().map(|node| node.display.user_label.clone()) {
             self.label.update(cx, |input, cx| {
                 input.set_value(
@@ -295,17 +313,24 @@ impl DetailsPanel {
                 cx,
             );
         });
-        let mut ports = if same_node {
+        let mut ports: BTreeMap<_, _> = if same_node {
             std::mem::take(&mut self.ports)
+                .into_iter()
+                .map(|field| (field.model.address.clone(), field))
+                .collect()
         } else {
-            vec![]
+            BTreeMap::new()
         };
         self.ports = node
             .iter()
             .flat_map(|node| node.ports.iter())
             .map(|port| {
-                if let Some(index) = ports.iter().position(|field| field.model == *port) {
-                    ports.remove(index)
+                if let Some(mut field) = ports
+                    .remove(&port.address)
+                    .filter(|field| field.model == *port)
+                {
+                    field.model = port.clone();
+                    field
                 } else {
                     PortField::new(port.clone(), window, cx)
                 }
@@ -322,11 +347,14 @@ impl DetailsPanel {
     }
 
     fn node(&self) -> Option<&EditorNodeModel> {
+        self.node_in(self.projection.as_ref()?)
+    }
+
+    fn node_in<'a>(&self, projection: &'a EditorProjectionModel) -> Option<&'a EditorNodeModel> {
         if self.selected.len() != 1 {
             return None;
         }
-        self.projection
-            .as_ref()?
+        projection
             .nodes
             .iter()
             .find(|node| node.node_id == self.selected[0])
@@ -354,113 +382,6 @@ impl DetailsPanel {
     }
 }
 
-impl DetailsPanel {
-    fn render_node_details(
-        &self,
-        node: &EditorNodeModel,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
-        let busy = self.graph().is_some_and(|graph| graph.read(cx).busy());
-        let node_id = node.node_id;
-        let epoch = self.epoch;
-        div()
-            .min_w_0()
-            .flex()
-            .flex_col()
-            .child(
-                div()
-                    .p_4()
-                    .flex()
-                    .flex_col()
-                    .gap_3()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(NativeIcon::Graph)
-                                    .size_4()
-                                    .text_color(gpui::rgb(appearance::BLUE)),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_sm()
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .truncate()
-                                    .child(
-                                        node.display
-                                            .user_label
-                                            .as_deref()
-                                            .unwrap_or(&node.display.title)
-                                            .to_owned(),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child("显示名称"),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                Input::new(&self.label)
-                                    .small()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .disabled(busy),
-                            )
-                            .child(
-                                Button::new("node-label")
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::Check)
-                                    .tooltip("应用名称")
-                                    .disabled(busy)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        if !view.accepts_input(epoch, cx) {
-                                            return;
-                                        }
-                                        let label = view.label.read(cx).value().to_string();
-                                        view.submit(
-                                            GraphCommand::Edit(EditorGraphMutation::SetNodeLabel {
-                                                node_id,
-                                                label: (!label.is_empty()).then_some(label),
-                                            }),
-                                            cx,
-                                        );
-                                    })),
-                            ),
-                    ),
-            )
-            .children(
-                self.graph()
-                    .and_then(|graph| graph.read(cx).command_error().map(str::to_owned))
-                    .map(|error| {
-                        div()
-                            .id("node-command-error")
-                            .role(gpui::accesskit::Role::Alert)
-                            .px_4()
-                            .text_xs()
-                            .text_color(cx.theme().danger)
-                            .child(error)
-                    }),
-            )
-            .child(self.parameters.clone())
-            .child(self.description.clone())
-            .child(self.render_ports(busy, cx))
-            .child(self.documentation.clone())
-    }
-}
 impl Render for DetailsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let panel = div()
