@@ -82,12 +82,14 @@ Robust、Quantile、Firth、计数/比例/Tobit/Conditional Logit 和其余 GLM 
 曲线、RCS、阈值、回归流程及 Multinomial/Ordinal Logit 使用 revision 5；
 两个非线性入口与 Deming 使用 revision 4。Ridge/Lasso/PLS 使用 revision 5，不输出系数 p 值。
 五个参数生存拟合内核（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 10，
-Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 10，
-无 moderator 的 Meta 模型、逐项排除和敏感性使用 revision 9；Egger 使用 revision 8，Begg 保持 revision 7。
-置信区间与调整预测使用 revision 5，多重比较使用 revision 6；六个 Meta 效应转换使用 revision 6，
-Forest/Funnel 绘图使用 revision 7。SCI 的共享正态临界值直接从中心置信度计算，
+Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 11，
+无 moderator 的 Meta 模型、逐项排除和敏感性使用 revision 10；Egger 使用 revision 9，Begg 保持 revision 7。
+置信区间与调整预测使用 revision 6，多重比较使用 revision 6；六个 Meta 效应转换使用 revision 6，
+Forest/Funnel 绘图使用 revision 8。SCI 的共享正态临界值直接从中心置信度计算，
 保留接近 1 的有限区间和极小正置信度的可表示宽度；多重比较只校验其实际使用的置信度，
-不预先计算并丢弃正态分位数。固定 95% 的异质性指标及 Begg、Egger 的现有推断保持原版本。
+不预先计算并丢弃正态分位数。接近零的 Student-t 临界值复用 SCI 受误差界约束的中心展开，
+保留极小置信水平与附近的区间宽度；上述区间、Meta 和绘图入口随实际调用更新能力版本。
+固定 95% 的异质性指标及 Begg 保持原版本；多重比较的显式尾概率不经过这份中心计算。
 中介 bootstrap 采用 revision 9，涵盖共享参数恢复、稳定分位数二分点和 Student-t 尾概率。
 能力指纹涵盖共享输入错误契约、实际尾概率及系数/协方差坐标恢复。
 

@@ -13,7 +13,15 @@ pub(crate) fn critical(confidence: f64, df: Option<f64>) -> Result<f64> {
     match df {
         // Central normal probability is erf(z / sqrt(2)); avoid rounding a CDF to 0.5 or 1.
         None => finite(std::f64::consts::SQRT_2 * statrs::function::erf::erf_inv(confidence)),
-        Some(_) => critical_tail((1. - confidence) / 2., df),
+        Some(degrees) => {
+            if !degrees.is_finite() || degrees <= 0. {
+                return Err(parameter());
+            }
+            match crate::distribution::student_t_center_quantile(confidence, degrees) {
+                Some(q) => finite(q),
+                None => critical_tail((1. - confidence) / 2., df),
+            }
+        }
     }
 }
 pub(super) fn critical_tail(tail: f64, df: Option<f64>) -> Result<f64> {

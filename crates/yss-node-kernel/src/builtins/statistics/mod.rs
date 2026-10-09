@@ -88,7 +88,7 @@ pub(super) fn install(
                 "yssbi.statistics.iv.2sls.fit" => 12,
                 "yssbi.statistics.iv.liml.fit" => 14,
                 "yssbi.statistics.panel.fit" => 12,
-                "yssbi.statistics.econometrics.panel.re" => 11,
+                "yssbi.statistics.econometrics.panel.re" | "yssbi.statistics.meta.regression" => 11,
                 "yssbi.statistics.econometrics.panel.fe"
                 | "yssbi.statistics.econometrics.panel.fd"
                 | "yssbi.statistics.panel.compare"
@@ -98,7 +98,11 @@ pub(super) fn install(
                 | "yssbi.statistics.survival.loglogistic"
                 | "yssbi.statistics.survival.lognormal"
                 | "yssbi.statistics.survival.weibull"
-                | "yssbi.statistics.meta.regression" => 10,
+                | "yssbi.statistics.meta.inverse_variance"
+                | "yssbi.statistics.meta.fixed_effect"
+                | "yssbi.statistics.meta.random_effect"
+                | "yssbi.statistics.meta.leave_one_out"
+                | "yssbi.statistics.meta.sensitivity" => 10,
                 "yssbi.statistics.adf.test"
                 | "yssbi.statistics.econometrics.panel.between"
                 | "yssbi.statistics.logit.summary"
@@ -114,11 +118,7 @@ pub(super) fn install(
                 | "yssbi.statistics.econometrics.heckman_two_step"
                 | "yssbi.statistics.workflow.mediation"
                 | "yssbi.statistics.workflow.moderated_mediation"
-                | "yssbi.statistics.meta.inverse_variance"
-                | "yssbi.statistics.meta.fixed_effect"
-                | "yssbi.statistics.meta.random_effect"
-                | "yssbi.statistics.meta.leave_one_out"
-                | "yssbi.statistics.meta.sensitivity" => 9,
+                | "yssbi.statistics.meta.egger" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
                 | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.sur"
@@ -135,7 +135,8 @@ pub(super) fn install(
                 | "yssbi.statistics.causal.ipw"
                 | "yssbi.statistics.causal.psm"
                 | "yssbi.statistics.causal.regression_adjustment"
-                | "yssbi.statistics.meta.egger" => 8,
+                | "yssbi.statistics.plot.forest"
+                | "yssbi.statistics.plot.funnel" => 8,
                 "yssbi.statistics.diagnostic.wald"
                 | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
@@ -185,8 +186,6 @@ pub(super) fn install(
                 | "yssbi.statistics.mixed.poisson"
                 | "yssbi.statistics.mixed.random_intercept"
                 | "yssbi.statistics.mixed.random_slope"
-                | "yssbi.statistics.plot.forest"
-                | "yssbi.statistics.plot.funnel"
                 | "yssbi.statistics.timeseries.ecm" => 7,
                 "yssbi.plot.boxplot"
                 | "yssbi.plot.violin"
@@ -224,7 +223,9 @@ pub(super) fn install(
                 | "yssbi.statistics.meta.single_proportion"
                 | "yssbi.statistics.meta.mean"
                 | "yssbi.statistics.meta.correlation"
-                | "yssbi.statistics.meta.or_hr" => 6,
+                | "yssbi.statistics.meta.or_hr"
+                | "yssbi.statistics.inference.confidence_interval"
+                | "yssbi.statistics.postestimation.adjusted_predictions" => 6,
                 "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
                 | "yssbi.statistics.diagnostic.ljung_box"
@@ -248,9 +249,7 @@ pub(super) fn install(
                 | "yssbi.statistics.timeseries.arch"
                 | "yssbi.statistics.timeseries.garch"
                 | "yssbi.statistics.timeseries.egarch"
-                | "yssbi.statistics.timeseries.gjr_garch"
-                | "yssbi.statistics.inference.confidence_interval"
-                | "yssbi.statistics.postestimation.adjusted_predictions" => 5,
+                | "yssbi.statistics.timeseries.gjr_garch" => 5,
                 _ if id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks" =>
                 {

@@ -1,5 +1,6 @@
 //! Noncentral t/F tails from centered Poisson/beta series; no asymptotic substitution.
 use super::*;
+use crate::distribution::stirling_error;
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT},
     function::{beta::beta_reg, gamma::ln_gamma},
@@ -113,10 +114,6 @@ fn probability(p: f64) -> Result<f64> {
         return Err(failed());
     }
     Ok(p.clamp(0., 1.))
-}
-fn stirling_error(z: f64) -> f64 {
-    let q = 1. / (z * z);
-    (1. / 12. - q * (1. / 360. - q * (1. / 1260. - q / 1680.))) / z
 }
 fn mode_weights(lambda: f64, mode: usize, twin: Option<f64>) -> (f64, f64) {
     let k = mode as f64;

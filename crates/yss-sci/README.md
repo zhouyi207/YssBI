@@ -124,6 +124,14 @@ rounding a CDF to one or one-half. ARIMA validates and obtains this value before
 fitting; Meta and adjusted predictions reuse the same owner. Pairwise comparison
 admission validates confidence directly instead of computing an unused normal
 quantile; its Student-t and multiplicity tail calculations remain explicit.
+Central Student-t widths use the distribution owner's fifth-order quantile
+expansion when its dimensionless curvature bounds the omitted term below
+rounding. The density normalization reuses Power's Stirling calculation, now
+owned by `distribution`; Power's arithmetic is unchanged. This preserves tiny
+positive confidence and nearby widths without rounded tails or inverse-Beta
+cancellation. Ordinary Student-t quantiles continue through the existing tail
+entry. Closed Cauchy/df-2 references and exact half-integer Gamma normalization
+check the central regime, including Knapp–Hartung Meta inference.
 `regression/postestimation` owns shared evaluation grids, binary-link derivatives
 and Delta variance for adjusted means and binary marginal effects. Evaluation
 retains fitted row order and applies explicit column overrides without rebuilding

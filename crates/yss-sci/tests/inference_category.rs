@@ -59,6 +59,71 @@ fn confidence_intervals_match_quantiles_keep_all_rows_and_check_inputs() {
     }
 }
 #[test]
+fn student_confidence_preserves_tiny_width_and_knapp_hartung_inference() {
+    let confidence = 1e-20;
+    check_student_confidence(confidence);
+    // Exact half-integer Gamma recurrence, evaluated with 100-digit Decimal factorials.
+    check_student_width(confidence, 64.0, 1.2582192702251038e-20);
+    let result = yss_sci::meta::model::fit(
+        &[-1.0, 0.0, 1.0],
+        &[1.0; 3],
+        &[],
+        yss_sci_contract::meta::MetaOptions {
+            estimator: yss_sci_contract::meta::MetaEstimator::Fixed,
+            inference: yss_sci_contract::meta::MetaInference::KnappHartung,
+            confidence_level: confidence,
+        },
+        &control(),
+    )
+    .unwrap();
+    let [lower, upper] = result.summary.coefficients[0].confidence_interval.unwrap();
+    let expected = std::f64::consts::SQRT_2 * confidence / 3.0f64.sqrt();
+    assert!(lower < 0.0 && upper > 0.0);
+    assert!((upper / expected - 1.0).abs() < 1e-12);
+    assert!((lower / expected + 1.0).abs() < 1e-12);
+}
+
+#[test]
+fn student_confidence_retains_center_precision_and_nonlinear_width() {
+    // The first case keeps a representable tail but loses precision in inverse Beta.
+    // The second needs the nonlinear terms of the central quantile.
+    for confidence in [1e-10, 1e-3] {
+        check_student_confidence(confidence);
+    }
+}
+
+fn check_student_confidence(confidence: f64) {
+    check_student_width(
+        confidence,
+        1.0,
+        (std::f64::consts::FRAC_PI_2 * confidence).tan(),
+    );
+    check_student_width(
+        confidence,
+        2.0,
+        std::f64::consts::SQRT_2 * confidence / (1.0 - confidence * confidence).sqrt(),
+    );
+}
+
+fn check_student_width(confidence: f64, df: f64, critical: f64) {
+    let result = intervals::calculate(
+        &[0.0],
+        &[1.0],
+        IntervalOptions {
+            confidence_level: confidence,
+            degrees_of_freedom: Some(df),
+        },
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(result.summary.reference_distribution, "student_t");
+    assert_eq!(result.summary.degrees_of_freedom, Some(df));
+    assert!(result.rows[0].upper > 0.0 && result.rows[0].lower < 0.0);
+    assert!((result.rows[0].upper / critical - 1.0).abs() < 1e-12);
+    assert!((result.rows[0].lower / critical + 1.0).abs() < 1e-12);
+}
+
+#[test]
 fn normal_confidence_edges_keep_arima_intervals_finite_near_one() {
     // Independent 140-digit Gaussian integration at the largest f64 below one.
     check_normal_confidence_edges(f64::from_bits(1.0f64.to_bits() - 1), 8.292361075813595);
