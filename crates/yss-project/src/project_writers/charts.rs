@@ -8,40 +8,45 @@ impl ProjectState {
         database_id: Option<String>,
         operation_id: OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let (session, authority_generation, ()) =
+            self.capture_writer_input(expected_project_instance_id, |_| ())?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let lease = self.filesystem().acquire(session.root.clone())?;
         let empty_context = context(
             self,
-            snapshot.session.clone(),
+            session.clone(),
             operation_id,
             BTreeMap::new(),
             BTreeSet::new(),
         );
-        self.validate_writer_context(&empty_context, snapshot.authority_generation)?;
-        let current = self.project_data.read().unwrap().clone();
-        let existing = current
-            .charts
-            .keys()
-            .map(ChartResourcePath::display_name)
-            .collect::<Vec<_>>();
-        let unique = allocate_unique_resource_name(name, existing);
-        let chart_path = ChartResourcePath::from_name(&unique);
-        let document = ChartDocument::new(
-            database_id
-                .or_else(|| current.databases.keys().min().cloned())
-                .unwrap_or_default(),
-        );
+        self.validate_writer_context(&empty_context, authority_generation)?;
+        let (chart_path, document) = {
+            let current = self.project_data.read().unwrap();
+            let existing = current.charts.keys().map(ChartResourcePath::display_name);
+            let unique = allocate_unique_resource_name(name, existing);
+            let chart_path = ChartResourcePath::from_name(&unique);
+            let document = ChartDocument::new(
+                database_id
+                    .or_else(|| current.databases.keys().min().cloned())
+                    .unwrap_or_default(),
+            );
+            (chart_path, document)
+        };
         let mutation_context = context(
             self,
-            snapshot.session.clone(),
+            session,
             operation_id,
             BTreeMap::new(),
             BTreeSet::from([chart_key(&chart_path)]),
         );
-        let result =
-            self.write_chart_patch(&snapshot, mutation_context, lease, chart_path, document);
+        let result = self.write_chart_patch(
+            authority_generation,
+            mutation_context,
+            lease,
+            chart_path,
+            document,
+        );
         if result.is_ok() {
             reservation.complete();
         }
@@ -56,36 +61,40 @@ impl ProjectState {
         operation_id: OperationId,
         name: Option<String>,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let (session, authority_generation, ()) =
+            self.capture_writer_input(expected_project_instance_id, |_| ())?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
-        let current = self.project_data.read().unwrap().clone();
-        let source_document = current.charts.get(source).cloned().ok_or_else(|| {
-            ProjectOperationError::ChartNotFound {
-                path: source.clone(),
-            }
-        })?;
-        let existing = current
-            .charts
-            .keys()
-            .map(ChartResourcePath::display_name)
-            .collect::<Vec<_>>();
-        let requested = name.as_deref().map(ResourceName::parse).transpose()?;
-        let unique = allocate_unique_resource_name(
-            requested.as_ref().unwrap_or_else(|| source.display_name()),
-            existing,
-        );
-        let target = ChartResourcePath::from_name(&unique);
+        let lease = self.filesystem().acquire(session.root.clone())?;
+        let (target, source_document) = {
+            let current = self.project_data.read().unwrap();
+            let source_document = current.charts.get(source).cloned().ok_or_else(|| {
+                ProjectOperationError::ChartNotFound {
+                    path: source.clone(),
+                }
+            })?;
+            let existing = current.charts.keys().map(ChartResourcePath::display_name);
+            let requested = name.as_deref().map(ResourceName::parse).transpose()?;
+            let unique = allocate_unique_resource_name(
+                requested.as_ref().unwrap_or_else(|| source.display_name()),
+                existing,
+            );
+            (ChartResourcePath::from_name(&unique), source_document)
+        };
         let mutation_context = context(
             self,
-            snapshot.session.clone(),
+            session,
             operation_id,
             BTreeMap::from([(chart_key(source), expected_revision)]),
             BTreeSet::from([chart_key(&target)]),
         );
-        let result =
-            self.write_chart_patch(&snapshot, mutation_context, lease, target, source_document);
+        let result = self.write_chart_patch(
+            authority_generation,
+            mutation_context,
+            lease,
+            target,
+            source_document,
+        );
         if result.is_ok() {
             reservation.complete();
         }
@@ -94,13 +103,13 @@ impl ProjectState {
 
     fn write_chart_patch(
         &self,
-        snapshot: &WriterSnapshot,
+        authority_generation: u64,
         context: ProjectTransactionContext,
         lease: yss_filesystem::FilesystemLeaseSet,
         chart_path: ChartResourcePath,
         document: ChartDocument,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        self.validate_writer_context(&context, snapshot.authority_generation)?;
+        self.validate_writer_context(&context, authority_generation)?;
         let (new_path, contents) =
             crate::serialize_chart(&chart_path, &document).map_err(prepare_error)?;
         let prepared = FilesystemTransaction::prepare_with_validator(
@@ -112,7 +121,7 @@ impl ProjectState {
             }],
             validate_document,
         )?;
-        self.validate_writer_context(&context, snapshot.authority_generation)?;
+        self.validate_writer_context(&context, authority_generation)?;
         let committed = prepared.commit()?;
         let result = match self.apply_project_resource_document_patch(
             &context,
@@ -143,26 +152,32 @@ impl ProjectState {
         document: ChartDocument,
         requested_revision: Option<ResourceRevision>,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let (session, authority_generation, (present, captured_revision)) = self
+            .capture_writer_input(expected_project_instance_id, |data| {
+                (
+                    data.charts.contains_key(chart_path),
+                    self.chart_revisions
+                        .read()
+                        .unwrap()
+                        .get(chart_path)
+                        .copied(),
+                )
+            })?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
-        if !snapshot.data.charts.contains_key(chart_path) {
+        let lease = self.filesystem().acquire(session.root.clone())?;
+        if !present {
             return Err(ProjectOperationError::ChartNotFound {
                 path: chart_path.clone(),
             });
         }
         // Explicit Save overwrites the resource; its transaction baseline is Rust-owned.
-        let expected_revision = snapshot
-            .chart_revisions
-            .get(chart_path)
-            .copied()
-            .ok_or_else(|| {
-                prepare_error(format!(
-                    "Chart '{}' has no resource revision",
-                    chart_path.as_str()
-                ))
-            })?;
+        let expected_revision = captured_revision.ok_or_else(|| {
+            prepare_error(format!(
+                "Chart '{}' has no resource revision",
+                chart_path.as_str()
+            ))
+        })?;
         if requested_revision.is_some_and(|revision| revision != expected_revision) {
             return Err(ProjectOperationError::ResourceRevisionConflict {
                 message: "chart changed after the editing baseline was captured".into(),
@@ -170,13 +185,13 @@ impl ProjectState {
         }
         let mutation_context = context(
             self,
-            snapshot.session.clone(),
+            session,
             operation_id,
             BTreeMap::from([(chart_key(chart_path), expected_revision)]),
             BTreeSet::new(),
         );
         let result = self.write_chart_patch(
-            &snapshot,
+            authority_generation,
             mutation_context,
             lease,
             chart_path.clone(),
@@ -197,7 +212,8 @@ impl ProjectState {
         lifecycle_token: u64,
         operation_id: OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let (session, authority_generation, ()) =
+            self.capture_writer_input(expected_project_instance_id, |_| ())?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
         let mut ownership = self.acquire_resource_rename_ownership(
@@ -205,42 +221,45 @@ impl ProjectState {
             yss_resource_lifecycle::LifecycleResourcePath::Chart(chart_path.clone()),
             lifecycle_token,
         )?;
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_writer_context(
             &context(
                 self,
-                snapshot.session.clone(),
+                session.clone(),
                 operation_id,
                 BTreeMap::from([(chart_key(chart_path), expected_revision)]),
                 BTreeSet::new(),
             ),
-            snapshot.authority_generation,
+            authority_generation,
         )?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
 
         let target = ChartResourcePath::from_name(new_name);
-        let current = self.project_data.read().unwrap().clone();
-        let moved = current.charts.get(chart_path).cloned().ok_or_else(|| {
-            ProjectOperationError::ChartNotFound {
-                path: chart_path.clone(),
+        let moved = {
+            let current = self.project_data.read().unwrap();
+            let moved = current.charts.get(chart_path).cloned().ok_or_else(|| {
+                ProjectOperationError::ChartNotFound {
+                    path: chart_path.clone(),
+                }
+            })?;
+            if current.charts.keys().any(|existing| {
+                existing != chart_path
+                    && existing.display_name().portable_key() == new_name.portable_key()
+            }) {
+                return Err(ProjectOperationError::ResourceNameConflict {
+                    message: format!("a chart named '{}' already exists", new_name.as_str()),
+                });
             }
-        })?;
-        if current.charts.keys().any(|existing| {
-            existing != chart_path
-                && existing.display_name().portable_key() == new_name.portable_key()
-        }) {
-            return Err(ProjectOperationError::ResourceNameConflict {
-                message: format!("a chart named '{}' already exists", new_name.as_str()),
-            });
-        }
+            moved
+        };
         let mutation_context = context(
             self,
-            snapshot.session.clone(),
+            session,
             operation_id,
             BTreeMap::from([(chart_key(chart_path), expected_revision)]),
             BTreeSet::from([chart_key(&target)]),
         );
-        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        self.validate_writer_context(&mutation_context, authority_generation)?;
         let prepared = FilesystemTransaction::prepare_with_validator(
             mutation_context.filesystem_context(),
             lease,
@@ -250,7 +269,7 @@ impl ProjectState {
             }],
             crate::project_writers::validate_document,
         )?;
-        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        self.validate_writer_context(&mutation_context, authority_generation)?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
         let committed = prepared.commit()?;
         let result = match self.apply_project_resource_document_patch(
@@ -283,23 +302,26 @@ impl ProjectState {
         expected_revision: ResourceRevision,
         operation_id: OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let (session, authority_generation, present) = self
+            .capture_writer_input(expected_project_instance_id, |data| {
+                data.charts.contains_key(chart_path)
+            })?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
-        if !snapshot.data.charts.contains_key(chart_path) {
+        let lease = self.filesystem().acquire(session.root.clone())?;
+        if !present {
             return Err(ProjectOperationError::ChartNotFound {
                 path: chart_path.clone(),
             });
         }
         let mutation_context = context(
             self,
-            snapshot.session.clone(),
+            session,
             operation_id,
             BTreeMap::from([(chart_key(chart_path), expected_revision)]),
             BTreeSet::new(),
         );
-        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        self.validate_writer_context(&mutation_context, authority_generation)?;
         let prepared = FilesystemTransaction::prepare_with_validator(
             mutation_context.filesystem_context(),
             lease,
@@ -308,7 +330,7 @@ impl ProjectState {
             }],
             crate::project_writers::validate_document,
         )?;
-        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        self.validate_writer_context(&mutation_context, authority_generation)?;
         let committed = prepared.commit()?;
         let result = match self.apply_project_resource_document_patch(
             &mutation_context,

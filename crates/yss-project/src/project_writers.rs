@@ -91,7 +91,6 @@ pub(crate) struct WriterSnapshot {
     pub(crate) data: ProjectData,
     pub(crate) graph_resource_revisions:
         std::collections::HashMap<GraphResourcePath, ResourceRevision>,
-    pub(crate) chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     pub(crate) authority_generation: u64,
 }
 
@@ -161,19 +160,17 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
     ) -> Result<WriterSnapshot, ProjectOperationError> {
-        let (session, authority_generation, (data, graph_resource_revisions, chart_revisions)) =
-            self.capture_writer_input(expected_project_instance_id, |data| {
+        let (session, authority_generation, (data, graph_resource_revisions)) = self
+            .capture_writer_input(expected_project_instance_id, |data| {
                 (
                     data.clone(),
                     self.graph_resource_revisions.read().unwrap().clone(),
-                    self.chart_revisions.read().unwrap().clone(),
                 )
             })?;
         Ok(WriterSnapshot {
             session,
             data,
             graph_resource_revisions,
-            chart_revisions,
             authority_generation,
         })
     }

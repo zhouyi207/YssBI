@@ -140,7 +140,10 @@ Event Graph/Function Graph 创建、复制、删除、重命名复用标准 Proj
 publication revision，而不仅是 authority generation。纯生命周期增删不伪造缺失的图投影，
 重命名回执保留真实 move delta、递增发布版本及受影响图的恢复声明。
 
-Graph 与 Chart writers 共用 WriterSnapshot 和 transaction context。取得文件系统 lease 后与暂存完成后，
+Graph writers 使用修改准备所需的 WriterSnapshot；Chart writers 通过同一捕获入口只读取
+项目身份与 authority generation，Save 额外捕获目标存在性及其 revision，删除只捕获目标存在性。
+名称分配借用 Chart 路径和默认数据库 ID，复制、重命名只复制目标 Chart 文档，不复制无关正文或 revision 表。
+两类 writer 共用 transaction context。取得文件系统 lease 后与暂存完成后，
 均检查捕获的 authority generation、受影响资源版本以及源/目标路径存在性；重命名复用相同的 ownership lease
 和 patch 发布入口。函数签名的 before-state、函数版本与所属 Graph 版本也在事务内校验，文件落盘成功后才发布，
 发布失败则回滚文件。签名最终发布在锁内重验原 WriterSnapshot 的 authority generation，确保准备的依赖集合仍有效；
