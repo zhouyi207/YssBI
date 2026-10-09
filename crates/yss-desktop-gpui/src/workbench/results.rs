@@ -189,6 +189,7 @@ impl Workbench {
         &mut self,
         reference: ResultReference,
         intent: Option<String>,
+        handoff: Option<std::sync::Arc<yss_application::graph::results::ResultLease>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -213,8 +214,10 @@ impl Workbench {
                     self.finish_intent(&id, true, window, cx);
                 } else {
                     self.observe_result_intent(&panel, id, window, cx);
-                    panel.update(cx, |panel, cx| panel.load(window, cx));
+                    panel.update(cx, |panel, cx| panel.load_retained(handoff, window, cx));
                 }
+            } else if handoff.is_some() && !panel.read(cx).loaded() {
+                panel.update(cx, |panel, cx| panel.load_retained(handoff, window, cx));
             }
             return;
         }
@@ -274,7 +277,7 @@ impl Workbench {
         if let Some(id) = intent {
             self.observe_result_intent(&panel, id, window, cx);
         }
-        panel.update(cx, |panel, cx| panel.load(window, cx));
+        panel.update(cx, |panel, cx| panel.load_retained(handoff, window, cx));
     }
 
     fn observe_result_intent(

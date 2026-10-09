@@ -131,7 +131,7 @@ impl Workbench {
                     })
                 });
                 if let Some(reference) = reference {
-                    self.open_result(reference, Some(receipt.id), window, cx);
+                    self.open_result(reference, Some(receipt.id), None, window, cx);
                 } else {
                     self.finish_intent(&receipt.id, false, window, cx);
                 }

@@ -343,7 +343,7 @@ impl Workbench {
                             view.open_project_resource(resource, window, cx)
                         }
                         ConversationEvent::OpenResult(reference) => {
-                            view.open_result(*reference, None, window, cx)
+                            view.open_result(*reference, None, None, window, cx)
                         }
                     }
                 },

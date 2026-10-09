@@ -83,7 +83,7 @@ impl Workbench {
                 if let yss_application::graph::run::RunApplicationEventKind::ResultInspectionRequested { result_id, .. } = event.kind() {
                     self.open_result(yss_graph_execution::result::ResultReference {
                         execution_session_id: *event.identity().execution_session_id(), result_id: *result_id,
-                    }, None, window, cx);
+                    }, None, None, window, cx);
                 } else if let Some(graph) = self.graphs.get(event.identity().graph_path().as_str()).and_then(gpui::WeakEntity::upgrade) {
                     graph.update(cx, |graph, cx| graph.accept_execution(event, cx));
                 }

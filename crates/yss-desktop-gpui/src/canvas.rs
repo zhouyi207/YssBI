@@ -38,6 +38,7 @@ use crate::{project::OpenedGraph, services::NativeServices};
 pub use authoring::ConstantValueInput;
 pub use commands::*;
 pub(crate) use constant_drag::ConstantDrag;
+pub(crate) use ports::scalar_input_type;
 
 pub enum CanvasEvent {
     Selection {
@@ -51,6 +52,7 @@ pub enum CanvasEvent {
     },
     Execution,
     ShowResults,
+    InspectResult(Arc<yss_application::graph::results::ResultLease>),
     ShowOutput,
     OpenGraph(String),
 }
@@ -95,7 +97,7 @@ pub struct GraphCanvas {
     hovered_connection: Option<ConnectionId>,
     context_menu: Option<menu::CanvasMenu>,
     connection_click: Option<connections::ConnectionClick>,
-    clipboard_task: Option<gpui::Task<()>>,
+    read_task: Option<gpui::Task<()>>,
     offset: Point<Pixels>,
     zoom: f32,
     gesture: Option<Gesture>,
@@ -137,7 +139,7 @@ impl GraphCanvas {
             hovered_connection: None,
             context_menu: None,
             connection_click: None,
-            clipboard_task: None,
+            read_task: None,
             offset: point(px(40.), px(40.)),
             zoom: 1.,
             gesture: None,
@@ -298,7 +300,7 @@ impl GraphCanvas {
         }
         self.hovered_connection = None;
         self.context_menu = None;
-        self.clipboard_task = None;
+        self.read_task = None;
     }
 
     fn begin_node(
@@ -319,7 +321,7 @@ impl GraphCanvas {
         self.palette = None;
         self.hovered_connection = None;
         self.context_menu = None;
-        self.clipboard_task = None;
+        self.read_task = None;
         let additive = event.modifiers.shift || event.modifiers.control || event.modifiers.platform;
         if additive {
             if !self.selected.insert(id) {
@@ -355,7 +357,7 @@ impl GraphCanvas {
         self.located_port = None;
         self.connection_click = None;
         self.context_menu = None;
-        self.clipboard_task = None;
+        self.read_task = None;
         self.hovered_connection = None;
         window.focus(&self.focus, cx);
         self.palette = None;

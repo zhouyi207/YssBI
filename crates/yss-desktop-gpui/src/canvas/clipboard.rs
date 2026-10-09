@@ -22,13 +22,13 @@ impl GraphCanvas {
                 .export_graph_subgraph(&project, &path, version, nodes)?;
             Ok(serde_json::to_string(&snapshot)?)
         });
-        self.clipboard_task = Some(cx.spawn(async move |view, cx| {
+        self.read_task = Some(cx.spawn(async move |view, cx| {
             let result = task
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
             let _ = view.update(cx, |view, cx| {
-                view.clipboard_task = None;
+                view.read_task = None;
                 if view.busy
                     || view.graph.editing.version != version
                     || !Arc::ptr_eq(&view.graph.projection, &projection)
@@ -72,10 +72,10 @@ impl GraphCanvas {
         let version = self.graph.editing.version;
         let anchor = self.world(self.bounds.get().center());
         let task = cx.read_from_clipboard_async();
-        self.clipboard_task = Some(cx.spawn(async move |view, cx| {
+        self.read_task = Some(cx.spawn(async move |view, cx| {
             let result = task.await;
             let _ = view.update(cx, |view, cx| {
-                view.clipboard_task = None;
+                view.read_task = None;
                 if view.busy
                     || view.graph.editing.version != version
                     || !Arc::ptr_eq(&view.graph.projection, &projection)

@@ -36,9 +36,10 @@ impl ResultPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.loading || self.closed {
+        if self.closed || (self.loading && (handoff.is_none() || self.loaded())) {
             return;
         }
+        // A new handoff replaces an unretained pending open before its source can expire.
         self.loading = true;
         self.error = None;
         self.generation += 1;

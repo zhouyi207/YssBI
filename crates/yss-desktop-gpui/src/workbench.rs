@@ -252,7 +252,7 @@ impl Workbench {
             window,
             |view, _, event, window, cx| {
                 let results::ResultsEvent::Open(reference) = event;
-                view.open_result(*reference, None, window, cx);
+                view.open_result(*reference, None, None, window, cx);
             },
         ));
     }

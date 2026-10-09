@@ -1,10 +1,29 @@
 //! Port presentation shares its type palette with connections; decisions stay backend-owned.
+mod inspection;
+mod menu;
+
 use super::{GraphCanvas, presentation::State};
 use crate::appearance;
 use gpui::{Context, IntoElement, MouseButton, div, prelude::*, px, rgb};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_graph_editor::projection::{ConnectionDecision, EditorPortModel, EditorPortTypeState};
 use yss_node_protocol::PortDirection;
+
+pub(crate) fn scalar_input_type(port: &EditorPortModel) -> Option<SemanticType> {
+    if port.direction != PortDirection::Input || port.orphan {
+        return None;
+    }
+    match &port.type_state {
+        EditorPortTypeState::Exact {
+            data_type:
+                Some(ValueType::Scalar(
+                    kind @ (SemanticType::Numeric | SemanticType::Binary | SemanticType::Text),
+                )),
+            ..
+        } => Some(*kind),
+        _ => None,
+    }
+}
 
 pub(super) fn type_color(port: &EditorPortModel) -> u32 {
     let EditorPortTypeState::Exact {
@@ -37,6 +56,7 @@ impl GraphCanvas {
     ) -> impl IntoElement + use<> {
         let start = port.address.clone();
         let end = start.clone();
+        let menu_address = start.clone();
         let output = port.direction == PortDirection::Output;
         let label = port
             .display
@@ -126,6 +146,13 @@ impl GraphCanvas {
                     view.begin_port(start.clone(), event, window, cx)
                 }),
             )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
+                    view.show_port_menu(menu_address.clone(), event.position, window, cx)
+                }),
+            )
+            .on_mouse_down(MouseButton::Middle, |_, _, cx| cx.stop_propagation())
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(move |view, _, _, cx| view.end_port(end.clone(), cx)),

@@ -663,6 +663,16 @@
 - L2：独立副本和工作区的原生 Clippy（--bin yss-desktop-gpui --no-deps --locked -- -D warnings）及临时窗口构建通过。cargo test -p yss-graph-editor -p yss-application --lib clipboard_ --locked 运行 4 项通过，覆盖源版本检查、资源声明、常量/内部连接和原子撤销；无新增 UI 测试或全工作区验证。
 - 14 个 Rust 文件局部格式、两份文档的入口/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）及 git diff --check 通过。本批完成 3 项源码审查，累计 199/265。节点内部的端口输入/菜单和完整类型提示仍由对应 Pin 条目追踪；物理键鼠/IME、读屏、Windows/macOS 和大图性能继续验收。
 
+### 端口菜单与结果交接
+
+- 已阅读 PinContextMenu 及 GraphPinController 的菜单、输入能力和结果打开路径；菜单复用 canvas/menu，断开与重置仍通过原图事务。重置的精确数值/布尔/文本规则与 Details 共用，端口右键不改变节点选择。
+- 输出及已连接输入提供查看，输入按连线顺序查询上游；当前结果查询不触发执行，上次成功结果按 stale 摘要中的原会话/结果身份打开。worker 取得 Application 自动租约后交给现有结果标签，隐藏或刷新取消迟到交付。
+- 相同结果复用原标签；交接沿用 ResultPanel 的租约读取，新的交接可替换尚未取得租约的首次读取，旧回执由原代次拒绝；重跑保留已打开的快照。
+- 独立 Linux/X11 窗口实际核对未连接输入隐藏查看、未运行输出查看不执行、字面量重置与撤销、输入查看上游值、编辑后当前查看拒绝过期值而上次成功仍为 21；重跑得到 42，原标签仍为 21。工作区核对英文菜单、输入查看上游结果、输出两条/输入一条连线断开与撤销；X11 指针事件确认端口中键拖动不平移、右键开菜单及刷新关闭菜单。没有新增 UI 单元测试。
+- L2：独立副本与工作区的 cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings 及临时原生窗口构建通过。cargo test -p yss-graph-execution --lib --locked 按 result_store::tests:: 下 retained_snapshots_survive_output_changes_until_the_last_lease_is_released、window_handoffs_and_owner_reconciliation_do_not_leak_or_drop_claimed_results、rerun_preserves_previous_success_until_replacement_and_rejects_obsolete_publication 三个完整名称分别以 -- --exact 运行，三项通过；未运行全工作区验证。
+- 14 个 Rust 文件局部格式、两份文档相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）及 git diff --check 通过。
+- 本批完成 PinContextMenu，累计 200/265；GraphPinController/View 的完整类型提示、端口内联输入及其余条目继续审查。物理键鼠/IME、读屏、Windows/macOS 和多源输入交互验收保持开放，临时窗口入口与隔离项目不提交。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -889,13 +899,13 @@
 | [modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx) | 迁移 | 原生 PopupMenu，单选/多选断开与危险删除；菜单/投影/版本校验，复用原图事务 | Linux 窗口核对多选、断开、Delete、转接点与历史；物理输入、读屏和跨平台待验收 |
 | [modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx) | 迁移 | 原生 PopupMenu，复用原选择、子图剪贴板、图事务和两种运行；managed/连接/运行条件及旧菜单校验 | 隔离窗口核对全部动作、撤销、托管节点与 Function 限制；物理输入及跨平台开放 |
-| [modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx) | 迁移/复用：共享 PopupMenu、原编辑与结果租约 | canvas/ports 的断开、重置、当前/上次结果查看；无额外执行或结果缓存 | Linux 窗口核对禁用、隐藏、撤销、值与结果身份；多源输入及跨平台验收开放 |
 | [modules/graph-editor/internal/ui/NodePalette.tsx](../../react/src/modules/graph-editor/internal/ui/NodePalette.tsx) | 迁移：完整目录检索与分类浏览，创建复用原图事务 | `canvas/palette` 保存索引、输入与读取代次；Catalog 生成全拼/首字母搜索，GPUI 虚拟列表只绘制可见行 | 分类/查询/键盘、不可用项、配置返回、错误重试、过期图及关闭后迟到回复已预览核对；物理 IME、完整项目切换及压力验收开放 |
 | [modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx) | 迁移 | canvas/nodes 保留标题/副标题、内联摘要和两侧端口，geometry 共用尺寸与锚点，摘要有界缓存 | 隔离窗口核对标题及临时内联展示投影的数值/空值/长文本/JSON、端口对齐；平台验收开放 |
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 优化 | 原生共享节点运行/结果/诊断展示投影，布局与菜单复用画布入口；不创建逐节点状态 owner | 节点状态、结果计数及菜单已核对；Pin 子组件的输入/菜单另行追踪 |
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 迁移 | 原生节点外框、布局、状态、选择、候选淡化及目标菜单；共用画布几何与生命周期 | 隔离窗口核对选择、菜单和既有状态/淡化；物理输入及跨平台开放 |
 | [modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx) | 迁移 | 按 builtin.reroute 使用紧凑节点、中央拖动柄与隐藏标签的端口，复用原手势、图事务及透明执行 | 窗口核对选择、拖动、运行与撤销；标量/表格执行及缓存回归通过，平台验收开放 |
-| [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 已读；共享状态与起手能力已接入，输入/菜单及完整提示待完成 | 组件未完成 |
+| [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 已读；共享状态与起手能力已接入，菜单已接入，内联输入及完整提示待完成 | 组件未完成 |
 | [modules/graph-editor/internal/ui/Pins/GraphPinView.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx) | 待查 | 已读；共享状态、紧凑端口和候选已接入，完整类型形状/提示待完成 | 组件未完成 |
 | [modules/graph-editor/internal/ui/Pins/PinInput.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/PinInput.tsx) | 待查 | 已读；画布内联端口值编辑待迁移，Details 原输入继续可用 | 组件未完成 |
 

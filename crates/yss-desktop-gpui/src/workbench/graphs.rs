@@ -238,6 +238,22 @@ impl Workbench {
                             cx,
                         );
                     }
+                    CanvasEvent::InspectResult(lease) => {
+                        if view.project.as_ref().is_some_and(|project| {
+                            project.identity == canvas.read(cx).graph.project
+                        }) && view
+                            .active_editor_panel(cx)
+                            .is_some_and(|panel| panel.view().entity_id() == canvas.entity_id())
+                        {
+                            view.open_result(
+                                lease.reference(),
+                                None,
+                                Some(lease.clone()),
+                                window,
+                                cx,
+                            );
+                        }
+                    }
                     CanvasEvent::Edited => cx.notify(),
                     CanvasEvent::OpenGraph(path) => view.open_graph(path.clone(), window, cx),
                 }

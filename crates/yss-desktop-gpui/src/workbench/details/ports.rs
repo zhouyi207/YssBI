@@ -10,11 +10,11 @@ use gpui_component::{
     input::{Input, InputState},
 };
 use serde_json::Value;
-use yss_data_contract::{SemanticType, ValueType};
+use yss_data_contract::SemanticType;
 use yss_graph_document::PortRef;
 use yss_graph_editor::{
     EditorGraphMutation, PortPlacement,
-    projection::{EditorEffectiveInputBinding, EditorPortModel, EditorPortTypeState},
+    projection::{EditorEffectiveInputBinding, EditorPortModel},
 };
 use yss_node_protocol::PortDirection;
 
@@ -32,16 +32,7 @@ impl PortField {
         window: &mut Window,
         cx: &mut Context<DetailsPanel>,
     ) -> Self {
-        let input = if model.direction == PortDirection::Input
-            && !model.orphan
-            && let EditorPortTypeState::Exact {
-                data_type: Some(ValueType::Scalar(kind)),
-                ..
-            } = &model.type_state
-            && matches!(
-                kind,
-                SemanticType::Numeric | SemanticType::Binary | SemanticType::Text
-            ) {
+        let input = if let Some(kind) = crate::canvas::scalar_input_type(&model) {
             let value = model.input.as_ref().and_then(|input| {
                 input
                     .literal_override
@@ -55,7 +46,7 @@ impl PortField {
                 })
                 .unwrap_or_default();
             Some((
-                *kind,
+                kind,
                 cx.new(|cx| InputState::new(window, cx).default_value(text)),
             ))
         } else {

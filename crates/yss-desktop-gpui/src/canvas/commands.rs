@@ -98,7 +98,7 @@ impl GraphCanvas {
                 | GraphCommand::Edit(EditorGraphMutation::DuplicateSubgraph { .. })
         )
         .then(|| self.selected.clone());
-        self.clipboard_task = None;
+        self.read_task = None;
         self.context_menu = None;
         self.hovered_connection = None;
         self.gesture = None;
