@@ -156,9 +156,9 @@ impl ConversationPanel {
                             for event in &buffered {
                                 view.accept_submission(event);
                             }
-                            view.session = session;
                             view.transcript = candidate;
                             view.catalog = Some(Arc::new(catalog));
+                            view.update_session(session);
                             view.ready = true;
                             view.stream_error = None;
                             view.recovering = false;
@@ -199,6 +199,7 @@ impl ConversationPanel {
                     view.catalog = None;
                     view.error = Some("模型目录读取失败，请检查设置后刷新。".into());
                 }
+                view.reconcile_effort();
                 cx.notify();
             });
         })

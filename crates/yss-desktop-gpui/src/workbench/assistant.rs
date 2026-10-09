@@ -310,7 +310,7 @@ impl Workbench {
         self.assistant_closed = None;
         let panel = if let Some(panel) = self.conversations.get(&id) {
             panel.update(cx, |panel, cx| {
-                panel.session = session;
+                panel.update_session(session);
                 cx.notify();
             });
             panel.clone()

@@ -25,7 +25,7 @@ impl Render for ConversationPanel {
             .on_action(cx.listener(|view, _: &CancelResponse, _, cx| view.cancel(cx)))
             .child(self.render_thread(cx))
             .child(self.status(cx))
-            .child(self.render_composer(cx))
+            .child(self.render_composer(window, cx))
     }
 }
 impl ConversationPanel {

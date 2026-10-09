@@ -4,6 +4,8 @@ mod composer;
 mod execution;
 mod header;
 mod inspect;
+mod models;
+mod options;
 mod projection;
 mod render;
 mod stream;
@@ -178,23 +180,9 @@ impl ConversationPanel {
     fn can_send(&self) -> bool {
         self.ready && !self.selecting && !self.running() && self.model_available()
     }
-    fn model_available(&self) -> bool {
-        let Some(selected) = self.selection() else {
-            return false;
-        };
-        self.catalog.as_ref().is_some_and(|catalog| {
-            catalog.providers.iter().any(|provider| {
-                provider.config.id == selected.provider_id
-                    && (provider.has_api_key
-                        || provider.config.authentication
-                            == yss_harness_contract::LanguageModelAuthentication::None)
-                    && provider
-                        .config
-                        .models
-                        .iter()
-                        .any(|model| model.id == selected.model_id)
-            })
-        })
+    pub(crate) fn update_session(&mut self, session: HarnessSessionRecord) {
+        self.session = session;
+        self.reconcile_effort();
     }
 }
 pub(crate) fn principal() -> PrincipalId {

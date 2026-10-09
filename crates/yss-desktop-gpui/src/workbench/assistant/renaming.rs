@@ -103,7 +103,7 @@ impl Workbench {
                     Ok(Ok(session)) => {
                         if let Some(panel) = view.conversations.get(&id) {
                             panel.update(cx, |panel, cx| {
-                                panel.session = session;
+                                panel.update_session(session);
                                 cx.notify();
                             });
                         }

@@ -172,7 +172,8 @@ impl ConversationPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.ready || self.selecting {
+        if !self.ready || self.selecting || !self.model_available_for(&model) {
+            cx.notify();
             return;
         }
         self.selecting = true;
@@ -199,7 +200,10 @@ impl ConversationPanel {
                 }
                 view.selecting = false;
                 match result {
-                    Ok(session) => view.session = session,
+                    Ok(session) => {
+                        view.update_session(session);
+                        view.error = None;
+                    }
                     Err(error) => view.error = Some(error),
                 }
                 cx.notify();
