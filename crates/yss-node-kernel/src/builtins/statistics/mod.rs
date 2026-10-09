@@ -196,8 +196,6 @@ pub(super) fn install(
                 | "yssbi.statistics.doe.response_surface"
                 | "yssbi.statistics.inference.cluster_robust"
                 | "yssbi.statistics.meta.cochran_q"
-                | "yssbi.statistics.meta.forest"
-                | "yssbi.statistics.meta.funnel"
                 | "yssbi.statistics.meta.i_squared"
                 | "yssbi.statistics.meta.tau_squared"
                 | "yssbi.statistics.sem.path"
