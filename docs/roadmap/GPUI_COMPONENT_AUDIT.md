@@ -578,6 +578,15 @@
 - R/Julia 高亮、单波浪号与原始 HTML 语义、Assistant 替代公式分隔符、脚注/锚点导航、图片呈现、无效链接禁用外观，以及公式嵌套标记/引用式链接/跨块选择继续处理。真实模型和来源交付、物理输入、读屏、Windows/macOS、表情字形与既有嵌套 Xwayland 局部重绘仍开放；临时浅色主题下原编辑区背景未同步的问题保留在外观验收中。三项 Markdown 与 Thread 不标记整体完成，累计仍为 188/265 项。
 
 
+### R / Julia 代码高亮（Markdown 继续审查）
+
+- 核对 React 的共用高亮配置后，使用 `tree-sitter-r` 与 `arborium-julia` 提供的 grammar/查询补齐两种语言，原生配置覆盖参考侧的 14 种语言。宿主启动时一次注册到组件原有 LanguageRegistry；`R`、`jl` 与规范名称共用配置，查询捕获名适配原主题分类，没有复制语法文件、另建解析器或缓存。
+- 工作区与独立提交副本的 Linux/X11 实际窗口核对 R 条件/循环、Julia 类型/字符、Unicode 源码、别名和明暗高亮；系统剪贴板保留原文与最终换行。独立副本核对未保存文档预览，以及未闭合 Julia 字符串追加、围栏闭合后在运行中可见并可复制全部内容。
+- 工作区一次主题切换后的流式文字未及时重绘，轮次完成后源码与高亮完整；独立副本没有复现该次停留。此项与既有嵌套 Xwayland 重绘、编辑区主题背景同步继续验收，不据此宣称流式显示整体完成。
+- L2：工作区的 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked`，两份内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过；窗口通过临时 `cargo build -p yss-desktop-gpui --example markdown_languages_review --locked` 构建。三个 Rust 文件的局部格式、文档链接/声明、模块索引及 `git diff --check` 通过；没有后端契约或文案变更，不新增 UI 单元测试，不运行全工作区验证。
+- 现有锁定版本保持；新增的两个 grammar 复用现有 tree-sitter runtime，lockfile 另包含 Julia grammar 的 WASM sysroot/allocator 条件依赖，原生构建不使用它们。临时入口与数据不提交；单波浪号、HTML、替代公式分隔符、脚注/锚点、图片等继续审查，三项 Markdown 与 Thread 仍未整体完成，累计 188/265 项。
+
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -691,7 +700,7 @@
 | [modules/assistant/internal/ui/AssistantConversationToggle.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationToggle.tsx) | 优化 | 原 DockArea、目录查询和 Application 会话入口补齐整组关闭、上次/最近恢复、空目录新建及生命周期隔离；无项目沿用临时会话目录 | 代码已覆盖；本批窗口验收见记录，故障与跨平台余项开放 |
 | [modules/assistant/internal/ui/AssistantConversations.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversations.tsx) | 优化 | 原 Activity 目录与虚拟列表补齐时间、名称回退搜索、重命名按钮、窗口激活刷新；DockArea 决定当前会话，重复激活关闭，缓存重开仍校验 Application | 代码已覆盖；本批交互验收见批次记录，跨项目/平台验收开放 |
 | [modules/assistant/internal/ui/AssistantExecution.tsx](../../react/src/modules/assistant/internal/ui/AssistantExecution.tsx) | 迁移 | assistant/execution 共用事件计时、模型与记录选项；窗口仅为可见且连接正常的运行会话刷新 | 原生合成事件窗口通过；真实运行/持久回放与跨平台待验收 |
-| [modules/assistant/internal/ui/AssistantMarkdown.tsx](../../react/src/modules/assistant/internal/ui/AssistantMarkdown.tsx) | 待查 | 已读代码操作、链接、数学预处理与流式配置；原生代码操作、12 类高亮、资源路由和共用公式已接入，替代分隔符等仍开放 | 合成事件窗口、系统剪贴板及隔离资源验收见本批；整体未完成 |
+| [modules/assistant/internal/ui/AssistantMarkdown.tsx](../../react/src/modules/assistant/internal/ui/AssistantMarkdown.tsx) | 待查 | 已读代码操作、链接、数学预处理与流式配置；原生代码操作、14 类高亮、资源路由和共用公式已接入，替代分隔符等仍开放 | 合成事件窗口、系统剪贴板及隔离资源验收见本批；整体未完成 |
 | [modules/assistant/internal/ui/AssistantModelPicker.tsx](../../react/src/modules/assistant/internal/ui/AssistantModelPicker.tsx) | 迁移 | assistant/models 复用可搜索 Combobox；会话回执拥有选择，当前目录校验身份与凭据，隐藏释放弹出状态 | Linux/X11 合成目录与真实会话选择验收通过；真实供应商/其他平台待验收 |
 | [modules/assistant/internal/ui/AssistantPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantPanel.tsx) | 复用原生组件 | 薄包装由既有 ActivityPanel 与根 DockArea 承接，不增加会话列表或状态 owner | 包装无独立业务；目录交互随本批验收 |
 | [modules/assistant/internal/ui/AssistantReferences.tsx](../../react/src/modules/assistant/internal/ui/AssistantReferences.tsx) | 迁移并优化：复用共享项目目录、原生 Popover/List 与资源打开入口 | project/resources、assistant/references；连续选择和四处共用引用标签，移除会话重复查询 | 代码已覆盖；两处隔离窗口已验收，跨项目/失败/真实模型与平台验收仍开放 |

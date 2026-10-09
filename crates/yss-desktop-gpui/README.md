@@ -84,10 +84,11 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   明确 Save 捕获当前 FileVersion，提交原 DocEdit 后调用原 Save；持久化失败保留中间编辑快照和输入。
   项目或版本失效不覆盖当前输入，干净文档可安装同一后端的后续投影；读取/保存期间收到的失效通知合并后重新查询。
   `documents/details` 从同一编辑器读取文件名、路径、保存/读取状态和错误；工作台只选择展示目标，不另建文件状态。
-  数学公式与外部引用预览仍待迁移。
+  数学公式复用共享 Markdown 扩展；外部引用预览仍待迁移。
 - `markdown`：节点文档、文档预览、Assistant 消息/引用和 Mind 标签共用 `Markdown` TextView 插件。
   后台解析、文本选择、表格横向滚动及代码高亮复用原生组件；Cargo 显式启用 Bash、CSS、HTML、JavaScript、JSON、Python、Rust、SQL、TOML、TSX、TypeScript、YAML grammar。
-  高亮与主题更新沿用组件缓存，未知语言保持源码；R/Julia 高亮、单波浪号语义和脚注导航仍待迁移。
+  `markdown/highlight` 在宿主启动时将 [tree-sitter-r](https://docs.rs/tree-sitter-r/) 与 [arborium-julia](https://docs.rs/arborium-julia/) 的 grammar 和查询注册到组件原有 LanguageRegistry，补齐 R、Julia；`R`、`jl` 共用对应语言配置。
+  查询捕获名适配组件已有的主题分类，高亮、缓存与主题更新仍由组件负责，未知语言保持源码；单波浪号语义和脚注导航仍待迁移。
   `markdown/links` 只将无凭据的 HTTP(S) URL 交给平台，在后台调用 [open](https://docs.rs/open/5.4.1/open/fn.that.html)，失败显示本地化通知；不记录 URL 或底层错误正文。
   项目资源导航由调用方提供，同段显示公式拆出的正文继承相同链接处理。
 - `markdown/math`：`$…$` 使用行内数学样式与文字基线；`$$…$$` 和 `math` 围栏使用显示样式，宽公式在正文列内横向滚动。

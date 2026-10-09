@@ -90,6 +90,7 @@ fn main() -> Result<()> {
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
             gpui_component::init(cx);
+            markdown::init();
             window_chrome::init(cx);
             cx.bind_keys([
                 KeyBinding::new(

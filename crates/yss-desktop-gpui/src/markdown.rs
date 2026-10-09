@@ -1,4 +1,5 @@
 //! Shared native rich-text policy; project-specific navigation stays with its caller.
+mod highlight;
 pub(crate) mod links;
 mod math;
 mod typesetting;
@@ -7,6 +8,8 @@ use std::sync::Arc;
 
 use gpui::{App, ClickEvent, MouseButton, Overflow, SharedString, StyleRefinement, Window};
 use gpui_component::text::{SelectionFormat, TextView, TextViewPlugin, TextViewStyle};
+
+pub(crate) use highlight::init;
 
 type LinkHandler = dyn Fn(&SharedString, &mut Window, &mut App) + Send + Sync;
 
