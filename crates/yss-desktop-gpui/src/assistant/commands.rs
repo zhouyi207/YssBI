@@ -196,11 +196,22 @@ pub(super) fn harness_failure(error: HarnessError) -> String {
     failure_text(&code)
 }
 pub(super) fn failure_text(code: &str) -> String {
-    let key = format!("panel.assistantErrors.{code}");
-    let localized = crate::text::translate(&key);
-    if localized == key {
-        "请求未完成，请检查模型配置或当前项目。".into()
-    } else {
-        localized
+    let public_code = match code {
+        "provider_authentication_failed" => "assistant_authentication_failed".to_owned(),
+        "provider_rate_limited" => "assistant_rate_limited".to_owned(),
+        "provider_transport_failed" => "assistant_provider_connection_failed".to_owned(),
+        "internal_failure" | "output_unavailable" => "assistant_turn_failed".to_owned(),
+        _ => format!("assistant_{code}"),
+    };
+    for key in [
+        format!("panel.assistantErrors.{code}"),
+        format!("panel.assistantErrors.{public_code}"),
+        format!("panel.assistantBlockedReasons.{code}"),
+    ] {
+        let localized = crate::text::translate(&key);
+        if localized != key {
+            return localized;
+        }
     }
+    code.to_owned()
 }

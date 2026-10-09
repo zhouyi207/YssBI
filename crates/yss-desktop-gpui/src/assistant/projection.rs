@@ -1,6 +1,6 @@
 //! Read-only transcript reduced from the existing public event projection.
 pub(super) mod usage;
-use std::collections::BTreeMap;
+use super::activity::Activity;
 use yss_harness_contract::{
     AgentRole, AgentRunState, HarnessResourceReference, HarnessTurnOptions, KnowledgeCitation,
     LanguageModelIdentity, ModelCallPurpose, ModelTokenUsage, StatisticalPlan,
@@ -49,6 +49,7 @@ pub(super) struct Tool {
 }
 #[derive(Clone)]
 pub(super) struct Task {
+    pub sequence: u64,
     pub id: String,
     pub role: AgentRole,
     pub objective: String,
@@ -56,11 +57,63 @@ pub(super) struct Task {
     pub state: Option<AgentRunState>,
     pub summary: Option<String>,
     pub error: Option<String>,
+    pub blocked_reason: Option<String>,
+    pub activity: Option<Activity>,
+    pub plan: Option<StatisticalPlan>,
     pub warnings: Vec<String>,
     pub artifacts: Vec<yss_harness_contract::ResourceChange>,
     pub results: Vec<AssistantResultReference>,
     pub tools: Vec<Tool>,
 }
+impl Task {
+    fn warn(&mut self, warning: String) {
+        if !self.warnings.contains(&warning) {
+            self.warnings.push(warning);
+        }
+    }
+    fn execution_warning(&mut self, event: &Event) {
+        if let Event::GraphExecutionFinished {
+            status,
+            failure_code,
+            ..
+        } = event
+            && status != "succeeded"
+        {
+            self.warn(failure_code.as_ref().unwrap_or(status).clone());
+        }
+    }
+    pub fn activity(&self) -> Option<&Activity> {
+        self.activity.as_ref()
+    }
+    pub fn failure(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+    fn accept(&mut self, at: u64, event: Event) {
+        self.timing.updated_at = at;
+        Activity::accept(&mut self.activity, &event);
+        self.execution_warning(&event);
+        let tool_finished = matches!(
+            &event,
+            Event::ToolInvocationCompleted { .. }
+                | Event::ToolInvocationFailed { .. }
+                | Event::GraphExecutionFinished { .. }
+        );
+        match event {
+            Event::PlanProposed { plan } => self.plan = Some(plan),
+            Event::DeliveryBlocked { reason } => self.error = Some(reason),
+            event => apply_tool(&mut self.tools, at, event),
+        }
+        if tool_finished {
+            self.activity = self
+                .tools
+                .iter()
+                .rev()
+                .find(|tool| !tool.finished)
+                .map(|tool| Activity::Tool(tool.kind));
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct Turn {
     pub id: String,
@@ -72,7 +125,8 @@ pub(super) struct Turn {
     pub text: String,
     pub reasoning: String,
     pub tools: Vec<Tool>,
-    pub tasks: BTreeMap<String, Task>,
+    // Each resume retains the previous attempt and its own disclosure identity.
+    pub tasks: Vec<Task>,
     pub citations: Vec<KnowledgeCitation>,
     pub plan: Option<StatisticalPlan>,
     pub options: Option<HarnessTurnOptions>,
@@ -115,7 +169,7 @@ impl Transcript {
                 text: String::new(),
                 reasoning: String::new(),
                 tools: vec![],
-                tasks: BTreeMap::new(),
+                tasks: vec![],
                 citations: vec![],
                 plan: None,
                 options: None,
@@ -128,7 +182,7 @@ impl Transcript {
             let Some(turn) = self.turns.iter_mut().rev().find(|turn| turn.id == id) else {
                 return Err(());
             };
-            turn.accept(event.occurred_at, event.event);
+            turn.accept(event.sequence, event.occurred_at, event.event);
         }
         self.sequence = event.sequence;
         Ok(())
@@ -138,12 +192,18 @@ impl Turn {
     fn finish_timing(&mut self, at: u64) {
         self.timing.finish(at);
         finish_tool_timings(&mut self.tools, at);
-        for task in self.tasks.values_mut().filter(|task| task.state.is_none()) {
+        for task in self.tasks.iter_mut().filter(|task| task.state.is_none()) {
             task.timing.finish(at);
             finish_tool_timings(&mut task.tools, at);
+            task.state = Some(if self.state == TurnState::Cancelled {
+                AgentRunState::Cancelled
+            } else {
+                AgentRunState::Interrupted
+            });
+            task.activity = None;
         }
     }
-    fn accept(&mut self, at: u64, event: Event) {
+    fn accept(&mut self, sequence: u64, at: u64, event: Event) {
         self.timing.updated_at = at;
         self.consumption.accept(&event, false);
         match event {
@@ -207,34 +267,33 @@ impl Turn {
                 role,
                 objective,
             } => {
-                self.tasks.insert(
-                    run_id.clone(),
-                    Task {
-                        id: run_id,
-                        role,
-                        objective,
-                        timing: Timing::started(at),
-                        state: None,
-                        summary: None,
-                        error: None,
-                        warnings: vec![],
-                        artifacts: vec![],
-                        results: vec![],
-                        tools: vec![],
-                    },
-                );
+                self.tasks.push(Task {
+                    sequence,
+                    id: run_id,
+                    role,
+                    objective,
+                    timing: Timing::started(at),
+                    state: None,
+                    summary: None,
+                    error: None,
+                    blocked_reason: None,
+                    activity: None,
+                    plan: None,
+                    warnings: vec![],
+                    artifacts: vec![],
+                    results: vec![],
+                    tools: vec![],
+                });
             }
             Event::AgentRunOutput { run_id, event } => {
-                if self
-                    .tasks
-                    .get(&run_id)
-                    .is_some_and(|task| task.role == AgentRole::Manager)
-                {
-                    self.accept(at, *event);
-                } else if let Some(task) = self.tasks.get_mut(&run_id) {
+                if let Some(task) = self.tasks.iter_mut().rev().find(|task| task.id == run_id) {
                     task.timing.updated_at = at;
-                    self.consumption.accept(&event, true);
-                    apply_tool(&mut task.tools, at, *event);
+                    if task.role == AgentRole::Manager {
+                        self.accept(sequence, at, *event);
+                    } else {
+                        self.consumption.accept(&event, true);
+                        task.accept(at, *event);
+                    }
                 }
             }
             Event::AgentRunFinished {
@@ -249,23 +308,29 @@ impl Turn {
                 results,
                 ..
             } => {
-                if let Some(task) = self.tasks.get_mut(&run_id) {
+                if let Some(task) = self.tasks.iter_mut().rev().find(|task| task.id == run_id) {
                     task.timing.finish(at);
                     finish_tool_timings(&mut task.tools, at);
                     task.state = Some(state);
                     task.summary = summary;
-                    task.error = failure_code.map(|code| code.to_string()).or(blocked_reason);
-                    task.warnings = warnings;
+                    task.error = failure_code.map(|code| code.to_string());
+                    task.blocked_reason = blocked_reason;
+                    task.activity = None;
+                    for warning in warnings {
+                        task.warn(warning);
+                    }
                     task.artifacts = artifacts;
                     task.results = results;
-                    if role == AgentRole::Manager && task.error.is_some() {
-                        self.error = task.error.clone();
+                    if role == AgentRole::Manager {
+                        self.error = task.error.clone().or_else(|| task.blocked_reason.clone());
                     }
                 }
             }
             Event::AgentRunInvalidated { run_id } => {
-                if let Some(task) = self.tasks.get_mut(&run_id) {
-                    task.timing.updated_at = at;
+                if let Some(task) = self.tasks.iter_mut().rev().find(|task| task.id == run_id) {
+                    task.timing.finish(at);
+                    finish_tool_timings(&mut task.tools, at);
+                    task.activity = None;
                     task.state = Some(AgentRunState::Stale);
                 }
             }
@@ -320,6 +385,10 @@ fn apply_tool(tools: &mut Vec<Tool>, at: u64, event: Event) {
             failure_code,
         } => {
             if let Some(tool) = tools.iter_mut().find(|tool| tool.id == invocation_id) {
+                tool.finished = true;
+                if let Some(timing) = &mut tool.timing {
+                    timing.finish(at);
+                }
                 tool.execution = Some(status);
                 tool.failure = failure_code.or(tool.failure.take());
             }

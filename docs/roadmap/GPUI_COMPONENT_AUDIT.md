@@ -527,6 +527,16 @@
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`、本批 Rust 文件局部格式、复用双语键及参数、文档元信息/相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。不新增依赖和 UI 单元测试，不运行全工作区验证，临时入口和数据不提交。
 - 内置来源、跨项目迟到读取、真实模型/账本、读屏、物理输入、Windows/macOS 与已有嵌套 Xwayland 局部重绘问题继续验收。Tasks、ToolCalls、Thread 仍独立审查；累计完成源码审查 186/265 项。
 
+### 任务与统计计划（AssistantTasks）
+
+- 已逐项阅读 AgentTaskCard、StatisticalPlanCard，以及任务开始/续跑、活动、图执行、终态与失效的事件归约。`assistant/tasks` 共用任务和计划卡片；时长、Markdown、工具详情及产物复用原入口，不新增业务 owner 或计时器。
+- 任务按开始事件序号保留每次执行；后续输出、终态和失效只更新最近一次执行。角色与状态本地化，运行/失败/受阻/中断默认展开，手动选择优先；折叠后仍显示目标、耗时、当前活动、独立的失败码/阻塞原因及产物。
+- 活动由事件投影保留类型化事实，渲染时读取当前语言，展示重连次数、压缩比例与剩余工具；断流隐藏活动和转圈。取消/中断及失效清除活动并结算耗时，图执行警告与最终结果警告去重保留。共享失败文案补齐 Driver 错误码到现有翻译键的映射。
+- 主对话和 Worker 计划使用同一卡片，呈现研究问题、分析模式、工作流及设计，完整计划按需展开；直接借用原 StatisticalPlan，不经 JSON 反序列化或复制计划业务状态。
+- 工作区和独立提交内容使用临时 Linux/X11 窗口与合成 AssistantEvent 验收默认展开、手动收起、双重失败原因、产物保留、续跑卡片独立选择、取消、事件重新归约及图执行警告在最终结果后保留。工作区另核对断流/恢复、零总量、剩余工具活动、完成/中断、失效仅改变最近执行、完整计划详情、中英文及窄列/展开布局。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`、本批 Rust 文件局部格式、29 个复用双语键及重连参数、文档元信息/相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。临时实际窗口使用 `cargo build -p yss-desktop-gpui --example assistant_tasks_review --locked` 构建，入口和隔离数据不提交；无新增依赖或 UI 单元测试，不运行全工作区验证。
+- 真实模型/账本交付、物理输入、读屏、Windows/macOS 和已有嵌套 Xwayland 局部重绘问题继续验收。ToolCalls、Thread 和 Markdown 的其他职责仍独立审查；累计完成源码审查 187/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -646,7 +656,7 @@
 | [modules/assistant/internal/ui/AssistantReferences.tsx](../../react/src/modules/assistant/internal/ui/AssistantReferences.tsx) | 迁移并优化：复用共享项目目录、原生 Popover/List 与资源打开入口 | project/resources、assistant/references；连续选择和四处共用引用标签，移除会话重复查询 | 代码已覆盖；两处隔离窗口已验收，跨项目/失败/真实模型与平台验收仍开放 |
 | [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 优化 | 共用当前目录产物/结果卡片；来源按需展开、校验与重试；复用原工作台入口 | 原生窗口与真实资源/结果读取通过；跨项目/内置来源/模型账本及平台验收开放 |
 | [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 迁移 | assistant/options 复用 HarnessTurnOptions、目录限制/默认档位；模式说明、勾选、重置与失效覆盖核对，保留队列配置 | Linux/X11 草稿/目录/队列交互验收通过；真实运行/其他平台待验收 |
-| [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 优化 | 每次执行独立卡片、活动与终态投影、完整计划；复用时长/工具/产物 | 原生窗口合成事件验收通过；模型账本/读屏/物理输入/平台与局部重绘开放 |
 | [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读主组件；历史范围、加载锚点、最新消息跳转与底部跟随已迁入 assistant/thread；消息子组件及依赖继续审查 | 视口已通过合成事件的原生窗口验收；整体未完成 |
 | [modules/assistant/internal/ui/AssistantTokenUsage.tsx](../../react/src/modules/assistant/internal/ui/AssistantTokenUsage.tsx) | 迁移 | 原事件投影增量统计本轮，原生 ProgressCircle/Popover 展示主对话占用及完整用量；未知与零分别保留 | 合成事件原生窗口通过；真实报告/持久回放与跨平台待验收 |
 | [modules/assistant/internal/ui/AssistantToolCalls.tsx](../../react/src/modules/assistant/internal/ui/AssistantToolCalls.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

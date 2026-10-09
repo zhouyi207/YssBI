@@ -1,4 +1,5 @@
 //! Native conversation views consume durable Harness facts and retain only input state.
+mod activity;
 mod commands;
 mod composer;
 mod drafts;
@@ -13,6 +14,7 @@ mod render;
 mod resources;
 mod sources;
 mod stream;
+mod tasks;
 mod thread;
 mod usage;
 
@@ -26,7 +28,7 @@ use gpui_component::{
     input::{InputEvent, TextareaState},
 };
 use std::{
-    collections::{BTreeSet, VecDeque},
+    collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
 use yss_harness_contract::{
@@ -85,7 +87,7 @@ pub(crate) struct ConversationPanel {
     buffered: Vec<HarnessEventEnvelope>,
     overflow: bool,
     event_task: Option<gpui::Task<()>>,
-    expanded: BTreeSet<String>,
+    expanded: BTreeMap<String, bool>,
     error: Option<String>,
     stream_error: Option<String>,
 }
@@ -136,7 +138,7 @@ impl ConversationPanel {
             buffered: vec![],
             overflow: false,
             event_task: None,
-            expanded: BTreeSet::new(),
+            expanded: BTreeMap::new(),
             error: None,
             stream_error: None,
         };

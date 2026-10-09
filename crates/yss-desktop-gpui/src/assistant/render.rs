@@ -10,7 +10,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     text::TextView,
 };
-use yss_harness_contract::{AgentRole, AgentRunState, ModelCallPurpose};
+use yss_harness_contract::{AgentRole, ModelCallPurpose};
 
 impl Render for ConversationPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -131,7 +131,7 @@ impl ConversationPanel {
         item = item.child(self.execution_header(turn, cx));
         if !turn.reasoning.is_empty() {
             let key = format!("reasoning-{id}");
-            let expanded = self.expanded.contains(&key);
+            let expanded = self.expanded.get(&key).copied().unwrap_or(false);
             item = item.child(
                 Button::new(SharedString::from(key.clone()))
                     .small()
@@ -142,9 +142,7 @@ impl ConversationPanel {
                         "查看推理文本"
                     })
                     .on_click(cx.listener(move |view, _, _, cx| {
-                        if !view.expanded.insert(key.clone()) {
-                            view.expanded.remove(&key);
-                        }
+                        view.expanded.insert(key.clone(), !expanded);
                         cx.notify();
                     })),
             );
@@ -160,36 +158,18 @@ impl ConversationPanel {
         item = item.child(self.tool_list(&turn.tools, turn.state == TurnState::Running, cx));
         for task in turn
             .tasks
-            .values()
+            .iter()
             .filter(|task| task.role != AgentRole::Manager)
         {
-            item = item.child(self.task_card(task, turn.state == TurnState::Running, cx));
+            item = item.child(self.task_card(
+                task.sequence,
+                task,
+                turn.state == TurnState::Running,
+                cx,
+            ));
         }
         if let Some(plan) = &turn.plan {
-            item = item.child(
-                div()
-                    .p_3()
-                    .rounded_md()
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(div().text_sm().child("统计计划"))
-                    .child(TextView::markdown(
-                        SharedString::from(format!("plan-{id}")),
-                        format!(
-                            "**研究问题**\n\n{}\n\n**设计**\n\n{}\n\n**方法**\n\n{}",
-                            plan.research_question,
-                            plan.study_design.description,
-                            plan.candidate_methods
-                                .iter()
-                                .map(ToString::to_string)
-                                .collect::<Vec<_>>()
-                                .join("、")
-                        ),
-                    )),
-            );
+            item = item.child(self.plan_card(format!("plan-{id}"), plan, cx));
         }
         if !turn.text.is_empty() {
             item = item.child(TextView::markdown(
@@ -256,21 +236,7 @@ impl ConversationPanel {
         let mut list = div().flex().flex_col().gap_1();
         for tool in tools {
             let id = tool.id.clone();
-            let code = match tool.kind {
-                yss_harness_contract::AssistantToolIdentity::Capability(kind) => {
-                    kind.as_str().to_owned()
-                }
-                yss_harness_contract::AssistantToolIdentity::Control(kind) => {
-                    kind.as_str().to_owned()
-                }
-            };
-            let key = format!("panel.assistantToolNames.{code}");
-            let title = crate::text::translate(&key);
-            let title = if title == key {
-                "工具操作".into()
-            } else {
-                title
-            };
+            let title = super::activity::tool_name(tool.kind);
             let state = if tool.failure.is_some() {
                 crate::text::t("panel.assistantToolFailed")
             } else if tool.finished {
@@ -313,78 +279,34 @@ impl ConversationPanel {
         }
         list.into_any_element()
     }
-    fn task_card(&self, task: &Task, running: bool, cx: &mut Context<Self>) -> AnyElement {
-        let key = format!("task-{}", task.id);
-        let expanded = self.expanded.contains(&key);
-        let state = match task.state {
-            None if !running => crate::text::t("panel.assistantToolInterrupted"),
-            None if !self.timing_connected() => crate::text::t("panel.assistantToolUnknown"),
-            None => crate::text::t("panel.assistantToolRunning"),
-            Some(AgentRunState::Completed) => "完成",
-            Some(AgentRunState::Stale) => "已过期",
-            Some(AgentRunState::Blocked) => "受阻",
-            Some(AgentRunState::Failed) => "失败",
-            Some(AgentRunState::Cancelled) => "已取消",
-            Some(AgentRunState::Interrupted) => "已中断",
-        };
-        let mut card = div()
-            .p_2()
-            .rounded_md()
-            .border_1()
-            .border_color(cx.theme().border)
-            .child(
-                Button::new(SharedString::from(key.clone()))
-                    .small()
-                    .ghost()
-                    .label(format!(
-                        "{} · {state} · {}",
-                        task.role.name(),
-                        task.objective
-                    ))
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        if !view.expanded.insert(key.clone()) {
-                            view.expanded.remove(&key);
-                        }
-                        cx.notify();
-                    })),
-            )
-            .child(self.elapsed(
-                format!("task-time-{}", task.id),
-                Some(task.timing),
-                running && task.state.is_none(),
-                cx,
-            ));
-        if expanded {
-            if let Some(summary) = &task.summary {
-                card = card.child(TextView::markdown(
-                    SharedString::from(format!("task-summary-{}", task.id)),
-                    summary.clone(),
-                ));
-            }
-            if let Some(error) = &task.error {
-                card = card.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(super::commands::failure_text(error)),
-                );
-            }
-            for warning in &task.warnings {
-                card = card.child(div().text_xs().child(warning.clone()));
-            }
-            card = card.child(self.tool_list(&task.tools, running && task.state.is_none(), cx));
-        }
-        if !task.artifacts.is_empty() || !task.results.is_empty() {
-            card = card.child(super::resources::cards(
-                format!("task-{}-artifacts", task.id),
-                &cx.entity().downgrade(),
-                &task.artifacts,
-                &task.results,
-                self.resource_catalog.as_deref(),
-                cx,
+    pub(super) fn task_content(
+        &self,
+        id: u64,
+        task: &Task,
+        running: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let mut body = div()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(self.tool_list(&task.tools, running, cx));
+        if let Some(summary) = &task.summary
+            && !summary.is_empty()
+        {
+            body = body.child(TextView::markdown(
+                SharedString::from(format!("task-summary-{id}")),
+                summary.clone(),
             ));
         }
-        card.into_any_element()
+        if let Some(plan) = &task.plan {
+            body = body.child(self.plan_card(format!("task-plan-{id}"), plan, cx));
+        }
+        for warning in &task.warnings {
+            body = body.child(div().text_xs().child(warning.clone()));
+        }
+        body.into_any_element()
     }
     fn usage(&self, turn: &Turn, cx: &mut Context<Self>) -> AnyElement {
         let Some((usage, context, _)) = turn
