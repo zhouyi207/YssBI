@@ -14,6 +14,13 @@ request. Closing takes the registry under its lock and wakes existing callers af
 A request admitted before closure may already be dispatching; closure does not prove that its
 remote operation was never executed. The process owner remains responsible for stopping transport.
 
+An outbound call remains local until its frame enters the writer queue. Serialization failure,
+an oversized frame, or a byte-budget or queue-capacity rejection retires only that call's
+correlation; other admitted calls and later requests keep using the connection. Failed queue
+admission releases its reserved byte charge. A disconnected writer instead reports
+`plugin_process_exited`, closes the registry and wakes all admitted callers. Writer I/O failure
+and a response that cannot be delivered also close the peer.
+
 A request timeout closes this same registry and wakes all other admitted callers. The timed-out
 caller receives `plugin_request_timeout`; other pending callers receive `plugin_process_exited`.
 No expired-request cache is retained for a closed connection. Responses without a matching pending

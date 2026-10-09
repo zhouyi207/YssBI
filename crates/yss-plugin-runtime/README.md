@@ -120,6 +120,12 @@ tasks and close/reopen panels. This example does not establish acceptance of ext
 
 ## Cancellation and diagnostics
 
+Ordinary calls rejected before outbound queue admission preserve the process and unrelated
+contexts and tasks. The [SDK](../yss-plugin-sdk/README.md) owns that admission boundary and reports
+a disconnected writer as `plugin_process_exited`; the process supervisor observes peer closure
+and stops the transport. Task cancellation retains the stronger fault policy below because
+the host must confirm that remote work has stopped.
+
 A task cancellation first goes to its plugin task. If cancellation fails, exceeds its grace
 period or the process is lost, the host treats it as a process-level fault: all nonterminal tasks
 of that exact plugin instance become `outcomeUnknown` and contexts are revoked. Windows stops the

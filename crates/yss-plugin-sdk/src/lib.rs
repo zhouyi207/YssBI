@@ -202,7 +202,14 @@ impl Peer {
         };
         let result = self.send(&request);
         if let Err(error) = result {
-            self.close();
+            // No frame was queued: retire only this call's correlation.
+            let mut pending = self
+                .pending
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if let Some(pending) = pending.as_mut() {
+                pending.remove(&request.id);
+            }
             return Err(error);
         }
         match receiver.recv_timeout(timeout) {
@@ -228,11 +235,18 @@ impl Peer {
             })
             .map_err(|_| PluginFailure::new("plugin_resource_exhausted"))?;
         let size = bytes.len();
-        if self.outgoing.try_send(bytes).is_err() {
-            self.outgoing_bytes.fetch_sub(size, Ordering::AcqRel);
-            return Err(PluginFailure::new("plugin_resource_exhausted"));
+        match self.outgoing.try_send(bytes) {
+            Ok(()) => Ok(()),
+            Err(mpsc::TrySendError::Full(_)) => {
+                self.outgoing_bytes.fetch_sub(size, Ordering::AcqRel);
+                Err(PluginFailure::new("plugin_resource_exhausted"))
+            }
+            Err(mpsc::TrySendError::Disconnected(_)) => {
+                self.outgoing_bytes.fetch_sub(size, Ordering::AcqRel);
+                self.close();
+                Err(PluginFailure::new("plugin_process_exited"))
+            }
         }
-        Ok(())
     }
     pub fn is_alive(&self) -> bool {
         self.pending.lock().is_ok_and(|pending| pending.is_some())
@@ -290,8 +304,8 @@ impl Drop for Peer {
 mod tests {
     use super::*;
 
-    #[test]
-    fn close_retires_admitted_requests_and_rejects_later_calls() {
+    fn fixture(budget: ResourceBudget) -> (Arc<Peer>, mpsc::Receiver<Vec<u8>>) {
+        budget.validate().unwrap();
         let (outgoing, frames) = mpsc::sync_channel(32);
         let peer = Arc::new(Peer {
             outgoing,
@@ -299,8 +313,95 @@ mod tests {
             pending: Mutex::new(Some(BTreeMap::new())),
             next: AtomicU64::new(1),
             prefix: "test".into(),
-            budget: Mutex::new(ResourceBudget::default()),
+            budget: Mutex::new(budget),
         });
+        (peer, frames)
+    }
+
+    fn waiting_call(peer: &Arc<Peer>) -> std::thread::JoinHandle<Result<Value, PluginFailure>> {
+        let caller = peer.clone();
+        std::thread::spawn(move || caller.call("tasks.get", Value::Null, Duration::from_secs(5)))
+    }
+
+    fn local_rejection_preserves_calls(params: Value, expected: &str, queued_bytes: u32) {
+        let (peer, frames) = fixture(ResourceBudget {
+            frame_bytes: 1024,
+            queued_bytes,
+            ..ResourceBudget::default()
+        });
+        let waiting = waiting_call(&peer);
+        let first = frames.recv_timeout(Duration::from_secs(5)).unwrap();
+        let first_request: RpcRequest = serde_json::from_slice(&first).unwrap();
+        let rejected = peer
+            .call("tasks.get", params, Duration::from_secs(5))
+            .unwrap_err();
+        let remained_alive = peer.is_alive();
+        let remaining = peer.pending_count();
+        let continued = waiting_call(&peer);
+        let next = remained_alive.then(|| frames.recv_timeout(Duration::from_secs(5)).unwrap());
+        peer.close();
+        assert_eq!(
+            waiting.join().unwrap().unwrap_err().code,
+            "plugin_process_exited"
+        );
+        assert_eq!(
+            continued.join().unwrap().unwrap_err().code,
+            "plugin_process_exited"
+        );
+        assert_eq!(rejected.code, expected);
+        assert!(
+            remained_alive,
+            "a local admission rejection closed the connection"
+        );
+        assert_eq!(remaining, 1, "only the rejected request should retire");
+        let next: RpcRequest = serde_json::from_slice(&next.unwrap()).unwrap();
+        assert_eq!(next.method, "tasks.get");
+        assert_ne!(next.id, first_request.id);
+        assert!(matches!(frames.try_recv(), Err(mpsc::TryRecvError::Empty)));
+    }
+
+    #[test]
+    fn oversized_request_is_a_local_admission_rejection() {
+        local_rejection_preserves_calls(
+            Value::String("x".repeat(1024)),
+            "plugin_payload_too_large",
+            4096,
+        );
+    }
+
+    #[test]
+    fn queued_byte_limit_is_a_local_admission_rejection() {
+        local_rejection_preserves_calls(
+            Value::String("x".repeat(924)),
+            "plugin_resource_exhausted",
+            1024,
+        );
+    }
+
+    #[test]
+    fn disconnected_output_is_a_connection_failure() {
+        let (peer, frames) = fixture(ResourceBudget::default());
+        let waiting = waiting_call(&peer);
+        frames.recv_timeout(Duration::from_secs(5)).unwrap();
+        drop(frames);
+        let failed = peer
+            .call("tasks.get", Value::Null, Duration::from_secs(5))
+            .unwrap_err();
+        let closed = !peer.is_alive();
+        let remaining = peer.pending_count();
+        peer.close();
+        assert_eq!(
+            waiting.join().unwrap().unwrap_err().code,
+            "plugin_process_exited"
+        );
+        assert_eq!(failed.code, "plugin_process_exited");
+        assert!(closed);
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn close_retires_admitted_requests_and_rejects_later_calls() {
+        let (peer, frames) = fixture(ResourceBudget::default());
         let caller = peer.clone();
         let request = std::thread::spawn(move || {
             caller.call("tasks.get", Value::Null, Duration::from_secs(5))
@@ -330,15 +431,7 @@ mod tests {
 
     #[test]
     fn timeout_closes_admission_and_wakes_other_pending_calls() {
-        let (outgoing, frames) = mpsc::sync_channel(32);
-        let peer = Arc::new(Peer {
-            outgoing,
-            outgoing_bytes: Arc::new(AtomicUsize::new(0)),
-            pending: Mutex::new(Some(BTreeMap::new())),
-            next: AtomicU64::new(1),
-            prefix: "timeout".into(),
-            budget: Mutex::new(ResourceBudget::default()),
-        });
+        let (peer, frames) = fixture(ResourceBudget::default());
         let caller = peer.clone();
         let waiting = std::thread::spawn(move || {
             caller.call("tasks.get", Value::Null, Duration::from_secs(5))
