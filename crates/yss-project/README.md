@@ -156,6 +156,8 @@ Chart writers 通过同一捕获入口只读取
 发布失败则回滚文件。签名最终发布在锁内重验原 GraphWriterSnapshot 的 authority generation，确保准备的依赖集合仍有效；
 全部可失败检查完成后直接更新目标函数及其 revision，不另复制整份 ProjectData 或 revision 表。
 Graph revision 不随驻留状态重置：卸载/重新加载保留版本，删除与移动后的旧路径保留 tombstone。
+Graph 加载在同一 publication 边界核对捕获的项目身份并读取驻留文档，旧请求不能读到
+同路径新项目的正文。磁盘加载返回本次安装的不可变文档，并重验会话，不在发布后再次读取当前图。
 
 Watcher 的 rescan 在 filesystem lease 下读取文件，重验项目身份后同步驻留 graph/chart，
 预先校验全部版本推进，再发布变更。无内容变化的重复 rescan 不再次推进版本。

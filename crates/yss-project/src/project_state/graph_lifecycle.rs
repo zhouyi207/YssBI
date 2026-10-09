@@ -298,14 +298,21 @@ impl ProjectState {
                 message: "graph load project instance is stale".into(),
             });
         }
-        if let Some(document) = self
-            .project_data
+        #[cfg(test)]
+        if let Some(hook) = self
+            .test_hooks
+            .graph_load_after_session_test_hook
             .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .graphs
-            .get(graph_path)
-            .map(|resource| resource.document.clone())
+            .unwrap()
+            .clone()
         {
+            hook();
+        }
+        if let Some(document) = self.coherent_project_read(&session, |data, _| {
+            data.graphs
+                .get(graph_path)
+                .map(|resource| Arc::clone(&resource.document))
+        })? {
             return Ok(document);
         }
 
@@ -340,6 +347,7 @@ impl ProjectState {
         self.run_graph_load_after_read_test_hook();
         self.validate_resource_lifecycle_operation(&operation)?;
 
+        let document = Arc::clone(&loaded.document);
         let resource = GraphResourceDocument {
             name: loaded.name,
             kind: loaded.kind,
@@ -378,15 +386,8 @@ impl ProjectState {
         drop(lifecycle);
         drop(publication);
 
-        self.project_data
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .graphs
-            .get(graph_path)
-            .map(|resource| resource.document.clone())
-            .ok_or_else(|| ProjectOperationError::TransactionCommitFailed {
-                message: "graph load committed without a resident document".into(),
-            })
+        self.validate_project_session(&operation.session)?;
+        Ok(document)
     }
 
     pub fn unload_graph_resource_for_lifecycle(
