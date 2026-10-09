@@ -10,4 +10,6 @@ Add only the auxiliary inputs required by the selected method; remove inapplicab
 
 Estimation and standard error methods are separate. OLS/WLS accept conventional, HC0–HC3, HAC, Newey–West, fixed-scale and cluster errors. Cluster covariance requires exactly one aligned **clusters** input identifying groups. Numeric, categorical, ordinal, binary, text and identifier labels are accepted; integer labels retain full precision and missing labels are rejected. Remove that input for other covariance choices. GLS currently accepts **nonrobust** only; other choices are rejected during execution.
 
+For HAC, choose **bartlett** (default), **parzen**, or **quadratic spectral** and a positive integer **Bandwidth** (default 1). Bartlett and Parzen use lags smaller than the bandwidth. Quadratic Spectral weights all available sample lags; bandwidth controls the kernel's scale, including weights beyond that value. This node uses the explicitly configured bandwidth.
+
 **Model** contains the immutable fitted linear regression result, reusable by **Linear Regression Summary** and **Linear Prediction** in the same run. **Fitted** and **Residuals** remain in original observation units, not weighted or whitened units.

@@ -176,6 +176,14 @@ fn iv_2sls_summary_decodes_covariance_and_uses_valid_constraints() {
         (
             OlsCovariance::Hac {
                 kernel: "bartlett".into(),
+                bandwidth: None,
+            },
+            false,
+            10404.0 / 4475.0,
+        ),
+        (
+            OlsCovariance::Hac {
+                kernel: "bartlett".into(),
                 bandwidth: Some(2),
             },
             false,

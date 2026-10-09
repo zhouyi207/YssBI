@@ -11,6 +11,77 @@ fn active_control() -> ScientificExecutionControl {
 use super::linear_regression;
 
 #[test]
+fn automatic_hac_runtime_preserves_coefficient_inference_units() {
+    use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};
+    use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+
+    let predictors = vec![
+        (0..64)
+            .map(|i| if i & 1 == 0 { 1.0 } else { -1.0 })
+            .collect::<Vec<_>>(),
+    ];
+    let response = predictors[0]
+        .iter()
+        .enumerate()
+        .map(|(i, &x)| {
+            1.0 + 0.5 * x
+                + x * if (i & 48_usize).count_ones().is_multiple_of(2) {
+                    1.0
+                } else {
+                    -1.0
+                }
+        })
+        .collect::<Vec<_>>();
+    let run = |unit| {
+        linear_regression(
+            LinearRegressionRequest {
+                method: LinearRegressionMethod::Ols,
+                response: response.iter().map(|y| y * unit).collect(),
+                predictors: predictors.clone(),
+                options: OlsOptions {
+                    constant: true,
+                    covariance: OlsCovariance::Hac {
+                        kernel: "bartlett".into(),
+                        bandwidth: None,
+                    },
+                },
+            },
+            &active_control(),
+        )
+        .unwrap()
+    };
+    let reference = run(1.0);
+    for unit in [1e-12, 1e-151, 1e100] {
+        let result = run(unit);
+        assert_eq!(result.report.model_basic_info.covariance_type, "HAC");
+        for (actual, expected) in result
+            .report
+            .coefficients
+            .iter()
+            .zip(&reference.report.coefficients)
+        {
+            assert!(
+                (actual.std_err / unit - expected.std_err).abs() < 1e-10,
+                "unit={unit}: normalized SE={} versus {}",
+                actual.std_err / unit,
+                expected.std_err
+            );
+            assert!((actual.t_value - expected.t_value).abs() < 1e-10);
+            assert!((actual.p_value - expected.p_value).abs() < 1e-10);
+        }
+    }
+    // Rational Bartlett(7) score products give variances 1/448 and 23/256.
+    for (coefficient, variance) in reference
+        .report
+        .coefficients
+        .iter()
+        .zip([1.0 / 448.0, 23.0 / 256.0])
+    {
+        assert!((coefficient.std_err.powi(2) - variance).abs() < 1e-12);
+    }
+}
+
+#[test]
 fn weighted_admission_classifies_observation_failures() {
     use yss_sci_contract::execution::{ScientificComputationError, ScientificInputViolation};
     use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};

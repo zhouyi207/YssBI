@@ -130,13 +130,20 @@ fn hat_diag_i(x: &Mat<f64>, xtx_inv: &Mat<f64>, i: usize) -> f64 {
 }
 
 /// HAC kernel weight at lag j (ivreg2 / Andrews 1991 style).
-/// bandwidth b: max lag = b-1, x = j/b. Bartlett: w = 1 - j/b.
+/// bandwidth b: x = j/b. Bartlett/Parzen support ends at b; QS uses every lag.
 fn hac_kernel_weight(j: usize, bandwidth: usize, kernel: &str) -> f64 {
-    if bandwidth == 0 || j >= bandwidth {
+    let kernel = kernel.to_lowercase();
+    if bandwidth == 0
+        || (j >= bandwidth
+            && !matches!(
+                kernel.as_str(),
+                "quadratic spectral" | "quadratic spectral kernel"
+            ))
+    {
         return 0.0;
     }
     let x = j as f64 / bandwidth as f64;
-    match kernel.to_lowercase().as_str() {
+    match kernel.as_str() {
         "bartlett" => {
             // Andrews/ivreg2: w = 1 - j/bandwidth
             1.0 - x
@@ -170,72 +177,78 @@ fn hac_kernel_weight(j: usize, bandwidth: usize, kernel: &str) -> f64 {
     }
 }
 
-/// Newey-West (1994) automatic bandwidth selection (ivreg2 bw(auto) / abw).
-/// Returns bandwidth = optlag + 1. Per NW(1994) p.639, mstar = trunc(20*(T/100)^expo).
-/// f = (u .* X) * h with h=1 for exog cols, h=0 for the configured intercept.
+/// Newey-West (1994) direct-score automatic selection, without prewhitening.
+/// The pilot estimates score moments; it does not cap the final integer bandwidth.
+/// Returns optlag + 1 under the existing kernel bandwidth convention.
 fn newey_west_1994_bandwidth(
     x: &Mat<f64>,
     row_weight: impl Fn(usize) -> f64,
     intercept_col: Option<usize>,
     kernel: &str,
-) -> usize {
+) -> Result<usize, String> {
     let n = x.nrows();
     let k = x.ncols();
     let t = n as f64;
-    let one_t = 1.0 / t;
     let (expo, q, cgamma) = match kernel.to_lowercase().as_str() {
         "parzen" => (4.0 / 25.0, 2, 2.6614),
         "quadratic spectral" | "quadratic spectral kernel" => (2.0 / 25.0, 2, 1.3221),
-        _ => (2.0 / 9.0, 1, 1.4117), // Bartlett default
+        _ => (2.0 / 9.0, 1, 1.1447), // NW(1994), Table I, p.640
     };
-    let mstar = (20.0 * (t / 100.0).powf(expo)).trunc() as usize;
-    if mstar == 0 {
-        return 1;
+    if n == 0 {
+        return Err("Automatic HAC bandwidth requires observations".into());
     }
-    let h: Vec<f64> = if k <= 1 {
-        vec![1.0; k]
-    } else {
-        (0..k)
-            .map(|c| if Some(c) == intercept_col { 0.0 } else { 1.0 })
-            .collect()
-    };
-    let f: Vec<f64> = (0..n)
+    let pilot_lags = ((20.0 * (t / 100.0).powf(expo)).trunc() as usize).min(n - 1);
+    let mut f: Vec<f64> = (0..n)
         .map(|i| {
-            let mut s = 0.0;
+            let weight = row_weight(i);
+            let mut score = 0.0;
             for c in 0..k {
-                s += row_weight(i) * x[(i, c)] * h[c];
+                if k <= 1 || Some(c) != intercept_col {
+                    score += weight * x[(i, c)];
+                }
             }
-            s
+            score
         })
         .collect();
-    let mut sigmahat = vec![one_t; mstar + 1];
-    for j in 0..=mstar {
-        let mut sum_val = 0.0;
-        for i in j..n {
-            sum_val += f[i] * f[i - j];
-        }
-        sigmahat[j] += sum_val * one_t;
+    if f.iter().any(|value| !value.is_finite()) {
+        return Err("Automatic HAC bandwidth requires finite scores".into());
+    }
+    let scale = f
+        .iter()
+        .fold(0.0_f64, |largest, value| largest.max(value.abs()));
+    if scale == 0.0 {
+        return Ok(1);
+    }
+    // Every moment has the same quadratic scale and 1/n factor. Cancel them
+    // before products to preserve the selector under response-unit changes.
+    for value in &mut f {
+        *value /= scale;
     }
     let mut shatq = 0.0;
-    let mut shat0 = sigmahat[0];
-    for (j, &sigma) in sigmahat.iter().enumerate().skip(1) {
-        let jf = j as f64;
-        shatq += 2.0 * sigma * jf.powi(q);
+    let mut shat0 = f.iter().map(|value| value * value).sum::<f64>();
+    for j in 1..=pilot_lags {
+        let sigma = (j..n).map(|i| f[i] * f[i - j]).sum::<f64>();
+        shatq += 2.0 * sigma * (j as f64).powi(q);
         shat0 += 2.0 * sigma;
     }
+    if shat0 == 0.0 {
+        return Err("Automatic HAC bandwidth has undefined pilot covariance".into());
+    }
     let expon = 1.0 / (2.0 * q as f64 + 1.0);
-    let gammahat = cgamma * (shatq / shat0).powf(2.0).powf(expon);
+    // Taking the power before dividing avoids squaring an overflowing ratio.
+    let gammahat = cgamma * shatq.abs().powf(2.0 * expon) / shat0.abs().powf(2.0 * expon);
     let m = gammahat * t.powf(expon);
-    let optlag = match kernel.to_lowercase().as_str() {
-        "quadratic spectral" | "quadratic spectral kernel" => (m.min(mstar as f64)) as usize,
-        _ => (m.trunc() as usize).min(mstar),
-    };
-    optlag.saturating_add(1)
+    if !m.is_finite() || m >= usize::MAX as f64 {
+        return Err("Automatic HAC bandwidth is out of range".into());
+    }
+    (m.trunc() as usize)
+        .checked_add(1)
+        .ok_or_else(|| "Automatic HAC bandwidth is out of range".into())
 }
 
 /// HAC: (X'X)⁻¹ S (X'X)⁻¹（sandwich，无 n/(n-k)）
 /// S = Σ_t e_t² x_t x_t' + Σ_{j=1}^{L} w_j Σ_{t=j+1}^{n} e_t e_{t-j} (x_t x_{t-j}' + x_{t-j} x_t')
-/// ivreg2 bw(b): max lag = b-1, weight = 1 - j/b
+/// Bartlett/Parzen have at most b-1 lags; QS has n-1 lags with scale b.
 fn cov_hac(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
@@ -311,7 +324,10 @@ fn lagged_score_meat(
     let n = x.nrows();
     let k = x.ncols();
     let bw = bandwidth;
-    let max_lag = bw.saturating_sub(1);
+    let max_lag = match kernel.to_lowercase().as_str() {
+        "quadratic spectral" | "quadratic spectral kernel" => n.saturating_sub(1),
+        _ => bw.saturating_sub(1).min(n.saturating_sub(1)),
+    };
     let mut meat: Mat<f64> = Mat::zeros(k, k);
 
     // j=0: Σ_t e_t² x_t x_t'
@@ -326,7 +342,7 @@ fn lagged_score_meat(
     }
 
     // j=1..max_lag: w_j * Σ_{t=j+1}^{n} e_t e_{t-j} (x_t x_{t-j}' + x_{t-j} x_t')
-    for j in 1..=max_lag.min(n.saturating_sub(1)) {
+    for j in 1..=max_lag {
         let w = hac_kernel_weight(j, bw, kernel);
         for t in j..n {
             let e_e = row_weight(t) * row_weight(t - j) * w;
@@ -354,12 +370,7 @@ fn hac_bandwidth(
         Some(q) if q > 0 => Ok(q as usize),
         Some(0) => Ok(1),
         Some(_) => Err("HAC bandwidth must be non-negative".into()),
-        None => Ok(newey_west_1994_bandwidth(
-            x,
-            row_weight,
-            intercept_col,
-            kernel,
-        )),
+        None => newey_west_1994_bandwidth(x, row_weight, intercept_col, kernel),
     }
 }
 

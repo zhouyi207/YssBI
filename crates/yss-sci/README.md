@@ -189,6 +189,18 @@ retaining their existing MacKinnon calibration and panel admission.
 the estimators that need them. DID calls the existing panel estimator, which
 continues to reuse OLS. `causal::did::fit_did` takes an explicit treatment vector;
 `panel::fit::fit_panel` owns ordinary panel fitting.
+`regression::covariance` owns both coefficient and IV score HAC covariance.
+For automatic selection it uses direct, unprewhitened score moments and the
+Newey–West (1994) kernel constants (Bartlett 1.1447, Parzen 2.6614, QS 1.3221).
+The existing integer bandwidth is the selected lag parameter plus one. The
+pilot moment horizon never caps it. Scaling the aggregated scores before their
+products removes response-unit dependence; no constant is added to the observed
+autocovariances. Zero scores select bandwidth one; nonzero scores with zero pilot
+covariance, nonfinite scores or an unrepresentable bandwidth return computation
+failure. Bartlett/Parzen stop below bandwidth; Quadratic Spectral uses all
+available sample lags, including those beyond bandwidth. WLS forwards its
+configured whitened intercept, while IV coefficient/first-stage/score callers
+reuse this same owner. Runtime retains the shared options and result projection.
 OLS, WLS, GLS and Prais return their existing fit error when coefficient division
 produces a NaN t-statistic, before calling the Student-t distribution. Prais also
 rejects a NaN F-statistic before its Fisher distribution call. Infinite statistics

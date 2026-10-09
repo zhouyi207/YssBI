@@ -813,6 +813,14 @@ fn iv_robust_overidentification_respects_cluster_and_serial_covariance() {
     // Exact raw score covariance, independent of coefficient finite-sample corrections.
     for (covariance, statistic, probability) in [
         (
+            OlsCovariance::Hac {
+                kernel: "bartlett".into(),
+                bandwidth: None,
+            },
+            10404.0 / 4475.0,
+            0.1273170765952319,
+        ),
+        (
             OlsCovariance::Cluster {
                 cluster_id: (0..16).map(|row| row / 2).collect(),
                 xtreg_fe_style: false,

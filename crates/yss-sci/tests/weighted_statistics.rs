@@ -6,6 +6,164 @@ fn near(actual: f64, expected: f64) {
 }
 
 #[test]
+fn automatic_hac_preserves_response_units_and_reference_bandwidths() {
+    use yss_sci::regression::linear::fit::fit_linear_regression;
+    use yss_sci_contract::regression::fit::RegressionStatistics;
+    use yss_sci_contract::regression::linear::LinearRegressionMethod;
+    use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+    use yss_sci_contract::{MissingValuePolicy, StatisticalObservationMetadata};
+
+    let near_statistic = |actual: f64, expected: f64| {
+        assert!(
+            (actual - expected).abs() < 1e-9 * expected.abs().max(1.0),
+            "{actual} != {expected}"
+        );
+    };
+    let predictors = vec![
+        (0..64)
+            .map(|i| if i & 1 == 0 { 1.0 } else { -1.0 })
+            .collect::<Vec<_>>(),
+    ];
+    for (mask, ols_bandwidths, wls_bandwidths) in [
+        (4_usize, [28, 60, 28], [28, 61, 29]),
+        (48, [7, 22, 14], [6, 23, 15]),
+    ] {
+        // Exact rational score products and NW(1994) Table I constants give
+        // these bandwidths. The pilot has 18 (Bartlett/Parzen) or 19 (QS) lags;
+        // it estimates the moments and is not a cap on the selected bandwidth.
+        let response = predictors[0]
+            .iter()
+            .enumerate()
+            .map(|(i, &x)| {
+                let score = if (i & mask).count_ones().is_multiple_of(2) {
+                    1.0
+                } else {
+                    -1.0
+                };
+                1.0 + 0.5 * x + x * score
+            })
+            .collect::<Vec<_>>();
+        for (method, bandwidths) in [
+            (LinearRegressionMethod::Ols, ols_bandwidths),
+            (
+                LinearRegressionMethod::Wls {
+                    weights: (0..64).map(|i| (1 + i % 3) as f64).collect(),
+                },
+                wls_bandwidths,
+            ),
+        ] {
+            for (kernel, bandwidth) in ["bartlett", "parzen", "quadratic spectral"]
+                .into_iter()
+                .zip(bandwidths)
+            {
+                let fit = |unit: f64, bandwidth| {
+                    fit_linear_regression(
+                        response.iter().map(|y| y * unit).collect(),
+                        &predictors,
+                        OlsOptions {
+                            constant: true,
+                            covariance: OlsCovariance::Hac {
+                                kernel: kernel.into(),
+                                bandwidth,
+                            },
+                        },
+                        method.clone(),
+                        StatisticalObservationMetadata {
+                            original_observation_count: 64,
+                            used_observation_count: 64,
+                            dropped_null_count: 0,
+                            dropped_nan_count: 0,
+                            missing_value_policy: MissingValuePolicy::Reject,
+                        },
+                    )
+                    .unwrap_or_else(|error| panic!("{method:?} mask={mask} kernel={kernel} unit={unit} bandwidth={bandwidth:?}: {error:?}"))
+                };
+                let reference = fit(1.0, Some(bandwidth));
+                let RegressionStatistics::Linear {
+                    coefficients: expected,
+                    model: expected_model,
+                } = &reference.statistics
+                else {
+                    panic!("Expected linear statistics");
+                };
+                if mask == 4
+                    && matches!(method, LinearRegressionMethod::Wls { .. })
+                    && kernel == "quadratic spectral"
+                {
+                    // Independent full-lag QS covariance. Cutting off at bandwidth
+                    // made this positive-weight fit fail its coefficient inference.
+                    near(expected.covariance[0][0], 0.0003147865539433194);
+                    near(expected.covariance[0][1], 0.0002744964033211535);
+                    near(expected.covariance[1][1], 0.0015114840365360392);
+                }
+                for unit in [1.0, 1e-12, 1e-151, 1e100] {
+                    let actual = fit(unit, None);
+                    let RegressionStatistics::Linear {
+                        coefficients,
+                        model,
+                    } = actual.statistics
+                    else {
+                        panic!("Expected linear statistics");
+                    };
+                    for j in 0..2 {
+                        near(actual.coefficients[j] / unit, reference.coefficients[j]);
+                        near(
+                            coefficients.standard_errors[j] / unit,
+                            expected.standard_errors[j],
+                        );
+                        near_statistic(
+                            coefficients.statistic_values[j],
+                            expected.statistic_values[j],
+                        );
+                        near(coefficients.p_values[j], expected.p_values[j]);
+                        for k in 0..2 {
+                            near(
+                                coefficients.covariance[j][k] / unit / unit,
+                                expected.covariance[j][k],
+                            );
+                        }
+                    }
+                    near_statistic(model.f_statistic, expected_model.f_statistic);
+                    near(model.f_p_value, expected_model.f_p_value);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn automatic_hac_rejects_undefined_pilot_covariance() {
+    use yss_sci::regression::covariance::compute_cov_beta;
+    use yss_sci_contract::regression::OlsCovariance;
+
+    let design = Mat::from_fn(2, 1, |_, _| 1.0);
+    let inverse = Mat::from_fn(1, 1, |_, _| 0.5);
+    for unit in [1.0, 1e-151, 1e100] {
+        // gamma(0) + 2*gamma(1) = 0 with nonzero score variation.
+        let residuals = Col::from_iter([unit, -unit]);
+        let covariance = |bandwidth| {
+            compute_cov_beta(
+                &design,
+                &inverse,
+                &residuals,
+                1,
+                Some(0),
+                &OlsCovariance::Hac {
+                    kernel: "bartlett".into(),
+                    bandwidth,
+                },
+            )
+        };
+        assert!(
+            covariance(None)
+                .unwrap_err()
+                .contains("undefined pilot covariance")
+        );
+        near(covariance(Some(1)).unwrap()[(0, 0)] / unit / unit, 0.5);
+    }
+}
+
+#[test]
 fn gls_identity_estimates_scale_like_ols() {
     use yss_sci::regression::linear::fit::fit_linear_regression;
     use yss_sci_contract::regression::fit::RegressionStatistics;
