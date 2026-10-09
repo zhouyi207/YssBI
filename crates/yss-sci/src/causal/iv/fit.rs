@@ -1,6 +1,5 @@
 //! Instrumental-variable design preparation and fit projection.
-use super::iv2sls::IV2SLS;
-use super::ivliml::IVLIML;
+use super::IvModel;
 use crate::error::{computation_failed, invalid_input};
 use crate::regression::design::design_matrix;
 use yss_sci_contract::causal::iv::{InstrumentalVariableFit, InstrumentalVariableKind};
@@ -40,32 +39,19 @@ pub fn fit_instrumental_variables(
     let instrument_columns = instruments;
     let instruments = design_matrix(instrument_columns, observations, false, op)?;
     let y = Col::from_iter(response);
-    let (result, options) = match kind {
-        InstrumentalVariableKind::TwoStageLeastSquares => {
-            let model = IV2SLS {
-                endog: y,
-                exog,
-                endog_reg,
-                instruments,
-                options,
-                small,
-                endog_names: None,
-                z_var_names: None,
-            };
-            (model.fit(), model.options)
-        }
-        InstrumentalVariableKind::LimitedInformationMaximumLikelihood => {
-            let model = IVLIML {
-                endog: y,
-                exog,
-                endog_reg,
-                instruments,
-                options,
-                small,
-            };
-            (model.fit(), model.options)
-        }
+    let model = IvModel {
+        endog: y,
+        exog,
+        endog_reg,
+        instruments,
+        options,
+        small,
     };
+    let result = match kind {
+        InstrumentalVariableKind::TwoStageLeastSquares => model.fit_2sls(),
+        InstrumentalVariableKind::LimitedInformationMaximumLikelihood => model.fit_liml(),
+    };
+    let options = model.options;
     let result = result.map_err(|_| computation_failed(op))?;
     Ok(InstrumentalVariableFit {
         response_name: "response".into(),
@@ -96,7 +82,7 @@ pub fn fit_instrumental_variables(
     })
 }
 
-fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IV2SLS, SciError> {
+fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IvModel, SciError> {
     let op = SciOperationCode::InstrumentalVariables;
     let n = fit.residuals.len();
     let data = &fit.design;
@@ -123,7 +109,7 @@ fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IV2SLS, SciError> {
     {
         return Err(invalid_input(op, ScientificInputViolation::ShapeMismatch));
     }
-    Ok(IV2SLS {
+    Ok(IvModel {
         endog: Col::from_iter(fit.fitted.iter().zip(&fit.residuals).map(|(f, r)| f + r)),
         exog: if data.exogenous.is_empty() {
             yss_sci_linalg::Mat::zeros(n, 0)
@@ -134,8 +120,6 @@ fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IV2SLS, SciError> {
         instruments: design_matrix(&data.instruments, n, false, op)?,
         options: fit.options.clone(),
         small: fit.small,
-        endog_names: None,
-        z_var_names: None,
     })
 }
 

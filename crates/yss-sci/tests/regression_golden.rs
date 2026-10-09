@@ -3,7 +3,7 @@
 //! 使用当前已验证正确的计算结果作为参考，重构后若计算不一致则测试失败
 
 use std::f64::consts::PI;
-use yss_sci::causal::iv::iv2sls::IV2SLS;
+use yss_sci::causal::iv::IvModel;
 use yss_sci::diagnostics;
 use yss_sci::regression::linear::{OLS, WLS, WLSConfig};
 use yss_sci_linalg::{Col, Mat};
@@ -96,7 +96,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 + signal(row, 5)
         });
         for covariance_type in ["nonrobust", "HC1", "HAC"] {
-            let estimator = IV2SLS {
+            let estimator = IvModel {
                 endog: response.clone(),
                 exog: exog.clone(),
                 endog_reg: endogenous.clone(),
@@ -113,10 +113,8 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 )
                 .unwrap(),
                 small: false,
-                endog_names: None,
-                z_var_names: None,
             };
-            let result = estimator.fit().unwrap();
+            let result = estimator.fit_2sls().unwrap();
             let (first_stage, first_stage_summary) = estimator.first_stage(false).unwrap();
             let expected = &[1.0, 0.7, 2.0, -0.5][..2 + endogenous_count];
             assert_eq!(result.betas.nrows(), expected.len());
@@ -175,7 +173,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
             + (5.0 * angle(row)).cos()
     });
     for order in [[0, 1, 2], [2, 0, 1]] {
-        let estimator = IV2SLS {
+        let estimator = IvModel {
             endog: response.clone(),
             exog: exog.clone(),
             endog_reg: Mat::from_fn(observations, 3, |row, column| {
@@ -184,8 +182,6 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
             instruments: instruments.clone(),
             options: yss_sci_contract::regression::OlsOptions::default(),
             small: false,
-            endog_names: None,
-            z_var_names: None,
         };
         let (_, summary) = estimator.first_stage(false).unwrap();
         assert_eq!(summary.shea_partial_r2.len(), order.len());
@@ -199,7 +195,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
         }
     }
     // A constant column remains a valid one-column design without an added intercept.
-    let estimator = IV2SLS {
+    let estimator = IvModel {
         endog: Col::from_iter((1..=16).map(f64::from)),
         exog: Mat::zeros(16, 0),
         endog_reg: Mat::from_fn(16, 1, |_, _| 1.0),
@@ -209,10 +205,8 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
             covariance: yss_sci_contract::regression::OlsCovariance::NonRobust,
         },
         small: false,
-        endog_names: None,
-        z_var_names: None,
     };
-    let fit = estimator.fit().unwrap();
+    let fit = estimator.fit_2sls().unwrap();
     let (equations, first_stage) = estimator.first_stage(false).unwrap();
     let (hausman, endogenous) = estimator.endogeneity(&fit.betas).unwrap();
     assert!(equations.iter().all(|equation| {
@@ -256,14 +250,14 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
         first_stage.r2_adjusted,
     );
 
-    let short = IV2SLS {
+    let short = IvModel {
         endog: Col::from_iter([1.0, 2.0]),
         exog: Mat::zeros(2, 0),
         endog_reg: Mat::from_fn(2, 1, |_, _| 1.0),
         instruments: Mat::from_fn(2, 1, |_, _| 1.0),
         ..estimator
     };
-    let fit = short.fit().unwrap();
+    let fit = short.fit_2sls().unwrap();
     let (hausman, endogenous) = short.endogeneity(&fit.betas).unwrap();
     assert!(
         endogenous.is_none(),
@@ -287,18 +281,16 @@ fn iv_first_stage_rejects_saturated_instrument_inference_without_invalidating_fi
     let response = Col::from_fn(n, |i| {
         1.0 + endogenous[(i, 0)] + 0.7 * endogenous[(i, 1)] + random()
     });
-    let model = IV2SLS {
+    let model = IvModel {
         endog: response,
         exog: Mat::zeros(n, 0),
         endog_reg: endogenous,
         instruments,
         options: yss_sci_contract::regression::OlsOptions::default(),
         small: false,
-        endog_names: None,
-        z_var_names: None,
     };
     // Structural residual degrees are positive; only first-stage inference is unavailable.
-    assert_eq!(model.fit().unwrap().statistics.df_residual, 3);
+    assert_eq!(model.fit_2sls().unwrap().statistics.df_residual, 3);
     for for_liml in [false, true] {
         let result = std::panic::catch_unwind(|| model.first_stage(for_liml));
         assert!(matches!(result, Ok(Err(_))), "{result:?}");
@@ -321,7 +313,7 @@ fn iv_first_stage_minimum_eigenvalue_preserves_generalized_problem_and_column_un
         // det(diag(4,1) - lambda*[[1,1],[1,2]]) = lambda² - 9lambda + 4.
         let expected = (9.0 - 65.0_f64.sqrt()) / 2.0 * (n - 2 - usize::from(constant)) as f64 / 2.0;
         for (order, scales) in [([0, 1], [1., 1.]), ([1, 0], [1., 1.]), ([0, 1], [1., 100.])] {
-            let model = IV2SLS {
+            let model = IvModel {
                 endog: Col::from_fn(n, |row| signal(row, 4)),
                 exog: Mat::zeros(n, 0),
                 endog_reg: Mat::from_fn(n, 2, |row, col| {
@@ -333,8 +325,6 @@ fn iv_first_stage_minimum_eigenvalue_preserves_generalized_problem_and_column_un
                     ..Default::default()
                 },
                 small: false,
-                endog_names: None,
-                z_var_names: None,
             };
             for for_liml in [false, true] {
                 let (_, result) = model.first_stage(for_liml).unwrap();
@@ -387,26 +377,12 @@ fn iv_small_sample_inference_uses_student_and_f_references_for_both_estimators()
                 } else {
                     0.15729920705028513
                 };
-                let liml_hc1 = kind == Kind::LimitedInformationMaximumLikelihood
-                    && matches!(covariance, OlsCovariance::Hc1);
-                // LIML's structural-X sandwich has slope variance 17/128, scaled
-                // to 17/96 with small. Its inference must use that covariance.
-                let slope_p = if liml_hc1 {
-                    if small {
-                        0.27965829090465777
-                    } else {
-                        0.1700669614539048
-                    }
-                } else {
-                    expected_p
-                };
                 let expected_critical = if small {
                     2.4469118511449694
                 } else {
                     1.959963984540054
                 };
                 for (j, &p) in fit.inference.p_values.iter().enumerate() {
-                    let expected_p = if j == 0 { expected_p } else { slope_p };
                     assert!(
                         (p - expected_p).abs() < 1e-9,
                         "{kind:?} {covariance:?} small={small}: {p} != {expected_p}"
@@ -420,15 +396,9 @@ fn iv_small_sample_inference_uses_student_and_f_references_for_both_estimators()
                 }
                 let statistics = serde_json::to_value(&fit.statistics).unwrap();
                 let test = &statistics["modelTest"];
-                assert!((test["pValue"].as_f64().unwrap() - slope_p).abs() < 1e-9);
+                assert!((test["pValue"].as_f64().unwrap() - expected_p).abs() < 1e-9);
                 assert_eq!(test["distribution"], if small { "f" } else { "chiSquared" });
-                let expected_statistic = if liml_hc1 {
-                    if small { 24.0 / 17.0 } else { 32.0 / 17.0 }
-                } else if small {
-                    1.5
-                } else {
-                    2.0
-                };
+                let expected_statistic = if small { 1.5 } else { 2.0 };
                 assert!((test["statistic"].as_f64().unwrap() - expected_statistic).abs() < 1e-9);
                 if small {
                     assert_eq!(test["dfNumerator"], 1);
@@ -538,6 +508,134 @@ fn iv_coefficient_inference_rejects_invalid_variance_before_zero_statistic_fallb
         ),
         "{result:?}"
     );
+}
+
+#[test]
+fn liml_robust_covariance_matches_2sls_under_exact_identification() {
+    use yss_sci::causal::iv::fit::fit_instrumental_variables;
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind as Kind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..8)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1))
+        .collect::<Vec<_>>();
+    let instrument = (0..8).map(|row| signal(row, 0)).collect::<Vec<_>>();
+    let response = (0..8)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + 2.0 * signal(row, 2))
+        .collect::<Vec<_>>();
+    for covariance in [
+        OlsCovariance::NonRobust,
+        OlsCovariance::Hc0,
+        OlsCovariance::Hc1,
+        OlsCovariance::Hc2,
+        OlsCovariance::Hc3,
+        OlsCovariance::Hac {
+            kernel: "bartlett".into(),
+            bandwidth: Some(2),
+        },
+        OlsCovariance::Newey { lag: Some(1) },
+        OlsCovariance::Cluster {
+            cluster_id: (0..8).collect(),
+            xtreg_fe_style: false,
+        },
+    ] {
+        for small in [false, true] {
+            let fit = |kind| {
+                fit_instrumental_variables(
+                    kind,
+                    response.clone(),
+                    &[],
+                    std::slice::from_ref(&endogenous),
+                    std::slice::from_ref(&instrument),
+                    OlsOptions {
+                        constant: true,
+                        covariance: covariance.clone(),
+                    },
+                    small,
+                )
+                .unwrap()
+            };
+            let two_stage = fit(Kind::TwoStageLeastSquares);
+            let liml = fit(Kind::LimitedInformationMaximumLikelihood);
+            assert!((liml.statistics.kappa - 1.0).abs() < 1e-10);
+            for (actual, expected) in liml.coefficients.iter().zip(&two_stage.coefficients) {
+                assert!((actual - expected).abs() < 1e-10);
+            }
+            for (j, (actual, expected)) in liml
+                .inference
+                .covariance
+                .iter()
+                .flatten()
+                .zip(two_stage.inference.covariance.iter().flatten())
+                .enumerate()
+            {
+                assert!(
+                    (actual - expected).abs() < 1e-10,
+                    "{covariance:?} small={small} entry={j}: {actual} != {expected}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn liml_overidentified_robust_covariance_preserves_k_class_bread() {
+    use yss_sci::causal::iv::fit::fit_instrumental_variables;
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1) + signal(row, 2))
+        .collect::<Vec<_>>();
+    let instruments = (0..2)
+        .map(|bit| (0..16).map(|row| signal(row, bit)).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let response = (0..16)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + signal(row, 1) + 2.0 * signal(row, 3))
+        .collect::<Vec<_>>();
+    // Exact Walsh moments give det(A-kB)=4k^2-26k+26. The
+    // covariance constants integrate projected score rows at its smaller root.
+    for (covariance, intercept_variance, slope_variance) in [
+        (OlsCovariance::Hc0, 0.3098050671931386, 0.07803464921066904),
+        (OlsCovariance::Hc1, 0.3098050671931386, 0.07803464921066904),
+        (OlsCovariance::Hc2, 0.3548016168351136, 0.09093196813509383),
+        (OlsCovariance::Hc3, 0.4068509949030412, 0.10607202570358924),
+    ] {
+        for small in [false, true] {
+            let fit = fit_instrumental_variables(
+                InstrumentalVariableKind::LimitedInformationMaximumLikelihood,
+                response.clone(),
+                &[],
+                std::slice::from_ref(&endogenous),
+                &instruments,
+                OlsOptions {
+                    constant: true,
+                    covariance: covariance.clone(),
+                },
+                small,
+            )
+            .unwrap();
+            assert!((fit.statistics.kappa - 1.2344355629253626).abs() < 1e-10);
+            assert!((fit.coefficients[1] - 0.6245154965970993).abs() < 1e-10);
+            let scale = if small && matches!(covariance, OlsCovariance::Hc1) {
+                16.0 / 14.0
+            } else {
+                1.0
+            };
+            let actual = &fit.inference.covariance;
+            assert!((actual[0][0] - scale * intercept_variance).abs() < 1e-10);
+            assert!(
+                (actual[1][1] - scale * slope_variance).abs() < 1e-10,
+                "{covariance:?} small={small}: {}",
+                actual[1][1]
+            );
+            assert!(actual[0][1].abs() < 1e-10 && actual[1][0].abs() < 1e-10);
+        }
+    }
 }
 
 #[test]

@@ -1,5 +1,11 @@
+mod critical_values;
+mod design;
 mod estimate;
 pub use estimate::IvEstimate;
+mod first_stage;
 pub mod fit;
-pub mod iv2sls;
-pub mod ivliml;
+mod iv2sls;
+mod ivliml;
+mod model;
+mod postestimation;
+pub use model::IvModel;

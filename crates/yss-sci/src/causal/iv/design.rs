@@ -1,4 +1,4 @@
-use super::types::IV2SLS;
+use super::model::IvModel;
 use yss_sci_linalg::{Mat, MatrixExt, Solve};
 
 pub(super) struct PreparedIvDesign {
@@ -10,7 +10,7 @@ pub(super) struct PreparedIvDesign {
     pub x_struct: Mat<f64>,
 }
 
-impl IV2SLS {
+impl IvModel {
     pub(super) fn design(&self) -> Result<PreparedIvDesign, String> {
         let n = self.endog.nrows();
         let k_exog = self.exog.ncols();
@@ -19,7 +19,7 @@ impl IV2SLS {
 
         if k_iv < k_endog {
             return Err(format!(
-                "IV2SLS: underidentified — {} instruments < {} endogenous. Need at least {} instruments.",
+                "IV: underidentified — {} instruments < {} endogenous. Need at least {} instruments.",
                 k_iv, k_endog, k_endog
             ));
         }
@@ -46,7 +46,7 @@ impl IV2SLS {
         let ztz_inv = ztz
             .checked_cholesky()
             .map_err(|_| {
-                "IV2SLS: Z'Z is not positive definite (stage 1). Check instruments and exog for collinearity.".to_string()
+                "IV: Z'Z is not positive definite (stage 1). Check instruments and exog for collinearity.".to_string()
             })?
             .solve(&Mat::identity(ztz.nrows(), ztz.nrows()));
 

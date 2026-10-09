@@ -184,6 +184,10 @@ default and Student-t reference with structural residual degrees for `small=true
 Summary projects the typed `statistics.modelTest` joint result, including its
 chi-square or F reference and degrees, and labels coefficient inference consistently.
 Undefined coefficient inference propagates as a scientific failure from Fit.
+Both estimator entries consume SCI's single numerical IV input and prepared design.
+LIML covariance uses projected score rows with its k-class inverse and observed
+structural residuals; Runtime projects those results directly and retains source
+labels. The neutral Fit model/report shape and summary selections stay the same.
 `causal::iv::summary` requests first-stage, overidentification and endogeneity analyses
 only when selected. SCI's insufficient first-stage residual-degree failure propagates
 before report encoding; summaries that omit that analysis retain the structural fit. Runtime

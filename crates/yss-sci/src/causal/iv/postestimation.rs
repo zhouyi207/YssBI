@@ -1,12 +1,15 @@
 use super::first_stage::{compute_first_stage_summary, is_robust_covariance};
-use super::{design::PreparedIvDesign, types::*};
+use super::{design::PreparedIvDesign, model::IvModel};
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
+use yss_sci_contract::causal::iv::{
+    EndogenousTest, FirstStageResult, FirstStageSummary, HausmanTest, OveridTest,
+};
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve};
 
-impl IV2SLS {
+impl IvModel {
     pub fn first_stage(
         &self,
         for_liml: bool,
@@ -62,20 +65,8 @@ impl IV2SLS {
             let ci_left: Vec<f64> = (0..k_z).map(|i| gamma[i] - t_crit * stds[i]).collect();
             let ci_right: Vec<f64> = (0..k_z).map(|i| gamma[i] + t_crit * stds[i]).collect();
 
-            let name = self
-                .endog_names
-                .as_ref()
-                .and_then(|n| n.get(j))
-                .cloned()
-                .unwrap_or_else(|| format!("endog_{}", j + 1));
-            let var_names: Vec<String> = (0..k_z)
-                .map(|i| {
-                    self.z_var_names
-                        .as_ref()
-                        .and_then(|v| v.get(i).cloned())
-                        .unwrap_or_else(|| format!("z{}", i + 1))
-                })
-                .collect();
+            let name = format!("endog_{}", j + 1);
+            let var_names = (0..k_z).map(|i| format!("z{}", i + 1)).collect();
             first_stage.push(FirstStageResult {
                 endog_name: name,
                 var_names,

@@ -2,11 +2,9 @@ use super::critical_values::{
     stock_yogo_cv_1_endog, stock_yogo_cv_2_endog, stock_yogo_cv_liml_1_endog,
     stock_yogo_cv_liml_2_endog,
 };
-use super::{
-    design::PreparedIvDesign,
-    types::{FirstStageSummary, IV2SLS},
-};
+use super::{design::PreparedIvDesign, model::IvModel};
 use crate::regression::covariance::compute_cov_beta;
+use yss_sci_contract::causal::iv::FirstStageSummary;
 use yss_sci_contract::regression::OlsCovariance;
 
 use statrs::{
@@ -18,7 +16,7 @@ use yss_sci_linalg::{MatrixExt, Solve};
 
 /// When true, use LIML Stock-Yogo size critical values (bias=None). When false, use 2SLS.
 pub(crate) fn compute_first_stage_summary(
-    model: &IV2SLS,
+    model: &IvModel,
     design: &PreparedIvDesign,
     for_liml: bool,
 ) -> Result<FirstStageSummary, String> {

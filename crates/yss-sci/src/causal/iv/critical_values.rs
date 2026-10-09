@@ -1,4 +1,4 @@
-use super::types::{StockYogoBiasRow, StockYogoCriticalValues, StockYogoSizeRow};
+use yss_sci_contract::causal::iv::{StockYogoBiasRow, StockYogoCriticalValues, StockYogoSizeRow};
 
 /// Stock-Yogo (2005) 临界值，1 内生变量。k2=排除工具数。与 Stata ivreg2/estat firststage 一致。
 /// 来源: livreg2.do s_ivbias*, s_ivsize*

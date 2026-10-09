@@ -1,4 +1,4 @@
-use super::{design::PreparedIvDesign, types::IV2SLS};
+use super::{design::PreparedIvDesign, model::IvModel};
 use crate::causal::iv::{
     IvEstimate,
     estimate::{coefficient_inference, model_test},
@@ -8,8 +8,8 @@ use statrs::statistics::Statistics;
 use yss_sci_contract::causal::iv::InstrumentalVariableStatistics;
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve, matrix_rank};
 
-impl IV2SLS {
-    pub fn fit(&self) -> Result<IvEstimate, String> {
+impl IvModel {
+    pub fn fit_2sls(&self) -> Result<IvEstimate, String> {
         let n = self.endog.nrows();
         let PreparedIvDesign { x, x_struct, .. } = self.design()?;
         let (rank, cond_no) = matrix_rank(x.as_ref()).map_err(|e| e.to_string())?;
@@ -30,10 +30,8 @@ impl IV2SLS {
         let covariance_type = self.options.covariance.name().to_owned();
 
         // OLS on second stage: β = (X'X)^{-1} X'y
-        let x_matrix = x.as_ref().to_owned();
-        let y_vector = self.endog.as_ref().to_owned();
-        let xtx = x_matrix.transpose() * x_matrix.as_ref();
-        let xty = x_matrix.transpose() * y_vector.as_ref();
+        let xtx = x.transpose() * x.as_ref();
+        let xty = x.transpose() * self.endog.as_ref();
         let xtx_inv = xtx
             .checked_cholesky()
             .map_err(|_| {
@@ -41,19 +39,18 @@ impl IV2SLS {
                     .to_string()
             })?
             .solve(&Mat::identity(xtx.nrows(), xtx.nrows()));
-        let betas_vector = xtx_inv.as_ref() * xty.as_ref();
-        let betas_nd = betas_vector.as_ref().to_owned();
+        let betas = xtx_inv.as_ref() * xty.as_ref();
 
         // ESS and VCE must use structural residuals: u = y - X_struct * β
         // where X_struct = [exog, endog] (actual endogenous, not endog_hat).
         // Stata: ESS = y'y - 2β'X'y + β'X'Xβ, σ² = ESS/(n-k), VCE = σ² (X'P_Z X)^{-1}.
-        let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas_nd.as_ref());
+        let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas.as_ref());
 
-        let y_mean = y_vector.iter().mean();
+        let y_mean = self.endog.iter().mean();
         let ss_total = if self.options.constant {
-            y_vector.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
+            self.endog.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
         } else {
-            y_vector.iter().map(|v| v.powi(2)).sum::<f64>()
+            self.endog.iter().map(|v| v.powi(2)).sum::<f64>()
         };
         let ss_residual = u_structural.transpose() * u_structural.as_ref();
         let r2 = if ss_total > 1e-300 {
@@ -74,7 +71,7 @@ impl IV2SLS {
         let sigma2_df = if self.small { df_residual } else { n };
 
         let cov_beta = compute_cov_beta(
-            &x_matrix,
+            &x,
             &xtx_inv,
             &u_structural,
             sigma2_df,
@@ -82,9 +79,9 @@ impl IV2SLS {
             &self.options.covariance,
         )?;
 
-        let inference = coefficient_inference(&betas_nd, &cov_beta, df_residual, self.small)?;
+        let inference = coefficient_inference(&betas, &cov_beta, df_residual, self.small)?;
         let model_test = model_test(
-            &betas_nd,
+            &betas,
             &cov_beta,
             self.options.constant,
             df_residual,
@@ -94,7 +91,7 @@ impl IV2SLS {
         Ok(IvEstimate {
             fitted: &self.endog - &u_structural,
             residuals: u_structural,
-            betas: betas_nd,
+            betas,
             inference,
             statistics: InstrumentalVariableStatistics {
                 covariance_type,

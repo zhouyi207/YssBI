@@ -234,7 +234,21 @@ These neutral fit entries consume shared binary/Prais and panel options, and IV
 accepts multiple endogenous and excluded-instrument columns. Panel dispatch covers
 FE/LSDV, entity first differences, entity/time/two-way RE FGLS and MLE, and
 entity/time Between, rejecting unsupported covariance/effect combinations.
-IV 2SLS and LIML share `IvEstimate` and coefficient statistics. The existing
+IV 2SLS and LIML share the numerical `causal::iv::IvModel` input and its existing
+`PreparedIvDesign` producer. `fit_2sls` and `fit_liml` consume the same instrument
+matrix, inverse, projected regressors and observed structural design. Their method
+implementations and shared postestimation live together under `causal/iv`; the
+neutral `causal::iv::fit` entry prepares one numerical input before dispatch.
+Numerical input carries no display labels: Runtime restores source labels on the
+shared fitted model and first-stage records. Direct matrix construction and borrowed
+included-instrument columns replace duplicate row buffers, instrument decomposition
+and matrix/vector copies in the estimators.
+LIML keeps its k-class cross-product inverse for covariance but uses instrument-
+projected score rows, structural residuals and projected leverage for HC2/HC3.
+The same projected scores feed HC0/HC1, cluster and serially robust covariance.
+At exact identification its coefficient/covariance results agree with 2SLS;
+overidentified LIML retains its estimated kappa and corresponding cross-product.
+Both estimators share `IvEstimate` and coefficient statistics. The existing
 estimate owner also computes both estimators' coefficient and joint inference from
 the selected covariance. Default coefficient tests and 95% intervals use a normal
 reference; `small=true` uses Student-t with the structural residual degrees.

@@ -84,10 +84,9 @@ pub(super) fn install(
             std::num::NonZeroU32::new(match id {
                 "yssbi.statistics.iv.2sls.summary" => 14,
                 "yssbi.statistics.iv.liml.summary" => 13,
-                "yssbi.statistics.panel.fit" => 11,
+                "yssbi.statistics.iv.liml.fit" | "yssbi.statistics.panel.fit" => 11,
                 "yssbi.statistics.econometrics.panel.re"
                 | "yssbi.statistics.iv.2sls.fit"
-                | "yssbi.statistics.iv.liml.fit"
                 | "yssbi.statistics.test.nonparametric.family" => 10,
                 "yssbi.statistics.adf.test"
                 | "yssbi.statistics.econometrics.panel.between"
