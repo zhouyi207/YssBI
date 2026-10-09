@@ -518,6 +518,15 @@
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；12 个 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true`、23 个双语键/参数与文档元信息/相对链接检查通过。`node scripts/generate-crate-dependencies.mjs --check` 校验 59 个 crate、240 条依赖声明；`git diff --check` 通过。不新增依赖或 UI 单元测试，不运行全工作区验证，临时模型接口、预览和数据不提交。
 - 真实供应商差异、物理键鼠/IME、读屏、跨项目迟到提交、跨重启草稿及 Windows/macOS 验收继续开放；不以 Composer 完成替代 Runtime/Thread 的剩余审查。累计完成源码审查 185/265 项。
 
+### 对话产物与引用来源（AssistantResources）
+
+- 已逐项阅读 ArtifactCard、ResultCard、AssistantArtifacts、AssistantSourceCard，以及打开资源/结果用例和任务/工具调用方。`assistant/resources` 共用当前目录呈现与原工作台打开入口，删除任务/工具重复按钮和旧引用弹窗；任务收起仍保留产物。
+- 共享资源目录补充原 ProjectIndex 的资源与函数签名版本，按记录的 revision kind 比较，显示当前名称、更新提示及缺失/删除状态。渲染直接借用调用方目录，工具详情窗口订阅所属会话；不为每张产物卡片新建目录、打开任务或结果租约。格式错误的结果引用显示不可用，完整 UUID/u64 交给既有结果 owner 加载、去重和反馈。
+- `assistant/sources` 复用 Collapsible 与 Markdown，按需展开、原位错误与重试，打开原文前重新校验。可见卡片拥有暂态详情和查询；引用/所属会话变化或隐藏释放界面查询状态，不接纳旧回执；Application 会话校验与知识服务保持授权及来源有效性的原职责。
+- 工作区和独立提交内容通过临时原生窗口及 GPUI Window 输入验证任务折叠后的产物、版本类型区分、非法/缺失引用、真实 Application 结果和文档打开；来源修改后失效、恢复原文后重试。工作区另核对英文文案、重复结果打开复用原面板、失效结果错误与重试入口、独立工具窗口中资源移走/恢复的更新；独立内容核对工具对话框的目录更新。任务/工具记录为合成数据，来源读取与结果计算经过真实后端，临时筛选索引只用于获取合法引用。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`、本批 Rust 文件局部格式、复用双语键及参数、文档元信息/相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。不新增依赖和 UI 单元测试，不运行全工作区验证，临时入口和数据不提交。
+- 内置来源、跨项目迟到读取、真实模型/账本、读屏、物理输入、Windows/macOS 与已有嵌套 Xwayland 局部重绘问题继续验收。Tasks、ToolCalls、Thread 仍独立审查；累计完成源码审查 186/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -635,7 +644,7 @@
 | [modules/assistant/internal/ui/AssistantModelPicker.tsx](../../react/src/modules/assistant/internal/ui/AssistantModelPicker.tsx) | 迁移 | assistant/models 复用可搜索 Combobox；会话回执拥有选择，当前目录校验身份与凭据，隐藏释放弹出状态 | Linux/X11 合成目录与真实会话选择验收通过；真实供应商/其他平台待验收 |
 | [modules/assistant/internal/ui/AssistantPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantPanel.tsx) | 复用原生组件 | 薄包装由既有 ActivityPanel 与根 DockArea 承接，不增加会话列表或状态 owner | 包装无独立业务；目录交互随本批验收 |
 | [modules/assistant/internal/ui/AssistantReferences.tsx](../../react/src/modules/assistant/internal/ui/AssistantReferences.tsx) | 迁移并优化：复用共享项目目录、原生 Popover/List 与资源打开入口 | project/resources、assistant/references；连续选择和四处共用引用标签，移除会话重复查询 | 代码已覆盖；两处隔离窗口已验收，跨项目/失败/真实模型与平台验收仍开放 |
-| [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 待查 | 已读源码；Artifacts、Results 与来源卡片的当前资源校验及交互继续审查 | 完整审查开放 |
+| [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 优化 | 共用当前目录产物/结果卡片；来源按需展开、校验与重试；复用原工作台入口 | 原生窗口与真实资源/结果读取通过；跨项目/内置来源/模型账本及平台验收开放 |
 | [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 迁移 | assistant/options 复用 HarnessTurnOptions、目录限制/默认档位；模式说明、勾选、重置与失效覆盖核对，保留队列配置 | Linux/X11 草稿/目录/队列交互验收通过；真实运行/其他平台待验收 |
 | [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读主组件；历史范围、加载锚点、最新消息跳转与底部跟随已迁入 assistant/thread；消息子组件及依赖继续审查 | 视口已通过合成事件的原生窗口验收；整体未完成 |

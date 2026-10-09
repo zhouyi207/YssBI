@@ -1,13 +1,11 @@
-//! Tool/citation details use the existing sanitized ledger and knowledge projections.
-use super::{ConversationEvent, ConversationPanel};
+//! Tool details consume the existing sanitized ledger projection.
+use super::ConversationPanel;
 use gpui::{ClipboardItem, Context, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme, Disableable, Sizable, WindowExt,
+    ActiveTheme, Sizable, WindowExt,
     button::{Button, ButtonVariants},
-    text::TextView,
 };
-use yss_harness_contract::{AssistantResultReference, AssistantToolInspection};
-use yss_harness_contract::{KnowledgeCitation, ToolInvocationId};
+use yss_harness_contract::{AssistantToolInspection, ToolInvocationId};
 
 impl ConversationPanel {
     pub(super) fn inspect_tool(&self, id: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -63,7 +61,14 @@ impl ConversationPanel {
                 match result {
                     Ok(detail) => {
                         let owner = cx.entity().downgrade();
-                        window.open_dialog(cx, move |dialog, _, cx| {
+                        window.open_dialog(cx, move |dialog, window, cx| {
+                            window.use_keyed_state("resource-observer", cx, |window, cx| {
+                                owner.upgrade().map(|owner| {
+                                    cx.observe_in(&owner, window, |_, _, window, _| {
+                                        window.refresh()
+                                    })
+                                })
+                            });
                             let mut body = div()
                                 .id("tool-detail")
                                 .max_h(px(460.))
@@ -95,39 +100,17 @@ impl ConversationPanel {
                                         .child(format!("失败：{failure}")),
                                 );
                             }
-                            for (index, artifact) in detail.artifacts.iter().enumerate() {
-                                let resource = artifact.resource.clone();
-                                let owner = owner.clone();
-                                body = body.child(
-                                    Button::new(("tool-artifact", index))
-                                        .small()
-                                        .ghost()
-                                        .label(resource.id.clone())
-                                        .disabled(artifact.deleted)
-                                        .on_click(move |_, _, cx| {
-                                            let _ = owner.update(cx, |_, cx| {
-                                                cx.emit(ConversationEvent::OpenResource(
-                                                    resource.clone(),
-                                                ))
-                                            });
-                                        }),
-                                );
-                            }
-                            for (index, result) in detail.results.iter().enumerate() {
-                                let result = result.clone();
-                                let owner = owner.clone();
-                                body = body.child(
-                                    Button::new(("tool-result", index))
-                                        .small()
-                                        .ghost()
-                                        .label(result.output.clone())
-                                        .on_click(move |_, _, cx| {
-                                            let _ = owner.update(cx, |view, cx| {
-                                                view.open_result(&result, cx)
-                                            });
-                                        }),
-                                );
-                            }
+                            let catalog = owner
+                                .upgrade()
+                                .and_then(|owner| owner.read(cx).resource_catalog.clone());
+                            body = body.child(super::resources::cards(
+                                "tool-artifacts",
+                                &owner,
+                                &detail.artifacts,
+                                &detail.results,
+                                catalog.as_deref(),
+                                cx,
+                            ));
                             let copy = serde_json::to_string_pretty(&detail).unwrap_or_default();
                             dialog.title("工具详情").width(px(620.)).child(body).footer(
                                 div().flex().justify_end().child(
@@ -152,111 +135,5 @@ impl ConversationPanel {
             });
         })
         .detach();
-    }
-    pub(super) fn inspect_citation(
-        &self,
-        citation: KnowledgeCitation,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let services = self.services.clone();
-        let session = self.session.id.clone();
-        let principal = self.principal.clone();
-        let generation = self.generation;
-        let title = citation.title.clone();
-        let job = self.services.executor.spawn(async move {
-            services
-                .application
-                .application
-                .validate_harness_session(&services.application.harness.host, &principal, &session)
-                .await
-                .map_err(super::commands::session_failure)?;
-            let text = services
-                .application
-                .harness
-                .host
-                .inspect_citation(&session, &citation)
-                .await
-                .map_err(super::commands::harness_failure)?
-                .ok_or_else(|| "引用来源已变化或不可用。".to_owned())?;
-            let resource = services
-                .application
-                .harness
-                .knowledge
-                .citation_resource(&citation)
-                .await
-                .map_err(|_| "引用来源不可用。".to_owned())?;
-            services
-                .application
-                .application
-                .validate_harness_session(&services.application.harness.host, &principal, &session)
-                .await
-                .map_err(super::commands::session_failure)?;
-            Ok::<_, String>((text, resource))
-        });
-        cx.spawn_in(window, async move |view, cx| {
-            let result = job.await.unwrap_or_else(|_| Err("引用读取未完成。".into()));
-            let _ = view.update_in(cx, |view, window, cx| {
-                if view.generation != generation {
-                    return;
-                }
-                match result {
-                    Ok((text, resource)) => {
-                        let owner = cx.entity().downgrade();
-                        window.open_dialog(cx, move |dialog, _, _| {
-                            dialog
-                                .title(title.clone())
-                                .width(px(700.))
-                                .child(
-                                    div()
-                                        .id("citation-text")
-                                        .max_h(px(440.))
-                                        .overflow_y_scroll()
-                                        .child(TextView::markdown("citation", text.clone())),
-                                )
-                                .footer(div().flex().justify_end().when_some(
-                                    resource.clone(),
-                                    |view, resource| {
-                                        let owner = owner.clone();
-                                        view.child(
-                                            Button::new("citation-open-source")
-                                                .small()
-                                                .ghost()
-                                                .label("打开来源")
-                                                .on_click(move |_, _, cx| {
-                                                    let _ = owner.update(cx, |_, cx| {
-                                                        cx.emit(ConversationEvent::OpenResource(
-                                                            resource.clone(),
-                                                        ))
-                                                    });
-                                                }),
-                                        )
-                                    },
-                                ))
-                        });
-                    }
-                    Err(error) => {
-                        view.error = Some(error);
-                        cx.notify();
-                    }
-                }
-            });
-        })
-        .detach();
-    }
-    pub(super) fn open_result(&self, result: &AssistantResultReference, cx: &mut Context<Self>) {
-        if let (Ok(session), Ok(id)) = (
-            result.execution_session_id.parse(),
-            result.result_id.parse(),
-        ) {
-            cx.emit(ConversationEvent::OpenResult(
-                yss_graph_execution::result::ResultReference {
-                    execution_session_id: yss_graph_execution::identity::ExecutionSessionId::new(
-                        session,
-                    ),
-                    result_id: yss_graph_execution::result::ResultId::from_existing(id),
-                },
-            ));
-        }
     }
 }

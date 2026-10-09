@@ -10,6 +10,8 @@ mod options;
 mod projection;
 mod references;
 mod render;
+mod resources;
+mod sources;
 mod stream;
 mod thread;
 mod usage;

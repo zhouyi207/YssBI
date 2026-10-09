@@ -1,5 +1,5 @@
 use super::{
-    CancelResponse, ConversationEvent, ConversationPanel,
+    CancelResponse, ConversationPanel,
     projection::{Task, Tool, Turn, TurnState},
 };
 use gpui::{
@@ -241,18 +241,13 @@ impl ConversationPanel {
                     .child("已完成的项目操作仍然保留。"),
             );
         }
-        let mut citations = div().flex().flex_wrap().gap_1();
+        let mut citations = div().min_w_0().flex().flex_col().gap_2();
         for (index, citation) in turn.citations.iter().enumerate() {
-            let citation = citation.clone();
-            citations = citations.child(
-                Button::new(SharedString::from(format!("citation-{id}-{index}")))
-                    .small()
-                    .ghost()
-                    .label(citation.title.clone())
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.inspect_citation(citation.clone(), window, cx)
-                    })),
-            );
+            citations = citations.child(super::sources::card(
+                format!("citation-{id}-{index}"),
+                citation,
+                cx.entity().downgrade(),
+            ));
         }
         item.child(citations).into_any_element()
     }
@@ -378,35 +373,16 @@ impl ConversationPanel {
                 card = card.child(div().text_xs().child(warning.clone()));
             }
             card = card.child(self.tool_list(&task.tools, running && task.state.is_none(), cx));
-            for (index, artifact) in task.artifacts.iter().enumerate() {
-                let resource = artifact.resource.clone();
-                card = card.child(
-                    Button::new(SharedString::from(format!(
-                        "task-artifact-{}-{index}",
-                        task.id
-                    )))
-                    .small()
-                    .ghost()
-                    .label(resource.id.clone())
-                    .disabled(artifact.deleted)
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        cx.emit(ConversationEvent::OpenResource(resource.clone()))
-                    })),
-                );
-            }
-            for (index, result) in task.results.iter().enumerate() {
-                let result = result.clone();
-                card = card.child(
-                    Button::new(SharedString::from(format!(
-                        "task-result-{}-{index}",
-                        task.id
-                    )))
-                    .small()
-                    .ghost()
-                    .label(result.output.clone())
-                    .on_click(cx.listener(move |view, _, _, cx| view.open_result(&result, cx))),
-                );
-            }
+        }
+        if !task.artifacts.is_empty() || !task.results.is_empty() {
+            card = card.child(super::resources::cards(
+                format!("task-{}-artifacts", task.id),
+                &cx.entity().downgrade(),
+                &task.artifacts,
+                &task.results,
+                self.resource_catalog.as_deref(),
+                cx,
+            ));
         }
         card.into_any_element()
     }

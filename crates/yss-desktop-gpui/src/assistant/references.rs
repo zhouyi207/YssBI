@@ -48,7 +48,7 @@ impl ConversationPanel {
         cx.notify();
     }
 
-    fn open_reference(&self, resource: &ProjectResourceRef, cx: &mut Context<Self>) {
+    pub(super) fn open_reference(&self, resource: &ProjectResourceRef, cx: &mut Context<Self>) {
         if self.reference_available(resource) {
             cx.emit(ConversationEvent::OpenResource(resource.clone()));
         }
