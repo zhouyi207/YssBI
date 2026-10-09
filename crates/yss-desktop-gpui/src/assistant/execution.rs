@@ -86,38 +86,41 @@ impl ConversationPanel {
         running: bool,
         cx: &App,
     ) -> AnyElement {
-        let Some(timing) = timing else {
-            return gpui::Empty.into_any_element();
-        };
-        let active = running && self.timing_connected();
-        let value = if let Some(finished) = timing.finished_at {
-            crate::text::format(
-                "panel.assistantDuration",
-                &[(
-                    "value",
-                    duration(finished.saturating_sub(timing.started_at)),
-                )],
-            )
-        } else if active {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis();
-            let elapsed = now
-                .saturating_sub(u128::from(timing.started_at))
-                .min(u128::from(u64::MAX)) as u64;
-            crate::text::format("panel.assistantElapsed", &[("value", duration(elapsed))])
-        } else {
-            crate::text::t("panel.assistantTimingUnconfirmed").to_owned()
-        };
-        div()
-            .id(SharedString::from(id))
-            .text_size(px(11.))
-            .text_color(cx.theme().muted_foreground)
-            .tooltip(move |window, cx| Tooltip::new(timing_hint(timing)).build(window, cx))
-            .child(value)
-            .into_any_element()
+        elapsed(id, timing, running && self.timing_connected(), cx)
     }
+}
+
+pub(super) fn elapsed(id: String, timing: Option<Timing>, active: bool, cx: &App) -> AnyElement {
+    let Some(timing) = timing else {
+        return gpui::Empty.into_any_element();
+    };
+    let value = if let Some(finished) = timing.finished_at {
+        crate::text::format(
+            "panel.assistantDuration",
+            &[(
+                "value",
+                duration(finished.saturating_sub(timing.started_at)),
+            )],
+        )
+    } else if active {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let elapsed = now
+            .saturating_sub(u128::from(timing.started_at))
+            .min(u128::from(u64::MAX)) as u64;
+        crate::text::format("panel.assistantElapsed", &[("value", duration(elapsed))])
+    } else {
+        crate::text::t("panel.assistantTimingUnconfirmed").to_owned()
+    };
+    div()
+        .id(SharedString::from(id))
+        .text_size(px(11.))
+        .text_color(cx.theme().muted_foreground)
+        .tooltip(move |window, cx| Tooltip::new(timing_hint(timing)).build(window, cx))
+        .child(value)
+        .into_any_element()
 }
 
 fn duration(milliseconds: u64) -> String {

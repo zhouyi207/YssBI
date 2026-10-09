@@ -1,139 +1,251 @@
-//! Tool details consume the existing sanitized ledger projection.
-use super::ConversationPanel;
-use gpui::{ClipboardItem, Context, Window, div, prelude::*, px};
-use gpui_component::{
-    ActiveTheme, Sizable, WindowExt,
-    button::{Button, ButtonVariants},
+//! Visible tool cards read the sanitized ledger projection within the original session boundary.
+mod render;
+use super::{
+    ConversationPanel,
+    projection::{Timing, Tool},
 };
-use yss_harness_contract::{AssistantToolInspection, ToolInvocationId};
+use crate::project::resources::ResourceCatalog;
+use gpui::{App, Context, IntoElement, RenderOnce, SharedString, Task, WeakEntity, Window};
+use std::sync::Arc;
+use yss_harness_contract::{
+    AssistantToolIdentity, AssistantToolInspection, ProjectResourceRef, ToolInvocationId,
+};
 
-impl ConversationPanel {
-    pub(super) fn inspect_tool(&self, id: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Ok(invocation) = ToolInvocationId::try_new(id) else {
+#[derive(IntoElement, Clone)]
+pub(super) struct ToolCard {
+    pub tool: Tool,
+    pub owner: WeakEntity<ConversationPanel>,
+    pub generation: u64,
+    pub catalog: Option<Arc<ResourceCatalog>>,
+    pub connected: bool,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Loading {
+    Pending,
+    Reading,
+    Ready,
+    Failed,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum CopyTarget {
+    Arguments,
+    Details,
+}
+
+struct Inspection {
+    card: ToolCard,
+    open: bool,
+    technical_open: bool,
+    technical: Option<SharedString>,
+    copied: Option<CopyTarget>,
+    loading: Loading,
+    detail: Option<AssistantToolInspection>,
+    target: Option<ProjectResourceRef>,
+    query: u64,
+    task: Option<Task<()>>,
+}
+
+impl RenderOnce for ToolCard {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let id = SharedString::from(format!("tool-detail-{}", self.tool.id));
+        let state = window.use_keyed_state(id, cx, |_, _| Inspection {
+            card: self.clone(),
+            open: false,
+            technical_open: false,
+            technical: None,
+            copied: None,
+            loading: Loading::Pending,
+            detail: None,
+            target: None,
+            query: 0,
+            task: None,
+        });
+        state.update(cx, |view, cx| {
+            let rebound = view.card.owner.entity_id() != self.owner.entity_id()
+                || view.card.tool.id != self.tool.id;
+            if rebound || view.card.generation != self.generation || view.card.tool != self.tool {
+                view.query += 1;
+                view.task = None;
+                view.detail = None;
+                view.technical = None;
+                view.copied = None;
+                view.loading = Loading::Pending;
+                if rebound {
+                    view.open = false;
+                    view.technical_open = false;
+                }
+            }
+            let catalog_changed = match (&view.card.catalog, &self.catalog) {
+                (Some(left), Some(right)) => !Arc::ptr_eq(left, right),
+                (None, None) => false,
+                _ => true,
+            };
+            view.card = self;
+            if catalog_changed || view.detail.is_none() {
+                view.resolve_target();
+            }
+            if view.loading == Loading::Pending
+                && (view.open
+                    || matches!(view.card.tool.kind, AssistantToolIdentity::Capability(_)))
+            {
+                view.loading = Loading::Reading;
+                // RenderOnce is called while ConversationPanel is leased. Read it after rendering.
+                cx.defer_in(window, |view, window, cx| view.load(window, cx));
+            }
+        });
+        state
+    }
+}
+
+impl Inspection {
+    fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.task.is_some() {
+            return;
+        }
+        self.query += 1;
+        let query = self.query;
+        let Some(owner) = self.card.owner.upgrade() else {
             return;
         };
-        let services = self.services.clone();
-        let principal = self.principal.clone();
-        let session = self.session.id.clone();
-        let generation = self.generation;
-        let job = self.services.executor.spawn(async move {
+        let owner = owner.read(cx);
+        if owner.generation != self.card.generation {
+            return;
+        }
+        let Ok(invocation) = ToolInvocationId::try_new(self.card.tool.id.clone()) else {
+            self.loading = Loading::Failed;
+            cx.notify();
+            return;
+        };
+        let services = owner.services.clone();
+        let principal = owner.principal.clone();
+        let session = owner.session.id.clone();
+        let project = owner.session.project.clone();
+        let generation = self.card.generation;
+        let kind = self.card.tool.kind;
+        let requested_session = session.clone();
+        self.loading = Loading::Reading;
+        let job = services.executor.clone().spawn(async move {
             services
                 .application
                 .application
-                .validate_harness_session(&services.application.harness.host, &principal, &session)
+                .validate_harness_session(
+                    &services.application.harness.host,
+                    &principal,
+                    &requested_session,
+                )
                 .await
-                .map_err(super::commands::session_failure)?;
-            let record = services
-                .application
-                .harness
-                .host
-                .inspect_tool_invocation(&session, &invocation)
-                .await
-                .map_err(super::commands::harness_failure)?;
-            let detail = if let Some(record) = record {
-                Some(AssistantToolInspection::from(record))
-            } else {
-                let events = services
+                .map_err(|_| ())?;
+            let detail = match kind {
+                AssistantToolIdentity::Capability(_) => services
                     .application
                     .harness
                     .host
-                    .events_after(&session, 0)
+                    .inspect_tool_invocation(&requested_session, &invocation)
                     .await
-                    .map_err(super::commands::harness_failure)?;
-                AssistantToolInspection::from_control_events(&events, &invocation)
+                    .map_err(|_| ())?
+                    .map(AssistantToolInspection::from),
+                AssistantToolIdentity::Control(_) => {
+                    let events = services
+                        .application
+                        .harness
+                        .host
+                        .events_after(&requested_session, 0)
+                        .await
+                        .map_err(|_| ())?;
+                    AssistantToolInspection::from_control_events(&events, &invocation)
+                }
             };
             services
                 .application
                 .application
-                .validate_harness_session(&services.application.harness.host, &principal, &session)
+                .validate_harness_session(
+                    &services.application.harness.host,
+                    &principal,
+                    &requested_session,
+                )
                 .await
-                .map_err(super::commands::session_failure)?;
-            detail.ok_or_else(|| "工具详情已不可用。".to_owned())
+                .map_err(|_| ())?;
+            detail.ok_or(())
         });
-        cx.spawn_in(window, async move |view, cx| {
-            let result = job
-                .await
-                .unwrap_or_else(|_| Err("工具详情读取失败。".into()));
-            let _ = view.update_in(cx, |view, window, cx| {
-                if view.generation != generation {
+        self.task = Some(cx.spawn_in(window, async move |view, cx| {
+            let result = job.await.unwrap_or(Err(()));
+            let _ = view.update_in(cx, |view, _, cx| {
+                if view.query != query {
                     return;
                 }
-                match result {
-                    Ok(detail) => {
-                        let owner = cx.entity().downgrade();
-                        window.open_dialog(cx, move |dialog, window, cx| {
-                            window.use_keyed_state("resource-observer", cx, |window, cx| {
-                                owner.upgrade().map(|owner| {
-                                    cx.observe_in(&owner, window, |_, _, window, _| {
-                                        window.refresh()
-                                    })
-                                })
-                            });
-                            let mut body = div()
-                                .id("tool-detail")
-                                .max_h(px(460.))
-                                .overflow_y_scroll()
-                                .flex()
-                                .flex_col()
-                                .gap_2()
-                                .text_sm();
-                            if let Some(target) = &detail.target {
-                                body = body.child(format!("目标：{target}"));
-                            }
-                            for (name, value) in &detail.parameters {
-                                body = body.child(format!("{name}：{value}"));
-                            }
-                            body = body.child(format!(
-                                "开始：{}",
-                                super::execution::timestamp(detail.started_at)
-                            ));
-                            if let Some(finished) = detail.finished_at {
-                                body = body.child(format!(
-                                    "结束：{}",
-                                    super::execution::timestamp(finished)
-                                ));
-                            }
-                            if let Some(failure) = &detail.failure {
-                                body = body.child(
-                                    div()
-                                        .text_color(cx.theme().danger)
-                                        .child(format!("失败：{failure}")),
-                                );
-                            }
-                            let catalog = owner
-                                .upgrade()
-                                .and_then(|owner| owner.read(cx).resource_catalog.clone());
-                            body = body.child(super::resources::cards(
-                                "tool-artifacts",
-                                &owner,
-                                &detail.artifacts,
-                                &detail.results,
-                                catalog.as_deref(),
-                                cx,
-                            ));
-                            let copy = serde_json::to_string_pretty(&detail).unwrap_or_default();
-                            dialog.title("工具详情").width(px(620.)).child(body).footer(
-                                div().flex().justify_end().child(
-                                    Button::new("copy-tool-detail")
-                                        .small()
-                                        .ghost()
-                                        .label("复制详情")
-                                        .on_click(move |_, _, cx| {
-                                            cx.write_to_clipboard(ClipboardItem::new_string(
-                                                copy.clone(),
-                                            ))
-                                        }),
-                                ),
-                            )
-                        });
-                    }
-                    Err(error) => {
-                        view.error = Some(error);
-                        cx.notify();
-                    }
+                view.task = None;
+                let current = view.card.owner.upgrade().is_some_and(|owner| {
+                    let owner = owner.read(cx);
+                    owner.generation == generation
+                        && owner.session.id == session
+                        && owner.session.project == project
+                });
+                if let Ok(detail) = result
+                    && current
+                {
+                    view.detail = Some(detail);
+                    view.loading = Loading::Ready;
+                } else {
+                    view.detail = None;
+                    view.loading = Loading::Failed;
                 }
+                view.technical = None;
+                view.copied = None;
+                view.resolve_target();
+                cx.notify();
             });
-        })
-        .detach();
+        }));
+        cx.notify();
+    }
+
+    fn resolve_target(&mut self) {
+        self.target = None;
+        let Some(id) = self
+            .detail
+            .as_ref()
+            .and_then(|detail| detail.target.as_ref())
+        else {
+            return;
+        };
+        let Some(catalog) = &self.card.catalog else {
+            return;
+        };
+        let mut matches = catalog
+            .entries
+            .iter()
+            .filter(|entry| &entry.resource.id == id);
+        if let Some(entry) = matches.next()
+            && matches.next().is_none()
+        {
+            self.target = Some(entry.resource.clone());
+        }
+    }
+
+    fn timing(&self) -> Option<Timing> {
+        let event = self.card.tool.timing;
+        self.detail
+            .as_ref()
+            .map(|detail| Timing {
+                started_at: detail.started_at,
+                updated_at: event.map_or(detail.started_at, |timing| timing.updated_at),
+                finished_at: detail
+                    .finished_at
+                    .or(event.and_then(|timing| timing.finished_at)),
+            })
+            .or(event)
+    }
+
+    fn copy(&mut self, target: CopyTarget, cx: &mut Context<Self>) {
+        let Some(detail) = &self.detail else { return };
+        let text = match target {
+            CopyTarget::Arguments => serde_json::to_string_pretty(&detail.parameters),
+            CopyTarget::Details => serde_json::to_string_pretty(detail),
+        }
+        .expect("tool inspection contains JSON values");
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        self.copied = Some(target);
+        cx.notify();
     }
 }

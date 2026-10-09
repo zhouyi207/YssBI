@@ -1,6 +1,6 @@
 use super::{
     CancelResponse, ConversationPanel,
-    projection::{Task, Tool, Turn, TurnState},
+    projection::{Task, Turn, TurnState},
 };
 use gpui::{
     AnyElement, Context, Empty, IntoElement, Render, SharedString, Window, div, prelude::*,
@@ -155,7 +155,12 @@ impl ConversationPanel {
                 ));
             }
         }
-        item = item.child(self.tool_list(&turn.tools, turn.state == TurnState::Running, cx));
+        item = item.child(self.tool_group(
+            format!("turn-tools-{}", turn.id),
+            turn.tools.iter(),
+            turn.state == TurnState::Running,
+            cx,
+        ));
         for task in turn
             .tasks
             .iter()
@@ -232,53 +237,6 @@ impl ConversationPanel {
         item.child(citations).into_any_element()
     }
 
-    fn tool_list(&self, tools: &[Tool], running: bool, cx: &mut Context<Self>) -> AnyElement {
-        let mut list = div().flex().flex_col().gap_1();
-        for tool in tools {
-            let id = tool.id.clone();
-            let title = super::activity::tool_name(tool.kind);
-            let state = if tool.failure.is_some() {
-                crate::text::t("panel.assistantToolFailed")
-            } else if tool.finished {
-                crate::text::t("panel.assistantToolCompleted")
-            } else if !running {
-                crate::text::t("panel.assistantToolInterrupted")
-            } else if !self.timing_connected() {
-                crate::text::t("panel.assistantToolUnknown")
-            } else {
-                crate::text::t("panel.assistantToolRunning")
-            };
-            list = list.child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        Button::new(SharedString::from(format!("tool-{id}")))
-                            .small()
-                            .ghost()
-                            .label(format!(
-                                "{title} · {state}{}",
-                                tool.execution
-                                    .as_ref()
-                                    .map(|status| format!(" · {status}"))
-                                    .unwrap_or_default()
-                            ))
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                view.inspect_tool(id.clone(), window, cx)
-                            })),
-                    )
-                    .child(self.elapsed(
-                        format!("tool-time-{}", tool.id),
-                        tool.timing,
-                        running && !tool.finished,
-                        cx,
-                    )),
-            );
-        }
-        list.into_any_element()
-    }
     pub(super) fn task_content(
         &self,
         id: u64,
@@ -291,7 +249,7 @@ impl ConversationPanel {
             .flex()
             .flex_col()
             .gap_2()
-            .child(self.tool_list(&task.tools, running, cx));
+            .child(self.tool_group(format!("task-tools-{id}"), task.tools.iter(), running, cx));
         if let Some(summary) = &task.summary
             && !summary.is_empty()
         {

@@ -1,6 +1,8 @@
 //! Read-only transcript reduced from the existing public event projection.
+mod tool;
 pub(super) mod usage;
 use super::activity::Activity;
+pub(super) use tool::{Tool, ToolState};
 use yss_harness_contract::{
     AgentRole, AgentRunState, HarnessResourceReference, HarnessTurnOptions, KnowledgeCitation,
     LanguageModelIdentity, ModelCallPurpose, ModelTokenUsage, StatisticalPlan,
@@ -9,7 +11,7 @@ use yss_harness_contract::{
     AssistantEvent, AssistantEventKind as Event, AssistantResultReference, AssistantToolIdentity,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(super) struct Timing {
     pub started_at: u64,
     pub updated_at: u64,
@@ -37,15 +39,6 @@ pub(super) enum TurnState {
     Completed,
     Failed,
     Cancelled,
-}
-#[derive(Clone)]
-pub(super) struct Tool {
-    pub id: String,
-    pub kind: AssistantToolIdentity,
-    pub finished: bool,
-    pub failure: Option<String>,
-    pub execution: Option<String>,
-    pub timing: Option<Timing>,
 }
 #[derive(Clone)]
 pub(super) struct Task {
@@ -108,7 +101,7 @@ impl Task {
                 .tools
                 .iter()
                 .rev()
-                .find(|tool| !tool.finished)
+                .find(|tool| tool.running())
                 .map(|tool| Activity::Tool(tool.kind));
         }
     }
@@ -191,10 +184,10 @@ impl Transcript {
 impl Turn {
     fn finish_timing(&mut self, at: u64) {
         self.timing.finish(at);
-        finish_tool_timings(&mut self.tools, at);
+        settle_tools(&mut self.tools, at, self.state == TurnState::Cancelled);
         for task in self.tasks.iter_mut().filter(|task| task.state.is_none()) {
             task.timing.finish(at);
-            finish_tool_timings(&mut task.tools, at);
+            settle_tools(&mut task.tools, at, self.state == TurnState::Cancelled);
             task.state = Some(if self.state == TurnState::Cancelled {
                 AgentRunState::Cancelled
             } else {
@@ -310,7 +303,7 @@ impl Turn {
             } => {
                 if let Some(task) = self.tasks.iter_mut().rev().find(|task| task.id == run_id) {
                     task.timing.finish(at);
-                    finish_tool_timings(&mut task.tools, at);
+                    settle_tools(&mut task.tools, at, state == AgentRunState::Cancelled);
                     task.state = Some(state);
                     task.summary = summary;
                     task.error = failure_code.map(|code| code.to_string());
@@ -329,7 +322,7 @@ impl Turn {
             Event::AgentRunInvalidated { run_id } => {
                 if let Some(task) = self.tasks.iter_mut().rev().find(|task| task.id == run_id) {
                     task.timing.finish(at);
-                    finish_tool_timings(&mut task.tools, at);
+                    settle_tools(&mut task.tools, at, false);
                     task.activity = None;
                     task.state = Some(AgentRunState::Stale);
                 }
@@ -338,11 +331,9 @@ impl Turn {
         }
     }
 }
-fn finish_tool_timings(tools: &mut [Tool], at: u64) {
+fn settle_tools(tools: &mut [Tool], at: u64, cancelled: bool) {
     for tool in tools {
-        if let Some(timing) = &mut tool.timing {
-            timing.finish(at);
-        }
+        tool.settle(at, cancelled);
     }
 }
 fn apply_tool(tools: &mut Vec<Tool>, at: u64, event: Event) {
@@ -350,51 +341,47 @@ fn apply_tool(tools: &mut Vec<Tool>, at: u64, event: Event) {
         Event::ToolInvocationStarted {
             invocation_id,
             capability_id,
-        } => tools.push(Tool {
-            id: invocation_id,
-            kind: capability_id,
-            finished: false,
-            failure: None,
-            execution: None,
-            timing: Some(Timing::started(at)),
-        }),
-        Event::ToolInvocationCompleted { invocation_id, .. } => {
-            if let Some(tool) = tools.iter_mut().find(|tool| tool.id == invocation_id) {
-                if let Some(timing) = &mut tool.timing {
-                    timing.finish(at);
-                }
-                tool.finished = true;
-            }
+        } => {
+            tools.push(Tool::started(invocation_id, capability_id, at));
+        }
+        Event::ToolInvocationCompleted {
+            invocation_id,
+            capability_id,
+        } => {
+            find_tool(tools, invocation_id, capability_id).completed(at);
         }
         Event::ToolInvocationFailed {
             invocation_id,
+            capability_id,
             failure_code,
-            ..
         } => {
-            if let Some(tool) = tools.iter_mut().find(|tool| tool.id == invocation_id) {
-                if let Some(timing) = &mut tool.timing {
-                    timing.finish(at);
-                }
-                tool.finished = true;
-                tool.failure = Some(failure_code);
-            }
+            find_tool(tools, invocation_id, capability_id).failed(at, failure_code);
         }
         Event::GraphExecutionFinished {
             invocation_id,
             status,
             failure_code,
         } => {
-            if let Some(tool) = tools.iter_mut().find(|tool| tool.id == invocation_id) {
-                tool.finished = true;
-                if let Some(timing) = &mut tool.timing {
-                    timing.finish(at);
-                }
-                tool.execution = Some(status);
-                tool.failure = failure_code.or(tool.failure.take());
-            }
+            find_tool(
+                tools,
+                invocation_id,
+                yss_harness_contract::CapabilityId::ExecuteGraph.into(),
+            )
+            .executed(at, &status, failure_code);
         }
         _ => {}
     }
+}
+fn find_tool(tools: &mut Vec<Tool>, id: String, kind: AssistantToolIdentity) -> &mut Tool {
+    let index = tools
+        .iter()
+        .rposition(|tool| tool.id == id)
+        .unwrap_or_else(|| {
+            // Recovery can finish a ledger record whose start event was never published.
+            tools.push(Tool::recovered(id, kind));
+            tools.len() - 1
+        });
+    &mut tools[index]
 }
 fn phase_label(phase: yss_harness_contract::AgentRuntimePhase) -> &'static str {
     match phase {

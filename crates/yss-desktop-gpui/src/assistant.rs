@@ -16,6 +16,7 @@ mod sources;
 mod stream;
 mod tasks;
 mod thread;
+mod tools;
 mod usage;
 
 use crate::services::NativeServices;

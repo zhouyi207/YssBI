@@ -535,7 +535,17 @@
 - 主对话和 Worker 计划使用同一卡片，呈现研究问题、分析模式、工作流及设计，完整计划按需展开；直接借用原 StatisticalPlan，不经 JSON 反序列化或复制计划业务状态。
 - 工作区和独立提交内容使用临时 Linux/X11 窗口与合成 AssistantEvent 验收默认展开、手动收起、双重失败原因、产物保留、续跑卡片独立选择、取消、事件重新归约及图执行警告在最终结果后保留。工作区另核对断流/恢复、零总量、剩余工具活动、完成/中断、失效仅改变最近执行、完整计划详情、中英文及窄列/展开布局。
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`、本批 Rust 文件局部格式、29 个复用双语键及重连参数、文档元信息/相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。临时实际窗口使用 `cargo build -p yss-desktop-gpui --example assistant_tasks_review --locked` 构建，入口和隔离数据不提交；无新增依赖或 UI 单元测试，不运行全工作区验证。
-- 真实模型/账本交付、物理输入、读屏、Windows/macOS 和已有嵌套 Xwayland 局部重绘问题继续验收。ToolCalls、Thread 和 Markdown 的其他职责仍独立审查；累计完成源码审查 187/265 项。
+- 真实模型/账本交付、物理输入、读屏、Windows/macOS 和已有嵌套 Xwayland 局部重绘问题继续验收。Thread 和 Markdown 的其他职责仍独立审查；本批结束时累计完成源码审查 187/265 项。
+
+### 工具调用（AssistantToolCalls）
+
+- 已逐项阅读 AssistantToolGroup、AssistantToolDetails 和 ToolCall 导出，以及工具终态归约、Thread 分组接入、资源打开与详情契约。`assistant/tools` 直接借用原工具序列，复用 Collapsible、时长、图标及资源卡片；工作区的有序输出按相邻工具分组，原聚合投影的输出排序继续由 Thread 批次处理。
+- `projection/tool` 集中归约完成、失败、取消、超时、结果未知与图执行结果；后续调用完成不覆盖图执行失败。缺少开始事件的完成项仍可查看，任务和轮次终态只结算未结束的工具；不从详情展开状态推断执行结果。
+- `assistant/inspect` 从可见卡片按需读取原 Harness 账本或控制事件，父视图渲染后启动查询，工具事实/会话代次变化使旧查询失效。会话读取前后校验与回执绑定检查保留，控制工具只在展开时读取事件，账本缺项不扫描事件；没有新增持久状态或业务 owner。
+- 详情原位展开参数、失败明细、目标与资源/结果；技术详情按需序列化完整安全投影（含输出），可分别复制参数与完整详情。参数名、已知值、工具状态和分组数量复用双语键；目标只在当前目录唯一匹配时提供原工作台打开入口。
+- 临时 Linux/X11 窗口通过合成 AssistantEvent、隔离 SQLite 账本/控制事件和真实 Harness 查询核对运行分组、状态更新、目标/失败明细、复制反馈、账本缺项与重试恢复、控制工具、图执行失败在完成事件后保留、缺少开始事件、取消及重放。工作区另核对相邻分组、中英文、断流/恢复、Worker 中断结算；独立候选核对窄列详情与原工作台打开资源。
+- L2：工作区与独立提交内容的 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；工作区 9 个/候选 8 个 Rust 文件局部格式、38 个复用双语键组/参数、文档元信息与 275/270 个相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。实际窗口用 `cargo build -p yss-desktop-gpui --example assistant_tools_review --locked` 构建，样例源码和隔离数据不提交；无新增依赖或 UI 单元测试，不运行全工作区验证。
+- 真实模型端到端交付、延迟读取期间切换/关闭、物理输入、读屏、Windows/macOS 和已有嵌套 Xwayland 局部重绘继续验收；本批窗口证据使用合成记录。Thread 和 Markdown 的其余职责继续独立审查；累计完成源码审查 188/265 项。
 
 ## app
 
@@ -659,7 +669,7 @@
 | [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 优化 | 每次执行独立卡片、活动与终态投影、完整计划；复用时长/工具/产物 | 原生窗口合成事件验收通过；模型账本/读屏/物理输入/平台与局部重绘开放 |
 | [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读主组件；历史范围、加载锚点、最新消息跳转与底部跟随已迁入 assistant/thread；消息子组件及依赖继续审查 | 视口已通过合成事件的原生窗口验收；整体未完成 |
 | [modules/assistant/internal/ui/AssistantTokenUsage.tsx](../../react/src/modules/assistant/internal/ui/AssistantTokenUsage.tsx) | 迁移 | 原事件投影增量统计本轮，原生 ProgressCircle/Popover 展示主对话占用及完整用量；未知与零分别保留 | 合成事件原生窗口通过；真实报告/持久回放与跨平台待验收 |
-| [modules/assistant/internal/ui/AssistantToolCalls.tsx](../../react/src/modules/assistant/internal/ui/AssistantToolCalls.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantToolCalls.tsx](../../react/src/modules/assistant/internal/ui/AssistantToolCalls.tsx) | 优化 | 工具分组、明确终态、可见卡片原位查询/重试与技术详情；复用时长/资源入口 | 原生窗口合成账本/控制事件验收；真实模型/迟到回执/物理输入/平台与局部重绘开放 |
 
 ## modules/chart
 
