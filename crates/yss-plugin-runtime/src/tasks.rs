@@ -96,32 +96,31 @@ impl PluginManager {
         {
             return serde_json::to_value(snapshot).map_err(|_| fail("plugin_response_invalid"));
         }
-        self.inner
-            .state
-            .lock()
-            .map_err(|_| fail("plugin_state_unavailable"))?
-            .contexts
-            .insert(
-                context.context_id.clone(),
-                ContextBinding {
-                    context: context.clone(),
-                    window: String::new(),
-                    view_id: String::new(),
-                },
-            );
         let manager = self.clone();
         let duration = Duration::from_millis(timeout_ms);
-        std::thread::spawn(move || {
-            manager.monitor_task(TaskExecution {
-                task_id,
-                task_type,
-                parameters,
-                context,
-                lease,
-                duration,
-                produces_artifacts,
+        if std::thread::Builder::new()
+            .spawn(move || {
+                manager.monitor_task(TaskExecution {
+                    task_id,
+                    task_type,
+                    parameters,
+                    context,
+                    lease,
+                    duration,
+                    produces_artifacts,
+                })
             })
-        });
+            .is_err()
+        {
+            let error = fail("plugin_resource_exhausted");
+            self.update_task(
+                &record.snapshot.task_id,
+                TaskState::Failed,
+                Some(error.clone()),
+                None,
+            )?;
+            return Err(error);
+        }
         serde_json::to_value(record.snapshot).map_err(|_| fail("plugin_response_invalid"))
     }
 
@@ -194,10 +193,36 @@ impl PluginManager {
         let poll_interval = Duration::from_millis(250);
         lease.process.diagnostics.task(&task_id, true);
         let wire_context = |request_deadline: Instant| json!({"contextId":context.context_id,"project":context.project,"remainingBudgetMs":request_deadline.saturating_duration_since(Instant::now()).as_millis() as u64});
+        let mut start_attempted = false;
         let mut remote_may_run = false;
         let result = (|| {
+            let state = self.task(&task_id)?.snapshot.state;
+            if state.terminal() {
+                return Ok(());
+            }
+            if state == TaskState::CancelRequested {
+                self.update_task(&task_id, TaskState::Cancelled, None, None)?;
+                return Ok(());
+            }
+            {
+                let mut state = self
+                    .inner
+                    .state
+                    .lock()
+                    .map_err(|_| fail("plugin_state_unavailable"))?;
+                state.ensure_active_process(&context)?;
+                state.contexts.insert(
+                    context.context_id.clone(),
+                    ContextBinding {
+                        context: context.clone(),
+                        window: String::new(),
+                        view_id: String::new(),
+                    },
+                );
+            }
             let mut cancellation_deadline = None;
             let mut last_storage_check = Instant::now();
+            start_attempted = true;
             lease
                 .process
                 .request(
@@ -347,10 +372,13 @@ impl PluginManager {
         })();
         if let Err(error) = result {
             let state = if remote_may_run
-                || matches!(
-                    error.code.as_str(),
-                    "plugin_process_exited" | "plugin_request_timeout" | "plugin_outcome_unknown"
-                ) {
+                || start_attempted
+                    && matches!(
+                        error.code.as_str(),
+                        "plugin_process_exited"
+                            | "plugin_request_timeout"
+                            | "plugin_outcome_unknown"
+                    ) {
                 TaskState::OutcomeUnknown
             } else {
                 TaskState::Failed

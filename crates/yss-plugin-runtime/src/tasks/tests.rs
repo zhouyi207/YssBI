@@ -213,7 +213,10 @@ mod observation {
                 contributes: Contributions {
                     views: vec![],
                     commands: vec![],
-                    task_types: vec![],
+                    task_types: vec![yss_plugin_protocol::TaskType {
+                        id: "compute".into(),
+                        produces_artifacts: false,
+                    }],
                 },
                 permissions: vec![],
                 ui_methods: vec![],
@@ -329,6 +332,150 @@ mod observation {
             let _ = self.socket.shutdown(Shutdown::Both);
             fs::remove_dir_all(&self.root).unwrap();
         }
+    }
+
+    #[test]
+    fn admitted_task_cancelled_before_start_never_dispatches() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let fixture = Fixture::new(Arc::new(move |_, _| {
+            counted.fetch_add(1, Ordering::AcqRel);
+            Err(fail("plugin_method_unknown"))
+        }));
+        fixture
+            .manager
+            .update_task("task-0", TaskState::CancelRequested, None, None)
+            .unwrap();
+        fixture.run();
+        assert_eq!(calls.load(Ordering::Acquire), 0);
+        assert_eq!(fixture.snapshot(0).state, TaskState::Cancelled);
+        assert_eq!(fixture.snapshot(1).state, TaskState::Admitted);
+        assert!(fixture.process.is_running());
+    }
+
+    #[test]
+    fn admitted_task_finished_before_start_keeps_its_receipt() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let fixture = Fixture::new(Arc::new(move |_, _| {
+            counted.fetch_add(1, Ordering::AcqRel);
+            Err(fail("plugin_method_unknown"))
+        }));
+        let receipt = json!({"receipt":{"resource":"committed-result"},"viewData":{"value":42}});
+        fixture
+            .manager
+            .update_task("task-0", TaskState::Succeeded, None, Some(receipt.clone()))
+            .unwrap();
+        fixture.run();
+        assert_eq!(calls.load(Ordering::Acquire), 0);
+        assert_eq!(fixture.snapshot(0).state, TaskState::Succeeded);
+        let binding = fixture.manager.inner.state.lock().unwrap().contexts["context-1"].clone();
+        let task = fixture
+            .manager
+            .task_view_call(&binding, "tasks.get", json!({"taskId":"task-0"}))
+            .unwrap();
+        assert_eq!(task["result"], receipt);
+        assert_eq!(fixture.snapshot(1).state, TaskState::Admitted);
+        assert!(fixture.process.is_running());
+    }
+
+    #[test]
+    fn admitted_task_lost_instance_before_start_never_dispatches() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let fixture = Fixture::new(Arc::new(move |_, _| {
+            counted.fetch_add(1, Ordering::AcqRel);
+            Err(fail("plugin_method_unknown"))
+        }));
+        let replacement = PluginProcess::with_test_peer("two", fixture.remote.clone());
+        fixture
+            .manager
+            .inner
+            .state
+            .lock()
+            .unwrap()
+            .processes
+            .insert("example.compute".into(), replacement.clone());
+        fixture.run();
+        assert_eq!(calls.load(Ordering::Acquire), 0);
+        let task = fixture.snapshot(0);
+        assert_eq!(task.state, TaskState::Failed);
+        assert_eq!(task.error.unwrap().code, "plugin_process_exited");
+        assert_eq!(fixture.snapshot(1).state, TaskState::Admitted);
+        assert_eq!(fixture.snapshot(2).state, TaskState::Admitted);
+        let state = fixture.manager.inner.state.lock().unwrap();
+        assert!(!state.contexts.contains_key("context-0"));
+        assert!(state.contexts.contains_key("context-1"));
+        assert!(Arc::ptr_eq(
+            &state.processes["example.compute"],
+            &replacement
+        ));
+        assert!(replacement.is_running());
+        assert!(fixture.process.is_running());
+    }
+
+    #[test]
+    fn admitted_task_runtime_state_failure_after_admission_is_retired() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let fixture = Fixture::new(Arc::new(move |_, _| {
+            counted.fetch_add(1, Ordering::AcqRel);
+            Err(fail("plugin_method_unknown"))
+        }));
+        let binding = fixture.manager.inner.state.lock().unwrap().contexts["context-0"].clone();
+        let operation = operation_id(crate::ledger::now_ms(), "state-failure").unwrap();
+        let input = json!({"operationId":operation,"taskType":"compute","parameters":null,"timeoutMs":5000});
+        let admission = fixture.manager.inner.commit.lock().unwrap();
+        let (acquired, poisoned, reply) = std::thread::scope(|scope| {
+            let manager = fixture.manager.clone();
+            let start = scope.spawn(move || manager.start_task(binding, input));
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while fixture.process.leases.load(Ordering::Acquire) == 0 && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            let acquired = fixture.process.leases.load(Ordering::Acquire) > 0;
+            let poisoned = acquired
+                && std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _state = fixture.manager.inner.state.lock().unwrap();
+                    panic!("runtime state lost while durable admission is waiting");
+                }))
+                .is_err();
+            drop(admission);
+            (acquired, poisoned, start.join().unwrap())
+        });
+        assert!(acquired && poisoned);
+        let admitted = reply.expect("durable admission must retain a task monitor");
+        let task_id = admitted["taskId"].as_str().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let task = loop {
+            let task = fixture
+                .manager
+                .list_tasks()
+                .unwrap()
+                .into_iter()
+                .chain(
+                    fixture
+                        .manager
+                        .task_history("example.compute", None, 10)
+                        .unwrap()
+                        .tasks,
+                )
+                .find(|task| task.task_id == task_id)
+                .unwrap();
+            if task.state.terminal() || Instant::now() >= deadline {
+                break task;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        while fixture.process.leases.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(task.state, TaskState::Failed);
+        assert_eq!(task.error.unwrap().code, "plugin_state_unavailable");
+        assert_eq!(calls.load(Ordering::Acquire), 0);
+        assert_eq!(fixture.process.leases.load(Ordering::Acquire), 0);
+        assert!(fixture.process.is_running());
+        assert!(fixture.manager.inner.state.is_poisoned());
     }
 
     #[test]
@@ -566,11 +713,18 @@ mod observation {
 
     #[test]
     fn monitor_cancel_poll_uses_the_remaining_grace_period() {
+        let (started, starting) = std::sync::mpsc::sync_channel(1);
+        let (continue_start, pending_start) = std::sync::mpsc::sync_channel(1);
+        let pending_start = Mutex::new(pending_start);
         let (entered, receiving) = std::sync::mpsc::sync_channel(1);
         let (release, blocked) = std::sync::mpsc::sync_channel(1);
         let blocked = Mutex::new(blocked);
         let fixture = Fixture::new(Arc::new(move |_, request| match request.method.as_str() {
-            "tasks.start" => Ok(Value::Null),
+            "tasks.start" => {
+                started.send(()).unwrap();
+                pending_start.lock().unwrap().recv().unwrap();
+                Ok(Value::Null)
+            }
             "tasks.cancel" => {
                 std::thread::sleep(Duration::from_secs(8));
                 Ok(Value::Null)
@@ -582,16 +736,18 @@ mod observation {
             }
             _ => Err(fail("plugin_method_unknown")),
         }));
-        fixture
-            .manager
-            .update_task("task-0", TaskState::CancelRequested, None, None)
-            .unwrap();
         let (done, finished) = std::sync::mpsc::sync_channel(1);
         let ended_before_reply = std::thread::scope(|scope| {
             let monitor = scope.spawn(|| {
                 fixture.run();
                 done.send(()).unwrap();
             });
+            starting.recv_timeout(Duration::from_secs(5)).unwrap();
+            fixture
+                .manager
+                .update_task("task-0", TaskState::CancelRequested, None, None)
+                .unwrap();
+            continue_start.send(()).unwrap();
             receiving.recv_timeout(Duration::from_secs(12)).unwrap();
             let ended = finished.recv_timeout(Duration::from_secs(3)).is_ok();
             release.send(()).unwrap();

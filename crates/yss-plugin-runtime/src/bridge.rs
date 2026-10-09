@@ -9,7 +9,7 @@ use yss_plugin_protocol::{
 };
 
 impl RuntimeState {
-    fn ensure_active_process(&self, context: &CallContext) -> Result<(), PluginFailure> {
+    pub(super) fn ensure_active_process(&self, context: &CallContext) -> Result<(), PluginFailure> {
         if !self
             .processes
             .get(&context.plugin_id)

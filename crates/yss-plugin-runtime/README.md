@@ -47,6 +47,14 @@ The task's `CallContext` owns its parameter hash. Admission compares that same
 field for active and archived retries, and Application uses it for result provenance;
 the durable task record does not store a second hash.
 
+After durable admission, the task monitor owns context publication and remote startup.
+Its initial task-state check preserves terminal receipts and completes pending cancellation
+locally without dispatch. Context publication reuses the runtime-state process check under
+that same lock, so a lost or replaced instance cannot publish a task context. A failure before
+the start RPC is attempted fails only that task; the monitor retains ownership even when
+runtime-state access fails. If its thread cannot be created, admission records a definite
+per-task `plugin_resource_exhausted` failure instead of leaving an unmonitored task.
+
 ## Grants, cleanup and trust
 
 The host validates requested budgets and records an effective grant with the installation and
