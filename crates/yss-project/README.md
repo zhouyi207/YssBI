@@ -79,6 +79,12 @@ Graph、Chart、Mind、Doc 和 Database 的复制接受可选目标名称，在�
 
 项目入口路径解释位于 `src/filesystem.rs`，索引变化策略与 ProjectIndexInvalidation 位于 `src/file_changes.rs`，业务失败由 `src/operation_error.rs` 的 ProjectOperationError 表达。FS 仅接收明确的目录、相对路径、字节与校验回调，不依赖项目契约。项目操作 ID 显式转换为 TransactionId；注册库的根身份与 FS RootIdentity 通过不解释内容的字符串投影比较，已有存储值保持不变。
 
+外部计算结果由 `commit_external_artifacts` 校验项目会话、来源、名称与内容指纹，
+保存在 `extension-results/<provider>/<task>`。相同回执和文件内容可幂等读取，冲突被拒绝；
+损坏回执按反序列化失败报告。目录、文件与最后写入的 `resource.json` 通过同一个 FS
+事务提交，复用路径检查、回滚、暂存清理与 Project 恢复标记。准备后重验会话和目标缺席，
+提交后再确认当前会话；失败不能留下半份结果或沿目录跳转在项目之外创建目录。
+
 所有项目写入在暂存阶段显式调用 Project 的文档校验器；通用 FS prepare 默认不限制文件格式。项目删除前对 metadata.yssbi 的校验也由 Project 执行。FilesystemError 在 Project 边界映射为既有业务错误类别，前端错误 wire 不变。
 
 创建、Save As 与资源 Writer 共用同一个文档校验入口。图文件复用正式读取解析器，

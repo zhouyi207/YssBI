@@ -1,7 +1,10 @@
 use crate::{ProjectError, ProjectState};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, fs, io::Write, path::PathBuf};
-use yss_filesystem::{metadata_is_redirect, read_secure_file};
+use std::{collections::BTreeSet, fs, path::PathBuf};
+use yss_filesystem::{
+    FilesystemError, FilesystemTransaction, StagedFilesystemMutation, TransactionContext,
+    TransactionId, read_secure_file,
+};
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
 pub struct ExternalArtifact {
@@ -67,6 +70,10 @@ fn valid_name(value: &str) -> bool {
             && matches!(stem.as_bytes()[3], b'1'..=b'9'))
 }
 
+fn transaction_error(error: FilesystemError) -> ProjectError {
+    ProjectError::InvalidProjectFormat(error.to_string())
+}
+
 impl ProjectState {
     pub fn commit_external_artifacts(
         &self,
@@ -89,7 +96,7 @@ impl ProjectState {
         if captured.instance_id != *instance {
             return Err(invalid());
         }
-        let _filesystem = self
+        let filesystem = self
             .acquire_filesystem_lease(captured.root.clone())
             .map_err(|_| invalid())?;
         self.validate_project_session(&captured)
@@ -144,7 +151,7 @@ impl ProjectState {
             )
             .map_err(|_| invalid())?;
             let existing: ExternalResourceReceipt =
-                serde_json::from_slice(&metadata).map_err(ProjectError::Serialize)?;
+                serde_json::from_slice(&metadata).map_err(ProjectError::Deserialize)?;
             if existing != receipt {
                 return Err(invalid());
             }
@@ -158,64 +165,166 @@ impl ProjectState {
                     return Err(invalid());
                 }
             }
-            return Ok(receipt);
-        }
-        // Save As already excludes this private transaction namespace.
-        let stage = root
-            .join(".yssbi-transaction")
-            .join(format!("extension-{}", uuid::Uuid::new_v4()));
-        let stage_parent = stage.parent().ok_or_else(invalid)?;
-        fs::create_dir_all(stage_parent).map_err(ProjectError::Io)?;
-        if metadata_is_redirect(&fs::symlink_metadata(stage_parent).map_err(ProjectError::Io)?) {
-            return Err(invalid());
-        }
-        fs::create_dir(&stage).map_err(ProjectError::Io)?;
-        let result = (|| {
-            for artifact in artifacts {
-                let mut file = fs::OpenOptions::new()
-                    .create_new(true)
-                    .write(true)
-                    .open(stage.join(artifact.name))
-                    .map_err(ProjectError::Io)?;
-                file.write_all(&artifact.contents)
-                    .map_err(ProjectError::Io)?;
-                file.sync_all().map_err(ProjectError::Io)?;
-            }
-            let mut metadata = fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(stage.join("resource.json"))
-                .map_err(ProjectError::Io)?;
-            metadata
-                .write_all(&serde_json::to_vec_pretty(&receipt).map_err(ProjectError::Serialize)?)
-                .map_err(ProjectError::Io)?;
-            metadata.sync_all().map_err(ProjectError::Io)?;
-            drop(metadata);
-            if self.project_instance_id() != instance.as_str()
-                || self.project_session_id() != *session
-            {
+            self.validate_project_session(&captured)
+                .map_err(|_| invalid())?;
+            if self.project_session_id() != *session {
                 return Err(invalid());
             }
-            let parent = target.parent().ok_or_else(invalid)?;
-            fs::create_dir_all(parent).map_err(ProjectError::Io)?;
-            for path in [root.join("extension-results"), parent.to_path_buf()] {
-                if metadata_is_redirect(&fs::symlink_metadata(path).map_err(ProjectError::Io)?) {
-                    return Err(invalid());
-                }
-            }
-            fs::rename(&stage, &target).map_err(ProjectError::Io)?;
-            Ok(receipt)
-        })();
-        if result.is_err() {
-            let _ = fs::remove_dir_all(stage);
+            return Ok(receipt);
         }
-        result
+        let relative = PathBuf::from(&receipt.resource_ref);
+        let mut mutations = Vec::with_capacity(artifacts.len() + 1);
+        mutations.extend(
+            artifacts
+                .into_iter()
+                .map(|artifact| StagedFilesystemMutation::Write {
+                    relative_path: relative.join(artifact.name),
+                    contents: artifact.contents,
+                }),
+        );
+        mutations.push(StagedFilesystemMutation::Write {
+            relative_path: relative.join("resource.json"),
+            contents: serde_json::to_vec_pretty(&receipt).map_err(ProjectError::Serialize)?,
+        });
+        let prepared = FilesystemTransaction::prepare(
+            TransactionContext {
+                root: captured.root.clone(),
+                transaction_id: TransactionId::new(),
+                recovery_marker: Some(self.project_recovery_marker()),
+            },
+            filesystem,
+            mutations,
+        )
+        .map_err(transaction_error)?;
+        self.validate_project_session(&captured)
+            .map_err(|_| invalid())?;
+        if self.project_session_id() != *session {
+            return Err(invalid());
+        }
+        match fs::symlink_metadata(&target) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ProjectError::Io(error)),
+            Ok(_) => return Err(invalid()),
+        }
+        let committed = prepared.commit().map_err(transaction_error)?;
+        if self.validate_project_session(&captured).is_err()
+            || self.project_session_id() != *session
+        {
+            committed.rollback().map_err(transaction_error)?;
+            return Err(invalid());
+        }
+        committed.finalize();
+        Ok(receipt)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn provenance() -> ExternalResourceProvenance {
+        ExternalResourceProvenance {
+            provider_id: "example.compute".into(),
+            package_digest: "package-hash".into(),
+            task_id: "task-1".into(),
+            operation_id: "operation-1".into(),
+            parameters_hash: "parameters-hash".into(),
+            sources: vec![],
+        }
+    }
+
+    fn artifacts() -> Vec<ExternalArtifact> {
+        vec![ExternalArtifact {
+            name: "summary.csv".into(),
+            media_type: "text/csv".into(),
+            contents: b"name,mean\na,2\n".to_vec(),
+        }]
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_artifacts_reject_redirected_parents_without_creating_outside_directories() {
+        let fixture = crate::fixtures::TempProject::activate(
+            "external-redirect",
+            yss_project_model::ProjectData::new(),
+        );
+        let outside = crate::fixtures::TempProject::activate(
+            "external-redirect-outside",
+            yss_project_model::ProjectData::new(),
+        );
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let outside_session = outside.state().capture_project_session().unwrap();
+        std::os::unix::fs::symlink(
+            outside_session.root.as_path(),
+            session.root.as_path().join("extension-results"),
+        )
+        .unwrap();
+        let result = state.commit_external_artifacts(
+            &session.instance_id,
+            &state.project_session_id(),
+            provenance(),
+            artifacts(),
+        );
+        assert!(result.is_err());
+        assert!(
+            !outside_session
+                .root
+                .as_path()
+                .join("example.compute")
+                .exists(),
+            "a rejected result commit created a directory outside the project"
+        );
+    }
+
+    #[test]
+    fn external_artifact_failure_rolls_back_the_entire_result_directory() {
+        let fixture = crate::fixtures::TempProject::activate(
+            "external-rollback",
+            yss_project_model::ProjectData::new(),
+        );
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let provenance = provenance();
+        state.set_filesystem_fault(Some(
+            yss_filesystem::FilesystemFaultPoint::SecondLiveReplacement,
+        ));
+        assert!(
+            state
+                .commit_external_artifacts(
+                    &session.instance_id,
+                    &state.project_session_id(),
+                    provenance.clone(),
+                    artifacts(),
+                )
+                .is_err()
+        );
+        assert!(
+            !session
+                .root
+                .as_path()
+                .join("extension-results/example.compute/task-1")
+                .exists()
+        );
+        state.ensure_project_operational().unwrap();
+        let receipt = state
+            .commit_external_artifacts(
+                &session.instance_id,
+                &state.project_session_id(),
+                provenance,
+                artifacts(),
+            )
+            .unwrap();
+        assert_eq!(
+            read_secure_file(
+                session.root.as_path(),
+                &PathBuf::from(receipt.resource_ref).join("summary.csv")
+            )
+            .unwrap(),
+            b"name,mean\na,2\n"
+        );
+    }
+
     #[test]
     fn committed_plugin_results_are_idempotent_portable_and_current_project_bound() {
         let fixture = crate::fixtures::TempProject::activate(
@@ -225,21 +334,7 @@ mod tests {
         let state = fixture.state();
         let session = state.capture_project_session().unwrap();
         let project_session = state.project_session_id();
-        let provenance = ExternalResourceProvenance {
-            provider_id: "example.compute".into(),
-            package_digest: "package-hash".into(),
-            task_id: "task-1".into(),
-            operation_id: "operation-1".into(),
-            parameters_hash: "parameters-hash".into(),
-            sources: vec![],
-        };
-        let artifacts = || {
-            vec![ExternalArtifact {
-                name: "summary.csv".into(),
-                media_type: "text/csv".into(),
-                contents: b"name,mean\na,2\n".to_vec(),
-            }]
-        };
+        let provenance = provenance();
         let receipt = state
             .commit_external_artifacts(
                 &session.instance_id,
@@ -301,6 +396,21 @@ mod tests {
                 )
                 .is_err()
         );
+        let metadata = session
+            .root
+            .as_path()
+            .join(&receipt.resource_ref)
+            .join("resource.json");
+        std::fs::write(metadata, b"damaged receipt").unwrap();
+        assert!(matches!(
+            state.commit_external_artifacts(
+                &session.instance_id,
+                &project_session,
+                provenance.clone(),
+                artifacts(),
+            ),
+            Err(ProjectError::Deserialize(_))
+        ));
         let _lifecycle = state
             .filesystem_for_test()
             .begin_root_lifecycle(session.root.clone())
