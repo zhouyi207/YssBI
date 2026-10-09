@@ -11,5 +11,7 @@ pub type ProjectActivationTestHook = TestHook;
 pub(crate) struct ProjectStateTestHooks {
     #[cfg(test)]
     pub(crate) graph_load_after_read_test_hook: TestHookSlot,
+    #[cfg(test)]
+    pub(crate) project_change_after_read_test_hook: TestHookSlot,
     pub(crate) project_activation_test_hook: TestHookSlot,
 }

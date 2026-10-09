@@ -137,6 +137,8 @@ Graph revision 不随驻留状态重置：卸载/重新加载保留版本，删�
 Watcher 的 rescan 在 filesystem lease 下读取文件，重验项目身份后同步驻留 graph/chart，
 预先校验全部版本推进，再发布变更。无内容变化的重复 rescan 不再次推进版本。
 未打开的 graph 保持按需加载；未保存图正文就是 Rust 当前驻留数据，watcher 不得用旧文件替换它。
+Watcher 在 publication 锁内重新比较扫描结果与当前正文；扫描期间的撤销若已恢复磁盘
+内容，刷新保留当前编辑会话、重做历史与版本，不重复安装同一正文或推进发布版本。
 ProjectIndex 的文件成员来自磁盘扫描，内存只提供适用的权威版本，不得复活已删除的 chart。
 
 Chart 文档和文件不包含资源 revision；`chart_revisions` 是其唯一版本 authority，在项目激活时从初始版本开始，

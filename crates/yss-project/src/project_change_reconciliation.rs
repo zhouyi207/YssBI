@@ -73,6 +73,16 @@ impl ProjectState {
             chart_changes.push((path.clone(), None));
         }
         self.validate_project_session(&session)?;
+        #[cfg(test)]
+        if let Some(hook) = self
+            .test_hooks
+            .project_change_after_read_test_hook
+            .read()
+            .unwrap()
+            .clone()
+        {
+            hook();
+        }
         if !graph_changes.is_empty()
             || !chart_changes.is_empty()
             || !mind_changes.is_empty()
@@ -85,8 +95,11 @@ impl ProjectState {
                 });
             }
             let mut data = self.project_data.write().unwrap();
-            // File notifications must not replace edits that have not been explicitly saved.
-            graph_changes.retain(|(path, _)| !self.is_graph_modified(path));
+            // Undo can make the current body match the file after the scan prepared a difference.
+            // Retain its editing identity/history instead of installing the same body again.
+            graph_changes.retain(|(path, incoming)| {
+                !self.is_graph_modified(path) && data.graphs.get(path) != incoming.as_ref()
+            });
             if graph_changes.is_empty()
                 && chart_changes.is_empty()
                 && mind_changes.is_empty()
@@ -164,6 +177,116 @@ mod tests {
     use crate::fixtures;
     use yss_filesystem::change::{FileChangeKind, RelativePath};
     use yss_project_model::ProjectData;
+
+    #[test]
+    fn rescan_preserves_redo_when_undo_matches_the_file_during_preparation() {
+        use crate::GraphHistoryAction;
+        use std::sync::{Arc, Mutex};
+        use yss_graph_document::{
+            DocumentNode, GraphDocumentOperation, GraphDocumentPatch, GraphResourceKind,
+            GraphResourcePath, NodeId, NodePosition,
+        };
+        use yss_graph_document_edit::apply_graph_document_patch;
+        use yss_project_identity::OperationId;
+        let path = GraphResourcePath::new("events/Watched.yssbi-event").unwrap();
+        let mut data = ProjectData::new();
+        data.graphs.insert(
+            path.clone(),
+            yss_project_model::GraphResourceDocument::new("Watched", GraphResourceKind::EventGraph),
+        );
+        let fixture = fixtures::TempProject::activate("watcher-undo-during-read", data);
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let original = state
+            .read_graph_editing(&session.instance_id, &path)
+            .unwrap();
+        let patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
+            node: DocumentNode {
+                id: NodeId::new(),
+                node_type: "yssbi.tests.node".parse().unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: Default::default(),
+                user_label: None,
+            },
+        }]);
+        let capture = state
+            .capture_graph_edit(
+                &session.instance_id,
+                &path,
+                original.state.version,
+                OperationId::new(),
+                [0; 32],
+            )
+            .unwrap();
+        let mut edited = (*original.document).clone();
+        apply_graph_document_patch(&mut edited, &patch).unwrap();
+        state
+            .commit_graph_edit(capture, Arc::new(edited), GraphHistoryAction::Edit(patch))
+            .unwrap();
+        let expected = Arc::new(Mutex::new(None));
+        let hook_state = state.clone();
+        let hook_project = session.instance_id.clone();
+        let hook_path = path.clone();
+        let hook_expected = Arc::clone(&expected);
+        *state
+            .test_hooks
+            .project_change_after_read_test_hook
+            .write()
+            .unwrap() = Some(Arc::new(move || {
+            let current = hook_state
+                .read_graph_editing(&hook_project, &hook_path)
+                .unwrap();
+            let patch = hook_state
+                .graph_history_patch(&hook_project, &hook_path, current.state.version, false)
+                .unwrap()
+                .unwrap();
+            let capture = hook_state
+                .capture_graph_edit(
+                    &hook_project,
+                    &hook_path,
+                    current.state.version,
+                    OperationId::new(),
+                    [0; 32],
+                )
+                .unwrap();
+            let mut document = (*current.document).clone();
+            apply_graph_document_patch(&mut document, &patch).unwrap();
+            let undone = hook_state
+                .commit_graph_edit(capture, Arc::new(document), GraphHistoryAction::Undo)
+                .unwrap();
+            assert!(!undone.editing.dirty && undone.editing.can_redo);
+            *hook_expected.lock().unwrap() = Some(undone.editing);
+        }));
+        let publication = state
+            .read_project_index(&session.instance_id)
+            .unwrap()
+            .publication_revision;
+        let result = state
+            .reconcile_project_change(&session.instance_id, FilesystemChange::rescan_required());
+        state
+            .test_hooks
+            .project_change_after_read_test_hook
+            .write()
+            .unwrap()
+            .take();
+        result.unwrap();
+        let current = state
+            .read_graph_editing(&session.instance_id, &path)
+            .unwrap();
+        assert_eq!(
+            current.state,
+            expected.lock().unwrap().clone().unwrap(),
+            "a stale rescan difference replaced the current editing session/history"
+        );
+        assert_eq!(current.document.as_ref(), original.document.as_ref());
+        assert_eq!(
+            state
+                .read_project_index(&session.instance_id)
+                .unwrap()
+                .publication_revision,
+            publication
+        );
+    }
 
     #[test]
     fn unrelated_change_is_a_noop_instead_of_an_error() {
