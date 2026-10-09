@@ -120,11 +120,20 @@ tasks and close/reopen panels. This example does not establish acceptance of ext
 
 ## Cancellation and diagnostics
 
-Ordinary calls rejected before outbound queue admission preserve the process and unrelated
+View and task-start calls rejected before outbound queue admission preserve the process and unrelated
 contexts and tasks. The [SDK](../yss-plugin-sdk/README.md) owns that admission boundary and reports
 a disconnected writer as `plugin_process_exited`; the process supervisor observes peer closure
 and stops the transport. Task cancellation retains the stronger fault policy below because
 the host must confirm that remote work has stopped.
+
+After `tasks.start` succeeds, the monitor keeps ownership of the remote work until it validates
+a terminal task reply. Temporary `tasks.get` resource exhaustion retries at the existing polling
+interval and remains bounded by the task deadline and cancellation grace period. Other observation
+failures retire that exact process instance and record its nonterminal tasks as `outcomeUnknown`;
+the host cannot claim that unobserved remote work failed. A result or host-handoff rejection after
+confirmed remote completion fails only that task, while transport faults retain their process-level
+policy. Budget, cancellation and observation failures use the same instance-failure owner once.
+Backend task lifecycle regressions live in [tasks/tests.rs](src/tasks/tests.rs).
 
 A task cancellation first goes to its plugin task. If cancellation fails, exceeds its grace
 period or the process is lost, the host treats it as a process-level fault: all nonterminal tasks

@@ -22,6 +22,20 @@ pub struct PluginProcess {
     job: ProcessJob,
 }
 impl PluginProcess {
+    #[cfg(all(test, unix))]
+    pub(super) fn with_test_peer(instance: &str, peer: Arc<Peer>) -> Arc<Self> {
+        Arc::new(Self {
+            instance_id: instance.into(),
+            peer,
+            child: Mutex::new(None),
+            leases: AtomicUsize::new(0),
+            diagnostics: Arc::new(crate::diagnostics::DiagnosticBuffer::new(
+                "example.compute".into(),
+                instance.into(),
+            )),
+        })
+    }
+
     pub(super) fn spawn(
         manifest: &PluginManifest,
         package: &Path,

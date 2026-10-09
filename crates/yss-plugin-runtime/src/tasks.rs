@@ -7,188 +7,7 @@ use std::{
 };
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    struct Host;
-    fn record(index: usize, instance: &str) -> TaskRecord {
-        let task_id = format!("task-{index}");
-        let operation = operation_id(crate::ledger::now_ms(), &format!("test-{index}")).unwrap();
-        TaskRecord {
-            snapshot: TaskSnapshot {
-                task_id: task_id.clone(),
-                operation_id: operation.clone(),
-                plugin_id: "example.compute".into(),
-                package_digest: "digest".into(),
-                state: TaskState::Admitted,
-                revision: "0".into(),
-                error: None,
-                result: None,
-                progress: None,
-            },
-            context: CallContext {
-                context_id: format!("context-{index}"),
-                plugin_id: "example.compute".into(),
-                installation_generation: "1".into(),
-                instance_id: instance.into(),
-                package_digest: "digest".into(),
-                project: None,
-                task_id: Some(task_id),
-                operation_id: Some(operation),
-                parameters_hash: Some("parameters".into()),
-                granted_budget: ResourceBudget::default(),
-            },
-        }
-    }
-
-    #[test]
-    fn archived_tasks_release_admission_and_keep_retry_receipts_after_cleanup_and_restart() {
-        let root =
-            std::env::temp_dir().join(format!("yssbi-task-archive-{}", uuid::Uuid::new_v4()));
-        let manager = PluginManager::new(&root, Arc::new(Host)).unwrap();
-        let first = record(0, "one");
-        for index in 0..160 {
-            let task = if index == 0 {
-                first.clone()
-            } else {
-                record(index, "one")
-            };
-            assert!(manager.admit_record(task.clone(), 2).unwrap().is_none());
-            manager
-                .update_task(
-                    &task.snapshot.task_id,
-                    TaskState::Succeeded,
-                    None,
-                    Some(
-                        json!({"receipt":{"resource":"project-result"},"viewData":{"value":index}}),
-                    ),
-                )
-                .unwrap();
-        }
-        assert!(manager.list_tasks().unwrap().is_empty());
-        let page = manager.task_history("example.compute", None, 25).unwrap();
-        assert_eq!(page.tasks.len(), 25);
-        let second = manager
-            .task_history("example.compute", page.next_cursor.as_deref(), 25)
-            .unwrap();
-        assert!(page.tasks.iter().all(|task| {
-            second
-                .tasks
-                .iter()
-                .all(|other| task.task_id != other.task_id)
-        }));
-        manager.clear_task_history("example.compute").unwrap();
-        assert!(
-            manager
-                .task_history("example.compute", None, 25)
-                .unwrap()
-                .tasks
-                .is_empty()
-        );
-        drop(manager);
-        let manager = PluginManager::new(&root, Arc::new(Host)).unwrap();
-        let replay = manager.admit_record(first.clone(), 2).unwrap().unwrap();
-        assert_eq!(replay.state, TaskState::Succeeded);
-        assert_eq!(
-            replay.result.as_ref().unwrap()["receipt"]["resource"],
-            "project-result"
-        );
-        assert!(replay.result.as_ref().unwrap().get("viewData").is_none());
-        let mut conflict = first;
-        conflict.context.parameters_hash = Some("changed".into());
-        assert_eq!(
-            manager.admit_record(conflict, 2).unwrap_err().code,
-            "plugin_operation_conflict"
-        );
-        manager.admit_record(record(200, "one"), 2).unwrap();
-        manager.admit_record(record(201, "one"), 2).unwrap();
-        assert_eq!(
-            manager
-                .admit_record(record(202, "one"), 2)
-                .unwrap_err()
-                .code,
-            "plugin_resource_exhausted"
-        );
-        drop(manager);
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    impl HostServices for Host {
-        fn current_project(&self) -> Result<Option<ProjectContext>, PluginFailure> {
-            Ok(None)
-        }
-        fn invoke(
-            &self,
-            _: &CallContext,
-            _: &str,
-            _: Value,
-            _: &Path,
-        ) -> Result<Value, PluginFailure> {
-            unreachable!()
-        }
-    }
-    #[test]
-    fn late_poll_cannot_erase_cancel_or_change_a_terminal_result() {
-        let root =
-            std::env::temp_dir().join(format!("yssbi-cancel-ledger-{}", uuid::Uuid::new_v4()));
-        let manager = PluginManager::new(&root, Arc::new(Host)).unwrap();
-        let context = CallContext {
-            context_id: "context".into(),
-            plugin_id: "example.compute".into(),
-            installation_generation: "1".into(),
-            instance_id: "instance".into(),
-            package_digest: "digest".into(),
-            project: None,
-            task_id: Some("task".into()),
-            operation_id: Some("operation".into()),
-            parameters_hash: Some("parameters".into()),
-            granted_budget: ResourceBudget::default(),
-        };
-        manager
-            .update_registry(|registry| {
-                registry.tasks.insert(
-                    "task".into(),
-                    TaskRecord {
-                        snapshot: TaskSnapshot {
-                            task_id: "task".into(),
-                            operation_id: "operation".into(),
-                            plugin_id: "example.compute".into(),
-                            package_digest: "digest".into(),
-                            state: TaskState::Admitted,
-                            revision: "0".into(),
-                            error: None,
-                            result: None,
-                            progress: None,
-                        },
-                        context,
-                    },
-                );
-                Ok(())
-            })
-            .unwrap();
-        manager
-            .update_task("task", TaskState::CancelRequested, None, None)
-            .unwrap();
-        manager
-            .update_task("task", TaskState::Running, None, None)
-            .unwrap();
-        assert_eq!(
-            manager.task("task").unwrap().snapshot.state,
-            TaskState::CancelRequested
-        );
-        manager
-            .update_task("task", TaskState::Cancelled, None, None)
-            .unwrap();
-        manager
-            .update_task("task", TaskState::Succeeded, None, Some(json!({})))
-            .unwrap();
-        assert_eq!(
-            manager.task("task").unwrap().snapshot.state,
-            TaskState::Cancelled
-        );
-        drop(manager);
-        fs::remove_dir_all(root).unwrap();
-    }
-}
+mod tests;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct TaskRecord {
@@ -372,18 +191,18 @@ impl PluginManager {
             produces_artifacts,
         } = execution;
         let deadline = Instant::now() + duration;
+        let poll_interval = Duration::from_millis(250);
         lease.process.diagnostics.task(&task_id, true);
         let wire_context = json!({"contextId":context.context_id,"project":context.project,"remainingBudgetMs":duration.as_millis() as u64});
+        let mut remote_active = false;
         let result = (|| {
             let mut cancellation_started = None;
             let mut last_storage_check = Instant::now();
             lease.process.request("tasks.start",json!({"context":wire_context,"input":{"taskId":task_id,"taskType":task_type,"parameters":parameters}}),Duration::from_secs(30).min(duration))?;
+            remote_active = true;
             loop {
                 if last_storage_check.elapsed() >= Duration::from_secs(2) {
-                    if let Err(error) = self.enforce_private_budget(&context.plugin_id, 0) {
-                        self.fail_instance(&context.plugin_id, &lease.process, error)?;
-                        return Ok(());
-                    }
+                    self.enforce_private_budget(&context.plugin_id, 0)?;
                     last_storage_check = Instant::now();
                 }
                 let state = self.task(&task_id)?.snapshot.state;
@@ -394,12 +213,7 @@ impl PluginManager {
                 if state == TaskState::CancelRequested || invalid || Instant::now() >= deadline {
                     let started = cancellation_started.get_or_insert_with(Instant::now);
                     if started.elapsed() > Duration::from_secs(10) {
-                        self.fail_instance(
-                            &context.plugin_id,
-                            &lease.process,
-                            fail("plugin_cancel_timeout"),
-                        )?;
-                        return Err(fail("plugin_outcome_unknown"));
+                        return Err(fail("plugin_cancel_timeout"));
                     }
                     let cancelled = lease.process.request(
                         "tasks.cancel",
@@ -411,19 +225,21 @@ impl PluginManager {
                             .process
                             .diagnostics
                             .push(format!("tasks.cancel: {}\n", error.code).as_bytes());
-                        self.fail_instance(
-                            &context.plugin_id,
-                            &lease.process,
-                            fail("plugin_cancel_failed"),
-                        )?;
-                        return Err(fail("plugin_outcome_unknown"));
+                        return Err(fail("plugin_cancel_failed"));
                     }
                 }
-                let snapshot = lease.process.request(
+                let snapshot = match lease.process.request(
                     "tasks.get",
                     json!({"context":wire_context,"input":{"taskId":task_id}}),
                     Duration::from_secs(10),
-                )?;
+                ) {
+                    Ok(snapshot) => snapshot,
+                    Err(error) if error.code == "plugin_resource_exhausted" => {
+                        std::thread::park_timeout(poll_interval);
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                };
                 let remote: TaskState = serde_json::from_value(snapshot["state"].clone())
                     .map_err(|_| fail("plugin_response_invalid"))?;
                 if snapshot["taskId"].as_str() != Some(task_id.as_str()) {
@@ -441,6 +257,8 @@ impl PluginManager {
                 {
                     return Err(fail("plugin_response_invalid"));
                 }
+                // Retire started remote work only after a validated terminal reply.
+                remote_active = !remote.terminal();
                 self.update_progress(&task_id, progress)?;
                 if remote == TaskState::Succeeded {
                     if invalid {
@@ -481,14 +299,15 @@ impl PluginManager {
                 if state != TaskState::CancelRequested {
                     self.update_task(&task_id, remote, None, None)?;
                 }
-                std::thread::park_timeout(Duration::from_millis(250));
+                std::thread::park_timeout(poll_interval);
             }
         })();
         if let Err(error) = result {
-            let state = if matches!(
-                error.code.as_str(),
-                "plugin_process_exited" | "plugin_request_timeout" | "plugin_outcome_unknown"
-            ) {
+            let state = if remote_active
+                || matches!(
+                    error.code.as_str(),
+                    "plugin_process_exited" | "plugin_request_timeout" | "plugin_outcome_unknown"
+                ) {
                 TaskState::OutcomeUnknown
             } else {
                 TaskState::Failed
