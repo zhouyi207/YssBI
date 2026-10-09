@@ -37,6 +37,9 @@ impl DataFusionRelation {
     }
     pub(crate) fn positioned(&self) -> Result<(DataFrame, String), RelationError> {
         let position = self.unique_name("__yssbi_transform_position");
+        Ok((self.with_position(&position)?, position))
+    }
+    pub(crate) fn with_position(&self, name: &str) -> Result<DataFrame, RelationError> {
         let mut expressions = self
             .columns
             .iter()
@@ -50,9 +53,10 @@ impl DataFusionRelation {
                 self.domain_order.clone(),
                 whole(),
             )?
-            .alias(&position),
+            .alias(self.unique_name(name))
+            .alias(name),
         );
-        Ok((self.select_native(expressions)?, position))
+        self.select_native(expressions)
     }
     pub(crate) fn rebuilt(
         &self,
@@ -360,8 +364,16 @@ impl DataFusionRelation {
         }) {
             return Err(RelationError::InvalidInput);
         }
-        let (source, position) = self.positioned()?;
-        let branch = self.unique_name("__yssbi_unpivot_column");
+        let temporary_name = |base: &str| {
+            let mut name = self.unique_name(base);
+            while name == spec.variable_name.as_ref() || name == spec.value_name.as_ref() {
+                name = self.unique_name(&(name + "_"));
+            }
+            name
+        };
+        let position = temporary_name("__yssbi_transform_position");
+        let branch = temporary_name("__yssbi_unpivot_column");
+        let source = self.with_position(&position)?;
         let mut result: Option<DataFrame> = None;
         for (index, column) in spec.columns.iter().enumerate() {
             let mut expressions = spec.keys.iter().map(|name| col(name)).collect::<Vec<_>>();

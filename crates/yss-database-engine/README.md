@@ -25,6 +25,10 @@ Standardization transforms consume the caller's evaluated mean and sample standa
 The engine validates finite statistics and a positive deviation, then builds a nullable Float64
 projection without recomputing aggregates. Forward and inverse transforms preserve the row domain.
 
+Row selection, grouping, reshaping and table composition share one ordered row-position
+projection. Unpivot's internal ordering columns avoid both source columns and requested output
+names; valid output names do not reserve an internal prefix.
+
 Run focused checks from the repository root:
 
 ```sh

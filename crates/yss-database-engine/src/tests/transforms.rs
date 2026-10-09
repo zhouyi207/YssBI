@@ -55,6 +55,60 @@ fn text_values(relation: &RelationHandle, column: usize) -> Vec<Option<String>> 
 }
 
 #[test]
+fn unpivot_output_names_do_not_collide_with_temporary_order_columns() {
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let source = table(
+        &runtime,
+        vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("x", DataType::Int64, false),
+            Field::new("y", DataType::Int64, false),
+        ],
+        vec![
+            Arc::new(Int64Array::from(vec![1, 2])),
+            Arc::new(Int64Array::from(vec![10, 20])),
+            Arc::new(Int64Array::from(vec![30, 40])),
+        ],
+    );
+    let result = source
+        .unpivot(&UnpivotSpec {
+            keys: vec!["id".into()],
+            columns: vec!["x".into(), "y".into()],
+            variable_name: "__yssbi_transform_position".into(),
+            value_name: "__yssbi_unpivot_column".into(),
+            include_null: true,
+        })
+        .expect("valid output names must remain independent of internal ordering columns");
+    assert_eq!(
+        result
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| field.name().as_str())
+            .collect::<Vec<_>>(),
+        ["id", "__yssbi_transform_position", "__yssbi_unpivot_column"]
+    );
+    assert_eq!(
+        numbers(&result, 0, 0, 10),
+        [Some(1.0), Some(1.0), Some(2.0), Some(2.0)]
+    );
+    assert_eq!(
+        text_values(&result, 1),
+        [
+            Some("x".into()),
+            Some("y".into()),
+            Some("x".into()),
+            Some("y".into())
+        ]
+    );
+    assert_eq!(
+        numbers(&result, 2, 0, 10),
+        [Some(10.0), Some(30.0), Some(20.0), Some(40.0)]
+    );
+    assert_eq!(source.page(0, 10, &control()).unwrap().row_count, 2);
+}
+
+#[test]
 fn numeric_series_operations_require_semantic_admission_for_integer_storage() {
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
     let source = table(

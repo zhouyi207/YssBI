@@ -3,7 +3,7 @@ use arrow::datatypes::{Field, Schema, SchemaRef};
 use datafusion::{
     common::{Column, ScalarValue},
     dataframe::DataFrame,
-    logical_expr::{Expr, ExprFunctionExt, JoinType, expr::Sort},
+    logical_expr::{Expr, JoinType, expr::Sort},
 };
 use std::sync::Arc;
 use yss_data_contract::table::{RowConcatMode, TableJoin, TableJoinKind, append_column_names};
@@ -67,31 +67,6 @@ pub(crate) fn merge_bindings(
 }
 
 impl DataFusionRelation {
-    fn with_position(&self, name: &str) -> Result<DataFrame, RelationError> {
-        let mut internal = name.to_owned();
-        while self
-            .domain
-            .schema()
-            .index_of_column_by_name(None, &internal)
-            .is_some()
-        {
-            internal.push('_');
-        }
-        let number = datafusion::functions_window::expr_fn::row_number()
-            .order_by(self.domain_order.clone())
-            .build()
-            .map_err(|_| RelationError::InvalidPlan)?
-            .alias(&internal);
-        let mut expressions = self
-            .columns
-            .iter()
-            .zip(self.schema.fields())
-            .map(|(expr, field)| expr.clone().alias(field.name()))
-            .collect::<Vec<_>>();
-        expressions.push(number.alias(name));
-        self.select_native(expressions)
-    }
-
     pub(crate) fn project_expressions(
         &self,
         fields: Vec<Field>,
