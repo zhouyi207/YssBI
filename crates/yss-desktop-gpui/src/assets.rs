@@ -8,10 +8,6 @@ pub struct Assets;
 
 const ICONS: &[(&str, &[u8])] = &[
     (
-        "icons/yssbi/chat.svg",
-        include_bytes!("../assets/icons/chat.svg"),
-    ),
-    (
         "icons/yssbi/chart.svg",
         include_bytes!("../assets/icons/chart.svg"),
     ),
@@ -46,10 +42,10 @@ impl AssetSource for Assets {
         if let Some((_, bytes)) = ICONS.iter().find(|(name, _)| *name == path) {
             return Ok(Some(Cow::Borrowed(bytes)));
         }
-        gpui_kit_assets::Assets.load(path)
+        gpui_kit_assets::AllAssets.load(path)
     }
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        let mut assets = gpui_kit_assets::Assets.list(path)?;
+        let mut assets = gpui_kit_assets::AllAssets.list(path)?;
         assets.extend(
             ICONS
                 .iter()
@@ -62,7 +58,6 @@ impl AssetSource for Assets {
 
 #[derive(Clone, Copy)]
 pub enum NativeIcon {
-    Chat,
     Chart,
     Save,
     Play,
@@ -74,7 +69,6 @@ pub enum NativeIcon {
 impl IconNamed for NativeIcon {
     fn path(self) -> SharedString {
         match self {
-            Self::Chat => "icons/yssbi/chat.svg",
             Self::Chart => "icons/yssbi/chart.svg",
             Self::Save => "icons/yssbi/save.svg",
             Self::Play => "icons/yssbi/play.svg",

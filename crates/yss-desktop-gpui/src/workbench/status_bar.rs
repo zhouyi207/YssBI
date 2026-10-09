@@ -108,18 +108,7 @@ impl Workbench {
                 WorkbenchPanel::Details,
                 cx,
             ))
-            .child(
-                Button::new("status-assistant")
-                    .xsmall()
-                    .compact()
-                    .ghost()
-                    .icon(Icon::new(NativeIcon::Chat).size_3())
-                    .tooltip("助手")
-                    .disabled(self.is_closing(cx))
-                    .on_click(cx.listener(|view, _, window, cx| {
-                        view.show_panel(WorkbenchPanel::Assistant, window, cx);
-                    })),
-            )
+            .child(self.conversation_window_button(cx))
             .child(self.dock_button(
                 "status-right",
                 IconName::PanelRight,
@@ -127,6 +116,30 @@ impl Workbench {
                 DockPlacement::Right,
                 cx,
             ))
+    }
+
+    fn conversation_window_button(&self, cx: &mut Context<Self>) -> Button {
+        let open = self.project.is_some() && self.conversation_window_open(cx);
+        let label = if self.project.is_none() {
+            "panel.assistant"
+        } else if open {
+            "bottomBar.closeConversation"
+        } else {
+            "bottomBar.openConversation"
+        };
+        Button::new("status-assistant")
+            .xsmall()
+            .compact()
+            .ghost()
+            .icon(Icon::new(gpui_kit_assets::IconName::MessageSquareText).size_3())
+            .tooltip(crate::text::translate(label))
+            .selected(open)
+            .disabled(
+                self.assistant_reopen || self.is_closing(cx) || self.dock.read(cx).is_locked(),
+            )
+            .on_click(cx.listener(|view, _, window, cx| {
+                view.toggle_conversation_window(window, cx);
+            }))
     }
 
     fn panel_button(

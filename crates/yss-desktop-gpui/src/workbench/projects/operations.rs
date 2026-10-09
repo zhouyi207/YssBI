@@ -199,6 +199,11 @@ impl Workbench {
         operation.show_progress(progress.clone(), cx);
         self.project_progress = Some(progress);
         self.error = None;
+        self.assistant_reopen = false;
+        self.assistant_closed = None;
+        self.assistant_generation = self.assistant_generation.wrapping_add(1);
+        self.assistant_reading = false;
+        self.assistant_again = false;
         self.lifecycle = self.lifecycle.wrapping_add(1);
         let lifecycle = self.lifecycle;
         window.focus(&self.focus, cx);
@@ -251,6 +256,7 @@ impl Workbench {
                                     Some("项目已切换，但内容未读取；请重新打开项目目录。".into());
                             } else {
                                 view.connect_events(window, cx);
+                                view.refresh_assistant_directory(window, cx);
                                 view.error =
                                     Some("项目状态未确认，输入已保留；请重新打开项目。".into());
                             }
@@ -265,6 +271,7 @@ impl Workbench {
                     )
                 } else {
                     view.connect_events(window, cx);
+                    view.refresh_assistant_directory(window, cx);
                     (
                         Some("项目任务未完成，输入已保留；请检查当前目录。".into()),
                         None,
@@ -304,6 +311,8 @@ impl Workbench {
         self.project = project;
         self.graphs.clear();
         self.conversations.clear();
+        self.assistant_reopen = false;
+        self.assistant_closed = None;
         self.assistant_generation = self.assistant_generation.wrapping_add(1);
         self.assistant_reading = false;
         self.assistant_again = false;

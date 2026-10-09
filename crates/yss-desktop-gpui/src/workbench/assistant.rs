@@ -1,4 +1,5 @@
 //! Project-scoped conversation directory and native panels; DockArea owns placement and visibility.
+mod navigation;
 mod renaming;
 
 use super::{
@@ -63,6 +64,7 @@ impl Workbench {
                 }
                 view.assistant_reading = false;
                 if let Some(document) = result {
+                    view.resume_conversation(&document, window, cx);
                     view.install_assistant_document(document, window, cx);
                 } else {
                     view.activity_read_state(
@@ -70,6 +72,9 @@ impl Workbench {
                         ReadState::Failed("native.workbench.assistantDirectoryFailed"),
                         cx,
                     );
+                    if std::mem::take(&mut view.assistant_reopen) && !view.is_closing(cx) {
+                        view.present_assistant(window, cx);
+                    }
                     tracing::warn!(
                         code = "native_assistant_directory_failed",
                         "Native conversation directory refresh failed"
@@ -190,6 +195,7 @@ impl Workbench {
         if self.is_closing(cx) {
             return;
         }
+        let reveal_directory_on_failure = std::mem::take(&mut self.assistant_reopen);
         self.assistant_busy = true;
         let lifecycle = self.lifecycle;
         let services = self.services.clone();
@@ -211,6 +217,9 @@ impl Workbench {
                     view.install_conversation(session, window, cx);
                 } else {
                     view.error = Some("新对话未确认，请检查会话目录后重试。".into());
+                    if reveal_directory_on_failure {
+                        view.present_assistant(window, cx);
+                    }
                 }
                 view.invalidate_assistant_directory(window, cx);
                 cx.notify();
@@ -231,6 +240,7 @@ impl Workbench {
         let Ok(session_id) = HarnessSessionId::try_new(id) else {
             return;
         };
+        let reveal_directory_on_failure = std::mem::take(&mut self.assistant_reopen);
         self.assistant_busy = true;
         let lifecycle = self.lifecycle;
         let services = self.services.clone();
@@ -256,6 +266,9 @@ impl Workbench {
                     view.install_conversation(session, window, cx);
                 } else {
                     view.error = Some("此对话不可用，请刷新会话目录。".into());
+                    if reveal_directory_on_failure {
+                        view.present_assistant(window, cx);
+                    }
                 }
                 view.invalidate_assistant_directory(window, cx);
                 cx.notify();
@@ -271,6 +284,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         let id = session.id.to_string();
+        self.assistant_closed = None;
         let panel = if let Some(panel) = self.conversations.get(&id) {
             panel.update(cx, |panel, cx| {
                 panel.session = session;
@@ -344,6 +358,8 @@ impl Workbench {
         if let Some(panel) = self.visible_conversation(cx)
             && panel.read(cx).session.id.as_str() == id
         {
+            self.assistant_reopen = false;
+            self.assistant_closed = Some(id);
             self.dock.update(cx, |dock, cx| {
                 dock.set_zoomed_out(window, cx);
                 dock.remove_panel(panel, window, cx);
