@@ -415,6 +415,7 @@ pub struct GraphNodeSpecialization {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub enum GraphNodeImplementation {
     Kernel(Box<str>),
+    Reroute,
     GroupMap {
         target: GraphResourcePath,
         transform: bool,

@@ -187,6 +187,31 @@ pub(crate) fn resolve_node_types(
         .and_then(|implementation| {
             build_specialization(implementation, &nodes[index].ports, coercions)
         });
+        if registered.transparent_role() == Some(yss_node_registry::TransparentNodeRole::Reroute) {
+            let category = nodes[index]
+                .ports
+                .iter()
+                .find(|port| port.direction == PortDirection::Input)
+                .and_then(|input| connections.get(&input.address))
+                .and_then(|connections| match connections.as_slice() {
+                    [connection] => Some(&connection.output),
+                    _ => None,
+                })
+                .and_then(|source| {
+                    nodes[*indices.get(&source.node_id)?]
+                        .ports
+                        .iter()
+                        .find(|port| &port.address == source && !port.orphan)
+                })
+                .map(|port| port.result_category);
+            if let Some(category) = category {
+                for port in &mut nodes[index].ports {
+                    if port.direction == PortDirection::Output && !port.orphan {
+                        port.result_category = category;
+                    }
+                }
+            }
+        }
         nodes[index].semantic_fingerprint = semantic_fingerprint(document_node, &nodes[index]);
     }
 

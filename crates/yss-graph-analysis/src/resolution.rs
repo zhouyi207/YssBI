@@ -209,6 +209,7 @@ fn validate_node_schema(
                     crate::GraphNodeImplementation::FunctionCall { .. }
                         | crate::GraphNodeImplementation::GroupMap { .. }
                         | crate::GraphNodeImplementation::FunctionReturn
+                        | crate::GraphNodeImplementation::Reroute
                 )
             })
             || matches!(

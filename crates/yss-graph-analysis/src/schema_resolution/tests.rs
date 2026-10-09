@@ -1892,6 +1892,46 @@ fn assert_matches_full(
 }
 
 #[test]
+fn reroutes_preserve_result_categories_when_the_source_changes() {
+    use crate::{GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind};
+    let registry = yss_node_catalog::build_builtin_node_system()
+        .unwrap()
+        .registry;
+    let mut document = GraphDocument::default();
+    let source = node(&mut document, "yssbi.plot.scatter.view", &[]);
+    let first = node(&mut document, "yssbi.core.reroute", &[]);
+    let second = node(&mut document, "yssbi.core.reroute", &[]);
+    connect(&mut document, port(source, "result"), port(first, "input"));
+    connect(&mut document, port(first, "output"), port(second, "input"));
+    let mut cache = GraphSemanticCache::default();
+    for (kind, expected) in [
+        (
+            "yssbi.plot.scatter.view",
+            GraphResultCategory::PlotData(GraphPlotDataKind::Scatter),
+        ),
+        (
+            "yssbi.statistics.linear.summary",
+            GraphResultCategory::StatisticalReport(
+                GraphStatisticalReportKind::LinearRegressionSummary,
+            ),
+        ),
+    ] {
+        document.nodes.get_mut(&source).unwrap().node_type = kind.parse().unwrap();
+        let snapshot = assert_matches_full(&document, &registry, &catalog(None), &mut cache);
+        for route in [first, second] {
+            assert_eq!(
+                snapshot
+                    .concrete_interface()
+                    .port(&port(route, "output"))
+                    .unwrap()
+                    .result_category,
+                expected
+            );
+        }
+    }
+}
+
+#[test]
 fn missing_target_keeps_existing_schema_and_type_facts() {
     let registry = yss_node_catalog::build_builtin_node_system()
         .unwrap()

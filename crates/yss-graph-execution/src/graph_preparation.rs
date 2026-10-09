@@ -443,6 +443,7 @@ fn plan_specialization(
         }
         GraphNodeImplementation::FunctionEntry => PlanNodeImplementation::FunctionEntry,
         GraphNodeImplementation::FunctionReturn => PlanNodeImplementation::FunctionReturn,
+        GraphNodeImplementation::Reroute => PlanNodeImplementation::Reroute,
         GraphNodeImplementation::GroupMap { target, transform } => {
             PlanNodeImplementation::GroupMap {
                 target: PlanResourceId::new(target.as_str().into())?,

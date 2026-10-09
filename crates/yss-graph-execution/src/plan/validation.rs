@@ -10,6 +10,8 @@ pub enum PlanValidationError {
     InputContractMismatch,
     #[error("output contract does not match the operation and output source")]
     OutputContractMismatch,
+    #[error("reroute must forward one value of the same type without parameters or coercions")]
+    InvalidReroute,
     #[error("plan operation source graph is empty")]
     EmptyOperationSourceGraph,
     #[error("plan operation source graph does not match its provenance")]
@@ -22,6 +24,11 @@ pub enum PlanValidationError {
 impl ExecutionPlan {
     pub(crate) fn validate(&self) -> Result<(), PlanValidationError> {
         for operation in self.operations() {
+            if operation.specialization().implementation()
+                == &super::PlanNodeImplementation::Reroute
+            {
+                validate_reroute(operation)?;
+            }
             for input in operation.inputs() {
                 let specialization = operation.specialization();
                 if !specialization.input_types().iter().any(|binding| {
@@ -77,4 +84,19 @@ impl ExecutionPlan {
             })
             .map_or(Ok(()), Err)
     }
+}
+
+fn validate_reroute(operation: &super::PlanOperation) -> Result<(), PlanValidationError> {
+    let ([input], [output]) = (operation.inputs(), operation.outputs()) else {
+        return Err(PlanValidationError::InvalidReroute);
+    };
+    if !matches!(input.source(), super::PlanInputSource::Value(_))
+        || input.contract().expected_type != output.contract().data_type
+        || !operation.parameters().is_empty()
+        || !operation.observation_intents().is_empty()
+        || !operation.specialization().coercions().is_empty()
+    {
+        return Err(PlanValidationError::InvalidReroute);
+    }
+    Ok(())
 }

@@ -637,10 +637,22 @@
 - 节点、端口和连线从 `canvas/presentation` 读取同一份结果/运行展示；`cache` 汇总输出与连接事实，`state` 统一优先级。删除连线独有的状态派生，沿用 ExecutionView 的身份和等待判据；Canvas 与 Output 复用运行失败文案。
 - 节点显示未运行、运行、可用、过期、部分可用及错误边框/徽标，可用/总数来自原后端结果；无输出节点回退到输入连接计数。起手遵循端口能力，候选返回后淡化所有端口都无效的节点，来源保持可见。
 - 隔离 Linux/X11 窗口使用真实 Application 核对双输出节点只运行一项后的 `1/2`、观察节点 `1/1`、运行中、有效、编辑后过期与真实除零失败。原生窗口事件核对紧凑转接点拖动/撤销及候选淡化；内联参数使用明确的只读展示投影核对实际数值、空值、长 Unicode 与 10,000 项 JSON 及端口对齐，内置目录尚未声明此展示方式。
-- 转接点插入后的后端 schema/内核阻断诊断已复现，透明节点执行链路保持开放。节点菜单、端口输入/菜单及完整类型形状也未完成；相关 Controller/View/GraphFlowNode 不计入完成数。
+- 本批曾复现转接点插入后的后端 schema/内核阻断，后续“透明转接点的分析与执行”已修复并验证。节点菜单、端口输入/菜单及完整类型形状仍未完成；相关 Controller/View/GraphFlowNode 不计入完成数。
 - 工作区另核对英文参数/结果/失败提示、转接点端口的真实连线替换和无连接端口 Ctrl 起手拒绝；悬浮状态与缓存相同时只显示一次文案。
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；迭代 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和临时窗口 `cargo build -p yss-desktop-gpui --example nodes_review --locked` 通过。检查本批 16/17 个 Rust 文件格式、25 个双语键及参数、两份文档声明/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）与 `git diff --check`。后端契约和依赖未变，不重复后端测试；没有新增 UI 单元测试或运行全工作区验证，临时入口和数据不提交。
 - 物理键鼠、读屏、Windows/macOS 和大图性能验收仍开放。累计完成源码审查 196/265 项。
+
+### 透明转接点的分析与执行
+
+- Registry 校验透明角色的一进一出 Identity 协议；Catalog 不再给通用转接输出声明仅适用于表格的 Schema。Analysis 直接发布 Reroute 调度事实，取消缺失内核 ID 的回退。
+- Schema 传递保留非表格、动态结构、错误及 lineage；上游观测字段成为转接输出的 Exact Schema，结果 ID 不跨输出冒用。按同一拓扑继承图表/统计报告类别，缓存命中也更新类别。
+- Execution 复用既有 demand、DAG、函数帧和 ResultStore；求值需求沿 producer 索引传到生产者，转接链共享同一物化值，保留每个节点/端口的缓存、错误及定位身份。
+- 四项新增后端回归分别覆盖插入转接链后的运行/缓存/编辑/撤销、动态表格结构与单一物化句柄、非法 literal 转接协议拒绝，以及缓存解析时结果类别的继承。无新增 UI 单元测试。
+- L2：`cargo test -p yss-node-registry -p yss-node-catalog -p yss-graph-analysis -p yss-graph-execution -p yss-graph-editor -p yss-graph-runtime --lib` 运行 149 项通过；既有人工计时探针保持 ignored。`cargo test -p yss-application --lib graph::catalog::tests::` 在独立提交副本和工作区各运行 23 项通过，包含函数私有帧和动态 Schema 反馈。
+- 受影响业务包 `cargo clippy -p yss-node-registry -p yss-node-catalog -p yss-graph-analysis -p yss-graph-execution -p yss-application --lib --tests --no-deps -- -D warnings`、工作区 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过。未运行全工作区验证。
+- 独立提交副本的 Linux/X11 窗口通过真实 Application 和 GPUI Window 事件核对工具栏运行、标量结果 `1`、转接点有效状态、上游编辑后的过期及撤销恢复；双击表格连线插入后，下游重新运行恢复 `2/2`。临时 `reroute_review` 入口、事件注入和数据不提交。
+- 工作区窗口另核对实际工具栏运行、除零错误仍定位原计算节点、撤销输入并重跑后整链恢复。两份临时入口均通过 `cargo build -p yss-desktop-gpui --example reroute_review --locked`；源码格式、文档入口/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 在交付前检查。
+- 本批补齐已审查组件的后端行为，完成源码审查数仍为 196/265；物理键鼠、读屏、Windows/macOS 和大图性能验收继续开放。
 
 ## app
 
@@ -873,7 +885,7 @@
 | [modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx) | 迁移 | canvas/nodes 保留标题/副标题、内联摘要和两侧端口，geometry 共用尺寸与锚点，摘要有界缓存 | 隔离窗口核对标题及临时内联展示投影的数值/空值/长文本/JSON、端口对齐；平台验收开放 |
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 待查 | 已读；共享节点状态、结果计数和诊断提示已迁移，节点菜单待完成 | 真实部分结果/观察节点/过期/除零已核对，组件未完成 |
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 待查 | 已读；节点布局、状态、选择及候选淡化已接入，节点菜单待完成 | 窗口已核对状态与淡化，组件未完成 |
-| [modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx) | 迁移 | 按 builtin.reroute 使用紧凑节点、中央拖动柄与隐藏标签的端口，复用原手势和图事务 | 窗口核对选择、拖动与撤销；后端透明节点执行阻断已记录，平台验收开放 |
+| [modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx) | 迁移 | 按 builtin.reroute 使用紧凑节点、中央拖动柄与隐藏标签的端口，复用原手势、图事务及透明执行 | 窗口核对选择、拖动、运行与撤销；标量/表格执行及缓存回归通过，平台验收开放 |
 | [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 已读；共享状态与起手能力已接入，输入/菜单及完整提示待完成 | 组件未完成 |
 | [modules/graph-editor/internal/ui/Pins/GraphPinView.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx) | 待查 | 已读；共享状态、紧凑端口和候选已接入，完整类型形状/提示待完成 | 组件未完成 |
 | [modules/graph-editor/internal/ui/Pins/PinInput.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/PinInput.tsx) | 待查 | 已读；画布内联端口值编辑待迁移，Details 原输入继续可用 | 组件未完成 |

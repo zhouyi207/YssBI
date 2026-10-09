@@ -54,6 +54,12 @@ CurrentInputs 不触发这种补算。结构边界之前已经成功发布的结
 
 Demand selection 和 DAG scheduler 保留。`yss-node-kernel::KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。计划中的 input slots 继续携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
 
+Reroute 是计划中的透明转交操作，保留节点、端口、demand 和结果身份，不请求计算内核。
+准入要求一个 Value 输入与同类型输出，禁止参数、coercion 和独立观察意图。
+`state/scheduler/reroute` 沿现有 producer 索引把求值边界传到实际生产者，DAG 在那里物化一次，
+转接链共享同一值/关系句柄，不逐节点重新扫描或复制表格。未要求求值的中间关系继续保持惰性；
+有效缓存、CurrentInputs、编辑失效和撤销恢复沿用 ResultStore，函数私有帧复用同一 DAG 行为。
+
 Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 传运行值、固定端口/重复组的局部键、有序输出类型与字段、取消/deadline 及中立关系工厂。Application 装配时核对输入布局；调用时注册表复核布局和输出外层载体。Literal 与资源运行值可以借用，列表和记录使用不可变共享缓冲。Execution 将局部输出映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
 输入 coercion 保留于计划校验，标量广播由 Kernel 执行，调度器交付原值。
 

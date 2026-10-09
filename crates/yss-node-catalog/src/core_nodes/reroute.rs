@@ -4,8 +4,8 @@ use super::support::{
 use crate::{REROUTE_INPUT_PORT, REROUTE_NODE_TYPE, REROUTE_OUTPUT_PORT};
 use yss_node_protocol::{
     InputBindingSpec, InputConsumption, LiteralPolicy, NodeStyleId, NodeTypingSpec,
-    OutputProduction, PortCardinality, PortDirection, PortEditorSpec, PortKey, PortSpec,
-    SchemaExpr, TypeExpr, TypeParameterId,
+    OutputProduction, PortCardinality, PortDirection, PortEditorSpec, PortKey, PortSpec, TypeExpr,
+    TypeParameterId,
 };
 use yss_node_registry::{RegisteredNode, TransparentNodeRole};
 
@@ -14,8 +14,8 @@ pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
         id: REROUTE_NODE_TYPE,
         title: "Reroute",
         zh_title: "重路由",
-        documentation: "Persistent data routing point with no execution operation.",
-        zh_documentation: "持久化的数据路由点，不增加执行操作。",
+        documentation: "Persistent data routing point that forwards its input without a computation kernel.",
+        zh_documentation: "持久化的数据路由点，直接转交输入值，无需计算内核。",
         aliases: &[],
         zh_aliases: &[],
     })?;
@@ -78,7 +78,6 @@ fn build_protocol() -> Result<yss_node_registry::RegisteredNode, BuiltinAssembly
     )?;
     reroute.catalog.hidden = true;
     reroute.catalog.style_id = semantic("builtin.reroute", NodeStyleId::new)?;
-    reroute.interface.ports[1].schema = Some(SchemaExpr::Input(input_key.clone()));
     reroute.typing = NodeTypingSpec::Identity {
         input: input_key,
         output: output_key,
@@ -110,4 +109,43 @@ fn port(
         editor: PortEditorSpec::Default,
         schema: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_node_registry::{NodeRegistryBuilder, ProviderRegistration};
+
+    #[test]
+    fn reroute_role_rejects_literal_sources_before_plan_preparation() {
+        let mut protocol = build_protocol().unwrap().protocol().clone();
+        protocol.type_id = "test.routing.node".parse().unwrap();
+        let register = |protocol| {
+            let mut builder = NodeRegistryBuilder::new();
+            crate::register_builtin_nodes(&mut builder).unwrap();
+            let mut provider = ProviderRegistration::new("test.routing".parse().unwrap());
+            provider.nodes = vec![RegisteredNode::transparent(
+                protocol,
+                TransparentNodeRole::Reroute,
+            )]
+            .into_boxed_slice();
+            builder.register_provider(provider).unwrap();
+            builder.freeze()
+        };
+        assert!(
+            register(protocol.clone().into()).is_ok(),
+            "the role is independent of the built-in node ID"
+        );
+        protocol.interface.ports[0]
+            .input_binding
+            .as_mut()
+            .unwrap()
+            .literal_policy = LiteralPolicy::Allowed;
+        let error = register(protocol.into()).unwrap_err();
+        assert!(
+            matches!(error, yss_node_registry::NodeRegistrationError::InvalidRegistry(
+            yss_node_registry::RegistryValidationError::InvalidNode { node, reason }
+        ) if node.as_str() == "test.routing.node" && reason.contains("one connected input"))
+        );
+    }
 }

@@ -2,7 +2,7 @@
 use crate::{GraphNodeImplementation, GraphPortBacking, GraphPortSemanticFact};
 use yss_graph_document::{DocumentNode, DynamicMemberLocator, GraphDocument, GraphResourcePath};
 use yss_node_protocol::PortDirection;
-use yss_node_registry::{RegisteredNode, StructuralNodeRole};
+use yss_node_registry::{RegisteredNode, StructuralNodeRole, TransparentNodeRole};
 
 /// Concrete result addresses, including unclaimed derived members, for runtime schema feedback.
 pub fn function_output_addresses(
@@ -81,6 +81,9 @@ pub(crate) fn implementation(
     registered: &RegisteredNode,
     ports: &[GraphPortSemanticFact],
 ) -> Option<GraphNodeImplementation> {
+    if registered.transparent_role() == Some(TransparentNodeRole::Reroute) {
+        return Some(GraphNodeImplementation::Reroute);
+    }
     Some(match registered.structural_role() {
         Some(StructuralNodeRole::FunctionEntry) => GraphNodeImplementation::FunctionEntry,
         Some(StructuralNodeRole::FunctionReturn) => GraphNodeImplementation::FunctionReturn,
@@ -120,10 +123,8 @@ pub(crate) fn implementation(
         }
         None => GraphNodeImplementation::Kernel(
             registered
-                .implementation()
-                .map_or(node.node_type.as_str(), |implementation| {
-                    implementation.implementation_identity()
-                })
+                .implementation()?
+                .implementation_identity()
                 .into(),
         ),
     })

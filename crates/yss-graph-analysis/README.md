@@ -78,7 +78,7 @@ ABI 的成员匹配以当前已解析的非 orphan 端口为准，按 binding or
 `specialize_function` 按签名 ID 与 ABI 地址绑定实参类型和 Schema，复用原解析器及缓存；
 实参和运行观测只属于这次调用，不改写定义，也不复用其他调用的中间值。
 
-`GraphNodeSpecialization` 明确区分叶内核、FunctionCall、Entry 和 Return。叶内核能力检查覆盖可达函数正文，
+`GraphNodeSpecialization` 明确区分叶内核、Reroute、GroupMap、FunctionCall、Entry 和 Return。叶内核能力检查覆盖可达函数正文，
 结构节点不使用伪造的 KernelId。Call 的表格输出是 Deferred，实际执行后可成为 Observed；
 `function_output_addresses` 复用派生成员身份，包含已绑定与未 claim 的结果地址，供运行列反馈使用。
 
@@ -96,7 +96,10 @@ flowchart LR
 
 Pin 创建目录和连接提交共用本模块的类型兼容规则：输出读取 snapshot 的已解析类型域，输入读取可接受类型域，候选节点的声明类型通过同一类型类展开与可赋值规则比较。类型域没有交集时拒绝；未解析的泛型仍允许连接，但不会绕过已知的容器形状或类型约束。Editor 在创建并连接、直接连线和迁移连线时重新校验，创建节点及连线属于同一原子补丁。
 
-Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识别。`GraphSchemaState` 区分 NotApplicable、Deferred（消费关系时才确定字段）、Exact（含空字段集合）、Pending、Unavailable、Conflict 和 InternalFailure。Reroute 可传递上游 Schema。Schema 和类型仍是同一次 Resolve 内的阶段，最终组装完整节点事实并发布完整 snapshot。
+Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识别。`GraphSchemaState` 区分 NotApplicable、Deferred（消费关系时才确定字段）、Exact（含空字段集合）、Pending、Unavailable、Conflict 和 InternalFailure。Reroute 按注册的透明角色传递上游状态，标量无需表格 Schema，动态表格可在求值前保持 Deferred。
+上游 Observed 的字段和 lineage 在转接输出成为 Exact，结果 ID 仍只属于原生产者；转接点不冒用该观测身份。
+同一拓扑遍历还为转接输出继承原结果类别，图表和统计报告不会退化为普通值展示；类型缓存命中也读取当前上游类别。
+Schema 和类型仍是同一次 Resolve 内的阶段，最终组装完整节点事实并发布完整 snapshot。
 
 `resolve_graph_semantics_with_observations` 接受由调用方按图、会话及生成依据核对的结果列观测。
 只有 Deferred 输出可成为 `Observed`；声明已知的 Schema 和结构错误不被运行结果覆盖。

@@ -32,6 +32,7 @@ impl NeutralPlanExecutor {
             arguments,
         } = execution;
         let operations = package.plan().operations();
+        let boundaries = super::reroute::evaluation_boundaries(operations, producers, boundaries);
         let mut values: Vec<Option<RuntimeValue>> = vec![None; producers.len()];
         for (index, value) in seeded {
             values[index] = Some(value);
@@ -95,6 +96,7 @@ impl NeutralPlanExecutor {
                 .map_err(|error| error.at_node(operation.source()))?;
 
             let mut output_values = match operation.specialization().implementation() {
+                crate::plan::PlanNodeImplementation::Reroute => Ok(inputs),
                 crate::plan::PlanNodeImplementation::Kernel(_) => crate::kernel_invocation::invoke(
                     &self.kernels,
                     &self.relations,
@@ -153,17 +155,23 @@ impl NeutralPlanExecutor {
             if output_values.len() != operation.outputs().len() {
                 return Err(OperationExecutionError::Failed);
             }
-            results::stabilize_outputs(
-                &mut output_values,
-                &operation
-                    .outputs()
-                    .iter()
-                    .map(|output| boundaries.contains(&output.value()))
-                    .collect::<Vec<_>>(),
-                &self.relations,
-                control,
-            )
-            .map_err(|error| OperationExecutionError::from(error).at_node(operation.source()))?;
+            if operation.specialization().implementation()
+                != &crate::plan::PlanNodeImplementation::Reroute
+            {
+                results::stabilize_outputs(
+                    &mut output_values,
+                    &operation
+                        .outputs()
+                        .iter()
+                        .map(|output| boundaries.contains(&output.value()))
+                        .collect::<Vec<_>>(),
+                    &self.relations,
+                    control,
+                )
+                .map_err(|error| {
+                    OperationExecutionError::from(error).at_node(operation.source())
+                })?;
+            }
             for (output, value) in operation.outputs().iter().zip(output_values) {
                 let Some(slot) = values.get_mut(output.value().index() as usize) else {
                     return Err(OperationExecutionError::Failed);

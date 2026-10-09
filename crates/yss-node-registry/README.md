@@ -22,6 +22,9 @@ Registry 不持有图实例、项目资源或执行状态，不推导连接后�
 登记阶段的提供者唯一性由 builder 保证；冻结阶段不重建第二套提供者 ID 集合。
 
 `RegisteredNode` 明确区分叶实现、结构角色和透明角色，三者互斥。
+`TransparentNodeRole::Reroute` 要求无参数的确定性 Identity 协议：同类型的一个固定输入和输出，
+输入只允许单条连线，不接收 literal/default；Schema 从输入继承，不另声明表格 Schema。
+该角色按注册事实识别，不依赖内置节点 ID，也不登记计算内核。
 `StructuralNodeRole` 拥有函数引用字段：Call、GroupApply、GroupTransform 使用 `target`，
 Entry/Return 使用 `function`。读取复用 Protocol 的 `Parameters::effective_text`；
 Registry 不解释引用中的项目路径。四个函数 interface resolver ID 和角色映射由这里唯一声明；

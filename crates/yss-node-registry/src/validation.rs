@@ -385,6 +385,9 @@ fn validate_node(
         .map(|parameter| (&parameter.key, parameter))
         .collect();
     validate_typing(&protocol.typing, &ports, &parameter_specs).map_err(&fail)?;
+    if node.transparent_role == Some(TransparentNodeRole::Reroute) {
+        validate_reroute(protocol).map_err(&fail)?;
+    }
     for port in &protocol.interface.ports {
         validate_type_expr(&port.value_type, types, &protocol.interface.type_parameters)
             .map_err(&fail)?;
@@ -457,6 +460,41 @@ fn validate_node(
                 )));
             }
         }
+    }
+    Ok(())
+}
+
+fn validate_reroute(protocol: &NodeProtocol) -> Result<(), String> {
+    let NodeTypingSpec::Identity { input, output } = &protocol.typing else {
+        return Err("reroute requires identity typing".into());
+    };
+    let ports = &protocol.interface.ports;
+    if ports.len() != 2
+        || ports
+            .iter()
+            .any(|port| port.cardinality != PortCardinality::Declared || port.schema.is_some())
+        || !protocol.interface.member_groups.is_empty()
+        || protocol.parameters.iter().next().is_some()
+        || protocol.execution.determinism != Determinism::Deterministic
+    {
+        return Err(
+            "reroute requires two declared ports, inherited schema and no parameters".into(),
+        );
+    }
+    // The identity typing validator has already checked both keys and directions.
+    let input = ports.iter().find(|port| &port.key == input).unwrap();
+    let output = ports.iter().find(|port| &port.key == output).unwrap();
+    if input.value_type != output.value_type
+        || input.connections != ConnectionsPerPort::Single
+        || !matches!(
+            &input.input_binding,
+            Some(InputBindingSpec {
+                literal_policy: LiteralPolicy::Forbidden,
+                default_value: None
+            })
+        )
+    {
+        return Err("reroute requires one connected input and an output of the same type".into());
     }
     Ok(())
 }

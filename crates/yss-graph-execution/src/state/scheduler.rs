@@ -2,6 +2,7 @@
 mod dag;
 mod functions;
 mod groups;
+mod reroute;
 mod results;
 mod selection;
 pub(super) use selection::{ExecutionSelection, execution_producers, select_execution};

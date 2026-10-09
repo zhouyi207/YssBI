@@ -79,6 +79,7 @@ pub struct PlanNodeSpecialization {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanNodeImplementation {
     Kernel(KernelId),
+    Reroute,
     GroupMap {
         target: super::PlanResourceId,
         transform: bool,

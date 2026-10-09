@@ -1,6 +1,7 @@
 use super::*;
 mod documentation;
 mod function_calls;
+mod reroute;
 mod schema_feedback;
 
 use crate::session::{ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot};

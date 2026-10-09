@@ -366,9 +366,19 @@ impl EditorSchemaResolver<'_> {
         }
         let tracked = self.resources.tracked();
         let parent = std::mem::replace(&mut self.resources, tracked);
-        let state = match self.resolve_expression(address.node_id, &expression) {
-            Ok(fields) => GraphSchemaState::Exact(ResolvedSchemaFact { expression, fields }),
-            Err(issue) => GraphSchemaState::from_issue(issue),
+        let state = if self
+            .registry
+            .get(&node.node_type)
+            .is_some_and(|registered| {
+                registered.transparent_role()
+                    == Some(yss_node_registry::TransparentNodeRole::Reroute)
+            }) {
+            self.forward_schema(address.node_id, expression)
+        } else {
+            match self.resolve_expression(address.node_id, &expression) {
+                Ok(fields) => GraphSchemaState::Exact(ResolvedSchemaFact { expression, fields }),
+                Err(issue) => GraphSchemaState::from_issue(issue),
+            }
         };
         let dependencies = self.resources.dependencies();
         self.resources = parent;
@@ -382,6 +392,29 @@ impl EditorSchemaResolver<'_> {
             },
         );
         state
+    }
+
+    fn forward_schema(&mut self, node: NodeId, expression: SchemaExpr) -> GraphSchemaState {
+        let SchemaExpr::Input(input) = &expression else {
+            return GraphSchemaState::from_issue(GraphSchemaIssue::UnsupportedResolver);
+        };
+        let input = PortAddress::declared(node, input.clone());
+        let state = match self.index.input_connections(&input) {
+            [] => return GraphSchemaState::from_issue(GraphSchemaIssue::UnconnectedInput),
+            [connection] => self.resolve_output(&connection.output),
+            _ => return GraphSchemaState::from_issue(GraphSchemaIssue::ConflictingInputs),
+        };
+        match state {
+            // Observed versions identify the producer's result, not this output.
+            // The route inherits its known fields and lineage as an exact Schema.
+            GraphSchemaState::Exact(schema) | GraphSchemaState::Observed { schema, .. } => {
+                GraphSchemaState::Exact(ResolvedSchemaFact {
+                    expression,
+                    fields: schema.fields,
+                })
+            }
+            state => state,
+        }
     }
 
     fn function_returns_dataframe(&self, address: &PortAddress) -> bool {
