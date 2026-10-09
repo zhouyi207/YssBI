@@ -547,6 +547,17 @@
 - L2：工作区与独立提交内容的 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；工作区 9 个/候选 8 个 Rust 文件局部格式、38 个复用双语键组/参数、文档元信息与 275/270 个相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。实际窗口用 `cargo build -p yss-desktop-gpui --example assistant_tools_review --locked` 构建，样例源码和隔离数据不提交；无新增依赖或 UI 单元测试，不运行全工作区验证。
 - 真实模型端到端交付、延迟读取期间切换/关闭、物理输入、读屏、Windows/macOS 和已有嵌套 Xwayland 局部重绘继续验收；本批窗口证据使用合成记录。Thread 和 Markdown 的其余职责继续独立审查；累计完成源码审查 188/265 项。
 
+### 消息有序输出与操作（AssistantThread，继续审查）
+
+- 已逐项阅读 Thread 的消息、思考、失败、复制、产物、分页和空状态组合，连同 React 文本归约与 Core 回放契约核对。空会话继续使用已迁移的铺满输入区，不添加重复空状态；用户消息的纯文本和局部选择仍待处理，Thread 暂不标记整体完成。
+- `projection/output` 替换按种类聚合的正文/思考/工具数组，主对话、Worker 和上下文整理沿用一条有序归约路径；渲染按事件顺序借用条目，相邻工具才形成一组。任务续跑独立，Manager 产物在原位置引用其结果记录并复用已有资源卡片。
+- 撤回按 Unicode 字符计数保留有效前缀和可查看的撤回片段；已有有效流式正文时，结束事件的 `final_text` 不追加、不替换。全量撤回后仍可使用终态备用正文，Worker 摘要后缀比较跨条目进行而不拼接全文。
+- 回复复制复用 `gpui_component::Clipboard`，仅点击时读取当前有效正文，成功勾选由原组件管理；运行中隐藏回复复制。失败保留在对应消息中，技术码按需展开，未知码显示通用提示，重复失败更新原卡片；不再在全局状态栏重复展示历史失败。
+- 上下文整理分别保留思考、摘要和调用用量，取消/失败结算尚未完成的整理；运行中思考默认展开，长内容在 288px 内滚动。会话级输出沿用每轮 768px 的宽度；分页、阅读锚点及底部跟随仍归原 `thread` owner。
+- 临时 Linux/X11 实际窗口使用合成 `AssistantEvent` 核对正文/思考/工具顺序、Unicode 局部及全量撤回、终态备用正文、系统剪贴板与成功反馈、未知失败技术码、Manager 产物和重复失败、完成/取消的上下文整理、Worker 展开与摘要去重、重新归约、会话级输出、25 轮历史分页与加载锚点、有界思考滚动，以及中英文和窄列/展开布局。独立提交副本另验证有序输出、复制及 Manager 产物打开原文档编辑器。
+- L2：工作区与独立提交内容通过 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked`、`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；8 个 Rust 文件局部格式、43 个双语键/参数（候选英文沿用工作区目录）、文档元信息与 275/271 条相对链接、`node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 条依赖）及 `git diff --check` 通过。实际窗口使用 `cargo build -p yss-desktop-gpui --example assistant_timeline_review --locked`；临时入口和隔离数据不提交。
+- 本批没有后端接口、依赖或 UI 单元测试变更，不运行全工作区验证。真实模型/持久账本交付、物理输入、读屏、Windows/macOS、已有嵌套 Xwayland 局部重绘，以及 Thread 纯文本/局部选择和 Markdown 的剩余职责继续开放；累计完成源码审查仍为 188/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -667,7 +678,7 @@
 | [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 优化 | 共用当前目录产物/结果卡片；来源按需展开、校验与重试；复用原工作台入口 | 原生窗口与真实资源/结果读取通过；跨项目/内置来源/模型账本及平台验收开放 |
 | [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 迁移 | assistant/options 复用 HarnessTurnOptions、目录限制/默认档位；模式说明、勾选、重置与失效覆盖核对，保留队列配置 | Linux/X11 草稿/目录/队列交互验收通过；真实运行/其他平台待验收 |
 | [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 优化 | 每次执行独立卡片、活动与终态投影、完整计划；复用时长/工具/产物 | 原生窗口合成事件验收通过；模型账本/读屏/物理输入/平台与局部重绘开放 |
-| [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读主组件；历史范围、加载锚点、最新消息跳转与底部跟随已迁入 assistant/thread；消息子组件及依赖继续审查 | 视口已通过合成事件的原生窗口验收；整体未完成 |
+| [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读全部消息组合；有序输出、撤回、复制反馈、失败详情、Manager 产物、历史范围和阅读锚点已接入；纯文本/局部选择及 Markdown 依赖继续审查 | 合成事件的原生窗口验收见本批记录；整体未完成 |
 | [modules/assistant/internal/ui/AssistantTokenUsage.tsx](../../react/src/modules/assistant/internal/ui/AssistantTokenUsage.tsx) | 迁移 | 原事件投影增量统计本轮，原生 ProgressCircle/Popover 展示主对话占用及完整用量；未知与零分别保留 | 合成事件原生窗口通过；真实报告/持久回放与跨平台待验收 |
 | [modules/assistant/internal/ui/AssistantToolCalls.tsx](../../react/src/modules/assistant/internal/ui/AssistantToolCalls.tsx) | 优化 | 工具分组、明确终态、可见卡片原位查询/重试与技术详情；复用时长/资源入口 | 原生窗口合成账本/控制事件验收；真实模型/迟到回执/物理输入/平台与局部重绘开放 |
 

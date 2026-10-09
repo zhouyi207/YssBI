@@ -1,6 +1,6 @@
 //! The loaded history range and reading position belong to this conversation view.
 use super::ConversationPanel;
-use gpui::{AnyElement, Context, Empty, Pixels, ScrollHandle, div, prelude::*, px};
+use gpui::{AnyElement, Context, Pixels, ScrollHandle, div, prelude::*, px};
 use gpui_component::{
     Sizable,
     button::{Button, ButtonVariants},
@@ -138,8 +138,8 @@ impl Viewport {
 
 impl ConversationPanel {
     pub(super) fn render_thread(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        if self.transcript.turns.is_empty() {
-            return Empty.into_any_element();
+        if self.transcript.turns.is_empty() && self.transcript.session_output.parts.is_empty() {
+            return gpui::Empty.into_any_element();
         }
         let first = self.viewport.first_turn(self.transcript.turns.len());
         let owner = cx.entity().downgrade();
@@ -206,6 +206,22 @@ impl ConversationPanel {
                     .child(self.render_turn(turn, cx)),
             );
         }
+        if !self.transcript.session_output.parts.is_empty() {
+            body = body.child(
+                div()
+                    .w_full()
+                    .max_w(px(768.))
+                    .min_w_0()
+                    .flex_shrink_0()
+                    .self_center()
+                    .child(self.render_output(
+                        &self.transcript.session_output,
+                        &[],
+                        self.running(),
+                        cx,
+                    )),
+            );
+        }
         div()
             .relative()
             .flex_1()
@@ -221,6 +237,9 @@ impl ConversationPanel {
                                 .small()
                                 .icon(IconName::ArrowDown)
                                 .tooltip(crate::text::t("panel.assistantScrollToBottom"))
+                                .accessibility_label(crate::text::t(
+                                    "panel.assistantScrollToBottom",
+                                ))
                                 .on_click(cx.listener(|view, _, _, cx| {
                                     view.viewport.jump_to_latest();
                                     cx.notify();

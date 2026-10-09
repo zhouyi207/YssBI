@@ -1,6 +1,6 @@
 //! User submission and model selection call the existing session and turn owners.
 use super::{ConversationEvent, ConversationPanel, DraftMessage, Submission};
-use gpui::{ClipboardItem, Context, Window};
+use gpui::{Context, Window};
 use yss_application::harness::HarnessSessionError;
 use yss_harness_contract::LanguageModelSelection;
 use yss_harness_core::HarnessError;
@@ -171,9 +171,6 @@ impl ConversationPanel {
         })
         .detach();
         cx.notify();
-    }
-    pub(super) fn copy_message(&self, text: String, cx: &mut Context<Self>) {
-        cx.write_to_clipboard(ClipboardItem::new_string(text));
     }
 }
 pub(super) fn session_failure(error: HarnessSessionError) -> String {

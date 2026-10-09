@@ -1,14 +1,12 @@
-//! Read-only transcript reduced from the existing public event projection.
+//! Read-only transcript reduced identically from live and persisted events.
+mod output;
 mod tool;
 pub(super) mod usage;
-use super::activity::Activity;
+pub(super) use output::{Compaction, Content, Output, Part, Usage};
 pub(super) use tool::{Tool, ToolState};
 use yss_harness_contract::{
-    AgentRole, AgentRunState, HarnessResourceReference, HarnessTurnOptions, KnowledgeCitation,
-    LanguageModelIdentity, ModelCallPurpose, ModelTokenUsage, StatisticalPlan,
-};
-use yss_harness_contract::{
-    AssistantEvent, AssistantEventKind as Event, AssistantResultReference, AssistantToolIdentity,
+    AgentRole, AgentRunState, AssistantEvent, AssistantEventKind as Event,
+    AssistantResultReference, HarnessResourceReference, HarnessTurnOptions, LanguageModelIdentity,
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -40,9 +38,9 @@ pub(super) enum TurnState {
     Failed,
     Cancelled,
 }
+
 #[derive(Clone)]
 pub(super) struct Task {
-    pub sequence: u64,
     pub id: String,
     pub role: AgentRole,
     pub objective: String,
@@ -51,13 +49,12 @@ pub(super) struct Task {
     pub summary: Option<String>,
     pub error: Option<String>,
     pub blocked_reason: Option<String>,
-    pub activity: Option<Activity>,
-    pub plan: Option<StatisticalPlan>,
     pub warnings: Vec<String>,
     pub artifacts: Vec<yss_harness_contract::ResourceChange>,
     pub results: Vec<AssistantResultReference>,
-    pub tools: Vec<Tool>,
+    pub output: Output,
 }
+
 impl Task {
     fn warn(&mut self, warning: String) {
         if !self.warnings.contains(&warning) {
@@ -75,35 +72,11 @@ impl Task {
             self.warn(failure_code.as_ref().unwrap_or(status).clone());
         }
     }
-    pub fn activity(&self) -> Option<&Activity> {
-        self.activity.as_ref()
+    pub fn activity(&self) -> Option<&super::activity::Activity> {
+        self.output.activity.as_ref()
     }
     pub fn failure(&self) -> Option<&str> {
-        self.error.as_deref()
-    }
-    fn accept(&mut self, at: u64, event: Event) {
-        self.timing.updated_at = at;
-        Activity::accept(&mut self.activity, &event);
-        self.execution_warning(&event);
-        let tool_finished = matches!(
-            &event,
-            Event::ToolInvocationCompleted { .. }
-                | Event::ToolInvocationFailed { .. }
-                | Event::GraphExecutionFinished { .. }
-        );
-        match event {
-            Event::PlanProposed { plan } => self.plan = Some(plan),
-            Event::DeliveryBlocked { reason } => self.error = Some(reason),
-            event => apply_tool(&mut self.tools, at, event),
-        }
-        if tool_finished {
-            self.activity = self
-                .tools
-                .iter()
-                .rev()
-                .find(|tool| tool.running())
-                .map(|tool| Activity::Tool(tool.kind));
-        }
+        self.error.as_deref().or_else(|| self.output.failure())
     }
 }
 
@@ -115,23 +88,18 @@ pub(super) struct Turn {
     pub timing: Timing,
     pub resources: Vec<HarnessResourceReference>,
     pub consumption: usage::TurnUsage,
-    pub text: String,
-    pub reasoning: String,
-    pub tools: Vec<Tool>,
-    // Each resume retains the previous attempt and its own disclosure identity.
+    pub output: Output,
+    // Each resume has its own entry so its earlier output is never overwritten.
     pub tasks: Vec<Task>,
-    pub citations: Vec<KnowledgeCitation>,
-    pub plan: Option<StatisticalPlan>,
     pub options: Option<HarnessTurnOptions>,
-    pub usage: Vec<(ModelTokenUsage, Option<u32>, ModelCallPurpose)>,
-    pub activity: Option<String>,
-    pub error: Option<String>,
     pub state: TurnState,
 }
+
 #[derive(Clone, Default)]
 pub(super) struct Transcript {
     pub sequence: u64,
     pub turns: Vec<Turn>,
+    pub session_output: Output,
 }
 impl Transcript {
     pub fn running(&self) -> bool {
@@ -146,36 +114,38 @@ impl Transcript {
         if event.sequence != self.sequence + 1 {
             return Err(());
         }
-        if let Event::TurnStarted {
-            user_message,
-            model,
-            resources,
-        } = event.event
-        {
-            self.turns.push(Turn {
+        match event.event {
+            Event::SessionCreated => {}
+            Event::TurnStarted {
+                user_message,
+                model,
+                resources,
+            } => self.turns.push(Turn {
                 id: event.turn_id.ok_or(())?,
                 user: user_message,
                 model,
                 timing: Timing::started(event.occurred_at),
                 resources,
                 consumption: Default::default(),
-                text: String::new(),
-                reasoning: String::new(),
-                tools: vec![],
+                output: Output::default(),
                 tasks: vec![],
-                citations: vec![],
-                plan: None,
                 options: None,
-                usage: vec![],
-                activity: None,
-                error: None,
                 state: TurnState::Running,
-            });
-        } else if let Some(id) = event.turn_id {
-            let Some(turn) = self.turns.iter_mut().rev().find(|turn| turn.id == id) else {
-                return Err(());
-            };
-            turn.accept(event.sequence, event.occurred_at, event.event);
+            }),
+            value => {
+                if let Some(id) = event.turn_id {
+                    let turn = self
+                        .turns
+                        .iter_mut()
+                        .rev()
+                        .find(|turn| turn.id == id)
+                        .ok_or(())?;
+                    turn.accept(event.sequence, event.occurred_at, value)?;
+                } else {
+                    self.session_output
+                        .accept(event.sequence, event.occurred_at, value)?;
+                }
+            }
         }
         self.sequence = event.sequence;
         Ok(())
@@ -184,71 +154,43 @@ impl Transcript {
 impl Turn {
     fn finish_timing(&mut self, at: u64) {
         self.timing.finish(at);
-        settle_tools(&mut self.tools, at, self.state == TurnState::Cancelled);
-        for task in self.tasks.iter_mut().filter(|task| task.state.is_none()) {
-            task.timing.finish(at);
-            settle_tools(&mut task.tools, at, self.state == TurnState::Cancelled);
-            task.state = Some(if self.state == TurnState::Cancelled {
-                AgentRunState::Cancelled
-            } else {
-                AgentRunState::Interrupted
-            });
-            task.activity = None;
+        self.output
+            .finish_timing(at, self.state == TurnState::Cancelled);
+        for task in &mut self.tasks {
+            if task.state.is_none() {
+                task.timing.finish(at);
+                task.output
+                    .finish_timing(at, self.state == TurnState::Cancelled);
+                task.state = Some(if self.state == TurnState::Cancelled {
+                    AgentRunState::Cancelled
+                } else {
+                    AgentRunState::Interrupted
+                });
+                task.output.activity = None;
+            }
         }
     }
-    fn accept(&mut self, sequence: u64, at: u64, event: Event) {
+    fn accept(&mut self, sequence: u64, at: u64, event: Event) -> Result<(), ()> {
         self.timing.updated_at = at;
         self.consumption.accept(&event, false);
         match event {
             Event::TurnConfigured { options } => self.options = Some(options),
-            Event::TextDelta { delta } => self.text.push_str(&delta),
-            Event::TextRetracted { characters } => {
-                let count = self.text.chars().count().saturating_sub(characters);
-                let end = self
-                    .text
-                    .char_indices()
-                    .nth(count)
-                    .map(|(i, _)| i)
-                    .unwrap_or(self.text.len());
-                self.text.truncate(end);
-            }
-            Event::ReasoningDelta { delta } => self.reasoning.push_str(&delta),
-            Event::UsageReported {
-                usage,
-                context_window,
-                purpose,
-            } => self.usage.push((usage, context_window, purpose)),
             Event::TurnCompleted { final_text } => {
-                self.text = final_text;
+                self.output.complete_text(sequence, final_text);
                 self.state = TurnState::Completed;
                 self.finish_timing(at);
-                self.activity = None;
+                self.output.activity = None;
             }
             Event::TurnFailed => {
                 self.state = TurnState::Failed;
                 self.finish_timing(at);
-                self.activity = None;
+                self.output.activity = None;
             }
             Event::TurnCancelled => {
                 self.state = TurnState::Cancelled;
                 self.finish_timing(at);
-                self.activity = None;
+                self.output.activity = None;
             }
-            Event::KnowledgeCited { citation } => {
-                if !self.citations.contains(&citation) {
-                    self.citations.push(citation);
-                }
-            }
-            Event::PlanProposed { plan } => self.plan = Some(plan),
-            Event::RuntimeStatus { phase, attempt } => {
-                self.activity = Some(format!("{} · {}", phase_label(phase), attempt))
-            }
-            Event::ContextCompactionProgress {
-                completed_bytes,
-                total_bytes,
-            } => self.activity = Some(format!("压缩上下文 · {completed_bytes}/{total_bytes}")),
-            Event::ContextCompacted { .. } => self.activity = None,
-            Event::DeliveryBlocked { reason } => self.error = Some(reason),
             Event::AgentRunStarted {
                 run_id,
                 role,
@@ -260,8 +202,10 @@ impl Turn {
                 role,
                 objective,
             } => {
+                if role != AgentRole::Manager {
+                    self.output.push(sequence, Content::Task(self.tasks.len()));
+                }
                 self.tasks.push(Task {
-                    sequence,
                     id: run_id,
                     role,
                     objective,
@@ -270,23 +214,27 @@ impl Turn {
                     summary: None,
                     error: None,
                     blocked_reason: None,
-                    activity: None,
-                    plan: None,
                     warnings: vec![],
                     artifacts: vec![],
                     results: vec![],
-                    tools: vec![],
+                    output: Output::default(),
                 });
             }
             Event::AgentRunOutput { run_id, event } => {
-                if let Some(task) = self.tasks.iter_mut().rev().find(|task| task.id == run_id) {
-                    task.timing.updated_at = at;
-                    if task.role == AgentRole::Manager {
-                        self.accept(sequence, at, *event);
-                    } else {
-                        self.consumption.accept(&event, true);
-                        task.accept(at, *event);
-                    }
+                let task = self
+                    .tasks
+                    .iter_mut()
+                    .rev()
+                    .find(|task| task.id == run_id)
+                    .ok_or(())?;
+                task.timing.updated_at = at;
+                self.consumption
+                    .accept(&event, task.role != AgentRole::Manager);
+                if task.role == AgentRole::Manager {
+                    self.output.accept(sequence, at, *event)?;
+                } else {
+                    task.execution_warning(&event);
+                    task.output.accept(sequence, at, *event)?;
                 }
             }
             Event::AgentRunFinished {
@@ -301,92 +249,54 @@ impl Turn {
                 results,
                 ..
             } => {
-                if let Some(task) = self.tasks.iter_mut().rev().find(|task| task.id == run_id) {
-                    task.timing.finish(at);
-                    settle_tools(&mut task.tools, at, state == AgentRunState::Cancelled);
-                    task.state = Some(state);
-                    task.summary = summary;
-                    task.error = failure_code.map(|code| code.to_string());
-                    task.blocked_reason = blocked_reason;
-                    task.activity = None;
-                    for warning in warnings {
-                        task.warn(warning);
+                let task = self
+                    .tasks
+                    .iter_mut()
+                    .enumerate()
+                    .rev()
+                    .find(|(_, task)| task.id == run_id)
+                    .ok_or(())?;
+                let (index, task) = task;
+                task.timing.finish(at);
+                task.output
+                    .finish_timing(at, state == AgentRunState::Cancelled);
+                task.state = Some(state);
+                task.summary = summary;
+                task.error = failure_code.map(|code| code.to_string());
+                task.blocked_reason = blocked_reason;
+                for warning in warnings {
+                    task.warn(warning);
+                }
+                task.artifacts = artifacts;
+                task.results = results;
+                task.output.activity = None;
+                if role == AgentRole::Manager {
+                    if !task.artifacts.is_empty()
+                        || !task.results.is_empty()
+                        || !task.warnings.is_empty()
+                    {
+                        self.output.push(sequence, Content::Outcome(index));
                     }
-                    task.artifacts = artifacts;
-                    task.results = results;
-                    if role == AgentRole::Manager {
-                        self.error = task.error.clone().or_else(|| task.blocked_reason.clone());
+                    if matches!(state, AgentRunState::Failed | AgentRunState::Blocked) {
+                        self.output.fail(
+                            sequence,
+                            task.error
+                                .clone()
+                                .unwrap_or_else(|| "report_delivery_incomplete".into()),
+                        );
                     }
                 }
             }
             Event::AgentRunInvalidated { run_id } => {
                 if let Some(task) = self.tasks.iter_mut().rev().find(|task| task.id == run_id) {
                     task.timing.finish(at);
-                    settle_tools(&mut task.tools, at, false);
-                    task.activity = None;
+                    task.output.finish_timing(at, false);
+                    task.output.activity = None;
                     task.state = Some(AgentRunState::Stale);
                 }
             }
-            event => apply_tool(&mut self.tools, at, event),
+            event => self.output.accept(sequence, at, event)?,
         }
-    }
-}
-fn settle_tools(tools: &mut [Tool], at: u64, cancelled: bool) {
-    for tool in tools {
-        tool.settle(at, cancelled);
-    }
-}
-fn apply_tool(tools: &mut Vec<Tool>, at: u64, event: Event) {
-    match event {
-        Event::ToolInvocationStarted {
-            invocation_id,
-            capability_id,
-        } => {
-            tools.push(Tool::started(invocation_id, capability_id, at));
-        }
-        Event::ToolInvocationCompleted {
-            invocation_id,
-            capability_id,
-        } => {
-            find_tool(tools, invocation_id, capability_id).completed(at);
-        }
-        Event::ToolInvocationFailed {
-            invocation_id,
-            capability_id,
-            failure_code,
-        } => {
-            find_tool(tools, invocation_id, capability_id).failed(at, failure_code);
-        }
-        Event::GraphExecutionFinished {
-            invocation_id,
-            status,
-            failure_code,
-        } => {
-            find_tool(
-                tools,
-                invocation_id,
-                yss_harness_contract::CapabilityId::ExecuteGraph.into(),
-            )
-            .executed(at, &status, failure_code);
-        }
-        _ => {}
-    }
-}
-fn find_tool(tools: &mut Vec<Tool>, id: String, kind: AssistantToolIdentity) -> &mut Tool {
-    let index = tools
-        .iter()
-        .rposition(|tool| tool.id == id)
-        .unwrap_or_else(|| {
-            // Recovery can finish a ledger record whose start event was never published.
-            tools.push(Tool::recovered(id, kind));
-            tools.len() - 1
-        });
-    &mut tools[index]
-}
-fn phase_label(phase: yss_harness_contract::AgentRuntimePhase) -> &'static str {
-    match phase {
-        yss_harness_contract::AgentRuntimePhase::CheckingDelivery => "检查交付",
-        yss_harness_contract::AgentRuntimePhase::Reconnecting => "重新连接",
-        yss_harness_contract::AgentRuntimePhase::Compacting => "压缩上下文",
+        Ok(())
     }
 }
