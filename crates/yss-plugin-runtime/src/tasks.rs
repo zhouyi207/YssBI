@@ -194,12 +194,24 @@ impl PluginManager {
         let poll_interval = Duration::from_millis(250);
         lease.process.diagnostics.task(&task_id, true);
         let wire_context = json!({"contextId":context.context_id,"project":context.project,"remainingBudgetMs":duration.as_millis() as u64});
-        let mut remote_active = false;
+        let mut remote_may_run = false;
         let result = (|| {
             let mut cancellation_started = None;
             let mut last_storage_check = Instant::now();
-            lease.process.request("tasks.start",json!({"context":wire_context,"input":{"taskId":task_id,"taskType":task_type,"parameters":parameters}}),Duration::from_secs(30).min(duration))?;
-            remote_active = true;
+            lease
+                .process
+                .request(
+                    "tasks.start",
+                    json!({"context":wire_context,"input":{"taskId":task_id,"taskType":task_type,"parameters":parameters}}),
+                    Duration::from_secs(30).min(duration),
+                )
+                .inspect_err(|error| {
+                    // A caught handler panic may follow remote work admission.
+                    if error.code == "plugin_handler_failed" {
+                        remote_may_run = true;
+                    }
+                })?;
+            remote_may_run = true;
             loop {
                 if last_storage_check.elapsed() >= Duration::from_secs(2) {
                     self.enforce_private_budget(&context.plugin_id, 0)?;
@@ -258,7 +270,7 @@ impl PluginManager {
                     return Err(fail("plugin_response_invalid"));
                 }
                 // Retire started remote work only after a validated terminal reply.
-                remote_active = !remote.terminal();
+                remote_may_run = !remote.terminal();
                 self.update_progress(&task_id, progress)?;
                 if remote == TaskState::Succeeded {
                     if invalid {
@@ -303,7 +315,7 @@ impl PluginManager {
             }
         })();
         if let Err(error) = result {
-            let state = if remote_active
+            let state = if remote_may_run
                 || matches!(
                     error.code.as_str(),
                     "plugin_process_exited" | "plugin_request_timeout" | "plugin_outcome_unknown"

@@ -126,6 +126,11 @@ a disconnected writer as `plugin_process_exited`; the process supervisor observe
 and stops the transport. Task cancellation retains the stronger fault policy below because
 the host must confirm that remote work has stopped.
 
+A `plugin_handler_failed` reply to `tasks.start` leaves remote admission uncertain. The monitor
+uses the existing instance-failure owner to record `outcomeUnknown` and revoke that instance even
+without a successful start acknowledgement. Definite local frame or queue admission rejection
+continues to fail only the requested task.
+
 After `tasks.start` succeeds, the monitor keeps ownership of the remote work until it validates
 a terminal task reply. Temporary `tasks.get` resource exhaustion retries at the existing polling
 interval and remains bounded by the task deadline and cancellation grace period. Other observation

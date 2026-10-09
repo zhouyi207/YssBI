@@ -475,4 +475,54 @@ mod observation {
         assert!(!state.exports.contains_key("export-1"));
         assert!(state.exports.contains_key("export-2"));
     }
+
+    #[test]
+    fn task_start_panic_retires_unconfirmed_remote_work() {
+        let started = Arc::new(AtomicUsize::new(0));
+        let observed = started.clone();
+        let fixture = Fixture::new(Arc::new(move |_, request| {
+            if request.method == "tasks.start" {
+                observed.fetch_add(1, Ordering::AcqRel);
+                panic!("task-start handler after remote admission");
+            }
+            Err(fail("plugin_method_unknown"))
+        }));
+        fixture.run();
+        assert_eq!(started.load(Ordering::Acquire), 1);
+        for index in [0, 1] {
+            let task = fixture.snapshot(index);
+            assert_eq!(task.state, TaskState::OutcomeUnknown);
+            assert_eq!(task.error.unwrap().code, "plugin_handler_failed");
+        }
+        assert_eq!(fixture.snapshot(2).state, TaskState::Admitted);
+        assert_eq!(fixture.snapshot(3).state, TaskState::Succeeded);
+        assert!(!fixture.process.is_running());
+        let state = fixture.manager.inner.state.lock().unwrap();
+        assert!(!state.contexts.contains_key("context-0"));
+        assert!(!state.contexts.contains_key("context-1"));
+        assert!(state.contexts.contains_key("context-2"));
+    }
+
+    #[test]
+    fn task_start_local_rejection_keeps_the_instance() {
+        let fixture = Fixture::new(Arc::new(|_, _| {
+            panic!("a locally rejected task must not reach its handler")
+        }));
+        fixture
+            .process
+            .peer
+            .apply_budget(ResourceBudget {
+                frame_bytes: 64,
+                ..ResourceBudget::default()
+            })
+            .unwrap();
+        fixture.run();
+        let task = fixture.snapshot(0);
+        assert_eq!(task.state, TaskState::Failed);
+        assert_eq!(task.error.unwrap().code, "plugin_payload_too_large");
+        assert!(fixture.process.is_running());
+        assert_eq!(fixture.snapshot(1).state, TaskState::Admitted);
+        assert_eq!(fixture.snapshot(2).state, TaskState::Admitted);
+        assert_eq!(fixture.snapshot(3).state, TaskState::Succeeded);
+    }
 }

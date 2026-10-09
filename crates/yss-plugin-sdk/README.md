@@ -21,6 +21,11 @@ admission releases its reserved byte charge. A disconnected writer instead repor
 `plugin_process_exited`, closes the registry and wakes all admitted callers. Writer I/O failure
 and a response that cannot be delivered also close the peer.
 
+Incoming handler panics are caught and returned as `plugin_handler_failed`. The handler has
+already received the request and may have produced side effects; this failure cannot establish
+that an operation was never admitted or roll it back. Callers own the operation's outcome and
+retirement policy. The peer stays available when the failure reply can be delivered.
+
 A request timeout closes this same registry and wakes all other admitted callers. The timed-out
 caller receives `plugin_request_timeout`; other pending callers receive `plugin_process_exited`.
 No expired-request cache is retained for a closed connection. Responses without a matching pending
