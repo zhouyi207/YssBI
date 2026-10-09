@@ -630,6 +630,18 @@
 - 聚焦验证：两份内容通过本包 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口入口使用 `cargo build -p yss-desktop-gpui --example styles_review --locked`。另检查本批 Rust 格式、文档声明与相对链接、复用中英文键及 265 项清单；模块索引与 `git diff --check` 通过。
 - 临时入口、故障/延迟、计数和隔离数据不提交，未新增 UI 单元测试或运行全工作区验证。物理输入、读屏、Windows/macOS、目标刷新率及大图验收继续开放；GraphFlowCanvas、GraphFlowNode、GraphPin 和 Reroute 的剩余职责继续逐项审查。累计完成源码审查 194/265 项。
 
+### 节点布局与共享运行呈现
+
+- 已逐项阅读 `DefaultNodeLayout` 与 `RerouteNodeLayout`，并核对 `GraphFlowNode`、`GraphNodeController/View`、`GraphPinController/View`、`PinInput`、结果呈现与样式。普通标题保留用户副标题，内联摘要只读取后端 `InlineAndDetail`；转接点由原 style ID 选择紧凑布局。
+- `geometry::NodeLayout` 统一节点尺寸、参数行、端口行和连线锚点，原选择、拖动、裁剪及定位复用同一几何。摘要随投影替换缓存；有界 JSON writer 避免每次绘制格式化大值。
+- 节点、端口和连线从 `canvas/presentation` 读取同一份结果/运行展示；`cache` 汇总输出与连接事实，`state` 统一优先级。删除连线独有的状态派生，沿用 ExecutionView 的身份和等待判据；Canvas 与 Output 复用运行失败文案。
+- 节点显示未运行、运行、可用、过期、部分可用及错误边框/徽标，可用/总数来自原后端结果；无输出节点回退到输入连接计数。起手遵循端口能力，候选返回后淡化所有端口都无效的节点，来源保持可见。
+- 隔离 Linux/X11 窗口使用真实 Application 核对双输出节点只运行一项后的 `1/2`、观察节点 `1/1`、运行中、有效、编辑后过期与真实除零失败。原生窗口事件核对紧凑转接点拖动/撤销及候选淡化；内联参数使用明确的只读展示投影核对实际数值、空值、长 Unicode 与 10,000 项 JSON 及端口对齐，内置目录尚未声明此展示方式。
+- 转接点插入后的后端 schema/内核阻断诊断已复现，透明节点执行链路保持开放。节点菜单、端口输入/菜单及完整类型形状也未完成；相关 Controller/View/GraphFlowNode 不计入完成数。
+- 工作区另核对英文参数/结果/失败提示、转接点端口的真实连线替换和无连接端口 Ctrl 起手拒绝；悬浮状态与缓存相同时只显示一次文案。
+- L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；迭代 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和临时窗口 `cargo build -p yss-desktop-gpui --example nodes_review --locked` 通过。检查本批 16/17 个 Rust 文件格式、25 个双语键及参数、两份文档声明/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）与 `git diff --check`。后端契约和依赖未变，不重复后端测试；没有新增 UI 单元测试或运行全工作区验证，临时入口和数据不提交。
+- 物理键鼠、读屏、Windows/macOS 和大图性能验收仍开放。累计完成源码审查 196/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -847,8 +859,8 @@
 | [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 已核对连线选择、菜单、删除与双击入口并接入原生；其他画布手势、框选和连接反馈继续审查 | 连线交互窗口验收见本批；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 迁移 | connections/drag、render 共用方向曲线、目标吸附、后端候选颜色/原因及替换集合；PendingFlowConnection 读取当前菜单来源 | 窗口核对输入侧、追加/替换/无效、移动与撤销、菜单及迟到失败隔离 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 迁移 | connections/appearance 按当前投影、执行身份与缓存派生外观，ports 共用类型配色；选择、替换及状态提示保留 | 真实执行核对运行/可用/过期/失败与清除；平台和大图验收开放 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 迁移 | canvas/presentation 按当前投影、执行身份与缓存派生外观，ports 共用类型配色；选择、替换及状态提示保留 | 真实执行核对运行/可用/过期/失败与清除；平台和大图验收开放 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 待查 | 已读；紧凑尺寸与端口起手能力已接入，相关节点/端口交互继续审查 | 布局和手势已核对，组件未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -858,13 +870,13 @@
 | [modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/NodePalette.tsx](../../react/src/modules/graph-editor/internal/ui/NodePalette.tsx) | 迁移：完整目录检索与分类浏览，创建复用原图事务 | `canvas/palette` 保存索引、输入与读取代次；Catalog 生成全拼/首字母搜索，GPUI 虚拟列表只绘制可见行 | 分类/查询/键盘、不可用项、配置返回、错误重试、过期图及关闭后迟到回复已预览核对；物理 IME、完整项目切换及压力验收开放 |
-| [modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Pins/GraphPinView.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Pins/PinInput.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/PinInput.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx) | 迁移 | canvas/nodes 保留标题/副标题、内联摘要和两侧端口，geometry 共用尺寸与锚点，摘要有界缓存 | 隔离窗口核对标题及临时内联展示投影的数值/空值/长文本/JSON、端口对齐；平台验收开放 |
+| [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 待查 | 已读；共享节点状态、结果计数和诊断提示已迁移，节点菜单待完成 | 真实部分结果/观察节点/过期/除零已核对，组件未完成 |
+| [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 待查 | 已读；节点布局、状态、选择及候选淡化已接入，节点菜单待完成 | 窗口已核对状态与淡化，组件未完成 |
+| [modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx) | 迁移 | 按 builtin.reroute 使用紧凑节点、中央拖动柄与隐藏标签的端口，复用原手势和图事务 | 窗口核对选择、拖动与撤销；后端透明节点执行阻断已记录，平台验收开放 |
+| [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 已读；共享状态与起手能力已接入，输入/菜单及完整提示待完成 | 组件未完成 |
+| [modules/graph-editor/internal/ui/Pins/GraphPinView.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx) | 待查 | 已读；共享状态、紧凑端口和候选已接入，完整类型形状/提示待完成 | 组件未完成 |
+| [modules/graph-editor/internal/ui/Pins/PinInput.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/PinInput.tsx) | 待查 | 已读；画布内联端口值编辑待迁移，Details 原输入继续可用 | 组件未完成 |
 
 ## modules/logs
 

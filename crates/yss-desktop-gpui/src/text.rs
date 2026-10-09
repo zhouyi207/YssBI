@@ -137,3 +137,31 @@ pub fn graph_diagnostic(diagnostic: &EditorDiagnosticModel) -> String {
     text.push_str(rest);
     text
 }
+
+pub fn run_failure_key(code: yss_graph_execution::error::RunFailureCode) -> &'static str {
+    use yss_graph_execution::error::RunFailureCode;
+    match code {
+        RunFailureCode::KernelFailed => "kernelFailed",
+        RunFailureCode::KernelNotFound => "kernelNotFound",
+        RunFailureCode::InvalidNumericInput => "invalidNumericInput",
+        RunFailureCode::ShapeMismatch => "shapeMismatch",
+        RunFailureCode::GroupSchemaMismatch => "groupSchemaMismatch",
+        RunFailureCode::GroupKeyCollision => "groupKeyCollision",
+        RunFailureCode::InvalidParameter => "invalidParameter",
+        RunFailureCode::UnalignedSeries => "unalignedSeries",
+        RunFailureCode::BudgetExceeded => "budgetExceeded",
+        RunFailureCode::InputLayoutMismatch => "inputLayoutMismatch",
+        RunFailureCode::OutputContractMismatch => "outputContractMismatch",
+        RunFailureCode::ScientificFailure => "scientificFailure",
+        RunFailureCode::DivisionByZero => "divisionByZero",
+        RunFailureCode::NonFiniteResult => "nonFiniteResult",
+        RunFailureCode::DeadlineExceeded => "deadlineExceeded",
+        RunFailureCode::ResourceUnavailable => "resourceUnavailable",
+        RunFailureCode::InputResultUnavailable => "inputResultUnavailable",
+        RunFailureCode::FinalizationFailed => "finalizationFailed",
+    }
+}
+
+pub fn run_failure(code: yss_graph_execution::error::RunFailureCode) -> String {
+    translate(&format!("runFailure.causes.{}", run_failure_key(code)))
+}

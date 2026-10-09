@@ -2,7 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use gpui::{Context, MouseButton, MouseDownEvent, Pixels, Point, Task, Window};
-use yss_graph_document::{ConnectionId, PortAddress};
+use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 use yss_graph_editor::{
     EditorGraphMutation,
     projection::{ConnectionDecision, ConnectionIntent},
@@ -24,6 +24,7 @@ pub(in crate::canvas) struct ConnectionDrag {
     pub current: Point<Pixels>,
     pub target: Option<PortAddress>,
     pub replaced: BTreeSet<ConnectionId>,
+    pub dimmed_nodes: BTreeSet<NodeId>,
     version: GraphEditVersion,
     candidates: Candidates,
 }
@@ -129,6 +130,25 @@ impl GraphCanvas {
             return;
         }
         let moving = event.modifiers.control || event.modifiers.platform;
+        let allowed = self
+            .graph
+            .projection
+            .nodes
+            .iter()
+            .flat_map(|node| node.ports.iter())
+            .find(|port| port.address == source)
+            .is_some_and(|port| {
+                !port.orphan
+                    && if moving {
+                        port.connections.can_move
+                    } else {
+                        port.connections.can_append || port.connections.can_replace
+                    }
+            });
+        if !allowed {
+            cx.notify();
+            return;
+        }
         let version = self.graph.editing.version;
         let task = self.query_connections(source.clone(), moving, version, cx);
         self.gesture = Some(Gesture::Connection(ConnectionDrag {
@@ -138,6 +158,7 @@ impl GraphCanvas {
             current: event.position,
             target: None,
             replaced: BTreeSet::new(),
+            dimmed_nodes: BTreeSet::new(),
             candidates: Candidates::Loading { _task: task },
         }));
         cx.notify();
@@ -220,19 +241,41 @@ impl GraphCanvas {
                 if view.graph.editing.version != version {
                     return;
                 }
+                let candidates = result.map(|candidates| {
+                    candidates
+                        .candidates
+                        .into_iter()
+                        .map(|candidate| (candidate.port, candidate.decision))
+                        .collect::<BTreeMap<_, _>>()
+                });
+                let dimmed_nodes = candidates
+                    .as_ref()
+                    .map(|candidates| {
+                        view.graph
+                            .projection
+                            .nodes
+                            .iter()
+                            .filter(|node| {
+                                node.node_id != source.node_id
+                                    && node.ports.iter().all(|port| {
+                                        matches!(
+                                            candidates.get(&port.address),
+                                            Some(ConnectionDecision::Invalid { .. })
+                                        )
+                                    })
+                            })
+                            .map(|node| node.node_id)
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 let Some(drag) = view.connection_drag_mut().filter(|drag| {
                     drag.source == source && drag.moving == moving && drag.version == version
                 }) else {
                     return;
                 };
-                drag.candidates = match result {
-                    Ok(candidates) => Candidates::Ready(
-                        candidates
-                            .candidates
-                            .into_iter()
-                            .map(|candidate| (candidate.port, candidate.decision))
-                            .collect(),
-                    ),
+                drag.dimmed_nodes = dimmed_nodes;
+                drag.candidates = match candidates {
+                    Ok(candidates) => Candidates::Ready(candidates),
                     Err(_) => {
                         tracing::debug!(
                             code = "native_connection_candidates_rejected",

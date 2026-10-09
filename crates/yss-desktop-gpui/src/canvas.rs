@@ -6,8 +6,10 @@ mod constant_drag;
 mod execution;
 mod geometry;
 mod navigation;
+mod nodes;
 mod palette;
 mod ports;
+mod presentation;
 mod render;
 mod toolbar;
 
@@ -94,6 +96,8 @@ pub struct GraphCanvas {
     gesture: Option<Gesture>,
     preview: BTreeMap<NodeId, NodePosition>,
     connection_layer: Rc<RefCell<connections::ConnectionLayer>>,
+    presentation: Rc<presentation::Presentation>,
+    node_contents: nodes::summary::Contents,
     selected: BTreeSet<NodeId>,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     palette: Option<Palette>,
@@ -133,6 +137,8 @@ impl GraphCanvas {
             gesture: None,
             preview: BTreeMap::new(),
             connection_layer,
+            presentation: Rc::default(),
+            node_contents: Default::default(),
             selected: BTreeSet::new(),
             bounds: Rc::new(Cell::new(Bounds::default())),
             palette: None,
@@ -143,7 +149,7 @@ impl GraphCanvas {
             execution: Default::default(),
         };
         view.reset_view();
-        view.refresh_connection_states();
+        view.refresh_presentation();
         cx.defer_in(window, |view, _, cx| view.resync_execution(cx));
         view
     }

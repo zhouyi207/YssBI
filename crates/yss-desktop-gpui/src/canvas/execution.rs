@@ -168,7 +168,7 @@ impl GraphCanvas {
             .last_key_value()
             .map(|(_, projection)| projection.event.identity().clone());
         self.error = None;
-        self.refresh_connection_states();
+        self.refresh_presentation();
         let task = self.services.run(move |services| {
             let application = &services.application;
             // Capture the document matching the displayed projection, never a later revision.
@@ -291,7 +291,7 @@ impl GraphCanvas {
         }
         let result_revision = event.result_revision();
         if self.execution.install(event) {
-            self.refresh_connection_states();
+            self.refresh_presentation();
             if result_revision > self.graph.results.revision {
                 self.refresh(cx);
             }
@@ -337,7 +337,7 @@ impl GraphCanvas {
                         }
                     }
                 }
-                view.refresh_connection_states();
+                view.refresh_presentation();
                 cx.emit(CanvasEvent::Execution);
                 cx.notify();
             });
@@ -363,7 +363,7 @@ impl GraphCanvas {
             return;
         }
         self.execution.cleared = Some(run.clone());
-        self.refresh_connection_states();
+        self.refresh_presentation();
         cx.emit(CanvasEvent::Execution);
         cx.notify();
     }

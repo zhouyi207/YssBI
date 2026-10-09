@@ -28,10 +28,6 @@ const ICONS: &[(&str, &[u8])] = &[
         include_bytes!("../assets/icons/graph.svg"),
     ),
     (
-        "icons/yssbi/database.svg",
-        include_bytes!("../assets/icons/database.svg"),
-    ),
-    (
         "icons/yssbi/table.svg",
         include_bytes!("../assets/icons/table.svg"),
     ),
@@ -63,7 +59,6 @@ pub enum NativeIcon {
     Play,
     Stop,
     Graph,
-    Database,
     Table,
 }
 impl IconNamed for NativeIcon {
@@ -74,7 +69,6 @@ impl IconNamed for NativeIcon {
             Self::Play => "icons/yssbi/play.svg",
             Self::Stop => "icons/yssbi/stop.svg",
             Self::Graph => "icons/yssbi/graph.svg",
-            Self::Database => "icons/yssbi/database.svg",
             Self::Table => "icons/yssbi/table.svg",
         }
         .into()

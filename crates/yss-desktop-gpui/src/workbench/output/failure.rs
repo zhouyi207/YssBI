@@ -5,7 +5,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
 };
 use yss_application::graph::run::{RunApplicationEvent, RunIdentity};
-use yss_graph_execution::error::{RunFailure, RunFailureCode, RunPhase};
+use yss_graph_execution::error::{RunFailure, RunPhase};
 
 use super::{OutputEvent, OutputPanel};
 use crate::text;
@@ -15,7 +15,7 @@ pub(super) fn render(
     failure: &RunFailure,
     cx: &Context<OutputPanel>,
 ) -> AnyElement {
-    let code = failure_key(failure.code);
+    let code = text::run_failure_key(failure.code);
     div()
         .flex()
         .flex_col()
@@ -30,7 +30,7 @@ pub(super) fn render(
                 .text_color(cx.theme().danger)
                 .child(text::t("runFailure.title")),
         )
-        .child(text::translate(&format!("runFailure.causes.{code}")))
+        .child(text::run_failure(failure.code))
         .children(failure.groups.iter().map(|group| {
             div()
                 .text_color(cx.theme().muted_foreground)
@@ -108,29 +108,6 @@ pub(super) fn render(
                 )),
         )
         .into_any_element()
-}
-
-fn failure_key(code: RunFailureCode) -> &'static str {
-    match code {
-        RunFailureCode::KernelFailed => "kernelFailed",
-        RunFailureCode::KernelNotFound => "kernelNotFound",
-        RunFailureCode::InvalidNumericInput => "invalidNumericInput",
-        RunFailureCode::ShapeMismatch => "shapeMismatch",
-        RunFailureCode::GroupSchemaMismatch => "groupSchemaMismatch",
-        RunFailureCode::GroupKeyCollision => "groupKeyCollision",
-        RunFailureCode::InvalidParameter => "invalidParameter",
-        RunFailureCode::UnalignedSeries => "unalignedSeries",
-        RunFailureCode::BudgetExceeded => "budgetExceeded",
-        RunFailureCode::InputLayoutMismatch => "inputLayoutMismatch",
-        RunFailureCode::OutputContractMismatch => "outputContractMismatch",
-        RunFailureCode::ScientificFailure => "scientificFailure",
-        RunFailureCode::DivisionByZero => "divisionByZero",
-        RunFailureCode::NonFiniteResult => "nonFiniteResult",
-        RunFailureCode::DeadlineExceeded => "deadlineExceeded",
-        RunFailureCode::ResourceUnavailable => "resourceUnavailable",
-        RunFailureCode::InputResultUnavailable => "inputResultUnavailable",
-        RunFailureCode::FinalizationFailed => "finalizationFailed",
-    }
 }
 
 fn phase_key(phase: RunPhase) -> &'static str {

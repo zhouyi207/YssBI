@@ -71,6 +71,7 @@ impl GraphCanvas {
         dimmed: bool,
     ) -> impl IntoElement + use<> {
         let layer = self.connection_layer.clone();
+        let presentation = self.presentation.clone();
         let offset = self.offset;
         let zoom = self.zoom;
         let preview = Rc::new(self.preview.clone());
@@ -85,13 +86,19 @@ impl GraphCanvas {
                 Animation::new(Duration::from_millis(1200)).repeat(),
                 move |view, progress| {
                     let layer = layer.clone();
+                    let presentation = presentation.clone();
                     let preview = preview.clone();
                     view.child(
                         canvas(
                             |_, _, _| (),
                             move |bounds, _, window, _| {
                                 layer.borrow().paint_activity(
-                                    bounds, offset, zoom, &preview, progress, window,
+                                    bounds,
+                                    offset,
+                                    zoom,
+                                    &preview,
+                                    (&presentation, progress),
+                                    window,
                                 );
                             },
                         )

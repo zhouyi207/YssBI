@@ -1,4 +1,3 @@
-mod appearance;
 mod curve;
 mod drag;
 mod hit;
@@ -16,14 +15,13 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
-use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::{ConnectionId, NodeId, NodePosition, PortAddress};
 use yss_graph_editor::projection::EditorProjectionModel;
 use yss_node_protocol::PortDirection;
 
+use super::presentation::{Presentation, State};
 use super::{geometry, ports};
 use crate::appearance as theme;
-use appearance::State;
 use curve::Curve;
 
 #[derive(Clone)]
@@ -34,7 +32,6 @@ struct PortAnchor {
     key: Arc<str>,
     direction: PortDirection,
     color: u32,
-    orphan: bool,
 }
 
 impl PortAnchor {
@@ -52,8 +49,6 @@ struct Connection {
     id: ConnectionId,
     output: PortAnchor,
     input: PortAnchor,
-    blocked: bool,
-    state: State,
     path: PathCache,
     highlight: PathCache,
     hit: hit::HitPath,
@@ -78,6 +73,7 @@ impl Connection {
 }
 
 pub(super) struct Interaction<'a> {
+    pub presentation: &'a Presentation,
     pub selected: &'a BTreeSet<ConnectionId>,
     pub hovered: Option<ConnectionId>,
     pub replacements: Option<&'a BTreeSet<ConnectionId>>,
@@ -110,22 +106,12 @@ impl ConnectionLayer {
                                 key: address.to_string().into(),
                                 direction: port.direction,
                                 color: ports::type_color(port),
-                                orphan: port.orphan,
                             },
                         )
                     },
                 )
             })
             .collect::<BTreeMap<_, _>>();
-        let blocked = projection
-            .diagnostics
-            .iter()
-            .filter(|diagnostic| diagnostic.blocking)
-            .filter_map(|diagnostic| match diagnostic.location {
-                DiagnosticLocation::Connection(id) => Some(id),
-                _ => None,
-            })
-            .collect::<BTreeSet<_>>();
         let connections = projection
             .connections
             .iter()
@@ -134,12 +120,8 @@ impl ConnectionLayer {
                 let input = anchors.get(&connection.input)?.clone();
                 Some(Connection {
                     id: connection.connection_id,
-                    blocked: output.orphan
-                        || input.orphan
-                        || blocked.contains(&connection.connection_id),
                     output,
                     input,
-                    state: State::Unexecuted,
                     path: PathCache::default(),
                     highlight: PathCache::default(),
                     hit: hit::HitPath::default(),
@@ -168,11 +150,10 @@ impl ConnectionLayer {
         self.anchors.get(address).map(|anchor| anchor.direction)
     }
 
-    pub fn label(&self, id: ConnectionId) -> Option<&'static str> {
-        self.connections
+    pub fn addresses(&self) -> impl Iterator<Item = (&str, &PortAddress)> {
+        self.anchors
             .iter()
-            .find(|connection| connection.id == id)
-            .map(|connection| connection.state.label())
+            .map(|(address, anchor)| (anchor.key.as_ref(), address))
     }
 
     pub fn paint(
@@ -190,6 +171,7 @@ impl ConnectionLayer {
             if !visible(curve, origin, bounds) {
                 continue;
             }
+            let state = interaction.presentation.connection(connection.id);
             let selected = interaction.selected.contains(&connection.id);
             let hovered = interaction.hovered == Some(connection.id);
             let replaced = interaction
@@ -200,7 +182,7 @@ impl ConnectionLayer {
             } else {
                 1.
             };
-            if selected || hovered || connection.state == State::Valid {
+            if selected || hovered || state == State::Valid {
                 let (width, color, alpha) = if selected {
                     (16., theme::BLUE, 0.55)
                 } else if hovered {
@@ -219,12 +201,12 @@ impl ConnectionLayer {
             }
             let color = if replaced {
                 theme::AMBER
-            } else if connection.state == State::Error {
+            } else if state == State::Error {
                 theme::RED
             } else {
                 connection.output.color
             };
-            let width = if replaced || connection.state == State::Valid {
+            let width = if replaced || state == State::Valid {
                 3.
             } else {
                 2.
@@ -233,8 +215,8 @@ impl ConnectionLayer {
                 &mut connection.path,
                 origin,
                 curve,
-                (px(width), connection.state),
-                rgb(color).opacity(connection.state.opacity() * opacity),
+                (px(width), state),
+                rgb(color).opacity(state.opacity() * opacity),
                 window,
             );
         }
@@ -278,6 +260,7 @@ impl ConnectionLayer {
 
     pub fn has_visible_running(
         &self,
+        presentation: &Presentation,
         bounds: Bounds<Pixels>,
         offset: Point<Pixels>,
         zoom: f32,
@@ -285,7 +268,7 @@ impl ConnectionLayer {
     ) -> bool {
         self.connections
             .iter()
-            .filter(|connection| connection.state == State::Running)
+            .filter(|connection| presentation.connection(connection.id) == State::Running)
             .any(|connection| {
                 let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
                 visible(curve, origin, bounds)
@@ -298,13 +281,13 @@ impl ConnectionLayer {
         offset: Point<Pixels>,
         zoom: f32,
         preview: &BTreeMap<NodeId, NodePosition>,
-        progress: f32,
+        (presentation, progress): (&Presentation, f32),
         window: &mut Window,
     ) {
         for connection in self
             .connections
             .iter()
-            .filter(|connection| connection.state == State::Running)
+            .filter(|connection| presentation.connection(connection.id) == State::Running)
         {
             let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
             if !visible(curve, origin, bounds) {

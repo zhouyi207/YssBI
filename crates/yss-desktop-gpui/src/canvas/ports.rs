@@ -1,5 +1,5 @@
 //! Port presentation shares its type palette with connections; decisions stay backend-owned.
-use super::GraphCanvas;
+use super::{GraphCanvas, presentation::State};
 use crate::appearance;
 use gpui::{Context, IntoElement, MouseButton, div, prelude::*, px, rgb};
 use yss_data_contract::{SemanticType, ValueType};
@@ -32,6 +32,7 @@ impl GraphCanvas {
     pub(super) fn render_port(
         &self,
         port: &EditorPortModel,
+        compact: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
         let start = port.address.clone();
@@ -54,6 +55,12 @@ impl GraphCanvas {
         } else {
             type_color(port)
         };
+        let state = self
+            .presentation
+            .ports
+            .get(&port.address)
+            .copied()
+            .unwrap_or_default();
         let ring = if active {
             Some(appearance::BLUE)
         } else {
@@ -61,18 +68,25 @@ impl GraphCanvas {
                 Some(ConnectionDecision::Append) => Some(appearance::GREEN),
                 Some(ConnectionDecision::Replace { .. }) => Some(appearance::AMBER),
                 Some(ConnectionDecision::Invalid { .. }) if target => Some(appearance::RED),
-                _ => None,
+                _ => match state {
+                    State::Error => Some(appearance::RED),
+                    State::Stale | State::Running => Some(appearance::AMBER),
+                    State::Valid => Some(color),
+                    State::Unexecuted | State::Partial => None,
+                },
             }
         };
+        let diameter = if compact { 20. } else { 10. };
         let dot = || {
             div()
-                .size(px(10. * self.zoom))
+                .size(px(diameter * self.zoom))
                 .flex_shrink_0()
                 .rounded_full()
                 .bg(rgb(color))
                 .border_1()
                 .border_color(rgb(ring.unwrap_or(appearance::CANVAS)))
                 .when(ring.is_some(), |dot| dot.border_2())
+                .when(state == State::Stale, |dot| dot.border_dashed())
                 .opacity(if dimmed && !target { 0.3 } else { 1. })
         };
         div()
@@ -117,14 +131,18 @@ impl GraphCanvas {
                 cx.listener(move |view, _, _, cx| view.end_port(end.clone(), cx)),
             )
             .when(!output, |view| {
-                view.ml(px(-5. * self.zoom))
+                view.ml(px(-diameter / 2. * self.zoom))
                     .child(dot())
-                    .child(div().min_w_0().flex_1().truncate().child(label.clone()))
+                    .when(!compact, |view| {
+                        view.child(div().min_w_0().flex_1().truncate().child(label.clone()))
+                    })
             })
             .when(output, |view| {
-                view.mr(px(-5. * self.zoom))
+                view.mr(px(-diameter / 2. * self.zoom))
                     .justify_end()
-                    .child(div().min_w_0().truncate().child(label))
+                    .when(!compact, |view| {
+                        view.child(div().min_w_0().truncate().child(label))
+                    })
                     .child(dot())
             })
     }

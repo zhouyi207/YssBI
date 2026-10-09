@@ -3,12 +3,11 @@ use gpui::{
     prelude::*, px, rgb,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{Icon, IconName, Sizable};
-use yss_graph_editor::{EditorGraphMutation, projection::EditorNodeModel};
-use yss_node_protocol::PortDirection;
+use gpui_component::{IconName, Sizable};
+use yss_graph_editor::EditorGraphMutation;
 
 use super::{Gesture, GraphCanvas, commands::*, geometry};
-use crate::{appearance, assets::NativeIcon};
+use crate::appearance;
 
 impl Render for GraphCanvas {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -16,6 +15,7 @@ impl Render for GraphCanvas {
         let offset = self.offset;
         let bounds_cell = self.bounds.clone();
         let connection_layer = self.connection_layer.clone();
+        let presentation = self.presentation.clone();
         let preview = self.preview.clone();
         let selected_connections = self.selected_connections.clone();
         let hovered_connection = self.hovered_connection;
@@ -30,8 +30,9 @@ impl Render for GraphCanvas {
         });
         let label = self
             .hovered_connection
-            .and_then(|id| connection_layer.borrow().label(id));
+            .map(|id| presentation.connection(id).label());
         let running_visible = connection_layer.borrow().has_visible_running(
+            &presentation,
             self.bounds.get(),
             offset,
             zoom,
@@ -231,6 +232,7 @@ impl Render for GraphCanvas {
                             zoom,
                             &preview,
                             super::connections::Interaction {
+                                presentation: &presentation,
                                 selected: &selected_connections,
                                 hovered: hovered_connection,
                                 replacements: replacements.as_ref(),
@@ -316,111 +318,6 @@ impl Render for GraphCanvas {
 }
 
 impl GraphCanvas {
-    fn render_node(
-        &self,
-        node: &EditorNodeModel,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
-        let id = node.node_id;
-        let position = geometry::position(node, &self.preview);
-        let origin = self.offset + point(px(position.x as f32), px(position.y as f32)) * self.zoom;
-        let border = if self.selected.contains(&id) {
-            appearance::BLUE
-        } else if !node.diagnostics.is_empty() {
-            appearance::AMBER
-        } else {
-            appearance::BORDER_STRONG
-        };
-        let inputs = node
-            .ports
-            .iter()
-            .filter(|p| p.direction == PortDirection::Input)
-            .collect::<Vec<_>>();
-        let outputs = node
-            .ports
-            .iter()
-            .filter(|p| p.direction == PortDirection::Output)
-            .collect::<Vec<_>>();
-        div()
-            .id(gpui::SharedString::from(format!("node-{id}")))
-            .absolute()
-            .left(origin.x)
-            .top(origin.y)
-            .w(px(geometry::NODE_WIDTH * self.zoom))
-            .h(px(geometry::node_height(node) * self.zoom))
-            .rounded(px(4. * self.zoom))
-            .border_1()
-            .border_color(rgb(border))
-            .bg(rgb(appearance::SURFACE))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |view, event, window, cx| view.begin_node(id, event, window, cx)),
-            )
-            .child(
-                div()
-                    .h(px(geometry::TITLE_HEIGHT * self.zoom))
-                    .px(px(12. * self.zoom))
-                    .flex()
-                    .items_center()
-                    .gap(px(8. * self.zoom))
-                    .rounded_t(px(4. * self.zoom))
-                    .bg(rgb(appearance::SURFACE_RAISED))
-                    .border_b_1()
-                    .border_color(rgb(appearance::BORDER))
-                    .text_size(px(13. * self.zoom))
-                    .font_weight(gpui::FontWeight::MEDIUM)
-                    .child(
-                        Icon::new(if node.node_type.as_str().contains("source.") {
-                            NativeIcon::Database
-                        } else {
-                            NativeIcon::Graph
-                        })
-                        .size(px(15. * self.zoom))
-                        .text_color(rgb(appearance::BLUE)),
-                    )
-                    .child(
-                        div().flex_1().min_w_0().truncate().child(
-                            node.display
-                                .user_label
-                                .as_deref()
-                                .unwrap_or(&node.display.title)
-                                .to_owned(),
-                        ),
-                    ),
-            )
-            .children((0..inputs.len().max(outputs.len())).map(|index| {
-                div()
-                    .absolute()
-                    .left_0()
-                    .right_0()
-                    .top(px((geometry::TITLE_HEIGHT
-                        + index as f32 * geometry::PORT_HEIGHT)
-                        * self.zoom))
-                    .h(px(geometry::PORT_HEIGHT * self.zoom))
-                    .flex()
-                    .items_center()
-                    .child(
-                        div()
-                            .w_1_2()
-                            .min_w_0()
-                            .h_full()
-                            .flex()
-                            .items_center()
-                            .children(inputs.get(index).map(|port| self.render_port(port, cx))),
-                    )
-                    .child(
-                        div()
-                            .w_1_2()
-                            .min_w_0()
-                            .h_full()
-                            .flex()
-                            .items_center()
-                            .justify_end()
-                            .children(outputs.get(index).map(|port| self.render_port(port, cx))),
-                    )
-            }))
-    }
-
     fn selection_bounds(&self) -> Option<Bounds<Pixels>> {
         if let Some(Gesture::Selection { press, current, .. }) = &self.gesture {
             let a = *press - self.bounds.get().origin;
