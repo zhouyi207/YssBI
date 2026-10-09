@@ -149,11 +149,8 @@ pub struct FirstStageResult {
     /// 自变量名称（const, exog..., instruments...）
     pub var_names: Vec<String>,
     pub betas: Vec<f64>,
-    pub stds: Vec<f64>,
-    pub tvalues: Vec<f64>,
-    pub pvalues: Vec<f64>,
-    pub conf_int_left: Vec<f64>,
-    pub conf_int_right: Vec<f64>,
+    pub inference: RegressionCoefficientStatistics,
+    pub df_residual: usize,
     pub r2: f64,
     pub r2_adjusted: f64,
 }

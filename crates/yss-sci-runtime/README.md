@@ -193,10 +193,14 @@ only when selected. SCI's insufficient first-stage residual-degree failure propa
 before report encoding; summaries that omit that analysis retain the structural fit. Runtime
 consumes the same prepared analysis for 2SLS and LIML and does not refit or construct
 an observation-square projection.
-First-stage rows, equations and weak-instrument display fields
-use the typed analysis results before JSON encoding, without decoding report values
-or replacing coefficients with zero. Undefined adjusted R² and unavailable Hausman
-or endogeneity tests arrive as SCI's existing `None` values. If both endogeneity
+First-stage rows reuse the existing coefficient-row projection of each equation's
+shared `inference` record. The equation retains its selected covariance and actual
+`df_residual`; weak-instrument F and coefficient probabilities use the same OLS
+reference degrees independently of structural `small`. Equation R² is uncentered
+when no intercept is estimated. Zero or undefined first-stage inference propagates
+as a scientific failure when selected, while summaries omitting it remain available.
+Equations and weak-instrument display fields use typed analysis results before JSON
+encoding. Unavailable Hausman or endogeneity tests retain SCI's existing `None` values. If both endogeneity
 tests are unavailable under nonrobust covariance, the report identifies insufficient
 residual variation or degrees of freedom; robust covariance retains its separate
 unsupported-test reason. An unavailable diagnostic does not invalidate the fit.

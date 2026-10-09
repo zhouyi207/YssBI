@@ -127,8 +127,9 @@ pub fn summary(
         let mut texts = Vec::new();
         for e in &equations {
             texts.push(equation(&e.endog_name, &e.var_names, &e.betas));
-            for (j, name) in e.var_names.iter().enumerate() {
-                rows.push(serde_json::json!({"equation":e.endog_name,"variable":name,"estimate":e.betas[j],"standard_error":e.stds[j],"statistic":e.tvalues[j],"p_value":e.pvalues[j],"ci_lower":e.conf_int_left[j],"ci_upper":e.conf_int_right[j]}));
+            for mut row in coefficient_rows(&e.var_names, &e.betas, &e.inference)? {
+                row["equation"] = serde_json::json!(e.endog_name);
+                rows.push(row);
             }
         }
         report["first_stage_rows"] = serde_json::json!(rows);

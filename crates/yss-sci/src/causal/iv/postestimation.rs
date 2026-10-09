@@ -1,7 +1,9 @@
+use super::estimate::coefficient_inference;
 use super::first_stage::{compute_first_stage_summary, is_robust_covariance};
 use super::{design::PreparedIvDesign, model::IvModel};
+use crate::regression::covariance::compute_cov_beta;
 use statrs::{
-    distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, StudentsT},
+    distribution::{ChiSquared, ContinuousCDF, FisherSnedecor},
     statistics::Statistics,
 };
 use yss_sci_contract::causal::iv::{
@@ -22,48 +24,39 @@ impl IvModel {
             .filter(|&degrees| degrees > 0)
             .ok_or("IV firststage: insufficient residual degrees of freedom")?;
         let design = self.design()?;
-        let t_dist = StudentsT::new(0.0, 1.0, df_z as f64)
-            .map_err(|error| format!("IV firststage: {error}"))?;
-        let t_crit = t_dist.inverse_cdf(0.975);
         let mut first_stage: Vec<FirstStageResult> = Vec::with_capacity(k_endog);
         for j in 0..k_endog {
             let endog_col = self.endog_reg.col(j);
             let gamma = design.first_stage_coefficients.col(j);
 
-            // First-stage stats: resid, r2, cov_gamma, stds, t, p
             let resid = endog_col - design.endog_hat.col(j);
             let ss_resid = resid.iter().map(|v| v.powi(2)).sum::<f64>();
-            let y_mean = endog_col.iter().mean();
+            let y_mean = if self.options.constant {
+                endog_col.iter().mean()
+            } else {
+                0.0
+            };
             let ss_tot = endog_col.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>();
-            let r2 = if ss_tot > 1e-300 {
-                1.0 - ss_resid / ss_tot
-            } else {
-                0.0
-            };
-            let ms_resid = ss_resid / df_z as f64;
-            let ms_tot = ss_tot / (n - 1) as f64;
-            let r2_adj = if ms_tot > 1e-300 {
-                1.0 - ms_resid / ms_tot
-            } else {
-                0.0
-            };
-
-            let sigma2 = ms_resid.max(1e-300);
-            let cov_gamma = yss_sci_linalg::Scale(sigma2) * &design.ztz_inverse;
-            let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[(i, i)].sqrt()).collect();
-            let t_values: Vec<f64> = (0..k_z).map(|i| gamma[i] / stds[i]).collect();
-            let p_values: Vec<f64> = t_values
-                .iter()
-                .map(|&t| {
-                    crate::distribution::student_t_probability(
-                        &t_dist,
-                        t,
-                        yss_sci_contract::hypothesis::Alternative::TwoSided,
-                    )
-                })
-                .collect();
-            let ci_left: Vec<f64> = (0..k_z).map(|i| gamma[i] - t_crit * stds[i]).collect();
-            let ci_right: Vec<f64> = (0..k_z).map(|i| gamma[i] + t_crit * stds[i]).collect();
+            if !ss_tot.is_finite() || ss_tot <= 0.0 {
+                return Err("IV firststage: response variation is undefined".into());
+            }
+            let unexplained = ss_resid / ss_tot;
+            let r2 = 1.0 - unexplained;
+            let r2_adj =
+                1.0 - unexplained * (n - usize::from(self.options.constant)) as f64 / df_z as f64;
+            if !r2.is_finite() || !r2_adj.is_finite() {
+                return Err("IV firststage: R-squared is undefined".into());
+            }
+            let cov_gamma = compute_cov_beta(
+                &design.z,
+                &design.ztz_inverse,
+                &resid,
+                df_z,
+                self.options.constant.then_some(0),
+                &self.options.covariance,
+            )?;
+            // First-stage equations are OLS regressions regardless of structural `small`.
+            let inference = coefficient_inference(gamma, &cov_gamma, df_z, true)?;
 
             let name = format!("endog_{}", j + 1);
             let var_names = (0..k_z).map(|i| format!("z{}", i + 1)).collect();
@@ -71,18 +64,16 @@ impl IvModel {
                 endog_name: name,
                 var_names,
                 betas: gamma.iter().copied().collect(),
-                stds,
-                tvalues: t_values,
-                pvalues: p_values,
-                conf_int_left: ci_left,
-                conf_int_right: ci_right,
+                inference,
+                df_residual: df_z,
                 r2,
                 r2_adjusted: r2_adj,
             });
         }
 
         // estat firststage: First-stage regression summary statistics
-        let first_stage_summary = compute_first_stage_summary(self, &design, for_liml)?;
+        let first_stage_summary =
+            compute_first_stage_summary(self, &design, &first_stage, for_liml)?;
 
         Ok((first_stage, first_stage_summary))
     }

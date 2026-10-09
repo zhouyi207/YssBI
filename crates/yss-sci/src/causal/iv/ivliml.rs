@@ -122,7 +122,8 @@ impl IvModel {
             self.options.constant.then_some(0),
             &self.options.covariance,
         )?;
-        let inference = coefficient_inference(&betas, &covariance, df_residual, self.small)?;
+        let inference =
+            coefficient_inference(betas.as_ref(), &covariance, df_residual, self.small)?;
         let model_test = model_test(
             &betas,
             &covariance,

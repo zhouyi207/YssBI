@@ -95,6 +95,84 @@ fn iv_fit_summary_preserves_small_sample_references_and_constraint_inference() {
 }
 
 #[test]
+fn iv_first_stage_reports_share_covariance_and_f_reference_after_model_roundtrip() {
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..8)
+        .map(|row| 1.0 + 0.5 * signal(row, 0) + signal(row, 1) * (1.0 + 0.5 * signal(row, 0)))
+        .collect::<Vec<_>>();
+    let instrument = (0..8).map(|row| signal(row, 0)).collect::<Vec<_>>();
+    let response = (0..8)
+        .map(|row| 1.0 + 0.7 * endogenous[row] + signal(row, 2))
+        .collect::<Vec<_>>();
+    let numeric = |value: &RuntimeValue| super::super::super::numeric_input(Some(value)).unwrap();
+    for kind in ["2sls", "liml"] {
+        for small in [false, true] {
+            for (constant, covariance, expected_p, variance) in [
+                (true, "HC0", 0.25281011330107206, 5.0 / 32.0),
+                (true, "HC1", 0.3153335962012296, 5.0 / 24.0),
+                (false, "HC0", 0.37717106261322186, 9.0 / 32.0),
+            ] {
+                let fit = run(
+                    &format!("yssbi.statistics.iv.{kind}.fit"),
+                    &[
+                        ("y", series(&response)),
+                        ("endogenous", series(&endogenous)),
+                        ("instruments", series(&instrument)),
+                    ],
+                    &[
+                        ("constant", flag(constant)),
+                        ("covariance", string(covariance)),
+                        ("small", flag(small)),
+                    ],
+                    3,
+                )
+                .unwrap();
+                let report = run(
+                    &format!("yssbi.statistics.iv.{kind}.summary"),
+                    &[("model", fit[0].clone())],
+                    &iv_summary_parameters(kind, true),
+                    1,
+                )
+                .unwrap();
+                let report = &report[0];
+                let first_stage = field(report, "firstStage").unwrap();
+                let statistics = field(first_stage, "statistics").unwrap();
+                assert!(
+                    (numeric(field(statistics, "f_stat").unwrap()) - 0.25 / variance).abs() < 1e-9
+                );
+                assert!(
+                    (numeric(field(statistics, "f_p_value").unwrap()) - expected_p).abs() < 1e-9
+                );
+                let RuntimeValue::List(equations) = field(first_stage, "equations").unwrap() else {
+                    panic!("first-stage equations")
+                };
+                assert_eq!(
+                    numeric(field(&equations[0], "df_residual").unwrap()),
+                    if constant { 6.0 } else { 7.0 }
+                );
+                let inference = field(&equations[0], "inference").unwrap();
+                let RuntimeValue::List(p_values) = field(inference, "pValues").unwrap() else {
+                    panic!("first-stage probabilities")
+                };
+                let slope = usize::from(constant);
+                assert!((numeric(&p_values[slope]) - expected_p).abs() < 1e-9);
+                let RuntimeValue::List(rows) = field(report, "first_stage_rows").unwrap() else {
+                    panic!("first-stage display rows")
+                };
+                let row = &rows[slope];
+                assert_eq!(field(row, "equation").unwrap(), &string("x1"));
+                assert_eq!(field(row, "variable").unwrap(), &string("z1"));
+                assert!(
+                    (numeric(field(row, "standard_error").unwrap()).powi(2) - variance).abs()
+                        < 1e-9
+                );
+                assert!((numeric(field(row, "p_value").unwrap()) - expected_p).abs() < 1e-9);
+            }
+        }
+    }
+}
+
+#[test]
 fn iv_first_stage_nodes_preserve_unavailable_inference_and_generalized_eigenvalues() {
     let n = 6;
     let mut state = 1_u64;

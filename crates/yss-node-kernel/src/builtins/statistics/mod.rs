@@ -82,8 +82,8 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(match id {
-                "yssbi.statistics.iv.2sls.summary" => 14,
-                "yssbi.statistics.iv.liml.summary" => 13,
+                "yssbi.statistics.iv.2sls.summary" => 15,
+                "yssbi.statistics.iv.liml.summary" => 14,
                 "yssbi.statistics.iv.liml.fit" | "yssbi.statistics.panel.fit" => 11,
                 "yssbi.statistics.econometrics.panel.re"
                 | "yssbi.statistics.iv.2sls.fit"

@@ -276,7 +276,15 @@ critical tables retain their existing conventions. See the
 [LAPACK reduction](https://netlib.org/lapack/lug/node54.html) for the symmetric
 generalized eigenproblem and the worked first-stage examples in the
 [Stata postestimation manual](https://www.stata.com/manuals/rivregresspostestimation.pdf).
-An undefined adjusted first-stage R² at zero centered variation remains `None`.
+First-stage equations retain the selected OLS covariance in their shared
+`RegressionCoefficientStatistics` inference record and expose `df_residual=n-k_z`.
+Coefficient tests and 95% intervals use Student-t with those degrees; the excluded-
+instrument Wald test reuses that covariance and reports F with numerator degrees
+equal to the excluded-instrument count and denominator degrees `n-k_z`, independent
+of the structural `small` option. No-constant equations use uncentered total variation
+and its corresponding adjusted R². Zero or undefined variance returns a scientific
+failure when first-stage analysis is requested; positive tiny variances retain their
+units without a fixed floor. Summaries omitting first-stage analysis remain available.
 Rank-zero traditional Hausman tests and endogeneity bundles without positive
 Wu denominator degrees of freedom likewise remain unavailable in the existing
 typed options, rather than returning NaN for later JSON conversion.

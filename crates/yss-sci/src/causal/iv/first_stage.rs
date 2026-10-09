@@ -2,32 +2,28 @@ use super::critical_values::{
     stock_yogo_cv_1_endog, stock_yogo_cv_2_endog, stock_yogo_cv_liml_1_endog,
     stock_yogo_cv_liml_2_endog,
 };
-use super::{design::PreparedIvDesign, model::IvModel};
-use crate::regression::covariance::compute_cov_beta;
-use yss_sci_contract::causal::iv::FirstStageSummary;
+use super::{design::PreparedIvDesign, estimate::model_test, model::IvModel};
+use yss_sci_contract::causal::iv::{
+    FirstStageResult, FirstStageSummary, InstrumentalVariableModelTest,
+};
 use yss_sci_contract::regression::OlsCovariance;
 
-use statrs::{
-    distribution::{ChiSquared, ContinuousCDF, FisherSnedecor},
-    statistics::Statistics,
-};
-use yss_sci_linalg::Mat;
+use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
 /// When true, use LIML Stock-Yogo size critical values (bias=None). When false, use 2SLS.
 pub(crate) fn compute_first_stage_summary(
     model: &IvModel,
     design: &PreparedIvDesign,
+    equations: &[FirstStageResult],
     for_liml: bool,
 ) -> Result<FirstStageSummary, String> {
     let z = &design.z;
-    let ztz_inv_nd = &design.ztz_inverse;
     let endog_hat = &design.endog_hat;
     let endog_reg = &model.endog_reg;
     let instruments = &model.instruments;
     let has_constant = model.options.constant;
     let covariance = &model.options.covariance;
-    let small = model.small;
     let n = z.nrows();
     let k_z = z.ncols();
     let k_exog = model.exog.ncols();
@@ -63,16 +59,15 @@ pub(crate) fn compute_first_stage_summary(
         .solve(&Mat::identity(x2_mx1_x2.nrows(), x2_mx1_x2.nrows()));
     let cross = mx1_x2.transpose() * mx1_y.as_ref();
     let inner = cross.transpose() * x2_mx1_x2_inv.as_ref() * cross.as_ref();
-    // Normalizing by excluded instruments makes the single-endogenous statistic equal F.
-    let inner_scaled = inner / yss_sci_linalg::Scale(k_iv.max(1) as f64);
+    // The single-endogenous statistic equals the homoskedastic first-stage F.
+    let inner_scaled = inner / yss_sci_linalg::Scale(k_iv as f64);
 
     // Generalized minimum eigenvalue of (inner/k_iv, Sigma_VV).
     let min_eigenvalue_from_cd = if k_endog == 1 {
-        if sigma_vv[(0, 0)] > 1e-300 {
-            inner_scaled[(0, 0)] / sigma_vv[(0, 0)]
-        } else {
-            0.0
+        if !sigma_vv[(0, 0)].is_finite() || sigma_vv[(0, 0)] <= 0.0 {
+            return Err("IV firststage: residual variance is undefined".into());
         }
+        inner_scaled[(0, 0)] / sigma_vv[(0, 0)]
     } else {
         // Sigma^-1 * inner is generally nonsymmetric. Whiten the generalized
         // problem with Sigma = LL' before using the symmetric eigensolver.
@@ -91,6 +86,9 @@ pub(crate) fn compute_first_stage_summary(
         let s_col = evd.values();
         s_col.iter().fold(f64::INFINITY, |a, &b| a.min(b))
     };
+    if !min_eigenvalue_from_cd.is_finite() {
+        return Err("IV firststage: minimum eigenvalue is undefined".into());
+    }
 
     let min_eigenvalue = min_eigenvalue_from_cd;
     let is_robust = is_robust_covariance(covariance);
@@ -134,26 +132,7 @@ pub(crate) fn compute_first_stage_summary(
         shea_partial_r2,
         shea_adj_partial_r2,
     ) = if k_endog == 1 {
-        // Single endog: R2, Adj R2, Partial R2, F
-        let y_col = endog_reg.col(0).to_owned();
-        let y_hat = endog_hat.col(0).to_owned();
-        let y_mean = y_col.iter().mean();
-        let ss_tot = y_col.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>();
-        let ss_resid = y_col
-            .iter()
-            .zip(y_hat.iter())
-            .map(|(a, b)| (a - b).powi(2))
-            .sum::<f64>();
-        let r2 = if ss_tot > 1e-300 {
-            1.0 - ss_resid / ss_tot
-        } else {
-            0.0
-        };
-        let r2_adj = if ss_tot == 0.0 {
-            None
-        } else {
-            Some(1.0 - (ss_resid / df_z as f64) / (ss_tot / (n - 1) as f64))
-        };
+        let equation = &equations[0];
 
         // Partial R2: regress M_X1*Y on M_X1*X2
         let my = mx1_y.col(0).to_owned();
@@ -166,57 +145,32 @@ pub(crate) fn compute_first_stage_summary(
             .map(|(a, b)| (a - b).powi(2))
             .sum();
         let ss_tot_partial: f64 = my.iter().map(|v| v.powi(2)).sum();
-        let partial_r2 = if ss_tot_partial > 1e-300 {
-            1.0 - ss_resid_partial / ss_tot_partial
-        } else {
-            0.0
-        };
+        if !ss_tot_partial.is_finite() || ss_tot_partial <= 0.0 {
+            return Err("IV firststage: partial response variation is undefined".into());
+        }
+        let partial_r2 = 1.0 - ss_resid_partial / ss_tot_partial;
+        if !partial_r2.is_finite() {
+            return Err("IV firststage: partial R-squared is undefined".into());
+        }
 
-        // F: H0: π2=0. Nonrobust: F = (R2_full - R2_r)/(1-R2_full) * (n-k_z)/k_iv
-        // Robust: Wald/k_iv for F-like
-        let (f_stat, f_p_value, f_df1, f_df2) = if is_robust {
-            let first_stage_resid = mz_y.col(0).to_owned();
-            let sigma2_df = if small { df_z } else { n };
-            let cov_gamma = compute_cov_beta(
-                z,
-                ztz_inv_nd,
-                &first_stage_resid,
-                sigma2_df,
-                has_constant.then_some(0),
-                covariance,
-            )?;
-            let gamma = design.first_stage_coefficients.col(0).to_owned();
-            let gamma2 = gamma.subrows(k1, gamma.nrows() - k1).to_owned();
-            let cov_gamma2 = cov_gamma
-                .submatrix(k1, k1, cov_gamma.nrows() - k1, cov_gamma.ncols() - k1)
-                .to_owned();
-            let cov_gamma2_inv = cov_gamma2
-                .as_ref()
-                .to_owned()
-                .checked_cholesky()
-                .map_err(|_| "IV2SLS firststage: cov_gamma2 not pd".to_string())?
-                .solve(&Mat::identity(cov_gamma2.nrows(), cov_gamma2.nrows()));
-            let wald = gamma2.transpose() * (cov_gamma2_inv.as_ref() * gamma2.as_ref()).as_ref();
-            let chi2 = ChiSquared::new(k_iv as f64).map_err(|e| format!("{}", e))?;
-            let f_p = chi2.sf(wald);
-            (wald / k_iv as f64, f_p, k_iv, df_z)
-        } else {
-            let ssr_r: f64 = my.iter().map(|value| value.powi(2)).sum();
-            let ssr_u = ss_resid;
-            let f_val = if ssr_u > 1e-300 {
-                ((ssr_r - ssr_u) / k_iv as f64) / (ssr_u / df_z as f64)
-            } else {
-                0.0
-            };
-            let f_dist =
-                FisherSnedecor::new(k_iv as f64, df_z as f64).map_err(|e| format!("{}", e))?;
-            let f_p = crate::distribution::fisher_snedecor_sf(&f_dist, f_val);
-            (f_val, f_p, k_iv, df_z)
+        // H0: excluded-instrument coefficients are zero. Reuse the equation's VCE.
+        let gamma2 = Col::from_iter(equation.betas[k1..].iter().copied());
+        let cov_gamma2 = Mat::from_fn(k_iv, k_iv, |r, c| {
+            equation.inference.covariance[k1 + r][k1 + c]
+        });
+        let InstrumentalVariableModelTest::F {
+            statistic: f_stat,
+            p_value: f_p_value,
+            df_numerator: f_df1,
+            df_denominator: f_df2,
+        } = model_test(&gamma2, &cov_gamma2, false, equation.df_residual, true)?
+        else {
+            return Err("IV firststage: unexpected joint-test reference".into());
         };
 
         (
-            Some(r2),
-            r2_adj,
+            Some(equation.r2),
+            Some(equation.r2_adjusted),
             Some(partial_r2),
             Some(f_stat),
             Some(f_p_value),
@@ -313,16 +267,18 @@ pub(crate) fn compute_first_stage_summary(
                 .zip(y1_hat_tilde.iter())
                 .map(|(a, b)| (a - b).powi(2))
                 .sum::<f64>();
-            let r2_s = if ss_tot > 1e-300 {
-                1.0 - ss_resid / ss_tot
-            } else {
-                0.0
-            };
+            if !ss_tot.is_finite() || ss_tot <= 0.0 {
+                return Err("IV firststage: Shea response variation is undefined".into());
+            }
+            let r2_s = 1.0 - ss_resid / ss_tot;
             let r2_s_adj = if has_constant {
                 1.0 - (1.0 - r2_s) * (n - 1) as f64 / (n - k_z + 1) as f64
             } else {
                 1.0 - (1.0 - r2_s) * (n - 1) as f64 / (n - k_z) as f64
             };
+            if !r2_s.is_finite() || !r2_s_adj.is_finite() {
+                return Err("IV firststage: Shea R-squared is undefined".into());
+            }
             shea_partial.push(r2_s);
             shea_adj.push(r2_s_adj);
         }

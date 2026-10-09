@@ -5,7 +5,7 @@ use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, St
 use yss_sci_contract::causal::iv::{InstrumentalVariableModelTest, InstrumentalVariableStatistics};
 use yss_sci_contract::hypothesis::Alternative;
 use yss_sci_contract::regression::fit::RegressionCoefficientStatistics;
-use yss_sci_linalg::{Col, Mat, MatrixExt, Solve};
+use yss_sci_linalg::{Col, ColRef, Mat, MatrixExt, Solve};
 
 #[derive(Debug)]
 pub struct IvEstimate {
@@ -17,7 +17,7 @@ pub struct IvEstimate {
 }
 
 pub(super) fn coefficient_inference(
-    betas: &Col<f64>,
+    betas: ColRef<'_, f64>,
     covariance: &Mat<f64>,
     df_residual: usize,
     small: bool,

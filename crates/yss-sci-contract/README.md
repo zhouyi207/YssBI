@@ -119,7 +119,12 @@ the borrowed model contract.
   with its degrees by default, or F with numerator/denominator degrees for
   `small=true`. Both variants retain the statistic and p-value; serialization
   tags the current `modelTest` record by `distribution` with camel-case fields.
-  First-stage, overidentification, Hausman and
+  `FirstStageResult` carries `betas`, the shared
+  `RegressionCoefficientStatistics` as `inference`, actual `df_residual`, R² and
+  adjusted R² alongside equation/variable names. The selected covariance inside
+  that inference record supplies both the coefficient table and excluded-instrument
+  F test. First-stage inference uses OLS residual degrees independently of the
+  structural `small` option. First-stage, overidentification, Hausman and
   endogenous-regressor results are independent records, selected through
   `IvSummaryOptions` rather than embedded in every fit.
 - `causal::did`: DID inputs, inference results and typed unavailable/error codes.

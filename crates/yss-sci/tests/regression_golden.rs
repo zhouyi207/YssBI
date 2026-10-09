@@ -207,32 +207,8 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
         small: false,
     };
     let fit = estimator.fit_2sls().unwrap();
-    let (equations, first_stage) = estimator.first_stage(false).unwrap();
+    assert!(estimator.first_stage(false).is_err());
     let (hausman, endogenous) = estimator.endogeneity(&fit.betas).unwrap();
-    assert!(equations.iter().all(|equation| {
-        equation
-            .betas
-            .iter()
-            .chain(&equation.stds)
-            .chain(&equation.tvalues)
-            .chain(&equation.pvalues)
-            .chain(&equation.conf_int_left)
-            .chain(&equation.conf_int_right)
-            .chain([&equation.r2, &equation.r2_adjusted])
-            .all(|value| value.is_finite())
-    }));
-    assert!(
-        [
-            first_stage.r2,
-            first_stage.partial_r2,
-            first_stage.f_stat,
-            first_stage.f_p_value,
-            Some(first_stage.min_eigenvalue),
-        ]
-        .into_iter()
-        .flatten()
-        .all(f64::is_finite)
-    );
     let endogenous = endogenous.unwrap();
     assert!(
         [
@@ -244,11 +220,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
         .into_iter()
         .all(f64::is_finite)
     );
-    assert!(
-        first_stage.r2_adjusted.is_none() && hausman.is_none(),
-        "undefined diagnostics must stay typed None: adjusted R²={:?}, Hausman={hausman:?}",
-        first_stage.r2_adjusted,
-    );
+    assert!(hausman.is_none(), "rank-zero Hausman must stay unavailable");
 
     let short = IvModel {
         endog: Col::from_iter([1.0, 2.0]),
@@ -635,6 +607,125 @@ fn liml_overidentified_robust_covariance_preserves_k_class_bread() {
             );
             assert!(actual[0][1].abs() < 1e-10 && actual[1][0].abs() < 1e-10);
         }
+    }
+}
+
+#[test]
+fn iv_first_stage_inference_uses_selected_covariance_and_matching_f_reference() {
+    use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    for constant in [true, false] {
+        for covariance in [
+            OlsCovariance::Hc0,
+            OlsCovariance::NonRobust,
+            OlsCovariance::Hc1,
+            OlsCovariance::Hc2,
+            OlsCovariance::Hc3,
+        ] {
+            let model = IvModel {
+                endog: Col::from_fn(8, |row| signal(row, 2)),
+                exog: Mat::zeros(8, 0),
+                endog_reg: Mat::from_fn(8, 1, |row, _| {
+                    1.0 + 0.5 * signal(row, 0) + signal(row, 1) * (1.0 + 0.5 * signal(row, 0))
+                }),
+                instruments: Mat::from_fn(8, 1, |row, _| signal(row, 0)),
+                options: OlsOptions {
+                    constant,
+                    covariance: covariance.clone(),
+                },
+                small: false,
+            };
+            let (equations, summary) = model.first_stage(false).unwrap();
+            let df = if constant { 6 } else { 7 };
+            let base = if constant { 5.0 / 32.0 } else { 9.0 / 32.0 };
+            let variance = match covariance {
+                OlsCovariance::Hc0 => base,
+                OlsCovariance::Hc3 => base * (8.0_f64 / df as f64).powi(2),
+                _ => base * 8.0 / df as f64,
+            };
+            let expected_p = match (constant, &covariance) {
+                (true, OlsCovariance::Hc0) => 0.25281011330107206,
+                (true, OlsCovariance::Hc3) => 0.3794097894803541,
+                (true, _) => 0.3153335962012296,
+                (false, OlsCovariance::Hc0) => 0.37717106261322186,
+                (false, OlsCovariance::Hc3) => 0.4366017029652409,
+                (false, _) => 0.4070838220655889,
+            };
+            assert!((summary.f_stat.unwrap() - 0.25 / variance).abs() < 1e-10);
+            assert!(
+                (summary.f_p_value.unwrap() - expected_p).abs() < 1e-10,
+                "{constant} {covariance:?}: {:?}",
+                summary.f_p_value
+            );
+            let equation = serde_json::to_value(&equations[0]).unwrap();
+            let inference = &equation["inference"];
+            let slope = usize::from(constant);
+            assert!(
+                (inference["standardErrors"][slope].as_f64().unwrap().powi(2) - variance).abs()
+                    < 1e-10
+            );
+            assert!((inference["pValues"][slope].as_f64().unwrap() - expected_p).abs() < 1e-10);
+            assert_eq!(equation["df_residual"], df);
+            assert!(
+                (equation["r2"].as_f64().unwrap() - if constant { 1.0 / 6.0 } else { 0.1 }).abs()
+                    < 1e-10
+            );
+            assert!(
+                (equation["r2_adjusted"].as_f64().unwrap()
+                    - if constant { 1.0 / 36.0 } else { -1.0 / 35.0 })
+                .abs()
+                    < 1e-10
+            );
+            if constant && !matches!(covariance, OlsCovariance::NonRobust) {
+                assert!(inference["covariance"][0][1].as_f64().unwrap().abs() > 0.1);
+            }
+        }
+    }
+}
+
+#[test]
+fn iv_first_stage_rejects_zero_variance_and_preserves_tiny_response_units() {
+    use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+    let exact = IvModel {
+        endog: Col::from_iter((1..=16).map(f64::from)),
+        exog: Mat::zeros(16, 0),
+        endog_reg: Mat::from_fn(16, 1, |_, _| 1.0),
+        instruments: Mat::from_fn(16, 1, |_, _| 1.0),
+        options: OlsOptions {
+            constant: false,
+            covariance: OlsCovariance::NonRobust,
+        },
+        small: false,
+    };
+    assert!(exact.fit_2sls().is_ok());
+    assert!(
+        exact.first_stage(false).is_err(),
+        "exact first-stage variance must not be replaced by a floor"
+    );
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    for scale in [1.0, 1e-151] {
+        let model = IvModel {
+            endog: Col::from_fn(8, |row| signal(row, 2)),
+            exog: Mat::zeros(8, 0),
+            endog_reg: Mat::from_fn(8, 1, |row, _| {
+                scale * (1.0 + 0.5 * signal(row, 0) + signal(row, 1) * (1.0 + 0.5 * signal(row, 0)))
+            }),
+            instruments: Mat::from_fn(8, 1, |row, _| signal(row, 0)),
+            options: OlsOptions {
+                constant: true,
+                covariance: OlsCovariance::NonRobust,
+            },
+            small: false,
+        };
+        let (_, summary) = model.first_stage(false).unwrap();
+        assert!(
+            (summary.f_stat.unwrap() - 1.2).abs() < 1e-10,
+            "scale={scale}: {:?}",
+            summary.f_stat
+        );
+        assert!((summary.min_eigenvalue - 1.2).abs() < 1e-10);
+        assert!((summary.r2.unwrap() - 1.0 / 6.0).abs() < 1e-10);
+        assert!((summary.partial_r2.unwrap() - 1.0 / 6.0).abs() < 1e-10);
     }
 }
 

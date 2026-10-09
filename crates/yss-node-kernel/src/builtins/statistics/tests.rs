@@ -804,6 +804,7 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         };
         let mut row_index = 0;
         for equation in equations.iter() {
+            let inference = field(equation, "inference").unwrap();
             let RuntimeValue::List(names) = field(equation, "var_names").unwrap() else {
                 panic!("first-stage labels")
             };
@@ -814,15 +815,15 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
                     field(equation, "endog_name").unwrap()
                 );
                 assert_eq!(field(row, "variable").unwrap(), name);
-                for (display, source) in [
-                    ("estimate", "betas"),
-                    ("standard_error", "stds"),
-                    ("statistic", "tvalues"),
-                    ("p_value", "pvalues"),
-                    ("ci_lower", "conf_int_left"),
-                    ("ci_upper", "conf_int_right"),
+                for (display, source, record) in [
+                    ("estimate", "betas", equation),
+                    ("standard_error", "standardErrors", inference),
+                    ("statistic", "statisticValues", inference),
+                    ("p_value", "pValues", inference),
+                    ("ci_lower", "confidenceIntervalLower", inference),
+                    ("ci_upper", "confidenceIntervalUpper", inference),
                 ] {
-                    let RuntimeValue::List(values) = field(equation, source).unwrap() else {
+                    let RuntimeValue::List(values) = field(record, source).unwrap() else {
                         panic!("first-stage coefficient values")
                     };
                     assert_eq!(field(row, display).unwrap(), &values[index]);
@@ -1090,27 +1091,36 @@ fn iv_nodes_accept_multiple_instruments_and_preserve_identification_results() {
         3,
     )
     .unwrap();
+    let mut summary_parameters = [
+        ("model_summary", flag(false)),
+        ("coefficient_table", flag(false)),
+        ("first_stage", flag(true)),
+        ("overidentification", flag(false)),
+        ("endogeneity", flag(true)),
+        ("hypothesis_test", flag(false)),
+        ("hypothesis", string("x1 = 0")),
+    ];
+    assert!(matches!(
+        run(
+            "yssbi.statistics.iv.2sls.summary",
+            &[("model", fit[0].clone())],
+            &summary_parameters,
+            1,
+        ),
+        Err(KernelError::ScientificFailure)
+    ));
+    summary_parameters
+        .iter_mut()
+        .find(|(key, _)| *key == "first_stage")
+        .unwrap()
+        .1 = flag(false);
     let summary = run(
         "yssbi.statistics.iv.2sls.summary",
         &[("model", fit[0].clone())],
-        &[
-            ("model_summary", flag(false)),
-            ("coefficient_table", flag(false)),
-            ("first_stage", flag(true)),
-            ("overidentification", flag(false)),
-            ("endogeneity", flag(true)),
-            ("hypothesis_test", flag(false)),
-            ("hypothesis", string("x1 = 0")),
-        ],
+        &summary_parameters,
         1,
     )
     .unwrap();
-    let statistics = field(field(&summary[0], "firstStage").unwrap(), "statistics").unwrap();
-    assert_eq!(
-        field(statistics, "r2_adjusted").unwrap(),
-        &RuntimeValue::Scalar(TabularScalar::Null),
-        "undefined centered adjusted R² is unavailable"
-    );
     assert_eq!(
         field(field(&summary[0], "endogeneity").unwrap(), "hausman").unwrap(),
         &RuntimeValue::Scalar(TabularScalar::Null),
