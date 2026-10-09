@@ -215,7 +215,8 @@ pub(super) fn install(
                 | "yssbi.statistics.spatial.slx"
                 | "yssbi.statistics.survey.linear_regression"
                 | "yssbi.statistics.survey.logistic"
-                | "yssbi.statistics.survey.poisson" => 6,
+                | "yssbi.statistics.survey.poisson"
+                | "yssbi.statistics.timeseries.phillips_perron" => 6,
                 "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
                 | "yssbi.statistics.diagnostic.ljung_box"
@@ -234,7 +235,7 @@ pub(super) fn install(
                 | "yssbi.statistics.test.normality"
                 | "yssbi.statistics.workflow.delphi"
                 | "yssbi.statistics.timeseries.grey_prediction"
-                | "yssbi.statistics.timeseries.phillips_perron" => 5,
+                | "yssbi.statistics.timeseries.kpss" => 5,
                 _ if id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks" =>
                 {

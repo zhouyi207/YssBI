@@ -467,6 +467,15 @@ offset or allocating differences, including for direct SCI and Runtime callers.
 ECM suppresses ordinary long-run OLS inference for cointegrating equations.
 EGARCH averages simulated variances with an explicit seed; other volatility models
 use analytic conditional-variance forecasts. KPSS reports its table-tail bounds.
+PP/KPSS normalize the series once before fitting and moment accumulation, retaining
+dimensionless statistics and the existing MacKinnon/table calibration. They restore
+only the reported long-run variance, applying response units after the normalized
+moment and requiring a positive finite result. PP borrows its lagged response column
+and computes the lag coefficient and standard error directly from Design's scale;
+it does not restore an unused inverse matrix. Both tests reuse fitted buffers as
+residuals; their shared controlled accumulator supplies the zero-lag and Bartlett
+moments once. Unit regressions cover positive subnormal variances and large finite
+reports whose unnormalized intermediate sums overflow.
 All new entry points accept execution control, reject invalid domains and preserve
 source-row alignment; admissibility comes from model identification and caller-owned
 workspace budgets rather than a fixed observation ceiling. Numerical references in

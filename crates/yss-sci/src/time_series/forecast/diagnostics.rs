@@ -1,11 +1,44 @@
 use super::*;
 
-fn long_run_variance(residuals: &[f64], bandwidth: usize, control: &Control) -> Result<f64> {
+fn normalized_series(y: &[f64], control: &Control) -> Result<(Vec<f64>, f64)> {
+    let mut scale: f64 = 0.0;
+    for (i, value) in y.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        scale = scale.max(value.abs());
+    }
+    if scale == 0.0 {
+        scale = 1.0;
+    }
+    let mut response = Vec::with_capacity(y.len());
+    for (i, value) in y.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        response.push(value / scale);
+    }
+    Ok((response, scale))
+}
+
+fn long_run_variance(
+    residuals: &[f64],
+    bandwidth: usize,
+    response_scale: f64,
+    control: &Control,
+) -> Result<(f64, f64, f64)> {
     if bandwidth >= residuals.len() {
         return Err(parameter());
     }
     let n = residuals.len() as f64;
-    let mut variance = residuals.iter().map(|v| v * v / n).sum::<f64>();
+    let mut gamma0 = 0.0;
+    for (i, value) in residuals.iter().enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        gamma0 += value * value / n;
+    }
+    let mut variance = gamma0;
     for lag in 1..=bandwidth {
         control.check()?;
         let mut cov = 0.0;
@@ -21,7 +54,13 @@ fn long_run_variance(residuals: &[f64], bandwidth: usize, control: &Control) -> 
     if variance <= 0.0 {
         return Err(parameter());
     }
-    Ok(variance)
+    // Statistics use normalized moments; only the reported long-run variance
+    // returns to physical units, without first squaring the response scale.
+    let raw_variance = finite((variance * response_scale) * response_scale)?;
+    if raw_variance <= 0.0 {
+        return Err(parameter());
+    }
+    Ok((gamma0, variance, raw_variance))
 }
 
 pub fn phillips_perron(
@@ -34,30 +73,36 @@ pub fn phillips_perron(
     if y.len() < 4 {
         return Err(parameter());
     }
+    let (response, response_scale) = normalized_series(y, control)?;
+    let y = response.as_slice();
     let n = y.len() - 1;
     let constant = deterministic != Deterministic::None;
-    let mut predictors = vec![y[..n].to_vec()];
-    if deterministic == Deterministic::Trend {
-        predictors.push((1..=n).map(|i| i as f64).collect());
+    let trend = (deterministic == Deterministic::Trend)
+        .then(|| (1..=n).map(|i| i as f64).collect::<Vec<_>>());
+    let mut predictors = vec![&y[..n]];
+    if let Some(trend) = &trend {
+        predictors.push(trend.as_slice());
     }
     let design = Design::new(&predictors, n, constant, true, true, control)?;
     let (beta, inverse) = least_squares(&design.x, &y[1..], None, control)?;
-    let residuals: Vec<_> = y[1..]
-        .iter()
-        .zip(fitted(&design.x, &beta))
-        .map(|(a, b)| a - b)
-        .collect();
-    let gamma0 = residuals.iter().map(|v| v * v / n as f64).sum::<f64>();
+    let mut residuals = fitted(&design.x, &beta);
+    for (i, (residual, value)) in residuals.iter_mut().zip(&y[1..]).enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        *residual = value - *residual;
+    }
+    let (gamma0, lambda2, raw_lambda2) =
+        long_run_variance(&residuals, bandwidth, response_scale, control)?;
     let s2 = gamma0 * n as f64 / (n - beta.len()) as f64;
-    let (raw, cov) = design.raw(&beta, Some(inverse));
     let j = usize::from(constant);
-    let se = finite((cov.ok_or_else(failed)?[(j, j)] * s2).sqrt())?;
-    let lambda2 = long_run_variance(&residuals, bandwidth, control)?;
+    let rho = beta[j] / design.scales[0];
+    let se = finite((inverse[(j, j)] * s2).sqrt() / design.scales[0])?;
     if se <= 0.0 || s2 <= 0.0 {
         return Err(parameter());
     }
     let statistic = finite(
-        (gamma0 / lambda2).sqrt() * (raw[j] - 1.0) / se
+        (gamma0 / lambda2).sqrt() * (rho - 1.0) / se
             - 0.5 * (lambda2 - gamma0) / lambda2.sqrt() * (n as f64 * se / s2.sqrt()),
     )?;
     let p_value = super::super::mackinnon::p_value(statistic, deterministic, 1);
@@ -71,7 +116,7 @@ pub fn phillips_perron(
         p_value,
         p_value_kind: "mackinnon_approximation".into(),
         critical_values: vec![],
-        long_run_variance: lambda2,
+        long_run_variance: raw_lambda2,
     })
 }
 
@@ -85,6 +130,8 @@ pub fn kpss(
     if y.len() < 3 || deterministic == Deterministic::None {
         return Err(parameter());
     }
+    let (response, response_scale) = normalized_series(y, control)?;
+    let y = response.as_slice();
     let x: Vec<Vec<f64>> = if deterministic == Deterministic::Trend {
         vec![(1..=y.len()).map(|i| i as f64).collect()]
     } else {
@@ -92,12 +139,15 @@ pub fn kpss(
     };
     let design = Design::new(&x, y.len(), true, true, true, control)?;
     let (beta, _) = least_squares(&design.x, y, None, control)?;
-    let residuals: Vec<_> = y
-        .iter()
-        .zip(fitted(&design.x, &beta))
-        .map(|(a, b)| a - b)
-        .collect();
-    let variance = long_run_variance(&residuals, bandwidth, control)?;
+    let mut residuals = fitted(&design.x, &beta);
+    for (i, (residual, value)) in residuals.iter_mut().zip(y).enumerate() {
+        if i % 1024 == 0 {
+            control.check()?;
+        }
+        *residual = value - *residual;
+    }
+    let (_, variance, raw_variance) =
+        long_run_variance(&residuals, bandwidth, response_scale, control)?;
     let mut sum = 0.0;
     let mut eta = 0.0;
     for (i, e) in residuals.iter().enumerate() {
@@ -143,6 +193,6 @@ pub fn kpss(
             .zip(critical)
             .map(|(p, v)| estimate(format!("alpha_{p}"), v))
             .collect(),
-        long_run_variance: variance,
+        long_run_variance: raw_variance,
     })
 }

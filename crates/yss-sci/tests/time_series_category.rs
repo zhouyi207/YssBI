@@ -163,6 +163,67 @@ fn time_series_stationarity_matches_arch_and_statsmodels_with_reported_tail_boun
     close(r.p_value, 0.1, 1e-12);
 }
 
+fn check_stationarity_response_units(scale: f64) {
+    let f = fixture();
+    let y = vector(&f["series"]);
+    let scaled = y.iter().map(|value| value * scale).collect::<Vec<_>>();
+    for case in f["stationarity"].as_array().unwrap() {
+        let trend = match case["trend"].as_str().unwrap() {
+            "n" => Deterministic::None,
+            "c" => Deterministic::Constant,
+            _ => Deterministic::Trend,
+        };
+        let fit = |series: &[f64]| {
+            if case["method"] == "pp" {
+                phillips_perron(series, 4, trend, &control())
+            } else {
+                kpss(series, 4, trend, &control())
+            }
+        };
+        let baseline = fit(&y).unwrap();
+        let result = fit(&scaled).unwrap_or_else(|error| {
+            panic!(
+                "{} {} in units {scale}: {error:?}",
+                case["method"], case["trend"]
+            )
+        });
+        close(result.statistic, case["statistic"].as_f64().unwrap(), 1e-8);
+        close(result.p_value, case["p_value"].as_f64().unwrap(), 1e-8);
+        assert_eq!(result.method, baseline.method);
+        assert_eq!(result.observations, baseline.observations);
+        assert_eq!(
+            result.effective_observations,
+            baseline.effective_observations
+        );
+        assert_eq!(result.deterministic, baseline.deterministic);
+        assert_eq!(result.bandwidth, baseline.bandwidth);
+        assert_eq!(result.p_value_kind, baseline.p_value_kind);
+        assert_eq!(result.critical_values, baseline.critical_values);
+        let expected_variance = (baseline.long_run_variance * scale) * scale;
+        assert!(expected_variance.is_finite() && expected_variance > 0.0);
+        assert!(result.long_run_variance.is_finite() && result.long_run_variance > 0.0);
+        let tolerance = (1e-10 * expected_variance).max(2.0 * f64::from_bits(1));
+        assert!(
+            (result.long_run_variance - expected_variance).abs() <= tolerance,
+            "long-run variance {} != {expected_variance}",
+            result.long_run_variance
+        );
+        if scale < 1.0 {
+            assert!(result.long_run_variance < f64::MIN_POSITIVE);
+        }
+    }
+}
+
+#[test]
+fn stationarity_response_units_preserve_subnormal_long_run_variance() {
+    check_stationarity_response_units(1e-161);
+}
+
+#[test]
+fn stationarity_response_units_avoid_large_intermediate_products() {
+    check_stationarity_response_units(1e152);
+}
+
 #[test]
 fn time_series_ecm_and_grey_forecast_match_independent_least_squares() {
     let f = fixture();
