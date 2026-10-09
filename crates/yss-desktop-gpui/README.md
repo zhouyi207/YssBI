@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: GPUI 原生桌面入口、项目导航、工作台、资源及图表编辑、执行结果、Assistant、模型设置与插件管理
-> Canonical owners: Cargo.toml、src/main.rs、src/window_chrome.rs、src/services.rs、src/projects/、src/workbench/、src/canvas/、src/documents/、src/minds/、src/databases/、src/charts/、src/plots/、src/imports/、src/plugins/、src/settings/、src/assistant/、src/file_commands.rs
+> Canonical owners: Cargo.toml、src/main.rs、src/window_chrome.rs、src/services.rs、src/projects/、src/workbench/、src/canvas/、src/documents/、src/markdown.rs、src/minds/、src/databases/、src/charts/、src/plots/、src/imports/、src/plugins/、src/settings/、src/assistant/、src/file_commands.rs
 > Update when: 原生宿主能力、状态所有权、启动方式或验收范围变化时
 
 这是 workspace 的默认原生桌面入口，使用 GPUI Pre 0.3.8 和 GPUI Component 0.7.1。
@@ -85,6 +85,16 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   项目或版本失效不覆盖当前输入，干净文档可安装同一后端的后续投影；读取/保存期间收到的失效通知合并后重新查询。
   `documents/details` 从同一编辑器读取文件名、路径、保存/读取状态和错误；工作台只选择展示目标，不另建文件状态。
   数学公式与外部引用预览仍待迁移。
+- `markdown`：节点文档、文档预览、Assistant 消息/引用和 Mind 标签共用 `Markdown` TextView 插件。
+  后台解析、文本选择、表格横向滚动及代码高亮复用原生组件；Cargo 显式启用 Bash、CSS、HTML、JavaScript、JSON、Python、Rust、SQL、TOML、TSX、TypeScript、YAML grammar。
+  高亮与主题更新沿用组件缓存，未知语言保持源码；R/Julia 高亮、单波浪号语义和脚注导航仍待迁移。
+  `markdown/links` 只将无凭据的 HTTP(S) URL 交给平台，在后台调用 [open](https://docs.rs/open/5.4.1/open/fn.that.html)，失败显示本地化通知；不记录 URL 或底层错误正文。
+  项目资源导航由调用方提供，同段显示公式拆出的正文继承相同链接处理。
+- `markdown/math`：`$…$` 使用行内数学样式与文字基线；`$$…$$` 和 `math` 围栏使用显示样式，宽公式在正文列内横向滚动。
+  同一段的顶层 `$$…$$` 拆成公式与正文；嵌套标记、引用式链接和连续跨块选择继续验收。
+  通过 [RaTeX](https://github.com/erweixin/RaTeX) 的 parser/layout/svg crates 生成包含字形轮廓的 SVG，GPUI 按字号与缩放绘制，单色公式继承正文颜色。
+  `markdown/typesetting` 在后台解析阶段排版，128 项 LRU 按公式与数学样式复用成功和失败；视图渲染不解析 LaTeX，不依赖 WebView 或在线服务。
+  无效公式回退为原始源码；公式右键可复制保留分隔符的源码。普通代码和转义美元符号保持字面量；Assistant 的替代公式分隔符仍待迁移。
 - `minds`：Project MindSnapshot 的原生树画布。layout 按父子关系、兄弟顺序、折叠状态和内容推导坐标；
   render 绘制有界可见主题、Markdown 标签与合并曲线；input 拥有选择、框选、平移、缩放与取消。
   details 挂载到已有 Details 面板并借用所选主题；父主题候选仅在菜单打开时派生，排除自身和后代，重复选择当前父主题不提交。
@@ -272,7 +282,12 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   消息复制复用原生 Clipboard 的按点击取值和成功反馈，仅拼接有效正文；运行中的回复不显示复制按钮。Worker 摘要去重直接比较正文片段，不在重绘时拼接全文。
 - `assistant/render/plain`：用户消息、思考和失败技术码共用原生只读 Textarea，保留原始标记、空白及换行，支持局部选择、键盘导航和复制。
   可见窗口的元素状态持有控件；只有投影文本变化才更新内容，并保留选区和滚动，隐藏后释放控件状态。用户编辑不改写消息事实。
-  回复仍使用 Markdown；链接、代码块及共享富文本行为由对应组件继续审查。
+  回复、Worker 摘要和引用片段使用共享 Markdown。
+- `assistant/markdown`：为回复、摘要和来源片段设置代码语言、原生 Clipboard 操作与流式淡入，代码操作保留独立元素身份。
+  复制按点击读取所在代码块，保留缩进、空白和最终换行；操作区预留顶部高度，长代码在列内横向滚动。高亮和复制不改写消息投影。
+  `yssbi://` 的六类类型身份与相对路径只在激活时从当前共享资源目录解析；严格 UTF-8 百分号解码，相对路径要求唯一匹配。
+  打开继续调用原 `open_reference` 与工作台路由，沿用项目核验、打开去重与失败反馈；不另建目录、查询或编辑器状态。
+  非资源链接交回共享外链入口；缺失或无效资源显示本地化通知。锚点定位与无效链接的禁用外观继续审查。
 - `assistant/tools`：工具调用序列共用 Collapsible 分组，直接借用事件投影计算总数、完成数、失败数及当前工具。
   已连接且运行时默认展开，手动选择优先；断流停止转圈并显示待确认，组收起释放工具详情的窗口状态。
   `assistant/projection/tool` 归约完成、失败、超时、取消、结果未知及图执行结果；调用完成不覆盖已记录的图执行状态。

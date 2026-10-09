@@ -11,6 +11,7 @@ mod databases;
 mod documents;
 mod file_commands;
 mod imports;
+mod markdown;
 mod minds;
 mod plots;
 mod plugins;

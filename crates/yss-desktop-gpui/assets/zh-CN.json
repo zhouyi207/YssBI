@@ -2947,6 +2947,9 @@
       "workflowStepCompleted": "工作流 {{run_id}} · {{step_id}} · 完成",
       "workflowStepFailed": "工作流 {{run_id}} · {{step_id}} · 失败{{value0}}",
       "workflowStepStarted": "工作流 {{run_id}} · {{step_id}} · 开始"
+    },
+    "markdown": {
+      "copyFormula": "复制公式源码"
     }
   }
 }

@@ -7,7 +7,6 @@ use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*, px};
 use gpui_component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
-    text::TextView,
 };
 use gpui_kit_assets::IconName;
 use yss_harness_contract::ModelCallPurpose;
@@ -64,6 +63,8 @@ impl ConversationPanel {
                     body = body.child(markdown(
                         format!("text-{id}"),
                         text.text[..text.valid_bytes].to_owned(),
+                        running && self.timing_connected(),
+                        cx,
                     ));
                 }
                 if text.valid_bytes < text.text.len() {
@@ -79,6 +80,8 @@ impl ConversationPanel {
                         body = body.child(markdown(
                             format!("retracted-text-{id}"),
                             text.text[text.valid_bytes..].to_owned(),
+                            false,
+                            cx,
                         ));
                     }
                 }
@@ -291,8 +294,19 @@ impl ConversationPanel {
     }
 }
 
-pub(super) fn markdown(id: String, text: String) -> AnyElement {
-    TextView::markdown(SharedString::from(id), text).into_any_element()
+pub(super) fn markdown(
+    id: String,
+    text: String,
+    streaming: bool,
+    cx: &mut Context<ConversationPanel>,
+) -> AnyElement {
+    super::super::markdown::view(
+        SharedString::from(id),
+        text,
+        streaming,
+        cx.entity().downgrade(),
+    )
+    .into_any_element()
 }
 
 /// Localize status events at presentation time, preserving all authored/model text verbatim.

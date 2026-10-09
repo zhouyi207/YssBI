@@ -221,7 +221,7 @@ impl MindCanvas {
                     view.begin_topic(click_id.clone(), event, window, cx)
                 }),
             )
-            .child(TextView::new(&label))
+            .child(TextView::new(&label).plugin(crate::markdown::Markdown::default()))
             .when(placement.children > 0, |view| {
                 view.child(
                     div()

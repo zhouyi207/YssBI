@@ -23,6 +23,8 @@ impl ConversationPanel {
             body = body.child(super::output::markdown(
                 format!("task-summary-{id}"),
                 summary.clone(),
+                false,
+                cx,
             ));
         }
         for warning in &task.warnings {

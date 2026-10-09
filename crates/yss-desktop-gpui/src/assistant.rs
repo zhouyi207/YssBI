@@ -6,6 +6,7 @@ mod drafts;
 mod execution;
 mod header;
 mod inspect;
+mod markdown;
 mod models;
 mod options;
 mod projection;

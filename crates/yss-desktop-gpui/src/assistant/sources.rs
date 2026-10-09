@@ -8,7 +8,6 @@ use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
-    text::TextView,
 };
 use gpui_kit_assets::IconName;
 use yss_harness_contract::{KnowledgeCitation, ProjectResourceRef};
@@ -203,7 +202,12 @@ impl Render for Source {
                     .min_w_0()
                     .max_h(px(360.))
                     .overflow_y_scroll()
-                    .child(TextView::markdown("citation-text", detail.text.clone())),
+                    .child(super::markdown::view(
+                        "citation-text",
+                        detail.text.clone(),
+                        false,
+                        self.owner.clone(),
+                    )),
             );
         }
         Collapsible::new()

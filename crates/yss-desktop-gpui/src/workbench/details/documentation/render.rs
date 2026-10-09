@@ -83,6 +83,7 @@ impl NodeDocumentation {
                 let mut table = gpui::StyleRefinement::default();
                 table.overflow.x = Some(gpui::Overflow::Scroll);
                 TextView::new(markdown)
+                    .plugin(crate::markdown::Markdown::default())
                     .scrollable(false)
                     .style(
                         TextViewStyle::default()

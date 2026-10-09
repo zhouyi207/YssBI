@@ -566,6 +566,18 @@
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；4 个 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true`、复用双语键/参数、文档元信息与相对链接、`node scripts/generate-crate-dependencies.mjs --check` 及 `git diff --check` 通过。窗口以 `cargo build -p yss-desktop-gpui --example assistant_text_review --locked` 构建，临时入口和隔离数据不提交。
 - 本批无后端接口、依赖或 UI 单元测试变更，不运行全工作区验证。物理输入/IME、读屏、真实模型交付、Windows/macOS、预览中未显示的表情字形和已有嵌套 Xwayland 局部重绘仍待验收；Markdown 的代码块、链接及共享富文本职责继续审查，Thread 暂不标记整体完成，累计仍为 188/265 项。
 
+### 共享 Markdown、代码操作与链接（继续审查）
+
+- 已阅读 AssistantMarkdown、MarkdownLink、MarkdownRenderer 及共用渲染、语法高亮、样式和资源/外链服务。正文与 Worker 摘要、来源片段复用 `assistant/markdown`，选择、后台解析、流式淡入及高亮沿用 TextView；不新增业务投影或解析器。
+- 代码块增加语言与 Clipboard 操作，保留缩进、Tab、Unicode、空行和最终换行。使用原生代码滚动容器，将操作留在视口，代码按自然行宽滚动；宽表格独立横向滚动。
+- 共享 `markdown` 插件统一外链与公式，Assistant 激活资源链接时读取当前共享目录并沿用原工作台路由；公式同段拆出的正文继承链接回调。外链只接受无凭据的 HTTP(S)，平台打开在后台执行，失败呈现本地化通知。
+- LaTeX 使用 RaTeX 原生字形 SVG，后台排版以 128 项 LRU 复用成功/失败；行内、同段/多行显示数学与 `math` 围栏共用渲染，失败保留源码，右键复制保留分隔符。开启组件已有的 12 类 grammar；SQL grammar 要求 `cc ~1.2`，lockfile 使用兼容的 1.2.67，未升级其他已锁定依赖。
+- 当前工作区和独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings`；迭代期间原生 `cargo check` 通过。局部 Rust 格式、双语文案、文档链接/声明、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。影响限于原生宿主及共用 TextView 消费者，无后端接口变更，不运行全工作区测试，也不新增 UI 单元测试。
+- 临时 `cargo build -p yss-desktop-gpui --example assistant_markdown_review --locked` 在 Linux/X11 原生窗口核对：独立代码块复制、原始空白/Unicode/换行、局部正文选择、未闭合代码流式追加后复制、Rust/SQL/Python 高亮与未知语言回退、浅色高亮、长代码末端及固定操作、代码区纵向滚动交接、宽表格、行内/显示/围栏公式、无效公式与转义源码、宽公式末端、公式源码复制及明暗颜色。Worker 摘要和未保存文档预览共用渲染与链接也已核对。
+- 资源链接窗口验收使用隔离项目的真实文档入口，覆盖类型 URL、带空格的相对路径、公式两侧链接及无效编码反馈。外链通过临时 PATH 中的本地打开程序核对左键/中键交付、scheme/凭据过滤和失败通知；这不作为真实浏览器或其他平台验收。临时样例随后移出仓库。
+- R/Julia 高亮、单波浪号与原始 HTML 语义、Assistant 替代公式分隔符、脚注/锚点导航、图片呈现、无效链接禁用外观，以及公式嵌套标记/引用式链接/跨块选择继续处理。真实模型和来源交付、物理输入、读屏、Windows/macOS、表情字形与既有嵌套 Xwayland 局部重绘仍开放；临时浅色主题下原编辑区背景未同步的问题保留在外观验收中。三项 Markdown 与 Thread 不标记整体完成，累计仍为 188/265 项。
+
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -679,7 +691,7 @@
 | [modules/assistant/internal/ui/AssistantConversationToggle.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationToggle.tsx) | 优化 | 原 DockArea、目录查询和 Application 会话入口补齐整组关闭、上次/最近恢复、空目录新建及生命周期隔离；无项目沿用临时会话目录 | 代码已覆盖；本批窗口验收见记录，故障与跨平台余项开放 |
 | [modules/assistant/internal/ui/AssistantConversations.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversations.tsx) | 优化 | 原 Activity 目录与虚拟列表补齐时间、名称回退搜索、重命名按钮、窗口激活刷新；DockArea 决定当前会话，重复激活关闭，缓存重开仍校验 Application | 代码已覆盖；本批交互验收见批次记录，跨项目/平台验收开放 |
 | [modules/assistant/internal/ui/AssistantExecution.tsx](../../react/src/modules/assistant/internal/ui/AssistantExecution.tsx) | 迁移 | assistant/execution 共用事件计时、模型与记录选项；窗口仅为可见且连接正常的运行会话刷新 | 原生合成事件窗口通过；真实运行/持久回放与跨平台待验收 |
-| [modules/assistant/internal/ui/AssistantMarkdown.tsx](../../react/src/modules/assistant/internal/ui/AssistantMarkdown.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantMarkdown.tsx](../../react/src/modules/assistant/internal/ui/AssistantMarkdown.tsx) | 待查 | 已读代码操作、链接、数学预处理与流式配置；原生代码操作、12 类高亮、资源路由和共用公式已接入，替代分隔符等仍开放 | 合成事件窗口、系统剪贴板及隔离资源验收见本批；整体未完成 |
 | [modules/assistant/internal/ui/AssistantModelPicker.tsx](../../react/src/modules/assistant/internal/ui/AssistantModelPicker.tsx) | 迁移 | assistant/models 复用可搜索 Combobox；会话回执拥有选择，当前目录校验身份与凭据，隐藏释放弹出状态 | Linux/X11 合成目录与真实会话选择验收通过；真实供应商/其他平台待验收 |
 | [modules/assistant/internal/ui/AssistantPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantPanel.tsx) | 复用原生组件 | 薄包装由既有 ActivityPanel 与根 DockArea 承接，不增加会话列表或状态 owner | 包装无独立业务；目录交互随本批验收 |
 | [modules/assistant/internal/ui/AssistantReferences.tsx](../../react/src/modules/assistant/internal/ui/AssistantReferences.tsx) | 迁移并优化：复用共享项目目录、原生 Popover/List 与资源打开入口 | project/resources、assistant/references；连续选择和四处共用引用标签，移除会话重复查询 | 代码已覆盖；两处隔离窗口已验收，跨项目/失败/真实模型与平台验收仍开放 |
@@ -952,8 +964,8 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [shared/ui/BrandMark.tsx](../../react/src/shared/ui/BrandMark.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [shared/ui/MarkdownLink.tsx](../../react/src/shared/ui/MarkdownLink.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [shared/ui/MarkdownRenderer.tsx](../../react/src/shared/ui/MarkdownRenderer.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [shared/ui/MarkdownLink.tsx](../../react/src/shared/ui/MarkdownLink.tsx) | 待查 | 已读 URL 校验、激活、失败和锚点行为；HTTP(S) 后台打开、失败通知及资源回调已接入，锚点和无效链接外观仍开放 | 隔离窗口和本地打开程序验收见本批；真实浏览器与整体未完成 |
+| [shared/ui/MarkdownRenderer.tsx](../../react/src/shared/ui/MarkdownRenderer.tsx) | 待查 | 已读 GFM、公式、代码高亮和表格；共用原生插件已接入，单波浪号、HTML、脚注与图片等仍开放 | 公式、表格、代码高亮和文档预览验收见本批；整体未完成 |
 | [shared/ui/MessageDialog.tsx](../../react/src/shared/ui/MessageDialog.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [shared/ui/Modal.tsx](../../react/src/shared/ui/Modal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [shared/ui/PageAlert.tsx](../../react/src/shared/ui/PageAlert.tsx) | 复用原生通知与所属表单反馈 | 原文件组合标题/详情、语义图标、操作和关闭；项目错误/重试由现有 owner 承接，其他调用方随自身迁移，不新建通用告警状态 | 项目调用方已接入；真实交互待验收 |

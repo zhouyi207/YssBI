@@ -26,7 +26,9 @@ impl Render for DocumentEditor {
                     .size_full()
                     .px_8()
                     .py_6()
-                    .child(TextView::new(&self.preview))
+                    .child(
+                        TextView::new(&self.preview).plugin(crate::markdown::Markdown::default()),
+                    )
                     .into_any_element()
             } else {
                 Editor::new(&self.input)
