@@ -1,4 +1,5 @@
 //! Read-only transcript reduced from the existing public event projection.
+pub(super) mod usage;
 use std::collections::BTreeMap;
 use yss_harness_contract::{
     AgentRole, AgentRunState, HarnessResourceReference, HarnessTurnOptions, KnowledgeCitation,
@@ -67,6 +68,7 @@ pub(super) struct Turn {
     pub model: LanguageModelIdentity,
     pub timing: Timing,
     pub resources: Vec<HarnessResourceReference>,
+    pub consumption: usage::TurnUsage,
     pub text: String,
     pub reasoning: String,
     pub tools: Vec<Tool>,
@@ -109,6 +111,7 @@ impl Transcript {
                 model,
                 timing: Timing::started(event.occurred_at),
                 resources,
+                consumption: Default::default(),
                 text: String::new(),
                 reasoning: String::new(),
                 tools: vec![],
@@ -142,6 +145,7 @@ impl Turn {
     }
     fn accept(&mut self, at: u64, event: Event) {
         self.timing.updated_at = at;
+        self.consumption.accept(&event, false);
         match event {
             Event::TurnConfigured { options } => self.options = Some(options),
             Event::TextDelta { delta } => self.text.push_str(&delta),
@@ -229,6 +233,7 @@ impl Turn {
                     self.accept(at, *event);
                 } else if let Some(task) = self.tasks.get_mut(&run_id) {
                     task.timing.updated_at = at;
+                    self.consumption.accept(&event, true);
                     apply_tool(&mut task.tools, at, *event);
                 }
             }

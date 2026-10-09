@@ -184,6 +184,7 @@ impl ConversationPanel {
                     .flex_wrap()
                     .items_center()
                     .gap_1()
+                    .child(self.usage_indicator(cx))
                     .child(self.model_picker(cx))
                     .child(self.mode_picker(cx))
                     .child(self.effort_picker(cx))

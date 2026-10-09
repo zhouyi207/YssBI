@@ -482,6 +482,15 @@
 - 工作区及独立提交内容使用临时 `assistant_execution_review` 原生窗口验收：合成 AssistantEvent 经原投影入口交付，核对 1.2 秒、1 分 2 秒、1 小时 1 分 1 秒、持续运行、断流停止、恢复及取消后的固定耗时。工作区另核对任务/工具独立结束、会话切换后的计时器释放、历史与草稿隔离、配置缺失/到达、时间/模型提示、中英文及窄列/展开排版。没有模型请求或事件账本写入，不代表真实执行和持久回放验收。
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；两处受影响 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true` 通过。20 个文案键及双语参数、两份文档的元信息与相对链接均通过检查；`node scripts/generate-crate-dependencies.mjs --check` 校验 59 个 crate、240 条依赖声明，`git diff --check` 通过。不新增依赖或 UI 单元测试，不运行全工作区验证。真实模型运行、重启/持久回放、工具详情窗口的实际账本读取、物理键鼠/IME、读屏和其他平台保持待验收。累计完成源码审查 180/265 项，Assistant 其余组件仍开放。
 
+### 对话 Token 用量（AssistantTokenUsage）
+
+- 已阅读 AssistantTokenUsage、assistantUsage 与原事件归约，迁移本轮累计、主对话最近输入/容量、部分报告提示及记录模型名。`assistant/projection/usage` 在原序号 gate 后增量处理事件；`assistant/usage` 复用 ProgressCircle 与 Popover，只读当前轮次，不扫描历史或增加订阅。
+- 所有 Manager、Worker 与上下文整理报告均计入本轮，未知字段不伪装为零；缓存和推理作为输入/输出的子项单独展示，累计使用 u128 保留多个 u64 报告的精度。只有 Manager Response 更新最近占用，主对话整理完成清除该占用但保留累计，Worker 整理不覆盖主对话占用。新轮次重新统计，事件重放与重复序号沿用原入口。
+- 占用环使用原生控件，高占用提示从实际 90% 开始；环形最大填满，提示仍保留超过 100% 的真实比例。弹出层随当前事件和语言更新，模型名读取该轮记录，长数值换行且保留完整整数。
+- 独立提交副本及工作区的临时 `assistant_usage_review` 原生窗口已验收空用量、Manager/Worker/整理累计、缺失字段提示、整理清除占用、新轮次重置和弹出层实时更新；工作区另核对嵌套 Manager、Worker 整理不清空主占用、零容量、150% 提示、两个 u64 最大值累计、结束保留、同组事件重新归约/重复交付、中英文、窄列及保留 sidebar 的展开布局。大整数换行在工作区最终版本复验通过。通过窗口事件交互和合成 AssistantEvent 验收，没有模型调用或持久账本写入。
+- L2：两处 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；受影响的五个 Rust 文件局部 `rustfmt --check --edition 2024 --config skip_children=true`、12 个双语键/参数及文档元信息/相对链接检查通过。`node scripts/generate-crate-dependencies.mjs --check` 校验 59 个 crate、240 条依赖声明，`git diff --check` 通过。工作区初次预览构建受并发 SCI 编辑影响，相关改动修正后重新构建通过；未改动 SCI，不新增依赖或 UI 单元测试，不运行全工作区验证。
+- 真实供应商报告、持久回放、物理键鼠、读屏与其他平台仍待验收。ModelPicker 与 RunOptions 已阅读但仍有搜索、失效选择提示和控件交互审查待完成；其余 Assistant 组件保持开放。累计完成源码审查 181/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -596,14 +605,14 @@
 | [modules/assistant/internal/ui/AssistantConversations.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversations.tsx) | 优化 | 原 Activity 目录与虚拟列表补齐时间、名称回退搜索、重命名按钮、窗口激活刷新；DockArea 决定当前会话，重复激活关闭，缓存重开仍校验 Application | 代码已覆盖；本批交互验收见批次记录，跨项目/平台验收开放 |
 | [modules/assistant/internal/ui/AssistantExecution.tsx](../../react/src/modules/assistant/internal/ui/AssistantExecution.tsx) | 迁移 | assistant/execution 共用事件计时、模型与记录选项；窗口仅为可见且连接正常的运行会话刷新 | 原生合成事件窗口通过；真实运行/持久回放与跨平台待验收 |
 | [modules/assistant/internal/ui/AssistantMarkdown.tsx](../../react/src/modules/assistant/internal/ui/AssistantMarkdown.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/assistant/internal/ui/AssistantModelPicker.tsx](../../react/src/modules/assistant/internal/ui/AssistantModelPicker.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantModelPicker.tsx](../../react/src/modules/assistant/internal/ui/AssistantModelPicker.tsx) | 待查 | 已阅读组件与目录/选择调用方；原生 dropdown 缺少搜索、失效选择及凭据提示，继续迁移 | 待补齐并验收 |
 | [modules/assistant/internal/ui/AssistantPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantPanel.tsx) | 复用原生组件 | 薄包装由既有 ActivityPanel 与根 DockArea 承接，不增加会话列表或状态 owner | 包装无独立业务；目录交互随本批验收 |
 | [modules/assistant/internal/ui/AssistantReferences.tsx](../../react/src/modules/assistant/internal/ui/AssistantReferences.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 待查 | 已阅读模式/推理档位与目录默认值规则；复用原 HarnessTurnOptions，控件提示、选择状态和交互继续审查 | 待完整验收 |
 | [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读主组件；历史范围、加载锚点、最新消息跳转与底部跟随已迁入 assistant/thread；消息子组件及依赖继续审查 | 视口已通过合成事件的原生窗口验收；整体未完成 |
-| [modules/assistant/internal/ui/AssistantTokenUsage.tsx](../../react/src/modules/assistant/internal/ui/AssistantTokenUsage.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantTokenUsage.tsx](../../react/src/modules/assistant/internal/ui/AssistantTokenUsage.tsx) | 迁移 | 原事件投影增量统计本轮，原生 ProgressCircle/Popover 展示主对话占用及完整用量；未知与零分别保留 | 合成事件原生窗口通过；真实报告/持久回放与跨平台待验收 |
 | [modules/assistant/internal/ui/AssistantToolCalls.tsx](../../react/src/modules/assistant/internal/ui/AssistantToolCalls.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 
 ## modules/chart

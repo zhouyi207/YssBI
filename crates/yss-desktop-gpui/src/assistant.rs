@@ -8,6 +8,7 @@ mod projection;
 mod render;
 mod stream;
 mod thread;
+mod usage;
 
 use crate::services::NativeServices;
 use gpui::{
