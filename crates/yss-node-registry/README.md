@@ -28,6 +28,8 @@ Registry 不解释引用中的项目路径。四个函数 interface resolver ID 
 使用这些 resolver 的叶节点仍由其登记的执行角色判定。
 
 协议指纹保留执行相关声明及参数验证/规范化契约，忽略普通显示信息。
+指纹投影直接借用 Protocol 字段序列化，不复制临时 JSON 树；参数按键规范排序由
+Canonical Hash 负责，与分组和显示顺序无关。
 注册表指纹组合提供者、类型/构造器/类型类、解析器 ID、协议指纹、执行角色/实现身份和
 nominal 验证器身份/版本。序列化与规范编码使用 [Canonical Hash](../yss-canonical-hash/README.md)。
 指纹字符串由 `hex` 编码为完整的 64 个小写十六进制字符。

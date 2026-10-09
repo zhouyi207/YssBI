@@ -1,7 +1,10 @@
-use serde::{Deserialize, Serialize};
+use serde::ser::{SerializeMap, SerializeStruct};
+use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
 use yss_canonical_hash::{CanonicalEncodingError, hash_canonical};
-use yss_node_protocol::NodeProtocol;
+use yss_node_protocol::{
+    NodeInterfaceProtocol, NodeProtocol, Parameter, ParameterEditorSpec, Parameters, PortSpec,
+};
 
 macro_rules! fingerprint {
     ($name:ident) => {
@@ -39,57 +42,111 @@ fingerprint!(RegistryFingerprint);
 pub(crate) fn protocol_fingerprint(
     protocol: &NodeProtocol,
 ) -> Result<ProtocolFingerprint, CanonicalEncodingError> {
-    hash_canonical(
-        "yssbi.node-protocol.v1",
-        &canonical_semantic_protocol(protocol),
-    )
-    .map(ProtocolFingerprint)
+    hash_canonical("yssbi.node-protocol.v1", &SemanticProtocol(protocol)).map(ProtocolFingerprint)
 }
 
-pub(crate) fn canonical_semantic_protocol(protocol: &NodeProtocol) -> serde_json::Value {
-    serde_json::json!({
-        "execution": &protocol.execution,
-        "interface": {
-            "ports": protocol.interface.ports.iter().map(|port| serde_json::json!({
-                "key": port.key,
-                "direction": port.direction,
-                "valueType": port.value_type,
-                "cardinality": port.cardinality,
-                "connections": port.connections,
-                "inputBinding": port.input_binding,
-                "consumption": port.consumption,
-                "production": port.production,
-                "schema": port.schema,
-            })).collect::<Vec<_>>(),
-            "typeParameters": protocol.interface.type_parameters,
-            "memberGroups": protocol.interface.member_groups,
-        },
-        "managedRole": &protocol.managed_role,
-        "parameters": protocol.parameters.iter().map(|parameter| (&parameter.key, semantic_parameter(parameter))).collect::<std::collections::BTreeMap<_, _>>(),
-        "scope": &protocol.scope,
-        "typing": &protocol.typing,
-        "typeId": &protocol.type_id,
-    })
+struct SemanticProtocol<'a>(&'a NodeProtocol);
+
+impl Serialize for SemanticProtocol<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let protocol = self.0;
+        let mut fields = serializer.serialize_struct("SemanticProtocol", 7)?;
+        fields.serialize_field("execution", &protocol.execution)?;
+        fields.serialize_field("interface", &SemanticInterface(&protocol.interface))?;
+        fields.serialize_field("managedRole", &protocol.managed_role)?;
+        fields.serialize_field("parameters", &SemanticParameters(&protocol.parameters))?;
+        fields.serialize_field("scope", &protocol.scope)?;
+        fields.serialize_field("typing", &protocol.typing)?;
+        fields.serialize_field("typeId", &protocol.type_id)?;
+        fields.end()
+    }
 }
 
-fn semantic_parameter(parameter: &yss_node_protocol::Parameter) -> serde_json::Value {
-    use yss_node_protocol::ParameterEditorSpec;
-    // Some editors also own validation/normalization. Preserve those contracts explicitly;
-    // labels, placement and ordinary widget choices do not affect execution identity.
-    let validation = match &parameter.editor {
-        ParameterEditorSpec::Resource { kind } => serde_json::json!({ "resource": kind }),
-        ParameterEditorSpec::SemanticDomain => serde_json::json!("semanticDomain"),
-        ParameterEditorSpec::GraphConstant => serde_json::json!("graphConstant"),
-        _ => serde_json::Value::Null,
-    };
-    serde_json::json!({
-        "key": parameter.key,
-        "valueType": parameter.value_type,
-        "default": parameter.default_value,
-        "constraints": parameter.constraints,
-        "condition": parameter.visible_when,
-        "validation": validation,
-    })
+struct SemanticInterface<'a>(&'a NodeInterfaceProtocol);
+
+impl Serialize for SemanticInterface<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let interface = self.0;
+        let mut fields = serializer.serialize_struct("SemanticInterface", 3)?;
+        fields.serialize_field("ports", &SemanticPorts(&interface.ports))?;
+        fields.serialize_field("typeParameters", &interface.type_parameters)?;
+        fields.serialize_field("memberGroups", &interface.member_groups)?;
+        fields.end()
+    }
+}
+
+struct SemanticPorts<'a>(&'a [PortSpec]);
+
+impl Serialize for SemanticPorts<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.0.iter().map(SemanticPort))
+    }
+}
+
+struct SemanticPort<'a>(&'a PortSpec);
+
+impl Serialize for SemanticPort<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let port = self.0;
+        let mut fields = serializer.serialize_struct("SemanticPort", 9)?;
+        fields.serialize_field("key", &port.key)?;
+        fields.serialize_field("direction", &port.direction)?;
+        fields.serialize_field("valueType", &port.value_type)?;
+        fields.serialize_field("cardinality", &port.cardinality)?;
+        fields.serialize_field("connections", &port.connections)?;
+        fields.serialize_field("inputBinding", &port.input_binding)?;
+        fields.serialize_field("consumption", &port.consumption)?;
+        fields.serialize_field("production", &port.production)?;
+        fields.serialize_field("schema", &port.schema)?;
+        fields.end()
+    }
+}
+
+struct SemanticParameters<'a>(&'a Parameters);
+
+impl Serialize for SemanticParameters<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // Canonical Hash owns key ordering; parameter groups only own presentation order.
+        let mut entries = serializer.serialize_map(None)?;
+        for parameter in self.0.iter() {
+            entries.serialize_entry(&parameter.key, &SemanticParameter(parameter))?;
+        }
+        entries.end()
+    }
+}
+
+struct SemanticParameter<'a>(&'a Parameter);
+
+impl Serialize for SemanticParameter<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let parameter = self.0;
+        let mut fields = serializer.serialize_struct("SemanticParameter", 6)?;
+        fields.serialize_field("key", &parameter.key)?;
+        fields.serialize_field("valueType", &parameter.value_type)?;
+        fields.serialize_field("default", &parameter.default_value)?;
+        fields.serialize_field("constraints", &parameter.constraints)?;
+        fields.serialize_field("condition", &parameter.visible_when)?;
+        fields.serialize_field("validation", &SemanticValidation(&parameter.editor))?;
+        fields.end()
+    }
+}
+
+struct SemanticValidation<'a>(&'a ParameterEditorSpec);
+
+impl Serialize for SemanticValidation<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // These editors also own validation/normalization; ordinary widgets only affect display.
+        match self.0 {
+            ParameterEditorSpec::Resource { kind } => {
+                let mut fields = serializer.serialize_struct("ResourceValidation", 1)?;
+                fields.serialize_field("resource", kind)?;
+                fields.end()
+            }
+            ParameterEditorSpec::SemanticDomain => serializer.serialize_str("semanticDomain"),
+            ParameterEditorSpec::GraphConstant => serializer.serialize_str("graphConstant"),
+            _ => serializer.serialize_none(),
+        }
+    }
 }
 
 pub(crate) fn registry_fingerprint<T: Serialize>(
@@ -163,6 +220,46 @@ mod tests {
             managed_role: None,
         };
         let original = protocol_fingerprint(&protocol).unwrap();
+        assert_eq!(
+            original.to_hex(),
+            "4e0e70e78c22868362a499a02c054810fbf5b6700460630ec342a2a2812718f6"
+        );
+        for editor in [
+            ParameterEditorSpec::Auto,
+            ParameterEditorSpec::Hidden,
+            ParameterEditorSpec::Text { multiline: true },
+            ParameterEditorSpec::Toggle,
+            ParameterEditorSpec::Select,
+        ] {
+            protocol.parameters.groups[0].parameters[0].editor = editor;
+            assert_eq!(original, protocol_fingerprint(&protocol).unwrap());
+        }
+        for (editor, expected) in [
+            (
+                ParameterEditorSpec::SemanticDomain,
+                "9bc25d2c142b3f25691eaf4d88826f1b0858f7aa19c35040004be3bf57d25f2b",
+            ),
+            (
+                ParameterEditorSpec::GraphConstant,
+                "0e0dc2a04513cbc14e99dda89cee9cf8a809c12fdf3a8aa05b02d19f437f5b69",
+            ),
+            (
+                ParameterEditorSpec::Resource {
+                    kind: ResourceDisplayKind::Function,
+                },
+                "360dc0560e076da17b35adb3e27fb15f967f584fc3613787707c64fcbed819cc",
+            ),
+            (
+                ParameterEditorSpec::Resource {
+                    kind: ResourceDisplayKind::Database,
+                },
+                "fc710a12c200fd5320ab33e7179804880406ba8478cf38c98af047533a98ea25",
+            ),
+        ] {
+            protocol.parameters.groups[0].parameters[0].editor = editor;
+            assert_eq!(protocol_fingerprint(&protocol).unwrap().to_hex(), expected);
+        }
+        protocol.parameters.groups[0].parameters[0].editor = ParameterEditorSpec::Number;
         protocol.interface.ports[0].title = "Translated result".into();
         protocol.parameters.groups[0].parameters[0].presentation =
             ParameterPresentation::InlineAndDetail;
