@@ -2768,7 +2768,22 @@
       },
       "defaultParentFailed": "无法读取默认目录，请选择或填写父目录。",
       "loadFailed": "最近项目读取失败，请重试或直接打开目录。",
-      "noMatchingRecentProjects": "没有匹配的最近项目"
+      "noMatchingRecentProjects": "没有匹配的最近项目",
+      "contextChanged": "项目上下文已变化，请确认当前项目后重试。",
+      "sessionRefreshFailed": "项目状态更新未完成，文件可能已经写入。请检查当前项目和目标目录后再继续。",
+      "invalidProjectName": "项目名称无效，请检查长度、空白和保留字符。",
+      "nameConflict": "目标名称已被使用，请选择其他名称或位置。",
+      "failureWithCode": "{{message}}\n错误码：{{code}}",
+      "writtenFailure": "项目文件已写入，但打开未完成。\n{{error}}\n请打开已写入的项目。",
+      "writtenAt": "已写入的项目位置",
+      "copyWrittenPath": "复制已写入项目的路径"
+    },
+    "workbench": {
+      "projectRegistrationFailed": "项目文件已写入，但登记未完成；请打开已写入的项目。",
+      "projectCopyOpenFailed": "副本已写入并登记，但未打开；请打开已写入的项目。",
+      "projectTrashPartial": "项目已移到回收站，但项目登记尚未更新。请检查最近项目列表。",
+      "projectOperationFailed": "项目操作未完成，原有输入已保留；请检查名称、目录或当前项目。",
+      "recentProjectsUpdateFailed": "项目已打开，但最近项目列表未更新。请稍后重新打开该目录以更新记录。"
     }
   }
 }

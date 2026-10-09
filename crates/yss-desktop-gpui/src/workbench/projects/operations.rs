@@ -1,20 +1,24 @@
 //! Commit project commands off-thread, then observe and install the actual authority.
 use super::{ProjectCommand, ProjectOperation, ProjectStage};
-use crate::{project::DesktopProject, workbench::Workbench};
+use crate::{project::DesktopProject, projects::feedback::ProjectFeedback, workbench::Workbench};
 use gpui::{Context, Window};
 use gpui_component::WindowExt;
 use std::path::PathBuf;
 use yss_application::{
     events::{ProjectLifecycleApplicationEvent, ProjectLifecycleOutcome},
-    project::query::ProjectQueryApplicationError,
+    project::{
+        lifecycle::{ApplicationProjectLifecycleError, ProjectLifecycleError},
+        query::ProjectQueryApplicationError,
+    },
     runtime::ApplicationServices,
+    session::{SessionCaptureError, SessionRevalidationError},
 };
 use yss_project_identity::{OperationId, ProjectInstanceId};
 
 struct ProjectObservation {
     active: Option<ProjectInstanceId>,
     project: Result<Option<DesktopProject>, anyhow::Error>,
-    error: Option<String>,
+    error: Option<ProjectFeedback>,
     recovery: Option<PathBuf>,
 }
 fn read_project(
@@ -37,19 +41,12 @@ fn read_project(
         Err(error) => (None, Err(error.into())),
     }
 }
-fn lifecycle_receipt(receipt: &ProjectLifecycleApplicationEvent) -> Result<(), &'static str> {
-    match receipt.outcome {
-        ProjectLifecycleOutcome::Committed => Ok(()),
-        ProjectLifecycleOutcome::RegistryFailed => {
-            Err("项目文件已写入，但登记未完成；请打开已写入的项目。")
-        }
-        ProjectLifecycleOutcome::ActivationFailed => {
-            Err("副本已写入并登记，但未打开；请打开已写入的项目。")
-        }
-        ProjectLifecycleOutcome::RegistryPending => {
-            Err("项目已移到回收站，列表登记尚未清理；请刷新或清理失效记录。")
-        }
-    }
+fn require_committed(receipt: &ProjectLifecycleApplicationEvent) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        receipt.outcome == ProjectLifecycleOutcome::Committed,
+        "project lifecycle returned a partial commit"
+    );
+    Ok(())
 }
 fn commit(
     command: ProjectCommand,
@@ -61,22 +58,27 @@ fn commit(
     let mut receipt = None;
     let register = matches!(&command, ProjectCommand::Open(_));
     let result = (|| -> anyhow::Result<()> {
-        if let Some(expected) = &expected {
-            anyhow::ensure!(
-                services
-                    .application
-                    .capture_session()?
-                    .project_instance_id()
-                    == expected,
-                "project session changed"
-            );
+        if let Some(expected) = &expected
+            && services
+                .application
+                .capture_session()?
+                .project_instance_id()
+                != expected
+        {
+            return Err(ApplicationProjectLifecycleError::SessionChanged(
+                SessionRevalidationError::Changed,
+            )
+            .into());
         }
         match command {
             ProjectCommand::Open(path) => {
-                services.application.load_project_for_application(
-                    path.to_str()
-                        .ok_or_else(|| anyhow::anyhow!("invalid path encoding"))?,
-                )?;
+                services
+                    .application
+                    .load_project_for_application(path.to_str().ok_or(
+                        ApplicationProjectLifecycleError::Lifecycle(
+                            ProjectLifecycleError::InvalidPath,
+                        ),
+                    )?)?;
             }
             ProjectCommand::Create { name, destination } => {
                 let created =
@@ -88,7 +90,7 @@ fn commit(
                     ))?;
                 receipt = Some(created);
                 let created = receipt.as_ref().unwrap();
-                lifecycle_receipt(created).map_err(anyhow::Error::msg)?;
+                require_committed(created)?;
                 progress.send_replace(ProjectStage::Opening);
                 services.application.load_project_for_application(
                     created
@@ -102,11 +104,11 @@ fn commit(
                     services.application.save_project_as_for_application(
                         &services.projects,
                         &destination,
-                        expected.ok_or_else(|| anyhow::anyhow!("no active project"))?,
+                        expected.ok_or(SessionCaptureError::Inactive)?,
                         OperationId::new(),
                     ),
                 )?);
-                lifecycle_receipt(receipt.as_ref().unwrap()).map_err(anyhow::Error::msg)?;
+                require_committed(receipt.as_ref().unwrap())?;
             }
             ProjectCommand::Close => {
                 if let Some(expected) = expected {
@@ -130,17 +132,9 @@ fn commit(
         })
         .and_then(|receipt| receipt.path.as_deref())
         .map(PathBuf::from);
-    let mut error = result.err().map(|_| {
-        receipt
-            .as_ref()
-            .and_then(|receipt| lifecycle_receipt(receipt).err())
-            .unwrap_or(if receipt.is_some() {
-                "项目文件可能已写入，打开未完成。请检查目标目录后再继续。"
-            } else {
-                "项目操作未完成，原有输入已保留；请检查名称、目录或当前项目。"
-            })
-            .to_owned()
-    });
+    let mut error = result
+        .err()
+        .map(|error| ProjectFeedback::operation(&error, receipt.as_ref()));
     progress.send_replace(ProjectStage::Reading);
     let (active, project) = read_project(services);
     if recovery.is_none() && (error.is_some() || project.is_err()) {
@@ -170,7 +164,9 @@ fn commit(
             )
             .is_err()
         {
-            error = Some("项目已打开，但最近项目列表未更新。请刷新或重新扫描登记。".into());
+            error = Some(ProjectFeedback::message(
+                "native.workbench.recentProjectsUpdateFailed",
+            ));
         }
     }
     ProjectObservation {
@@ -261,7 +257,10 @@ impl Workbench {
                         }
                     }
                     (
-                        observation.error.or_else(|| view.error.clone()),
+                        observation
+                            .error
+                            .map(|error| error.text())
+                            .or_else(|| view.error.clone()),
                         observation.recovery,
                     )
                 } else {

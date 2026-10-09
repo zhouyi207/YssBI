@@ -335,6 +335,9 @@ impl Render for ProjectForm {
             .when_some(self.error.clone(), |view, error| {
                 view.child(div().text_sm().text_color(cx.theme().danger).child(error))
             })
+            .when_some(self.recovery.as_deref(), |view, path| {
+                view.child(super::feedback::recovery_target(path, cx))
+            })
             .child(
                 div()
                     .flex()
