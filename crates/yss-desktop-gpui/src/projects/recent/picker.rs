@@ -2,7 +2,8 @@
 use super::{RecentProjectEvent, RecentProjects, RecentSnapshot};
 use gpui::{App, Context, Entity, IntoElement, Task, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme, Icon, IconName, IndexPath,
+    ActiveTheme, Icon, IconName, IndexPath, Sizable,
+    button::{Button, ButtonVariants},
     list::{ListDelegate, ListItem, ListState},
 };
 
@@ -30,7 +31,8 @@ impl RecentDelegate {
     pub(crate) fn install(&mut self, snapshot: RecentSnapshot) -> Option<IndexPath> {
         self.snapshot = snapshot;
         self.filter();
-        (!self.matches.is_empty()).then_some(IndexPath::default())
+        (!self.matches.is_empty() && !self.snapshot.loading && self.snapshot.error.is_none())
+            .then_some(IndexPath::default())
     }
 
     fn filter(&mut self) {
@@ -68,7 +70,12 @@ impl ListDelegate for RecentDelegate {
     }
 
     fn items_count(&self, _: usize, _: &App) -> usize {
-        self.matches.len()
+        // Keep the accepted records for a retry, but show the error even when they are nonempty.
+        if self.snapshot.error.is_some() {
+            0
+        } else {
+            self.matches.len()
+        }
     }
 
     fn render_item(
@@ -158,16 +165,27 @@ impl ListDelegate for RecentDelegate {
         div()
             .size_full()
             .flex()
+            .flex_col()
+            .gap_3()
             .items_center()
             .justify_center()
             .p_4()
             .text_sm()
             .text_color(cx.theme().muted_foreground)
-            .child(
+            .child(crate::text::translate(
                 self.snapshot
                     .error
-                    .clone()
-                    .unwrap_or_else(|| "没有匹配的最近项目".into()),
-            )
+                    .unwrap_or("native.projects.noMatchingRecentProjects"),
+            ))
+            .when(self.snapshot.error.is_some(), |view| {
+                let owner = self.owner.clone();
+                view.child(
+                    Button::new("recent-projects-retry")
+                        .small()
+                        .ghost()
+                        .label(crate::text::translate("common.retry"))
+                        .on_click(move |_, _, cx| owner.update(cx, |recent, cx| recent.reload(cx))),
+                )
+            })
     }
 }

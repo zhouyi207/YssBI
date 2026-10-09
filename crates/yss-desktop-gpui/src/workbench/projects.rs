@@ -146,8 +146,7 @@ impl Workbench {
             picker.update(cx, |picker, cx| picker.focus(window, cx));
             return;
         }
-        self.recent
-            .update(cx, |recent, cx| recent.reload(window, cx));
+        self.recent.update(cx, |recent, cx| recent.reload(cx));
         let delegate = RecentDelegate::new(self.recent.clone(), self.recent.read(cx).snapshot());
         let picker = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
         picker.update(cx, |picker, cx| {

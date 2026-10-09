@@ -117,7 +117,7 @@ impl Workbench {
                     .text_color(cx.theme().muted_foreground)
                     .child("正在读取最近项目…"),
             );
-        } else if let Some(error) = snapshot.error.clone() {
+        } else if let Some(error) = snapshot.error {
             recent = recent
                 .child(
                     div()
@@ -125,16 +125,15 @@ impl Workbench {
                         .py_3()
                         .text_sm()
                         .text_color(cx.theme().danger)
-                        .child(error),
+                        .child(crate::text::translate(error)),
                 )
                 .child(
                     Button::new("welcome-retry")
                         .small()
                         .ghost()
                         .label("重试")
-                        .on_click(cx.listener(|view, _, window, cx| {
-                            view.recent
-                                .update(cx, |recent, cx| recent.reload(window, cx))
+                        .on_click(cx.listener(|view, _, _, cx| {
+                            view.recent.update(cx, |recent, cx| recent.reload(cx))
                         })),
                 );
         } else if snapshot.records.is_empty() {

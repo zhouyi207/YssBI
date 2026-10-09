@@ -2765,7 +2765,10 @@
         "reading": "正在读取项目内容",
         "registering": "正在更新最近项目",
         "watching": "正在准备工作区"
-      }
+      },
+      "defaultParentFailed": "无法读取默认目录，请选择或填写父目录。",
+      "loadFailed": "最近项目读取失败，请重试或直接打开目录。",
+      "noMatchingRecentProjects": "没有匹配的最近项目"
     }
   }
 }

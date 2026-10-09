@@ -3,7 +3,7 @@ mod picker;
 pub(crate) use picker::RecentDelegate;
 
 use crate::services::NativeServices;
-use gpui::{Context, EntityId, EventEmitter, Window};
+use gpui::{Context, EntityId, EventEmitter};
 use std::sync::Arc;
 use yss_project_registry_contract::ProjectRecord;
 
@@ -22,7 +22,7 @@ pub(crate) struct RecentSnapshot {
     pub records: Arc<[ProjectRecord]>,
     pub generation: u64,
     pub loading: bool,
-    pub error: Option<String>,
+    pub error: Option<&'static str>,
 }
 
 pub(crate) struct RecentProjects {
@@ -51,7 +51,7 @@ impl RecentProjects {
             && self.snapshot.records.contains(record)
     }
 
-    pub(crate) fn reload(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn reload(&mut self, cx: &mut Context<Self>) {
         if self.snapshot.loading {
             self.again = true;
             return;
@@ -65,9 +65,10 @@ impl RecentProjects {
             .services
             .executor
             .spawn(async move { services.application.projects.list_projects().await });
-        cx.spawn_in(window, async move |view, cx| {
+        // The workbench owns this read; closing its optional picker must not strand loading.
+        cx.spawn(async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            let _ = view.update(cx, |view, cx| {
                 if view.snapshot.generation != generation {
                     return;
                 }
@@ -79,10 +80,10 @@ impl RecentProjects {
                         .filter(|record| record.last_opened_at.is_some())
                         .collect();
                 } else {
-                    view.snapshot.error = Some("最近项目读取失败，请重试或直接打开目录。".into());
+                    view.snapshot.error = Some("native.projects.loadFailed");
                 }
                 if std::mem::take(&mut view.again) {
-                    view.reload(window, cx);
+                    view.reload(cx);
                 }
                 cx.emit(RecentProjectEvent::Changed);
                 cx.notify();

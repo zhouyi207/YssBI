@@ -14,7 +14,7 @@ use gpui::{
 use gpui_component::{
     ActiveTheme, Disableable, WindowExt,
     button::{Button, ButtonVariants},
-    input::{Input, InputState},
+    input::{Input, InputEvent, InputState},
 };
 use std::{
     path::{Component, Path, PathBuf},
@@ -44,6 +44,7 @@ pub(crate) struct ProjectForm {
     parent: Entity<InputState>,
     original_name: String,
     original_parent: String,
+    default_parent_pending: bool,
     pub(crate) busy: bool,
     progress: Option<Entity<ProjectProgress>>,
     error: Option<String>,
@@ -64,24 +65,39 @@ impl ProjectForm {
         let name = cx.new(|cx| InputState::new(window, cx).default_value(default_name.clone()));
         let parent =
             cx.new(|cx| InputState::new(window, cx).placeholder("选择父目录，或输入绝对路径"));
-        let subscriptions = [&name, &parent]
+        let mut subscriptions: Vec<_> = [&name, &parent]
             .into_iter()
             .map(|input| cx.observe(input, |_, _, cx| cx.notify()))
             .collect();
+        subscriptions.push(cx.subscribe(&parent, |view, _, event, _| {
+            if matches!(event, InputEvent::Change) {
+                view.default_parent_pending = false;
+            }
+        }));
         cx.defer_in(window, |view, window, cx| {
             let job = view
                 .services
-                .run(|_| Ok(yss_project_registry::default_project_parent_directory().ok()));
+                .run(|_| Ok(yss_project_registry::default_project_parent_directory()?));
             cx.spawn_in(window, async move |view, cx| {
-                if let Some(path) = job.await.ok().and_then(Result::ok).flatten() {
-                    let _ = view.update_in(cx, |view, window, cx| {
-                        if view.parent.read(cx).value().is_empty() && !view.busy {
+                let result = job.await.ok().and_then(Result::ok);
+                let _ = view.update_in(cx, |view, window, cx| {
+                    if !std::mem::take(&mut view.default_parent_pending) {
+                        return;
+                    }
+                    match result {
+                        Some(path) => {
                             view.original_parent = path.clone();
                             view.parent
                                 .update(cx, |input, cx| input.set_value(path, window, cx));
                         }
-                    });
-                }
+                        None => {
+                            view.error = Some(crate::text::translate(
+                                "native.projects.defaultParentFailed",
+                            ))
+                        }
+                    }
+                    cx.notify();
+                });
             })
             .detach();
         });
@@ -94,6 +110,7 @@ impl ProjectForm {
             parent,
             original_name: default_name,
             original_parent: String::new(),
+            default_parent_pending: true,
             busy: false,
             progress: None,
             error: None,
@@ -134,6 +151,7 @@ impl ProjectForm {
                 view.busy = false;
                 match result {
                     Ok(Ok(Some(paths))) => {
+                        view.default_parent_pending = false;
                         if let Some(path) = paths.first().and_then(|path| path.to_str()) {
                             view.parent.update(cx, |input, cx| {
                                 input.set_value(path.to_owned(), window, cx)

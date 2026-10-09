@@ -281,8 +281,7 @@ impl Workbench {
                     }
                 }
                 view.error = error.take();
-                view.recent
-                    .update(cx, |recent, cx| recent.reload(window, cx));
+                view.recent.update(cx, |recent, cx| recent.reload(cx));
                 cx.notify();
             });
         })

@@ -200,8 +200,7 @@ impl Workbench {
         })
         .detach();
         cx.defer_in(window, move |view, window, cx| {
-            view.recent
-                .update(cx, |recent, cx| recent.reload(window, cx));
+            view.recent.update(cx, |recent, cx| recent.reload(cx));
             if window.focused(cx).is_none() {
                 window.focus(&view.focus, cx);
             }

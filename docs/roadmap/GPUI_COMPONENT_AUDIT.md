@@ -190,9 +190,18 @@
 - 新增 `projects/progress` 只负责显示，复用 gpui-component Progress 和 Tokio watch 的最新值交付。原操作 worker 在真实步骤边界发送阶段，工作台与表单共享无输入控件的显示实体；目标路径保留原值，状态按当前语言渲染。退出旧视图不会取消已提交的领域操作。
 - 打开、新建、另存为和关闭没有底层取消契约与工作总量，使用未知进度且不提供取消；React 的 10%/50%/90% 等阶段估算无需移植。可取消扫描/清理已无原生入口，不添加新的任务登记层。保存前置步骤也显示进度，表单保留输入，失败恢复表单及原已写入目标。
 - 通用忙碌遮罩补充原生鼠标遮挡，防止事件命中下层编辑区。完成与失败继续由现有宿主 lifecycle/回执处理，进度不判断成功，也不成为另一份忙碌或项目事实。
-- 当前项目反馈仍有待优化：最近列表读取失败的原位重试，以及更精确的类型化失败展示；单独审查记录，不以已存在通用提示视为完整覆盖。语言设置、窗口焦点及主题完整能力由各自组件批次继续核对。
+- 当前项目反馈仍有待优化：更精确的类型化失败展示；最近弹窗读取失败重试已在下一批补齐。单独审查记录，不以已存在通用提示视为完整覆盖。语言设置、窗口焦点及主题完整能力由各自组件批次继续核对。
 - L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；8 个变更 Rust 文件的局部格式、工作区两份文档元信息与 275 个相对链接、8 个中英文进度文案、模块索引（59 crates / 239 条声明）及 `git diff --check` 通过。
 - 临时 `cargo build -p yss-desktop-gpui --example project_progress_review` 构建后，目视核对长路径、省略、无目标状态，以及同一实体在两个原生窗口接收 watch 阶段更新；预览不调用 Application，源码随后移出仓库。真实项目提交、失败恢复、键盘/鼠标遮挡、语言和关闭仍待人工验收；本批没有后端契约改动，不重复后端测试，也不添加 UI 单元测试。
+
+
+### 项目表单输入与最近列表恢复
+
+- 默认父目录只在未编辑字段上安装；输入后清空、系统选择器的明确选择均阻止迟到回填。默认目录读取失败给出可操作提示；选择器取消不会丢弃正常返回的默认位置。
+- 最近列表读取改为绑定原 RecentProjects 实体。关闭发起重试的弹窗后，结果仍完成同一读取、解除 loading 并通知欢迎页；没有新建任务或列表 owner。
+- 最近弹窗在失败时隐藏不可用旧行并呈现原位重试，保留搜索输入与已有记录，仍以原 generation 和完整记录校验打开。错误持有翻译键，欢迎页与弹窗共用原查询；不从旧记录伪造成功或自动重新激活项目。
+- L2 验证：独立提交内容与工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；工作区首次被并行 SCI 修改的类型错误阻断，该源码修复后重跑通过（依赖中仍有一个未使用导入警告）。没有修改该批后端工作。
+- 7 个变更 Rust 文件的局部格式、两份文档的元信息与 275 个相对链接、4 个中英文文案键及 `git diff --check` 通过；依赖和模块声明未变，复用本轮已通过的模块索引检查。没有后端契约变化，不重复后端测试；输入/清空、取消选择器、真实失败重试及关闭弹窗期间的读取仍待人工验收，不添加 UI 单元测试。
 
 
 ## app
@@ -484,12 +493,12 @@
 | [modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections.tsx](../../react/src/modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/project-explorer/internal/ui/picker/DeleteProjectConfirmDialog.tsx](../../react/src/modules/project-explorer/internal/ui/picker/DeleteProjectConfirmDialog.tsx) | 无需迁移已移除的项目回收站入口 | 当前项目入口只提供打开/新建/另存为/关闭；没有项目文件删除动作，不新增确认状态或删除授权 | 已审查；无需对应原生组件 |
-| [modules/project-explorer/internal/ui/picker/NewProjectModal.tsx](../../react/src/modules/project-explorer/internal/ui/picker/NewProjectModal.tsx) | 复用原生项目表单并接入进度 | projects/form 使用路径组件校验、系统目录选择、原生命周期与部分提交恢复；提交保留输入，失败返回同一表单；默认目录迟到输入保护仍需复核 | 主体已迁移；默认目录与真实交互待完善 |
-| [modules/project-explorer/internal/ui/picker/ProjectLibrary.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectLibrary.tsx) | 以欢迎页和最近项目替代独立项目库 | projects/recent 直接消费 registry 记录，ListState 拥有搜索/键盘/虚拟列表；选择校验原记录与代次，不复刻收藏和排序草稿 | 替代入口已实现；失败重试与真实交互待完善 |
+| [modules/project-explorer/internal/ui/picker/NewProjectModal.tsx](../../react/src/modules/project-explorer/internal/ui/picker/NewProjectModal.tsx) | 复用原生项目表单并接入进度 | projects/form 使用路径组件校验、系统目录选择、原生命周期与部分提交恢复；提交保留输入，失败返回同一表单；默认目录只回填未编辑父目录 | 代码已覆盖；真实交互待验收 |
+| [modules/project-explorer/internal/ui/picker/ProjectLibrary.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectLibrary.tsx) | 以欢迎页和最近项目替代独立项目库 | projects/recent 直接消费 registry 记录，ListState 拥有搜索/键盘/虚拟列表；选择校验原记录与代次，不复刻收藏和排序草稿 | 替代入口及重试已实现；真实交互待验收 |
 | [modules/project-explorer/internal/ui/picker/ProjectPickerActionPanel.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectPickerActionPanel.tsx) | 无需独立操作侧栏 | 保留的新建/打开/最近入口由 welcome、文件菜单与项目表单承接；扫描/清理/收藏/回收站已不在当前流程 | 已审查；无需对应原生组件 |
 | [modules/project-explorer/internal/ui/picker/ProjectPickerChrome.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectPickerChrome.tsx) | 复用主窗口标题栏与共享设置 | 欢迎页和工作台沿用 window_chrome/menus/settings，不另建 Picker 标题与语言 owner；主题能力在设置批次继续核对 | 结构已复用；主题及窗口交互待验收 |
 | [modules/project-explorer/internal/ui/picker/ProjectPickerFeedbackDetails.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectPickerFeedbackDetails.tsx) | 复用原生反馈并完善失败分类 | 原表单保留失败输入与部分提交的恢复路径；当前错误多为通用文案，类型化失败码/精确原因仍需迁移 | 待完善错误呈现与验收 |
-| [modules/project-explorer/internal/ui/picker/ProjectPickerPageIssueAlert.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectPickerPageIssueAlert.tsx) | 按当前入口迁移失败与重试 | 操作通知及表单反馈由原 owner 呈现；扫描/清理空结果已无入口，最近列表失败仍缺原位重试 | 待完善读取重试与验收 |
+| [modules/project-explorer/internal/ui/picker/ProjectPickerPageIssueAlert.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectPickerPageIssueAlert.tsx) | 按当前入口迁移失败与重试 | 欢迎页/最近弹窗复用原读取重试，错误按当前语言呈现；旧记录不能绕过失败状态；扫描/清理空结果已无入口 | 重试已接入；类型化原因及真实交互待完善 |
 | [modules/project-explorer/internal/ui/picker/ProjectPickerScreen.tsx](../../react/src/modules/project-explorer/internal/ui/picker/ProjectPickerScreen.tsx) | 以现有工作台欢迎页替代页面容器 | Workbench 直接路由类型化项目操作，最近记录/输入/提交分别由原 owner 管理，不复制路由页面与 UIStore 全局进度 | 结构替代已实现；子流程缺口分别记录 |
 | [modules/project-explorer/internal/ui/picker/projectPickerContextMenu/buildProjectPickerContextMenuSections.tsx](../../react/src/modules/project-explorer/internal/ui/picker/projectPickerContextMenu/buildProjectPickerContextMenuSections.tsx) | 无需迁移已移除的项目库菜单 | 保留的打开/创建在当前 welcome 和文件菜单中；资源侧栏菜单为其他组件，不借此恢复项目库管理动作 | 已审查；无需对应原生组件 |
 
