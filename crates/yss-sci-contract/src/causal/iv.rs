@@ -29,8 +29,7 @@ pub struct InstrumentalVariableFit {
 #[serde(rename_all = "camelCase")]
 pub struct InstrumentalVariableStatistics {
     pub covariance_type: String,
-    pub wald_chi2: f64,
-    pub wald_p_value: f64,
+    pub model_test: InstrumentalVariableModelTest,
     pub observations: usize,
     pub df_residual: usize,
     pub r2: f64,
@@ -38,6 +37,26 @@ pub struct InstrumentalVariableStatistics {
     pub condition_number: f64,
     /// The k-class parameter is 1 for 2SLS and estimated for LIML.
     pub kappa: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    tag = "distribution",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum InstrumentalVariableModelTest {
+    ChiSquared {
+        statistic: f64,
+        df: usize,
+        p_value: f64,
+    },
+    F {
+        statistic: f64,
+        df_numerator: usize,
+        df_denominator: usize,
+        p_value: f64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

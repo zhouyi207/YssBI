@@ -114,7 +114,12 @@ the borrowed model contract.
   equation coordinates. An infinite Fisher statistic caused by a zero individual
   p-value uses `None` with combined p-value zero, never a nonfinite JSON number.
 - `causal::iv`: IV estimator selection and fitted model facts, including design
-  columns for later analyses. First-stage, overidentification, Hausman and
+  columns for later analyses. `InstrumentalVariableStatistics.model_test` owns
+  the joint coefficient test as `InstrumentalVariableModelTest`: chi-square
+  with its degrees by default, or F with numerator/denominator degrees for
+  `small=true`. Both variants retain the statistic and p-value; serialization
+  tags the current `modelTest` record by `distribution` with camel-case fields.
+  First-stage, overidentification, Hausman and
   endogenous-regressor results are independent records, selected through
   `IvSummaryOptions` rather than embedded in every fit.
 - `causal::did`: DID inputs, inference results and typed unavailable/error codes.

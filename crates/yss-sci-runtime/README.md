@@ -179,6 +179,11 @@ IV accepts separate exogenous, endogenous and instrument column collections, pre
 fitted values, residuals, coefficient inference and the design needed for later analyses.
 Its Fit entry returns the shared `InstrumentalVariableFit` directly; Kernel restores
 source labels and applies its existing finite-value output conversion before JSON encoding.
+Coefficient probabilities and 95% intervals retain SCI's normal reference by
+default and Student-t reference with structural residual degrees for `small=true`.
+Summary projects the typed `statistics.modelTest` joint result, including its
+chi-square or F reference and degrees, and labels coefficient inference consistently.
+Undefined coefficient inference propagates as a scientific failure from Fit.
 `causal::iv::summary` requests first-stage, overidentification and endogeneity analyses
 only when selected. SCI's insufficient first-stage residual-degree failure propagates
 before report encoding; summaries that omit that analysis retain the structural fit. Runtime

@@ -4,14 +4,11 @@
 //! κ-class estimator with κ = minimum eigenvalue of (Ỹ'MZ Ỹ)^{-1/2} Ỹ'MX1 Ỹ (Ỹ'MZ Ỹ)^{-1/2}
 //! β̂ = {X'(I − κMZ)X}^{-1} X'(I − κMZ)y
 
+use crate::causal::iv::estimate::{coefficient_inference, model_test};
 use crate::regression::covariance::compute_cov_beta;
-use crate::regression::design::covariance_rows;
+use yss_sci_contract::causal::iv::InstrumentalVariableStatistics;
 use yss_sci_contract::regression::OlsOptions;
-use yss_sci_contract::{
-    causal::iv::InstrumentalVariableStatistics, regression::fit::RegressionCoefficientStatistics,
-};
 
-use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 use statrs::statistics::Statistics;
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
@@ -250,63 +247,24 @@ impl IVLIML {
             &self.options.covariance,
         )?;
 
-        let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
-        let z_values: Vec<f64> = betas_nd
-            .iter()
-            .zip(std_err.iter())
-            .map(|(b, se)| if *se > 1e-300 { b / se } else { 0.0 })
-            .collect();
-        let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("IVLIML: {}", e))?;
-        let p_values: Vec<f64> = z_values
-            .iter()
-            .map(|&z| crate::distribution::normal_two_sided_p(z))
-            .collect();
-        let z_crit = std_normal.inverse_cdf(0.975);
-        let ci_lower = &betas_nd - yss_sci_linalg::Scale(z_crit) * &std_err;
-        let ci_upper = &betas_nd + yss_sci_linalg::Scale(z_crit) * &std_err;
-
+        let inference = coefficient_inference(&betas_nd, &cov_beta, df_residual, self.small)?;
         let covariance_type = self.options.covariance.name().to_owned();
-
-        let k = betas_nd.nrows();
-        let (wald_chi2, wald_p) = {
-            let (beta_s, v_s, df_wald) = if self.options.constant && k > 1 {
-                let beta_s = betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned();
-                let v_s = cov_beta
-                    .submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1)
-                    .to_owned();
-                (beta_s, v_s, k - 1)
-            } else {
-                (betas_nd.clone(), cov_beta.clone(), k)
-            };
-            let v_s_matrix = v_s.as_ref().to_owned();
-            let beta_s_vector = beta_s.as_ref().to_owned();
-            let x_sol = v_s_matrix
-                .as_ref()
-                .checked_cholesky()
-                .map_err(|_| "IVLIML: V_s not pd for Wald".to_string())?
-                .solve(&beta_s_vector.as_ref());
-            let wald = beta_s.transpose() * x_sol.as_ref();
-            let chi2_dist =
-                ChiSquared::new(df_wald as f64).map_err(|e| format!("IVLIML Wald: {}", e))?;
-            (wald, chi2_dist.sf(wald))
-        };
+        let model_test = model_test(
+            &betas_nd,
+            &cov_beta,
+            self.options.constant,
+            df_residual,
+            self.small,
+        )?;
 
         Ok(crate::causal::iv::IvEstimate {
             fitted: &self.endog - &u_structural,
             residuals: u_structural,
             betas: betas_nd,
-            inference: RegressionCoefficientStatistics {
-                covariance: covariance_rows(&cov_beta),
-                standard_errors: std_err.iter().copied().collect(),
-                statistic_values: z_values,
-                p_values,
-                confidence_interval_lower: ci_lower.iter().copied().collect(),
-                confidence_interval_upper: ci_upper.iter().copied().collect(),
-            },
+            inference,
             statistics: InstrumentalVariableStatistics {
                 covariance_type,
-                wald_chi2,
-                wald_p_value: wald_p,
+                model_test,
                 observations: n,
                 df_residual,
                 r2,

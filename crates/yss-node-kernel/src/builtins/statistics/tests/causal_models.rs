@@ -16,6 +16,83 @@ fn iv_summary_parameters(kind: &str, first_stage: bool) -> Vec<(&'static str, Ru
 }
 
 #[test]
+fn iv_fit_summary_preserves_small_sample_references_and_constraint_inference() {
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..8)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1))
+        .collect::<Vec<_>>();
+    let instrument = (0..8).map(|row| signal(row, 0)).collect::<Vec<_>>();
+    let response = (0..8)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + 2.0 * signal(row, 2))
+        .collect::<Vec<_>>();
+    let numeric = |value: &RuntimeValue| super::super::super::numeric_input(Some(value)).unwrap();
+    for kind in ["2sls", "liml"] {
+        for small in [false, true] {
+            let fit = run(
+                &format!("yssbi.statistics.iv.{kind}.fit"),
+                &[
+                    ("y", series(&response)),
+                    ("endogenous", series(&endogenous)),
+                    ("instruments", series(&instrument)),
+                ],
+                &[
+                    ("constant", flag(true)),
+                    ("covariance", string("nonrobust")),
+                    ("small", flag(small)),
+                ],
+                3,
+            )
+            .unwrap();
+            let mut options = iv_summary_parameters(kind, false);
+            for (key, value) in &mut options {
+                if matches!(*key, "coefficient_table" | "hypothesis_test") {
+                    *value = flag(true);
+                }
+            }
+            let report = run(
+                &format!("yssbi.statistics.iv.{kind}.summary"),
+                &[("model", fit[0].clone())],
+                &options,
+                1,
+            )
+            .unwrap();
+            let report = &report[0];
+            assert_eq!(
+                field(report, "statisticDistribution").unwrap(),
+                &string(if small { "t" } else { "z" }),
+            );
+            let model = field(report, "model").unwrap();
+            let statistics = field(model, "statistics").unwrap();
+            let model_test = field(statistics, "modelTest").unwrap();
+            assert_eq!(
+                field(model_test, "distribution").unwrap(),
+                &string(if small { "f" } else { "chiSquared" }),
+            );
+            if small {
+                assert_eq!(numeric(field(model_test, "dfNumerator").unwrap()), 1.0);
+                assert_eq!(numeric(field(model_test, "dfDenominator").unwrap()), 6.0);
+            } else {
+                assert_eq!(numeric(field(model_test, "df").unwrap()), 1.0);
+            }
+            let coefficients = field(report, "coefficients").unwrap();
+            let inference = field(coefficients, "inference").unwrap();
+            let RuntimeValue::List(p_values) = field(inference, "pValues").unwrap() else {
+                panic!("coefficient probabilities")
+            };
+            let expected = if small {
+                0.26656970338006913
+            } else {
+                0.15729920705028513
+            };
+            assert!((numeric(&p_values[1]) - expected).abs() < 1e-9);
+            assert!((numeric(field(model_test, "pValue").unwrap()) - expected).abs() < 1e-9);
+            let constraint = field(report, "hypothesisTest").unwrap();
+            assert!((numeric(field(constraint, "p_value").unwrap()) - expected).abs() < 1e-9);
+        }
+    }
+}
+
+#[test]
 fn iv_first_stage_nodes_preserve_unavailable_inference_and_generalized_eigenvalues() {
     let n = 6;
     let mut state = 1_u64;

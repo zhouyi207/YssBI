@@ -349,6 +349,198 @@ fn iv_first_stage_minimum_eigenvalue_preserves_generalized_problem_and_column_un
 }
 
 #[test]
+fn iv_small_sample_inference_uses_student_and_f_references_for_both_estimators() {
+    use yss_sci::causal::iv::fit::fit_instrumental_variables;
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind as Kind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..8)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1))
+        .collect::<Vec<_>>();
+    let instrument = (0..8).map(|row| signal(row, 0)).collect::<Vec<_>>();
+    let response = (0..8)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + 2.0 * signal(row, 2))
+        .collect::<Vec<_>>();
+    for kind in [
+        Kind::TwoStageLeastSquares,
+        Kind::LimitedInformationMaximumLikelihood,
+    ] {
+        for covariance in [OlsCovariance::NonRobust, OlsCovariance::Hc1] {
+            for small in [true, false] {
+                let fit = fit_instrumental_variables(
+                    kind,
+                    response.clone(),
+                    &[],
+                    std::slice::from_ref(&endogenous),
+                    std::slice::from_ref(&instrument),
+                    OlsOptions {
+                        constant: true,
+                        covariance: covariance.clone(),
+                    },
+                    small,
+                )
+                .unwrap();
+                let expected_p = if small {
+                    0.26656970338006913
+                } else {
+                    0.15729920705028513
+                };
+                let liml_hc1 = kind == Kind::LimitedInformationMaximumLikelihood
+                    && matches!(covariance, OlsCovariance::Hc1);
+                // LIML's structural-X sandwich has slope variance 17/128, scaled
+                // to 17/96 with small. Its inference must use that covariance.
+                let slope_p = if liml_hc1 {
+                    if small {
+                        0.27965829090465777
+                    } else {
+                        0.1700669614539048
+                    }
+                } else {
+                    expected_p
+                };
+                let expected_critical = if small {
+                    2.4469118511449694
+                } else {
+                    1.959963984540054
+                };
+                for (j, &p) in fit.inference.p_values.iter().enumerate() {
+                    let expected_p = if j == 0 { expected_p } else { slope_p };
+                    assert!(
+                        (p - expected_p).abs() < 1e-9,
+                        "{kind:?} {covariance:?} small={small}: {p} != {expected_p}"
+                    );
+                    let half_width =
+                        fit.inference.confidence_interval_upper[j] - fit.coefficients[j];
+                    assert!(
+                        (half_width / fit.inference.standard_errors[j] - expected_critical).abs()
+                            < 1e-9
+                    );
+                }
+                let statistics = serde_json::to_value(&fit.statistics).unwrap();
+                let test = &statistics["modelTest"];
+                assert!((test["pValue"].as_f64().unwrap() - slope_p).abs() < 1e-9);
+                assert_eq!(test["distribution"], if small { "f" } else { "chiSquared" });
+                let expected_statistic = if liml_hc1 {
+                    if small { 24.0 / 17.0 } else { 32.0 / 17.0 }
+                } else if small {
+                    1.5
+                } else {
+                    2.0
+                };
+                assert!((test["statistic"].as_f64().unwrap() - expected_statistic).abs() < 1e-9);
+                if small {
+                    assert_eq!(test["dfNumerator"], 1);
+                    assert_eq!(test["dfDenominator"], 6);
+                } else {
+                    assert_eq!(test["df"], 1);
+                }
+            }
+        }
+    }
+
+    // Two simultaneous restrictions distinguish F=W/q from W, and omitting
+    // the intercept changes residual degrees without removing a tested slope.
+    let endogenous = (0..32)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 2))
+        .collect::<Vec<_>>();
+    let second_endogenous = (0..32)
+        .map(|row| signal(row, 1) + 0.5 * signal(row, 3))
+        .collect::<Vec<_>>();
+    let instruments = (0..2)
+        .map(|bit| (0..32).map(|row| signal(row, bit)).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    for kind in [
+        Kind::TwoStageLeastSquares,
+        Kind::LimitedInformationMaximumLikelihood,
+    ] {
+        for constant in [false, true] {
+            let intercept = if constant { 1.0 } else { 0.0 };
+            let response = (0..32)
+                .map(|row| {
+                    intercept
+                        + 0.5 * endogenous[row]
+                        + 0.25 * second_endogenous[row]
+                        + 2.0 * signal(row, 4)
+                })
+                .collect::<Vec<_>>();
+            for small in [false, true] {
+                let fit = fit_instrumental_variables(
+                    kind,
+                    response.clone(),
+                    &[],
+                    &[endogenous.clone(), second_endogenous.clone()],
+                    &instruments,
+                    OlsOptions {
+                        constant,
+                        covariance: OlsCovariance::NonRobust,
+                    },
+                    small,
+                )
+                .unwrap();
+                let statistics = serde_json::to_value(&fit.statistics).unwrap();
+                let test = &statistics["modelTest"];
+                let df_residual = if constant { 29 } else { 30 };
+                let expected_statistic = if small {
+                    8.5 * df_residual as f64 / 64.0
+                } else {
+                    8.5
+                };
+                // Chi-square(2) and F(2,v) have elementary upper tails.
+                let expected_p = if small {
+                    (32.0_f64 / 40.5).powf(df_residual as f64 / 2.0)
+                } else {
+                    (-4.25_f64).exp()
+                };
+                assert!((test["statistic"].as_f64().unwrap() - expected_statistic).abs() < 1e-9);
+                assert!((test["pValue"].as_f64().unwrap() - expected_p).abs() < 1e-9);
+                assert_eq!(statistics["dfResidual"], df_residual);
+                if small {
+                    assert_eq!(test["dfNumerator"], 2);
+                    assert_eq!(test["dfDenominator"], df_residual);
+                } else {
+                    assert_eq!(test["df"], 2);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn iv_coefficient_inference_rejects_invalid_variance_before_zero_statistic_fallback() {
+    use yss_sci::causal::iv::fit::fit_instrumental_variables;
+    use yss_sci_contract::{
+        SciError, SciOperationCode,
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let predictor = vec![0., 0., 0., 0., 1., 1., 1., 1.];
+    let response = vec![0., 0., 0., 0., 1., 2., 3., 4.];
+    let result = fit_instrumental_variables(
+        InstrumentalVariableKind::TwoStageLeastSquares,
+        response,
+        &[],
+        std::slice::from_ref(&predictor),
+        std::slice::from_ref(&predictor),
+        OlsOptions {
+            constant: true,
+            covariance: OlsCovariance::Hc0,
+        },
+        false,
+    );
+    assert!(
+        matches!(
+            result,
+            Err(SciError::ComputationFailed {
+                operation: SciOperationCode::InstrumentalVariables
+            })
+        ),
+        "{result:?}"
+    );
+}
+
+#[test]
 fn test_ols_golden() {
     let (exog, endog, _weights) = load_iris();
     let ols = OLS {

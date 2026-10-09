@@ -234,8 +234,18 @@ These neutral fit entries consume shared binary/Prais and panel options, and IV
 accepts multiple endogenous and excluded-instrument columns. Panel dispatch covers
 FE/LSDV, entity first differences, entity/time/two-way RE FGLS and MLE, and
 entity/time Between, rejecting unsupported covariance/effect combinations.
-IV 2SLS and LIML share `IvEstimate` and coefficient statistics. Their first-stage,
-overidentification and endogeneity analyses are separate calls in `causal::iv::fit`;
+IV 2SLS and LIML share `IvEstimate` and coefficient statistics. The existing
+estimate owner also computes both estimators' coefficient and joint inference from
+the selected covariance. Default coefficient tests and 95% intervals use a normal
+reference; `small=true` uses Student-t with the structural residual degrees.
+The joint test excludes an estimated intercept: its Wald statistic uses chi-square
+by default, or F after division by the number of restrictions with `small=true`.
+`statistics.modelTest` carries the actual distribution, statistic, degrees and
+p-value. Invalid coefficient variances and undefined or nonfinite statistics and
+intervals return a scientific failure before probability evaluation or serialization.
+These conventions follow the [Stata IV manual](https://www.stata.com/manuals/rivregress.pdf).
+Their first-stage, overidentification and endogeneity analyses are separate calls
+in `causal::iv::fit`;
 first-stage analysis reuses the same implementation for both estimators.
 It requires positive first-stage residual degrees before preparing the design;
 saturated instrument regressions return a scientific failure while the structural
