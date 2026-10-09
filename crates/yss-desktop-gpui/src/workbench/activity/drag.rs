@@ -24,7 +24,8 @@ impl ActivityDrag {
         row: usize,
         cx: &Context<ActivityPanel>,
     ) -> Option<Self> {
-        let ActivityRowContent::Item(item) = &panel.document.rows.get(row)?.content else {
+        let document = panel.document.as_ref()?;
+        let ActivityRowContent::Item(item) = &document.rows.get(row)?.content else {
             return None;
         };
         let creation = match item {
@@ -42,7 +43,7 @@ impl ActivityDrag {
         };
         Some(Self {
             source: cx.entity().downgrade(),
-            document: panel.document.clone(),
+            document: document.clone(),
             row,
             creation,
         })
@@ -57,7 +58,7 @@ impl ActivityDrag {
         let source = self.source.upgrade()?;
         let source = source.read(cx);
         if self.document.project_instance_id.as_deref() != Some(project.as_str())
-            || !Arc::ptr_eq(&source.document, &self.document)
+            || !source.accepts(&self.document)
         {
             return None;
         }

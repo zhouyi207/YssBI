@@ -1,13 +1,13 @@
 //! Project-scoped conversation directory and native panels; DockArea owns placement and visibility.
 use super::{
     Workbench,
-    activity::{ActivityEvent, ActivityPanel},
+    activity::{ActivityEvent, ActivityPanel, ReadState},
 };
 use crate::assistant::{ConversationEvent, ConversationPanel, principal};
 use gpui::{AppContext, Context, Window, div, prelude::*, px};
 use gpui_component::{
     WindowExt,
-    dock::{DockPlacement, panel_handle},
+    dock::{DockPlacement, PaneRef, panel_handle},
     input::{Input, InputState},
 };
 use std::sync::Arc;
@@ -20,15 +20,19 @@ impl Workbench {
         if self.busy || self.closing {
             return;
         }
-        self.refresh_assistant_directory(true, window, cx);
+        self.ensure_assistant_directory(window, cx);
+        self.present_assistant(window, cx);
+        if let Some(intent) = self.assistant_intent.take() {
+            self.finish_intent(&intent, true, window, cx);
+        }
+        self.refresh_assistant_directory(window, cx);
     }
     pub(super) fn refresh_assistant_directory(
         &mut self,
-        reveal: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.assistant_reveal |= reveal;
+        let panel = self.ensure_assistant_directory(window, cx);
         if self.assistant_reading {
             self.assistant_again = true;
             return;
@@ -37,6 +41,7 @@ impl Workbench {
         let generation = self.assistant_generation;
         let lifecycle = self.lifecycle;
         self.assistant_reading = true;
+        panel.update(cx, |panel, cx| panel.set_read_state(ReadState::Loading, cx));
         let project = self
             .project
             .as_ref()
@@ -58,23 +63,20 @@ impl Workbench {
                 view.assistant_reading = false;
                 if let Some(document) = result {
                     view.install_assistant_document(document, window, cx);
-                    if view.assistant_reveal {
-                        view.assistant_reveal = false;
-                        view.present_assistant(window, cx);
-                        if let Some(intent) = view.assistant_intent.take() {
-                            view.finish_intent(&intent, true, window, cx);
-                        }
-                    }
                 } else {
-                    view.assistant_reveal = false;
-                    view.error = Some("助手目录读取失败，请重新打开助手。".into());
-                    if let Some(intent) = view.assistant_intent.take() {
-                        view.finish_intent(&intent, false, window, cx);
-                    }
+                    view.activity_read_state(
+                        &["assistant"],
+                        ReadState::Failed("native.workbench.assistantDirectoryFailed"),
+                        cx,
+                    );
+                    tracing::warn!(
+                        code = "native_assistant_directory_failed",
+                        "Native conversation directory refresh failed"
+                    );
                 }
                 if view.assistant_again {
                     view.assistant_again = false;
-                    view.refresh_assistant_directory(false, window, cx);
+                    view.refresh_assistant_directory(window, cx);
                 }
                 cx.notify();
             });
@@ -88,18 +90,29 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let panel = self.ensure_assistant_directory(window, cx);
+        panel.update(cx, |panel, cx| {
+            panel.replace_document(Arc::new(document), cx)
+        });
+    }
+
+    fn ensure_assistant_directory(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::Entity<ActivityPanel> {
         if let Some(panel) = self
             .activities
             .get("assistant")
             .and_then(gpui::WeakEntity::upgrade)
         {
-            panel.update(cx, |view, cx| view.replace_document(Arc::new(document), cx));
-            return;
+            return panel;
         }
-        let panel = cx.new(|cx| ActivityPanel::with_search(Arc::new(document), window, cx));
+        let panel = cx.new(|cx| ActivityPanel::pending_conversations(window, cx));
         self.activities.insert("assistant", panel.downgrade());
         self.subscriptions.push(
             cx.subscribe_in(&panel, window, |view, _, event, window, cx| match event {
+                ActivityEvent::RefreshResources => view.refresh_assistant_directory(window, cx),
                 ActivityEvent::OpenConversation(id) => {
                     view.open_conversation(id.clone(), window, cx)
                 }
@@ -113,8 +126,27 @@ impl Workbench {
             }),
         );
         self.dock.update(cx, |dock, cx| {
-            dock.add_panel_view(panel_handle(panel), DockPlacement::Left, None, window, cx)
+            let selected = dock.layout(DockPlacement::Left).and_then(|tree| {
+                let node = tree.find_node(tree.find_panel_node(tree.panels().next()?)?)?;
+                match node.kind() {
+                    PaneRef::Tabs { panels, active_ix } => panels.get(active_ix).copied(),
+                    _ => None,
+                }
+            });
+            // Background directory creation preserves the first group's selection.
+            // An explicit show request selects the panel after mounting it.
+            dock.add_panel_view(
+                panel_handle(panel.clone()),
+                DockPlacement::Left,
+                None,
+                window,
+                cx,
+            );
+            if let Some(selected) = selected {
+                dock.select_panel(selected, window, cx);
+            }
         });
+        panel
     }
     fn present_assistant(&self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(panel) = self
@@ -170,7 +202,7 @@ impl Workbench {
                 } else {
                     view.error = Some("新对话未确认，请检查会话目录后重试。".into());
                 }
-                view.refresh_assistant_directory(false, window, cx);
+                view.refresh_assistant_directory(window, cx);
                 cx.notify();
             });
         })
@@ -225,7 +257,7 @@ impl Workbench {
                 } else {
                     view.error = Some("此对话不可用，请刷新会话目录。".into());
                 }
-                view.refresh_assistant_directory(false, window, cx);
+                view.refresh_assistant_directory(window, cx);
                 cx.notify();
             });
         })
@@ -249,7 +281,7 @@ impl Workbench {
                 window,
                 |view, _, event, window, cx| match event {
                     ConversationEvent::DirectoryChanged => {
-                        view.refresh_assistant_directory(false, window, cx)
+                        view.refresh_assistant_directory(window, cx)
                     }
                     ConversationEvent::Settings => view.show_settings(window, cx),
                     ConversationEvent::OpenResource(resource) => match resource.kind {
@@ -373,7 +405,7 @@ impl Workbench {
                                     view.error =
                                         Some("会话重命名未完成，请刷新目录后重试。".into());
                                 }
-                                view.refresh_assistant_directory(false, window, cx);
+                                view.refresh_assistant_directory(window, cx);
                                 cx.notify();
                             });
                         })

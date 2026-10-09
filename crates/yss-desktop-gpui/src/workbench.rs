@@ -74,7 +74,6 @@ pub struct Workbench {
     assistant_generation: u64,
     assistant_reading: bool,
     assistant_again: bool,
-    assistant_reveal: bool,
     assistant_intent: Option<String>,
     assistant_busy: bool,
     dock: Entity<DockArea>,
@@ -153,7 +152,6 @@ impl Workbench {
             assistant_generation: 0,
             assistant_reading: false,
             assistant_again: false,
-            assistant_reveal: false,
             assistant_intent: None,
             assistant_busy: false,
             dock,
@@ -216,7 +214,7 @@ impl Workbench {
             view.restore_layout(initial_resource, window, cx)
         });
         cx.defer_in(window, |view, window, cx| {
-            view.refresh_assistant_directory(false, window, cx)
+            view.refresh_assistant_directory(window, cx)
         });
         view
     }

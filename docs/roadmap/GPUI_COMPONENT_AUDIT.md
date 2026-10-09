@@ -417,6 +417,18 @@
 - L2 定向业务验证：`cargo test -p yss-application --lib project::query::tests::resource_reveal_uses_the_requested_project_and_an_existing_native_path -- --exact`（1 项），`cargo test -p yss-project --lib resource_reveal::tests::`（3 项），`cargo test -p yss-project --lib file_resources::tests::authored_document_lifecycle_preserves_unsaved_content_and_rejects_stale_edits -- --exact`（1 项），`cargo test -p yss-resource-lifecycle --lib tests::abandoned_internal_owner_does_not_reuse_its_issued_token -- --exact`（1 项）通过，保护原项目/路径、文件版本及内部序号分配。
 - 工作区和独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`，Application 通过 `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings`。三份文档的元信息/相对链接（278/273）、模块索引（59 crates / 240 条依赖声明）、双语文案键（52/39，英文沿用工作区目录）、22 个 Rust 文件局部格式和 `git diff --check` 通过；不运行全工作区验证，不添加 UI 单元测试。Linux 定位已实际调起 Dolphin 并传入所选文件路径，系统窗口的可视选中、Windows/macOS、项目切换期间迟到提交和外部并发修改的完整交互验收继续开放。本批累计审查 163/265 项。
 
+### 公共目录外壳、焦点导航与侧栏基础组件
+
+- 已逐项阅读 ActivityPanelDocumentView、ActivityPanelShell、两类空态、分类行/箭头、搜索输入、列表行、拖拽包装及浮层十个组件，连同 sidebarStyles、实际调用者、目录文档与拖放样式一起核对。Assistant 业务控制器与重命名表单继续独立审查。
+- 继续复用原 ActivityPanelDocument、DockArea、Input、Button、uniform_list 和 ActivityDrag。`feedback` 只呈现读取状态/原工具/空态，Workbench 继续拥有异步读取、合并刷新与交付校验；没有文档时使用 None，不伪造后端目录或复制另一份列表。
+- 助手首次打开立即呈现待加载面板并结算显示 intent，后台挂载保留原选择；查询完成只安装内容。删除旧 assistant_reveal 标记与 reveal 参数，直接更新所有调用者。初次加载有原生 spinner，后台刷新保留旧内容与布局，失败在目录内重试并保留原投影和输入。
+- `navigation` 只保存原行 ID 的焦点，复用原资源打开、分类展开与节点文档预览入口。上/下和 Home/End 滚动定位，Enter/空格激活；搜索 Input 有焦点时不截获这些键。文档替换保留仍可见的身份，清理失效焦点；展开和当前编辑资源继续归原 owner。
+- 保持 28px 按需行构建，补齐树层级、展开/选中状态与独立焦点描边。原工具改为紧凑图标与提示；空目录显示标题和说明，消息行提供完整 tooltip/无障碍描述。当前 Application 未向 Message.description 提供正文，不建立额外变高列表。项目空分类继续只显示标题及工具。
+- 临时 `cargo build -p yss-desktop-gpui --example activity_shell_review` 使用隔离项目和真实 Application。Linux/X11 GPUI Window 事件注入核对方向键不打开资源、Enter 打开第二图且原图脏状态/会话/节点保持，36 个可见目录行的 Home/End 与节点预览，语言排序变化保留原行 ID；图内容未因导航和预览修改。
+- 同一临时入口为助手目录查询注入 4 秒延迟和可恢复失败，核对初次加载/空目录/图标新建、切换项目目录后迟到结果不抢占、失败保留旧目录、原重试恢复并保留搜索。输入框内方向/Home/End/Enter 不激活目录行；目录刷新后旧拖放被拒绝。预览源与注入逻辑不进入提交。
+- L2：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。只改变宿主显示与暂态交付，后端契约未变，不重复后端测试或全工作区检查，不增加 UI 单元测试。15 个 Rust 文件局部格式、双语键/参数（工作区 41、提交内容 30，英文沿用工作区目录）、两份文档元信息/相对链接（275/270）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。
+- 物理键鼠/IME、完整 tooltip、平台读屏、跨项目/关闭来源/忙碌目标、多窗口和 Windows/macOS 仍待验收；这批不代表 Assistant 整体、其他 Activity 业务控制器或展开持久化已完成。本批累计审查 173/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -756,9 +768,9 @@
 | [modules/workbench/internal/layout/RootPanelTabRenderer.tsx](../../react/src/modules/workbench/internal/layout/RootPanelTabRenderer.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/WorkbenchWindow.tsx](../../react/src/modules/workbench/internal/ui/WorkbenchWindow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/WorkbenchWindowEntry.tsx](../../react/src/modules/workbench/internal/ui/WorkbenchWindowEntry.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/activity/ActivityPanelDocumentView.tsx](../../react/src/modules/workbench/internal/ui/activity/ActivityPanelDocumentView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/activity/ActivityPanelShell.tsx](../../react/src/modules/workbench/internal/ui/activity/ActivityPanelShell.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/dnd/SidebarDragOverlay.tsx](../../react/src/modules/workbench/internal/ui/dnd/SidebarDragOverlay.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/workbench/internal/ui/activity/ActivityPanelDocumentView.tsx](../../react/src/modules/workbench/internal/ui/activity/ActivityPanelDocumentView.tsx) | 优化 | 原 ActivityPanelDocument + feedback/navigation；首次加载、错误重试、空态说明和按行 ID 导航；请求仍归 Workbench | Linux/X11 事件注入通过加载/重试/导航；平台无障碍和完整项目切换待验收 |
+| [modules/workbench/internal/ui/activity/ActivityPanelShell.tsx](../../react/src/modules/workbench/internal/ui/activity/ActivityPanelShell.tsx) | 复用原生组件 | 根 DockArea 提供面板外壳；原 tools 呈现图标及提示，继续原侧栏标题，不叠加另一套标题/布局 | 工具新建、后台返回不抢占选择已核对；多窗口和目标平台待验收 |
+| [modules/workbench/internal/ui/dnd/SidebarDragOverlay.tsx](../../react/src/modules/workbench/internal/ui/dnd/SidebarDragOverlay.tsx) | 复用原生组件 | ActivityDrag 使用 GPUI 拖拽视图和共享行展示，保留原不可变载荷、主题及资源身份 | 原生拖放已有专项记录；本批再核对目录刷新拒绝旧拖放，物理拖拽仍待验收 |
 | [modules/workbench/internal/ui/menu/AboutModal.tsx](../../react/src/modules/workbench/internal/ui/menu/AboutModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/menu/ArchitectureModal.tsx](../../react/src/modules/workbench/internal/ui/menu/ArchitectureModal.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/menu/BackendArchitecture.tsx](../../react/src/modules/workbench/internal/ui/menu/BackendArchitecture.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -766,15 +778,15 @@
 | [modules/workbench/internal/ui/menu/CrateDependencies.tsx](../../react/src/modules/workbench/internal/ui/menu/CrateDependencies.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/menu/FrontendArchitecture.tsx](../../react/src/modules/workbench/internal/ui/menu/FrontendArchitecture.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/menu/WorkbenchMenuBar.tsx](../../react/src/modules/workbench/internal/ui/menu/WorkbenchMenuBar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/sidebar/SidebarEmptyState.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarEmptyState.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/workbench/internal/ui/sidebar/SidebarEmptyState.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarEmptyState.tsx) | 迁移 | feedback 直接显示原文档空标题/说明，搜索无匹配使用原本地化文案 | 助手真实空目录与无匹配已核对；窄窗口/完整 tooltip 待验收 |
 | [modules/workbench/internal/ui/sidebar/SidebarRenameDialog.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarRenameDialog.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/sidebar/SidebarSectionEmptyState.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarSectionEmptyState.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/sidebar/primitives/SidebarChevron.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarChevron.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/sidebar/primitives/SidebarDraggableItem.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarDraggableItem.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/sidebar/primitives/SidebarListItem.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarListItem.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/workbench/internal/ui/sidebar/SidebarSectionEmptyState.tsx](../../react/src/modules/workbench/internal/ui/sidebar/SidebarSectionEmptyState.tsx) | 优化 | Message 保持虚拟列表 28px 行，完整文本/可选说明交 tooltip 与无障碍描述；项目空分组遵循现有仅标题/工具样式 | 当前生产者未提供 Message.description；完整提示和平台无障碍待验收 |
+| [modules/workbench/internal/ui/sidebar/primitives/SidebarChevron.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarChevron.tsx) | 复用原生组件 | 原分类行复用 Kit ChevronRight/ChevronDown；展开来自原行 ID 的覆盖 | 鼠标/Enter 展开和刷新保留已核对 |
+| [modules/workbench/internal/ui/sidebar/primitives/SidebarDraggableItem.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarDraggableItem.tsx) | 复用原生组件 | ActivityDrag + GPUI on_drag，共用源文档/项目校验及原画布接收；无第二套拖放状态 | 目录刷新拒绝旧拖放已核对；源关闭/跨项目/物理拖拽待验收 |
+| [modules/workbench/internal/ui/sidebar/primitives/SidebarListItem.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarListItem.tsx) | 优化 | 28px 虚拟行统一焦点、树层级和选中语义；原资源打开与节点预览入口继续共用 | 焦点不打开/编辑，Enter 打开/预览及长列表定位已核对；读屏待验收 |
 | [modules/workbench/internal/ui/sidebar/primitives/SidebarRowActionButton.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarRowActionButton.tsx) | 复用原生 Button 与 tooltip | 资源行箭头悬停显示，点击/按下停止传播并沿同一打开入口；不增加按钮包装组件 | 箭头打开与悬停已核对；完整 tooltip/键盘与平台交互开放 |
-| [modules/workbench/internal/ui/sidebar/primitives/SidebarTreeCategoryRow.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarTreeCategoryRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/sidebar/primitives/SidebarTreeSearchInput.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarTreeSearchInput.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/workbench/internal/ui/sidebar/primitives/SidebarTreeCategoryRow.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarTreeCategoryRow.tsx) | 优化 | 原分类图标/数量/tools 和展开覆盖；工具图标映射共用，输入与分类切换不混用 | 分类展开/菜单沿原入口，语言刷新保留稳定 ID；展开持久化归业务控制器审查 |
+| [modules/workbench/internal/ui/sidebar/primitives/SidebarTreeSearchInput.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarTreeSearchInput.tsx) | 复用原生组件 | 原 Input 补齐 Search 图标；NodePalette 保留展开/收起全部和既有搜索，助手复用输入焦点隔离 | 输入导航不切换行、无匹配/恢复已核对；IME 和键盘可达性待验收 |
 | [modules/workbench/internal/ui/status/StatusBar.tsx](../../react/src/modules/workbench/internal/ui/status/StatusBar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/status/StatusBarItem.tsx](../../react/src/modules/workbench/internal/ui/status/StatusBarItem.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 

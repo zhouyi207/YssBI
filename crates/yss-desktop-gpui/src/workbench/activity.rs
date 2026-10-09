@@ -1,10 +1,13 @@
 mod categories;
 mod drag;
+mod feedback;
+mod navigation;
 mod nodes;
 mod render;
 mod resources;
 mod rows;
 pub(crate) use drag::{ActivityDrag, ActivityDrop};
+pub(super) use feedback::ReadState;
 
 use gpui::{
     App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
@@ -47,7 +50,10 @@ pub enum ActivityEvent {
 }
 
 pub struct ActivityPanel {
-    document: Arc<ActivityPanelDocument>,
+    panel_id: &'static str,
+    document: Option<Arc<ActivityPanelDocument>>,
+    read_state: ReadState,
+    focused_row: Option<String>,
     resources: Option<resources::ResourceRows>,
     expanded: BTreeMap<String, bool>,
     rows: Vec<usize>,
@@ -64,13 +70,20 @@ impl ActivityPanel {
         document: Arc<ActivityPanelDocument>,
         cx: &mut Context<Self>,
     ) {
-        if Arc::ptr_eq(&self.document, &document) {
+        self.set_read_state(ReadState::Ready, cx);
+        if self.accepts(&document) {
             return;
         }
-        if self.document.project_instance_id != document.project_instance_id {
+        if self
+            .document
+            .as_ref()
+            .is_none_or(|previous| previous.project_instance_id != document.project_instance_id)
+        {
             self.resources = None;
             self.expanded.clear();
             self.active_resource = None;
+            self.focused_row = None;
+            self.scroll.scroll_to_item(0, gpui::ScrollStrategy::Top);
         } else {
             let categories: BTreeSet<_> = document
                 .rows
@@ -81,13 +94,22 @@ impl ActivityPanel {
             self.expanded
                 .retain(|id, _| categories.contains(id.as_str()));
         }
-        self.document = document;
+        self.document = Some(document);
         self.rebuild_rows(cx);
         cx.notify();
     }
     pub fn new(document: Arc<ActivityPanelDocument>, cx: &mut Context<Self>) -> Self {
-        let mut panel = Self {
-            document,
+        let mut panel = Self::pending(document.panel_id, cx);
+        panel.replace_document(document, cx);
+        panel
+    }
+
+    fn pending(panel_id: &'static str, cx: &mut Context<Self>) -> Self {
+        Self {
+            panel_id,
+            document: None,
+            read_state: ReadState::Loading,
+            focused_row: None,
             resources: None,
             expanded: BTreeMap::new(),
             rows: Vec::new(),
@@ -96,17 +118,17 @@ impl ActivityPanel {
             active_resource: None,
             search: None,
             search_subscription: None,
-        };
-        panel.rebuild_rows(cx);
-        panel
+        }
     }
 
-    pub fn with_search(
-        document: Arc<ActivityPanelDocument>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let mut panel = Self::new(document, cx);
+    fn accepts(&self, document: &Arc<ActivityPanelDocument>) -> bool {
+        self.document
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, document))
+    }
+
+    pub fn pending_conversations(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let mut panel = Self::pending("assistant", cx);
         let search = cx.new(|cx| {
             InputState::new(window, cx).placeholder(crate::text::translate(
                 "native.workbench.searchConversations",
@@ -143,7 +165,7 @@ impl Focusable for ActivityPanel {
 }
 impl BasePanel for ActivityPanel {
     fn panel_name(&self) -> &'static str {
-        self.document.panel_id
+        self.panel_id
     }
     fn closable(&self, _: &App) -> bool {
         false
@@ -157,14 +179,14 @@ impl Panel for ActivityPanel {
             .items_center()
             .gap_2()
             .child(
-                match self.document.panel_id {
+                match self.panel_id {
                     "project" => Icon::new(IconName::Folder),
                     "assistant" => Icon::new(IconName::MessageSquareText),
                     _ => Icon::new(IconName::Frame),
                 }
                 .size_3(),
             )
-            .child(activity_text(&self.document.title))
+            .child(self.title_text())
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

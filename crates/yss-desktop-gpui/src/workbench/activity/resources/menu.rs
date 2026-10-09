@@ -30,7 +30,7 @@ pub(super) fn resource_menu(
             .icon(IconName::FolderOpen)
             .on_click(move |_, _, cx| {
                 let _ = reveal_owner.update(cx, |view, cx| {
-                    if Arc::ptr_eq(&view.document, &reveal_document)
+                    if view.accepts(&reveal_document)
                         && let ActivityRowContent::Item(item) = &reveal_document.rows[row].content
                         && let Some(request) = reveal_request(item)
                     {
@@ -77,7 +77,7 @@ pub(super) fn resource_menu(
         };
         menu = menu.item(item.icon(icon).on_click(move |_, _, cx| {
             let _ = owner.update(cx, |view, cx| {
-                if !Arc::ptr_eq(&view.document, &document) {
+                if !view.accepts(&document) {
                     return;
                 }
                 let event = match &document.rows[row].content {

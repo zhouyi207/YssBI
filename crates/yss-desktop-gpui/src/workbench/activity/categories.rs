@@ -14,7 +14,10 @@ impl ActivityPanel {
         item: Stateful<Div>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let row = &self.document.rows[index];
+        let Some(document) = &self.document else {
+            return item.into_any_element();
+        };
+        let row = &document.rows[index];
         let ActivityRowContent::Category {
             label,
             count,
@@ -26,10 +29,11 @@ impl ActivityPanel {
         };
         let id = row.id.clone();
         let expanded = self.expanded.get(&id).copied().unwrap_or(*default_expanded);
-        let expected = self.document.clone();
+        let expected = document.clone();
         let menu_document = expected.clone();
         let owner = cx.entity().downgrade();
         let item = item
+            .aria_expanded(expanded)
             .font_weight(gpui::FontWeight::MEDIUM)
             .cursor_pointer()
             .text_color(cx.theme().muted_foreground)
@@ -44,7 +48,7 @@ impl ActivityPanel {
             )
             .children(tools.iter().map(|tool| {
                 let tool_id = tool.id.to_owned();
-                let expected = self.document.clone();
+                let expected = document.clone();
                 Button::new(gpui::SharedString::from(format!(
                     "category-tool-{}-{tool_id}",
                     row.id
@@ -52,24 +56,24 @@ impl ActivityPanel {
                 .small()
                 .ghost()
                 .size_5()
-                .icon(IconName::Plus)
+                .icon(feedback::tool_icon(tool.icon))
                 .tooltip(activity_text(&tool.label))
                 .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(cx.listener(move |view, _, _, cx| {
                     cx.stop_propagation();
-                    if Arc::ptr_eq(&view.document, &expected) {
+                    if view.accepts(&expected) {
                         cx.emit(ActivityEvent::Tool(tool_id.clone()));
                     }
                 }))
             }))
             .on_click(cx.listener(move |view, _, _, cx| {
-                if Arc::ptr_eq(&view.document, &expected) {
+                if view.accepts(&expected) {
                     view.expanded.insert(id.clone(), !expanded);
                     view.rebuild_rows(cx);
                     cx.notify();
                 }
             }));
-        if self.document.panel_id == "project" && !tools.is_empty() {
+        if self.panel_id == "project" && !tools.is_empty() {
             item.context_menu(move |mut menu, _, _| {
                 let ActivityRowContent::Category { tools, .. } = &menu_document.rows[index].content
                 else {
@@ -81,10 +85,10 @@ impl ActivityPanel {
                     let tool_id = tool.id.to_owned();
                     menu = menu.item(
                         PopupMenuItem::new(activity_text(&tool.label))
-                            .icon(IconName::Plus)
+                            .icon(feedback::tool_icon(tool.icon))
                             .on_click(move |_, _, cx| {
                                 let _ = owner.update(cx, |view, cx| {
-                                    if Arc::ptr_eq(&view.document, &expected) {
+                                    if view.accepts(&expected) {
                                         cx.emit(ActivityEvent::Tool(tool_id.clone()));
                                     }
                                 });

@@ -13,7 +13,10 @@ impl ActivityPanel {
         item: Stateful<Div>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let row = &self.document.rows[index];
+        let Some(document) = &self.document else {
+            return item.into_any_element();
+        };
+        let row = &document.rows[index];
         let ActivityRowContent::Item(ActivityItem::Node {
             title,
             available,
@@ -23,15 +26,15 @@ impl ActivityPanel {
         else {
             return item.into_any_element();
         };
-        let expected = self.document.clone();
+        let expected = document.clone();
         let expected_creation = expected.clone();
         item.child(crate::catalog_rows::node(title, creation, *available, cx))
             .cursor_pointer()
             .hover(|view| view.bg(cx.theme().muted))
             .on_click(cx.listener(move |view, _, _, cx| {
-                if Arc::ptr_eq(&view.document, &expected)
+                if view.accepts(&expected)
                     && let ActivityRowContent::Item(ActivityItem::Node { creation, .. }) =
-                        &view.document.rows[index].content
+                        &expected.rows[index].content
                 {
                     cx.emit(ActivityEvent::InspectNode(
                         crate::catalog_rows::node_type(creation).clone(),
@@ -56,12 +59,12 @@ impl ActivityPanel {
                         .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .on_click(cx.listener(move |view, _, _, cx| {
                             cx.stop_propagation();
-                            if Arc::ptr_eq(&view.document, &expected_creation)
+                            if view.accepts(&expected_creation)
                                 && let ActivityRowContent::Item(ActivityItem::Node {
                                     available: true,
                                     creation,
                                     ..
-                                }) = &view.document.rows[index].content
+                                }) = &expected_creation.rows[index].content
                             {
                                 cx.emit(ActivityEvent::CreateNode(creation.clone()));
                             }

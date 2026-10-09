@@ -307,7 +307,6 @@ impl Workbench {
         self.assistant_generation = self.assistant_generation.wrapping_add(1);
         self.assistant_reading = false;
         self.assistant_again = false;
-        self.assistant_reveal = false;
         self.assistant_intent = None;
         self.documents.clear();
         self.charts.clear();
@@ -325,6 +324,6 @@ impl Workbench {
         self.install_activity(window, cx);
         self.connect_events(window, cx);
         self.restore_layout(None, window, cx);
-        self.refresh_assistant_directory(false, window, cx);
+        self.refresh_assistant_directory(window, cx);
     }
 }

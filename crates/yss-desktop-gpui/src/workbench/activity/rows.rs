@@ -10,7 +10,10 @@ impl ActivityPanel {
             .unwrap_or_default();
         self.rows.clear();
         let mut hidden_depth = None;
-        for (index, row) in self.document.rows.iter().enumerate() {
+        let Some(document) = &self.document else {
+            return;
+        };
+        for (index, row) in document.rows.iter().enumerate() {
             if hidden_depth.is_some_and(|depth| row.depth > depth) {
                 continue;
             }
@@ -29,7 +32,7 @@ impl ActivityPanel {
                     }
                     true
                 }
-                ActivityRowContent::Message { .. } => self.document.panel_id != "project",
+                ActivityRowContent::Message { .. } => self.panel_id != "project",
                 ActivityRowContent::Item(ActivityItem::Conversation {
                     title, session_id, ..
                 }) => {
@@ -44,6 +47,14 @@ impl ActivityPanel {
             if visible {
                 self.rows.push(index);
             }
+        }
+        if self.focused_row.as_ref().is_some_and(|id| {
+            !self
+                .rows
+                .iter()
+                .any(|index| &document.rows[*index].id == id)
+        }) {
+            self.focused_row = None;
         }
     }
 }

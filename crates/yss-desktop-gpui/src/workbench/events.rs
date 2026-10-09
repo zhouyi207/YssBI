@@ -1,4 +1,4 @@
-use super::Workbench;
+use super::{Workbench, activity::ReadState};
 use crate::{project::DesktopProject, services::NativeEvent};
 use gpui::{Context, Window};
 use tokio::sync::broadcast::error::RecvError;
@@ -145,7 +145,7 @@ impl Workbench {
     }
 
     pub(super) fn rebind_session(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.refresh_assistant_directory(false, window, cx);
+        self.refresh_assistant_directory(window, cx);
         for conversation in self.conversations.values() {
             conversation.update(cx, |view, cx| view.reload(false, window, cx));
         }
@@ -215,6 +215,7 @@ impl Workbench {
             return;
         };
         self.refreshing_index = true;
+        self.activity_read_state(&["project", "nodes"], ReadState::Loading, cx);
         self.index_generation = self.index_generation.wrapping_add(1);
         let generation = self.index_generation;
         self.index_again = false;
@@ -247,10 +248,17 @@ impl Workbench {
                 view.refreshing_index = false;
                 match result {
                     Ok(project) => view.install_project_index(project, window, cx),
-                    Err(_error) => tracing::warn!(
-                        code = "native_activity_refresh_failed",
-                        "Native activity refresh failed"
-                    ),
+                    Err(_error) => {
+                        view.activity_read_state(
+                            &["project", "nodes"],
+                            ReadState::Failed("native.workbench.activityLoadFailed"),
+                            cx,
+                        );
+                        tracing::warn!(
+                            code = "native_activity_refresh_failed",
+                            "Native activity refresh failed"
+                        );
+                    }
                 }
                 if view.index_again {
                     view.refresh_project(window, cx);

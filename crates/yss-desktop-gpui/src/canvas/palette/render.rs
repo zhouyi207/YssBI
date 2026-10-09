@@ -70,7 +70,12 @@ impl NodePalette {
                     .flex()
                     .items_center()
                     .gap_1()
-                    .child(Input::new(&self.search).small().w_full())
+                    .child(
+                        Input::new(&self.search)
+                            .small()
+                            .w_full()
+                            .prefix(gpui_component::Icon::new(IconName::Search).size_3()),
+                    )
                     .child(
                         Button::new("palette-toggle-all")
                             .ghost()

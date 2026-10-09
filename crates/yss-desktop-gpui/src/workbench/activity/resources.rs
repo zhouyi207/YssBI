@@ -60,11 +60,14 @@ impl ActivityPanel {
         catalog: Arc<ActivityPanelDocument>,
         cx: &mut Context<Self>,
     ) {
-        if self.document.panel_id != "project" {
+        if self.panel_id != "project" {
             return;
         }
-        if self.document.project_instance_id != catalog.project_instance_id
-            || self.document.publication_revision != catalog.publication_revision
+        let Some(document) = &self.document else {
+            return;
+        };
+        if document.project_instance_id != catalog.project_instance_id
+            || document.publication_revision != catalog.publication_revision
         {
             self.resources = None;
             cx.notify();
@@ -113,16 +116,16 @@ impl ActivityPanel {
         cx.notify();
     }
 
-    fn open_resource(
+    pub(super) fn open_resource(
         &self,
         expected: &Arc<ActivityPanelDocument>,
         index: usize,
         cx: &mut Context<Self>,
     ) {
-        if !Arc::ptr_eq(&self.document, expected) {
+        if !self.accepts(expected) {
             return;
         }
-        let event = match &self.document.rows[index].content {
+        let event = match &expected.rows[index].content {
             ActivityRowContent::Item(
                 ActivityItem::EventGraph { path, .. } | ActivityItem::FunctionGraph { path, .. },
             ) => ActivityEvent::OpenGraph(path.clone()),
@@ -149,7 +152,10 @@ impl ActivityPanel {
         row: Stateful<Div>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let ActivityRowContent::Item(item) = &self.document.rows[index].content else {
+        let Some(document) = &self.document else {
+            return row.into_any_element();
+        };
+        let ActivityRowContent::Item(item) = &document.rows[index].content else {
             return row.into_any_element();
         };
         let id = match item {
@@ -162,7 +168,7 @@ impl ActivityPanel {
             _ => return row.into_any_element(),
         };
         let selected = self.active_resource.as_deref() == Some(id);
-        let expected = self.document.clone();
+        let expected = document.clone();
         let expected_button = expected.clone();
         let expected_menu = expected.clone();
         let owner = cx.entity().downgrade();
@@ -174,6 +180,7 @@ impl ActivityPanel {
             );
         let row = row
             .group("activity-resource")
+            .aria_selected(selected)
             .child(label(item, cx))
             .cursor_pointer()
             .when(selected, |row| row.bg(cx.theme().sidebar_accent))
