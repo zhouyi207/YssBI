@@ -1,7 +1,7 @@
 use super::*;
 
 fn validate_signature_request<'a>(
-    data: &'a ProjectData,
+    graphs: &'a std::collections::HashMap<GraphResourcePath, GraphResourceDocument>,
     path: &GraphResourcePath,
     request: &MutationRequest<yss_project_history::FunctionDocumentPatch>,
 ) -> Result<&'a yss_project_history::FunctionDocument, ProjectResourceMutationError> {
@@ -14,8 +14,7 @@ fn validate_signature_request<'a>(
             store: format!("{resource:?}").into(),
         });
     }
-    let function = data
-        .graphs
+    let function = graphs
         .get(path)
         .and_then(|graph| graph.function.as_ref())
         .ok_or_else(|| ProjectResourceMutationError::ResourceMismatch {
@@ -76,7 +75,7 @@ impl ProjectState {
             ));
         }
         let snapshot = self
-            .capture_writer_snapshot(expected_project_instance_id)
+            .capture_graph_writer_snapshot(expected_project_instance_id)
             .map_err(function_mutation_error)?;
         let reservation = self
             .reserve_resource_operation(expected_project_instance_id, request.operation_id)
@@ -85,7 +84,7 @@ impl ProjectState {
             .filesystem()
             .acquire(snapshot.session.root.clone())
             .map_err(function_mutation_error)?;
-        let function = validate_signature_request(&snapshot.data, graph_path, &request)?;
+        let function = validate_signature_request(&snapshot.graphs, graph_path, &request)?;
         let revision = function
             .revision
             .checked_next()
@@ -113,7 +112,7 @@ impl ProjectState {
         let expected_graph_paths =
             super::graph_references::capture_function_dependents(&snapshot, graph_path, registry)
                 .map_err(function_mutation_error)?;
-        let mut candidate = snapshot.data.graphs[graph_path].clone();
+        let mut candidate = snapshot.graphs[graph_path].clone();
         if self.is_graph_modified(graph_path) {
             candidate.document = crate::project_io::load_project_graph_document_from_file(
                 snapshot.session.root.as_path().to_string_lossy().as_ref(),
@@ -156,7 +155,7 @@ impl ProjectState {
 
     fn commit_function_signature(
         &self,
-        snapshot: &crate::project_writers::WriterSnapshot,
+        snapshot: &crate::project_writers::GraphWriterSnapshot,
         graph_path: &GraphResourcePath,
         request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
         expected_graph_paths: Vec<String>,
@@ -177,7 +176,7 @@ impl ProjectState {
         }
         let mut data = self.project_data.write().unwrap();
         self.ensure_mutation_operational()?;
-        let function = validate_signature_request(&data, graph_path, &request)?;
+        let function = validate_signature_request(&data.graphs, graph_path, &request)?;
         let publication_advance = publication
             .prepare_resource_revision()
             .map_err(|error| ProjectResourceMutationError::Projection(error.to_string().into()))?;
@@ -341,7 +340,7 @@ mod tests {
         let state = fixture.state();
         let project = state.capture_project_session().unwrap().instance_id;
         let editing = state.read_graph_editing(&project, &path).unwrap();
-        let snapshot = state.capture_writer_snapshot(&project).unwrap();
+        let snapshot = state.capture_graph_writer_snapshot(&project).unwrap();
         let mut document = (*editing.document).clone();
         let id = NodeId::new();
         let node = DocumentNode {

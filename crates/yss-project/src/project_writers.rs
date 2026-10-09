@@ -10,7 +10,7 @@ use yss_project_history::{ChartResourceKey, ResourceKey};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_layout::{CHART_EXTENSION, PROJECT_METADATA_FILE};
-use yss_project_model::{ProjectData, ProjectDataPatch};
+use yss_project_model::{GraphResourceDocument, ProjectData, ProjectDataPatch};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
 #[path = "project_writers/charts.rs"]
@@ -86,9 +86,9 @@ pub struct ProjectResourceMutationParts {
     pub projection_status: ProjectProjectionStatus,
 }
 
-pub(crate) struct WriterSnapshot {
+pub(crate) struct GraphWriterSnapshot {
     pub(crate) session: ProjectSession,
-    pub(crate) data: ProjectData,
+    pub(crate) graphs: std::collections::HashMap<GraphResourcePath, GraphResourceDocument>,
     pub(crate) graph_resource_revisions:
         std::collections::HashMap<GraphResourcePath, ResourceRevision>,
     pub(crate) authority_generation: u64,
@@ -156,20 +156,20 @@ pub(crate) fn validate_document(path: &Path, contents: &[u8]) -> Result<(), Stri
 }
 
 impl ProjectState {
-    pub(crate) fn capture_writer_snapshot(
+    pub(crate) fn capture_graph_writer_snapshot(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-    ) -> Result<WriterSnapshot, ProjectOperationError> {
-        let (session, authority_generation, (data, graph_resource_revisions)) = self
+    ) -> Result<GraphWriterSnapshot, ProjectOperationError> {
+        let (session, authority_generation, (graphs, graph_resource_revisions)) = self
             .capture_writer_input(expected_project_instance_id, |data| {
                 (
-                    data.clone(),
+                    data.graphs.clone(),
                     self.graph_resource_revisions.read().unwrap().clone(),
                 )
             })?;
-        Ok(WriterSnapshot {
+        Ok(GraphWriterSnapshot {
             session,
-            data,
+            graphs,
             graph_resource_revisions,
             authority_generation,
         })

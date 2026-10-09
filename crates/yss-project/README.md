@@ -142,13 +142,18 @@ Event Graph/Function Graph 创建、复制、删除、重命名复用标准 Proj
 publication revision，而不仅是 authority generation。纯生命周期增删不伪造缺失的图投影，
 重命名回执保留真实 move delta、递增发布版本及受影响图的恢复声明。
 
-Graph writers 使用修改准备所需的 WriterSnapshot；Chart writers 通过同一捕获入口只读取
+Graph 复制、重命名和签名准备使用 `GraphWriterSnapshot`，只捕获 Graph 文档和 Graph revision，
+不复制 Mind/Doc/Chart 正文或数据库声明。Graph 创建、删除只捕获项目身份与 authority generation；
+创建在文件系统 lease 和事务检查后读取目标 tombstone revision。
+Graph 名称分配在文件系统 lease 下扫描一次路径，并在现有一致读取边界借用驻留图名称，
+与复制共用已扫描索引的名称分配入口，不复制完整 ProjectData 或另构造路径规则。
+Chart writers 通过同一捕获入口只读取
 项目身份与 authority generation，Save 额外捕获目标存在性及其 revision，删除只捕获目标存在性。
 名称分配借用 Chart 路径和默认数据库 ID，复制、重命名只复制目标 Chart 文档，不复制无关正文或 revision 表。
 两类 writer 共用 transaction context。取得文件系统 lease 后与暂存完成后，
 均检查捕获的 authority generation、受影响资源版本以及源/目标路径存在性；重命名复用相同的 ownership lease
 和 patch 发布入口。函数签名的 before-state、函数版本与所属 Graph 版本也在事务内校验，文件落盘成功后才发布，
-发布失败则回滚文件。签名最终发布在锁内重验原 WriterSnapshot 的 authority generation，确保准备的依赖集合仍有效；
+发布失败则回滚文件。签名最终发布在锁内重验原 GraphWriterSnapshot 的 authority generation，确保准备的依赖集合仍有效；
 全部可失败检查完成后直接更新目标函数及其 revision，不另复制整份 ProjectData 或 revision 表。
 Graph revision 不随驻留状态重置：卸载/重新加载保留版本，删除与移动后的旧路径保留 tombstone。
 

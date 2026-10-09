@@ -8,7 +8,7 @@ use yss_node_protocol::{ParameterEditorSpec, PortCardinality, ResourceDisplayKin
 use yss_node_registry::{NodeRegistry, StructuralNodeRole};
 
 pub(super) fn capture_function_dependents(
-    snapshot: &crate::project_writers::WriterSnapshot,
+    snapshot: &crate::project_writers::GraphWriterSnapshot,
     changed: &GraphResourcePath,
     registry: &NodeRegistry,
 ) -> Result<Vec<String>, crate::ProjectOperationError> {
@@ -20,7 +20,7 @@ pub(super) fn capture_function_dependents(
         affected: BTreeSet::from([changed.clone()]),
     };
     let mut visited = BTreeSet::new();
-    for (path, graph) in &snapshot.data.graphs {
+    for (path, graph) in &snapshot.graphs {
         visited.insert(path.clone());
         capture.record_document(path, &graph.document);
     }

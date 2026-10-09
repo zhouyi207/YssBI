@@ -60,23 +60,26 @@ impl ProjectState {
         mut resource: GraphResourceDocument,
         operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let (session, authority_generation, ()) =
+            self.capture_writer_input(expected_project_instance_id, |_| ())?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let lease = self.filesystem().acquire(session.root.clone())?;
         // Application has already allocated the shell's identity. Never silently rename it here.
         let name = ResourceName::parse(name)?;
         let path = renamed_graph_path(&name, resource.kind)?;
         let mutation_context = context(
             self,
-            snapshot.session.clone(),
+            session,
             operation_id,
             BTreeMap::new(),
             [yss_project_history::ResourceKey::Graph(path.clone())].into(),
         );
-        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
-        let revision = snapshot
+        self.validate_writer_context(&mutation_context, authority_generation)?;
+        let revision = self
             .graph_resource_revisions
+            .read()
+            .unwrap()
             .get(&path)
             .copied()
             .map(|retained| super::checked_resource_revision(path.as_str(), retained))
@@ -101,7 +104,7 @@ impl ProjectState {
             }],
             crate::project_writers::validate_document,
         )?;
-        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        self.validate_writer_context(&mutation_context, authority_generation)?;
         let committed = prepared.commit()?;
         match self.apply_project_resource_document_patch(
             &mutation_context,
@@ -130,7 +133,7 @@ impl ProjectState {
         operation_id: yss_project_identity::OperationId,
         name: Option<String>,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let snapshot = self.capture_graph_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
         let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
@@ -146,7 +149,7 @@ impl ProjectState {
             Default::default(),
         );
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
-        let source = match snapshot.data.graphs.get(source_path) {
+        let source = match snapshot.graphs.get(source_path) {
             Some(resource) => resource.clone(),
             None => crate::project_io::load_project_graph_from_file(
                 snapshot.session.root.as_path().to_string_lossy().as_ref(),
@@ -156,10 +159,17 @@ impl ProjectState {
                 message: error.to_string(),
             })?,
         };
-        let (target, name) = Self::allocate_graph_path_from_snapshot(
-            snapshot.session.root.as_path().to_str(),
-            &snapshot.data,
-            name.as_deref().unwrap_or(&format!("{} Copy", source.name)),
+        let index =
+            crate::scan_graph_resource_index(snapshot.session.root.as_path()).map_err(|error| {
+                ProjectOperationError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                }
+            })?;
+        let requested = name.unwrap_or_else(|| format!("{} Copy", source.name));
+        let (target, name) = Self::allocate_graph_path_from_index(
+            &snapshot.graphs,
+            &index,
+            &requested,
             source.kind,
         )?;
         mutation_context
@@ -228,13 +238,14 @@ impl ProjectState {
         expected_revision: ResourceRevision,
         operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let (session, authority_generation, ()) =
+            self.capture_writer_input(expected_project_instance_id, |_| ())?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let lease = self.filesystem().acquire(session.root.clone())?;
         let mutation_context = context(
             self,
-            snapshot.session.clone(),
+            session,
             operation_id,
             [(
                 yss_project_history::ResourceKey::Graph(graph_path.clone()),
@@ -243,7 +254,7 @@ impl ProjectState {
             .into(),
             Default::default(),
         );
-        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        self.validate_writer_context(&mutation_context, authority_generation)?;
         let prepared = FilesystemTransaction::prepare_with_validator(
             mutation_context.filesystem_context(),
             lease,
@@ -252,7 +263,7 @@ impl ProjectState {
             }],
             crate::project_writers::validate_document,
         )?;
-        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        self.validate_writer_context(&mutation_context, authority_generation)?;
         let committed = prepared.commit()?;
         match self.apply_project_resource_document_patch(
             &mutation_context,
@@ -468,59 +479,39 @@ impl ProjectState {
                 message: "graph allocation project instance is stale".into(),
             });
         }
-        let data = self.get_data()?;
-        Self::allocate_graph_path_from_snapshot(session.root.as_path().to_str(), &data, name, kind)
+        let _lease = self.filesystem().acquire(session.root.clone())?;
+        self.validate_project_session(&session)?;
+        let index = crate::scan_graph_resource_index(session.root.as_path()).map_err(|error| {
+            ProjectOperationError::TransactionPrepareFailed {
+                message: error.to_string(),
+            }
+        })?;
+        self.coherent_project_read(&session, |data, _| {
+            Self::allocate_graph_path_from_index(&data.graphs, &index, name, kind)
+        })?
     }
 
-    pub(crate) fn allocate_graph_path_from_snapshot(
-        project_path: Option<&str>,
-        data: &yss_project_model::ProjectData,
+    fn allocate_graph_path_from_index(
+        graphs: &HashMap<GraphResourcePath, GraphResourceDocument>,
+        index: &crate::GraphResourceIndex,
         name: &str,
         kind: yss_graph_document::GraphResourceKind,
     ) -> Result<(GraphResourcePath, String), ProjectOperationError> {
-        let persisted = project_path
-            .map(|path| {
-                let root = crate::project_root_from_path(path);
-                crate::scan_graph_resource_index(&root)
-                    .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                        message: error.to_string(),
-                    })
-                    .map(|index| {
-                        index
-                            .entries()
-                            .iter()
-                            .filter(|entry| entry.kind == kind)
-                            .map(|entry| entry.path.clone())
-                            .collect::<Vec<_>>()
-                    })
-            })
-            .transpose()?
-            .unwrap_or_default();
-        let existing = data
-            .graphs
+        let persisted = index
+            .entries()
+            .iter()
+            .filter(|entry| entry.kind == kind)
+            .map(|entry| &entry.path);
+        let existing = graphs
             .iter()
             .filter(|(_, graph)| graph.kind == kind)
             .map(|(path, _)| path)
-            .chain(persisted.iter())
+            .chain(persisted)
             .map(|path| ResourceName::parse(path.display_name()))
             .collect::<Result<Vec<_>, _>>()?;
         let requested = ResourceName::parse(name)?;
         let allocated = allocate_unique_resource_name(&requested, existing.iter());
-        let (directory, extension) = match kind {
-            yss_graph_document::GraphResourceKind::EventGraph => (
-                yss_project_layout::EVENT_GRAPHS_DIR,
-                yss_project_layout::EVENT_GRAPH_EXTENSION,
-            ),
-            yss_graph_document::GraphResourceKind::FunctionGraph => (
-                yss_project_layout::FUNCTION_GRAPHS_DIR,
-                yss_project_layout::FUNCTION_GRAPH_EXTENSION,
-            ),
-        };
-        let path =
-            GraphResourcePath::new(format!("{directory}/{}.{extension}", allocated.as_str()))
-                .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                })?;
+        let path = renamed_graph_path(&allocated, kind)?;
         Ok((path, allocated.as_str().to_owned()))
     }
 
@@ -605,7 +596,7 @@ impl ProjectState {
             operation_id,
         } = request;
         self.ensure_project_operational()?;
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let snapshot = self.capture_graph_writer_snapshot(expected_project_instance_id)?;
         let session = snapshot.session.clone();
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -616,7 +607,7 @@ impl ProjectState {
         )?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
-        let current_data = &snapshot.data;
+        let current_graphs = &snapshot.graphs;
         let mut persisted_source = crate::project_io::load_project_graph_from_file(
             session.root.as_path().to_string_lossy().as_ref(),
             graph_path,
@@ -624,8 +615,7 @@ impl ProjectState {
         .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
             message: error.to_string(),
         })?;
-        let mut source = current_data
-            .graphs
+        let mut source = current_graphs
             .get(graph_path)
             .unwrap_or(&persisted_source)
             .clone();
@@ -643,7 +633,7 @@ impl ProjectState {
         let requested = ResourceName::parse(new_name)?;
         let target = renamed_graph_path(&requested, source.kind)?;
         let target_name_key = requested.portable_key();
-        if current_data.graphs.iter().any(|(path, resource)| {
+        if current_graphs.iter().any(|(path, resource)| {
             path != graph_path
                 && resource.kind == source.kind
                 && ResourceName::parse(path.display_name())
@@ -710,7 +700,7 @@ impl ProjectState {
             .entries()
             .iter()
             .map(|entry| entry.path.clone())
-            .chain(current_data.graphs.keys().cloned())
+            .chain(current_graphs.keys().cloned())
             .collect::<std::collections::BTreeSet<_>>();
         let mut referenced = Vec::new();
         for path in paths {
@@ -724,7 +714,7 @@ impl ProjectState {
             .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                 message: error.to_string(),
             })?;
-            let mut changed = current_data.graphs.get(&path).unwrap_or(&persisted).clone();
+            let mut changed = current_graphs.get(&path).unwrap_or(&persisted).clone();
             let current_changed = remap_document(
                 Arc::make_mut(&mut changed.document),
                 graph_path,
@@ -826,7 +816,7 @@ impl ProjectState {
                     .collect(),
                 loaded_referenced_graphs: referenced
                     .iter()
-                    .filter(|(path, _, _)| current_data.graphs.contains_key(path))
+                    .filter(|(path, _, _)| current_graphs.contains_key(path))
                     .map(|(path, _, _)| path.clone())
                     .collect(),
             },
@@ -1096,7 +1086,9 @@ mod tests {
         ));
         assert_eq!(std::fs::read(&file).unwrap(), bytes);
 
-        let snapshot = state.capture_writer_snapshot(&session.instance_id).unwrap();
+        let snapshot = state
+            .capture_graph_writer_snapshot(&session.instance_id)
+            .unwrap();
         let context = context(
             state,
             session.clone(),
