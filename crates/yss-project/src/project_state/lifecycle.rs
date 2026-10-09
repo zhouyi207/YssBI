@@ -89,10 +89,11 @@ impl ProjectState {
         Ok(())
     }
 
-    pub(crate) fn coherent_project_read_snapshot(
+    pub(crate) fn coherent_project_read<T>(
         &self,
         session: &ProjectSession,
-    ) -> Result<(String, u64, ProjectData), ProjectOperationError> {
+        read: impl FnOnce(&ProjectData, &MutationPublication) -> T,
+    ) -> Result<T, ProjectOperationError> {
         self.ensure_project_operational()?;
         let publication = self.mutation_publication.lock().unwrap();
         let path = self.project_path.read().unwrap();
@@ -106,12 +107,9 @@ impl ProjectState {
                 message: "project changed before read publication".into(),
             });
         }
-        let data = self.project_data.read().unwrap().clone();
+        let data = self.project_data.read().unwrap();
+        let result = read(&data, &publication);
         self.ensure_project_operational()?;
-        Ok((
-            publication.project_instance_id.clone(),
-            publication.resource_revision,
-            data,
-        ))
+        Ok(result)
     }
 }

@@ -11,9 +11,44 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
     ) -> Result<ProjectIndex, ProjectOperationError> {
-        read_project_index_with(self, expected_project_instance_id, |root| {
-            crate::project_io::read_project_index_from_root(root).map_err(read_error)
-        })
+        let session = expected_session(self, expected_project_instance_id)?;
+        let _lease = self.filesystem().acquire(session.root.clone())?;
+        self.validate_project_session(&session)?;
+        let mut index = crate::project_io::read_project_index_from_root(session.root.as_path())
+            .map_err(read_error)?;
+        self.validate_project_session(&session)?;
+        self.coherent_project_read(&session, |data, publication| {
+            let graph_revisions = self.graph_resource_revisions.read().unwrap();
+            let chart_revisions = self.chart_revisions.read().unwrap();
+            let database_revisions = self.database_authority_revisions.read().unwrap();
+            if data
+                .databases
+                .keys()
+                .any(|id| !database_revisions.contains_key(id))
+            {
+                return Err(stale_catalog(
+                    "loaded database is missing its revision authority",
+                ));
+            }
+            overlay_authoritative_project_index(
+                data,
+                &graph_revisions,
+                &chart_revisions,
+                &database_revisions,
+                &mut index,
+            )?;
+            index.project_instance_id = publication.project_instance_id.clone();
+            index.publication_revision = publication.resource_revision;
+            index.authority_generation = publication.authority_generation();
+            Ok(())
+        })??;
+        self.validate_project_session(&session)?;
+        self.validate_project_index_version(
+            &session.instance_id,
+            index.publication_revision,
+            index.authority_generation,
+        )?;
+        Ok(index)
     }
 
     /// Revalidate a captured index without rescanning files or cloning project data.
@@ -50,15 +85,18 @@ impl ProjectState {
         let session = expected_session(self, expected_project_instance_id)?;
         let _lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
-        let (_, publication_revision, data) = self.coherent_project_read_snapshot(&session)?;
-        if expected_publication_revision.is_some_and(|expected| expected != publication_revision) {
-            return Err(stale_catalog("chart changed during index preparation"));
-        }
-        let document = data.charts.get(chart_path).cloned().ok_or_else(|| {
-            ProjectOperationError::ChartNotFound {
-                path: chart_path.clone(),
+        let document = self.coherent_project_read(&session, |data, publication| {
+            if expected_publication_revision
+                .is_some_and(|expected| expected != publication.resource_revision)
+            {
+                return Err(stale_catalog("chart changed during index preparation"));
             }
-        })?;
+            data.charts.get(chart_path).cloned().ok_or_else(|| {
+                ProjectOperationError::ChartNotFound {
+                    path: chart_path.clone(),
+                }
+            })
+        })??;
         self.validate_project_session(&session)?;
         Ok(document)
     }
@@ -90,98 +128,6 @@ fn expected_session(
         });
     }
     Ok(session)
-}
-
-struct ProjectIndexAuthorityCapture {
-    project_instance_id: String,
-    publication_revision: u64,
-    authority_generation: u64,
-    data: ProjectData,
-    graph_resource_revisions:
-        std::collections::HashMap<yss_graph_document::GraphResourcePath, ResourceRevision>,
-    chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
-    database_revisions: std::collections::HashMap<String, u64>,
-}
-
-fn read_project_index_with(
-    state: &ProjectState,
-    expected_project_instance_id: &ProjectInstanceId,
-    read: impl FnOnce(&std::path::Path) -> Result<ProjectIndex, ProjectOperationError>,
-) -> Result<ProjectIndex, ProjectOperationError> {
-    let session = expected_session(state, expected_project_instance_id)?;
-    let _lease = state.filesystem().acquire(session.root.clone())?;
-    state.validate_project_session(&session)?;
-    let mut index = read(session.root.as_path())?;
-    state.validate_project_session(&session)?;
-    let capture = capture_project_index_authority(state, &session)?;
-    overlay_authoritative_project_index(
-        &capture.data,
-        &capture.graph_resource_revisions,
-        &capture.chart_revisions,
-        &capture.database_revisions,
-        &mut index,
-    )?;
-    index.project_instance_id = capture.project_instance_id.clone();
-    index.publication_revision = capture.publication_revision;
-    index.authority_generation = capture.authority_generation;
-    validate_project_index_authority(state, &session, &capture)?;
-    Ok(index)
-}
-
-fn capture_project_index_authority(
-    state: &ProjectState,
-    session: &ProjectSession,
-) -> Result<ProjectIndexAuthorityCapture, ProjectOperationError> {
-    capture_project_index_authority_with(state, session, || {})
-}
-
-fn capture_project_index_authority_with(
-    state: &ProjectState,
-    session: &ProjectSession,
-    after_declaration_capture: impl FnOnce(),
-) -> Result<ProjectIndexAuthorityCapture, ProjectOperationError> {
-    let publication = state.mutation_publication.lock().unwrap();
-    if publication.project_instance_id != session.instance_id.as_str() {
-        return Err(stale_project_lifecycle(
-            "project changed before project index authority capture",
-        ));
-    }
-    let data = state.project_data.read().unwrap().clone();
-    let graph_resource_revisions = state.graph_resource_revisions.read().unwrap().clone();
-    let chart_revisions = state.chart_revisions.read().unwrap().clone();
-    after_declaration_capture();
-    let database_revisions = state.database_authority_revisions.read().unwrap().clone();
-    if data
-        .databases
-        .keys()
-        .any(|id| !database_revisions.contains_key(id))
-    {
-        return Err(stale_catalog(
-            "loaded database is missing its revision authority",
-        ));
-    }
-    Ok(ProjectIndexAuthorityCapture {
-        project_instance_id: publication.project_instance_id.clone(),
-        publication_revision: publication.resource_revision,
-        authority_generation: publication.authority_generation(),
-        data,
-        graph_resource_revisions,
-        chart_revisions,
-        database_revisions,
-    })
-}
-
-fn validate_project_index_authority(
-    state: &ProjectState,
-    session: &ProjectSession,
-    capture: &ProjectIndexAuthorityCapture,
-) -> Result<(), ProjectOperationError> {
-    state.validate_project_session(session)?;
-    state.validate_project_index_version(
-        &session.instance_id,
-        capture.publication_revision,
-        capture.authority_generation,
-    )
 }
 
 fn overlay_authoritative_project_index(

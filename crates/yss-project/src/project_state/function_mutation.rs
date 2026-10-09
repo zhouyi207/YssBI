@@ -414,7 +414,9 @@ mod tests {
         let (fixture, path) = function_project(revision);
         let state = fixture.state();
         let session = state.capture_project_session().unwrap();
-        let before_publication = state.coherent_project_read_snapshot(&session).unwrap().1;
+        let before_publication = state
+            .coherent_project_read(&session, |_, publication| publication.resource_revision)
+            .unwrap();
         let before = state.get_data().unwrap().graphs[&path].function.clone();
         let before_revisions = state.revision_state_for_test();
         let request = MutationRequest::new(
@@ -438,7 +440,9 @@ mod tests {
         assert_eq!(state.get_data().unwrap().graphs[&path].function, before);
         assert_eq!(state.revision_state_for_test(), before_revisions);
         assert_eq!(
-            state.coherent_project_read_snapshot(&session).unwrap().1,
+            state
+                .coherent_project_read(&session, |_, publication| publication.resource_revision)
+                .unwrap(),
             before_publication
         );
     }

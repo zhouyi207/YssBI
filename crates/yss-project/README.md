@@ -66,6 +66,10 @@ GroupTransform 角色形成正文调用边。
 
 `read_resource_catalog` 提供资源身份、名称、版本和轻量状态；复用现有路径扫描和数据库声明，不读取正文、不复制 ProjectData、不打开关闭图。文件成员仍由磁盘路径决定，resident 状态只补充其版本、dirty 和初始业务引用。调用方通过原 `validate_project_index_version` 重验 publication 与 authority generation。数据库 dirty 仍归 Database owner；图尚未打开时不虚构编辑会话。
 
+项目索引在既有 publication 锁内借用当前数据和资源 revision 表，仅复制索引所需的声明、
+函数签名与版本，不复制文档正文。单张 Chart 读取在同一会话校验边界只复制目标文档，
+并校验调用者的 publication revision；Save As 仍捕获复制所需的完整当前正文。
+
 Graph、Chart、Mind、Doc 和 Database 的复制接受可选目标名称，在同一次复制提交中沿用名称分配规则；不通过复制后重命名实现。返回的实际名称和资源身份用于后续操作。
 
 ## Filesystem boundary
