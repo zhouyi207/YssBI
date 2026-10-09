@@ -32,6 +32,21 @@ pub enum OlsCovariance {
 }
 
 impl OlsCovariance {
+    /// Whether covariance adjusts for heterogeneous or dependent errors.
+    /// Fixed-scale and ordinary homoskedastic covariance are nonrobust.
+    pub fn is_robust(&self) -> bool {
+        match self {
+            Self::NonRobust | Self::FixedScale { .. } => false,
+            Self::Hc0
+            | Self::Hc1
+            | Self::Hc2
+            | Self::Hc3
+            | Self::Cluster { .. }
+            | Self::Hac { .. }
+            | Self::Newey { .. } => true,
+        }
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Self::NonRobust => "nonrobust",

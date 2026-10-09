@@ -40,3 +40,116 @@ fn twfe_did_preserves_treatment_effect_and_report_contract() {
         })
     ));
 }
+
+#[test]
+fn iv_fixed_scale_unavailability_retains_the_nonrobust_reason() {
+    use yss_sci_contract::causal::iv::{InstrumentalVariableKind, IvSummaryOptions};
+    use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+    use yss_sci_runtime::causal::iv::{fit_instrumental_variables, summary};
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1))
+        .collect::<Vec<_>>();
+    let instruments = (0..2)
+        .map(|bit| (0..16).map(|row| signal(row, bit)).collect())
+        .collect::<Vec<Vec<f64>>>();
+    let response = (0..16)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + 2.0 * signal(row, 2))
+        .collect();
+    let fit = fit_instrumental_variables(
+        InstrumentalVariableKind::TwoStageLeastSquares,
+        response,
+        &[],
+        &[endogenous],
+        &instruments,
+        OlsOptions {
+            constant: true,
+            covariance: OlsCovariance::FixedScale { scale: 1.0 },
+        },
+        false,
+    )
+    .unwrap();
+    assert_eq!(fit.statistics.covariance_type, "fixed scale");
+    let model = serde_json::to_value(&fit).unwrap();
+    let fit = serde_json::from_value(model).unwrap();
+    let report = summary(
+        &fit,
+        IvSummaryOptions {
+            model_summary: false,
+            coefficient_table: false,
+            first_stage: false,
+            overidentification: false,
+            endogeneity: true,
+        },
+    )
+    .unwrap();
+    assert!(report["endogeneity"]["hausman"].is_null());
+    assert!(report["endogeneity"]["endogenous"].is_null());
+    assert_eq!(
+        report["endogeneityUnavailable"],
+        "insufficient_residual_variation_or_degrees_of_freedom"
+    );
+}
+
+#[test]
+fn iv_diagnostic_unavailability_uses_options_after_model_roundtrip() {
+    use yss_sci_contract::causal::iv::{InstrumentalVariableKind, IvSummaryOptions};
+    use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+    use yss_sci_runtime::causal::iv::{fit_instrumental_variables, summary};
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1) + signal(row, 2))
+        .collect::<Vec<_>>();
+    let instruments = (0..2)
+        .map(|bit| (0..16).map(|row| signal(row, bit)).collect())
+        .collect::<Vec<Vec<f64>>>();
+    let response = (0..16)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + signal(row, 1) + 2.0 * signal(row, 3))
+        .collect::<Vec<_>>();
+    let mut reasons = Vec::new();
+    for kind in [
+        InstrumentalVariableKind::TwoStageLeastSquares,
+        InstrumentalVariableKind::LimitedInformationMaximumLikelihood,
+    ] {
+        let fit = fit_instrumental_variables(
+            kind,
+            response.clone(),
+            &[],
+            std::slice::from_ref(&endogenous),
+            &instruments,
+            OlsOptions {
+                constant: true,
+                covariance: OlsCovariance::Hc1,
+            },
+            false,
+        )
+        .unwrap();
+        let mut model = serde_json::to_value(&fit).unwrap();
+        model["statistics"]["covarianceType"] = serde_json::json!("nonrobust");
+        let fit = serde_json::from_value(model).unwrap();
+        let liml = kind == InstrumentalVariableKind::LimitedInformationMaximumLikelihood;
+        let report = summary(
+            &fit,
+            IvSummaryOptions {
+                model_summary: false,
+                coefficient_table: false,
+                first_stage: false,
+                overidentification: liml,
+                endogeneity: !liml,
+            },
+        )
+        .unwrap();
+        let field = if liml {
+            "overidentificationUnavailable"
+        } else {
+            "endogeneityUnavailable"
+        };
+        reasons.push((kind, report[field].clone()));
+    }
+    assert!(
+        reasons
+            .iter()
+            .all(|(_, reason)| reason == "requires_nonrobust_covariance"),
+        "{reasons:?}"
+    );
+}

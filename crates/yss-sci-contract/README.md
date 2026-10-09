@@ -57,6 +57,9 @@ the borrowed model contract.
   allow adapters to restore exact tabular values; optional MANOVA inference fields
   explicitly represent unavailable small-sample F approximations.
 - `regression`: the single OLS configuration/default and covariance selection.
+  `OlsCovariance::is_robust` owns the shared classification used by IV diagnostics
+  and their report availability: HC, cluster and serial covariance are robust;
+  `NonRobust` and `FixedScale` are not. Display names do not select this policy.
   `linear` defines OLS/WLS/GLS computation requests/results; `fit` defines neutral
   regression statistics; `report` defines typed OLS
   summary records. Report construction and labels belong to the runtime.

@@ -12,7 +12,7 @@ use yss_sci_contract::causal::iv::{
     FirstStageResult, FirstStageSummary, InstrumentalVariableDesign, InstrumentalVariableKind,
     InstrumentalVariableModelTest,
 };
-use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+use yss_sci_contract::regression::OlsOptions;
 use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 
 use yss_sci_linalg::{Col, ColRef, Mat, MatRef};
@@ -191,7 +191,7 @@ fn compute_first_stage_summary(
     }
 
     let min_eigenvalue = min_eigenvalue_from_cd;
-    let is_robust = is_robust_covariance(covariance);
+    let is_robust = covariance.is_robust();
     let min_eigenvalue_cv = if !is_robust {
         if kind == InstrumentalVariableKind::LimitedInformationMaximumLikelihood {
             if k_endog == 1 {
@@ -371,17 +371,4 @@ fn compute_first_stage_summary(
         min_eigenvalue_cv,
         min_eigenvalue_cv_note,
     })
-}
-
-pub(super) fn is_robust_covariance(covariance: &OlsCovariance) -> bool {
-    matches!(
-        covariance,
-        OlsCovariance::Hc0
-            | OlsCovariance::Hc1
-            | OlsCovariance::Hc2
-            | OlsCovariance::Hc3
-            | OlsCovariance::Cluster { .. }
-            | OlsCovariance::Hac { .. }
-            | OlsCovariance::Newey { .. }
-    )
 }

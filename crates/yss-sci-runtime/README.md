@@ -227,7 +227,11 @@ Equations and weak-instrument display fields use typed analysis results before J
 encoding. Unavailable Hausman or endogeneity tests retain SCI's existing `None` values. If both endogeneity
 tests are unavailable under nonrobust covariance, the report identifies insufficient
 residual variation or degrees of freedom; robust covariance retains its separate
-unsupported-test reason. An unavailable diagnostic does not invalidate the fit.
+unsupported-test reason. Both this classification and the LIML overidentification
+reason borrow `fit.options.covariance.is_robust()`, shared with SCI; stored covariance
+names are display facts. Fixed-scale covariance retains the nonrobust reason when
+residual variation or degrees are unavailable. An unavailable diagnostic does not
+invalidate the fit.
 Panel accepts `PanelOptions`; SCI selects the estimator/effect
 combination and owns all matrix construction. Panel Summary projects the selected
 model, coefficient, effect and estimator statistics from the shared fit contract.

@@ -1,5 +1,4 @@
 use super::design::{prepare_instruments, project_endogenous, regressor_design};
-use super::first_stage::is_robust_covariance;
 use crate::regression::covariance::score_covariance;
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use yss_sci_contract::causal::iv::{
@@ -10,7 +9,7 @@ use yss_sci_linalg::{Col, ColRef, Mat, MatrixExt, Solve, Svd};
 pub(super) fn endogeneity(
     fit: &InstrumentalVariableFit,
 ) -> Result<(Option<HausmanTest>, Option<EndogenousTest>), String> {
-    if is_robust_covariance(&fit.options.covariance) {
+    if fit.options.covariance.is_robust() {
         return Ok((None, None));
     }
     let n = fit.residuals.len();
@@ -199,7 +198,7 @@ pub(super) fn overidentification(
     let (z, inverse) = prepare_instruments(n, &columns, fit.options.constant)?;
     let distribution =
         ChiSquared::new(df as f64).map_err(|error| format!("IV2SLS overid ChiSquared: {error}"))?;
-    if is_robust_covariance(&fit.options.covariance) {
+    if fit.options.covariance.is_robust() {
         let statistic = wooldridge_score(fit, &z, &inverse, residuals.as_ref())?;
         return Ok(Some(OveridTest {
             test_type: "wooldridge".into(),
@@ -300,7 +299,7 @@ pub(super) fn liml_overidentification(
 ) -> Result<Option<LimlOveridTest>, String> {
     let k_iv = fit.design.instruments.len();
     let k_endog = fit.design.endogenous.len();
-    if k_iv <= k_endog || is_robust_covariance(&fit.options.covariance) {
+    if k_iv <= k_endog || fit.options.covariance.is_robust() {
         return Ok(None);
     }
     let n = fit.residuals.len();

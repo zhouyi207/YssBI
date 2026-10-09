@@ -770,6 +770,8 @@ named parameters; OLS, WLS and IV reuse their existing design, inverse cross pro
 and residual buffers. IV 2SLS/LIML models consume the same `OlsOptions`, with `small`
 remaining an IV-specific input. Fit projection moves those options into the result;
 first-stage and postestimation checks borrow the same covariance selection.
+`OlsCovariance::is_robust` owns their robust/nonrobust classification and is shared
+with Runtime availability reasons; covariance display names do not govern analysis.
 
 Covariance callers supply the intercept column from the existing model or design
 options. Automatic HAC bandwidth excludes that column from a multicolumn pilot

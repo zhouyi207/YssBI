@@ -63,9 +63,7 @@ pub fn summary(
                 serde_json::json!(
                     if fit.design.instruments.len() == fit.design.endogenous.len() {
                         "exact_identification"
-                    } else if fit.family == "iv_liml"
-                        && fit.statistics.covariance_type != "nonrobust"
-                    {
+                    } else if fit.family == "iv_liml" && fit.options.covariance.is_robust() {
                         "requires_nonrobust_covariance"
                     } else {
                         "insufficient_residual_variation_or_degrees_of_freedom"
@@ -80,10 +78,10 @@ pub fn summary(
         if hausman.is_none() && endogenous.is_none() {
             report.insert(
                 "endogeneityUnavailable".into(),
-                serde_json::json!(if fit.statistics.covariance_type == "nonrobust" {
-                    "insufficient_residual_variation_or_degrees_of_freedom"
-                } else {
+                serde_json::json!(if fit.options.covariance.is_robust() {
                     "requires_nonrobust_covariance"
+                } else {
+                    "insufficient_residual_variation_or_degrees_of_freedom"
                 }),
             );
         }
