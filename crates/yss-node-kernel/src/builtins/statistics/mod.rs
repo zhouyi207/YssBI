@@ -86,6 +86,8 @@ pub(super) fn install(
                     && id != "yssbi.statistics.survival.competing_risks")
                     || id == "yssbi.statistics.workflow.subgroup"
                     || id == "yssbi.statistics.test.fisher_exact"
+                    || id == "yssbi.statistics.test.binomial"
+                    || id == "yssbi.statistics.test.poisson"
                 {
                     7
                 } else if matches!(
@@ -94,8 +96,6 @@ pub(super) fn install(
                         | "yssbi.statistics.test.mcnemar"
                         | "yssbi.statistics.test.cmh"
                         | "yssbi.statistics.test.chisquare.crosstab"
-                        | "yssbi.statistics.test.binomial"
-                        | "yssbi.statistics.test.poisson"
                 ) {
                     6
                 } else if matches!(

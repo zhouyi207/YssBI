@@ -4,7 +4,7 @@
 
 ## 输入与参数
 
-`series` 输入数值 `0/1` 观测，`1` 为成功。至少 1 次、最多 1,000,000 次试验；不得含空值或其他编码。`null_probability` 默认为 `0.5`，范围 $[0,1]$。`alternative` 默认 `two_sided`，另可选 `greater`、`less`。
+`series` 输入数值 `0/1` 观测，`1` 为成功。至少 1 次试验；不得含空值或其他编码。`null_probability` 默认为 `0.5`，范围 $[0,1]$。`alternative` 默认 `two_sided`，另可选 `greater`、`less`。
 
 ## 假设与统计量
 

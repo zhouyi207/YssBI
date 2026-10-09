@@ -63,6 +63,29 @@ fn classical_admission_preserves_option_observation_and_computation_roles() {
 }
 
 #[test]
+fn poisson_adapter_admits_counts_and_rates_without_fixed_scientific_caps() {
+    for (counts, rate, alternative) in [
+        ([0.0], 500_001.0, "greater"),
+        ([1_000_001.0], 0.0, "less"),
+        ([1_000_001.0], 1.0, "less"),
+    ] {
+        let result = run(
+            "yssbi.statistics.test.poisson",
+            &[("series", series(&counts))],
+            &[
+                ("null_rate", number(rate)),
+                ("alternative", string(alternative)),
+            ],
+            1,
+        )
+        .unwrap();
+        let p_value =
+            crate::builtins::numeric_input(Some(field(&result[0], "p_value").unwrap())).unwrap();
+        assert_eq!(p_value, 1.0);
+    }
+}
+
+#[test]
 fn discrete_adapters_preserve_inclusive_and_degenerate_exact_tails() {
     for (id, values, parameter, null, alternative, expected) in [
         (

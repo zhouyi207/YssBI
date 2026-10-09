@@ -628,6 +628,10 @@ retained. Zero odds with a positive denominator remain a defined zero statistic.
 Exact Binomial and Poisson tails include the observed count: `Greater` uses
 `P(X >= k)` and `Less` uses `P(X <= k)`. Zero counts and point-mass nulls
 (probability 0/1 or rate 0) respect the selected alternative.
+Count admission uses the caller's resources and execution control. Binomial
+trials and Poisson events/expected counts have no additional fixed sample caps;
+two-sided enumeration samples the caller's cancellation/deadline. Integer
+representation bounds and finite derived values remain checked.
 
 All four entrypoints also accept the caller's `ScientificExecutionControl`. Input,
 rank/tie, table and variance scans, exact binomial/Poisson/Fisher enumeration,

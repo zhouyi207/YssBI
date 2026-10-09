@@ -6,7 +6,7 @@ Tests the mean event rate for observations with equal exposure.
 
 `series` contains nonnegative integer counts and must be nonempty with no missing values. Observations should have equal exposure. `null_rate` defaults to `1`: the finite, nonnegative expected count per observation under the null. `alternative` defaults to `two_sided`, with `greater` and `less` available.
 
-Total observed events are limited to 1,000,000 and total null expected events to 500,000. Unequal exposure is not an input to this node.
+Unequal exposure is not an input to this node.
 
 ## Hypotheses and statistic
 

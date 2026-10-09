@@ -276,9 +276,6 @@ pub fn run(
             }
             let events = events_f as u64;
             let expected = finite(null_rate_per_observation * counts.len() as f64)?;
-            if expected > 500_000.0 || events > 1_000_000 {
-                return Err(invalid(Violation::DataOutOfRange));
-            }
             let p_value = poisson_p_value(events, expected, alternative, control)?;
             let rate = events as f64 / counts.len() as f64;
             let statistic = (events as f64 - expected) / expected.sqrt().max(1.0);
@@ -581,9 +578,6 @@ fn binomial_p_value(
     alternative: Alternative,
     control: &ScientificExecutionControl,
 ) -> Result<f64, Error> {
-    if trials > 1_000_000 {
-        return Err(invalid(Violation::DataOutOfRange));
-    }
     if p == 0.0 {
         return Ok(
             if matches!(alternative, Alternative::Less) || successes == 0 {
@@ -622,7 +616,7 @@ fn binomial_p_value(
         }
     };
     control.check()?;
-    Ok(value.clamp(0.0, 1.0))
+    Ok(finite(value)?.clamp(0.0, 1.0))
 }
 
 fn poisson_p_value(
@@ -661,5 +655,5 @@ fn poisson_p_value(
         }
     };
     control.check()?;
-    Ok(p_value.clamp(0.0, 1.0))
+    Ok(finite(p_value)?.clamp(0.0, 1.0))
 }

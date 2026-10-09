@@ -4,7 +4,7 @@ Tests the success probability of binary trials using binomial probabilities.
 
 ## Inputs and parameters
 
-Supply numeric `0/1` observations through `series`, with `1` indicating success. Between 1 and 1,000,000 trials are supported. Missing values and other codes are rejected. `null_probability` defaults to `0.5` and lies in $[0,1]$. `alternative` defaults to `two_sided`; `greater` and `less` are available.
+Supply numeric `0/1` observations through `series`, with `1` indicating success. At least one trial is required. Missing values and other codes are rejected. `null_probability` defaults to `0.5` and lies in $[0,1]$. `alternative` defaults to `two_sided`; `greater` and `less` are available.
 
 ## Hypotheses and statistic
 
