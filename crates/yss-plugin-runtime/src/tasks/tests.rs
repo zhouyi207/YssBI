@@ -392,4 +392,87 @@ mod observation {
         assert!(fixture.process.is_running());
         assert_eq!(fixture.snapshot(1).state, TaskState::Admitted);
     }
+
+    #[test]
+    fn fault_teardown_precedes_blocked_task_publication() {
+        let fixture = Fixture::new(Arc::new(|_, _| Err(fail("plugin_method_unknown"))));
+        let publication = fixture.manager.inner.commit.lock().unwrap();
+        let manager = fixture.manager.clone();
+        let process = fixture.process.clone();
+        let fault = std::thread::spawn(move || {
+            manager.fail_instance("example.compute", &process, fail("plugin_response_invalid"))
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let retired = loop {
+            let state = fixture.manager.inner.state.lock().unwrap();
+            let retired = !fixture.process.is_running()
+                && !state.contexts.contains_key("context-0")
+                && !state.contexts.contains_key("context-1");
+            drop(state);
+            if retired || Instant::now() >= deadline {
+                break retired;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        drop(publication);
+        fault.join().unwrap().unwrap();
+        assert!(retired, "fault teardown waited for task publication");
+        assert_eq!(fixture.snapshot(0).state, TaskState::OutcomeUnknown);
+        assert_eq!(fixture.snapshot(1).state, TaskState::OutcomeUnknown);
+        assert_eq!(fixture.snapshot(2).state, TaskState::Admitted);
+        assert_eq!(fixture.snapshot(3).state, TaskState::Succeeded);
+    }
+
+    #[test]
+    fn fault_teardown_survives_poisoned_runtime_state() {
+        let fixture = Fixture::new(Arc::new(|_, _| Err(fail("plugin_method_unknown"))));
+        {
+            let mut state = fixture.manager.inner.state.lock().unwrap();
+            for index in 0..3 {
+                state.exports.insert(
+                    format!("export-{index}"),
+                    (
+                        format!("context-{index}"),
+                        fixture.root.join(format!("lease-{index}")),
+                    ),
+                );
+            }
+        }
+        let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _state = fixture.manager.inner.state.lock().unwrap();
+            panic!("runtime-state fault fixture");
+        }));
+        assert!(poisoned.is_err());
+        let error = fixture
+            .manager
+            .fail_instance(
+                "example.compute",
+                &fixture.process,
+                fail("plugin_response_invalid"),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "plugin_state_unavailable");
+        assert!(!fixture.process.is_running());
+        assert_eq!(fixture.snapshot(0).state, TaskState::OutcomeUnknown);
+        assert_eq!(fixture.snapshot(1).state, TaskState::OutcomeUnknown);
+        assert_eq!(fixture.snapshot(2).state, TaskState::Admitted);
+        assert_eq!(fixture.snapshot(3).state, TaskState::Succeeded);
+        assert_eq!(
+            fixture.manager.list().err().unwrap().code,
+            "plugin_state_unavailable"
+        );
+        let state = fixture
+            .manager
+            .inner
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        assert!(!state.processes.contains_key("example.compute"));
+        assert!(!state.contexts.contains_key("context-0"));
+        assert!(!state.contexts.contains_key("context-1"));
+        assert!(state.contexts.contains_key("context-2"));
+        assert!(!state.exports.contains_key("export-0"));
+        assert!(!state.exports.contains_key("export-1"));
+        assert!(state.exports.contains_key("export-2"));
+    }
 }

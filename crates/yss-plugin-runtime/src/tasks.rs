@@ -399,13 +399,13 @@ impl PluginManager {
         process
             .diagnostics
             .push(format!("plugin process fault: {}\n", error.code).as_bytes());
-        let publication = self.record_instance_failure(plugin, &process.instance_id, error);
-        let removed = {
-            let mut state = self
-                .inner
-                .state
-                .lock()
-                .map_err(|_| fail("plugin_state_unavailable"))?;
+        process.stop();
+        let (removed, state_unavailable) = {
+            // A poisoned state still owns bindings that must be revoked.
+            let (mut state, unavailable) = match self.inner.state.lock() {
+                Ok(state) => (state, false),
+                Err(error) => (error.into_inner(), true),
+            };
             if state
                 .processes
                 .get(plugin)
@@ -426,13 +426,17 @@ impl PluginManager {
             state
                 .exports
                 .retain(|_, (context, _)| !removed.contains(context));
-            removed
+            (removed, unavailable)
         };
-        process.stop();
+        let publication = self.record_instance_failure(plugin, &process.instance_id, error);
         for context in removed {
             self.inner.services.release_context(&context);
         }
-        publication
+        if state_unavailable {
+            Err(fail("plugin_state_unavailable"))
+        } else {
+            publication
+        }
     }
 
     fn record_instance_failure(

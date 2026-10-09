@@ -145,6 +145,13 @@ waiting, so repeated stop calls cannot reuse a retired process ID. Waiting and t
 outside the handle lock. Target-platform execution acceptance remains open. Late results cannot
 change those terminal records. Other instances are unaffected.
 
+Instance faults stop the process and revoke its runtime bindings and export grants before waiting
+for task-ledger publication. If the runtime-state mutex is poisoned, teardown uses its retained
+contents only for revocation and still reports `plugin_state_unavailable` after cleanup; normal
+state access remains unavailable. Publication errors are returned after process retirement and
+context release, so a failed or blocked ledger write cannot keep the faulted instance active.
+The captured process identity continues to protect replacement instances and completed receipts.
+
 Stdout remains protocol-only. Stderr is drained into a 64 KiB ring per process, tagged with plugin,
 instance and the task identities active at emission. The host retains four recent instances per
 plugin and at most 64 buffers globally. Diagnostics are local, capacity-limited and queried
