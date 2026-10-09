@@ -632,6 +632,8 @@ input violation rather than producing a p-value; finite-input total overflow rem
 a computation failure.
 Multiple-proportion inputs retain ordered success/trial pairs. Each group's success
 and failure counts share one column in the two-row table passed to the shared Pearson test.
+Pearson contingency tables reject a zero observed total as a data-domain violation
+before dividing by it.
 `tests/categorical_tables.rs` covers repeated long labels whose first appearance
 order differs from the table's lexical order.
 For 2x2 Fisher tests, the statistic is the sample odds ratio `a*d/(b*c)`;

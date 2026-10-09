@@ -74,6 +74,16 @@ fn classical_admission_preserves_option_observation_and_computation_roles() {
         matches!(result, Err(KernelError::InvalidNumericInput)),
         "invalid frequency totals crossed the kernel boundary: {result:?}"
     );
+    let result = run(
+        "yssbi.statistics.test.chisquare.general",
+        &[("counts", series(&[0.0; 4]))],
+        &[("rows", int(2)), ("columns", int(2))],
+        1,
+    );
+    assert!(
+        matches!(result, Err(KernelError::InvalidNumericInput)),
+        "zero-total counts crossed the wrong error boundary: {result:?}"
+    );
 }
 
 #[test]

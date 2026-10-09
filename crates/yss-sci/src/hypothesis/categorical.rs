@@ -160,6 +160,9 @@ fn pearson_table(
         row_totals[i / columns] += count;
         col_totals[i % columns] += count;
     }
+    if n <= 0.0 {
+        return Err(invalid(Violation::DataOutOfRange));
+    }
     let mut statistic = 0.0;
     let mut min_expected = f64::INFINITY;
     for r in 0..rows {

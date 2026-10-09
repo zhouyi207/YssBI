@@ -114,6 +114,18 @@ fn classical_families_preserve_data_option_and_computation_errors() {
         invalid(Violation::NonFiniteInput),
     );
     assert_eq!(
+        categorical::run(
+            Categorical::PearsonTable {
+                observed: vec![0.0; 4],
+                rows: 2,
+                columns: 2,
+            },
+            &control,
+        )
+        .unwrap_err(),
+        invalid(Violation::DataOutOfRange),
+    );
+    assert_eq!(
         nonparametric::run(
             Rank::Runs {
                 values: vec![0.0, 2.0]
