@@ -4,8 +4,8 @@ use crate::services::NativeEvent;
 use gpui::{Context, Window};
 use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
-use yss_harness_contract::{HarnessEvent, HarnessEventEnvelope};
 use yss_harness_contract::AssistantEvent;
+use yss_harness_contract::{HarnessEvent, HarnessEventEnvelope};
 
 impl ConversationPanel {
     pub(super) fn connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -51,8 +51,6 @@ impl ConversationPanel {
         if !self.ready {
             return;
         }
-        let follow = self.transcript_scroll.offset().y + self.transcript_scroll.max_offset().y
-            <= gpui::px(32.);
         self.accept_submission(&event);
         let directory_changed = matches!(event.event, HarnessEvent::TurnStarted { .. });
         if self
@@ -68,9 +66,6 @@ impl ConversationPanel {
         }
         if !self.transcript.running() {
             self.stopping = false;
-        }
-        if follow {
-            self.transcript_scroll.scroll_to_bottom();
         }
         cx.notify();
     }
@@ -162,9 +157,6 @@ impl ConversationPanel {
                                 view.accept_submission(event);
                             }
                             view.session = session;
-                            if view.transcript.turns.is_empty() {
-                                view.transcript_scroll.scroll_to_bottom();
-                            }
                             view.transcript = candidate;
                             view.catalog = Some(Arc::new(catalog));
                             view.ready = true;

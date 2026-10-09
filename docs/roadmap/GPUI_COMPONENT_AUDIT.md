@@ -463,6 +463,16 @@
 - 嵌套 Xwayland 的局部重绘曾漏画部分静态文字，窗口尺寸变化后完整呈现；独立显示环境的重绘验收保持开放。物理键鼠、IME、读屏、混合拖放、跨项目迟到菜单、真实运行中的选项/队列和 Windows/macOS 仍待验收，不据此标记整个 Assistant 或工作台完成。
 - L2：工作区与独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`。独立预览首次构建的 SCI 字段错误来自共享 target 中另一个工作区的产物；重建对应契约后构建成功，未修改 SCI 代码。23/22 个 Rust 文件局部格式、31 个中英文文案键/参数、两份文档元信息及 275/270 条相对链接、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过；没有后端接口、依赖或 UI 单元测试变更，不运行全仓验证。累计审查 179/265 项。
 
+### 对话历史视口（Thread 分阶段迁移）
+
+- 已阅读 AssistantThread、AssistantMarkdown 主组件及滚动/富文本原生接口，先完成历史范围与阅读位置这一独立职责；消息子组件及其依赖尚未全部核销。
+- `assistant/thread` 接管原视图的历史范围和 ScrollHandle：首次保留最近 20 轮，向前每次加载 20 轮；后续消息追加不移动已加载起点。根 DockArea、会话缓存与 Harness 的状态归属保持原契约。
+- 加载较早消息时保留原可见轮次及条目内位置，Markdown 后台测量改变上方内容高度后继续校正。只在排版坐标变化时调整偏移，普通滚动沿用 GPUI；调整后在下一帧通知原实体，移除事件交付层对滚动的控制。
+- 添加“回到最新消息”及剩余历史数量；点击后恢复排版完成时的底部跟随。宽窗口每轮正文居中且最大 768px；当前工作区的新对话仍沿用已说明的输入区布局。
+- 工作区临时 `assistant_thread_review` 与独立提交内容的 `assistant_repaint_review` 均构建成功，在隔离应用目录、真实 Application 和 Linux/X11 窗口中使用 60 轮合成消息及原 accept_live 入口交付后续流式事件。验收初始末页、分批向前加载后原消息位置、追加不丢失历史、浏览时不跳动、回到底部后的长段追加和宽窗口排版；工作区另验收中英文数量提示、语言/会话切换保留输入与阅读位置。夹具不写事件账本、不调用模型，不能代替持久回放或真实模型运行验收。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；后者已接纳并发的 SCI 提交并重新编译消费者。局部格式、使用到的双语键/参数、两份文档的元信息和相对链接、模块索引及 `git diff --check` 按本批范围检查；不添加 UI 单元测试，不运行全工作区测试。
+- 此前静态文字漏绘在本轮展开/切换预览中未复现，独立显示环境仍待验证。触摸板惯性、物理键鼠、IME、读屏与其他平台尚未验收。用户消息的纯文本与局部选择、复制反馈、推理/失败展示、运行信息以及 Markdown 代码/资源/外部链接继续审查；Thread 与 Markdown 不标记整体完成，累计完整审查仍为 179/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -583,7 +593,7 @@
 | [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读主组件；历史范围、加载锚点、最新消息跳转与底部跟随已迁入 assistant/thread；消息子组件及依赖继续审查 | 视口已通过合成事件的原生窗口验收；整体未完成 |
 | [modules/assistant/internal/ui/AssistantTokenUsage.tsx](../../react/src/modules/assistant/internal/ui/AssistantTokenUsage.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantToolCalls.tsx](../../react/src/modules/assistant/internal/ui/AssistantToolCalls.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 

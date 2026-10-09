@@ -67,63 +67,7 @@ impl ConversationPanel {
             .child(text)
             .into_any_element()
     }
-    fn render_thread(&self, cx: &mut Context<Self>) -> AnyElement {
-        let first = self
-            .transcript
-            .turns
-            .len()
-            .saturating_sub(self.visible_turns);
-        let mut body = div()
-            .id("assistant-transcript")
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scroll()
-            .track_scroll(&self.transcript_scroll)
-            .px_4()
-            .py_3()
-            .flex()
-            .flex_col()
-            .gap_4();
-        if first > 0 {
-            body = body.child(
-                Button::new("assistant-earlier")
-                    .small()
-                    .ghost()
-                    .label("加载更早的消息")
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        let old_first = view
-                            .transcript
-                            .turns
-                            .len()
-                            .saturating_sub(view.visible_turns);
-                        let old_top = view.transcript_scroll.top_item();
-                        view.visible_turns += 20;
-                        let added = old_first
-                            - view
-                                .transcript
-                                .turns
-                                .len()
-                                .saturating_sub(view.visible_turns);
-                        view.transcript_scroll.scroll_to_item(old_top + added);
-                        cx.notify();
-                    })),
-            );
-        }
-        if self.transcript.turns.is_empty() {
-            body = body.child(
-                div()
-                    .py_8()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("描述问题、引用数据，开始新的分析对话。"),
-            );
-        }
-        for turn in &self.transcript.turns[first..] {
-            body = body.child(self.render_turn(turn, cx));
-        }
-        body.into_any_element()
-    }
-    fn render_turn(&self, turn: &Turn, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_turn(&self, turn: &Turn, cx: &mut Context<Self>) -> AnyElement {
         let text = turn.user.clone();
         let copy_user = text.clone();
         let id = &turn.id;

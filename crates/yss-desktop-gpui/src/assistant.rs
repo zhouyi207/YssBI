@@ -6,6 +6,7 @@ mod inspect;
 mod projection;
 mod render;
 mod stream;
+mod thread;
 
 use crate::services::NativeServices;
 use gpui::{
@@ -58,7 +59,7 @@ pub(crate) struct ConversationPanel {
     _search_subscription: Subscription,
     reference_picker: bool,
     resource_generation: u64,
-    transcript_scroll: gpui::ScrollHandle,
+    viewport: thread::Viewport,
     transcript: projection::Transcript,
     catalog: Option<Arc<LanguageModelCatalog>>,
     references: Vec<ProjectResourceRef>,
@@ -78,7 +79,6 @@ pub(crate) struct ConversationPanel {
     buffered: Vec<HarnessEventEnvelope>,
     overflow: bool,
     event_task: Option<gpui::Task<()>>,
-    visible_turns: usize,
     expanded: BTreeSet<String>,
     error: Option<String>,
     stream_error: Option<String>,
@@ -118,7 +118,7 @@ impl ConversationPanel {
             _search_subscription: search_subscription,
             reference_picker: false,
             resource_generation: 0,
-            transcript_scroll: gpui::ScrollHandle::new(),
+            viewport: Default::default(),
             transcript: Default::default(),
             catalog: None,
             references: vec![],
@@ -138,7 +138,6 @@ impl ConversationPanel {
             buffered: vec![],
             overflow: false,
             event_task: None,
-            visible_turns: 20,
             expanded: BTreeSet::new(),
             error: None,
             stream_error: None,
