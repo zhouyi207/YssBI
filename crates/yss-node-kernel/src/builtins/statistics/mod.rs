@@ -118,7 +118,8 @@ pub(super) fn install(
                 | "yssbi.statistics.econometrics.heckman_two_step"
                 | "yssbi.statistics.workflow.mediation"
                 | "yssbi.statistics.workflow.moderated_mediation"
-                | "yssbi.statistics.meta.egger" => 9,
+                | "yssbi.statistics.meta.egger"
+                | "yssbi.statistics.plot.funnel" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
                 | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.sur"
@@ -135,8 +136,7 @@ pub(super) fn install(
                 | "yssbi.statistics.causal.ipw"
                 | "yssbi.statistics.causal.psm"
                 | "yssbi.statistics.causal.regression_adjustment"
-                | "yssbi.statistics.plot.forest"
-                | "yssbi.statistics.plot.funnel" => 8,
+                | "yssbi.statistics.plot.forest" => 8,
                 "yssbi.statistics.diagnostic.wald"
                 | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
@@ -186,7 +186,10 @@ pub(super) fn install(
                 | "yssbi.statistics.mixed.poisson"
                 | "yssbi.statistics.mixed.random_intercept"
                 | "yssbi.statistics.mixed.random_slope"
-                | "yssbi.statistics.timeseries.ecm" => 7,
+                | "yssbi.statistics.timeseries.ecm"
+                | "yssbi.statistics.meta.cochran_q"
+                | "yssbi.statistics.meta.i_squared"
+                | "yssbi.statistics.meta.tau_squared" => 7,
                 "yssbi.plot.boxplot"
                 | "yssbi.plot.violin"
                 | "yssbi.statistics.diagnostic.information_matrix"
@@ -194,9 +197,6 @@ pub(super) fn install(
                 | "yssbi.statistics.diagnostic.white"
                 | "yssbi.statistics.doe.response_surface"
                 | "yssbi.statistics.inference.cluster_robust"
-                | "yssbi.statistics.meta.cochran_q"
-                | "yssbi.statistics.meta.i_squared"
-                | "yssbi.statistics.meta.tau_squared"
                 | "yssbi.statistics.sem.path"
                 | "yssbi.statistics.test.cochran_q"
                 | "yssbi.statistics.timeseries.granger"

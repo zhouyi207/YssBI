@@ -165,7 +165,14 @@ SCI does not depend on the catalog or use node IDs to select algorithms.
 `meta` separates effect conversion, inverse-variance regression, asymmetry and
 sensitivity diagnostics, and plot data. Intercept-only pooling and moderator
 models share one weighted-fit implementation; Paule–Mandel estimates residual
-heterogeneity with moderators included. Existing regression designs, coefficient
+heterogeneity with moderators included. Its iterations retain numerical coefficients,
+covariance and weight scales; observation records are produced only for a complete
+`model::fit`. `model::summary` and `model::heterogeneity` return their existing
+neutral records directly from that same prepared fit. Asymmetry, omissions,
+sensitivity and heterogeneity callers do not construct unused study rows.
+Funnel accepts an estimator and confidence level and uses the shared pooled estimate;
+it does not require coefficient inference or a prediction interval to draw its
+normal reference lines. Existing regression designs, coefficient
 inference, Kendall correlation and plot payloads are reused. Independent
 NumPy/SciPy/statsmodels references live in `tests/fixtures/meta_reference.*`.
 

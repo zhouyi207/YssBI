@@ -158,6 +158,15 @@ fn meta_pooling_regression_and_sensitivity_match_statsmodels_and_scipy() {
     let (y, v) = (numbers(&f["y"]), numbers(&f["variances"]));
     for case in f["pooling"].as_array().unwrap() {
         let fit = model::fit(&y, &v, &[], options(case), &control()).unwrap();
+        let summary = model::summary(&y, &v, &[], options(case), &control()).unwrap();
+        assert_eq!(
+            serde_json::to_value(&summary).unwrap(),
+            serde_json::to_value(&fit.summary).unwrap()
+        );
+        let heterogeneity =
+            model::heterogeneity(&y, &v, options(case).estimator, &control()).unwrap();
+        close(heterogeneity.q, case["q"].as_f64().unwrap());
+        close(heterogeneity.tau_squared, case["tau"].as_f64().unwrap());
         let c = &fit.summary.coefficients[0];
         close(c.estimate, case["estimate"].as_f64().unwrap());
         close(c.standard_error.unwrap(), case["se"].as_f64().unwrap());
@@ -228,7 +237,7 @@ fn meta_pooling_regression_and_sensitivity_match_statsmodels_and_scipy() {
         summary.baseline.coefficients[0].estimate.exp(),
     );
     assert_eq!(forest.data.len(), y.len() + 1);
-    let funnel = plots::funnel(&y, &v, opt, &control()).unwrap();
+    let funnel = plots::funnel(&y, &v, opt.estimator, opt.confidence_level, &control()).unwrap();
     assert_eq!(funnel.plot.reference_lines.len(), 3);
     close(
         funnel.plot.reference_lines[1].start.x,
@@ -275,6 +284,43 @@ fn meta_asymmetry_and_p_combination_match_reference_distributions() {
         0.
     );
     assert!(diagnostics::combine_p(&[0., 1.], None, true, &control()).is_err());
+}
+
+#[test]
+fn meta_funnel_uses_its_finite_center_without_unused_coefficient_inference() {
+    let y = [1e160; 4];
+    let v = [1e-300; 4];
+    let options = MetaOptions {
+        estimator: MetaEstimator::Fixed,
+        ..Default::default()
+    };
+    let plot = plots::funnel(
+        &y,
+        &v,
+        options.estimator,
+        options.confidence_level,
+        &control(),
+    )
+    .unwrap();
+    let heterogeneity = model::heterogeneity(&y, &v, options.estimator, &control()).unwrap();
+    assert_eq!(heterogeneity.q, 0.0);
+    assert_eq!(heterogeneity.degrees_of_freedom, y.len() - 1);
+    assert_eq!(heterogeneity.p_value, 1.0);
+    assert_eq!(plot.plot.data.len(), y.len());
+    assert!(plot.plot.reference_lines.iter().all(|line| {
+        line.start.x == y[0]
+            && line.end.x == y[0]
+            && line.start.y.is_finite()
+            && line.end.y.is_finite()
+    }));
+    assert_eq!(plot.y_domain[1], 0.0);
+    assert!(plot.y_domain[0] > 0.0 && plot.y_domain[0].is_finite());
+    assert!(matches!(
+        plots::funnel(&y, &v, options.estimator, 0.0, &control()),
+        Err(ScientificComputationError::InvalidInput {
+            violation: ScientificInputViolation::ParameterOutOfRange
+        })
+    ));
 }
 
 #[test]

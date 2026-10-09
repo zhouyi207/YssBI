@@ -1,5 +1,6 @@
 //! Fixed/mixed-effects inverse-variance regression; pooling is its intercept-only case.
 use super::data::*;
+use crate::inference::intervals::validate_confidence;
 use crate::regression::models::common::{Design, coefficient_table, inverse, names, validate};
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 use yss_sci_linalg::Mat;
@@ -7,11 +8,17 @@ use yss_sci_linalg::Mat;
 struct WeightedFit {
     beta: Vec<f64>,
     covariance: Mat<f64>,
-    fitted: Vec<f64>,
-    residuals: Vec<f64>,
-    weights: Vec<f64>,
     q: f64,
     moment_denominator: f64,
+    weight_scale: f64,
+    weight_total: f64,
+}
+
+struct PreparedMeta {
+    design: Design,
+    fit: WeightedFit,
+    baseline_q: f64,
+    tau: f64,
 }
 
 fn fit_at(
@@ -23,12 +30,14 @@ fn fit_at(
 ) -> Result<WeightedFit> {
     control.check()?;
     let (n, p) = (y.len(), design.x.ncols());
-    let raw = variances
+    let mut w = variances
         .iter()
         .map(|v| finite(1. / (v + tau)))
         .collect::<Result<Vec<_>>>()?;
-    let scale = raw.iter().copied().fold(0., f64::max);
-    let w = raw.iter().map(|w| w / scale).collect::<Vec<_>>();
+    let scale = w.iter().copied().fold(0., f64::max);
+    for weight in &mut w {
+        *weight /= scale;
+    }
     let gram = Mat::from_fn(p, p, |j, k| {
         (0..n)
             .map(|i| w[i] * design.x[(i, j)] * design.x[(i, k)])
@@ -41,8 +50,6 @@ fn fit_at(
     let beta = (0..p)
         .map(|j| finite((0..p).map(|k| inverse[(j, k)] * rhs[k]).sum()))
         .collect::<Result<Vec<_>>>()?;
-    let mut fitted = Vec::with_capacity(n);
-    let mut residuals = Vec::with_capacity(n);
     let mut q = 0.;
     let mut projection_trace = 0.;
     for i in 0..n {
@@ -61,8 +68,6 @@ fn fit_at(
             })
             .sum::<f64>();
         projection_trace += w[i] * w[i] * hat;
-        fitted.push(prediction);
-        residuals.push(residual);
     }
     let total = w.iter().sum::<f64>();
     let moment_denominator = finite(scale * (total - projection_trace))?;
@@ -70,11 +75,10 @@ fn fit_at(
     Ok(WeightedFit {
         beta,
         covariance,
-        fitted,
-        residuals,
-        weights: w.iter().map(|v| v / total).collect(),
         q: finite(q)?,
         moment_denominator,
+        weight_scale: scale,
+        weight_total: total,
     })
 }
 
@@ -121,6 +125,150 @@ fn heterogeneity_variance(
     Err(failed())
 }
 
+fn prepare(
+    y: &[f64],
+    variances: &[f64],
+    moderators: &[Vec<f64>],
+    estimator: MetaEstimator,
+    confidence: Option<f64>,
+    control: &Control,
+) -> Result<PreparedMeta> {
+    let n = study_data(y, variances, control)?;
+    validate(y, moderators, control)?;
+    if let Some(confidence) = confidence {
+        validate_confidence(confidence)?;
+    }
+    let design = Design::new(moderators, n, true, true, true, control)?;
+    let zero = fit_at(y, variances, &design, 0., control)?;
+    let baseline_q = zero.q;
+    let tau = heterogeneity_variance(y, variances, &design, &zero, estimator, control)?;
+    let fit = if tau == 0. {
+        zero
+    } else {
+        drop(zero);
+        fit_at(y, variances, &design, tau, control)?
+    };
+    Ok(PreparedMeta {
+        design,
+        fit,
+        baseline_q,
+        tau,
+    })
+}
+
+impl PreparedMeta {
+    fn heterogeneity(&self) -> Result<Heterogeneity> {
+        let df = self.design.x.nrows() - self.design.x.ncols();
+        Ok(Heterogeneity {
+            q: self.baseline_q,
+            degrees_of_freedom: df,
+            p_value: ChiSquared::new(df as f64)
+                .map_err(|_| failed())?
+                .sf(self.baseline_q),
+            i_squared_percent: if self.baseline_q > 0. {
+                ((self.baseline_q - df as f64) / self.baseline_q).max(0.) * 100.
+            } else {
+                0.
+            },
+            h_squared: (self.baseline_q / df as f64).max(1.),
+            tau_squared: self.tau,
+        })
+    }
+
+    fn summary(&self, options: MetaOptions, control: &Control) -> Result<MetaSummary> {
+        let (design, result, tau) = (&self.design, &self.fit, self.tau);
+        let (n, p) = (design.x.nrows(), design.x.ncols());
+        let df = n - p;
+        let scale = if options.inference == MetaInference::KnappHartung {
+            result.q / df as f64
+        } else {
+            1.
+        };
+        let covariance = Mat::from_fn(p, p, |j, k| result.covariance[(j, k)] * scale);
+        let (beta, covariance) = design.raw(&result.beta, Some(covariance));
+        let covariance = covariance.ok_or_else(failed)?;
+        let t_df = (options.inference == MetaInference::KnappHartung).then_some(df);
+        let q = critical(options.confidence_level, t_df.map(|df| df as f64))?;
+        let mut coefficients =
+            coefficient_table(&beta, names(p - 1, true), Some(&covariance), t_df)?;
+        for c in &mut coefficients {
+            c.confidence_interval = c
+                .standard_error
+                .map(|se| [c.estimate - q * se, c.estimate + q * se]);
+            if c.confidence_interval
+                .is_some_and(|ci| ci.iter().any(|x| !x.is_finite()))
+            {
+                return Err(failed());
+            }
+        }
+        let prediction_interval = if p == 1 && options.estimator != MetaEstimator::Fixed && n > 2 {
+            let q = critical(options.confidence_level, Some((n - 2) as f64))?;
+            let width = finite(q * (tau + covariance[(0, 0)]).sqrt())?;
+            Some([finite(beta[0] - width)?, finite(beta[0] + width)?])
+        } else {
+            None
+        };
+        let summary = MetaSummary {
+            studies: n,
+            estimator: options.estimator,
+            inference: options.inference,
+            confidence_level: options.confidence_level,
+            residual_degrees_of_freedom: df,
+            coefficients,
+            covariance: (0..p)
+                .map(|j| (0..p).map(|k| covariance[(j, k)]).collect())
+                .collect(),
+            heterogeneity: self.heterogeneity()?,
+            residual_q: result.q,
+            prediction_interval,
+        };
+        control.check()?;
+        Ok(summary)
+    }
+}
+
+pub fn summary(
+    y: &[f64],
+    variances: &[f64],
+    moderators: &[Vec<f64>],
+    options: MetaOptions,
+    control: &Control,
+) -> Result<MetaSummary> {
+    prepare(
+        y,
+        variances,
+        moderators,
+        options.estimator,
+        Some(options.confidence_level),
+        control,
+    )?
+    .summary(options, control)
+}
+
+pub fn heterogeneity(
+    y: &[f64],
+    variances: &[f64],
+    estimator: MetaEstimator,
+    control: &Control,
+) -> Result<Heterogeneity> {
+    let result = prepare(y, variances, &[], estimator, None, control)?.heterogeneity()?;
+    control.check()?;
+    Ok(result)
+}
+
+pub(super) fn pooled_estimate(
+    y: &[f64],
+    variances: &[f64],
+    estimator: MetaEstimator,
+    confidence: f64,
+    control: &Control,
+) -> Result<f64> {
+    let prepared = prepare(y, variances, &[], estimator, Some(confidence), control)?;
+    let (beta, _) = prepared.design.raw(&prepared.fit.beta, None);
+    control.check()?;
+    finite(beta[0])
+}
+
 pub fn fit(
     y: &[f64],
     variances: &[f64],
@@ -128,88 +276,34 @@ pub fn fit(
     options: MetaOptions,
     control: &Control,
 ) -> Result<MetaFit> {
-    let n = study_data(y, variances, control)?;
-    validate(y, moderators, control)?;
-    let normal_q = critical(options.confidence_level, None)?;
-    let design = Design::new(moderators, n, true, true, true, control)?;
-    let p = design.x.ncols();
-    let df = n - p;
-    let zero = fit_at(y, variances, &design, 0., control)?;
-    let tau = heterogeneity_variance(y, variances, &design, &zero, options.estimator, control)?;
-    let nonzero;
-    let result = if tau == 0. {
-        &zero
-    } else {
-        nonzero = fit_at(y, variances, &design, tau, control)?;
-        &nonzero
-    };
-    let scale = if options.inference == MetaInference::KnappHartung {
-        result.q / df as f64
-    } else {
-        1.
-    };
-    let covariance = Mat::from_fn(p, p, |j, k| result.covariance[(j, k)] * scale);
-    let (beta, covariance) = design.raw(&result.beta, Some(covariance));
-    let covariance = covariance.ok_or_else(failed)?;
-    let t_df = (options.inference == MetaInference::KnappHartung).then_some(df);
-    let q = critical(options.confidence_level, t_df.map(|df| df as f64))?;
-    let mut coefficients = coefficient_table(
-        &beta,
-        names(moderators.len(), true),
-        Some(&covariance),
-        t_df,
+    let prepared = prepare(
+        y,
+        variances,
+        moderators,
+        options.estimator,
+        Some(options.confidence_level),
+        control,
     )?;
-    for c in &mut coefficients {
-        c.confidence_interval = c
-            .standard_error
-            .map(|se| [c.estimate - q * se, c.estimate + q * se]);
-        if c.confidence_interval
-            .is_some_and(|ci| ci.iter().any(|x| !x.is_finite()))
-        {
-            return Err(failed());
-        }
-    }
-    let prediction_interval = if p == 1 && options.estimator != MetaEstimator::Fixed && n > 2 {
-        let q = critical(options.confidence_level, Some((n - 2) as f64))?;
-        let width = finite(q * (tau + covariance[(0, 0)]).sqrt())?;
-        Some([finite(beta[0] - width)?, finite(beta[0] + width)?])
-    } else {
-        None
-    };
-    let h_squared = (zero.q / df as f64).max(1.);
-    let heterogeneity = Heterogeneity {
-        q: zero.q,
-        degrees_of_freedom: df,
-        p_value: ChiSquared::new(df as f64).map_err(|_| failed())?.sf(zero.q),
-        i_squared_percent: if zero.q > 0. {
-            ((zero.q - df as f64) / zero.q).max(0.) * 100.
-        } else {
-            0.
-        },
-        h_squared,
-        tau_squared: tau,
-    };
-    let summary = MetaSummary {
-        studies: n,
-        estimator: options.estimator,
-        inference: options.inference,
-        confidence_level: options.confidence_level,
-        residual_degrees_of_freedom: df,
-        coefficients,
-        covariance: (0..p)
-            .map(|j| (0..p).map(|k| covariance[(j, k)]).collect())
-            .collect(),
-        heterogeneity,
-        residual_q: result.q,
-        prediction_interval,
-    };
-    let studies = (0..n)
+    let summary = prepared.summary(options, control)?;
+    let normal_q = critical(options.confidence_level, None)?;
+    let p = prepared.design.x.ncols();
+    let studies = (0..y.len())
         .map(|i| {
+            if i.is_multiple_of(1024) {
+                control.check()?;
+            }
+            let fitted = finite(
+                (0..p)
+                    .map(|j| prepared.design.x[(i, j)] * prepared.fit.beta[j])
+                    .sum(),
+            )?;
             Ok(MetaStudy {
                 effect: study(i, y[i], variances[i], normal_q)?,
-                weight: result.weights[i],
-                fitted: result.fitted[i],
-                residual: result.residuals[i],
+                weight: (1. / (variances[i] + prepared.tau))
+                    / prepared.fit.weight_scale
+                    / prepared.fit.weight_total,
+                fitted,
+                residual: finite(y[i] - fitted)?,
             })
         })
         .collect::<Result<Vec<_>>>()?;

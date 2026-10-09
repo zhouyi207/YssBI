@@ -53,7 +53,9 @@ it does not generate a second design or alter its coded levels.
 linear/binary model contracts with diagnostics and delegates numerical work to SCI.
 
 `meta` exposes SCI effect conversion, inverse-variance models, diagnostics and
-plots. The runtime does not construct study tables or duplicate fitting logic.
+plots, including direct summary and heterogeneity projections from the shared fit.
+Funnel receives its estimator and confidence level directly. The runtime does not
+construct study tables or duplicate fitting logic.
 
 `spatial` exposes stateless `weights`, `moran` and `regression` entry points from
 SCI. Unit identity, balanced-panel ordering and restoration to input row order

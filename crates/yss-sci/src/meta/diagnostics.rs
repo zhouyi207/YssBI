@@ -16,7 +16,7 @@ pub fn egger(
         .zip(&precision)
         .map(|(y, p)| y * p)
         .collect::<Vec<_>>();
-    let mut fit = model::fit(
+    let mut fit = model::summary(
         &standardized,
         &vec![1.; y.len()],
         &[precision],
@@ -26,14 +26,13 @@ pub fn egger(
             confidence_level: confidence,
         },
         control,
-    )?
-    .summary;
+    )?;
     fit.coefficients[0].term = "asymmetry_intercept".into();
     fit.coefficients[1].term = "precision".into();
     Ok(fit)
 }
 pub fn begg(y: &[f64], v: &[f64], control: &Control) -> Result<CorrelationResult> {
-    let fit = model::fit(
+    let fit = model::summary(
         y,
         v,
         &[],
@@ -43,8 +42,8 @@ pub fn begg(y: &[f64], v: &[f64], control: &Control) -> Result<CorrelationResult
         },
         control,
     )?;
-    let theta = fit.summary.coefficients[0].estimate;
-    let pooled_variance = fit.summary.covariance[0][0];
+    let theta = fit.coefficients[0].estimate;
+    let pooled_variance = fit.covariance[0][0];
     let standardized = y
         .iter()
         .zip(v)
@@ -141,7 +140,7 @@ pub fn leave_one_out(
                 .filter_map(|(j, &v)| (i != j).then_some(v))
                 .collect::<Vec<_>>()
         };
-        let fit = model::fit(&subset(y), &subset(v), &[], options, control)?.summary;
+        let fit = model::summary(&subset(y), &subset(v), &[], options, control)?;
         let c = &fit.coefficients[0];
         let ci = c.confidence_interval.ok_or_else(failed)?;
         rows.push(OmissionResult {
@@ -162,7 +161,7 @@ pub fn sensitivity(
     options: MetaOptions,
     control: &Control,
 ) -> Result<(SensitivitySummary, Vec<OmissionResult>)> {
-    let baseline = model::fit(y, v, &[], options, control)?.summary;
+    let baseline = model::summary(y, v, &[], options, control)?;
     let alternative_models = [
         MetaEstimator::Fixed,
         MetaEstimator::DerSimonianLaird,
@@ -170,7 +169,7 @@ pub fn sensitivity(
     ]
     .into_iter()
     .map(|estimator| {
-        model::fit(
+        model::summary(
             y,
             v,
             &[],
@@ -180,7 +179,6 @@ pub fn sensitivity(
             },
             control,
         )
-        .map(|r| r.summary)
     })
     .collect::<Result<_>>()?;
     Ok((

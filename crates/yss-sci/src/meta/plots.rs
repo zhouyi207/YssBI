@@ -37,13 +37,18 @@ pub fn forest(
         confidence_level: options.confidence_level,
     })
 }
-pub fn funnel(y: &[f64], v: &[f64], options: MetaOptions, control: &Control) -> Result<FunnelPlot> {
-    let result = model::fit(y, v, &[], options, control)?;
+pub fn funnel(
+    y: &[f64],
+    v: &[f64],
+    estimator: MetaEstimator,
+    confidence: f64,
+    control: &Control,
+) -> Result<FunnelPlot> {
+    let center = model::pooled_estimate(y, v, estimator, confidence, control)?;
     let se = v.iter().map(|v| v.sqrt()).collect::<Vec<_>>();
     let mut plot = crate::visualization::xy(y, &se, false, control)?;
-    let center = result.summary.coefficients[0].estimate;
     let high = se.iter().copied().fold(0., f64::max);
-    let q = critical(options.confidence_level, None)?;
+    let q = critical(confidence, None)?;
     plot.x_label = "Effect".into();
     plot.y_label = "Standard error".into();
     plot.reference_lines = [-1., 0., 1.]

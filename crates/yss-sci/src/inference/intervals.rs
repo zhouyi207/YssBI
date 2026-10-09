@@ -2,7 +2,7 @@ use crate::regression::models::common::{Result, failed, finite, parameter};
 use statrs::distribution::{ContinuousCDF, Normal, StudentsT};
 use yss_sci_contract::{execution::*, inference::*};
 
-pub(super) fn validate_confidence(confidence: f64) -> Result<()> {
+pub(crate) fn validate_confidence(confidence: f64) -> Result<()> {
     if !confidence.is_finite() || confidence <= 0. || confidence >= 1. {
         return Err(parameter());
     }

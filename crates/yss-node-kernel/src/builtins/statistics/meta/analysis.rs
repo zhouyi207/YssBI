@@ -44,10 +44,8 @@ pub(super) fn execute(
             ]);
         }
         "cochran_q" | "i_squared" | "tau_squared" => value(
-            sci::model::fit(y, v, &[], options, control)
-                .map_err(computation_error)?
-                .summary
-                .heterogeneity,
+            sci::model::heterogeneity(y, v, options.estimator, control)
+                .map_err(computation_error)?,
             inv,
         )?,
         "egger" => value(
@@ -60,9 +58,8 @@ pub(super) fn execute(
             inv,
         )?,
         "leave_one_out" => {
-            let baseline = sci::model::fit(y, v, &[], options, control)
-                .map_err(computation_error)?
-                .summary;
+            let baseline =
+                sci::model::summary(y, v, &[], options, control).map_err(computation_error)?;
             let rows = sci::diagnostics::leave_one_out(y, v, options, control)
                 .map_err(computation_error)?;
             return Ok(vec![value(baseline, inv)?, output::omissions(&rows, inv)?]);
@@ -78,7 +75,8 @@ pub(super) fn execute(
             inv,
         )?,
         "funnel" => value(
-            sci::plots::funnel(y, v, options, control).map_err(computation_error)?,
+            sci::plots::funnel(y, v, options.estimator, options.confidence_level, control)
+                .map_err(computation_error)?,
             inv,
         )?,
         _ => return Err(KernelError::InvalidParameter),
