@@ -7,7 +7,6 @@ mod render;
 
 pub(super) use drag::ConnectionDrag;
 pub(super) use interaction::ConnectionClick;
-pub(super) use menu::ConnectionMenu;
 
 use gpui::{Bounds, PathBuilder, Pixels, Point, Window, fill, point, px, rgb, size};
 use gpui_base::plot::{PathCache, ShapeKey};

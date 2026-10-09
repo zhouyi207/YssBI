@@ -12,6 +12,8 @@ impl GraphCanvas {
     pub(super) fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let run_node = self.can_run() && self.selected.len() == 1;
         let running = self.is_running();
+        let event_graph = self.graph.projection.graph_path.kind()
+            == yss_graph_document::GraphResourceKind::EventGraph;
         let focus = self.focus.clone();
         div()
             .h(px(32.))
@@ -75,9 +77,19 @@ impl GraphCanvas {
                     .tooltip("更多图操作")
                     .dropdown_menu(move |menu, _, _| {
                         menu.action_context(focus.clone())
-                            .menu_with_enable("运行此节点", Box::new(RunCurrentNode), run_node)
-                            .menu_with_enable("运行至此节点", Box::new(RunToNode), run_node)
-                            .separator()
+                            .when(event_graph, |menu| {
+                                menu.menu_with_enable(
+                                    crate::text::t("contextMenu.node.runNode"),
+                                    Box::new(RunCurrentNode),
+                                    run_node,
+                                )
+                                .menu_with_enable(
+                                    crate::text::t("contextMenu.node.runTo"),
+                                    Box::new(RunToNode),
+                                    run_node,
+                                )
+                                .separator()
+                            })
                             .menu("刷新运行状态", Box::new(RefreshRunState))
                             .menu("重置视图", Box::new(FrameGraph))
                     }),

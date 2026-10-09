@@ -13,6 +13,7 @@ actions!(
         UndoGraph,
         RedoGraph,
         DeleteSelection,
+        DuplicateSelection,
         SelectAll,
         CancelGesture,
         FrameGraph,
@@ -29,6 +30,10 @@ pub enum GraphCommand {
     Undo,
     Redo,
     Save,
+    Paste {
+        source: String,
+        anchor: yss_graph_document::NodePosition,
+    },
     SetParameter {
         node_id: yss_graph_document::NodeId,
         key: yss_node_protocol::ParameterKey,
@@ -87,7 +92,14 @@ impl GraphCanvas {
             self.connection_click = None;
             None
         };
-        self.connection_menu = None;
+        let insertion_selection = matches!(
+            &command,
+            GraphCommand::Paste { .. }
+                | GraphCommand::Edit(EditorGraphMutation::DuplicateSubgraph { .. })
+        )
+        .then(|| self.selected.clone());
+        self.clipboard_task = None;
+        self.context_menu = None;
         self.hovered_connection = None;
         self.gesture = None;
         if creation.is_none() {
@@ -105,6 +117,14 @@ impl GraphCanvas {
         let task = self.services.run(move |services| {
             let application = &services.application;
             let response = match command {
+                GraphCommand::Paste { source, anchor } => {
+                    let snapshot =
+                        yss_graph_editor::deserialize_clipboard_subgraph(source.as_bytes())?;
+                    application.edit_graph(
+                        request,
+                        EditorGraphMutation::InsertSubgraph { snapshot, anchor },
+                    )?
+                }
                 GraphCommand::Edit(mutation) => application.edit_graph(request, mutation)?,
                 GraphCommand::Undo => application.change_graph_history(request, false)?,
                 GraphCommand::Redo => application.change_graph_history(request, true)?,
@@ -163,6 +183,24 @@ impl GraphCanvas {
                 view.busy = false;
                 match result {
                     Ok(response) => {
+                        if insertion_selection
+                            .as_ref()
+                            .is_some_and(|selection| *selection == view.selected)
+                        {
+                            view.selected = response
+                                .update
+                                .patch
+                                .operations
+                                .iter()
+                                .filter_map(|operation| match operation {
+                                    yss_graph_document::GraphDocumentOperation::InsertNode {
+                                        node,
+                                    } => Some(node.id),
+                                    _ => None,
+                                })
+                                .collect();
+                            view.selected_connections.clear();
+                        }
                         view.install_response(response, cx);
                         if let Some(creation) = &creation {
                             creation.update(cx, |creation, cx| creation.creation_succeeded(cx));

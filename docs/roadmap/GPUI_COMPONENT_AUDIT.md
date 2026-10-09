@@ -654,6 +654,15 @@
 - 工作区窗口另核对实际工具栏运行、除零错误仍定位原计算节点、撤销输入并重跑后整链恢复。两份临时入口均通过 `cargo build -p yss-desktop-gpui --example reroute_review --locked`；源码格式、文档入口/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 在交付前检查。
 - 本批补齐已审查组件的后端行为，完成源码审查数仍为 196/265；物理键鼠、读屏、Windows/macOS 和大图性能验收继续开放。
 
+### 节点菜单与子图剪贴板
+
+- 已逐项阅读 NodeContextMenu、GraphNodeController/View 和调用的编辑/剪贴板入口。右键菜单绑定单个目标，覆盖两种运行、复制、剪切、副本、断开全部连接、选择直接相邻节点及危险删除；菜单按 managed、连接数量和当前运行能力启用。
+- 节点与连线共用 canvas/menu 的 PopupMenu 生命周期，动作核对菜单/投影/版本/语言。右键拖动仍平移，静止释放才打开节点菜单；Function 图隐藏独立运行入口，键盘与工具栏遵循同一限制。
+- canvas/clipboard 使用原 Application 子图导出和 Editor 有界 parser，直接传递当前 ClipboardSubgraph JSON；新交互、投影更新和隐藏取消待交付读取。副本/粘贴选择来自原提交补丁，不复制领域模型，不增加 envelope、版本转换或 UI 历史。
+- 原生窗口通过真实图事务核对全部节点菜单动作和撤销、双节点及内部连线复制/粘贴、托管函数节点禁用、CurrentInputs 缺少输入时拒绝、Dependencies 补算及之后的 CurrentInputs。工作区另核对英文、快捷键、非法剪贴板不改变图、带常量子图跨图粘贴、右键平移/刷新关闭与连线菜单断开/撤销；临时入口和数据不提交。
+- L2：独立副本和工作区的原生 Clippy（--bin yss-desktop-gpui --no-deps --locked -- -D warnings）及临时窗口构建通过。cargo test -p yss-graph-editor -p yss-application --lib clipboard_ --locked 运行 4 项通过，覆盖源版本检查、资源声明、常量/内部连接和原子撤销；无新增 UI 测试或全工作区验证。
+- 14 个 Rust 文件局部格式、两份文档的入口/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）及 git diff --check 通过。本批完成 3 项源码审查，累计 199/265。节点内部的端口输入/菜单和完整类型提示仍由对应 Pin 条目追踪；物理键鼠/IME、读屏、Windows/macOS 和大图性能继续验收。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -879,12 +888,12 @@
 | [modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx) | 迁移 | 原生 PopupMenu，单选/多选断开与危险删除；菜单/投影/版本校验，复用原图事务 | Linux 窗口核对多选、断开、Delete、转接点与历史；物理输入、读屏和跨平台待验收 |
-| [modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx) | 迁移 | 原生 PopupMenu，复用原选择、子图剪贴板、图事务和两种运行；managed/连接/运行条件及旧菜单校验 | 隔离窗口核对全部动作、撤销、托管节点与 Function 限制；物理输入及跨平台开放 |
 | [modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/NodePalette.tsx](../../react/src/modules/graph-editor/internal/ui/NodePalette.tsx) | 迁移：完整目录检索与分类浏览，创建复用原图事务 | `canvas/palette` 保存索引、输入与读取代次；Catalog 生成全拼/首字母搜索，GPUI 虚拟列表只绘制可见行 | 分类/查询/键盘、不可用项、配置返回、错误重试、过期图及关闭后迟到回复已预览核对；物理 IME、完整项目切换及压力验收开放 |
 | [modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx) | 迁移 | canvas/nodes 保留标题/副标题、内联摘要和两侧端口，geometry 共用尺寸与锚点，摘要有界缓存 | 隔离窗口核对标题及临时内联展示投影的数值/空值/长文本/JSON、端口对齐；平台验收开放 |
-| [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 待查 | 已读；共享节点状态、结果计数和诊断提示已迁移，节点菜单待完成 | 真实部分结果/观察节点/过期/除零已核对，组件未完成 |
-| [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 待查 | 已读；节点布局、状态、选择及候选淡化已接入，节点菜单待完成 | 窗口已核对状态与淡化，组件未完成 |
+| [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 优化 | 原生共享节点运行/结果/诊断展示投影，布局与菜单复用画布入口；不创建逐节点状态 owner | 节点状态、结果计数及菜单已核对；Pin 子组件的输入/菜单另行追踪 |
+| [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 迁移 | 原生节点外框、布局、状态、选择、候选淡化及目标菜单；共用画布几何与生命周期 | 隔离窗口核对选择、菜单和既有状态/淡化；物理输入及跨平台开放 |
 | [modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx) | 迁移 | 按 builtin.reroute 使用紧凑节点、中央拖动柄与隐藏标签的端口，复用原手势、图事务及透明执行 | 窗口核对选择、拖动、运行与撤销；标量/表格执行及缓存回归通过，平台验收开放 |
 | [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 已读；共享状态与起手能力已接入，输入/菜单及完整提示待完成 | 组件未完成 |
 | [modules/graph-editor/internal/ui/Pins/GraphPinView.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx) | 待查 | 已读；共享状态、紧凑端口和候选已接入，完整类型形状/提示待完成 | 组件未完成 |

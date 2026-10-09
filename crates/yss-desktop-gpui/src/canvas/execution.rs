@@ -106,10 +106,23 @@ impl ExecutionView {
 
 impl GraphCanvas {
     pub(crate) fn can_run(&self) -> bool {
-        !self.busy
+        self.graph.projection.graph_path.kind() == yss_graph_document::GraphResourceKind::EventGraph
+            && !self.busy
             && !self.execution.running()
             && !self.execution.unknown
             && self.execution.recovery.is_none()
+    }
+
+    pub(super) fn run_selected(
+        &mut self,
+        mode: yss_graph_execution::plan::NodeExecutionMode,
+        cx: &mut Context<Self>,
+    ) {
+        if self.selected.len() == 1
+            && let Some(node_id) = self.selected.iter().next().copied()
+        {
+            self.run_graph(RunDemand::Node { node_id, mode }, cx);
+        }
     }
 
     pub(crate) fn run_status(&self) -> &'static str {
@@ -155,6 +168,7 @@ impl GraphCanvas {
         if !self.can_run() {
             return;
         }
+        self.context_menu = None;
         let project = self.graph.project.clone();
         let path = self.graph.projection.graph_path.clone();
         let version = self.graph.editing.version;

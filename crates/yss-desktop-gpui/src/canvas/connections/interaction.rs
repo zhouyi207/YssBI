@@ -48,7 +48,7 @@ impl GraphCanvas {
         self.cancel_gesture();
         self.located_port = None;
         self.palette = None;
-        self.connection_menu = None;
+        self.context_menu = None;
         window.focus(&self.focus, cx);
         if event.button == MouseButton::Right {
             if !self.selected_connections.contains(&id) {
@@ -116,7 +116,7 @@ impl GraphCanvas {
         screen: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        let hovered = if self.busy || self.connection_menu.is_some() {
+        let hovered = if self.busy || self.context_menu.is_some() {
             None
         } else {
             self.hit_connection(screen)
@@ -150,6 +150,6 @@ impl GraphCanvas {
         };
         self.hovered_connection = self.hovered_connection.filter(exists);
         self.connection_click = None;
-        self.connection_menu = None;
+        self.context_menu = None;
     }
 }

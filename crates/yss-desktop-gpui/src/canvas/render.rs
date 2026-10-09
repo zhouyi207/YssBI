@@ -80,36 +80,23 @@ impl Render for GraphCanvas {
                     view.submit(GraphCommand::Redo, None, cx);
                 }
             }))
-            .on_action(cx.listener(|view, _: &DeleteSelection, _, cx| {
-                if !view.selected_connections.is_empty() {
-                    view.submit(
-                        GraphCommand::Edit(EditorGraphMutation::DisconnectConnections {
-                            connection_ids: view.selected_connections.iter().copied().collect(),
-                        }),
-                        None,
-                        cx,
-                    );
-                    return;
-                }
-                let node_ids = view
-                    .graph
-                    .projection
-                    .nodes
-                    .iter()
-                    .filter(|node| {
-                        view.selected.contains(&node.node_id) && !node.capabilities.managed
-                    })
-                    .map(|node| node.node_id)
-                    .collect::<Vec<_>>();
-                if !node_ids.is_empty() {
-                    view.submit(
-                        GraphCommand::Edit(EditorGraphMutation::DeleteNodes { node_ids }),
-                        None,
-                        cx,
-                    );
-                }
+            .on_action(cx.listener(|view, _: &DeleteSelection, _, cx| view.delete_selection(cx)))
+            .on_action(
+                cx.listener(|view, _: &DuplicateSelection, _, cx| view.duplicate_selection(cx)),
+            )
+            .on_action(cx.listener(|view, _: &gpui_component::input::Copy, _, cx| {
+                view.copy_selection(false, cx)
             }))
+            .on_action(cx.listener(|view, _: &gpui_component::input::Cut, _, cx| {
+                view.copy_selection(true, cx)
+            }))
+            .on_action(
+                cx.listener(|view, _: &gpui_component::input::Paste, _, cx| {
+                    view.paste_selection(cx)
+                }),
+            )
             .on_action(cx.listener(|view, _: &SelectAll, _, cx| {
+                view.cancel_gesture();
                 view.located_port = None;
                 view.selected_connections.clear();
                 view.connection_click = None;
@@ -142,30 +129,16 @@ impl Render for GraphCanvas {
             .on_action(cx.listener(|view, _: &CancelRun, _, cx| view.cancel_run(cx)))
             .on_action(cx.listener(|view, _: &RefreshRunState, _, cx| view.resync_execution(cx)))
             .on_action(cx.listener(|view, _: &RunCurrentNode, _, cx| {
-                if view.selected.len() == 1
-                    && let Some(node_id) = view.selected.iter().next().copied()
-                {
-                    view.run_graph(
-                        yss_application::graph::run::RunDemand::Node {
-                            node_id,
-                            mode: yss_graph_execution::plan::NodeExecutionMode::CurrentInputs,
-                        },
-                        cx,
-                    );
-                }
+                view.run_selected(
+                    yss_graph_execution::plan::NodeExecutionMode::CurrentInputs,
+                    cx,
+                );
             }))
             .on_action(cx.listener(|view, _: &RunToNode, _, cx| {
-                if view.selected.len() == 1
-                    && let Some(node_id) = view.selected.iter().next().copied()
-                {
-                    view.run_graph(
-                        yss_application::graph::run::RunDemand::Node {
-                            node_id,
-                            mode: yss_graph_execution::plan::NodeExecutionMode::Dependencies,
-                        },
-                        cx,
-                    );
-                }
+                view.run_selected(
+                    yss_graph_execution::plan::NodeExecutionMode::Dependencies,
+                    cx,
+                );
             }))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::begin_pane))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::begin_pane))
@@ -261,7 +234,7 @@ impl Render for GraphCanvas {
                     gpui_component::tooltip::Tooltip::new(label).build(window, cx)
                 })
             })
-            .when_some(self.connection_menu.as_ref(), |view, menu| {
+            .when_some(self.context_menu.as_ref(), |view, menu| {
                 view.child(menu.render())
             })
             .when_some(self.selection_bounds(), |view, rect| {

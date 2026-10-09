@@ -1,16 +1,19 @@
 mod authoring;
 mod catalog;
+mod clipboard;
 mod commands;
 mod connections;
 mod constant_drag;
 mod execution;
 mod geometry;
+mod menu;
 mod navigation;
 mod nodes;
 mod palette;
 mod ports;
 mod presentation;
 mod render;
+mod selection;
 mod toolbar;
 
 use std::{
@@ -57,6 +60,7 @@ enum Gesture {
         press: Point<Pixels>,
         previous: Point<Pixels>,
         moved: bool,
+        node: Option<NodeId>,
     },
     Nodes {
         press: Point<Pixels>,
@@ -89,8 +93,9 @@ pub struct GraphCanvas {
     located_port: Option<PortAddress>,
     selected_connections: BTreeSet<ConnectionId>,
     hovered_connection: Option<ConnectionId>,
-    connection_menu: Option<connections::ConnectionMenu>,
+    context_menu: Option<menu::CanvasMenu>,
     connection_click: Option<connections::ConnectionClick>,
+    clipboard_task: Option<gpui::Task<()>>,
     offset: Point<Pixels>,
     zoom: f32,
     gesture: Option<Gesture>,
@@ -130,8 +135,9 @@ impl GraphCanvas {
             located_port: None,
             selected_connections: BTreeSet::new(),
             hovered_connection: None,
-            connection_menu: None,
+            context_menu: None,
             connection_click: None,
+            clipboard_task: None,
             offset: point(px(40.), px(40.)),
             zoom: 1.,
             gesture: None,
@@ -291,7 +297,8 @@ impl GraphCanvas {
             self.preview.clear();
         }
         self.hovered_connection = None;
-        self.connection_menu = None;
+        self.context_menu = None;
+        self.clipboard_task = None;
     }
 
     fn begin_node(
@@ -311,7 +318,8 @@ impl GraphCanvas {
         window.focus(&self.focus, cx);
         self.palette = None;
         self.hovered_connection = None;
-        self.connection_menu = None;
+        self.context_menu = None;
+        self.clipboard_task = None;
         let additive = event.modifiers.shift || event.modifiers.control || event.modifiers.platform;
         if additive {
             if !self.selected.insert(id) {
@@ -346,7 +354,8 @@ impl GraphCanvas {
         }
         self.located_port = None;
         self.connection_click = None;
-        self.connection_menu = None;
+        self.context_menu = None;
+        self.clipboard_task = None;
         self.hovered_connection = None;
         window.focus(&self.focus, cx);
         self.palette = None;
@@ -355,6 +364,7 @@ impl GraphCanvas {
                 press: event.position,
                 previous: event.position,
                 moved: false,
+                node: None,
             });
         } else {
             let previous = self.selected.clone();
@@ -395,6 +405,7 @@ impl GraphCanvas {
                 press,
                 previous,
                 moved,
+                ..
             } => {
                 *moved |= (event.position - *press).magnitude() > 3.;
                 self.offset += event.position - *previous;
@@ -474,8 +485,14 @@ impl GraphCanvas {
                     );
                 }
             }
-            Some(Gesture::Pan { moved: false, .. }) if event.button == MouseButton::Right => {
-                self.show_palette(event.position, None, window, cx);
+            Some(Gesture::Pan {
+                moved: false, node, ..
+            }) if event.button == MouseButton::Right => {
+                if let Some(id) = node {
+                    self.show_node_menu(id, event.position, window, cx);
+                } else {
+                    self.show_palette(event.position, None, window, cx);
+                }
             }
             Some(Gesture::Connection(drag)) if !drag.moving => {
                 self.show_palette(event.position, Some(drag.source), window, cx);

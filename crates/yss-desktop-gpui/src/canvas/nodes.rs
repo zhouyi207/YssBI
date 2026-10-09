@@ -1,3 +1,4 @@
+mod menu;
 pub(super) mod summary;
 
 use gpui::{Context, IntoElement, MouseButton, div, point, prelude::*, px, rgb};
@@ -74,6 +75,12 @@ impl GraphCanvas {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |view, event, window, cx| view.begin_node(id, event, window, cx)),
+            )
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |view, event, window, cx| {
+                    view.begin_node_menu(id, event, window, cx)
+                }),
             )
             .when(
                 matches!(display.state, State::Error | State::Valid),
