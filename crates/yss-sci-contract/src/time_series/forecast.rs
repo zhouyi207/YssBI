@@ -139,7 +139,6 @@ pub struct EcmResult {
     pub first_short_run_row: usize,
     pub long_run: RegressionModelResult,
     pub short_run: RegressionModelResult,
-    pub equilibrium_errors: Vec<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -23,9 +23,12 @@ pub fn ecm(y: &[f64], x: &[Vec<f64>], options: EcmOptions, control: &Control) ->
         coefficient.p_value = None;
         coefficient.confidence_interval = None;
     }
-    let errors = long_run.residuals.clone();
     let dy: Vec<_> = (start..y.len()).map(|i| y[i] - y[i - 1]).collect();
-    let mut predictors = vec![(start..y.len()).map(|i| errors[i - 1]).collect()];
+    let mut predictors = vec![
+        (start..y.len())
+            .map(|i| long_run.residuals[i - 1])
+            .collect(),
+    ];
     let mut names = vec!["error_correction_lag1".to_owned()];
     for lag in 1..=options.lags {
         control.check()?;
@@ -63,7 +66,6 @@ pub fn ecm(y: &[f64], x: &[Vec<f64>], options: EcmOptions, control: &Control) ->
         first_short_run_row: start,
         long_run,
         short_run,
-        equilibrium_errors: errors,
     })
 }
 
@@ -161,12 +163,13 @@ pub fn markov_prediction(
     let last_state = states[states.len() - 1];
     let mut distribution = vec![0.0; state_count];
     distribution[last_state] = 1.0;
-    let mut forecast_probabilities = Vec::with_capacity(steps);
+    let mut forecast_probabilities: Vec<Vec<f64>> = Vec::with_capacity(steps);
     let mut forecast_states = Vec::with_capacity(steps);
     for _ in 0..steps {
         control.check()?;
         let mut next = vec![0.0; state_count];
-        for (i, &weight) in distribution.iter().enumerate() {
+        let previous = forecast_probabilities.last().unwrap_or(&distribution);
+        for (i, &weight) in previous.iter().enumerate() {
             if i % 64 == 0 {
                 control.check()?;
             }
@@ -183,8 +186,7 @@ pub fn markov_prediction(
         }
         let mode = (0..state_count).fold(0, |best, j| if next[j] > next[best] { j } else { best });
         forecast_states.push(mode);
-        forecast_probabilities.push(next.clone());
-        distribution = next;
+        forecast_probabilities.push(next);
     }
     Ok(MarkovResult {
         observations: states.len(),

@@ -472,6 +472,10 @@ remain explicit in its result.
 The shared ADF regression rejects lags outside the sample before adding the lag
 offset or allocating differences, including for direct SCI and Runtime callers.
 ECM suppresses ordinary long-run OLS inference for cointegrating equations.
+Its equilibrium errors remain in `long_run.residuals`, which supplies the lagged
+short-run predictor without a duplicate top-level result array. Markov forecasting
+borrows the latest stored probability vector and moves each next vector into its
+result history, keeping one owned distribution per forecast step.
 EGARCH averages simulated variances with an explicit seed; other volatility models
 use analytic conditional-variance forecasts. KPSS reports its table-tail bounds.
 Volatility fitting and forecasting retain normalized response coordinates. Variance

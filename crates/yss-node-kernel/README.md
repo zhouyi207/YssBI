@@ -109,6 +109,9 @@ AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线�
 Markov 状态平方矩阵与结构化结果均在计算前按预算准入，不设置固定行数上限。
 Markov 恢复原始状态标签，时序图可省略时间列并使用从 1 开始的横坐标；
 显式时间须严格递增。时序图与相关图复用现有 SCI 绘图数据，其他入口返回结构化报告。
+ECM 使用 revision 7，均衡误差统一位于 `long_run.residuals`，短期方程复用这份序列。
+Markov 保持原能力版本，SCI 借用上一期预测分布并将下一期缓冲移入结果历史；
+Kernel 在已生成的记录上补充状态标签，保留原顺序和既有工作区预算。
 Grey Prediction 使用 revision 6；Phillips–Perron 使用 revision 6，KPSS 使用 revision 5。
 两个平稳性检验在 SCI 的规范化响应坐标中拟合和计算矩，仅恢复报告的长期方差单位；
 PP 复用 Design 的尺度直接计算滞后系数推断，不恢复整份逆矩阵。

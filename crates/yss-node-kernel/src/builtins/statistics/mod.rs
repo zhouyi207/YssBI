@@ -186,7 +186,8 @@ pub(super) fn install(
                 | "yssbi.statistics.mixed.random_intercept"
                 | "yssbi.statistics.mixed.random_slope"
                 | "yssbi.statistics.plot.forest"
-                | "yssbi.statistics.plot.funnel" => 7,
+                | "yssbi.statistics.plot.funnel"
+                | "yssbi.statistics.timeseries.ecm" => 7,
                 "yssbi.plot.boxplot"
                 | "yssbi.plot.violin"
                 | "yssbi.statistics.diagnostic.information_matrix"
@@ -201,7 +202,6 @@ pub(super) fn install(
                 | "yssbi.statistics.meta.tau_squared"
                 | "yssbi.statistics.sem.path"
                 | "yssbi.statistics.test.cochran_q"
-                | "yssbi.statistics.timeseries.ecm"
                 | "yssbi.statistics.timeseries.granger"
                 | "yssbi.statistics.workflow.moderation"
                 | "yssbi.statistics.workflow.moderation_advanced"

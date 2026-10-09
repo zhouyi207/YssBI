@@ -178,10 +178,11 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         let result =
             sci::markov_prediction(&states, k, h, number(inv, "ts_pseudocount")?, &control)
                 .map_err(computation_error)?;
-        let mut out = match value(&result, inv)? {
-            RuntimeValue::Record(v) => (*v).clone(),
+        let mut record = match value(&result, inv)? {
+            RuntimeValue::Record(v) => v,
             _ => unreachable!(),
         };
+        let out = std::sync::Arc::make_mut(&mut record);
         out.insert(
             "state_labels".into(),
             RuntimeValue::List(labels.iter().cloned().map(RuntimeValue::Scalar).collect()),
@@ -196,7 +197,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                     .collect(),
             ),
         );
-        return Ok(vec![RuntimeValue::Record(std::sync::Arc::new(out))]);
+        return Ok(vec![RuntimeValue::Record(record)]);
     }
     let y = numeric(first, false, inv)?;
     let iteration = if inv.parameter("max_iterations").is_some() {

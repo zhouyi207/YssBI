@@ -374,6 +374,18 @@ fn time_series_ecm_and_grey_forecast_match_independent_least_squares() {
     )
     .unwrap();
     assert_eq!(r.first_short_run_row, 2);
+    let y = vector(&data["y"]);
+    let x = vector(&data["x"]);
+    assert_eq!(r.long_run.residuals.len(), y.len());
+    for ((residual, response), predictor) in r.long_run.residuals.iter().zip(y).zip(x) {
+        close(
+            *residual,
+            response
+                - data["long"][0].as_f64().unwrap()
+                - data["long"][1].as_f64().unwrap() * predictor,
+            1e-8,
+        );
+    }
     compare(
         &r.long_run
             .coefficients
@@ -587,6 +599,8 @@ fn time_series_markov_preserves_transition_counts_and_handles_unobserved_outgoin
     assert_eq!(r.counts, vec![vec![0, 2], vec![2, 1]]);
     close(r.forecast_probabilities[0][1], 1.0, 1e-12);
     close(r.forecast_probabilities[1][0], 2.0 / 3.0, 1e-12);
+    close(r.forecast_probabilities[2][0], 2.0 / 9.0, 1e-12);
+    close(r.forecast_probabilities[2][1], 7.0 / 9.0, 1e-12);
     assert_eq!(r.forecast_states, vec![1, 0, 1]);
     assert!(markov_prediction(&[0, 0, 1], 2, 2, 0.0, &control()).is_err());
     let smoothed = markov_prediction(&[0, 0, 1], 2, 2, 1.0, &control()).unwrap();

@@ -98,6 +98,8 @@ the borrowed model contract.
   `forecast` owns ARIMA/smoothing/volatility options, source-aligned forecasts,
   ECM equations, Markov transition reports and PP/KPSS statistics. Forecast arrays
   start one step after the sample; unavailable initial fits and inference are nullable.
+  ECM equilibrium errors are the source-aligned `long_run.residuals`; the long-run
+  equation owns that sequence. `first_short_run_row` aligns the short-run equation.
   KPSS explicitly distinguishes interpolated p-values from table-tail bounds.
 - `diagnostics::serial_correlation`: serial-correlation requests and BG/Q/Durbin-Watson results.
 - `diagnostics::model`: borrowed linear/binary model inputs, information criteria,
