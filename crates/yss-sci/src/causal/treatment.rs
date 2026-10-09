@@ -273,28 +273,44 @@ fn point(
         }
         TreatmentMethod::Ipw => {
             let e = scores.as_ref().expect("propensity");
-            let mut weighted_y = [0.0; 3];
+            let weights = |i: usize| {
+                [
+                    treatment[i] / e[i],
+                    (1.0 - treatment[i]) / (1.0 - e[i]),
+                    (1.0 - treatment[i]) * e[i] / (1.0 - e[i]),
+                ]
+            };
             let mut weight = [0.0; 3];
             for i in 0..n {
                 if i.is_multiple_of(1024) {
                     control.check()?;
                 }
-                let w = [
-                    treatment[i] / e[i],
-                    (1.0 - treatment[i]) / (1.0 - e[i]),
-                    (1.0 - treatment[i]) * e[i] / (1.0 - e[i]),
-                ];
+                let w = weights(i);
                 for j in 0..3 {
-                    weighted_y[j] += w[j] * y[i];
                     weight[j] += w[j];
+                }
+            }
+            if weight.iter().any(|w| !w.is_finite() || *w <= 0.0) {
+                return Err(failed());
+            }
+            let mut weighted_y = [0.0; 3];
+            // Normalize before multiplying responses, so finite means never
+            // require an overflowing unnormalized weighted outcome sum.
+            for (i, &response) in y.iter().enumerate() {
+                if i.is_multiple_of(1024) {
+                    control.check()?;
+                }
+                let w = weights(i);
+                for j in 0..3 {
+                    weighted_y[j] += (w[j] / weight[j]) * response;
                 }
             }
             let observed_treated = (0..n)
                 .map(|i| treatment[i] * y[i] / treated as f64)
                 .sum::<f64>();
             (
-                weighted_y[0] / weight[0] - weighted_y[1] / weight[1],
-                observed_treated - weighted_y[2] / weight[2],
+                weighted_y[0] - weighted_y[1],
+                observed_treated - weighted_y[2],
             )
         }
         TreatmentMethod::RegressionAdjustment | TreatmentMethod::Aipw => {

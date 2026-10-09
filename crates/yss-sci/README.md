@@ -512,6 +512,18 @@ and Heckman optionally resample independent rows and refit all nuisance stages;
 failed bootstrap fits abort rather than biasing inference by being discarded.
 The default is point estimation; bootstrap inference uses normal intervals.
 
+IPW sums each estimand's weights before multiplying normalized weights by outcomes;
+finite Hájek means do not require an unnormalized weighted-outcome sum. The shared
+treatment/Heckman bootstrap accumulator keeps online means and covariance in
+bounded per-coefficient coordinates, rescaling existing moments when a magnitude
+grows. It divides the centered-product sum by B-1 before restoring coefficient units,
+applying the larger coordinate first without forming a product of scales. It reuses
+the sampled-row buffer and owned replicate vectors, then checks and symmetrizes
+covariance in place with the standard floating-point midpoint. Failed
+refits, nonfinite covariance and execution interruption retain their typed errors.
+The response-unit regressions verify IPW effects against the existing independent
+reference and bootstrap inference under large finite and subnormal covariance scales.
+
 Matching sorts row indices within each treatment cohort and locates the complete
 nearest-distance interval with binary searches on both sides of the query score.
 This includes distinct scores whose subtractions round to equal distances. A

@@ -116,6 +116,131 @@ fn treatment_estimands_match_independent_references_and_bootstrap_refits() {
 }
 
 #[test]
+fn treatment_response_units_keep_ipw_effects_finite() {
+    let f = fixture();
+    let d = &f["treatment"];
+    let scale = 1e306;
+    let response = vector(&d["response"])
+        .into_iter()
+        .map(|value| value * scale)
+        .collect::<Vec<_>>();
+    assert!(response.iter().all(|value| value.is_finite()));
+    let result = treatment::estimate(
+        &response,
+        &vector(&d["treatment"]),
+        &matrix(&d["predictors"]),
+        options(TreatmentMethod::Ipw),
+        &control(),
+    )
+    .expect("normalized IPW means and effects are finite in these response units");
+    assert!(result.ate.estimate.is_finite() && result.att.estimate.is_finite());
+    close(
+        result.ate.estimate / scale,
+        d["cases"]["ipw"][0].as_f64().unwrap(),
+        1e-8,
+    );
+    close(
+        result.att.estimate / scale,
+        d["cases"]["ipw"][1].as_f64().unwrap(),
+        1e-8,
+    );
+    assert!(result.ate.standard_error.is_none() && result.att.standard_error.is_none());
+}
+
+#[test]
+fn treatment_response_units_keep_bootstrap_inference_finite() {
+    let f = fixture();
+    let d = &f["treatment"];
+    let response = vector(&d["response"]);
+    let treated = vector(&d["treatment"]);
+    let predictors = matrix(&d["predictors"]);
+    let scale = 5e154;
+    let scaled_response = response
+        .iter()
+        .map(|value| value * scale)
+        .collect::<Vec<_>>();
+    for method in [
+        TreatmentMethod::Ipw,
+        TreatmentMethod::RegressionAdjustment,
+        TreatmentMethod::Aipw,
+    ] {
+        let options = TreatmentOptions {
+            bootstrap: BootstrapOptions {
+                replications: 24,
+                seed: 17,
+            },
+            ..options(method)
+        };
+        let baseline =
+            treatment::estimate(&response, &treated, &predictors, options, &control()).unwrap();
+        for effect in [&baseline.ate, &baseline.att] {
+            let expected_se = effect.standard_error.unwrap() * scale;
+            assert!(expected_se.is_finite() && (expected_se * expected_se).is_finite());
+        }
+        let scaled =
+            treatment::estimate(&scaled_response, &treated, &predictors, options, &control())
+                .expect("bootstrap coefficient covariance is finite in these response units");
+        for (actual, expected) in [(&scaled.ate, &baseline.ate), (&scaled.att, &baseline.att)] {
+            close(actual.estimate / scale, expected.estimate, 1e-8);
+            close(
+                actual.standard_error.unwrap() / scale,
+                expected.standard_error.unwrap(),
+                1e-8,
+            );
+            close(actual.statistic.unwrap(), expected.statistic.unwrap(), 1e-8);
+            close(actual.p_value.unwrap(), expected.p_value.unwrap(), 1e-8);
+            for (bound, expected) in actual
+                .confidence_interval
+                .unwrap()
+                .into_iter()
+                .zip(expected.confidence_interval.unwrap())
+            {
+                assert!(bound.is_finite());
+                close(bound / scale, expected, 1e-8);
+            }
+        }
+        assert_eq!(scaled.bootstrap_replications, 24);
+        assert_eq!(scaled.inference, baseline.inference);
+
+        let small_scale = 1e-160;
+        let small_response = response
+            .iter()
+            .map(|value| value * small_scale)
+            .collect::<Vec<_>>();
+        let small =
+            treatment::estimate(&small_response, &treated, &predictors, options, &control())
+                .expect("representable subnormal bootstrap covariance must retain inference");
+        for (actual, expected) in [(&small.ate, &baseline.ate), (&small.att, &baseline.att)] {
+            let standard_error = actual.standard_error.unwrap();
+            let expected_variance = (expected.standard_error.unwrap() * small_scale).powi(2);
+            assert!(expected_variance > 0.0 && expected_variance.is_subnormal());
+            assert!(standard_error.is_finite() && standard_error > 0.0);
+            // At these units covariance is subnormal; compare its representable
+            // values within one ULP rather than demanding normal precision.
+            assert!(
+                standard_error
+                    .powi(2)
+                    .to_bits()
+                    .abs_diff(expected_variance.to_bits())
+                    <= 1,
+                "{method:?}: {} != {expected_variance}",
+                standard_error.powi(2)
+            );
+            close(actual.estimate / small_scale, expected.estimate, 1e-8);
+            assert!(actual.statistic.unwrap().is_finite());
+            assert!(actual.p_value.unwrap().is_finite());
+            assert!(
+                actual
+                    .confidence_interval
+                    .unwrap()
+                    .iter()
+                    .all(|bound| bound.is_finite())
+            );
+        }
+    }
+}
+
+#[test]
 fn gmm_matches_statsmodels_robust_covariance_and_hansen_test() {
     let f = fixture();
     let d = &f["gmm"];

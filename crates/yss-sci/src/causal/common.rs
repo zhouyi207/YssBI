@@ -55,14 +55,43 @@ pub(super) fn bootstrap_covariance(
         return Err(parameter());
     }
     let mut rng = StdRng::seed_from_u64(options.seed);
+    let mut indices = vec![0; n];
     let mut average = vec![0.0; width];
+    let mut scales = vec![0.0; width];
     let mut covariance = Mat::zeros(width, width);
     for b in 0..options.replications {
         control.check()?;
-        let indices = (0..n).map(|_| rng.random_range(0..n)).collect::<Vec<_>>();
-        let values = fit(&indices)?;
+        for (i, index) in indices.iter_mut().enumerate() {
+            if i.is_multiple_of(1024) {
+                control.check()?;
+            }
+            *index = rng.random_range(0..n);
+        }
+        let mut values = fit(&indices)?;
         if values.len() != width || values.iter().any(|v| !v.is_finite()) {
             return Err(failed());
+        }
+        // Keep online moments in bounded coefficient coordinates. Rescaling
+        // existing moments preserves both very large and subnormal covariance.
+        for j in 0..width {
+            if j.is_multiple_of(256) {
+                control.check()?;
+            }
+            let scale = values[j].abs();
+            if scale > scales[j] {
+                let ratio = scales[j] / scale;
+                average[j] *= ratio;
+                for k in 0..width {
+                    covariance[(j, k)] *= ratio;
+                    covariance[(k, j)] *= ratio;
+                }
+                scales[j] = scale;
+            }
+            values[j] = if scales[j] == 0.0 {
+                0.0
+            } else {
+                values[j] / scales[j]
+            };
         }
         let delta = values
             .iter()
@@ -71,14 +100,78 @@ pub(super) fn bootstrap_covariance(
             .collect::<Vec<_>>();
         for j in 0..width {
             average[j] += delta[j] / (b + 1) as f64;
+            values[j] -= average[j];
         }
         for j in 0..width {
+            if j.is_multiple_of(256) {
+                control.check()?;
+            }
             for k in 0..width {
-                covariance[(j, k)] += delta[j] * (values[k] - average[k]);
+                covariance[(j, k)] += delta[j] * values[k];
             }
         }
     }
-    Ok(Some(Mat::from_fn(width, width, |j, k| {
-        (covariance[(j, k)] + covariance[(k, j)]) / (2.0 * (options.replications - 1) as f64)
-    })))
+    for j in 0..width {
+        control.check()?;
+        for k in 0..=j {
+            let normalized =
+                covariance[(j, k)].midpoint(covariance[(k, j)]) / (options.replications - 1) as f64;
+            // Apply the larger coordinate first to preserve small cross terms;
+            // do not form an overflowing or underflowing product of scales.
+            let value = finite(normalized * scales[j].max(scales[k]) * scales[j].min(scales[k]))?;
+            covariance[(j, k)] = value;
+            covariance[(k, j)] = value;
+        }
+    }
+    Ok(Some(covariance))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_covariance_preserves_minimum_positive_units() {
+        use std::cell::RefCell;
+        use std::time::{Duration, Instant};
+        use yss_sci_contract::execution::ScientificCancellationToken;
+
+        let control = Control {
+            cancellation: ScientificCancellationToken::new(),
+            deadline: Instant::now() + Duration::from_secs(60),
+        };
+        let amplitude = (4.0 * f64::from_bits(1)).sqrt();
+        let samples = RefCell::new(Vec::new());
+        let covariance = bootstrap_covariance(
+            2,
+            1,
+            BootstrapOptions {
+                replications: 64,
+                seed: 17,
+            },
+            &control,
+            |indices| {
+                let average = indices
+                    .iter()
+                    .map(|&i| if i == 0 { 1.0 } else { -1.0 })
+                    .sum::<f64>()
+                    / indices.len() as f64;
+                samples.borrow_mut().push(average);
+                Ok(vec![average * amplitude])
+            },
+        )
+        .unwrap()
+        .unwrap();
+        let samples = samples.into_inner();
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let normalized_variance = samples
+            .iter()
+            .map(|value| (value - mean).powi(2))
+            .sum::<f64>()
+            / (samples.len() - 1) as f64;
+        let expected = normalized_variance * amplitude * amplitude;
+        assert!(expected > 0.0 && expected.is_subnormal());
+        assert!(covariance[(0, 0)] > 0.0);
+        assert_eq!(covariance[(0, 0)], expected);
+    }
 }
