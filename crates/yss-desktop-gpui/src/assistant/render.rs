@@ -5,9 +5,10 @@ use super::{
 use gpui::{
     AnyElement, Context, Empty, IntoElement, Render, SharedString, Window, div, prelude::*,
 };
-use gpui_component::{ActiveTheme, Sizable, clipboard::Clipboard, text::TextView};
+use gpui_component::{ActiveTheme, Sizable, clipboard::Clipboard};
 mod failure;
 mod output;
+mod plain;
 mod task;
 
 impl Render for ConversationPanel {
@@ -91,9 +92,10 @@ impl ConversationPanel {
                             row.child(self.copy_action(turn, true, cx))
                         }),
                 )
-                .child(TextView::markdown(
+                .child(plain::PlainText::new(
                     SharedString::from(format!("user-{id}")),
                     text,
+                    "panel.assistantYou",
                 ))
                 .child(
                     self.reference_chips(

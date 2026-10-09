@@ -120,7 +120,11 @@ impl ConversationPanel {
                             .border_l_1()
                             .border_color(cx.theme().border)
                             .text_color(cx.theme().muted_foreground)
-                            .child(markdown(format!("reasoning-text-{id}"), text.clone())),
+                            .child(super::plain::PlainText::new(
+                                SharedString::from(format!("reasoning-text-{id}")),
+                                text.clone(),
+                                "panel.assistantThinking",
+                            )),
                     );
                 }
                 body.into_any_element()

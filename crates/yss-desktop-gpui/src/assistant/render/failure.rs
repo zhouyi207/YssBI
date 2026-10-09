@@ -1,6 +1,6 @@
 //! A localized failure stays in its message; the original code is available on demand.
 use super::super::ConversationPanel;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
+use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use gpui_component::ActiveTheme;
 
 impl ConversationPanel {
@@ -31,7 +31,15 @@ impl ConversationPanel {
                 cx,
             ))
             .when(open, |card| {
-                card.child(div().font_family("monospace").child(code.to_owned()))
+                card.child(
+                    div()
+                        .font_family(cx.theme().mono_font_family.clone())
+                        .child(super::plain::PlainText::new(
+                            SharedString::from(format!("failure-code-{id}")),
+                            code.to_owned(),
+                            "panel.assistantTechnicalDetails",
+                        )),
+                )
             })
             .into_any_element()
     }

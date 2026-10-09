@@ -558,6 +558,14 @@
 - L2：工作区与独立提交内容通过 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked`、`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；8 个 Rust 文件局部格式、43 个双语键/参数（候选英文沿用工作区目录）、文档元信息与 275/271 条相对链接、`node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 条依赖）及 `git diff --check` 通过。实际窗口使用 `cargo build -p yss-desktop-gpui --example assistant_timeline_review --locked`；临时入口和隔离数据不提交。
 - 本批没有后端接口、依赖或 UI 单元测试变更，不运行全工作区验证。真实模型/持久账本交付、物理输入、读屏、Windows/macOS、已有嵌套 Xwayland 局部重绘，以及 Thread 纯文本/局部选择和 Markdown 的剩余职责继续开放；累计完成源码审查仍为 188/265 项。
 
+### 消息纯文本与局部选择（AssistantThread，继续审查）
+
+- 用户消息、思考和失败技术码改为 `assistant/render/plain` 的共用只读 Textarea，保留 Markdown/HTML/公式标记、原始空白和换行。选择、键盘导航、复制及编辑保护复用组件；技术码使用主题等宽字体。
+- 窗口元素状态持有可见控件，消息事实仍来自原事件投影。仅在内容变化时同步文本并恢复选区和滚动；普通重绘不重置控件，隐藏后释放状态。思考继续使用原 288px 滚动区域，回复仍由 Markdown 呈现。
+- 工作区及独立提交副本通过临时 Linux/X11 窗口核对原样呈现、系统剪贴板、键盘全选、鼠标局部选择、输入/删除/粘贴的只读保护、流式追加后选区保留，以及失败技术码的选择复制。工作区另核对局部键盘选择、中文/表情/组合字符的剪贴板内容、语言切换后选区保留、窄列换行、保留 sidebar 的展开布局及 40 行思考追加后的阅读位置；最终独立副本核对主题等宽字体。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；4 个 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true`、复用双语键/参数、文档元信息与相对链接、`node scripts/generate-crate-dependencies.mjs --check` 及 `git diff --check` 通过。窗口以 `cargo build -p yss-desktop-gpui --example assistant_text_review --locked` 构建，临时入口和隔离数据不提交。
+- 本批无后端接口、依赖或 UI 单元测试变更，不运行全工作区验证。物理输入/IME、读屏、真实模型交付、Windows/macOS、预览中未显示的表情字形和已有嵌套 Xwayland 局部重绘仍待验收；Markdown 的代码块、链接及共享富文本职责继续审查，Thread 暂不标记整体完成，累计仍为 188/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -678,7 +686,7 @@
 | [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 优化 | 共用当前目录产物/结果卡片；来源按需展开、校验与重试；复用原工作台入口 | 原生窗口与真实资源/结果读取通过；跨项目/内置来源/模型账本及平台验收开放 |
 | [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 迁移 | assistant/options 复用 HarnessTurnOptions、目录限制/默认档位；模式说明、勾选、重置与失效覆盖核对，保留队列配置 | Linux/X11 草稿/目录/队列交互验收通过；真实运行/其他平台待验收 |
 | [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 优化 | 每次执行独立卡片、活动与终态投影、完整计划；复用时长/工具/产物 | 原生窗口合成事件验收通过；模型账本/读屏/物理输入/平台与局部重绘开放 |
-| [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读全部消息组合；有序输出、撤回、复制反馈、失败详情、Manager 产物、历史范围和阅读锚点已接入；纯文本/局部选择及 Markdown 依赖继续审查 | 合成事件的原生窗口验收见本批记录；整体未完成 |
+| [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读全部消息组合；有序输出、撤回、复制反馈、失败详情、Manager 产物、历史范围和阅读锚点已接入；纯文本与局部选择已接入只读 Textarea，Markdown 依赖继续审查 | 合成事件的原生窗口与系统剪贴板验收见对应批次；整体未完成 |
 | [modules/assistant/internal/ui/AssistantTokenUsage.tsx](../../react/src/modules/assistant/internal/ui/AssistantTokenUsage.tsx) | 迁移 | 原事件投影增量统计本轮，原生 ProgressCircle/Popover 展示主对话占用及完整用量；未知与零分别保留 | 合成事件原生窗口通过；真实报告/持久回放与跨平台待验收 |
 | [modules/assistant/internal/ui/AssistantToolCalls.tsx](../../react/src/modules/assistant/internal/ui/AssistantToolCalls.tsx) | 优化 | 工具分组、明确终态、可见卡片原位查询/重试与技术详情；复用时长/资源入口 | 原生窗口合成账本/控制事件验收；真实模型/迟到回执/物理输入/平台与局部重绘开放 |
 
