@@ -1,6 +1,9 @@
 //! Linear IV GMM, Heckman two-step, normal–half-normal frontiers and SUR.
 use super::common::*;
-use crate::regression::models::{common::normal_log_cdf, glm};
+use crate::regression::models::{
+    common::{normal_log_cdf, normal_log_cdf_density_ratio},
+    glm,
+};
 use yss_sci_contract::causal::models::*;
 use yss_sci_contract::regression::models::{GlmFamily, GlmLink, GlmOptions};
 use yss_sci_linalg::matrix_rank;
@@ -362,17 +365,27 @@ pub fn frontier(
     if y.len() <= p + 2 {
         return Err(parameter());
     }
-    let (ols, _) = least_squares(x, y, None, control)?;
-    let residuals = y
+    let mut response_scale = 0.0_f64;
+    for (i, value) in y.iter().enumerate() {
+        if i.is_multiple_of(512) {
+            control.check()?;
+        }
+        response_scale = response_scale.max(value.abs());
+    }
+    if response_scale == 0.0 {
+        response_scale = 1.0;
+    }
+    let response = y
+        .iter()
+        .map(|value| value / response_scale)
+        .collect::<Vec<_>>();
+    let (ols, _) = least_squares(x, &response, None, control)?;
+    let sd = response
         .iter()
         .zip(fitted(x, &ols))
-        .map(|(y, f)| y - f)
-        .collect::<Vec<_>>();
-    let sd = (residuals
-        .iter()
-        .map(|e| e * e / y.len() as f64)
-        .sum::<f64>())
-    .sqrt();
+        .map(|(value, fitted)| (value - fitted).powi(2) / response.len() as f64)
+        .sum::<f64>()
+        .sqrt();
     if !sd.is_finite() || sd <= 0.0 {
         return Err(parameter());
     }
@@ -385,13 +398,13 @@ pub fn frontier(
         if su <= 0.0 || sv <= 0.0 || !sigma.is_finite() {
             return Err(failed());
         }
-        let predicted = fitted(x, &b[..p]);
         let mut loss = 0.0;
-        for (i, (&y, &f)) in y.iter().zip(&predicted).enumerate() {
+        for (i, &y) in response.iter().enumerate() {
             if i.is_multiple_of(512) {
                 control.check()?;
             }
-            let e = (y - f) / sigma;
+            let fitted = (0..p).map(|j| x[(i, j)] * b[j]).sum::<f64>();
+            let e = (y - fitted) / sigma;
             loss += sigma.ln() + 0.5 * e * e + 0.5 * (2.0 * std::f64::consts::PI).ln()
                 - 2.0_f64.ln()
                 - normal_log_cdf(-sign * e * su / sv);
@@ -414,33 +427,44 @@ pub fn frontier(
     let information = hessian(&objective, &optimum.beta, control)?;
     let inv = inverse(&information)?;
     let cov = Mat::from_fn(p, p, |i, j| inv[(i, j)] / y.len() as f64);
-    let predicted = fitted(x, &optimum.beta[..p]);
-    let residuals = y
+    let mut predicted = fitted(x, &optimum.beta[..p]);
+    let mut residuals = response
         .iter()
         .zip(&predicted)
         .map(|(y, f)| y - f)
         .collect::<Vec<_>>();
-    let variance = su * su + sv * sv;
-    let conditional_sd = su * sv / variance.sqrt();
+    let sigma = su.hypot(sv);
+    let conditional_sd = su * (sv / sigma);
+    let raw_conditional_sd = finite(conditional_sd * response_scale)?;
     let mut inefficiency = Vec::with_capacity(y.len());
     let mut efficiency = Vec::with_capacity(y.len());
-    for (i, &e) in residuals.iter().enumerate() {
+    for (i, e) in residuals.iter_mut().enumerate() {
         if i.is_multiple_of(512) {
             control.check()?;
         }
-        let mu = -sign * e * su * su / variance;
+        let mu = -sign * *e * (su / sigma).powi(2);
         let z = mu / conditional_sd;
-        let mills =
-            (-0.5 * z * z - 0.5 * (2.0 * std::f64::consts::PI).ln() - normal_log_cdf(z)).exp();
-        inefficiency.push(finite(mu + conditional_sd * mills)?);
+        let log_ratio = normal_log_cdf_density_ratio(z);
+        let mills = (-log_ratio).exp();
+        inefficiency.push(finite((mu + conditional_sd * mills) * response_scale)?);
+        // Completing the square expresses E[exp(-u)] as a ratio of CDF/density
+        // ratios, without subtracting quadratic terms in raw response units.
         efficiency.push(finite(
-            (-mu + 0.5 * conditional_sd.powi(2) + normal_log_cdf(z - conditional_sd)
-                - normal_log_cdf(z))
-            .exp(),
+            (normal_log_cdf_density_ratio(z - raw_conditional_sd) - log_ratio).exp(),
         )?);
+        predicted[i] = finite(predicted[i] * response_scale)?;
+        *e = finite(*e * response_scale)?;
     }
-    let (beta, cov) = design.raw(&optimum.beta[..p], Some(cov));
+    let coordinates = design.raw_jacobian(response_scale);
+    let (beta, cov) = transform(&optimum.beta[..p], Some(cov), &coordinates);
     let cov = cov.expect("covariance");
+    for i in 0..p {
+        control.check()?;
+        finite(beta[i])?;
+        for j in 0..p {
+            finite(cov[(i, j)])?;
+        }
+    }
     Ok(FrontierResult {
         observations: y.len(),
         cost: options.cost,
@@ -451,9 +475,9 @@ pub fn frontier(
             None,
         )?,
         covariance: rows(&cov),
-        sigma_u: su,
-        sigma_v: sv,
-        log_likelihood: -optimum.value * y.len() as f64,
+        sigma_u: finite(su * response_scale)?,
+        sigma_v: finite(sv * response_scale)?,
+        log_likelihood: finite(-(optimum.value + response_scale.ln()) * y.len() as f64)?,
         iterations: optimum.iterations,
         frontier: predicted,
         residuals,

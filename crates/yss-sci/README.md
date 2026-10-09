@@ -524,6 +524,19 @@ regressions retain the independent coefficient, covariance and inference referen
 The [two-step SUR contract](https://www.stata.com/manuals/rsureg.pdf) uses the sample
 size as the residual-covariance divisor and rejects singular residual systems.
 
+Frontier fits its half-normal likelihood and observed Hessian in normalized response
+coordinates, then restores coefficients, covariance, sigma and observation results
+through the existing design map. Reported likelihood includes the response-density
+scale adjustment. Objective evaluations accumulate row predictions directly without
+allocating a full fitted vector each time. Conditional moments use normalized scale
+ratios; efficiency uses the shared log-CDF/density ratio and its existing tail series,
+avoiding raw variance products and quadratic cancellation. Both production and cost
+retain `E[exp(-u)]`, which changes with response units. Small/large response-unit
+regressions check independent regular inference and the appropriate efficiency limits.
+Both near-zero variance-component boundaries still fail as nonregular inference.
+The [half-normal likelihood and conditional moments](https://www.stata.com/manuals/rfrontier.pdf)
+define the retained fit; the neutral result owns its production/cost efficiency ratio.
+
 `causal::treatment` reuses controlled Logit and OLS for nearest-neighbour propensity
 matching with replacement, normalized Hájek IPW, RA and AIPW. Matching includes exact
 distance ties and rejects caliper failures instead of changing the estimand by

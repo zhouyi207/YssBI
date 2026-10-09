@@ -666,6 +666,98 @@ fn selection_and_frontier_match_probit_and_likelihood_references() {
 }
 
 #[test]
+fn frontier_response_units_keep_small_regular_inference() {
+    check_frontier_response_units(1e-155);
+}
+
+#[test]
+fn frontier_response_units_keep_large_conditional_efficiency_finite() {
+    check_frontier_response_units(1e153);
+}
+
+fn check_frontier_response_units(scale: f64) {
+    use statrs::distribution::{Continuous, ContinuousCDF, Normal};
+
+    let f = fixture();
+    let d = &f["frontier"];
+    let y = vector(&d["response"]);
+    let x = matrix(&d["predictors"]);
+    let beta = vector(&d["coefficients"]);
+    let covariance = matrix(&d["covariance"]);
+    let su = d["sigma_u"].as_f64().unwrap();
+    let sv = d["sigma_v"].as_f64().unwrap();
+    let sigma = su.hypot(sv);
+    let conditional_sd = su * (sv / sigma);
+    let normal = Normal::new(0.0, 1.0).unwrap();
+    for cost in [false, true] {
+        let sign = if cost { -1.0 } else { 1.0 };
+        let response = y
+            .iter()
+            .map(|value| sign * value * scale)
+            .collect::<Vec<_>>();
+        let result = econometrics::frontier(
+            &response,
+            &x,
+            FrontierOptions {
+                constant: true,
+                cost,
+                iteration: IterationOptions::default(),
+            },
+            &control(),
+        )
+        .expect("regular frontier inference retains response units");
+        assert_eq!(result.observations, y.len());
+        assert_eq!(result.cost, cost);
+        close(result.sigma_u / scale, su, 3e-5);
+        close(result.sigma_v / scale, sv, 3e-5);
+        close(
+            result.log_likelihood + y.len() as f64 * scale.ln(),
+            d["log_likelihood"].as_f64().unwrap(),
+            1e-7,
+        );
+        for (j, coefficient) in result.coefficients.iter().enumerate() {
+            let se = covariance[j][j].sqrt();
+            assert!(coefficient.estimate.is_finite());
+            close(coefficient.estimate / scale, sign * beta[j], 3e-5);
+            close(coefficient.standard_error.unwrap() / scale, se, 3e-5);
+            close(coefficient.statistic.unwrap(), sign * beta[j] / se, 3e-5);
+            for (k, &value) in result.covariance[j].iter().enumerate() {
+                assert!(value.is_finite());
+                close(value / scale / scale, covariance[j][k], 3e-5);
+            }
+        }
+        for i in 0..y.len() {
+            let fitted = beta[0] + x.iter().zip(&beta[1..]).map(|(x, b)| x[i] * b).sum::<f64>();
+            let residual = y[i] - fitted;
+            let mu = -residual * (su / sigma).powi(2);
+            let z = mu / conditional_sd;
+            let density_ratio = normal.pdf(z) / normal.cdf(z);
+            let conditional_mean = mu + conditional_sd * density_ratio;
+            assert!(result.frontier[i].is_finite());
+            assert!(result.residuals[i].is_finite());
+            assert!(result.conditional_inefficiency[i].is_finite());
+            close(result.frontier[i] / scale, sign * fitted, 3e-5);
+            close(result.residuals[i] / scale, sign * residual, 3e-5);
+            close(
+                result.conditional_inefficiency[i] / scale,
+                conditional_mean,
+                3e-5,
+            );
+            let efficiency = result.efficiency[i];
+            assert!(efficiency.is_finite() && efficiency > 0.0 && efficiency <= 1.0);
+            if scale < 1.0 {
+                assert_eq!(efficiency, 1.0);
+            } else {
+                // S * E[exp(-S*u)] tends to the independently fitted posterior
+                // density at u=0, not to the normal-unit efficiency score.
+                let expected_density = density_ratio / conditional_sd;
+                close(efficiency * scale / expected_density, 1.0, 3e-5);
+            }
+        }
+    }
+}
+
+#[test]
 fn sur_response_units_keep_large_residual_covariance_finite() {
     check_sur_response_units([5e153, 5e153], 1.0);
 }
