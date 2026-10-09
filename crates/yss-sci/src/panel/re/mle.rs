@@ -605,7 +605,7 @@ pub fn fit_panel_re_mle(
     };
     let chi2_lr =
         ChiSquared::new(k_slopes as f64).map_err(|e| format!("Panel RE MLE LR: {}", e))?;
-    let prob_lr_chi2 = 1.0 - chi2_lr.cdf(lr_chi2);
+    let prob_lr_chi2 = chi2_lr.sf(lr_chi2);
 
     // chibar2(01) for H0: sigma_u=0. Restricted model = pooled OLS.
     let ll_ols = {
@@ -653,7 +653,7 @@ pub fn fit_panel_re_mle(
         }
     };
     let chi2_1 = ChiSquared::new(1.0).map_err(|e| format!("Panel RE MLE chibar2: {}", e))?;
-    let prob_chibar2 = 0.5 * (1.0 - chi2_1.cdf(chibar2));
+    let prob_chibar2 = 0.5 * (chi2_1.sf(chibar2));
 
     let mle_theta = {
         let thetas: Vec<f64> = obs_per_entity
@@ -692,7 +692,7 @@ pub fn fit_panel_re_mle(
     // Stata xtreg, re uses z (asymptotic normal), not t
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE MLE: {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
+        crate::distribution::normal_two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
@@ -704,9 +704,12 @@ pub fn fit_panel_re_mle(
         response_name: "response".into(),
         omitted_terms: vec![],
         estimation: yss_sci_contract::panel::PanelEstimationSample {
-            space: "quasi_demeaned".into(), constant: final_ols.config.constant,
+            space: "quasi_demeaned".into(),
+            constant: final_ols.config.constant,
             response: final_ols.endog.iter().copied().collect(),
-            design: (0..final_ols.exog.ncols()).map(|j|final_ols.exog.col(j).iter().copied().collect()).collect(),
+            design: (0..final_ols.exog.ncols())
+                .map(|j| final_ols.exog.col(j).iter().copied().collect())
+                .collect(),
             coefficients: result.betas.iter().copied().collect(),
             fitted: result.fitted.iter().copied().collect(),
             residuals: result.residuals.iter().copied().collect(),
@@ -750,14 +753,14 @@ pub fn fit_panel_re_mle(
         effects_statistics: fe_stats,
         omitted_indices,
         estimator_statistics: super::PanelEstimatorStatistics::MaximumLikelihood {
-                log_likelihood,
-                lr_chi2,
-                lr_p_value: prob_lr_chi2,
-                chibar2,
-                chibar2_p_value: prob_chibar2,
-                constant_iterations: mle_iter_log_lik_const,
-                iterations: mle_iter_log_lik,
-            },
+            log_likelihood,
+            lr_chi2,
+            lr_p_value: prob_lr_chi2,
+            chibar2,
+            chibar2_p_value: prob_chibar2,
+            constant_iterations: mle_iter_log_lik_const,
+            iterations: mle_iter_log_lik,
+        },
         covariance_nonrobust: None,
     })
 }

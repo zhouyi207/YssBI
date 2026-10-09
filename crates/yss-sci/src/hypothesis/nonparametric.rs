@@ -753,7 +753,7 @@ fn normal_p(z: f64, a: Alternative, control: &ScientificExecutionControl) -> Res
     let n = Normal::new(0.0, 1.0).expect("standard normal");
     control.check()?;
     let p = match a {
-        Alternative::TwoSided => 2.0 * n.sf(z.abs()),
+        Alternative::TwoSided => crate::distribution::normal_two_sided_p(z),
         Alternative::Greater => n.sf(z),
         Alternative::Less => n.cdf(z),
     }

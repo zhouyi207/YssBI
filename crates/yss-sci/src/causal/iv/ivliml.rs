@@ -259,7 +259,7 @@ impl IVLIML {
         let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("IVLIML: {}", e))?;
         let p_values: Vec<f64> = z_values
             .iter()
-            .map(|&z| 2.0 * (1.0 - std_normal.cdf(z.abs())))
+            .map(|&z| crate::distribution::normal_two_sided_p(z))
             .collect();
         let z_crit = std_normal.inverse_cdf(0.975);
         let ci_lower = &betas_nd - yss_sci_linalg::Scale(z_crit) * &std_err;
@@ -288,7 +288,7 @@ impl IVLIML {
             let wald = beta_s.transpose() * x_sol.as_ref();
             let chi2_dist =
                 ChiSquared::new(df_wald as f64).map_err(|e| format!("IVLIML Wald: {}", e))?;
-            (wald, 1.0 - chi2_dist.cdf(wald))
+            (wald, chi2_dist.sf(wald))
         };
 
         Ok(crate::causal::iv::IvEstimate {

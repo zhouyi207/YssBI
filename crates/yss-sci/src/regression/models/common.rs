@@ -268,7 +268,7 @@ pub(crate) fn coefficient_table(
             let p_value = statistic.map(|v| {
                 t.as_ref()
                     .map_or_else(
-                        || 2.0 * normal.sf(v.abs()),
+                        || crate::distribution::normal_two_sided_p(v),
                         |d| {
                             crate::distribution::student_t_probability(
                                 d,

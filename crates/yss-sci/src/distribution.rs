@@ -11,6 +11,11 @@ use yss_sci_contract::execution::{
 };
 use yss_sci_contract::hypothesis::Alternative;
 
+/// Standard-normal two-sided tails round once, including subnormal probabilities.
+pub(crate) fn normal_two_sided_p(statistic: f64) -> f64 {
+    statrs::function::erf::erfc(statistic.abs() / std::f64::consts::SQRT_2)
+}
+
 /// Directed probabilities for validated standard Student-t reference distributions.
 pub(crate) fn student_t_probability(
     distribution: &native::StudentsT,

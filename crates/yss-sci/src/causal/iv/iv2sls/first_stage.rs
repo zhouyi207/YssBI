@@ -277,7 +277,7 @@ pub(crate) fn compute_first_stage_summary(
                 .solve(&Mat::identity(cov_gamma2.nrows(), cov_gamma2.nrows()));
             let wald = gamma2.transpose() * (cov_gamma2_inv.as_ref() * gamma2.as_ref()).as_ref();
             let chi2 = ChiSquared::new(k_iv as f64).map_err(|e| format!("{}", e))?;
-            let f_p = 1.0 - chi2.cdf(wald);
+            let f_p = chi2.sf(wald);
             (wald / k_iv as f64, f_p, k_iv, df_z)
         } else {
             let ssr_r: f64 = y_col

@@ -88,11 +88,7 @@ fn im_test_from_white(
     let (chi2_s, df_s) = lm_chi2_aux(&y_s, x)?;
     let chi2_skew =
         ChiSquared::new(df_s as f64).map_err(|e| format!("im_test skewness: ChiSquared: {}", e))?;
-    let p_s = if df_s > 0 {
-        1.0 - chi2_skew.cdf(chi2_s)
-    } else {
-        1.0
-    };
+    let p_s = if df_s > 0 { chi2_skew.sf(chi2_s) } else { 1.0 };
 
     // Kurtosis: y_k = u⁴ - 6·σ²·u² + 3·σ⁴，对常数回归，df=1（Cameron-Trivedi 固定）
     let y_k: Col<f64> = Col::from_fn(n, |i| {
@@ -111,13 +107,13 @@ fn im_test_from_white(
     let df_k = 1;
     let chi2_kurt =
         ChiSquared::new(df_k as f64).map_err(|e| format!("im_test kurtosis: ChiSquared: {}", e))?;
-    let p_k = 1.0 - chi2_kurt.cdf(chi2_k);
+    let p_k = chi2_kurt.sf(chi2_k);
 
     let total_chi2 = hetero.lm_stat + chi2_s + chi2_k;
     let total_df = hetero.df + df_s + df_k;
     let chi2_total = ChiSquared::new(total_df as f64)
         .map_err(|e| format!("im_test total: ChiSquared: {}", e))?;
-    let total_p_value = 1.0 - chi2_total.cdf(total_chi2);
+    let total_p_value = chi2_total.sf(total_chi2);
 
     Ok(ImTestResult {
         heteroskedasticity: Chi2TestResult {

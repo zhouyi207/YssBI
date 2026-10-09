@@ -3,7 +3,7 @@
 // 按 Stata vec 命令的 Johansen (1995) 方法实现。
 // 支持 trend(none), trend(constant), trend(trend)。
 
-use super::distributions::{chi_squared_sf, normal_cdf, normal_two_sided_p};
+use super::distributions::{chi_squared_sf, normal_two_sided_p};
 use super::vec_vecrank_cv::{max_eigen_critical_row, trace_critical_row};
 
 use yss_sci_linalg::{MatrixExt, Solve};

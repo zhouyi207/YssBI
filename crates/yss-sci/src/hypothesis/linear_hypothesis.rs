@@ -198,7 +198,7 @@ pub fn run_asymptotic_hypothesis_test(
         let normal =
             Normal::new(0.0, 1.0).map_err(|e| HypothesisError::InvalidInput(e.to_string()))?;
         result.p_value = if result.alternative == "two_sided" {
-            2.0 * normal.sf(result.stat.abs())
+            crate::distribution::normal_two_sided_p(result.stat)
         } else {
             normal.sf(result.stat)
         };

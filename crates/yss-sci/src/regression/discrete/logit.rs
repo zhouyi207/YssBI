@@ -162,7 +162,7 @@ impl Logit {
                     .collect();
                 let p_values: Vec<f64> = z_values
                     .iter()
-                    .map(|&z| 2.0 * (1.0 - normal.cdf(z.abs())))
+                    .map(|&z| crate::distribution::normal_two_sided_p(z))
                     .collect();
                 let z_crit = normal.inverse_cdf(0.975);
                 let ci_lower = &beta - yss_sci_linalg::Scale(z_crit) * &std_err;
@@ -201,9 +201,9 @@ impl Logit {
                 let lr_p_value = if df_model == 0 {
                     1.0
                 } else {
-                    1.0 - ChiSquared::new(df_model as f64)
+                    ChiSquared::new(df_model as f64)
                         .map_err(|e| format!("Logit: ChiSquared: {}", e))?
-                        .cdf(lr_chi2)
+                        .sf(lr_chi2)
                 };
 
                 let aic = -2.0 * ll + 2.0 * k as f64;

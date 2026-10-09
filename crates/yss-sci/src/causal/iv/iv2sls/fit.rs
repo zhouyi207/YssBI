@@ -95,7 +95,7 @@ impl IV2SLS {
         let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("IV2SLS: {}", e))?;
         let p_values: Vec<f64> = z_values
             .iter()
-            .map(|&z| 2.0 * (1.0 - std_normal.cdf(z.abs())))
+            .map(|&z| crate::distribution::normal_two_sided_p(z))
             .collect();
 
         let z_crit = std_normal.inverse_cdf(0.975);
@@ -131,7 +131,7 @@ impl IV2SLS {
             let wald = beta_s.transpose() * x_nd.as_ref();
             let chi2_dist =
                 ChiSquared::new(df_wald as f64).map_err(|e| format!("IV2SLS Wald: {}", e))?;
-            let wald_p = 1.0 - chi2_dist.cdf(wald);
+            let wald_p = chi2_dist.sf(wald);
             (wald, wald_p)
         };
 

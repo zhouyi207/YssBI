@@ -157,7 +157,7 @@ pub fn difference_gmm(
         let statistic = beta[j] / std;
         se.push(std);
         z_values.push(statistic);
-        p_values.push(2.0 * normal.sf(statistic.abs()));
+        p_values.push(crate::distribution::normal_two_sided_p(statistic));
         lower.push(beta[j] - critical * std);
         upper.push(beta[j] + critical * std);
     }

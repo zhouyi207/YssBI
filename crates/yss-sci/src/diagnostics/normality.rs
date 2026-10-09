@@ -90,14 +90,14 @@ pub fn normality_tests(residuals: &Col<f64>) -> Result<NormalityTestResult, Stri
     // Jarque-Bera: JB = n/6 * (S² + (K-3)²/4), K 为 raw kurtosis
     let jb = n_f / 6.0 * (g1 * g1 + (kurtosis_raw - 3.0) * (kurtosis_raw - 3.0) / 4.0);
     let chi2_jb = ChiSquared::new(2.0).map_err(|e| format!("normality_tests JB: {}", e))?;
-    let jb_p = 1.0 - chi2_jb.cdf(jb);
+    let jb_p = chi2_jb.sf(jb);
 
     // Omnibus: scipy normaltest = skewtest² + kurtosistest²（与 statsmodels 完全一致）
     let z_skew = scipy_skewtest_z(g1, n_f);
     let z_kurt = scipy_kurtosistest_z(kurtosis_raw, n_f);
     let omnibus_stat = z_skew * z_skew + z_kurt * z_kurt;
     let chi2_om = ChiSquared::new(2.0).map_err(|e| format!("normality_tests Omnibus: {}", e))?;
-    let omnibus_p = 1.0 - chi2_om.cdf(omnibus_stat);
+    let omnibus_p = chi2_om.sf(omnibus_stat);
 
     Ok(NormalityTestResult {
         skewness: g1,

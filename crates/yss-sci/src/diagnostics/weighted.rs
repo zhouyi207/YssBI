@@ -105,7 +105,7 @@ pub fn breusch_pagan_stata_rhs_weighted(
 
     let chi2 = ChiSquared::new(df as f64)
         .map_err(|e| format!("breusch_pagan_stata_rhs_weighted: ChiSquared: {}", e))?;
-    let p_value = 1.0 - chi2.cdf(lm_stat);
+    let p_value = chi2.sf(lm_stat);
 
     Ok(BreuschPaganResult {
         lm_stat,
@@ -154,7 +154,7 @@ pub fn breusch_pagan_koenker_rhs_weighted(
 
     let chi2 = ChiSquared::new(df as f64)
         .map_err(|e| format!("breusch_pagan_koenker_rhs_weighted: ChiSquared: {}", e))?;
-    let p_value = 1.0 - chi2.cdf(lm_stat);
+    let p_value = chi2.sf(lm_stat);
 
     Ok(BreuschPaganResult {
         lm_stat,
@@ -197,7 +197,7 @@ pub fn breusch_pagan_stata_weighted(
 
     let chi2 = ChiSquared::new(df as f64)
         .map_err(|e| format!("breusch_pagan_stata_weighted: ChiSquared: {}", e))?;
-    let p_value = 1.0 - chi2.cdf(lm_stat);
+    let p_value = chi2.sf(lm_stat);
 
     Ok(BreuschPaganResult {
         lm_stat,
@@ -237,7 +237,7 @@ pub fn breusch_pagan_koenker_weighted(
 
     let chi2 = ChiSquared::new(df as f64)
         .map_err(|e| format!("breusch_pagan_koenker_weighted: ChiSquared: {}", e))?;
-    let p_value = 1.0 - chi2.cdf(lm_stat);
+    let p_value = chi2.sf(lm_stat);
 
     Ok(BreuschPaganResult {
         lm_stat,

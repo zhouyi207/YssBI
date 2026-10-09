@@ -131,7 +131,7 @@ fn compute_beta_ce_stats(
             let var_ii = scale * a_inv_jj * b_inv[(ii, ii)].max(0.0);
             let se = var_ii.sqrt().max(1e-300);
             let z = coef / se;
-            let p = 2.0 * (1.0 - normal_cdf(z.abs()));
+            let p = normal_two_sided_p(z);
             let half_width = 1.96 * se;
             std_err[i][j] = Some(se);
             z_val[i][j] = Some(z);

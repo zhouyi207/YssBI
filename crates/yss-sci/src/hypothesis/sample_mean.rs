@@ -514,7 +514,7 @@ fn finish_normal(
     let distribution = Normal::new(0.0, 1.0).map_err(|_| failed())?;
     control.check()?;
     let p_value = match alternative {
-        Alternative::TwoSided => 2.0 * distribution.sf(statistic.abs()),
+        Alternative::TwoSided => crate::distribution::normal_two_sided_p(statistic),
         Alternative::Greater => distribution.sf(statistic),
         Alternative::Less => distribution.cdf(statistic),
     }

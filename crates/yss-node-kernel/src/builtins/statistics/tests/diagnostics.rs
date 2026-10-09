@@ -1,6 +1,63 @@
 use super::*;
 
 #[test]
+fn asymptotic_nodes_preserve_small_and_subnormal_tail_values() {
+    let residuals: Vec<_> = (0..20).map(|i| f64::from(i == 0)).collect();
+    let outputs = run(
+        "yssbi.statistics.test.normality",
+        &[("series", series(&residuals))],
+        &[],
+        1,
+    )
+    .unwrap();
+    let numeric = |v: &RuntimeValue| crate::builtins::numeric_input(Some(v)).unwrap();
+    let statistic = numeric(field(&outputs[0], "jarque_bera_stat").unwrap());
+    let mut reports = vec![(
+        "Jarque-Bera",
+        numeric(field(&outputs[0], "jarque_bera_p_value").unwrap()),
+        (-statistic / 2.0).exp(),
+    )];
+    for (method, observations, successes, expected) in [
+        ("logit", 200, 180, 1.141_306_038_338_677_2e-20),
+        ("probit", 200, 180, 2.905_331_538_655_039e-26),
+        ("logit", 3408, 3067, f64::from_bits(1)),
+    ] {
+        let response: Vec<_> = (0..observations)
+            .map(|i| f64::from(i < successes))
+            .collect();
+        let outputs = run(
+            &format!("yssbi.statistics.{method}.fit"),
+            &[
+                ("y", series(&response)),
+                ("x", series(&vec![1.0; observations])),
+            ],
+            &[
+                ("constant", flag(false)),
+                ("max_iterations", int(100)),
+                ("tolerance", number(1e-12)),
+            ],
+            3,
+        )
+        .unwrap();
+        let stats = field(&outputs[0], "statistics").unwrap();
+        let RuntimeValue::List(probabilities) = field(stats, "pValues").unwrap() else {
+            panic!("coefficient probabilities")
+        };
+        reports.push((method, numeric(&probabilities[0]), expected));
+    }
+    let lost: Vec<_> = reports
+        .into_iter()
+        .filter(|(_, actual, expected)| {
+            (actual / expected - 1.0).abs() >= 1e-8 || !actual.is_finite()
+        })
+        .collect();
+    assert!(
+        lost.is_empty(),
+        "Tail values lost at the node boundary: {lost:?}"
+    );
+}
+
+#[test]
 fn f_inference_keeps_small_tails_in_anova_and_linear_nodes() {
     let response = [
         1.,

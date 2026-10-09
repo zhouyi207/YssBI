@@ -123,7 +123,10 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(format!("yssbi.statistics.{id}").into()).expect("association ID"),
                 std::num::NonZeroU32::new(
-                    if matches!(method, Icc | Pearson | Partial | Spearman) {
+                    if matches!(
+                        method,
+                        Icc | Pearson | Partial | Spearman | Kendall | Kappa | Ridit
+                    ) {
                         4
                     } else {
                         3

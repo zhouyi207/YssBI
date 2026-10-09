@@ -399,12 +399,12 @@ pub fn fit_panel_re_fgls_twoway(
         let wald = beta_s.transpose() * x_nd.as_ref();
         let chi2_dist = ChiSquared::new(df_wald as f64)
             .map_err(|e| format!("Panel RE (Two-Way) Wald: {}", e))?;
-        (wald, 1.0 - chi2_dist.cdf(wald))
+        (wald, chi2_dist.sf(wald))
     };
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE (Two-Way): {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
+        crate::distribution::normal_two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
@@ -1062,7 +1062,7 @@ pub fn fit_panel_re_mle_twoway(
     let lr_chi2 = (2.0 * (log_likelihood - ll_null)).max(0.0);
     let chi2_lr = ChiSquared::new(k_slopes as f64)
         .map_err(|e| format!("Panel RE (Two-Way) MLE LR: {}", e))?;
-    let prob_lr_chi2 = 1.0 - chi2_lr.cdf(lr_chi2);
+    let prob_lr_chi2 = chi2_lr.sf(lr_chi2);
 
     let ll_ols = {
         let (x_ols_use, ols_omitted) =
@@ -1104,7 +1104,7 @@ pub fn fit_panel_re_mle_twoway(
     let chibar2 = 2.0 * (log_likelihood - ll_ols).max(0.0);
     let chibar2_dist =
         ChiSquared::new(0.5).map_err(|e| format!("Panel RE (Two-Way) chibar2: {}", e))?;
-    let prob_chibar2 = 1.0 - chibar2_dist.cdf(chibar2);
+    let prob_chibar2 = chibar2_dist.sf(chibar2);
 
     let fe_stats = Some(super::PanelFEStats {
         r2: None,
@@ -1124,7 +1124,7 @@ pub fn fit_panel_re_mle_twoway(
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE (Two-Way) MLE: {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
+        crate::distribution::normal_two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;

@@ -1,6 +1,5 @@
 use super::*;
 use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
-use statrs::distribution::{ContinuousCDF, Normal};
 use yss_sci_contract::spatial::*;
 
 fn centered(y: &[f64]) -> Result<Vec<f64>> {
@@ -74,11 +73,14 @@ pub fn analyze(
     } else {
         None
     };
-    let normal = Normal::new(0.0, 1.0).expect("normal");
     let infer = |v: Option<f64>| {
         let v = v.filter(|v| v.is_finite() && *v > 1e-14);
         let z = v.map(|v| (observed - expected) / v.sqrt());
-        (v, z, z.map(|z| (2.0 * normal.sf(z.abs())).clamp(0.0, 1.0)))
+        (
+            v,
+            z,
+            z.map(|z| crate::distribution::normal_two_sided_p(z).clamp(0.0, 1.0)),
+        )
     };
     let (normal_variance, normal_z, normal_p_value) = infer(Some(variance));
     let (randomization_variance, randomization_z, randomization_p_value) = infer(random_variance);

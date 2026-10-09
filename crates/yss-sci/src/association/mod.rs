@@ -147,7 +147,7 @@ fn normal_tail(z: f64, alternative: Alternative) -> Result<f64, Error> {
     let distribution = Normal::new(0.0, 1.0).map_err(|_| Error::ComputationFailed)?;
     bounded(
         match alternative {
-            Alternative::TwoSided => 2.0 * distribution.sf(z.abs()),
+            Alternative::TwoSided => crate::distribution::normal_two_sided_p(z),
             Alternative::Greater => distribution.sf(z),
             Alternative::Less => distribution.cdf(z),
         },

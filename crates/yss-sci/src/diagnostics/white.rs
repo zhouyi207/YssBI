@@ -117,7 +117,7 @@ pub fn white_test(x: &Mat<f64>, residuals: &Col<f64>) -> Result<BreuschPaganResu
     let lm_stat = n as f64 * r2;
 
     let chi2 = ChiSquared::new(df as f64).map_err(|e| format!("white_test: ChiSquared: {}", e))?;
-    let p_value = 1.0 - chi2.cdf(lm_stat);
+    let p_value = chi2.sf(lm_stat);
 
     Ok(BreuschPaganResult {
         lm_stat,
@@ -211,7 +211,7 @@ pub fn white_test_weighted(
 
     let chi2 = ChiSquared::new(df as f64)
         .map_err(|e| format!("white_test_weighted: ChiSquared: {}", e))?;
-    let p_value = 1.0 - chi2.cdf(lm_stat);
+    let p_value = chi2.sf(lm_stat);
 
     Ok(BreuschPaganResult {
         lm_stat,

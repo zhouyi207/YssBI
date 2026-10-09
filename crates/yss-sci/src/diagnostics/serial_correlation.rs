@@ -47,7 +47,7 @@ pub fn ljung_box_q(residuals: &[f64], lags: usize) -> Option<(f64, f64)> {
     }
     let q_stat = n as f64 * (n as f64 + 2.0) * q;
     let dist = ChiSquared::new(h as f64).ok()?;
-    let p_value = 1.0 - dist.cdf(q_stat);
+    let p_value = dist.sf(q_stat);
     Some((q_stat, p_value))
 }
 
@@ -133,7 +133,7 @@ pub fn breusch_godfrey(
     let lm_stat = n_aux as f64 * r2;
 
     let dist = ChiSquared::new(p as f64).ok()?;
-    let p_value = 1.0 - dist.cdf(lm_stat);
+    let p_value = dist.sf(lm_stat);
 
     Some((lm_stat, p_value))
 }

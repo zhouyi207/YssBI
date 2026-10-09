@@ -383,14 +383,14 @@ pub fn fit_panel_re_fgls(
         let wald = beta_s.transpose() * x_nd.as_ref();
         let chi2_dist =
             ChiSquared::new(df_wald as f64).map_err(|e| format!("Panel RE FGLS Wald: {}", e))?;
-        let wald_p = 1.0 - chi2_dist.cdf(wald);
+        let wald_p = chi2_dist.sf(wald);
         (wald, wald_p)
     };
 
     // Stata xtreg, re uses z (asymptotic normal), not t
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE FGLS: {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
+        crate::distribution::normal_two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
@@ -402,9 +402,12 @@ pub fn fit_panel_re_fgls(
         response_name: "response".into(),
         omitted_terms: vec![],
         estimation: yss_sci_contract::panel::PanelEstimationSample {
-            space: "quasi_demeaned".into(), constant: ols_re.config.constant,
+            space: "quasi_demeaned".into(),
+            constant: ols_re.config.constant,
             response: ols_re.endog.iter().copied().collect(),
-            design: (0..ols_re.exog.ncols()).map(|j|ols_re.exog.col(j).iter().copied().collect()).collect(),
+            design: (0..ols_re.exog.ncols())
+                .map(|j| ols_re.exog.col(j).iter().copied().collect())
+                .collect(),
             coefficients: result.betas.iter().copied().collect(),
             fitted: result.fitted.iter().copied().collect(),
             residuals: result.residuals.iter().copied().collect(),
@@ -447,7 +450,10 @@ pub fn fit_panel_re_fgls(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::RandomEffects { wald_chi2, wald_p_value: prob_wald_chi2 },
+        estimator_statistics: super::PanelEstimatorStatistics::RandomEffects {
+            wald_chi2,
+            wald_p_value: prob_wald_chi2,
+        },
         covariance_nonrobust: Some(super::covariance_rows(&(result.cov_beta_nonrobust))),
     })
 }

@@ -207,6 +207,20 @@ design-based survey inference.
 [Student density](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.t.html)
 define the calculation; native quantiles and noncentral algorithms retain their owners.
 
+`distribution::normal_two_sided_p` owns standard-normal two-sided inference.
+It evaluates `erfc(abs(z)/sqrt(2))` directly, avoiding subtraction from a rounded
+CDF and the intermediate halving that can erase a representable subnormal.
+Binary, IV, random/dynamic panel, model coefficient, asymptotic constraint,
+correlation/rank and VAR/VEC inference reuse this calculation. The time-series
+boundary retains its existing rejection of nonfinite statistics.
+Chi-square upper tails reuse the validated native distribution's SF directly,
+including diagnostics, binary likelihood ratios, IV, random panel and VAR/VEC
+postestimation; these callers keep their existing degrees, unavailable-result
+and control contracts. No extra Chi-square wrapper or reference model is introduced.
+The [normal/error-function identity](https://dlmf.nist.gov/7.20.iii) and
+[Chi-square density](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2.html)
+provide the scientific references.
+
 These neutral fit entries consume shared binary/Prais and panel options, and IV
 accepts multiple endogenous and excluded-instrument columns. Panel dispatch covers
 FE/LSDV, entity first differences, entity/time/two-way RE FGLS and MLE, and

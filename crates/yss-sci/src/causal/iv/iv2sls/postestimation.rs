@@ -199,7 +199,7 @@ impl IV2SLS {
                     .map(|(a, b)| (a - b).powi(2))
                     .sum();
                 let wooldridge_stat = n as f64 - rss;
-                let wooldridge_p = 1.0 - chi2_dist.cdf(wooldridge_stat);
+                let wooldridge_p = chi2_dist.sf(wooldridge_stat);
                 Some(OveridTest {
                     test_type: "wooldridge".to_string(),
                     sargan_stat: None,
@@ -223,8 +223,8 @@ impl IV2SLS {
                     } else {
                         sargan_stat
                     };
-                    let sargan_p = 1.0 - chi2_dist.cdf(sargan_stat);
-                    let basmann_p = 1.0 - chi2_dist.cdf(basmann_stat);
+                    let sargan_p = chi2_dist.sf(sargan_stat);
+                    let basmann_p = chi2_dist.sf(basmann_stat);
                     Some(OveridTest {
                         test_type: "sargan_basmann".to_string(),
                         sargan_stat: Some(sargan_stat),
@@ -338,7 +338,7 @@ impl IV2SLS {
                     .ok()
                     .map(|distribution| HausmanTest {
                         stat: h_stat,
-                        p_value: 1.0 - distribution.cdf(h_stat),
+                        p_value: distribution.sf(h_stat),
                         df: h_df,
                     })
             } else {
@@ -405,7 +405,7 @@ impl IV2SLS {
                 };
                 let durbin_stat = durbin_stat.max(0.0);
                 let chi2_d = ChiSquared::new(p1 as f64).ok();
-                let durbin_p = chi2_d.map(|c| 1.0 - c.cdf(durbin_stat)).unwrap_or(f64::NAN);
+                let durbin_p = chi2_d.map(|c| c.sf(durbin_stat)).unwrap_or(f64::NAN);
 
                 let wu_stat: f64 = if wudf_denom > 0 && denom > 1e-300 {
                     ((num / p1 as f64) / (denom / wudf_denom as f64)).max(0.0)
@@ -468,7 +468,7 @@ impl IV2SLS {
                 };
                 let chi2_dist = ChiSquared::new(df_overid as f64)
                     .map_err(|e| format!("IVLIML overid ChiSquared: {}", e))?;
-                let ar_p = 1.0 - chi2_dist.cdf(sargan_stat);
+                let ar_p = chi2_dist.sf(sargan_stat);
                 let basmann_f_stat = basmann_chi2 / (df_overid as f64);
                 let f_dist = FisherSnedecor::new(df_overid as f64, df_denom as f64)
                     .map_err(|e| format!("IVLIML overid FisherSnedecor: {}", e))?;
