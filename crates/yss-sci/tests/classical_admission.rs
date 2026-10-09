@@ -127,6 +127,16 @@ fn classical_families_preserve_data_option_and_computation_errors() {
     );
     assert_eq!(
         nonparametric::run(
+            Rank::MoodMedian {
+                groups: vec![vec![1.0, 1.0], vec![1.0, 1.0]],
+            },
+            &control,
+        )
+        .unwrap_err(),
+        invalid(Violation::DataOutOfRange),
+    );
+    assert_eq!(
+        nonparametric::run(
             Rank::Runs {
                 values: vec![0.0, 2.0]
             },

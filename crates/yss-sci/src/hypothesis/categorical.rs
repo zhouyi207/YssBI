@@ -133,7 +133,7 @@ fn goodness(
     )
 }
 
-fn pearson_table(
+pub(super) fn pearson_table(
     observed: Vec<f64>,
     rows: usize,
     columns: usize,

@@ -557,35 +557,21 @@ fn mood_median(
     } else {
         all[all.len() / 2]
     };
-    let mut above = vec![0.0; groups.len()];
-    let mut below = vec![0.0; groups.len()];
+    drop(all);
+    let mut table = vec![0.0; groups.len() * 2];
     for (i, g) in groups.iter().enumerate() {
         checkpoint(control, i)?;
         for (j, x) in g.iter().enumerate() {
             checkpoint(control, j)?;
             if *x > median {
-                above[i] += 1.0
+                table[i] += 1.0
             } else if *x < median {
-                below[i] += 1.0
+                table[groups.len() + i] += 1.0
             }
         }
     }
-    let mut table = Vec::with_capacity(groups.len() * 2);
-    for i in 0..groups.len() {
-        checkpoint(control, i)?;
-        table.push(above[i]);
-        table.push(below[i]);
-    }
-    let mut result = chi_table(
-        "mood_median",
-        "group medians are equal",
-        table,
-        2,
-        groups.len(),
-        control,
-    )?;
-    result.details.insert("pooled_median".into(), median);
-    result.sample_sizes = groups
+    let pearson = super::categorical::pearson_table(table, 2, groups.len(), control)?;
+    let sizes = groups
         .iter()
         .enumerate()
         .map(|(i, g)| {
@@ -593,6 +579,16 @@ fn mood_median(
             Ok(g.len())
         })
         .collect::<Result<_, Error>>()?;
+    let mut result = base(
+        "mood_median",
+        "group medians are equal",
+        "chi_squared",
+        pearson.statistic.ok_or_else(failed)?,
+        pearson.degrees_of_freedom,
+        pearson.p_value,
+        sizes,
+    );
+    result.details.insert("pooled_median".into(), median);
     Ok(result)
 }
 
@@ -799,41 +795,6 @@ fn base(
         details: Default::default(),
     }
 }
-fn chi_table(
-    method: &str,
-    null: &str,
-    observed: Vec<f64>,
-    rows: usize,
-    cols: usize,
-    control: &ScientificExecutionControl,
-) -> Result<ClassicalTestResult, Error> {
-    let mut n = 0.0;
-    let mut rt = vec![0.0; rows];
-    let mut ct = vec![0.0; cols];
-    for (i, value) in observed.iter().enumerate() {
-        checkpoint(control, i)?;
-        n += value;
-        rt[i / cols] += value;
-        ct[i % cols] += value;
-    }
-    let mut x = 0.0;
-    for r in 0..rows {
-        for c in 0..cols {
-            checkpoint(control, r * cols + c)?;
-            let e = rt[r] * ct[c] / n;
-            if e <= 0.0 {
-                return Err(invalid(Violation::DataOutOfRange));
-            }
-            x += (observed[r * cols + c] - e).powi(2) / e;
-        }
-    }
-    let df = ((rows - 1) * (cols - 1)) as f64;
-    control.check()?;
-    let p = ChiSquared::new(df).map_err(|_| failed())?.sf(x);
-    control.check()?;
-    Ok(base(method, null, "chi_squared", x, vec![df], p, vec![]))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

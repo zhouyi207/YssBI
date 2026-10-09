@@ -2231,6 +2231,28 @@ fn scale_limits_mixed_estimators_preserve_replicated_reference_fits() {
 
 #[test]
 fn scale_limits_classification_and_classical_groups_keep_valid_results() {
+    let median_groups = [
+        ("groups", series(&[1.0, 2.0, 3.0])),
+        ("groups", series(&[4.0, 5.0, 6.0])),
+        ("groups", series(&[7.0, 8.0, 9.0])),
+    ];
+    for (id, parameters) in [
+        ("yssbi.statistics.test.mood_median", vec![]),
+        (
+            "yssbi.statistics.test.nonparametric.family",
+            vec![("method", string("mood_median"))],
+        ),
+    ] {
+        let report = run(id, &median_groups, &parameters, 1).unwrap();
+        let statistic =
+            super::super::numeric_input(Some(field(&report[0], "statistic").unwrap())).unwrap();
+        let p = super::super::numeric_input(Some(field(&report[0], "p_value").unwrap())).unwrap();
+        assert!(
+            (statistic - 6.0).abs() < 1e-12,
+            "{id} lost group margins: statistic={statistic}, p={p}"
+        );
+        assert!((p - 0.049_787_068_367_863_944).abs() < 1e-12);
+    }
     let result = run(
         "yssbi.statistics.test.proportion.multiple",
         &[(

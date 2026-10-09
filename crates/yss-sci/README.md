@@ -634,6 +634,10 @@ Multiple-proportion inputs retain ordered success/trial pairs. Each group's succ
 and failure counts share one column in the two-row table passed to the shared Pearson test.
 Pearson contingency tables reject a zero observed total as a data-domain violation
 before dividing by it.
+Mood's median test uses that same controlled Pearson owner. Its two-row table keeps
+each group's above/below counts in one column, excludes pooled-median ties and retains
+the original group sample sizes. Groups with no usable table information are data-domain
+violations; Mood does not keep a separate chi-square implementation.
 `tests/categorical_tables.rs` covers repeated long labels whose first appearance
 order differs from the table's lexical order.
 For 2x2 Fisher tests, the statistic is the sample odds ratio `a*d/(b*c)`;

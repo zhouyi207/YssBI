@@ -20,8 +20,8 @@ $$
 
 Here $k$ is group count and $N$ is the total after excluding median ties. Independent samples and positive table margins are required. Many median ties reduce the information used.
 
-## Outputs and current limitation
+## Outputs and interpretation
 
 `result` contains the structured result. `statistic` is chi-square, `degrees_of_freedom` is `[k−1]`, `p_value` is the upper tail, and `details.pooled_median` is $m$. `sample_sizes` retains group sizes before excluding median ties. Estimate and standard error are null.
 
-The current table order gives an equivalent independence test for two groups. With more than two groups it does not preserve group margins correctly, so results should not be used for multi-group median inference. For valid two-group results, $p<\alpha$ supports different medians.
+Each group occupies one column in the above/below table. For two or more groups, $p<\alpha$ supports a difference in at least one population median.

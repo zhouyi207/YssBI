@@ -88,6 +88,7 @@ pub(super) fn install(
                     || id == "yssbi.statistics.test.fisher_exact"
                     || id == "yssbi.statistics.test.binomial"
                     || id == "yssbi.statistics.test.poisson"
+                    || id == "yssbi.statistics.test.nonparametric.family"
                 {
                     7
                 } else if matches!(
@@ -99,12 +100,12 @@ pub(super) fn install(
                         | "yssbi.statistics.test.chisquare.general"
                         | "yssbi.statistics.test.chisquare.goodness_of_fit"
                         | "yssbi.statistics.test.proportion.multiple"
+                        | "yssbi.statistics.test.mood_median"
                         | "yssbi.statistics.test.mann_whitney"
                         | "yssbi.statistics.test.kruskal_wallis"
                         | "yssbi.statistics.test.friedman"
                         | "yssbi.statistics.test.runs"
                         | "yssbi.statistics.test.mann_kendall"
-                        | "yssbi.statistics.test.nonparametric.family"
                 ) {
                     6
                 } else if matches!(
@@ -118,7 +119,6 @@ pub(super) fn install(
                         | "yssbi.statistics.test.equivalence"
                         | "yssbi.statistics.test.wilcoxon.one_sample"
                         | "yssbi.statistics.test.wilcoxon.paired"
-                        | "yssbi.statistics.test.mood_median"
                         | "yssbi.statistics.test.cochran_q"
                         | "yssbi.statistics.test.levene"
                         | "yssbi.statistics.test.brown_forsythe"
