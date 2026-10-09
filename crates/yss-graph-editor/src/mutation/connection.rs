@@ -96,9 +96,8 @@ pub(crate) fn move_connection_operations(
         ));
     }
 
-    let moved = document
-        .connections
-        .values()
+    let moved = document_read
+        .connections_for(&source)
         .filter(|connection| match source_port.spec.direction {
             PortDirection::Output => connection.output == source,
             PortDirection::Input => connection.input == source,
@@ -140,9 +139,8 @@ pub(crate) fn move_connection_operations(
     let mut insertions = BTreeMap::new();
     document_read.validate_connection_candidate(&removals, &insertions)?;
     match endpoint_capacity(
-        document
-            .connections
-            .values()
+        document_read
+            .connections_for(&target)
             .filter(|connection| !removals.contains_key(&connection.id)),
         &target,
         target_port.spec.connections,
@@ -163,14 +161,14 @@ pub(crate) fn move_connection_operations(
     // Resolved endpoints and distinct original connection IDs preserve those
     // invariants; only capacity and duplicate pairs depend on earlier branches.
     for proposal in &proposals {
-        let mut connections = document
-            .connections
-            .values()
+        if document_read
+            .connections_for(&proposal.output)
             .filter(|connection| !removals.contains_key(&connection.id))
-            .chain(insertions.values());
-        if connections.any(|connection| {
-            connection.output == proposal.output && connection.input == proposal.input
-        }) {
+            .chain(insertions.values())
+            .any(|connection| {
+                connection.output == proposal.output && connection.input == proposal.input
+            })
+        {
             return Err(editor_error(
                 EditorMutationErrorCode::GraphConnectionAlreadyExists,
                 "a moved connection endpoint pair already exists",
@@ -180,18 +178,16 @@ pub(crate) fn move_connection_operations(
         let input = resolve_mutation_port(document, registry, &proposal.input)?;
         validate_connection_order(input.spec.connections, proposal.order.as_ref())?;
         validate_connection_capacity(
-            document
-                .connections
-                .values()
+            document_read
+                .connections_for(&proposal.output)
                 .filter(|connection| !removals.contains_key(&connection.id))
                 .chain(insertions.values()),
             &proposal.output,
             output.spec.connections,
         )?;
         validate_connection_capacity(
-            document
-                .connections
-                .values()
+            document_read
+                .connections_for(&proposal.input)
                 .filter(|connection| !removals.contains_key(&connection.id))
                 .chain(insertions.values()),
             &proposal.input,
@@ -356,7 +352,7 @@ pub(crate) fn validate_subgraph_connection(
     let output_port = resolve_mutation_port(document, registry, output)?;
     let input_port = resolve_mutation_port(document, registry, input)?;
     validate_document_connection_endpoints(&output_port, &input_port)?;
-    validate_connection_does_not_exist(document, output, input)?;
+    validate_connection_does_not_exist(GraphDocumentRead::new(document), output, input)?;
     crate::compatibility::validate_connection_types(
         document,
         registry,
@@ -390,7 +386,7 @@ pub(super) fn connect_operations(
     let output_port = resolve_mutation_port(document, registry, &output)?;
     let input_port = resolve_mutation_port(document, registry, &input)?;
     validate_document_connection_endpoints(&output_port, &input_port)?;
-    validate_connection_does_not_exist(document, &output, &input)?;
+    validate_connection_does_not_exist(document_read, &output, &input)?;
     crate::compatibility::validate_connection_types(document, registry, context, &output, &input)
         .map_err(MutationConflict::Editor)?;
     plan_connection_operations_after_type_validation(
@@ -404,13 +400,12 @@ pub(super) fn connect_operations(
 }
 
 fn validate_connection_does_not_exist(
-    document: &GraphDocument,
+    document: GraphDocumentRead<'_>,
     output: &PortAddress,
     input: &PortAddress,
 ) -> Result<(), MutationConflict> {
     if document
-        .connections
-        .values()
+        .connections_for(output)
         .any(|connection| connection.output == *output && connection.input == *input)
     {
         Err(editor_error(
@@ -430,12 +425,17 @@ fn plan_connection_operations_after_type_validation(
     input: PortAddress,
     order: Option<OrderKey>,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    let document = document_read.document();
     validate_connection_order(input_connections, order.as_ref())?;
-    let output_capacity =
-        endpoint_capacity(document.connections.values(), &output, output_connections)?;
-    let input_capacity =
-        endpoint_capacity(document.connections.values(), &input, input_connections)?;
+    let output_capacity = endpoint_capacity(
+        document_read.connections_for(&output),
+        &output,
+        output_connections,
+    )?;
+    let input_capacity = endpoint_capacity(
+        document_read.connections_for(&input),
+        &input,
+        input_connections,
+    )?;
     let mut incumbents = BTreeMap::new();
     for capacity in [output_capacity, input_capacity] {
         if let EndpointCapacity::Replace(connections) = capacity {
@@ -446,17 +446,15 @@ fn plan_connection_operations_after_type_validation(
     }
     document_read.validate_connection_candidate(&incumbents, &BTreeMap::new())?;
     validate_connection_capacity(
-        document
-            .connections
-            .values()
+        document_read
+            .connections_for(&output)
             .filter(|connection| !incumbents.contains_key(&connection.id)),
         &output,
         output_connections,
     )?;
     validate_connection_capacity(
-        document
-            .connections
-            .values()
+        document_read
+            .connections_for(&input)
             .filter(|connection| !incumbents.contains_key(&connection.id)),
         &input,
         input_connections,

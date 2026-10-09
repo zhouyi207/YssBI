@@ -1,5 +1,7 @@
+use crate::port_references::PortReferenceIndex;
 use crate::{DocumentError, GraphDocumentRead, validate_graph_document};
 use std::borrow::Cow;
+use std::sync::OnceLock;
 use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicPortBinding, GraphDocument, GraphDocumentOperation,
     GraphDocumentPatch, InputState, PortAddress,
@@ -189,6 +191,7 @@ pub fn prepare_graph_document_patch(
 pub struct GraphDocumentPatchPreview<'a> {
     document: Cow<'a, GraphDocument>,
     validated: Option<bool>,
+    references: OnceLock<PortReferenceIndex>,
 }
 
 impl<'a> GraphDocumentPatchPreview<'a> {
@@ -196,6 +199,7 @@ impl<'a> GraphDocumentPatchPreview<'a> {
         Self {
             document: Cow::Borrowed(document),
             validated: None,
+            references: OnceLock::new(),
         }
     }
 
@@ -207,7 +211,7 @@ impl<'a> GraphDocumentPatchPreview<'a> {
         let validated = *self
             .validated
             .get_or_insert_with(|| validate_graph_document(&self.document).is_ok());
-        GraphDocumentRead::from_validity(&self.document, validated)
+        GraphDocumentRead::from_validity(&self.document, validated, Some(&self.references))
     }
 
     pub fn prepare<'stage>(
@@ -215,7 +219,12 @@ impl<'a> GraphDocumentPatchPreview<'a> {
         patch: &'stage GraphDocumentPatch,
     ) -> Result<PreparedGraphDocumentPatch<'stage>, DocumentError> {
         let validated = self.read().is_validated();
-        prepare_patch(self.document.to_mut(), patch, validated)
+        prepare_patch(
+            self.document.to_mut(),
+            patch,
+            validated,
+            Some(&mut self.references),
+        )
     }
 }
 
@@ -225,6 +234,7 @@ pub struct PreparedGraphDocumentPatch<'a> {
     document: &'a mut GraphDocument,
     operations: &'a [GraphDocumentOperation],
     applied: usize,
+    references: Option<&'a mut OnceLock<PortReferenceIndex>>,
 }
 
 impl PreparedGraphDocumentPatch<'_> {
@@ -233,14 +243,14 @@ impl PreparedGraphDocumentPatch<'_> {
     }
 
     pub fn read(&self) -> GraphDocumentRead<'_> {
-        GraphDocumentRead::from_validity(self.document, true)
+        GraphDocumentRead::from_validity(self.document, true, self.references.as_deref())
     }
 
     pub fn prepare<'stage>(
         &'stage mut self,
         patch: &'stage GraphDocumentPatch,
     ) -> Result<PreparedGraphDocumentPatch<'stage>, DocumentError> {
-        prepare_patch(self.document, patch, true)
+        prepare_patch(self.document, patch, true, self.references.as_deref_mut())
     }
 
     fn commit(mut self) {
@@ -252,6 +262,9 @@ impl Drop for PreparedGraphDocumentPatch<'_> {
     fn drop(&mut self) {
         for operation in self.operations[..self.applied].iter().rev() {
             restore_operation(operation, self.document);
+            if let Some(index) = self.references.as_deref_mut().and_then(OnceLock::get_mut) {
+                index.update(self.document, operation);
+            }
         }
     }
 }
@@ -261,22 +274,31 @@ pub fn prepare_graph_document_patch_in_place<'a>(
     document: &'a mut GraphDocument,
     patch: &'a GraphDocumentPatch,
 ) -> Result<PreparedGraphDocumentPatch<'a>, DocumentError> {
-    prepare_patch(document, patch, false)
+    prepare_patch(document, patch, false, None)
 }
 
 fn prepare_patch<'a>(
     document: &'a mut GraphDocument,
     patch: &'a GraphDocumentPatch,
     validated: bool,
+    references: Option<&'a mut OnceLock<PortReferenceIndex>>,
 ) -> Result<PreparedGraphDocumentPatch<'a>, DocumentError> {
     let mut candidate = PreparedGraphDocumentPatch {
         document,
         operations: &patch.operations,
         applied: 0,
+        references,
     };
     for operation in &patch.operations {
         apply_operation(operation, candidate.document)?;
         candidate.applied += 1;
+        if let Some(index) = candidate
+            .references
+            .as_deref_mut()
+            .and_then(OnceLock::get_mut)
+        {
+            index.update(candidate.document, operation);
+        }
     }
     crate::validation::validate_graph_document_patch(
         candidate.document,
@@ -385,6 +407,95 @@ mod tests {
         };
         document.connections.insert(connection.id, connection);
         document
+    }
+
+    #[test]
+    fn port_references_follow_nested_changes_and_late_index_initialization() {
+        use yss_graph_document::{
+            ConnectionId, DynamicMemberLocator, FunctionParameterId, InputState,
+            LastKnownPortMetadata,
+        };
+        let mut document = document_with_bound_connection();
+        let connection = document.connections.values().next().unwrap().clone();
+        let input = &connection.input;
+        document.port_bindings.insert(
+            input.clone(),
+            DynamicPortBinding::Resolved {
+                origin: DynamicMemberLocator::FunctionParameter {
+                    function: "functions/Flag.yssbi-function".parse().unwrap(),
+                    parameter: FunctionParameterId::new("flag"),
+                },
+                order: OrderKey::new("first"),
+                last_known: LastKnownPortMetadata::default(),
+            },
+        );
+        let remove = GraphDocumentPatch::new([GraphDocumentOperation::RemoveConnection {
+            connection: connection.clone(),
+        }]);
+        let state = InputState {
+            literal_override: None,
+        };
+        let set_state = GraphDocumentPatch::new([GraphDocumentOperation::SetInputState {
+            address: input.clone(),
+            before: None,
+            after: Some(state.clone()),
+        }]);
+        let replacement = yss_graph_document::DocumentConnection {
+            id: ConnectionId::new(),
+            ..connection.clone()
+        };
+        let rejected = GraphDocumentPatch::new([
+            GraphDocumentOperation::SetInputState {
+                address: input.clone(),
+                before: Some(state),
+                after: None,
+            },
+            GraphDocumentOperation::InsertConnection {
+                connection: replacement.clone(),
+            },
+            GraphDocumentOperation::InsertConnection {
+                connection: replacement.clone(),
+            },
+        ]);
+        let mut preview = GraphDocumentPatchPreview::new(&document);
+        {
+            let mut outer = preview.prepare(&remove).unwrap();
+            // Reference queries must observe this temporary document, not the original.
+            assert_eq!(outer.read().connections_for(input).count(), 0);
+            assert_eq!(
+                outer
+                    .read()
+                    .unreferenced_derived_bindings()
+                    .map(|(address, _)| address)
+                    .collect::<Vec<_>>(),
+                [input]
+            );
+            {
+                let mut inner = outer.prepare(&set_state).unwrap();
+                assert_eq!(inner.read().unreferenced_derived_bindings().count(), 0);
+                assert_eq!(
+                    inner.prepare(&rejected).err(),
+                    Some(DocumentError::DuplicateConnection(replacement.id))
+                );
+                assert_eq!(inner.read().connections_for(input).count(), 0);
+                assert_eq!(inner.read().unreferenced_derived_bindings().count(), 0);
+                assert!(inner.document().input_states.contains_key(input));
+            }
+            assert_eq!(
+                outer
+                    .read()
+                    .unreferenced_derived_bindings()
+                    .map(|(address, _)| address)
+                    .collect::<Vec<_>>(),
+                [input]
+            );
+        }
+        assert_eq!(preview.document(), &document);
+        assert_eq!(
+            preview.read().connections_for(input).collect::<Vec<_>>(),
+            [&connection]
+        );
+        assert_eq!(preview.read().unreferenced_derived_bindings().count(), 0);
     }
 
     #[test]

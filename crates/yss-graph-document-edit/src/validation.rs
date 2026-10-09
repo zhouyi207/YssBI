@@ -1,5 +1,7 @@
 use crate::DocumentError;
+use crate::port_references::PortReferenceIndex;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DynamicPortBinding, GraphDocument, GraphDocumentOperation,
     NodeId, PortAddress, PortInstanceId,
@@ -88,15 +90,77 @@ pub fn validate_graph_document(document: &GraphDocument) -> Result<(), DocumentE
 pub struct GraphDocumentRead<'a> {
     document: &'a GraphDocument,
     validated: bool,
+    references: Option<&'a OnceLock<PortReferenceIndex>>,
 }
 
 impl<'a> GraphDocumentRead<'a> {
     pub fn new(document: &'a GraphDocument) -> Self {
-        Self::from_validity(document, false)
+        Self::from_validity(document, false, None)
     }
 
     pub fn document(self) -> &'a GraphDocument {
         self.document
+    }
+
+    pub fn connections_for<'query>(
+        self,
+        address: &'query PortAddress,
+    ) -> impl Iterator<Item = &'a DocumentConnection> + 'query
+    where
+        'a: 'query,
+    {
+        let index = self.references.and_then(|cache| {
+            cache.get().or_else(|| {
+                (!self.document.connections.is_empty())
+                    .then(|| cache.get_or_init(|| PortReferenceIndex::new(self.document)))
+            })
+        });
+        let indexed = index
+            .and_then(|index| index.connections_for(address))
+            .into_iter()
+            .flatten()
+            .map(move |id| &self.document.connections[id]);
+        let scanned = index
+            .is_none()
+            .then(|| self.document.connections.values())
+            .into_iter()
+            .flatten()
+            .filter(move |connection| {
+                connection.output == *address || connection.input == *address
+            });
+        indexed.chain(scanned)
+    }
+
+    pub fn unreferenced_derived_bindings(
+        self,
+    ) -> impl Iterator<Item = (&'a PortAddress, &'a DynamicPortBinding)> + 'a {
+        let index = self.references.and_then(|cache| {
+            cache.get().or_else(|| {
+                self.document
+                    .port_bindings
+                    .values()
+                    .any(|binding| !matches!(binding, DynamicPortBinding::UserCreated { .. }))
+                    .then(|| cache.get_or_init(|| PortReferenceIndex::new(self.document)))
+            })
+        });
+        let indexed = index
+            .into_iter()
+            .flat_map(|index| index.unreferenced_bindings())
+            .map(move |address| (address, &self.document.port_bindings[address]));
+        let scanned = self
+            .references
+            .is_none()
+            .then(|| self.document.port_bindings.iter())
+            .into_iter()
+            .flatten()
+            .filter(move |(address, binding)| {
+                !matches!(binding, DynamicPortBinding::UserCreated { .. })
+                    && !self.document.input_states.contains_key(*address)
+                    && !self.document.connections.values().any(|connection| {
+                        connection.output == **address || connection.input == **address
+                    })
+            });
+        indexed.chain(scanned)
     }
 
     pub fn validate_connection_candidate(
@@ -107,10 +171,15 @@ impl<'a> GraphDocumentRead<'a> {
         validate_connection_candidate(self.document, removals, insertions, self.validated)
     }
 
-    pub(crate) fn from_validity(document: &'a GraphDocument, validated: bool) -> Self {
+    pub(crate) fn from_validity(
+        document: &'a GraphDocument,
+        validated: bool,
+        references: Option<&'a OnceLock<PortReferenceIndex>>,
+    ) -> Self {
         Self {
             document,
             validated,
+            references,
         }
     }
 

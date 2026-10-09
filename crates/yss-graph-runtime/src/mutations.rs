@@ -1,5 +1,4 @@
 use super::*;
-use crate::binding_cleanup::BindingCleanup;
 use std::collections::BTreeSet;
 use yss_graph_document_edit::GraphDocumentPatchPreview;
 
@@ -9,7 +8,6 @@ pub(super) struct EditorMutationPlanner<'a> {
     catalog: &'a CatalogMutationValidationSnapshot,
     semantics: Option<&'a GraphSemanticSnapshot>,
     candidate: GraphDocumentPatchPreview<'a>,
-    cleanup: BindingCleanup<'a>,
 }
 
 impl<'a> EditorMutationPlanner<'a> {
@@ -26,7 +24,6 @@ impl<'a> EditorMutationPlanner<'a> {
             catalog,
             semantics: analysis.map(GraphAnalysis::semantic_snapshot),
             candidate: GraphDocumentPatchPreview::new(document),
-            cleanup: BindingCleanup::new(document),
         }
     }
 
@@ -47,7 +44,7 @@ impl<'a> EditorMutationPlanner<'a> {
                 context,
             )?;
             let staged = self.candidate.prepare(&patch)?;
-            let cleanup = self.cleanup.operations(staged.document(), &patch);
+            let cleanup = crate::binding_cleanup::operations(staged.read());
             drop(staged);
             let mut operations = patch.operations;
             operations.extend(cleanup);
@@ -61,7 +58,7 @@ impl<'a> EditorMutationPlanner<'a> {
                 context,
             )?;
             let staged = claimed.prepare(&patch)?;
-            let cleanup = self.cleanup.operations(staged.document(), &patch);
+            let cleanup = crate::binding_cleanup::operations(staged.read());
             drop(staged);
             drop(claimed);
             let mut operations = claims.operations;

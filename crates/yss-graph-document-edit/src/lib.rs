@@ -8,6 +8,7 @@
 mod constant_references;
 mod error;
 mod patch;
+mod port_references;
 mod validation;
 
 pub use constant_references::{constant_references_for_copy, remap_copied_constant_references};
