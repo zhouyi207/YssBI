@@ -318,7 +318,7 @@ impl Workbench {
                             view.install_mind(mind, window, cx);
                         }
                         for (entry, read) in databases {
-                            view.install_database(entry, read, window, cx);
+                            view.install_database(entry, Some(read), window, cx);
                         }
                         for chart in charts {
                             view.install_chart(chart, window, cx);

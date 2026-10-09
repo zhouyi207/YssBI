@@ -46,7 +46,7 @@ use std::{
 };
 
 use crate::{canvas::GraphCanvas, project::DesktopProject, services::NativeServices};
-pub(crate) use activity::NodeDrag;
+pub(crate) use activity::{ActivityDrag, ActivityDrop};
 use activity::{ActivityEvent, ActivityPanel};
 use details::DetailsPanel;
 use logs::LogsPanel;
@@ -251,11 +251,22 @@ impl Workbench {
         let mut left = DockLayout::tabs();
         for document in &project.panels {
             let panel = cx.new(|cx| ActivityPanel::new(document.clone(), cx));
+            if let Some(catalog) = project
+                .panels
+                .iter()
+                .find(|panel| panel.panel_id == "nodes")
+            {
+                let owner = cx.entity().downgrade();
+                panel.update(cx, |panel, cx| {
+                    panel.set_project_resources(owner, catalog.clone(), cx)
+                });
+            }
             self.activities.insert(document.panel_id, panel.downgrade());
             self.subscriptions.push(cx.subscribe_in(
                 &panel,
                 window,
                 |view, _, event, window, cx| match event {
+                    ActivityEvent::RefreshResources => view.refresh_project(window, cx),
                     ActivityEvent::OpenGraph(path) => view.open_graph(path.clone(), window, cx),
                     ActivityEvent::OpenDocument(path) => {
                         view.open_document(path.clone(), None, window, cx)

@@ -58,6 +58,7 @@ pub struct DatabaseEditor {
     busy: bool,
     mutating: bool,
     ready: bool,
+    read_failed: bool,
     refresh_again: bool,
     pub error: Option<String>,
 }
@@ -103,6 +104,7 @@ impl DatabaseEditor {
             busy: false,
             mutating: false,
             ready: false,
+            read_failed: false,
             refresh_again: false,
             error: None,
         }
@@ -112,6 +114,15 @@ impl DatabaseEditor {
     }
     pub fn busy(&self) -> bool {
         self.busy || self.mutating
+    }
+    pub fn read_failed(&self) -> bool {
+        self.read_failed
+    }
+    pub fn fail_read(&mut self, cx: &mut Context<Self>) {
+        self.ready = false;
+        self.read_failed = true;
+        self.error = Some(crate::text::translate("native.databases.readFailed"));
+        self.changed(cx);
     }
     pub fn focus_table(&self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.grid.read(cx).focus_handle(cx), cx);
@@ -133,6 +144,7 @@ impl DatabaseEditor {
         self.meta = Some(meta.clone());
         self.edit = Some(read.edit);
         self.ready = true;
+        self.read_failed = false;
         self.error = None;
         self.offset = read.offset;
         if let Some(page) = read.page {
@@ -171,6 +183,7 @@ impl DatabaseEditor {
         self.generation = self.generation.wrapping_add(1);
         self.ready = false;
         self.edit = None;
+        self.read_failed = true;
         self.busy = false;
         self.error = Some("数据已移除或暂不可用，请从项目目录重新打开。".into());
         self.changed(cx);

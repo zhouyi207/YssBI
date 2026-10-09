@@ -1,64 +1,10 @@
 //! Node interactions retain the exact Application catalog descriptor.
 use super::*;
-use gpui::{AnyElement, Div, Stateful, WeakEntity};
+use gpui::{AnyElement, Div, Stateful};
 use gpui_component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
 };
-use yss_project_identity::ProjectInstanceId;
-
-#[derive(Clone)]
-pub(crate) struct NodeDrag {
-    source: WeakEntity<ActivityPanel>,
-    document: Arc<ActivityPanelDocument>,
-    row: usize,
-}
-
-impl NodeDrag {
-    pub(crate) fn creation(&self, project: &ProjectInstanceId, cx: &App) -> Option<&NodeCreation> {
-        if self.document.project_instance_id.as_deref() != Some(project.as_str())
-            || self
-                .source
-                .upgrade()
-                .is_none_or(|source| !Arc::ptr_eq(&source.read(cx).document, &self.document))
-        {
-            return None;
-        }
-        match &self.document.rows.get(self.row)?.content {
-            ActivityRowContent::Item(ActivityItem::Node {
-                available: true,
-                creation,
-                ..
-            }) => Some(creation),
-            _ => None,
-        }
-    }
-}
-
-impl Render for NodeDrag {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let body = div()
-            .p_2()
-            .max_w(px(280.))
-            .rounded_md()
-            .bg(cx.theme().background)
-            .text_color(cx.theme().foreground)
-            .border_1()
-            .border_color(cx.theme().border);
-        if let Some(row) = self.document.rows.get(self.row)
-            && let ActivityRowContent::Item(ActivityItem::Node {
-                title,
-                creation,
-                available,
-                ..
-            }) = &row.content
-        {
-            body.child(crate::catalog_rows::node(title, creation, *available, cx))
-        } else {
-            body
-        }
-    }
-}
 
 impl ActivityPanel {
     pub(super) fn render_node(
@@ -94,11 +40,7 @@ impl ActivityPanel {
             }))
             .when(*available, |item| {
                 item.on_drag(
-                    NodeDrag {
-                        source: cx.entity().downgrade(),
-                        document: self.document.clone(),
-                        row: index,
-                    },
+                    ActivityDrag::new(self, index, cx).expect("available node row"),
                     |drag, _, _, cx| {
                         cx.stop_propagation();
                         cx.new(|_| drag.clone())

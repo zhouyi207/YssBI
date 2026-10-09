@@ -292,7 +292,15 @@ impl GraphCanvas {
         descriptor: yss_node_catalog::NodeCreation,
         cx: &mut Context<Self>,
     ) {
-        let position = self.world(self.bounds.get().center());
+        self.create_node_at(descriptor, self.world(self.bounds.get().center()), cx);
+    }
+
+    pub(super) fn create_node_at(
+        &mut self,
+        descriptor: yss_node_catalog::NodeCreation,
+        position: yss_graph_document::NodePosition,
+        cx: &mut Context<Self>,
+    ) {
         self.submit(
             GraphCommand::Edit(EditorGraphMutation::CreateNode {
                 descriptor,
@@ -302,7 +310,7 @@ impl GraphCanvas {
                 port_counts: Default::default(),
                 user_label: None,
             }),
-            None,
+            Some(self.graph.editing.version),
             cx,
         );
     }

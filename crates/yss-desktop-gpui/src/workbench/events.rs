@@ -181,7 +181,17 @@ impl Workbench {
                 .get(document.panel_id)
                 .and_then(gpui::WeakEntity::upgrade)
             {
-                panel.update(cx, |panel, cx| panel.replace_document(document.clone(), cx));
+                let owner = cx.entity().downgrade();
+                panel.update(cx, |panel, cx| {
+                    panel.replace_document(document.clone(), cx);
+                    if let Some(catalog) = project
+                        .panels
+                        .iter()
+                        .find(|panel| panel.panel_id == "nodes")
+                    {
+                        panel.set_project_resources(owner, catalog.clone(), cx);
+                    }
+                });
             }
             if document.panel_id == "nodes" {
                 for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {

@@ -1,7 +1,9 @@
+mod drag;
 mod nodes;
 mod render;
+mod resources;
 mod rows;
-pub(crate) use nodes::NodeDrag;
+pub(crate) use drag::{ActivityDrag, ActivityDrop};
 
 use gpui::{
     App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
@@ -38,10 +40,12 @@ pub enum ActivityEvent {
     OpenConversation(String),
     RenameConversation(String, String),
     Tool(String),
+    RefreshResources,
 }
 
 pub struct ActivityPanel {
     document: Arc<ActivityPanelDocument>,
+    resources: Option<resources::ResourceRows>,
     expanded: BTreeMap<String, bool>,
     rows: Vec<usize>,
     scroll: gpui::UniformListScrollHandle,
@@ -61,6 +65,7 @@ impl ActivityPanel {
             return;
         }
         if self.document.project_instance_id != document.project_instance_id {
+            self.resources = None;
             self.expanded.clear();
             self.active_resource = None;
         } else {
@@ -80,6 +85,7 @@ impl ActivityPanel {
     pub fn new(document: Arc<ActivityPanelDocument>, cx: &mut Context<Self>) -> Self {
         let mut panel = Self {
             document,
+            resources: None,
             expanded: BTreeMap::new(),
             rows: Vec::new(),
             scroll: gpui::UniformListScrollHandle::new(),

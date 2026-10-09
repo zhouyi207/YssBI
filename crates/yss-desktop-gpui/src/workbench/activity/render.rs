@@ -1,6 +1,6 @@
 //! Render only requested visible rows; documents and actions remain with ActivityPanel.
 use super::*;
-use crate::{appearance, text::activity_text};
+use crate::text::activity_text;
 use gpui::{AnyElement, uniform_list};
 use gpui_component::{
     ActiveTheme, Icon, Sizable,
@@ -99,280 +99,104 @@ impl ActivityPanel {
             .items_center()
             .gap_1p5()
             .text_size(px(13.));
-        let item = match &row.content {
-            ActivityRowContent::Item(ActivityItem::Conversation {
-                session_id, title, ..
-            }) => {
-                let active = self.active_resource.as_deref() == Some(session_id.as_str());
-                let open_id = session_id.clone();
-                let rename_id = session_id.clone();
-                let title = title.clone();
-                let expected = self.document.clone();
-                let owner = cx.entity().downgrade();
-                item.child(Icon::new(IconName::MessageSquareText).size_3())
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .child(if title.is_empty() {
-                                crate::text::translate("panel.assistantNewConversation")
-                            } else {
-                                title.clone()
-                            }),
-                    )
-                    .cursor_pointer()
-                    .when(active, |view| view.bg(cx.theme().sidebar_accent))
-                    .hover(|view| view.bg(cx.theme().muted))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        cx.emit(ActivityEvent::OpenConversation(open_id.clone()))
-                    }))
-                    .context_menu(move |menu, _, _| {
-                        let owner = owner.clone();
-                        let expected = expected.clone();
-                        let id = rename_id.clone();
-                        let title = title.clone();
-                        menu.item(
-                            PopupMenuItem::new(crate::text::translate(
-                                "contextMenu.dialog.renameSubmit",
-                            ))
-                            .on_click(move |_, _, cx| {
-                                let _ = owner.update(cx, |view, cx| {
-                                    if Arc::ptr_eq(&view.document, &expected) {
-                                        cx.emit(ActivityEvent::RenameConversation(
-                                            id.clone(),
-                                            title.clone(),
-                                        ));
-                                    }
-                                });
-                            }),
+        let item =
+            match &row.content {
+                ActivityRowContent::Item(ActivityItem::Conversation {
+                    session_id, title, ..
+                }) => {
+                    let active = self.active_resource.as_deref() == Some(session_id.as_str());
+                    let open_id = session_id.clone();
+                    let rename_id = session_id.clone();
+                    let title = title.clone();
+                    let expected = self.document.clone();
+                    let owner = cx.entity().downgrade();
+                    item.child(Icon::new(IconName::MessageSquareText).size_3())
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .child(if title.is_empty() {
+                                    crate::text::translate("panel.assistantNewConversation")
+                                } else {
+                                    title.clone()
+                                }),
                         )
-                    })
-                    .into_any_element()
-            }
-            ActivityRowContent::Category {
-                label,
-                count,
-                default_expanded,
-                ..
-            } => {
-                let expanded = self.expanded.get(&id).copied().unwrap_or(*default_expanded);
-                let expected = self.document.clone();
-                item.font_weight(gpui::FontWeight::MEDIUM)
-                    .cursor_pointer()
-                    .text_color(cx.theme().muted_foreground)
-                    .hover(|style| style.bg(cx.theme().muted))
-                    .child(crate::catalog_rows::category(
-                        activity_text(label),
-                        expanded,
-                        cx,
-                    ))
-                    .children(
-                        count.map(|count| {
-                            div().text_xs().px_1().rounded_sm().child(count.to_string())
-                        }),
-                    )
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        if Arc::ptr_eq(&view.document, &expected) {
-                            view.expanded.insert(id.clone(), !expanded);
-                            view.rebuild_rows(cx);
-                            cx.notify();
-                        }
-                    }))
-                    .into_any_element()
-            }
-            ActivityRowContent::Item(
-                ActivityItem::EventGraph { path, name }
-                | ActivityItem::FunctionGraph { path, name },
-            ) => {
-                let path = path.clone();
-                let menu_path = path.clone();
-                let menu_owner = cx.entity().downgrade();
-                let expected_document = self.document.clone();
-                let active = self.active_resource.as_deref() == Some(&path);
-                item.child(
-                    Icon::new(IconName::Workflow)
-                        .size_3()
-                        .text_color(gpui::rgb(appearance::BLUE)),
-                )
-                .child(div().flex_1().min_w_0().truncate().child(name.clone()))
-                .when(active, |view| view.bg(cx.theme().sidebar_accent))
-                .cursor_pointer()
-                .hover(|style| style.bg(cx.theme().muted))
-                .on_click(
-                    cx.listener(move |_, _, _, cx| cx.emit(ActivityEvent::OpenGraph(path.clone()))),
-                )
-                .context_menu(move |mut menu, _, _| {
-                    use crate::workbench::resources::ResourceAction;
-                    for (label, action) in [
-                        (
-                            crate::text::translate("contextMenu.dialog.renameSubmit"),
-                            ResourceAction::Rename,
-                        ),
-                        (
-                            crate::text::translate("contextMenu.node.duplicate"),
-                            ResourceAction::Duplicate,
-                        ),
-                        (
-                            crate::text::translate("native.workbench.copyRelativePath"),
-                            ResourceAction::CopyPath,
-                        ),
-                        (
-                            crate::text::translate("native.workbench.deleteGraph"),
-                            ResourceAction::Delete,
-                        ),
-                    ] {
-                        let owner = menu_owner.clone();
-                        let path = menu_path.clone();
-                        let expected = expected_document.clone();
-                        menu = menu.item(PopupMenuItem::new(label).on_click(move |_, _, cx| {
-                            let _ = owner.update(cx, |view, cx| {
-                                if Arc::ptr_eq(&view.document, &expected) {
-                                    cx.emit(ActivityEvent::GraphResource(path.clone(), action));
-                                }
-                            });
-                        }));
-                    }
-                    menu
-                })
-                .into_any_element()
-            }
-            ActivityRowContent::Item(ActivityItem::Node { .. }) => {
-                return Some(self.render_node(index, item, cx));
-            }
-            ActivityRowContent::Item(ActivityItem::Doc { path, name }) => {
-                let active = self.active_resource.as_deref() == Some(path.as_str());
-                let path = path.clone();
-                item.child(Icon::new(IconName::File).size_3())
-                    .child(div().flex_1().min_w_0().truncate().child(name.clone()))
-                    .cursor_pointer()
-                    .when(active, |view| view.bg(cx.theme().sidebar_accent))
-                    .hover(|style| style.bg(cx.theme().muted))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        cx.emit(ActivityEvent::OpenDocument(path.clone()))
-                    }))
-                    .into_any_element()
-            }
-            ActivityRowContent::Item(ActivityItem::Database { id, name, .. }) => {
-                let active = self.active_resource.as_deref() == Some(id.as_str());
-                let id = id.clone();
-                let menu_id = id.clone();
-                let owner = cx.entity().downgrade();
-                let expected = self.document.clone();
-                item.child(Icon::new(IconName::Database).size_3())
-                    .child(div().flex_1().min_w_0().truncate().child(name.clone()))
-                    .cursor_pointer()
-                    .when(active, |view| view.bg(cx.theme().sidebar_accent))
-                    .hover(|style| style.bg(cx.theme().muted))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        cx.emit(ActivityEvent::OpenDatabase(id.clone()))
-                    }))
-                    .context_menu(move |mut menu, _, _| {
-                        use crate::workbench::resources::ResourceAction;
-                        for (label, action) in [
-                            (
-                                crate::text::translate("contextMenu.dialog.renameSubmit"),
-                                ResourceAction::Rename,
-                            ),
-                            (
-                                crate::text::translate("contextMenu.node.duplicate"),
-                                ResourceAction::Duplicate,
-                            ),
-                            (
-                                crate::text::translate("native.workbench.copyResourcePath"),
-                                ResourceAction::CopyPath,
-                            ),
-                            (
-                                crate::text::translate("native.workbench.deleteDatabase"),
-                                ResourceAction::Delete,
-                            ),
-                        ] {
+                        .cursor_pointer()
+                        .when(active, |view| view.bg(cx.theme().sidebar_accent))
+                        .hover(|view| view.bg(cx.theme().muted))
+                        .on_click(cx.listener(move |_, _, _, cx| {
+                            cx.emit(ActivityEvent::OpenConversation(open_id.clone()))
+                        }))
+                        .context_menu(move |menu, _, _| {
                             let owner = owner.clone();
-                            let id = menu_id.clone();
                             let expected = expected.clone();
-                            menu =
-                                menu.item(PopupMenuItem::new(label).on_click(move |_, _, cx| {
+                            let id = rename_id.clone();
+                            let title = title.clone();
+                            menu.item(
+                                PopupMenuItem::new(crate::text::translate(
+                                    "contextMenu.dialog.renameSubmit",
+                                ))
+                                .on_click(move |_, _, cx| {
                                     let _ = owner.update(cx, |view, cx| {
                                         if Arc::ptr_eq(&view.document, &expected) {
-                                            cx.emit(ActivityEvent::DatabaseResource(
+                                            cx.emit(ActivityEvent::RenameConversation(
                                                 id.clone(),
-                                                action,
+                                                title.clone(),
                                             ));
                                         }
                                     });
-                                }));
-                        }
-                        menu
-                    })
-                    .into_any_element()
-            }
-            ActivityRowContent::Item(ActivityItem::Mind { path, name }) => {
-                let active = self.active_resource.as_deref() == Some(path.as_str());
-                let path = path.clone();
-                item.child(Icon::new(IconName::File).size_3())
-                    .child(div().flex_1().min_w_0().truncate().child(name.clone()))
-                    .cursor_pointer()
-                    .when(active, |view| view.bg(cx.theme().sidebar_accent))
-                    .hover(|style| style.bg(cx.theme().muted))
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        cx.emit(ActivityEvent::OpenMind(path.clone()))
-                    }))
-                    .into_any_element()
-            }
-            ActivityRowContent::Item(ActivityItem::Chart { path, name, .. }) => {
-                let path = path.clone();
-                let menu_path = path.clone();
-                let owner = cx.entity().downgrade();
-                let active = self.active_resource.as_deref() == Some(path.as_str());
-                item.child(
-                    Icon::new(IconName::ChartLine)
-                        .size_3()
-                        .text_color(cx.theme().muted_foreground),
-                )
-                .child(div().flex_1().min_w_0().truncate().child(name.clone()))
-                .cursor_pointer()
-                .when(active, |view| view.bg(cx.theme().sidebar_accent))
-                .hover(|style| style.bg(cx.theme().muted))
-                .on_click(
-                    cx.listener(move |_, _, _, cx| cx.emit(ActivityEvent::OpenChart(path.clone()))),
-                )
-                .context_menu(move |mut menu, _, _| {
-                    for (title, action) in [
-                        (
-                            crate::text::translate("native.workbench.rename"),
-                            crate::workbench::resources::ResourceAction::Rename,
-                        ),
-                        (
-                            crate::text::translate("native.workbench.copyChart"),
-                            crate::workbench::resources::ResourceAction::Duplicate,
-                        ),
-                        (
-                            crate::text::translate("native.workbench.copyResourcePath"),
-                            crate::workbench::resources::ResourceAction::CopyPath,
-                        ),
-                        (
-                            crate::text::translate("native.workbench.delete"),
-                            crate::workbench::resources::ResourceAction::Delete,
-                        ),
-                    ] {
-                        let owner = owner.clone();
-                        let path = menu_path.clone();
-                        menu = menu.item(PopupMenuItem::new(title).on_click(move |_, _, cx| {
-                            let _ = owner.update(cx, |_, cx| {
-                                cx.emit(ActivityEvent::ChartResource(path.clone(), action))
-                            });
-                        }));
-                    }
-                    menu
-                })
-                .into_any_element()
-            }
-            ActivityRowContent::Message { label, .. } => item
-                .text_color(cx.theme().muted_foreground)
-                .child(activity_text(label))
-                .into_any_element(),
-            _ => return None,
-        };
+                                }),
+                            )
+                        })
+                        .into_any_element()
+                }
+                ActivityRowContent::Category {
+                    label,
+                    count,
+                    default_expanded,
+                    ..
+                } => {
+                    let expanded = self.expanded.get(&id).copied().unwrap_or(*default_expanded);
+                    let expected = self.document.clone();
+                    item.font_weight(gpui::FontWeight::MEDIUM)
+                        .cursor_pointer()
+                        .text_color(cx.theme().muted_foreground)
+                        .hover(|style| style.bg(cx.theme().muted))
+                        .child(crate::catalog_rows::category(
+                            activity_text(label),
+                            expanded,
+                            cx,
+                        ))
+                        .children(count.map(|count| {
+                            div().text_xs().px_1().rounded_sm().child(count.to_string())
+                        }))
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if Arc::ptr_eq(&view.document, &expected) {
+                                view.expanded.insert(id.clone(), !expanded);
+                                view.rebuild_rows(cx);
+                                cx.notify();
+                            }
+                        }))
+                        .into_any_element()
+                }
+                ActivityRowContent::Item(ActivityItem::Node { .. }) => {
+                    return Some(self.render_node(index, item, cx));
+                }
+                ActivityRowContent::Item(
+                    ActivityItem::EventGraph { .. }
+                    | ActivityItem::FunctionGraph { .. }
+                    | ActivityItem::Doc { .. }
+                    | ActivityItem::Database { .. }
+                    | ActivityItem::Mind { .. }
+                    | ActivityItem::Chart { .. },
+                ) => return Some(self.render_resource(index, item, cx)),
+                ActivityRowContent::Message { label, .. } => item
+                    .text_color(cx.theme().muted_foreground)
+                    .child(activity_text(label))
+                    .into_any_element(),
+                _ => return None,
+            };
         Some(item)
     }
 }

@@ -151,12 +151,17 @@ impl Workbench {
         let catalog_language = crate::text::locale().to_owned();
         let canvas =
             cx.new(|cx| GraphCanvas::new(services, graph, catalog, catalog_language, window, cx));
+        let mut diagnostic_count = canvas.read(cx).graph.projection.diagnostics.len();
         self.subscriptions.push(cx.subscribe_in(
             &canvas,
             window,
-            |view, canvas, event, window, cx| match event {
+            move |view, canvas, event, window, cx| match event {
                 CanvasEvent::Selection { nodes, projection }
                 | CanvasEvent::Projection { nodes, projection } => {
+                    if diagnostic_count != projection.diagnostics.len() {
+                        diagnostic_count = projection.diagnostics.len();
+                        view.refresh_resource_rows(cx);
+                    }
                     if matches!(event, CanvasEvent::Projection { .. })
                         && view
                             .details
@@ -225,9 +230,11 @@ impl Workbench {
                     );
                 }
                 CanvasEvent::Edited => cx.notify(),
+                CanvasEvent::OpenGraph(path) => view.open_graph(path.clone(), window, cx),
             },
         ));
         self.graphs.insert(path, canvas.downgrade());
+        self.refresh_resource_rows(cx);
         self.present_panel(
             gpui_component::dock::panel_handle(canvas.clone()),
             DockPlacement::Center,

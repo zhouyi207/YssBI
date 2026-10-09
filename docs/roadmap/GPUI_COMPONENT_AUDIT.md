@@ -394,6 +394,18 @@
 - 物理键鼠/IME、完整 tooltip 悬浮、跨项目/关闭源面板/忙碌目标、资源并发冲突、新增/删除分类和多窗口仍需实际验收；截图沿用尺寸变化触发重绘。公共 Activity 外壳与侧栏基础组件继续独立审查，不以本批替代其完整验收。临时预览入口不提交，不增加 UI 单元测试。
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；9 个 Rust 文件局部格式、21 个工作区双语键、两份文档的元信息/相对链接（工作区 275、提交内容 270）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。后端契约未改动，不重复后端测试或全工作区验证。本批累计审查 156/265 项。
 
+### 项目资源行、打开按钮与资源拖放
+
+- 已逐项阅读 SidebarDataRow、SidebarFileRow、SidebarProjectTreeRow、SidebarRowActionButton，以及资源图标/样式、拖拽载荷、目录描述索引、画布接收和资源打开入口；公共 Activity 外壳与资源管理控制器继续独立审查。
+- `activity/resources` 统一六类资源行，尾部原生 Button 复用条目打开路由，悬停显示；用原资源 ID 高亮，Graph/Database/Chart 的原菜单继续交付现有操作并校验源文档。文档与 Mind 的资源菜单、打开/定位目录菜单项、分类工具归待审查的资源管理控制器，本批不标为完成。
+- 节点与资源行复用 `activity/drag`：源面板弱引用、原 Activity 文档、原节点目录和行索引贯穿拖拽。资源路径索引只在目录替换时生成，不逐帧扫描节点目录或复制创建描述。不可用项不注册拖放，按下时请求原目录刷新。
+- Event 图拖入画布打开原图；Function/Database 使用原 ResourceBound 描述及接收时的目标图版本创建节点，函数自身调用直接拒绝。目录更新、跨项目、源面板失效或忙碌目标拒绝交付；Application 仍校验资源版本、历史与保存，画布按钮与拖放共用原创建入口。
+- 图诊断标记直接读取已打开画布的原投影，数据库标记读取编辑器的读取失败状态，原事件只在显示状态变化时通知侧栏更新；保存和导出错误不能设置读取失败。首次读取失败保留可重试编辑器，重复打开沿原 query 重试；首次读取交付还核验当前目录中的资源版本，变化后重读。
+- 临时 `cargo build -p yss-desktop-gpui --example resource_rows_review` 使用真实 Application、两个 Event 图、两个 Function 图、两个数据库及 Chart/Mind/Doc。Linux/X11 GPUI Window 事件注入核对资源箭头打开、高亮和标签复用、Function → Event/其他 Function 的原绑定、函数自身拒绝、Event 拖放只打开、127% 缩放与平移下数据库落点、目录刷新拒绝旧拖放，及改用共用载荷后的普通节点拖放。
+- 在隔离项目中临时破坏未打开数据库的 Parquet，首次打开显示错误面板和红点；恢复原字节后点击资源，原读取成功并清除红点。删除问题节点后图黄点消失，Undo 恢复；数据库创建的一次 Undo/Redo 只撤销/恢复该节点。显式保存前磁盘无节点，保存后有 3 个节点并保留实际函数和数据库路径。中英文切换保留资源及展开状态，原生鼠标移动核对行内箭头悬停显示。收紧刷新条件后，最终源码再次核对诊断消除/撤销恢复及首次数据库失败/恢复。
+- 完整 tooltip、物理拖放/IME、跨项目/关闭来源/忙碌目标、后台图诊断更新、资源读写并发、关闭失败面板后重开及多窗口仍需专项人工验收。临时预览不提交，不增加 UI 单元测试；公共侧栏和菜单缺口继续保持开放。
+- L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；16 个 Rust 文件局部格式、文案键（工作区 28、提交内容 21，英文沿用工作区目录）、两份文档的元信息/相对链接（275/270）、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。后端接口与类型未改动，不重复后端测试或全工作区检查。本批累计审查 160/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -677,10 +689,10 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [modules/project-explorer/internal/ui/activity/ProjectActivityPanelController.tsx](../../react/src/modules/project-explorer/internal/ui/activity/ProjectActivityPanelController.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/project-explorer/internal/ui/activity/SidebarDataRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarDataRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/project-explorer/internal/ui/activity/SidebarFileRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarFileRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/project-explorer/internal/ui/activity/SidebarDataRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarDataRow.tsx) | 迁移：复用原目录描述和数据库编辑器 | activity/resources 展示读取失败/打开按钮；原目录索引与 activity/drag 保留数据库绑定；首次失败保留原编辑器并可重试 | 拖放/首次失败/恢复已核对；完整 tooltip、并发与平台验收开放 |
+| [modules/project-explorer/internal/ui/activity/SidebarFileRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarFileRow.tsx) | 迁移：统一资源行，复用图投影与打开入口 | activity/resources/drag 覆盖五类文件图标、高亮、打开、图诊断与 Event/Function 拖放；Doc/Mind 资源菜单待控制器批次 | 六类打开、图标/诊断更新、函数自调用拒绝已核对；菜单缺口及平台专项开放 |
 | [modules/project-explorer/internal/ui/activity/SidebarProjectTab.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarProjectTab.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx](../../react/src/modules/project-explorer/internal/ui/activity/SidebarProjectTreeRow.tsx) | 优化：直接匹配 Rust ActivityItem，无需组件转发层 | activity/render 以原行索引分派 resources，保留深度、资源身份和选中；类别工具与菜单控制器仍独立审查 | 六类资源分派与高亮已核对；剩余控制器及公共外壳开放 |
 | [modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections.tsx](../../react/src/modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/project-explorer/internal/ui/picker/DeleteProjectConfirmDialog.tsx](../../react/src/modules/project-explorer/internal/ui/picker/DeleteProjectConfirmDialog.tsx) | 无需迁移已移除的项目回收站入口 | 当前项目入口只提供打开/新建/另存为/关闭；没有项目文件删除动作，不新增确认状态或删除授权 | 已审查；无需对应原生组件 |
 | [modules/project-explorer/internal/ui/picker/NewProjectModal.tsx](../../react/src/modules/project-explorer/internal/ui/picker/NewProjectModal.tsx) | 复用原生项目表单并接入进度 | projects/form 使用路径组件校验、系统目录选择、原生命周期与部分提交恢复；提交保留输入，失败返回同一表单；默认目录只回填未编辑父目录 | 代码已覆盖；真实交互待验收 |
@@ -749,7 +761,7 @@
 | [modules/workbench/internal/ui/sidebar/primitives/SidebarChevron.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarChevron.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/sidebar/primitives/SidebarDraggableItem.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarDraggableItem.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/sidebar/primitives/SidebarListItem.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarListItem.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/workbench/internal/ui/sidebar/primitives/SidebarRowActionButton.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarRowActionButton.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/workbench/internal/ui/sidebar/primitives/SidebarRowActionButton.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarRowActionButton.tsx) | 复用原生 Button 与 tooltip | 资源行箭头悬停显示，点击/按下停止传播并沿同一打开入口；不增加按钮包装组件 | 箭头打开与悬停已核对；完整 tooltip/键盘与平台交互开放 |
 | [modules/workbench/internal/ui/sidebar/primitives/SidebarTreeCategoryRow.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarTreeCategoryRow.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/sidebar/primitives/SidebarTreeSearchInput.tsx](../../react/src/modules/workbench/internal/ui/sidebar/primitives/SidebarTreeSearchInput.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/workbench/internal/ui/status/StatusBar.tsx](../../react/src/modules/workbench/internal/ui/status/StatusBar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

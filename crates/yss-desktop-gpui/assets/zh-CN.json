@@ -2643,7 +2643,8 @@
       "size": "{{rows}} 行 · {{columns}} 列",
       "storageType": "存储类型",
       "semantics": "数据语义",
-      "unset": "未设置"
+      "unset": "未设置",
+      "readFailed": "数据读取未完成，请刷新项目后重试。"
     },
     "charts": {
       "unnamedDataset": "未命名数据集",

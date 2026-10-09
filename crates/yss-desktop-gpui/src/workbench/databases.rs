@@ -24,7 +24,12 @@ impl Workbench {
                 window,
                 cx,
             );
-            editor.update(cx, |editor, cx| editor.focus_table(window, cx));
+            editor.update(cx, |editor, cx| {
+                if editor.read_failed() {
+                    editor.reload(true, window, cx);
+                }
+                editor.focus_table(window, cx);
+            });
             if let Some(intent) = intent {
                 self.finish_intent(&intent, true, window, cx);
             }
@@ -52,49 +57,53 @@ impl Workbench {
         let identity = project.identity.clone();
         let expected = identity.clone();
         let lifecycle = self.lifecycle;
+        let read_entry = entry.clone();
         let task = self.services.run(move |services| {
             query::read(
                 services,
                 identity,
-                entry.id.clone(),
-                entry.revision,
+                read_entry.id,
+                read_entry.revision,
                 0,
                 None,
             )
-            .map(|read| (entry, read))
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = task.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
-                if view.lifecycle != lifecycle
-                    || view
-                        .project
-                        .as_ref()
-                        .is_none_or(|project| project.identity != expected)
-                {
-                    return;
-                }
-                view.opening.remove(&key);
-                let applied = if let Some((entry, read)) = result {
-                    view.install_database(entry, read, window, cx)
+            let _ =
+                view.update_in(cx, |view, window, cx| {
+                    if view.lifecycle != lifecycle
+                        || view
+                            .project
+                            .as_ref()
+                            .is_none_or(|project| project.identity != expected)
+                    {
+                        return;
+                    }
+                    view.opening.remove(&key);
+                    if view.project.as_ref().is_none_or(|project| {
+                        !project.index.databases.iter().any(|current| {
+                            current.id == entry.id && current.revision == entry.revision
+                        })
+                    }) {
+                        view.open_database(entry.id, intent, window, cx);
+                        return;
+                    }
+                    let applied = result.is_some();
+                    view.install_database(entry, result, window, cx)
                         .update(cx, |editor, cx| editor.focus_table(window, cx));
-                    true
-                } else {
-                    view.error = Some("数据未打开，请刷新项目目录后重试。".into());
-                    false
-                };
-                if let Some(intent) = intent {
-                    view.finish_intent(&intent, applied, window, cx);
-                }
-                cx.notify();
-            });
+                    if let Some(intent) = intent {
+                        view.finish_intent(&intent, applied, window, cx);
+                    }
+                    cx.notify();
+                });
         })
         .detach();
     }
     pub(super) fn install_database(
         &mut self,
         entry: yss_project::ProjectDatabaseIndexEntry,
-        read: query::DatabaseRead,
+        read: Option<query::DatabaseRead>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> gpui::Entity<DatabaseEditor> {
@@ -117,11 +126,20 @@ impl Workbench {
                 cx,
             )
         });
-        editor.update(cx, |editor, cx| editor.install_read(read, window, cx));
+        editor.update(cx, |editor, cx| match read {
+            Some(read) => editor.install_read(read, window, cx),
+            None => editor.fail_read(cx),
+        });
+        let mut read_failed = editor.read(cx).read_failed();
         self.subscriptions.push(cx.subscribe_in(
             &editor,
             window,
-            |view, editor, event, window, cx| {
+            move |view, editor, event, window, cx| {
+                let next = editor.read(cx).read_failed();
+                if next != read_failed {
+                    read_failed = next;
+                    view.refresh_resource_rows(cx);
+                }
                 match event {
                     DatabaseEvent::Activated => {
                         view.details.update(cx, |details, cx| {
@@ -139,6 +157,7 @@ impl Workbench {
             },
         ));
         self.databases.insert(id, editor.downgrade());
+        self.refresh_resource_rows(cx);
         self.present_panel(
             panel_handle(editor.clone()),
             DockPlacement::Center,

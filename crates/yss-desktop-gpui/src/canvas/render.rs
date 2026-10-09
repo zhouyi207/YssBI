@@ -146,25 +146,23 @@ impl Render for GraphCanvas {
             .on_mouse_down(MouseButton::Right, cx.listener(Self::begin_pane))
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::begin_pane))
             .on_drop(
-                cx.listener(|view, drag: &crate::workbench::NodeDrag, window, cx| {
+                cx.listener(|view, drag: &crate::workbench::ActivityDrag, window, cx| {
                     if view.busy() {
                         return;
                     }
-                    let Some(creation) = drag.creation(&view.graph.project, cx) else {
-                        return;
-                    };
-                    view.submit(
-                        GraphCommand::Edit(EditorGraphMutation::CreateNode {
-                            descriptor: creation.clone(),
-                            position: view.world(window.mouse_position()),
-                            connect_from: None,
-                            parameters: Default::default(),
-                            port_counts: Default::default(),
-                            user_label: None,
-                        }),
-                        Some(view.graph.editing.version),
-                        cx,
-                    );
+                    match drag.resolve(&view.graph.project, view.path(), cx) {
+                        Some(crate::workbench::ActivityDrop::OpenGraph(path)) => {
+                            cx.emit(super::CanvasEvent::OpenGraph(path.to_owned()));
+                        }
+                        Some(crate::workbench::ActivityDrop::CreateNode(creation)) => {
+                            view.create_node_at(
+                                creation.clone(),
+                                view.world(window.mouse_position()),
+                                cx,
+                            );
+                        }
+                        None => {}
+                    }
                 }),
             )
             .on_drop(cx.listener(|view, drag: &super::ConstantDrag, window, cx| {

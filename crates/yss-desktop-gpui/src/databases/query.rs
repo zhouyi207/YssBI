@@ -71,6 +71,7 @@ impl DatabaseEditor {
         let offset = self.offset;
         self.busy = true;
         self.ready = false;
+        self.read_failed = false;
         self.refresh_again = false;
         let job = self
             .services
@@ -86,7 +87,7 @@ impl DatabaseEditor {
                     if let Some(read) = result {
                         view.install_read(read, window, cx);
                     } else {
-                        view.error = Some("数据读取未完成，请刷新项目后重试。".into());
+                        view.fail_read(cx);
                     }
                 }
                 if view.refresh_again {

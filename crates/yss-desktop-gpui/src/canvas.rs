@@ -45,6 +45,7 @@ pub enum CanvasEvent {
     },
     Execution,
     ShowResults,
+    OpenGraph(String),
 }
 
 enum Gesture {
