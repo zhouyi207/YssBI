@@ -79,6 +79,9 @@ struct Palette {
     world: NodePosition,
     source: Option<PortAddress>,
     catalog: Option<Arc<ActivityPanelDocument>>,
+    configure_first: bool,
+    configuration: Option<gpui::Entity<crate::workbench::NodeCreationView>>,
+    configuration_subscription: Option<gpui::Subscription>,
 }
 
 pub struct GraphCanvas {
@@ -166,6 +169,13 @@ impl GraphCanvas {
 
     pub fn set_catalog(&mut self, catalog: Arc<ActivityPanelDocument>, cx: &mut Context<Self>) {
         self.catalog = catalog;
+        if let Some(form) = self
+            .palette
+            .as_ref()
+            .and_then(|palette| palette.configuration.as_ref())
+        {
+            form.update(cx, |form, cx| form.localize_title(&self.catalog, cx));
+        }
         cx.notify();
     }
 

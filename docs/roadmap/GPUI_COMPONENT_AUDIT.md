@@ -344,6 +344,18 @@
 - `cargo test -p yss-application --lib description_ -- --nocapture` 在工作区与独立提交内容均运行 3 项并通过：2 项新增投影契约测试，以及扩展的真实描述节点结果测试。覆盖源顺序、Null/精确整数/标签与不完整或混合字段拒绝；不新增 UI 单元测试。
 - `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。11 个 Rust 文件局部格式、25 个双语键/参数、288 条文档相对链接（工作区 293 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。不新增依赖，未运行全工作区验证。累计审查 150/265 项。
 
+### 节点创建前配置与共享参数表单
+
+- 逐项核对 NodeCreationForm、PortCountField、useNodeCreationForm 与 NodePalette 的配置调用；本批计入创建表单，NodePalette、NodeDetailPanel、DetailColumnList 的其余行为继续独立审查。
+- 画布节点菜单增加可选“创建前配置”，默认保留快速创建；表单返回保留菜单查询。`workbench/node_creation` 捕获原节点描述符、图版本与项目，`query` 调用现有只读 Application 表单，`ports` 保存数量草稿，`render` 只负责有界滚动与操作入口。
+- Details 原参数、列表、关系及语义域编辑器移到 `workbench/parameters`；共享实体只发出键/值意图，由 Details 提交原参数事务、创建视图刷新只读表单。保留字段身份、输入事件、原诊断与显式应用；创建时收集尚未应用的输入，未改动默认值不写成显式覆盖。Application 仅重新导出既有 NodeCreationForm，不新增模型或依赖。
+- 固定/派生端口只读，可变端口按原成员组显示一项并提交全部成员；范围取自协议。创建前再次校验参数和数量，节点及可选连接仍是同一个可逆补丁。失败保留表单，版本变化禁止提交；语言切换复用在途值和草稿，并随目录更新标题。
+- 临时 `cargo build -p yss-desktop-gpui --example node_creation_review` 使用隔离项目和真实 Application。GPUI Window 事件分发核对未应用的 degree 输入随创建提交、条件字段消失后清理参数、无效值保留并可修正、语言切换保留未应用输入、既有 Details 的 Enter 提交，以及外部图编辑后禁用旧表单。
+- 同一预览核对线性节点的 X 数量输入在另一参数预览后仍保留，创建得到 4 个实际 X 端口；语义域编码 `001` 与标签完整提交。选择不兼容常量后创建/连接被原后端拒绝，节点/连线及版本均不变且选择保留；改选兼容常量后成功，一次撤销同时移除节点与连线。函数资源描述符创建得到原资源绑定；返回保留搜索词及配置开关，关闭开关后恢复快速创建。预览期间未显式保存，磁盘图正文仍为空。
+- 物理键鼠/IME、多行/复合列表/关系字段的完整创建交互、成组端口界面、读取失败/迟到交付、多窗口与完整项目切换继续开放；截图依赖尺寸变化，临时入口不提交。不增加 UI 单元测试。
+- `cargo test -p yss-application --lib graph::catalog::tests::node_creation_form_is_read_only_and_preserves_protocol_defaults_and_conditions -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::grouped_initial_ports_are_offered_and_created_as_complete_members -- --exact` 各实际运行 1 项并通过，复用现有只读/条件/默认值及完整成员组回归。
+- `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。25 个 Rust 文件局部格式、双语键/参数、文档元信息/相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。未运行全工作区验证；累计审查 151/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -510,7 +522,7 @@
 | [modules/details/internal/ui/DetailsPane.tsx](../../react/src/modules/details/internal/ui/DetailsPane.tsx) | 优化既有 Details 协调层，不迁入 React 模型 store | 单个有效节点借用原投影渲染，多选/无节点/失效节点回到原 GraphProperties；资源显示委派给实际编辑器，日志检查沿用前批弱引用 | 路由已修正；各分支专项及生命周期继续单独验收 |
 | [modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx](../../react/src/modules/details/internal/ui/constantValue/ConstantValueEditorModal.tsx) | 迁移到现有常量卡片的按需 JSON 编辑，复用同一草稿和应用/恢复 | `constant_values` 用 RawValue 与 bigdecimal 保留精确数值；无效输入保留，Null 仍走原类型化事务 | 样例精确 JSON、对象形状错误与 Null 已核对；完整生命周期待验收 |
 | [modules/details/internal/ui/node/DescriptionResultSection.tsx](../../react/src/modules/details/internal/ui/node/DescriptionResultSection.tsx) | 迁移：Details 按当前有效结果延迟读取描述统计，复用 Application 投影和 Results 表格 | 默认折叠、数值/分类字段、源顺序与精确原值；每页 50 列/100 类，后台刷新及语言切换不重读 | 数值、空值、205 类分页、编码、失效与撤销已预览核对；物理输入、迟到查询及多窗口仍开放 |
-| [modules/details/internal/ui/node/NodeCreationForm.tsx](../../react/src/modules/details/internal/ui/node/NodeCreationForm.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/node/NodeCreationForm.tsx](../../react/src/modules/details/internal/ui/node/NodeCreationForm.tsx) | 迁移：复用 Application 只读表单与 Details 参数草稿，原图事务一次创建 | `node_creation` 协调配置/端口/校验；`parameters` 共用输入与诊断；语言及相同投影保留输入，失败可原位重试 | 条件字段、未应用输入、端口数量、常量/函数创建、连接失败重试与一次撤销已预览核对；物理输入、复合字段及完整生命周期继续开放 |
 | [modules/details/internal/ui/node/NodeDocumentationPanel.tsx](../../react/src/modules/details/internal/ui/node/NodeDocumentationPanel.tsx) | 迁移/优化：复用 TextView、Collapsible 和单类型文档查询 | documentation 持有当前目标与视图；render 展示正文/折叠/重试，参数编辑不重读，项目/语言隔离 | 常规 Markdown 与文档生命周期预览通过；共享公式组件及其余人工验收开放 |
 | [modules/details/internal/ui/node/NodePinConnectionField.tsx](../../react/src/modules/details/internal/ui/node/NodePinConnectionField.tsx) | 迁移/优化：连接选择复用原生虚拟 List，Application 决定候选和替换 | `connections` 安装对端名称和逐条删除，50 条分页；picker 按需查询、搜索、键盘确认和失败重试，版本/投影/控件拒绝过期操作 | 样例已核对双向连接、替换与分支保留；失败/过期/大列表验收开放 |
 | [modules/details/internal/ui/node/NodePinInterfacePanel.tsx](../../react/src/modules/details/internal/ui/node/NodePinInterfacePanel.tsx) | 迁移/优化：输入、输出默认折叠，内容按展开构建 | `ports/list` 分组及空状态；原字面量与实例操作复用原事务，提交失败直接呈现在节点属性 | 样例已核对折叠、连接与实例操作；完整字面量/多窗口验收开放 |

@@ -8,6 +8,7 @@
 ## Authority and identities
 
 `node_creation_form` 是项目会话内的只读查询，调用 Graph Runtime 后重验项目身份，不要求图已载入。
+`catalog` 公开复用同一 `NodeCreationForm` 类型，原生消费者无须直接依赖 Graph Runtime。
 创建请求同时携带 `parameters` 与 `portCounts`：前者保存显式参数，后者指定用户可变端口的初始总数。
 Graph Editor 在同一候选补丁中生成参数、完整成员组和可选连接，Project 仍只提交一次历史变更。
 GUI 与 Harness 消费同一 Protocol、参数合并与数量校验；命令层不自行推导可创建端口。

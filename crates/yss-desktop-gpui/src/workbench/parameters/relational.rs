@@ -1,7 +1,7 @@
 //! Relational fields own one draft; availability remains in the semantic projection.
 mod columns;
 mod predicate;
-use super::{DetailsPanel, parameters::list::ListDraft};
+use super::{ParameterForm, field::list::ListDraft};
 use columns::ColumnsDraft;
 use gpui::{AnyElement, Context, EntityId, Window};
 use predicate::FilterDraft;
@@ -17,7 +17,7 @@ impl RelationalDraft {
     pub fn new(
         model: &EditorParameterModel,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> Self {
         match model
             .configuration
@@ -75,7 +75,7 @@ impl RelationalDraft {
     }
 }
 
-impl DetailsPanel {
+impl ParameterForm {
     pub(super) fn render_relational(
         &self,
         index: usize,

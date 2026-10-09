@@ -5,10 +5,10 @@ mod draft;
 use super::RelationalDraft;
 use crate::{
     text::translate,
-    workbench::details::{DetailsPanel, controls, parameters::ParameterDraft},
+    workbench::parameters::{ParameterForm, controls, field::ParameterDraft},
 };
 use choices::FilterMenu;
-pub(in crate::workbench::details) use draft::FilterDraft;
+pub(in crate::workbench::parameters) use draft::FilterDraft;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
 use gpui_component::{Disableable, Sizable, checkbox::Checkbox, input::Input};
 use yss_graph_editor::projection::{EditorFilterLiteralType, EditorParameterConfiguration};
@@ -36,8 +36,8 @@ fn literal_label(kind: EditorFilterLiteralType) -> String {
     })
 }
 
-impl DetailsPanel {
-    pub(in crate::workbench::details::relational) fn render_filter(
+impl ParameterForm {
+    pub(in crate::workbench::parameters::relational) fn render_filter(
         &self,
         index: usize,
         draft: &FilterDraft,
@@ -122,6 +122,7 @@ impl DetailsPanel {
                                     )
                                 });
                                 field.error = None;
+                                field.dirty = true;
                                 cx.notify();
                             }
                         })),

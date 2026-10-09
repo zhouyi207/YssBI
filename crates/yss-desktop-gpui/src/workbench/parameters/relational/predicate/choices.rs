@@ -2,7 +2,7 @@
 use super::{FilterDraft, literal_label, operator_label};
 use crate::{
     text::translate,
-    workbench::details::{DetailsPanel, parameters::ParameterDraft, relational::RelationalDraft},
+    workbench::parameters::{ParameterForm, field::ParameterDraft, relational::RelationalDraft},
 };
 use gpui::{AnyElement, Context, IntoElement, prelude::*};
 use gpui_component::{
@@ -37,7 +37,7 @@ impl Choice {
     }
 }
 
-impl DetailsPanel {
+impl ParameterForm {
     pub(super) fn filter_choice(
         &self,
         index: usize,
@@ -181,6 +181,7 @@ impl DetailsPanel {
                                 };
                                 if changed {
                                     field.error = None;
+                                    field.dirty = true;
                                     cx.notify();
                                 }
                             });

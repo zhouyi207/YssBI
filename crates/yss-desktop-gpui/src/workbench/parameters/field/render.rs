@@ -10,15 +10,12 @@ use std::collections::BTreeMap;
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_editor::projection::{EditorDiagnosticModel, EditorDiagnosticSeverity};
 
-impl DetailsPanel {
-    pub(in crate::workbench::details) fn render_parameters(
+impl ParameterForm {
+    pub(in crate::workbench::parameters) fn render_parameters(
         &self,
         busy: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let Some(node) = self.node() else {
-            return div().into_any_element();
-        };
         let mut content = div()
             .p_4()
             .flex()
@@ -34,25 +31,16 @@ impl DetailsPanel {
                 ))
                 .into_any_element();
         }
-        let indices = self
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(index, field)| (&field.model.key, index))
-            .collect::<BTreeMap<_, _>>();
         let mut diagnostics: BTreeMap<_, Vec<_>> = BTreeMap::new();
-        for diagnostic in &node.diagnostics {
-            if let DiagnosticLocation::Parameter { node_id, key } = &diagnostic.location
-                && *node_id == node.node_id
-            {
+        for diagnostic in &self.diagnostics {
+            if let DiagnosticLocation::Parameter { key, .. } = &diagnostic.location {
                 diagnostics.entry(key).or_default().push(diagnostic);
             }
         }
-        for group in &node.parameter_groups {
+        for group in &self.groups {
             let fields = group
-                .parameters
-                .iter()
-                .filter_map(|parameter| indices.get(&parameter.key).copied())
+                .fields
+                .clone()
                 .map(|index| {
                     self.render_parameter(
                         index,

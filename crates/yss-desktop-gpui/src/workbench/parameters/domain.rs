@@ -1,7 +1,7 @@
 //! Bounded code/label controls share the existing parameter commit and restore paths.
 mod draft;
 mod positive;
-use super::{DetailsPanel, controls, parameters::ParameterDraft};
+use super::{ParameterForm, controls, field::ParameterDraft};
 use crate::text::translate;
 pub(super) use draft::DomainDraft;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
@@ -13,7 +13,7 @@ use gpui_component::{
 use gpui_kit_assets::IconName;
 use yss_data_contract::ConversionDomain;
 
-impl DetailsPanel {
+impl ParameterForm {
     pub(super) fn render_domain(
         &self,
         index: usize,
@@ -83,6 +83,7 @@ impl DetailsPanel {
                                                                 row, direction, window, cx,
                                                             );
                                                             view.fields[index].error = None;
+                                                            view.fields[index].dirty = true;
                                                             cx.notify();
                                                         }
                                                     },
@@ -107,6 +108,7 @@ impl DetailsPanel {
                                                 {
                                                     draft.remove(row, window, cx);
                                                     view.fields[index].error = None;
+                                                    view.fields[index].dirty = true;
                                                     cx.notify();
                                                 }
                                             }),
@@ -153,6 +155,7 @@ impl DetailsPanel {
                                 {
                                     draft.add(window, cx);
                                     view.fields[index].error = None;
+                                    view.fields[index].dirty = true;
                                     cx.notify();
                                 }
                             })),

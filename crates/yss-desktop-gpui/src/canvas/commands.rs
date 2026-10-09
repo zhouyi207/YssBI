@@ -49,11 +49,36 @@ impl GraphCanvas {
         version: Option<GraphEditVersion>,
         cx: &mut Context<Self>,
     ) {
+        self.submit_command(command, version, None, cx);
+    }
+
+    pub(super) fn submit_creation(
+        &mut self,
+        mutation: EditorGraphMutation,
+        version: GraphEditVersion,
+        cx: &mut Context<Self>,
+    ) {
+        let creation = self
+            .palette
+            .as_ref()
+            .and_then(|palette| palette.configuration.clone());
+        self.submit_command(GraphCommand::Edit(mutation), Some(version), creation, cx);
+    }
+
+    fn submit_command(
+        &mut self,
+        command: GraphCommand,
+        version: Option<GraphEditVersion>,
+        creation: Option<gpui::Entity<crate::workbench::NodeCreationView>>,
+        cx: &mut Context<Self>,
+    ) {
         if self.busy {
             return;
         }
         self.gesture = None;
-        self.palette = None;
+        if creation.is_none() {
+            self.palette = None;
+        }
         self.busy = true;
         self.error = None;
         let request = GraphEditRequest {
@@ -123,7 +148,12 @@ impl GraphCanvas {
             let _ = view.update(cx, |view, cx| {
                 view.busy = false;
                 match result {
-                    Ok(response) => view.install_response(response, cx),
+                    Ok(response) => {
+                        view.install_response(response, cx);
+                        if creation.is_some() {
+                            view.palette = None;
+                        }
+                    }
                     Err(error) => {
                         tracing::error!(
                             code = "native_graph_command_failed",
@@ -134,6 +164,9 @@ impl GraphCanvas {
                                 .downcast_ref::<crate::constant_values::InputError>()
                                 .map_or("native.canvas.commandFailed", |error| error.0),
                         ));
+                        if let Some(creation) = &creation {
+                            creation.update(cx, |creation, cx| creation.creation_failed(cx));
+                        }
                         view.preview.clear();
                         view.refresh_pending = true;
                     }

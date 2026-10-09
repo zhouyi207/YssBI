@@ -1,5 +1,5 @@
 //! Choice values stay in the projection; localized menu entries are built only on open.
-use super::{DetailsPanel, EditorParameterConfiguration, ParameterDraft, controls};
+use super::{EditorParameterConfiguration, ParameterDraft, ParameterForm, controls};
 use crate::text::translate;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
 use gpui_component::{
@@ -30,7 +30,7 @@ fn option_label(key: &str, option: &str) -> String {
         .unwrap_or_else(|| option.to_owned())
 }
 
-impl DetailsPanel {
+impl ParameterForm {
     pub(super) fn render_parameter_choice(
         &self,
         index: usize,

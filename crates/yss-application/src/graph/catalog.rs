@@ -11,6 +11,7 @@ use yss_graph_document_edit::{DocumentError, validate_graph_document};
 use yss_graph_editor::{CatalogMutationResource, CatalogMutationValidationSnapshot};
 use yss_graph_resource_contract::{FunctionParameterContract, FunctionSignature, GraphResourceId};
 use yss_graph_runtime::GraphRuntimeCatalogError;
+pub use yss_graph_runtime::NodeCreationForm;
 use yss_node_catalog::{
     CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
 };
@@ -516,7 +517,7 @@ impl ApplicationState {
         parameters: yss_node_protocol::ParameterValues,
         port_counts: yss_node_protocol::InitialPortCounts,
         locale: &str,
-    ) -> Result<yss_graph_runtime::NodeCreationForm, CatalogQueryApplicationError> {
+    ) -> Result<NodeCreationForm, CatalogQueryApplicationError> {
         let captured = self.capture_session()?;
         ensure_requested_project(&captured, project_instance_id)?;
         let form =

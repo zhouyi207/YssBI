@@ -1,7 +1,7 @@
 //! One ordered draft owns codes, labels and the selected positive row.
 use crate::{
     text::translate,
-    workbench::details::{DetailsPanel, parameters::subscribe_input},
+    workbench::parameters::{ParameterForm, field::subscribe_input},
 };
 use gpui::{App, AppContext, Context, Entity, EntityId, Subscription, Window};
 use gpui_component::input::InputState;
@@ -24,7 +24,7 @@ pub(super) struct Inputs {
     _subscriptions: [Subscription; 2],
 }
 
-pub(in crate::workbench::details) struct DomainDraft {
+pub(in crate::workbench::parameters) struct DomainDraft {
     rows: Vec<Row>,
     key: ParameterKey,
     pub(super) positive: Option<usize>,
@@ -33,10 +33,10 @@ pub(in crate::workbench::details) struct DomainDraft {
 }
 
 impl DomainDraft {
-    pub(in crate::workbench::details) fn new(
+    pub(in crate::workbench::parameters) fn new(
         model: &EditorParameterModel,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> Self {
         let domain = model
             .value
@@ -82,7 +82,7 @@ impl DomainDraft {
         &mut self,
         page: usize,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) {
         self.page = page.min(self.pages() - 1);
         for row in self
@@ -111,7 +111,7 @@ impl DomainDraft {
         }
     }
 
-    pub(super) fn add(&mut self, window: &mut Window, cx: &mut Context<DetailsPanel>) {
+    pub(super) fn add(&mut self, window: &mut Window, cx: &mut Context<ParameterForm>) {
         if self.len() >= ConversionDomain::MAX_VALUES {
             return;
         }
@@ -127,7 +127,7 @@ impl DomainDraft {
         &mut self,
         row: usize,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) {
         if row >= self.len() {
             return;
@@ -149,7 +149,7 @@ impl DomainDraft {
         row: usize,
         direction: isize,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) {
         if let Some(target) = row.checked_add_signed(direction)
             && row < self.len()
@@ -199,7 +199,7 @@ impl DomainDraft {
         })
     }
 
-    pub(in crate::workbench::details) fn input_changed(&mut self, id: EntityId) {
+    pub(in crate::workbench::parameters) fn input_changed(&mut self, id: EntityId) {
         if self
             .rows
             .iter()
@@ -209,11 +209,11 @@ impl DomainDraft {
         }
     }
 
-    pub(in crate::workbench::details) fn owns_input(&self, id: EntityId) -> bool {
+    pub(in crate::workbench::parameters) fn owns_input(&self, id: EntityId) -> bool {
         self.rows.iter().any(|row| matches!(row, Row::Input(input) if input.code.entity_id() == id || input.label.entity_id() == id))
     }
 
-    pub(in crate::workbench::details) fn value(&self, cx: &App) -> Result<Value, String> {
+    pub(in crate::workbench::parameters) fn value(&self, cx: &App) -> Result<Value, String> {
         if self.has_duplicates(cx) {
             return Err(translate("conversion.duplicateValues"));
         }

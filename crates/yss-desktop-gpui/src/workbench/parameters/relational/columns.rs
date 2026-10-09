@@ -2,9 +2,9 @@
 use super::RelationalDraft;
 use crate::{
     text::translate,
-    workbench::details::{
-        DetailsPanel, controls,
-        parameters::{ParameterDraft, list::ListDraft},
+    workbench::parameters::{
+        ParameterForm, controls,
+        field::{ParameterDraft, list::ListDraft},
     },
 };
 use gpui::{AnyElement, Context, IntoElement, Window, div, prelude::*};
@@ -21,7 +21,7 @@ use yss_node_protocol::{ParameterKey, RelationalScalarType};
 
 const PAGE_SIZE: usize = 50;
 
-pub(in crate::workbench::details) enum ColumnsDraft {
+pub(in crate::workbench::parameters) enum ColumnsDraft {
     Known { selected: Vec<String>, page: usize },
     Manual(ListDraft),
 }
@@ -32,7 +32,7 @@ impl ColumnsDraft {
         known: bool,
         values: &[Box<str>],
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> Self {
         let values = values.iter().map(ToString::to_string);
         if known {
@@ -60,7 +60,7 @@ impl ColumnsDraft {
     }
 }
 
-impl DetailsPanel {
+impl ParameterForm {
     pub(super) fn render_columns(
         &self,
         index: usize,
@@ -161,6 +161,7 @@ impl DetailsPanel {
                                                 selected.retain(|name| name != &toggle_name);
                                             }
                                             view.fields[index].error = None;
+                                            view.fields[index].dirty = true;
                                             cx.notify();
                                         }
                                     })),
@@ -232,6 +233,7 @@ impl DetailsPanel {
                                                 {
                                                     selected.swap(row, target);
                                                     view.fields[index].error = None;
+                                                    view.fields[index].dirty = true;
                                                     cx.notify();
                                                 }
                                             }))

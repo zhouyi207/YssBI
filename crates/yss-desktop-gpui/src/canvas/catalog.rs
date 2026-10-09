@@ -1,5 +1,5 @@
 use super::{Gesture, GraphCanvas, Palette};
-use gpui::{Context, Pixels, Point, Window};
+use gpui::{AppContext, Context, Pixels, Point, Window};
 use std::sync::Arc;
 use yss_application::{
     activity_panel::nodes_activity_panel_from_catalog, graph::catalog::CompatibleCatalogRequest,
@@ -58,6 +58,9 @@ impl GraphCanvas {
             world: self.world(point),
             catalog: source.is_none().then(|| self.catalog.clone()),
             source: source.clone(),
+            configure_first: false,
+            configuration: None,
+            configuration_subscription: None,
         });
         let Some(source) = source else {
             return;
@@ -116,5 +119,75 @@ impl GraphCanvas {
             });
         })
         .detach();
+    }
+}
+
+impl GraphCanvas {
+    pub(super) fn configure_node(
+        &mut self,
+        descriptor: yss_node_catalog::NodeCreation,
+        title: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.busy {
+            return;
+        }
+        let Some(palette) = &self.palette else {
+            return;
+        };
+        let position = palette.world;
+        let connect_from = palette.source.clone();
+        let version = self.graph.editing.version;
+        let target = crate::workbench::CreationTarget {
+            graph: cx.entity().downgrade(),
+            project: self.graph.project.clone(),
+            version,
+            descriptor: descriptor.clone(),
+            title,
+        };
+        let form = cx.new(|cx| {
+            crate::workbench::NodeCreationView::new(self.services.clone(), target, window, cx)
+        });
+        let id = form.entity_id();
+        let subscription = cx.subscribe(&form, move |view, _, event, cx| {
+            if view
+                .palette
+                .as_ref()
+                .and_then(|palette| palette.configuration.as_ref())
+                .is_none_or(|form| form.entity_id() != id)
+            {
+                return;
+            }
+            match event {
+                crate::workbench::CreationEvent::Back => {
+                    let palette = view.palette.as_mut().expect("current palette");
+                    palette.configuration = None;
+                    palette.configuration_subscription = None;
+                    cx.notify();
+                }
+                crate::workbench::CreationEvent::Create {
+                    parameters,
+                    port_counts,
+                } => {
+                    view.submit_creation(
+                        yss_graph_editor::EditorGraphMutation::CreateNode {
+                            descriptor: descriptor.clone(),
+                            position,
+                            connect_from: connect_from.clone(),
+                            parameters: parameters.clone(),
+                            port_counts: port_counts.clone(),
+                            user_label: None,
+                        },
+                        version,
+                        cx,
+                    );
+                }
+            }
+        });
+        let palette = self.palette.as_mut().expect("palette open");
+        palette.configuration = Some(form);
+        palette.configuration_subscription = Some(subscription);
+        cx.notify();
     }
 }

@@ -2,7 +2,7 @@
 mod choices;
 pub(super) mod list;
 mod render;
-use super::{DetailsPanel, controls, domain::DomainDraft, relational::RelationalDraft};
+use super::{ParameterForm, controls, domain::DomainDraft, relational::RelationalDraft};
 use crate::workbench::input::TextField;
 use gpui::{
     AnyElement, Context, Entity, EntityId, EventEmitter, IntoElement, Subscription, Window, div,
@@ -21,6 +21,7 @@ pub(super) struct ParameterField {
     pub model: EditorParameterModel,
     pub draft: ParameterDraft,
     pub error: Option<String>,
+    pub dirty: bool,
     _input_subscription: Option<Subscription>,
 }
 
@@ -96,7 +97,7 @@ impl ParameterField {
     pub fn new(
         model: EditorParameterModel,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> Self {
         let draft = if let Some(configuration) = &model.configuration {
             match configuration {
@@ -155,12 +156,17 @@ impl ParameterField {
                 input: TextField::Single(input),
                 ..
             } => Some(subscribe_input(input, model.key.clone(), window, cx)),
+            ParameterDraft::Text {
+                input: TextField::Multiline(input),
+                ..
+            } => Some(subscribe_input(input, model.key.clone(), window, cx)),
             _ => None,
         };
         Self {
             model,
             draft,
             error: None,
+            dirty: false,
             _input_subscription: input_subscription,
         }
     }
@@ -210,7 +216,7 @@ pub(super) fn subscribe_input<T: EventEmitter<InputEvent> + 'static>(
     input: &Entity<T>,
     key: ParameterKey,
     window: &mut Window,
-    cx: &mut Context<DetailsPanel>,
+    cx: &mut Context<ParameterForm>,
 ) -> Subscription {
     let input_id = input.entity_id();
     cx.subscribe_in(input, window, move |view, _, event, _, cx| {
@@ -225,9 +231,20 @@ pub(super) fn subscribe_input<T: EventEmitter<InputEvent> + 'static>(
             return;
         };
         match event {
-            InputEvent::PressEnter { .. } => view.apply_parameter(index, cx),
+            InputEvent::PressEnter { .. }
+                if !matches!(
+                    view.fields[index].draft,
+                    ParameterDraft::Text {
+                        input: TextField::Multiline(_),
+                        ..
+                    }
+                ) =>
+            {
+                view.apply_parameter(index, cx)
+            }
             InputEvent::Change => {
                 let field = &mut view.fields[index];
+                field.dirty = true;
                 let mut refresh = field.error.take().is_some();
                 if let ParameterDraft::Domain(draft) = &mut field.draft {
                     draft.input_changed(input_id);
@@ -257,6 +274,10 @@ impl ParameterField {
                 input: TextField::Single(input),
                 ..
             } => input.entity_id() == id,
+            ParameterDraft::Text {
+                input: TextField::Multiline(input),
+                ..
+            } => input.entity_id() == id,
             ParameterDraft::List(draft) => draft.owns_input(id),
             ParameterDraft::Domain(draft) => draft.owns_input(id),
             ParameterDraft::Relational(draft) => draft.owns_input(id),
@@ -265,7 +286,7 @@ impl ParameterField {
     }
 }
 
-impl DetailsPanel {
+impl ParameterForm {
     pub(super) fn restore_parameter(
         &mut self,
         index: usize,
@@ -284,6 +305,7 @@ impl DetailsPanel {
                 .unwrap_or_default();
             input.set_value(value, window, cx);
             self.fields[index].error = None;
+            self.fields[index].dirty = false;
         } else {
             self.fields[index] = ParameterField::new(model, window, cx);
         }

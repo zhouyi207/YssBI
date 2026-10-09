@@ -1,7 +1,7 @@
 //! Typed predicate state uses issued options, never display labels, as identities.
 use crate::{
     text::translate,
-    workbench::details::{DetailsPanel, parameters::subscribe_input},
+    workbench::parameters::{ParameterForm, field::subscribe_input},
 };
 use gpui::{App, AppContext, Context, Entity, EntityId, Subscription, Window};
 use gpui_component::input::InputState;
@@ -30,7 +30,7 @@ const LITERAL_TYPES: &[LiteralType] = &[
     LiteralType::String,
 ];
 
-pub(in crate::workbench::details) struct FilterDraft {
+pub(in crate::workbench::parameters) struct FilterDraft {
     pub(super) column: Entity<InputState>,
     pub(super) operator: Option<FilterOperator>,
     pub(super) literal_type: LiteralType,
@@ -39,10 +39,10 @@ pub(in crate::workbench::details) struct FilterDraft {
 }
 
 impl FilterDraft {
-    pub(in crate::workbench::details::relational) fn new(
+    pub(in crate::workbench::parameters::relational) fn new(
         model: &EditorParameterModel,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> Self {
         let Some(Configuration::FilterPredicate { value, columns, .. }) = &model.configuration
         else {
@@ -153,7 +153,7 @@ impl FilterDraft {
         name: &str,
         configuration: &Configuration,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> bool {
         if self.column.read(cx).value() == name {
             return false;
@@ -184,7 +184,7 @@ impl FilterDraft {
         &mut self,
         kind: LiteralType,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> bool {
         if self.literal_type == kind {
             return false;
@@ -196,11 +196,11 @@ impl FilterDraft {
         true
     }
 
-    pub(in crate::workbench::details::relational) fn owns_input(&self, id: EntityId) -> bool {
+    pub(in crate::workbench::parameters::relational) fn owns_input(&self, id: EntityId) -> bool {
         self.column.entity_id() == id || self.input.entity_id() == id
     }
 
-    pub(in crate::workbench::details::relational) fn value(
+    pub(in crate::workbench::parameters::relational) fn value(
         &self,
         configuration: &Configuration,
         cx: &App,

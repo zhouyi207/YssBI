@@ -1,5 +1,5 @@
 //! Positive selection follows the authored row; menu labels are built on open.
-use super::{DetailsPanel, DomainDraft, ParameterDraft};
+use super::{DomainDraft, ParameterDraft, ParameterForm};
 use crate::text::translate;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
 use gpui_component::{
@@ -9,7 +9,7 @@ use gpui_component::{
 };
 use gpui_kit_assets::IconName;
 
-impl DetailsPanel {
+impl ParameterForm {
     pub(super) fn domain_positive(
         &self,
         index: usize,
@@ -91,6 +91,7 @@ impl DetailsPanel {
                                             if draft.positive != row {
                                                 draft.positive = row;
                                                 field.error = None;
+                                                field.dirty = true;
                                                 cx.notify();
                                             }
                                         });

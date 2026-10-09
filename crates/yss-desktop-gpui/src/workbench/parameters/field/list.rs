@@ -1,8 +1,8 @@
 //! Bounded series pages reuse the same draft for input, reordering and submission.
 mod draft;
-use super::{DetailsPanel, controls};
+use super::{ParameterForm, controls};
 use crate::text::translate;
-pub(in crate::workbench::details) use draft::ListDraft;
+pub(in crate::workbench::parameters) use draft::ListDraft;
 use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use gpui_component::{
     Disableable, Sizable,
@@ -11,8 +11,8 @@ use gpui_component::{
 };
 use gpui_kit_assets::IconName;
 
-impl DetailsPanel {
-    pub(in crate::workbench::details) fn render_list_parameter(
+impl ParameterForm {
+    pub(in crate::workbench::parameters) fn render_list_parameter(
         &self,
         index: usize,
         draft: &ListDraft,
@@ -62,6 +62,7 @@ impl DetailsPanel {
                                     {
                                         draft.move_row(row, direction, window, cx);
                                         view.fields[index].error = None;
+                                        view.fields[index].dirty = true;
                                         cx.notify();
                                     }
                                 },
@@ -84,6 +85,7 @@ impl DetailsPanel {
                                 {
                                     draft.remove(row, window, cx);
                                     view.fields[index].error = None;
+                                    view.fields[index].dirty = true;
                                     cx.notify();
                                 }
                             },
@@ -113,6 +115,7 @@ impl DetailsPanel {
                                 {
                                     draft.add(window, cx);
                                     view.fields[index].error = None;
+                                    view.fields[index].dirty = true;
                                     cx.notify();
                                 }
                             })),

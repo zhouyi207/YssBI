@@ -2,10 +2,7 @@ use super::controls;
 mod connections;
 mod description;
 mod documentation;
-mod domain;
-mod parameters;
 mod ports;
-mod relational;
 
 use gpui::{
     App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, WeakEntity,
@@ -27,9 +24,9 @@ use yss_graph_editor::{
 use yss_node_protocol::NodeTypeId;
 use yss_project::GraphEditVersion;
 
+use super::parameters::{ParameterChange, ParameterForm};
 use crate::canvas::{GraphCanvas, GraphCommand};
 use crate::{appearance, assets::NativeIcon, services::NativeServices};
-use parameters::ParameterField;
 use ports::PortField;
 
 pub struct DetailsPanel {
@@ -55,7 +52,8 @@ pub struct DetailsPanel {
     selected: Vec<NodeId>,
     version: Option<GraphEditVersion>,
     label: Entity<InputState>,
-    fields: Vec<ParameterField>,
+    parameters: Entity<ParameterForm>,
+    _parameter_subscription: gpui::Subscription,
     ports: Vec<PortField>,
     epoch: u64,
     error: Option<String>,
@@ -68,6 +66,37 @@ impl DetailsPanel {
         let documentation = cx.new(|_| documentation::NodeDocumentation::new(services.clone()));
         let description = cx.new(|_| description::NodeDescription::new(services.clone()));
         let properties_observer = cx.observe(&properties, |_, _, cx| cx.notify());
+        let host = cx.entity();
+        let owner = host.downgrade();
+        let parameters = cx.new(|cx| {
+            ParameterForm::new(
+                properties.clone(),
+                &host,
+                move |cx| {
+                    owner.upgrade().is_some_and(|owner| {
+                        let view = owner.read(cx);
+                        view.accepts_input(view.epoch, cx)
+                    })
+                },
+                cx,
+            )
+        });
+        let parameter_subscription =
+            cx.subscribe(&parameters, |view, _, event: &ParameterChange, cx| {
+                if !view.accepts_input(view.epoch, cx) {
+                    return;
+                }
+                if let Some(node) = view.node() {
+                    view.submit(
+                        GraphCommand::SetParameter {
+                            node_id: node.node_id,
+                            key: event.key.clone(),
+                            value: event.value.clone(),
+                        },
+                        cx,
+                    );
+                }
+            });
         Self {
             services,
             connection_picker: None,
@@ -88,7 +117,8 @@ impl DetailsPanel {
             selected: vec![],
             version: None,
             label: cx.new(|cx| InputState::new(window, cx).placeholder("节点显示名称")),
-            fields: vec![],
+            parameters,
+            _parameter_subscription: parameter_subscription,
             ports: vec![],
             epoch: 0,
             error: None,
@@ -114,7 +144,8 @@ impl DetailsPanel {
         self.projection = None;
         self.selected.clear();
         self.version = None;
-        self.fields.clear();
+        self.parameters
+            .update(cx, |parameters, cx| parameters.clear(cx));
         self.ports.clear();
         self.properties
             .update(cx, |properties, cx| properties.clear(cx));
@@ -251,30 +282,19 @@ impl DetailsPanel {
                 )
             });
         }
-        let mut fields = if same_node {
-            std::mem::take(&mut self.fields)
-                .into_iter()
-                .map(|field| (field.model.key.clone(), field))
-                .collect::<std::collections::BTreeMap<_, _>>()
-        } else {
-            std::collections::BTreeMap::new()
-        };
-        self.fields = node
-            .iter()
-            .flat_map(|node| node.parameter_groups.iter())
-            .flat_map(|group| group.parameters.iter())
-            .map(|parameter| {
-                if let Some(mut field) = fields
-                    .remove(&parameter.key)
-                    .filter(|field| field.accepts_projection(parameter))
-                {
-                    field.model = parameter.clone();
-                    field
-                } else {
-                    ParameterField::new(parameter.clone(), window, cx)
-                }
-            })
-            .collect();
+        self.parameters.update(cx, |parameters, cx| {
+            parameters.install(
+                node.as_ref()
+                    .map_or(&[], |node| node.parameter_groups.as_ref()),
+                node.as_ref().map_or_else(Vec::new, |node| node.diagnostics.iter()
+                    .filter(|diagnostic| matches!(&diagnostic.location,
+                        yss_graph_analysis_contract::DiagnosticLocation::Parameter {node_id, ..} if *node_id == node.node_id))
+                    .cloned().collect()),
+                same_node,
+                window,
+                cx,
+            );
+        });
         let mut ports = if same_node {
             std::mem::take(&mut self.ports)
         } else {
@@ -292,11 +312,7 @@ impl DetailsPanel {
             })
             .collect();
         self.install_connections();
-        let needed = node.is_none()
-            || self
-                .fields
-                .iter()
-                .any(|field| matches!(field.draft, parameters::ParameterDraft::Constant));
+        let needed = node.is_none() || self.parameters.read(cx).needs_constants();
         self.properties.update(cx, |properties, cx| {
             properties.set_graph(graph, needed, window, cx)
         });
@@ -335,39 +351,6 @@ impl DetailsPanel {
         if let Some(graph) = self.graph.as_ref().and_then(WeakEntity::upgrade) {
             graph.update(cx, |view, cx| view.submit(command, self.version, cx));
         }
-    }
-
-    fn apply_parameter(&mut self, index: usize, cx: &mut Context<Self>) {
-        match self.fields[index].value(cx) {
-            Ok(value) => self.commit_parameter(index, value, cx),
-            Err(error) => {
-                self.fields[index].error = Some(error);
-                cx.notify();
-            }
-        }
-    }
-
-    fn commit_parameter(&mut self, index: usize, value: serde_json::Value, cx: &mut Context<Self>) {
-        let Some(node) = self.node() else {
-            return;
-        };
-        let node_id = node.node_id;
-        let field = &mut self.fields[index];
-        field.error = None;
-        if field.model.value.as_ref() == Some(&value) && !value.is_null() {
-            cx.notify();
-            return;
-        }
-        let key = field.model.key.clone();
-        self.submit(
-            GraphCommand::SetParameter {
-                node_id,
-                key,
-                value,
-            },
-            cx,
-        );
-        cx.notify();
     }
 }
 
@@ -472,7 +455,7 @@ impl DetailsPanel {
                             .child(error)
                     }),
             )
-            .child(self.render_parameters(busy, cx))
+            .child(self.parameters.clone())
             .child(self.description.clone())
             .child(self.render_ports(busy, cx))
             .child(self.documentation.clone())

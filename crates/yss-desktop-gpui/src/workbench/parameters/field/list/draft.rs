@@ -1,5 +1,5 @@
 //! A series owns one draft per row; input entities are created on visited pages.
-use super::super::{DetailsPanel, display, subscribe_input};
+use super::super::{ParameterForm, display, subscribe_input};
 use gpui::{App, AppContext, Context, Entity, EntityId, Subscription, Window};
 use gpui_component::input::InputState;
 use serde_json::Value;
@@ -17,7 +17,7 @@ enum Row {
     },
 }
 
-pub(in crate::workbench::details) struct ListDraft {
+pub(in crate::workbench::parameters) struct ListDraft {
     rows: Vec<Row>,
     numeric: bool,
     key: ParameterKey,
@@ -25,10 +25,10 @@ pub(in crate::workbench::details) struct ListDraft {
 }
 
 impl ListDraft {
-    pub(in crate::workbench::details::parameters) fn new(
+    pub(in crate::workbench::parameters::field) fn new(
         model: &EditorParameterModel,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> Self {
         Self::from_strings(
             &model.key,
@@ -48,11 +48,11 @@ impl ListDraft {
         )
     }
 
-    pub(in crate::workbench::details) fn text(
+    pub(in crate::workbench::parameters) fn text(
         key: &ParameterKey,
         values: impl IntoIterator<Item = String>,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> Self {
         Self::from_strings(key, values, false, window, cx)
     }
@@ -62,7 +62,7 @@ impl ListDraft {
         values: impl IntoIterator<Item = String>,
         numeric: bool,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) -> Self {
         let mut draft = Self {
             rows: values.into_iter().map(Row::Text).collect(),
@@ -97,7 +97,7 @@ impl ListDraft {
         &mut self,
         page: usize,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) {
         self.page = page.min(self.pages() - 1);
         for row in self
@@ -118,7 +118,7 @@ impl ListDraft {
         }
     }
 
-    pub(super) fn add(&mut self, window: &mut Window, cx: &mut Context<DetailsPanel>) {
+    pub(super) fn add(&mut self, window: &mut Window, cx: &mut Context<ParameterForm>) {
         self.rows.push(Row::Text(String::new()));
         self.show_page(self.pages() - 1, window, cx);
     }
@@ -127,7 +127,7 @@ impl ListDraft {
         &mut self,
         row: usize,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) {
         if row < self.len() {
             self.rows.remove(row);
@@ -140,7 +140,7 @@ impl ListDraft {
         row: usize,
         direction: isize,
         window: &mut Window,
-        cx: &mut Context<DetailsPanel>,
+        cx: &mut Context<ParameterForm>,
     ) {
         if let Some(target) = row.checked_add_signed(direction)
             && row < self.len()
@@ -151,13 +151,13 @@ impl ListDraft {
         }
     }
 
-    pub(in crate::workbench::details) fn owns_input(&self, id: EntityId) -> bool {
+    pub(in crate::workbench::parameters) fn owns_input(&self, id: EntityId) -> bool {
         self.rows
             .iter()
             .any(|row| matches!(row, Row::Input { input, .. } if input.entity_id() == id))
     }
 
-    pub(in crate::workbench::details) fn value(&self, cx: &App) -> Result<Value, String> {
+    pub(in crate::workbench::parameters) fn value(&self, cx: &App) -> Result<Value, String> {
         self.rows
             .iter()
             .map(|row| {

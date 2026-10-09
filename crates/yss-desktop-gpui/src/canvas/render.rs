@@ -458,15 +458,19 @@ impl GraphCanvas {
     fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let palette = self.palette.as_ref().expect("palette is open");
         let size = self.bounds.get().size;
+        let configuring = palette.configuration.is_some();
+        let width = if configuring { 420. } else { 300. };
+        let height = if configuring { 560. } else { 396. };
+        let height = px(height).min(size.height);
         let x = palette
             .point
             .x
-            .min((size.width - px(300.)).max(px(0.)))
+            .min((size.width - px(width)).max(px(0.)))
             .max(px(0.));
         let y = palette
             .point
             .y
-            .min((size.height - px(360.)).max(px(0.)))
+            .min((size.height - height).max(px(0.)))
             .max(px(0.));
         let query = self.search.read(cx).value().to_lowercase();
         let items = palette
@@ -489,8 +493,8 @@ impl GraphCanvas {
             .absolute()
             .left(x)
             .top(y)
-            .w(px(300.))
-            .h(px(360.))
+            .w(px(width).min(size.width))
+            .h(height)
             .p_2()
             .rounded_md()
             .bg(rgb(appearance::SURFACE_RAISED))
@@ -503,29 +507,58 @@ impl GraphCanvas {
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .child(Input::new(&self.search).small())
-            .when(palette.catalog.is_none(), |view| {
-                view.child("加载兼容节点…")
+            .when_some(palette.configuration.as_ref(), |body, form| {
+                body.child(form.clone())
             })
-            .child(
-                div()
-                    .id("node-palette-items")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .children(items.map(|(key, title, creation)| {
+            .when(!configuring, |body| {
+                body.child(Input::new(&self.search).small())
+                    .child(
+                        gpui_component::checkbox::Checkbox::new("configure-before-creating")
+                            .label(crate::text::translate("canvas.nodePalette.configureFirst"))
+                            .checked(palette.configure_first)
+                            .on_click(cx.listener(|view, value: &bool, _, cx| {
+                                if let Some(palette) = &mut view.palette {
+                                    palette.configure_first = *value;
+                                    cx.notify();
+                                }
+                            })),
+                    )
+                    .when(palette.catalog.is_none(), |view| {
+                        view.child("加载兼容节点…")
+                    })
+                    .child(
                         div()
-                            .id(gpui::SharedString::from(key))
-                            .p_2()
-                            .rounded_sm()
-                            .text_sm()
-                            .cursor_pointer()
-                            .hover(|style| style.bg(rgb(appearance::SELECTED)))
-                            .child(title)
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.create_node(creation.clone(), cx)
-                            }))
-                    })),
-            )
+                            .id("node-palette-items")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .children(items.map(|(key, title, creation)| {
+                                div()
+                                    .id(gpui::SharedString::from(key))
+                                    .p_2()
+                                    .rounded_sm()
+                                    .text_sm()
+                                    .cursor_pointer()
+                                    .hover(|style| style.bg(rgb(appearance::SELECTED)))
+                                    .child(title.clone())
+                                    .on_click(cx.listener(move |view, _, window, cx| {
+                                        if view
+                                            .palette
+                                            .as_ref()
+                                            .is_some_and(|palette| palette.configure_first)
+                                        {
+                                            view.configure_node(
+                                                creation.clone(),
+                                                title.clone(),
+                                                window,
+                                                cx,
+                                            );
+                                        } else {
+                                            view.create_node(creation.clone(), cx);
+                                        }
+                                    }))
+                            })),
+                    )
+            })
     }
 }
