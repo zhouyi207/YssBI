@@ -609,8 +609,14 @@ impl ProjectState {
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         let current_graphs = &snapshot.graphs;
-        let mut persisted_source = crate::project_io::load_project_graph_from_file(
-            session.root.as_path().to_string_lossy().as_ref(),
+        let index = crate::scan_graph_resource_index(session.root.as_path()).map_err(|error| {
+            ProjectOperationError::TransactionPrepareFailed {
+                message: error.to_string(),
+            }
+        })?;
+        let mut persisted_source = crate::project_io::load_project_graph_from_index(
+            session.root.as_path(),
+            &index,
             graph_path,
         )
         .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
@@ -692,11 +698,6 @@ impl ProjectState {
             message: error.to_string(),
         })?;
 
-        let index = crate::scan_graph_resource_index(session.root.as_path()).map_err(|error| {
-            ProjectOperationError::TransactionPrepareFailed {
-                message: error.to_string(),
-            }
-        })?;
         let paths = index
             .entries()
             .iter()
@@ -708,8 +709,9 @@ impl ProjectState {
             if &path == graph_path {
                 continue;
             }
-            let mut persisted = crate::project_io::load_project_graph_from_file(
-                session.root.as_path().to_string_lossy().as_ref(),
+            let mut persisted = crate::project_io::load_project_graph_from_index(
+                session.root.as_path(),
+                &index,
                 &path,
             )
             .map_err(|error| ProjectOperationError::TransactionPrepareFailed {

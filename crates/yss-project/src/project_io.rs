@@ -290,6 +290,14 @@ pub(crate) fn load_project_graph_document_from_file(
 ) -> Result<GraphResourceFile, ProjectError> {
     let root = project_root_from_path(path);
     let graph_resources = load_graph_resource_index(root.as_path())?;
+    load_project_graph_document_from_index(root.as_path(), &graph_resources, graph_path)
+}
+
+fn load_project_graph_document_from_index(
+    root: &Path,
+    graph_resources: &GraphResourceIndex,
+    graph_path: &GraphResourcePath,
+) -> Result<GraphResourceFile, ProjectError> {
     if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
         let document =
             read_graph_document(root.join(resource.path.as_str()).as_path(), resource.kind)?;
@@ -306,7 +314,17 @@ pub fn load_project_graph_from_file(
     path: &str,
     graph_path: &GraphResourcePath,
 ) -> Result<yss_project_model::GraphResourceDocument, ProjectError> {
-    let document = load_project_graph_document_from_file(path, graph_path)?;
+    let root = project_root_from_path(path);
+    let graph_resources = load_graph_resource_index(root.as_path())?;
+    load_project_graph_from_index(root.as_path(), &graph_resources, graph_path)
+}
+
+pub(crate) fn load_project_graph_from_index(
+    root: &Path,
+    graph_resources: &GraphResourceIndex,
+    graph_path: &GraphResourcePath,
+) -> Result<GraphResourceDocument, ProjectError> {
+    let document = load_project_graph_document_from_index(root, graph_resources, graph_path)?;
     Ok(yss_project_model::GraphResourceDocument {
         name: document.name,
         kind: document.kind,

@@ -147,6 +147,8 @@ Graph 复制、重命名和签名准备使用 `GraphWriterSnapshot`，只捕获 
 创建在文件系统 lease 和事务检查后读取目标 tombstone revision。
 Graph 名称分配在文件系统 lease 下扫描一次路径，并在现有一致读取边界借用驻留图名称，
 与复制共用已扫描索引的名称分配入口，不复制完整 ProjectData 或另构造路径规则。
+Graph 重命名在同一文件系统 lease 下扫描一次路径索引，源图及调用图读取共用该索引，
+继续由 Project IO 校验索引成员和图文件类型，不在每次读取正文时再次扫描全部路径。
 Chart writers 通过同一捕获入口只读取
 项目身份与 authority generation，Save 额外捕获目标存在性及其 revision，删除只捕获目标存在性。
 名称分配借用 Chart 路径和默认数据库 ID，复制、重命名只复制目标 Chart 文档，不复制无关正文或 revision 表。
