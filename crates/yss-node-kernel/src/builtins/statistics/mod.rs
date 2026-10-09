@@ -106,6 +106,9 @@ pub(super) fn install(
                         | "yssbi.statistics.test.friedman"
                         | "yssbi.statistics.test.runs"
                         | "yssbi.statistics.test.mann_kendall"
+                        | "yssbi.statistics.test.levene"
+                        | "yssbi.statistics.test.brown_forsythe"
+                        | "yssbi.statistics.test.bartlett"
                 ) {
                     6
                 } else if matches!(
@@ -120,9 +123,6 @@ pub(super) fn install(
                         | "yssbi.statistics.test.wilcoxon.one_sample"
                         | "yssbi.statistics.test.wilcoxon.paired"
                         | "yssbi.statistics.test.cochran_q"
-                        | "yssbi.statistics.test.levene"
-                        | "yssbi.statistics.test.brown_forsythe"
-                        | "yssbi.statistics.test.bartlett"
                         | "yssbi.statistics.psychometrics.item_analysis"
                 ) {
                     5

@@ -419,7 +419,7 @@ admits linear category indexes before constructing them, then uses actual row an
 column cardinalities for the dense table. These are conservative workspace
 estimates, not process RSS limits. Classical kernels use revision 6, except the
 paired t, McNemar, CMH, categorical independence, Pearson contingency, chi-square goodness-of-fit and
-multiple-proportion and Mood median kernels,
+multiple-proportion, Mood median, Levene, Brown-Forsythe and Bartlett kernels,
 which use revision 7;
 Mann–Whitney, Kruskal–Wallis, Friedman, Runs and Mann–Kendall also use revision 7,
 covering corrected rank moments and tie handling. The rank-family selector uses
@@ -441,6 +441,8 @@ Goodness-of-fit retains SCI's positive, matching frequency-total requirement and
 roundoff tolerance through the existing numeric-input error boundary.
 Zero-total Pearson count tables use the same numeric-input error boundary.
 Multiple-proportion input preserves ordered success/trial pairs for SCI's shared Pearson test.
+Variance-homogeneity adapters preserve SCI's small upper-tail probabilities and
+its p-value of one for a zero F statistic.
 
 Paired t and McNemar tests use the shared numeric-column reader to pair equal-length
 measurements by their current positions. Database series from independent sources and

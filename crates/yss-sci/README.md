@@ -638,6 +638,10 @@ Mood's median test uses that same controlled Pearson owner. Its two-row table ke
 each group's above/below counts in one column, excludes pooled-median ties and retains
 the original group sample sizes. Groups with no usable table information are data-domain
 violations; Mood does not keep a separate chi-square implementation.
+Variance-homogeneity tests retain small upper-tail probabilities instead of
+subtracting a CDF near one. Levene and Brown-Forsythe use the reciprocal F
+distribution with swapped degrees of freedom; Bartlett uses the chi-square
+survival function. A zero F statistic retains a p-value of one.
 `tests/categorical_tables.rs` covers repeated long labels whose first appearance
 order differs from the table's lexical order.
 For 2x2 Fisher tests, the statistic is the sample odds ratio `a*d/(b*c)`;

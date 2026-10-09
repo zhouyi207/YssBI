@@ -2231,6 +2231,50 @@ fn scale_limits_mixed_estimators_preserve_replicated_reference_fits() {
 
 #[test]
 fn scale_limits_classification_and_classical_groups_keep_valid_results() {
+    for (id, groups, expected_p) in [
+        (
+            "yssbi.statistics.test.levene",
+            [
+                [-1.125, -0.875, 0.875, 1.125],
+                [
+                    -1_000_000_000_000.125,
+                    -999_999_999_999.875,
+                    999_999_999_999.875,
+                    1_000_000_000_000.125,
+                ],
+            ],
+            7.629_394_531_295_777e-77,
+        ),
+        (
+            "yssbi.statistics.test.brown_forsythe",
+            [
+                [-1.125, -0.875, 0.875, 1.125],
+                [
+                    -1_000_000_000_000.125,
+                    -999_999_999_999.875,
+                    999_999_999_999.875,
+                    1_000_000_000_000.125,
+                ],
+            ],
+            7.629_394_531_295_777e-77,
+        ),
+        (
+            "yssbi.statistics.test.bartlett",
+            [[1.0, 2.0, 3.0, 4.0], [1e8, 2e8, 3e8, 4e8]],
+            1.318_325_745_654_562_2e-21,
+        ),
+    ] {
+        let inputs = groups
+            .iter()
+            .map(|group| ("groups", series(group)))
+            .collect::<Vec<_>>();
+        let report = run(id, &inputs, &[], 1).unwrap();
+        let p = super::super::numeric_input(Some(field(&report[0], "p_value").unwrap())).unwrap();
+        assert!(
+            (p / expected_p - 1.0).abs() < 1e-12,
+            "{id} lost its upper tail: p={p}"
+        );
+    }
     let median_groups = [
         ("groups", series(&[1.0, 2.0, 3.0])),
         ("groups", series(&[4.0, 5.0, 6.0])),
