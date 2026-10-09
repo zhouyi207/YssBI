@@ -2,11 +2,19 @@ use crate::regression::models::common::{Result, failed, finite, parameter};
 use statrs::distribution::{ContinuousCDF, Normal, StudentsT};
 use yss_sci_contract::{execution::*, inference::*};
 
-pub(crate) fn critical(confidence: f64, df: Option<f64>) -> Result<f64> {
+pub(super) fn validate_confidence(confidence: f64) -> Result<()> {
     if !confidence.is_finite() || confidence <= 0. || confidence >= 1. {
         return Err(parameter());
     }
-    critical_tail((1. - confidence) / 2., df)
+    Ok(())
+}
+pub(crate) fn critical(confidence: f64, df: Option<f64>) -> Result<f64> {
+    validate_confidence(confidence)?;
+    match df {
+        // Central normal probability is erf(z / sqrt(2)); avoid rounding a CDF to 0.5 or 1.
+        None => finite(std::f64::consts::SQRT_2 * statrs::function::erf::erf_inv(confidence)),
+        Some(_) => critical_tail((1. - confidence) / 2., df),
+    }
 }
 pub(super) fn critical_tail(tail: f64, df: Option<f64>) -> Result<f64> {
     if !tail.is_finite() || tail <= 0. || tail >= 0.5 {

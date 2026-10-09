@@ -82,8 +82,12 @@ Robust、Quantile、Firth、计数/比例/Tobit/Conditional Logit 和其余 GLM 
 曲线、RCS、阈值、回归流程及 Multinomial/Ordinal Logit 使用 revision 5；
 两个非线性入口与 Deming 使用 revision 4。Ridge/Lasso/PLS 使用 revision 5，不输出系数 p 值。
 五个参数生存拟合内核（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 10，
-Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 9，
-无 moderator 的 Meta 模型、逐项排除和敏感性保持 revision 8；Egger 使用 revision 8，Begg 保持 revision 7。
+Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 10，
+无 moderator 的 Meta 模型、逐项排除和敏感性使用 revision 9；Egger 使用 revision 8，Begg 保持 revision 7。
+置信区间与调整预测使用 revision 5，多重比较使用 revision 6；六个 Meta 效应转换使用 revision 6，
+Forest/Funnel 绘图使用 revision 7。SCI 的共享正态临界值直接从中心置信度计算，
+保留接近 1 的有限区间和极小正置信度的可表示宽度；多重比较只校验其实际使用的置信度，
+不预先计算并丢弃正态分位数。固定 95% 的异质性指标及 Begg、Egger 的现有推断保持原版本。
 中介 bootstrap 采用 revision 9，涵盖共享参数恢复、稳定分位数二分点和 Student-t 尾概率。
 能力指纹涵盖共享输入错误契约、实际尾概率及系数/协方差坐标恢复。
 
@@ -109,7 +113,8 @@ Grey Prediction 使用 revision 6；Phillips–Perron 使用 revision 6，KPSS �
 两个平稳性检验在 SCI 的规范化响应坐标中拟合和计算矩，仅恢复报告的长期方差单位；
 PP 复用 Design 的尺度直接计算滞后系数推断，不恢复整份逆矩阵。
 借用列和拟合缓冲复用保留现有观测工作区预算，报告字段、校准和执行中断沿用当前边界。
-ARIMA/SARIMA 与三个平滑入口使用 revision 5，复用 SCI 的受控残差尺度和报告路径：
+ARIMA/SARIMA 使用 revision 6，并在拟合前复用 SCI 的共享正态临界值；三个平滑入口使用 revision 5。
+这些预测入口复用 SCI 的受控残差尺度和报告路径：
 方差与似然避免原单位中间溢出，ARIMA 区间按标准差组合，参数标签只在最终拟合后生成；
 平滑优化使用规范化序列和共享初始残差 RMS，保留现有行对齐、报告单位和工作区预算。
 ARCH/GARCH/EGARCH/GJR-GARCH 使用 revision 5，SCI 在规范化坐标中拟合和预测，

@@ -1,5 +1,5 @@
 use super::*;
-use statrs::distribution::{ContinuousCDF, Normal};
+use crate::inference::intervals::critical;
 
 /// Reflection coefficients map finite unconstrained values into a stable AR polynomial.
 pub(super) fn stable_coefficients(raw: &[f64]) -> Vec<f64> {
@@ -76,10 +76,8 @@ pub fn arima(y: &[f64], o: ArimaOptions, control: &Control) -> Result<ForecastRe
     validate(y, &[], control)?;
     check_iteration(o.iteration)?;
     horizon(y.len(), o.horizon)?;
-    if o.period == 0
-        || !(0.0..1.0).contains(&o.confidence)
-        || o.confidence == 0.0
-        || ((o.seasonal_p > 0 || o.seasonal_d > 0 || o.seasonal_q > 0) && o.period < 2)
+    let z = critical(o.confidence, None)?;
+    if o.period == 0 || ((o.seasonal_p > 0 || o.seasonal_d > 0 || o.seasonal_q > 0) && o.period < 2)
     {
         return Err(parameter());
     }
@@ -224,9 +222,6 @@ pub fn arima(y: &[f64], o: ArimaOptions, control: &Control) -> Result<ForecastRe
     r.parameters
         .push(estimate("innovation_variance", r.innovation_variance));
     let denominator = multiply(&model.ar, &diff);
-    let z = Normal::new(0.0, 1.0)
-        .map_err(|_| failed())?
-        .inverse_cdf(0.5 + o.confidence / 2.0);
     let mut psi = Vec::with_capacity(o.horizon);
     let mut sum = 0.0;
     let mut lower = Vec::new();

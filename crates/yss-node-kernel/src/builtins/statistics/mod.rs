@@ -97,7 +97,8 @@ pub(super) fn install(
                 | "yssbi.statistics.survival.exponential"
                 | "yssbi.statistics.survival.loglogistic"
                 | "yssbi.statistics.survival.lognormal"
-                | "yssbi.statistics.survival.weibull" => 10,
+                | "yssbi.statistics.survival.weibull"
+                | "yssbi.statistics.meta.regression" => 10,
                 "yssbi.statistics.adf.test"
                 | "yssbi.statistics.econometrics.panel.between"
                 | "yssbi.statistics.logit.summary"
@@ -111,17 +112,16 @@ pub(super) fn install(
                 | "yssbi.statistics.var.summary"
                 | "yssbi.statistics.workflow.subgroup"
                 | "yssbi.statistics.econometrics.heckman_two_step"
-                | "yssbi.statistics.meta.regression"
                 | "yssbi.statistics.workflow.mediation"
-                | "yssbi.statistics.workflow.moderated_mediation" => 9,
+                | "yssbi.statistics.workflow.moderated_mediation"
+                | "yssbi.statistics.meta.inverse_variance"
+                | "yssbi.statistics.meta.fixed_effect"
+                | "yssbi.statistics.meta.random_effect"
+                | "yssbi.statistics.meta.leave_one_out"
+                | "yssbi.statistics.meta.sensitivity" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
                 | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.sur"
-                | "yssbi.statistics.meta.fixed_effect"
-                | "yssbi.statistics.meta.inverse_variance"
-                | "yssbi.statistics.meta.leave_one_out"
-                | "yssbi.statistics.meta.random_effect"
-                | "yssbi.statistics.meta.sensitivity"
                 | "yssbi.statistics.test.binomial"
                 | "yssbi.statistics.test.fisher_exact"
                 | "yssbi.statistics.test.levene"
@@ -184,7 +184,9 @@ pub(super) fn install(
                 | "yssbi.statistics.mixed.negative_binomial"
                 | "yssbi.statistics.mixed.poisson"
                 | "yssbi.statistics.mixed.random_intercept"
-                | "yssbi.statistics.mixed.random_slope" => 7,
+                | "yssbi.statistics.mixed.random_slope"
+                | "yssbi.statistics.plot.forest"
+                | "yssbi.statistics.plot.funnel" => 7,
                 "yssbi.plot.boxplot"
                 | "yssbi.plot.violin"
                 | "yssbi.statistics.diagnostic.information_matrix"
@@ -197,8 +199,6 @@ pub(super) fn install(
                 | "yssbi.statistics.meta.funnel"
                 | "yssbi.statistics.meta.i_squared"
                 | "yssbi.statistics.meta.tau_squared"
-                | "yssbi.statistics.plot.forest"
-                | "yssbi.statistics.plot.funnel"
                 | "yssbi.statistics.sem.path"
                 | "yssbi.statistics.test.cochran_q"
                 | "yssbi.statistics.timeseries.ecm"
@@ -217,7 +217,16 @@ pub(super) fn install(
                 | "yssbi.statistics.survey.logistic"
                 | "yssbi.statistics.survey.poisson"
                 | "yssbi.statistics.timeseries.phillips_perron"
-                | "yssbi.statistics.timeseries.grey_prediction" => 6,
+                | "yssbi.statistics.timeseries.grey_prediction"
+                | "yssbi.statistics.timeseries.arima"
+                | "yssbi.statistics.timeseries.sarima"
+                | "yssbi.statistics.posthoc.multiple_comparisons"
+                | "yssbi.statistics.meta.continuous"
+                | "yssbi.statistics.meta.binary"
+                | "yssbi.statistics.meta.single_proportion"
+                | "yssbi.statistics.meta.mean"
+                | "yssbi.statistics.meta.correlation"
+                | "yssbi.statistics.meta.or_hr" => 6,
                 "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
                 | "yssbi.statistics.diagnostic.ljung_box"
@@ -225,7 +234,6 @@ pub(super) fn install(
                 | "yssbi.statistics.diagnostic.reset"
                 | "yssbi.statistics.doe.dose_response"
                 | "yssbi.statistics.plot.nomogram"
-                | "yssbi.statistics.posthoc.multiple_comparisons"
                 | "yssbi.statistics.power.anova"
                 | "yssbi.statistics.power.cluster_randomized"
                 | "yssbi.statistics.power.linear_regression"
@@ -236,15 +244,15 @@ pub(super) fn install(
                 | "yssbi.statistics.test.normality"
                 | "yssbi.statistics.workflow.delphi"
                 | "yssbi.statistics.timeseries.kpss"
-                | "yssbi.statistics.timeseries.arima"
-                | "yssbi.statistics.timeseries.sarima"
                 | "yssbi.statistics.timeseries.exponential_smoothing"
                 | "yssbi.statistics.timeseries.ets"
                 | "yssbi.statistics.timeseries.holt_winters"
                 | "yssbi.statistics.timeseries.arch"
                 | "yssbi.statistics.timeseries.garch"
                 | "yssbi.statistics.timeseries.egarch"
-                | "yssbi.statistics.timeseries.gjr_garch" => 5,
+                | "yssbi.statistics.timeseries.gjr_garch"
+                | "yssbi.statistics.inference.confidence_interval"
+                | "yssbi.statistics.postestimation.adjusted_predictions" => 5,
                 _ if id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks" =>
                 {

@@ -117,6 +117,13 @@ Cluster admission reports incompatible group lengths as `ShapeMismatch`, insuffi
 samples as `EmptyInput`, and fewer than two clusters as `DataOutOfRange`. Group scans
 check execution control, and downstream OLS errors retain their shared violation
 through Contract's neutral conversion.
+`inference::intervals` owns confidence validation and shared critical values.
+Its central normal multiplier uses `sqrt(2) * erf_inv(confidence)`, preserving
+finite upper-end intervals and positive widths at tiny positive confidence without
+rounding a CDF to one or one-half. ARIMA validates and obtains this value before
+fitting; Meta and adjusted predictions reuse the same owner. Pairwise comparison
+admission validates confidence directly instead of computing an unused normal
+quantile; its Student-t and multiplicity tail calculations remain explicit.
 `regression/postestimation` owns shared evaluation grids, binary-link derivatives
 and Delta variance for adjusted means and binary marginal effects. Evaluation
 retains fitted row order and applies explicit column overrides without rebuilding

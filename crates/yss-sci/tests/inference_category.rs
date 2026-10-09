@@ -59,6 +59,86 @@ fn confidence_intervals_match_quantiles_keep_all_rows_and_check_inputs() {
     }
 }
 #[test]
+fn normal_confidence_edges_keep_arima_intervals_finite_near_one() {
+    // Independent 140-digit Gaussian integration at the largest f64 below one.
+    check_normal_confidence_edges(f64::from_bits(1.0f64.to_bits() - 1), 8.292361075813595);
+}
+
+#[test]
+fn normal_confidence_edges_preserve_tiny_positive_width_and_meta_inference() {
+    let confidence = 1e-20;
+    // Independent Gaussian integration; the first-order width is sqrt(pi / 2) * confidence.
+    let critical = 1.2533141373155002e-20;
+    check_normal_confidence_edges(confidence, critical);
+    let result = yss_sci::meta::model::fit(
+        &[0.0; 3],
+        &[1.0; 3],
+        &[],
+        yss_sci_contract::meta::MetaOptions {
+            estimator: yss_sci_contract::meta::MetaEstimator::Fixed,
+            inference: yss_sci_contract::meta::MetaInference::Wald,
+            confidence_level: confidence,
+        },
+        &control(),
+    )
+    .unwrap();
+    let [lower, upper] = result.summary.coefficients[0].confidence_interval.unwrap();
+    let expected = critical / 3.0f64.sqrt();
+    assert!(lower < 0.0 && upper > 0.0);
+    assert!((upper / expected - 1.0).abs() < 1e-12);
+    assert!((lower / expected + 1.0).abs() < 1e-12);
+}
+
+fn check_normal_confidence_edges(confidence: f64, critical: f64) {
+    let result = intervals::calculate(
+        &[0.0],
+        &[1.0],
+        IntervalOptions {
+            confidence_level: confidence,
+            degrees_of_freedom: None,
+        },
+        &control(),
+    )
+    .unwrap();
+    assert!(result.rows[0].lower.is_finite() && result.rows[0].lower < 0.0);
+    assert!(result.rows[0].upper.is_finite() && result.rows[0].upper > 0.0);
+    assert!((result.rows[0].upper / critical - 1.0).abs() < 1e-12);
+    assert!((result.rows[0].lower / critical + 1.0).abs() < 1e-12);
+    let forecast = yss_sci::time_series::forecast::arima(
+        &[-1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0],
+        yss_sci_contract::time_series::forecast::ArimaOptions {
+            p: 0,
+            d: 0,
+            q: 0,
+            seasonal_p: 0,
+            seasonal_d: 0,
+            seasonal_q: 0,
+            period: 1,
+            constant: false,
+            horizon: 3,
+            confidence,
+            iteration: yss_sci_contract::regression::models::IterationOptions::default(),
+        },
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(forecast.innovation_variance, 1.0);
+    assert_eq!(forecast.forecasts, vec![0.0; 3]);
+    for (&lower, &upper) in forecast
+        .lower
+        .as_ref()
+        .unwrap()
+        .iter()
+        .zip(forecast.upper.as_ref().unwrap())
+    {
+        assert!(lower.is_finite() && lower < 0.0);
+        assert!(upper.is_finite() && upper > 0.0);
+        assert!((upper / critical - 1.0).abs() < 1e-12);
+        assert!((lower / critical + 1.0).abs() < 1e-12);
+    }
+}
+
+#[test]
 fn independent_group_comparisons_match_ols_welch_and_multipletests() {
     let f = fixture();
     let y: Vec<f64> = serde_json::from_value(f["y"].clone()).unwrap();

@@ -1,5 +1,5 @@
 //! Pooled-ANOVA or Welch pair contrasts, followed by one family-wise adjustment.
-use super::intervals::{critical, critical_tail};
+use super::intervals::{critical_tail, validate_confidence};
 use crate::regression::models::common::{Result, finite, parameter};
 use statrs::distribution::StudentsT;
 use std::collections::BTreeMap;
@@ -117,7 +117,7 @@ pub fn pairwise(
     options: PairwiseOptions,
     control: &ScientificExecutionControl,
 ) -> Result<PairwiseResult> {
-    critical(options.confidence_level, None)?;
+    validate_confidence(options.confidence_level)?;
     let moments = group_moments(y, groups, control)?;
     let k = moments.len();
     if k < 2 {
