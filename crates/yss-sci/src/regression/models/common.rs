@@ -179,7 +179,61 @@ impl Design {
         })
     }
     pub fn raw(&self, beta: &[f64], covariance: Option<Mat<f64>>) -> (Vec<f64>, Option<Mat<f64>>) {
-        transform(beta, covariance, &self.raw_jacobian(1.0))
+        let offset = usize::from(self.constant);
+        let mut raw = beta.to_vec();
+        for (j, scale) in self.scales.iter().enumerate() {
+            raw[offset + j] /= scale;
+            if self.constant {
+                raw[0] -= self.means[j] * raw[offset + j];
+            }
+        }
+        let covariance = covariance.map(|mut covariance| {
+            let p = self.x.ncols();
+            let scale = |i| {
+                if self.constant && i == 0 {
+                    1.0
+                } else {
+                    self.scales[i - offset]
+                }
+            };
+            for i in 0..p {
+                for j in 0..p {
+                    let (a, b) = (scale(i), scale(j));
+                    let product = a * b;
+                    let value = covariance[(i, j)];
+                    covariance[(i, j)] = if product.is_normal() {
+                        value / product
+                    } else {
+                        // Preserve small cross-covariances without forming an
+                        // underflowing scale product or overflowing reciprocal.
+                        let first = value / a.min(b);
+                        if first.is_finite() {
+                            first / a.max(b)
+                        } else {
+                            (value / a.max(b)) / a.min(b)
+                        }
+                    };
+                }
+            }
+            if self.constant {
+                // Center the intercept row before the column so both passes
+                // consume the correct, already-scaled slope entries in place.
+                for j in 0..p {
+                    let shift = (1..p)
+                        .map(|i| self.means[i - 1] * covariance[(i, j)])
+                        .sum::<f64>();
+                    covariance[(0, j)] -= shift;
+                }
+                for i in 0..p {
+                    let shift = (1..p)
+                        .map(|j| covariance[(i, j)] * self.means[j - 1])
+                        .sum::<f64>();
+                    covariance[(i, 0)] -= shift;
+                }
+            }
+            covariance
+        });
+        (raw, covariance)
     }
 }
 pub(crate) fn transform(

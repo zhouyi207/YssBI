@@ -510,7 +510,7 @@ fn causal_hc3_keeps_finite_inference_for_large_response_units() {
     );
 }
 
-fn check_heckman_response_units(scale: f64) {
+fn check_heckman_response_units(scale: f64, predictor_scale: f64) {
     let f = fixture();
     let d = &f["heckman"];
     let response = serde_json::from_value::<Vec<Option<f64>>>(d["response"].clone()).unwrap();
@@ -537,22 +537,32 @@ fn check_heckman_response_units(scale: f64) {
         .iter()
         .map(|value| value.map(|value| value * scale))
         .collect::<Vec<_>>();
+    let scaled_predictors = predictors
+        .iter()
+        .map(|column| column.iter().map(|value| value * predictor_scale).collect())
+        .collect::<Vec<Vec<_>>>();
     let result = econometrics::heckman(
         &scaled_response,
         &selected,
-        &predictors,
+        &scaled_predictors,
         &selection_predictors,
         options,
         &control(),
     )
     .expect("reported Heckman sigma and rho are finite in these response units");
-    for (actual, expected) in result
+    for (i, (actual, expected)) in result
         .outcome_coefficients
         .iter()
         .zip(vector(&d["coefficients"]))
+        .enumerate()
     {
         assert!(actual.estimate.is_finite());
-        close(actual.estimate / scale, expected, 1e-7);
+        let coefficient_scale = if i > 0 && i <= predictors.len() {
+            scale / predictor_scale
+        } else {
+            scale
+        };
+        close(actual.estimate / coefficient_scale, expected, 1e-7);
         assert!(actual.standard_error.is_none());
     }
     assert!(result.sigma.is_finite() && result.sigma > 0.0);
@@ -581,12 +591,17 @@ fn check_heckman_response_units(scale: f64) {
 
 #[test]
 fn heckman_response_units_keep_large_sigma_finite() {
-    check_heckman_response_units(1e200);
+    check_heckman_response_units(1e200, 1.0);
 }
 
 #[test]
 fn heckman_response_units_keep_small_sigma_identified() {
-    check_heckman_response_units(1e-200);
+    check_heckman_response_units(1e-200, 1.0);
+}
+
+#[test]
+fn raw_restoration_keeps_heckman_point_estimates_with_subnormal_predictors() {
+    check_heckman_response_units(1e-156, 1e-310);
 }
 
 #[test]

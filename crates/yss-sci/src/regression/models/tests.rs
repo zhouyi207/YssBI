@@ -264,6 +264,91 @@ fn glm_families_links_and_fractional_sandwich_match_statsmodels() {
     }
 }
 #[test]
+fn raw_restoration_keeps_gaussian_inference_with_subnormal_predictors() {
+    let data = reference();
+    let reference = &data["cases"]["gaussian"];
+    let (y, x) = inputs(reference);
+    let options = GlmOptions {
+        constant: true,
+        family: GlmFamily::Gaussian,
+        link: GlmLink::Identity,
+        fractional: false,
+        iteration: IterationOptions::default(),
+    };
+    let baseline = glm(&y, &x, options, &control()).unwrap();
+    let response_scale = 1e-156;
+    let predictor_scale = 1e-310;
+    let scaled_y = y
+        .iter()
+        .map(|value| value * response_scale)
+        .collect::<Vec<_>>();
+    let scaled_x = x
+        .iter()
+        .map(|column| column.iter().map(|value| value * predictor_scale).collect())
+        .collect::<Vec<Vec<_>>>();
+    let result = glm(&scaled_y, &scaled_x, options, &control())
+        .expect("raw coefficients and covariance are finite in these joint units");
+    let units = [
+        response_scale,
+        response_scale / predictor_scale,
+        response_scale / predictor_scale,
+    ];
+    for (i, (actual, expected)) in result
+        .coefficients
+        .iter()
+        .zip(&baseline.coefficients)
+        .enumerate()
+    {
+        assert_eq!(actual.term, expected.term);
+        close(
+            actual.estimate / units[i],
+            reference["coefficients"][i].as_f64().unwrap(),
+            1e-7,
+        );
+        close(
+            actual.standard_error.unwrap() / units[i],
+            reference["standard_errors"][i].as_f64().unwrap(),
+            1e-7,
+        );
+        close(actual.statistic.unwrap(), expected.statistic.unwrap(), 1e-6);
+        close(actual.p_value.unwrap(), expected.p_value.unwrap(), 1e-7);
+        for (actual, expected) in actual
+            .confidence_interval
+            .unwrap()
+            .into_iter()
+            .zip(expected.confidence_interval.unwrap())
+        {
+            assert!(actual.is_finite());
+            close(actual / units[i], expected, 1e-7);
+        }
+    }
+    let covariance = result.covariance.as_ref().unwrap();
+    for (i, row) in covariance.iter().enumerate() {
+        for (j, value) in row.iter().enumerate() {
+            assert!(value.is_finite());
+            let restored = value / units[i].max(units[j]) / units[i].min(units[j]);
+            let expected = baseline.covariance.as_ref().unwrap()[i][j];
+            assert!(
+                (restored - expected).abs() <= 2e-6 * expected.abs(),
+                "covariance[{i}, {j}]: {restored} != {expected}"
+            );
+        }
+    }
+    for (actual, expected) in result.fitted.iter().zip(vector(&reference["fitted"])) {
+        close(actual / response_scale, expected, 1e-7);
+    }
+    for (actual, expected) in result.residuals.iter().zip(&baseline.residuals) {
+        close(actual / response_scale, *expected, 1e-7);
+    }
+    assert!(result.converged);
+    assert_eq!(result.observations, baseline.observations);
+    assert_eq!(
+        result.statistics.df_residual,
+        baseline.statistics.df_residual
+    );
+}
+
+#[test]
 fn likelihood_count_censoring_and_proportion_models_match_references() {
     let data = reference();
     let c = control();

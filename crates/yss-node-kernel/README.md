@@ -77,14 +77,15 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
 不归为参数错误。`inference.cluster_robust` 使用 revision 6，并复用 SCI 的稳定 Student-t 尾概率。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
-回归模型按其实际参考分布维护能力版本：层次、逐步及 GLM 使用 revision 6；曲线、RCS、阈值、回归流程以及正态 Wald 推断的模型入口
-使用 revision 5；两个非线性入口与 Deming 使用 revision 4。Ridge/Lasso/PLS 不输出系数 p 值，
-沿用各自能力版本。共享设计校验的五个参数生存拟合内核
-（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 9。
-复用该准备的 Mixed/GEE 及除 GMM 外返回正态 Wald 推断的因果估计采用 revision 6；共线性诊断使用
-revision 5。Meta 模型、逐项排除和敏感性使用 revision 8，Egger 与 Begg 使用 revision 7；
-绘图和仅返回异质性统计的入口维护各自的能力版本。能力指纹涵盖共享输入错误契约和实际尾概率计算。中介 bootstrap 采用 revision 8，同时涵盖稳定分位数二分点和
-共享 Student-t 尾概率。
+回归模型按实际消费者维护能力版本：层次、逐步使用 revision 6，GLM 使用 revision 7；
+Robust、Quantile、Firth、计数/比例/Tobit/Conditional Logit 和其余 GLM 入口使用 revision 6。
+曲线、RCS、阈值、回归流程及 Multinomial/Ordinal Logit 使用 revision 5；
+两个非线性入口与 Deming 使用 revision 4。Ridge/Lasso/PLS 使用 revision 5，不输出系数 p 值。
+五个参数生存拟合内核（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 10，
+Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 9，
+无 moderator 的 Meta 模型、逐项排除和敏感性保持 revision 8；Egger 使用 revision 8，Begg 保持 revision 7。
+中介 bootstrap 采用 revision 9，涵盖共享参数恢复、稳定分位数二分点和 Student-t 尾概率。
+能力指纹涵盖共享输入错误契约、实际尾概率及系数/协方差坐标恢复。
 
 `builtins/statistics/diagnostics/models` 接入共线性、Harman、NRI/IDI、残差/Cook、
 AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线性值或预算化的二元模型
@@ -97,12 +98,14 @@ AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线�
 不以向量长度代替地区对应关系。计算按权重地区顺序、时期首次出现顺序组织，
 观测结果恢复输入行序；地区效应保持权重顺序。密集权重、矩阵分解、似然 Hessian、
 物化输入和结构化输出合并预算准入，并向 SCI 传递取消和期限。结果复用现有报告页面。
+八个空间回归入口（含 Panel）使用 revision 6，涵盖共享参数恢复。
 
 `builtins/statistics/time_series/forecast` 注册时间序列分类的 16 个新增入口。
 共享物化路径按位置核对列长度，保留现有行顺序；SCI 接收取消和期限，工作区、预测长度、
 Markov 状态平方矩阵与结构化结果均在计算前按预算准入，不设置固定行数上限。
 Markov 恢复原始状态标签，时序图可省略时间列并使用从 1 开始的横坐标；
 显式时间须严格递增。时序图与相关图复用现有 SCI 绘图数据，其他入口返回结构化报告。
+Grey Prediction 和 Phillips–Perron 使用 revision 5，涵盖共享参数恢复。
 
 `builtins/statistics/causal/models` 适配新增计量与因果分析入口，复用共享列对齐、
 精确分组编码和有限结果序列化。Heckman 仅在未入选行允许空结果；其余输入不静默删行。
@@ -110,19 +113,21 @@ SUR 将方程自变量索引解析为中立列表，并按所有方程的总参�
 数值工作区、bootstrap 顺序重拟合、结构化输出与常驻输入合并准入，取消和期限传递给 SCI。
 GMM 使用 revision 8，涵盖 SCI 的响应尺度规范化及响应/自变量单位的联合坐标恢复；
 系数、协方差、观测结果和原工具变量矩仍沿用现有中立结果与有限值转换。
-RDD 和异质性分析使用 revision 6，复用 SCI 的共享 HC3 影响量累加器；
+RDD 和异质性分析使用 revision 7，复用 SCI 的共享 HC3 影响量累加器和参数恢复；
 有效加权杠杆率保留实际余量，未定义或非有限推断为科学计算失败，取消与期限保持原分类。
-PSM 使用 revision 7，SCI 按处理组排序得分并查询全部最近距离平局，
+PSM 使用 revision 8，SCI 按处理组排序得分并查询全部最近距离平局，
 复用均值索引，结果恢复输入行序；排序与均值索引由现有线性观测工作区预算覆盖。
-IPW、RA 和 AIPW 使用 revision 7，涵盖 IPW 先归一化权重再计算均值，
+IPW、RA 和 AIPW 使用 revision 8，涵盖共享参数恢复、IPW 先归一化权重再计算均值，
 以及共享 bootstrap 按系数量纲规范化在线矩、恢复单位并原位检查和对称化协方差；
 重拟合、结果单位、有限值和执行中断仍由现有 SCI/Runtime/Kernel 边界处理。
-Heckman 使用 revision 8，保留共享 bootstrap 和第二阶段拟合；sigma 使用残差与
+Heckman 使用 revision 9，第二阶段点估计直接恢复自变量单位，保留共享 bootstrap；sigma 使用残差与
 Mills 系数的共同尺度计算，rho 保留原单位比值与未定义参数失败，取消和期限传入受控扫描。
 SUR 使用 revision 8，在 SCI 的方程响应坐标中构造残差协方差和块 GLS 系统，
 完整系数协方差只恢复一次，方程推断使用同一结果；原单位输出、有限值与中断保持现有边界。
 GMM 和 SUR 的联合坐标映射由共享 Design 直接计算尺度比值，避免先求自变量倒数溢出；
 SUR 与 Heckman 复用借用列准备，现有工作区预算仍覆盖临时行选择和方程尺度。
+普通 Design 的点估计逐系数恢复，协方差在已有矩阵中恢复尺度和截距，
+减少密集矩阵工作量并避免自变量倒数的中间溢出；现有消费者预算继续覆盖该路径。
 SFA 使用 revision 7，在规范化响应坐标中拟合并恢复原单位及似然密度；目标函数逐行计算，
 条件效率复用 SCI 的稳定尾部比值。生产/成本均保留 `E[exp(-u)]` 与非正规边界失败。
 ATE/ATT 复用预算化结果解码，保留上游处理效应的方法、目标样本数及可空推断，
@@ -188,7 +193,7 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 预算和取消协议。普通事件列支持布尔或 0/1；竞争风险原因保留整数代码。
 观测时间、事件/治疗编码、计数过程区间、分组可辨识性和预测概率保持为数值输入错误；
 数组或模型布局不符保持为形状错误。预测期限、分箱/刻度数及迭代设置仍为参数错误。
-参数生存、Cox/计数过程及亚组使用 revision 9；分组曲线与 Log-rank 使用 revision 8；竞争风险、校准及
+参数生存使用 revision 10，Cox/计数过程及亚组使用 revision 9；分组曲线与 Log-rank 使用 revision 8；竞争风险、校准及
 决策曲线使用 revision 7，Cox PH 诊断使用 revision 6，列线图使用 revision 5。
 生存工作区分别计算设计宽度、矩阵维度和线性组元数据；受试者数和曲线组数不增加
 模型列数。Log-rank 保留组协方差预算，亚组治疗效应保留设计矩阵预算；竞争风险输出
@@ -260,7 +265,7 @@ native OLS/WLS/GLS models. Adapters share controlled materialization, budgets an
 finite-result encoding, then call `yss-sci-runtime::visualization`.
 Each result is one `plot.data` record; rendering does not run inside a kernel.
 Boxplot and violin use revision 6 for stable shared quantile midpoints; Delphi
-uses revision 5, and both mediation bootstrap kernels use revision 8.
+uses revision 5, and both mediation bootstrap kernels use revision 9.
 
 `KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明有序输入键及数量范围、实际参数键集合和输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
 
@@ -540,6 +545,7 @@ and inverse-inclusion-probability output preserve the source relation via existi
 series expressions. Estimator adapters account for fit, PSU score and covariance storage.
 Shared `regression_outputs` receives explicit predictor labels, excluding survey design
 columns from coefficient-axis names; complete observations remain paged relations.
+The three survey regression kernels use revision 6 for shared parameter restoration.
 
 `builtins/statistics/power` converts model-specific scalar parameters to neutral designs.
 There are no observation inputs; bounded report admission and cooperative scientific

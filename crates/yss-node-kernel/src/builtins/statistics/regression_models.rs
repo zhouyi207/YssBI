@@ -153,22 +153,13 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
                 std::num::NonZeroU32::new(
-                    1 + if matches!(
-                        method,
-                        "regression.stepwise" | "regression.hierarchical" | "regression.glm"
-                    ) {
-                        5
+                    1 + if method == "regression.glm" {
+                        6
                     } else if matches!(
                         method,
-                        "regression.curve"
-                            | "regression.threshold"
-                            | "workflow.regression.baseline"
-                            | "workflow.regression.univariate_multivariable"
-                            | "workflow.regression.grouped"
-                            | "transform.rcs"
+                        "regression.stepwise"
+                            | "regression.hierarchical"
                             | "regression.robust"
-                            | "regression.logit.multinomial"
-                            | "regression.logit.ordinal"
                             | "regression.logit.firth"
                             | "regression.poisson"
                             | "regression.negative_binomial"
@@ -183,15 +174,27 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                             | "regression.beta"
                             | "regression.fractional_response"
                     ) {
+                        5
+                    } else if matches!(
+                        method,
+                        "regression.curve"
+                            | "regression.threshold"
+                            | "workflow.regression.baseline"
+                            | "workflow.regression.univariate_multivariable"
+                            | "workflow.regression.grouped"
+                            | "transform.rcs"
+                            | "regression.logit.multinomial"
+                            | "regression.logit.ordinal"
+                            | "regression.ridge"
+                            | "regression.lasso"
+                            | "regression.pls"
+                    ) {
                         4
                     } else if matches!(
                         method,
                         "regression.nonlinear"
                             | "regression.nonlinear_formula"
                             | "regression.deming"
-                            | "regression.ridge"
-                            | "regression.lasso"
-                            | "regression.pls"
                     ) {
                         3
                     } else {

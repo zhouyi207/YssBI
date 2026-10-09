@@ -614,6 +614,14 @@ and selected-row workspaces after preparation. Its coordinate map accepts the
 response scale and forms response/predictor ratios directly, avoiding overflowing
 predictor reciprocals in GMM/SUR. Other model consumers use unit response scaling.
 The joint-unit regressions retain finite inference with subnormal predictors.
+For ordinary designs, `Design::raw` restores point coefficients by direct division
+in linear time, without a dense Jacobian or matrix/vector product. It scales the
+owned covariance entries and centers its intercept row/column in place in
+quadratic time. A normal scale product or ordered divisions preserve finite joint
+units and small cross-covariances without first forming predictor reciprocals.
+Heckman point-estimate and Gaussian GLM inference regressions cover subnormal
+predictors with small responses against the existing independent references.
+Composite parameter/response mappings continue to use the explicit Jacobian.
 
 `regression::models` owns controlled estimators over neutral numeric columns:
 Huber/Tukey M-estimation with MAD/H1 inference, Ridge/Lasso with an unpenalized
