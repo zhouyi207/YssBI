@@ -7364,6 +7364,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "pinyin_pro"
+version = "3.29.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6ef145a97b5cb42183eb967529942f003d2dd82a41f288027564d60beb99312"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "piper"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12793,7 +12802,10 @@ dependencies = [
 name = "yss-node-catalog"
 version = "0.1.0"
 dependencies = [
+ "pinyin_pro",
  "serde",
+ "unicode-casefold",
+ "unicode-normalization",
  "yss-data-contract",
  "yss-node-protocol",
  "yss-node-registry",

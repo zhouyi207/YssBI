@@ -60,6 +60,7 @@ pub enum ActivityItem {
         key: String,
         title: String,
         creation: NodeCreation,
+        search_text: Box<str>,
     },
     Command {
         id: &'static str,
@@ -396,6 +397,7 @@ fn catalog_rows(catalog: LocalizedCatalog) -> Vec<ActivityRow> {
                         key,
                         title: item.title.to_string(),
                         creation: item.creation.clone(),
+                        search_text: yss_node_catalog::catalog_search_text(item),
                     }),
                 });
             }

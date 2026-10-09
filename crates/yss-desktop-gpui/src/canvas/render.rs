@@ -2,12 +2,8 @@ use gpui::{
     Bounds, Context, IntoElement, MouseButton, Pixels, Render, Window, canvas, div, point,
     prelude::*, px, rgb,
 };
+use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Icon, IconName, Sizable};
-use gpui_component::{
-    button::{Button, ButtonVariants},
-    input::Input,
-};
-use yss_application::activity_panel::{ActivityItem, ActivityRowContent};
 use yss_graph_editor::{
     EditorGraphMutation,
     projection::{EditorNodeModel, EditorPortModel},
@@ -18,7 +14,7 @@ use super::{Gesture, GraphCanvas, commands::*, geometry};
 use crate::{appearance, assets::NativeIcon};
 
 impl Render for GraphCanvas {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let zoom = self.zoom;
         let offset = self.offset;
         let bounds_cell = self.bounds.clone();
@@ -104,9 +100,10 @@ impl Render for GraphCanvas {
                 view.emit_selection(cx);
                 cx.notify();
             }))
-            .on_action(cx.listener(|view, _: &CancelGesture, _, cx| {
+            .on_action(cx.listener(|view, _: &CancelGesture, window, cx| {
                 view.cancel_gesture();
                 view.palette = None;
+                window.focus(&view.focus, cx);
                 view.emit_selection(cx);
                 cx.notify();
             }))
@@ -248,7 +245,7 @@ impl Render for GraphCanvas {
                 )
             })
             .when(self.palette.is_some(), |view| {
-                view.child(self.render_palette(cx))
+                view.child(self.render_palette(window, cx))
             });
         div()
             .size_full()
@@ -455,10 +452,10 @@ impl GraphCanvas {
         }
     }
 
-    fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    fn render_palette(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let palette = self.palette.as_ref().expect("palette is open");
         let size = self.bounds.get().size;
-        let configuring = palette.configuration.is_some();
+        let configuring = palette.view.read(cx).configuring();
         let width = if configuring { 420. } else { 300. };
         let height = if configuring { 560. } else { 396. };
         let height = px(height).min(size.height);
@@ -472,93 +469,35 @@ impl GraphCanvas {
             .y
             .min((size.height - height).max(px(0.)))
             .max(px(0.));
-        let query = self.search.read(cx).value().to_lowercase();
-        let items = palette
-            .catalog
-            .iter()
-            .flat_map(|catalog| catalog.rows.iter())
-            .filter_map(|row| match &row.content {
-                ActivityRowContent::Item(ActivityItem::Node {
-                    available: true,
-                    key,
-                    title,
-                    creation,
-                }) if title.to_lowercase().contains(&query) => {
-                    Some((key.clone(), title.clone(), creation.clone()))
-                }
-                _ => None,
-            });
-        div()
-            .id("node-palette")
-            .absolute()
-            .left(x)
-            .top(y)
-            .w(px(width).min(size.width))
-            .h(height)
-            .p_2()
-            .rounded_md()
-            .bg(rgb(appearance::SURFACE_RAISED))
-            .border_1()
-            .border_color(rgb(appearance::BORDER))
-            .shadow_lg()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
-            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .when_some(palette.configuration.as_ref(), |body, form| {
-                body.child(form.clone())
-            })
-            .when(!configuring, |body| {
-                body.child(Input::new(&self.search).small())
-                    .child(
-                        gpui_component::checkbox::Checkbox::new("configure-before-creating")
-                            .label(crate::text::translate("canvas.nodePalette.configureFirst"))
-                            .checked(palette.configure_first)
-                            .on_click(cx.listener(|view, value: &bool, _, cx| {
-                                if let Some(palette) = &mut view.palette {
-                                    palette.configure_first = *value;
-                                    cx.notify();
-                                }
-                            })),
-                    )
-                    .when(palette.catalog.is_none(), |view| {
-                        view.child("加载兼容节点…")
-                    })
+        let origin = self.bounds.get().origin;
+        let view = palette.view.clone();
+        // A backdrop handles outside presses in the bubble phase, so child
+        // dropdowns can consume their own presses beyond the form's bounds.
+        gpui::deferred(
+            gpui::anchored().position(point(px(0.), px(0.))).child(
+                div()
+                    .id("node-palette-backdrop")
+                    .relative()
+                    .w(window.viewport_size().width)
+                    .h(window.viewport_size().height)
+                    .occlude()
+                    .on_any_mouse_down(cx.listener(|view, _, _, cx| {
+                        if let Some(palette) = &view.palette {
+                            palette.view.update(cx, |palette, cx| palette.dismiss(cx));
+                        }
+                        cx.stop_propagation();
+                    }))
                     .child(
                         div()
-                            .id("node-palette-items")
-                            .flex_1()
-                            .min_h_0()
-                            .overflow_y_scroll()
-                            .children(items.map(|(key, title, creation)| {
-                                div()
-                                    .id(gpui::SharedString::from(key))
-                                    .p_2()
-                                    .rounded_sm()
-                                    .text_sm()
-                                    .cursor_pointer()
-                                    .hover(|style| style.bg(rgb(appearance::SELECTED)))
-                                    .child(title.clone())
-                                    .on_click(cx.listener(move |view, _, window, cx| {
-                                        if view
-                                            .palette
-                                            .as_ref()
-                                            .is_some_and(|palette| palette.configure_first)
-                                        {
-                                            view.configure_node(
-                                                creation.clone(),
-                                                title.clone(),
-                                                window,
-                                                cx,
-                                            );
-                                        } else {
-                                            view.create_node(creation.clone(), cx);
-                                        }
-                                    }))
-                            })),
-                    )
-            })
+                            .absolute()
+                            .left(origin.x + x)
+                            .top(origin.y + y)
+                            .w(px(width).min(size.width))
+                            .h(height)
+                            .child(view),
+                    ),
+            ),
+        )
+        .with_priority(1)
     }
 }

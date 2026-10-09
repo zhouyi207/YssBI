@@ -58,10 +58,13 @@ impl GraphCanvas {
         version: GraphEditVersion,
         cx: &mut Context<Self>,
     ) {
-        let creation = self
-            .palette
-            .as_ref()
-            .and_then(|palette| palette.configuration.clone());
+        let creation = self.palette.as_ref().map(|palette| palette.view.clone());
+        if self.busy {
+            if let Some(creation) = creation {
+                creation.update(cx, |creation, cx| creation.creation_failed(cx));
+            }
+            return;
+        }
         self.submit_command(GraphCommand::Edit(mutation), Some(version), creation, cx);
     }
 
@@ -69,7 +72,7 @@ impl GraphCanvas {
         &mut self,
         command: GraphCommand,
         version: Option<GraphEditVersion>,
-        creation: Option<gpui::Entity<crate::workbench::NodeCreationView>>,
+        creation: Option<gpui::Entity<super::palette::NodePalette>>,
         cx: &mut Context<Self>,
     ) {
         if self.busy {
@@ -150,8 +153,8 @@ impl GraphCanvas {
                 match result {
                     Ok(response) => {
                         view.install_response(response, cx);
-                        if creation.is_some() {
-                            view.palette = None;
+                        if let Some(creation) = &creation {
+                            creation.update(cx, |creation, cx| creation.creation_succeeded(cx));
                         }
                     }
                     Err(error) => {
@@ -289,16 +292,12 @@ impl GraphCanvas {
         descriptor: yss_node_catalog::NodeCreation,
         cx: &mut Context<Self>,
     ) {
-        let (position, connect_from) = self
-            .palette
-            .as_ref()
-            .map(|palette| (palette.world, palette.source.clone()))
-            .unwrap_or_else(|| (self.world(self.bounds.get().center()), None));
+        let position = self.world(self.bounds.get().center());
         self.submit(
             GraphCommand::Edit(EditorGraphMutation::CreateNode {
                 descriptor,
                 position,
-                connect_from,
+                connect_from: None,
                 parameters: Default::default(),
                 port_counts: Default::default(),
                 user_label: None,

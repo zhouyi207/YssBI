@@ -185,7 +185,9 @@ impl Workbench {
             }
             if document.panel_id == "nodes" {
                 for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {
-                    graph.update(cx, |graph, cx| graph.set_catalog(document.clone(), cx));
+                    graph.update(cx, |graph, cx| {
+                        graph.set_catalog(document.clone(), crate::text::locale(), cx)
+                    });
                 }
             }
         }

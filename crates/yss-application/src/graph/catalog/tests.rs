@@ -905,8 +905,10 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     assert!(snapshot.activity_panels[1].rows.iter().any(|row| matches!(
         &row.content,
         crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::Node {
-            creation: yss_node_catalog::NodeCreation::ResourceBound { resource_path, .. }, ..
-        }) if resource_path.as_str() == function_path.as_str()
+            creation, search_text, ..
+        }) if creation == &resource.creation
+            && search_text.as_ref() == yss_node_catalog::catalog_search_text(resource).as_ref()
+            && search_text.contains("sales report")
     )));
 }
 

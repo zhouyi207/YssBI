@@ -356,6 +356,20 @@
 - `cargo test -p yss-application --lib graph::catalog::tests::node_creation_form_is_read_only_and_preserves_protocol_defaults_and_conditions -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::grouped_initial_ports_are_offered_and_created_as_complete_members -- --exact` 各实际运行 1 项并通过，复用现有只读/条件/默认值及完整成员组回归。
 - `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。25 个 Rust 文件局部格式、双语键/参数、文档元信息/相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。未运行全工作区验证；累计审查 151/265 项。
 
+
+### 节点菜单的分类、检索与创建生命周期
+
+- 逐项阅读 NodePalette、LocalizedCatalogTreeRow 的菜单用法、目录浏览投影、搜索文档、useLocalizedNodeCatalog/useCompatibleNodeCatalog 及对应参考测试；本批计入 NodePalette，共用侧栏行组件继续独立审查。
+- `canvas/palette` 接管一次打开的搜索、分类展开、键盘活动项、兼容目录任务和配置子视图。`browser` 只保存 Application 行索引并在输入/目录/展开变化时重建，`render` 使用 GPUI `uniform_list`；不逐帧归一化全部名称或克隆全部创建描述。
+- Node Catalog 复用 `unicode-normalization`、`unicode-casefold` 与带词组字典的 `pinyin_pro`，删除手写宽度/音标/拉丁字符表。Application 原活动面板携带同一条目的只读检索文本，覆盖标题、别名、技术术语、后端关键词、资源名、类型 ID、全拼和首字母；不新建目录 store，也不改创建描述。
+- 分类默认展开，支持单项及全部收放；搜索时展开匹配项祖先并禁用分类操作，清空后恢复折叠。不可用节点保留置灰提示，方向键只选择可用项并滚动到当前项；Enter 使用原描述，组合输入期间不处理菜单选择。
+- 普通目录复用现有快照，兼容目录仍调用 Application；读取按实体、代次、语言及捕获图版本接纳。加载/错误/重试有独立展示，新语言读取失败不接纳旧语言条目。默认快速创建，配置复用上批 NodeCreationView；两条路径共用原图事务，失败保留菜单，成功关闭并恢复画布焦点。背景层在冒泡阶段处理外部点击，让下拉菜单处理自己的输入。
+- 临时原生预览通过 `Window.dispatch_event`/`dispatch_keystroke` 注入输入，核对全拼 `chong fu`、首字母 `cfclfc`、类型 ID 和资源名查询；511 行投影中键盘活动项滚动可见、方向键/Enter 创建原节点、全部折叠与清空搜索恢复、不可用 KNN 不创建、配置返回保留搜索及开关、语言刷新、图版本变化禁用、配置/列表 Escape 和外部关闭。配置页创建及函数资源创建仍进入原描述与参数事务。
+- 预览向菜单注入合法格式但未注册的创建类型，原后端拒绝时图版本/节点/连线不变，输入与错误保留；重新读取真实目录后快速创建连线成功，一次 Undo 同时撤销节点和连线。无效源端口触发目录错误，重试再次调用原读取；延迟两秒的目录回复不能恢复已经关闭的菜单。预览使用独立临时项目，未显式保存。
+- L2：`cargo test -p yss-node-catalog --lib` 实际运行 20 项通过；`cargo test -p yss-application --lib graph::catalog::tests::localized_catalog_returns_resources_from_the_same_coherent_snapshot -- --exact` 实际运行 1 项通过。新增搜索回归并扩展同一快照的资源描述/搜索投影断言，不新增 UI 单元测试。
+- `cargo clippy -p yss-node-catalog -p yss-application --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。复用缓存前启动的重复冷编译已取消，不计为通过。17 个 Rust 文件局部格式、11 个双语键/参数、4 份文档元信息、335 条工作区相对链接（独立提交内容 330 条）、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过；未运行全工作区验证。
+- 物理键鼠/IME、多窗口、完整项目切换、跨边界复合参数菜单与大资源目录压力验收仍开放；临时预览入口不提交。本批累计审查 152/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -583,7 +597,7 @@
 | [modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/NodePalette.tsx](../../react/src/modules/graph-editor/internal/ui/NodePalette.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/NodePalette.tsx](../../react/src/modules/graph-editor/internal/ui/NodePalette.tsx) | 迁移：完整目录检索与分类浏览，创建复用原图事务 | `canvas/palette` 保存索引、输入与读取代次；Catalog 生成全拼/首字母搜索，GPUI 虚拟列表只绘制可见行 | 分类/查询/键盘、不可用项、配置返回、错误重试、过期图及关闭后迟到回复已预览核对；物理 IME、完整项目切换及压力验收开放 |
 | [modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/DefaultNodeLayout.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

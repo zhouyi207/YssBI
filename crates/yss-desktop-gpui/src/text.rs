@@ -27,6 +27,21 @@ pub fn translate(key: &str) -> String {
     value.as_str().unwrap_or(key).to_owned()
 }
 
+pub fn input_placeholder(
+    input: &gpui::Entity<gpui_component::input::InputState>,
+    key: &str,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) {
+    let placeholder = translate(key);
+    if input.read(cx).presentation().placeholder().as_ref() != placeholder.as_str() {
+        let placeholder = placeholder.to_owned();
+        input.update(cx, |input, cx| {
+            input.set_placeholder(placeholder, window, cx)
+        });
+    }
+}
+
 /// Interpolate once: resource names and user input containing {{braces}} remain literal.
 pub fn format(key: &str, arguments: &[(&str, String)]) -> String {
     let template = translate(key);

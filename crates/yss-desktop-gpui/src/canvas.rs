@@ -1,4 +1,3 @@
-use gpui::AppContext;
 mod authoring;
 mod catalog;
 mod commands;
@@ -6,6 +5,7 @@ mod connections;
 mod constant_drag;
 mod execution;
 mod geometry;
+mod palette;
 mod render;
 mod toolbar;
 
@@ -20,10 +20,7 @@ use gpui::{
     App, Bounds, Context, EventEmitter, FocusHandle, Focusable, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollWheelEvent, Window, point, px,
 };
-use gpui_component::{
-    dock::{BasePanel, Panel, PanelEvent},
-    input::InputState,
-};
+use gpui_component::dock::{BasePanel, Panel, PanelEvent};
 use yss_application::activity_panel::ActivityPanelDocument;
 use yss_graph_document::{NodeId, NodePosition, PortAddress};
 use yss_graph_editor::projection::EditorProjectionModel;
@@ -76,18 +73,15 @@ enum Gesture {
 
 struct Palette {
     point: Point<Pixels>,
-    world: NodePosition,
-    source: Option<PortAddress>,
-    catalog: Option<Arc<ActivityPanelDocument>>,
-    configure_first: bool,
-    configuration: Option<gpui::Entity<crate::workbench::NodeCreationView>>,
-    configuration_subscription: Option<gpui::Subscription>,
+    view: gpui::Entity<palette::NodePalette>,
+    _subscription: gpui::Subscription,
 }
 
 pub struct GraphCanvas {
     pub(super) graph: OpenedGraph,
     services: Arc<NativeServices>,
     catalog: Arc<ActivityPanelDocument>,
+    catalog_language: String,
     focus: FocusHandle,
     offset: Point<Pixels>,
     zoom: f32,
@@ -97,7 +91,6 @@ pub struct GraphCanvas {
     selected: BTreeSet<NodeId>,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     palette: Option<Palette>,
-    search: gpui::Entity<InputState>,
     busy: bool,
     refreshing: bool,
     refresh_pending: bool,
@@ -105,7 +98,6 @@ pub struct GraphCanvas {
         Option<BTreeMap<PortAddress, yss_graph_editor::projection::ConnectionDecision>>,
     error: Option<String>,
     execution: execution::ExecutionView,
-    _subscriptions: Vec<gpui::Subscription>,
 }
 
 impl GraphCanvas {
@@ -113,14 +105,10 @@ impl GraphCanvas {
         services: Arc<NativeServices>,
         graph: OpenedGraph,
         catalog: Arc<ActivityPanelDocument>,
+        catalog_language: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("搜索节点…"));
-        let subscription = cx.subscribe(
-            &search,
-            |_, _, _: &gpui_component::input::InputEvent, cx| cx.notify(),
-        );
         let connection_layer = Rc::new(RefCell::new(connections::ConnectionLayer::new(
             &graph.projection,
         )));
@@ -128,6 +116,7 @@ impl GraphCanvas {
             graph,
             services,
             catalog,
+            catalog_language,
             focus: cx.focus_handle(),
             offset: point(px(40.), px(40.)),
             zoom: 1.,
@@ -137,14 +126,12 @@ impl GraphCanvas {
             selected: BTreeSet::new(),
             bounds: Rc::new(Cell::new(Bounds::default())),
             palette: None,
-            search,
             busy: false,
             refreshing: false,
             refresh_pending: false,
             connection_candidates: None,
             error: None,
             execution: Default::default(),
-            _subscriptions: vec![subscription],
         };
         view.reset_view();
         cx.defer_in(window, |view, _, cx| view.resync_execution(cx));
@@ -167,14 +154,18 @@ impl GraphCanvas {
         self.busy
     }
 
-    pub fn set_catalog(&mut self, catalog: Arc<ActivityPanelDocument>, cx: &mut Context<Self>) {
+    pub fn set_catalog(
+        &mut self,
+        catalog: Arc<ActivityPanelDocument>,
+        language: &str,
+        cx: &mut Context<Self>,
+    ) {
         self.catalog = catalog;
-        if let Some(form) = self
-            .palette
-            .as_ref()
-            .and_then(|palette| palette.configuration.as_ref())
-        {
-            form.update(cx, |form, cx| form.localize_title(&self.catalog, cx));
+        self.catalog_language = language.to_owned();
+        if let Some(palette) = &self.palette {
+            palette.view.update(cx, |palette, cx| {
+                palette.catalog_changed(self.catalog.clone(), cx)
+            });
         }
         cx.notify();
     }

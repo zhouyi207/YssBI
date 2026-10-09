@@ -148,7 +148,9 @@ impl Workbench {
             .cloned()?;
         let path = graph.projection.graph_path.as_str().to_owned();
         let services = self.services.clone();
-        let canvas = cx.new(|cx| GraphCanvas::new(services, graph, catalog, window, cx));
+        let catalog_language = crate::text::locale().to_owned();
+        let canvas =
+            cx.new(|cx| GraphCanvas::new(services, graph, catalog, catalog_language, window, cx));
         self.subscriptions.push(cx.subscribe_in(
             &canvas,
             window,

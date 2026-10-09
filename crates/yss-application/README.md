@@ -56,6 +56,11 @@ Harness 与界面意图共用 `ProjectResourceRef`；提交通过 Harness gatewa
 | 查询与应用投影       | 组织资源目录、数据库页面、图表数据、结果报告和活动面板，并检查查询结果是否仍有效 | [catalog_query](src/graph/catalog.rs)、[result_query](src/graph/results/mod.rs)、[chart_plot](src/chart/query.rs)、[activity_panel](src/activity_panel.rs) |
 | 自动化与插件接入     | 校验调用上下文，提供图操作、数据快照和插件结果提交能力                           | [automation](src/automation.rs)、[plugins](src/plugins.rs)                                                                                                 |
 
+节点目录与兼容节点目录共用 `activity_panel::nodes_activity_panel_from_catalog` 的只读树投影。
+每个节点行保留完整创建描述、可用性和由 [Node Catalog](../yss-node-catalog/README.md) 生成的 `search_text`；
+资源身份仍来自同一 Project 快照。宿主持有该投影并管理搜索、展开和选择，不复制另一份节点目录，
+不通过标题重建创建描述。兼容查询仍使用捕获版本的当前图，创建与连接由原图编辑事务校验。
+
 ### 桌面初始化
 
 [ApplicationServices::initialize](src/runtime.rs) 接收 `ApplicationPaths`（应用数据目录与示例目录）和 Harness 端口组装回调，返回拥有 ApplicationState、项目登记、Harness、Plugin Manager 和 watcher 的服务集合。它不访问窗口或 Tauri。宿主保持这些服务和异步执行器存活，并在 UI 线程以外执行阻塞业务调用。

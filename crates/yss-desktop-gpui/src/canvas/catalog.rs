@@ -1,9 +1,6 @@
+use super::palette::{NodePalette, PaletteEvent, PaletteTarget};
 use super::{Gesture, GraphCanvas, Palette};
 use gpui::{AppContext, Context, Pixels, Point, Window};
-use std::sync::Arc;
-use yss_application::{
-    activity_panel::nodes_activity_panel_from_catalog, graph::catalog::CompatibleCatalogRequest,
-};
 use yss_graph_document::PortAddress;
 use yss_graph_editor::projection::ConnectionIntent;
 
@@ -51,143 +48,61 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.search
-            .update(cx, |input, cx| input.set_value("", window, cx));
-        self.palette = Some(Palette {
-            point: point - self.bounds.get().origin,
-            world: self.world(point),
-            catalog: source.is_none().then(|| self.catalog.clone()),
-            source: source.clone(),
-            configure_first: false,
-            configuration: None,
-            configuration_subscription: None,
-        });
-        let Some(source) = source else {
-            return;
-        };
-        let project = self.graph.project.clone();
-        let path = self.graph.projection.graph_path.clone();
-        let version = self.graph.editing.version;
-        let query = source.clone();
-        let task = self.services.run(move |services| {
-            let document = services
-                .application
-                .current_graph_document(&project, &path, version)?;
-            let catalog =
-                services
-                    .application
-                    .compatible_node_catalog(CompatibleCatalogRequest::new(
-                        project.clone(),
-                        path.clone(),
-                        (*document).clone(),
-                        query,
-                        "zh-CN",
-                    ))?;
-            services
-                .application
-                .current_graph_document(&project, &path, version)?;
-            Ok(Arc::new(nodes_activity_panel_from_catalog(catalog)))
-        });
-        cx.spawn(async move |view, cx| {
-            let result = task
-                .await
-                .map_err(anyhow::Error::from)
-                .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
-                if view.graph.editing.version != version {
-                    return;
-                }
-                let Some(palette) = view
-                    .palette
-                    .as_mut()
-                    .filter(|palette| palette.source.as_ref() == Some(&source))
-                else {
-                    return;
-                };
-                match result {
-                    Ok(catalog) => palette.catalog = Some(catalog),
-                    Err(_error) => {
-                        tracing::debug!(
-                            code = "native_compatible_node_catalog_rejected",
-                            "Native compatible node catalog rejected"
-                        );
-                        view.palette = None;
-                        view.error = Some("当前端口无法创建连接，请检查图状态。".into());
-                    }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-}
-
-impl GraphCanvas {
-    pub(super) fn configure_node(
-        &mut self,
-        descriptor: yss_node_catalog::NodeCreation,
-        title: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
         if self.busy {
             return;
         }
-        let Some(palette) = &self.palette else {
-            return;
-        };
-        let position = palette.world;
-        let connect_from = palette.source.clone();
+        let position = self.world(point);
         let version = self.graph.editing.version;
-        let target = crate::workbench::CreationTarget {
+        let target = PaletteTarget {
             graph: cx.entity().downgrade(),
             project: self.graph.project.clone(),
+            path: self.graph.projection.graph_path.clone(),
             version,
-            descriptor: descriptor.clone(),
-            title,
+            source: source.clone(),
         };
-        let form = cx.new(|cx| {
-            crate::workbench::NodeCreationView::new(self.services.clone(), target, window, cx)
-        });
-        let id = form.entity_id();
-        let subscription = cx.subscribe(&form, move |view, _, event, cx| {
-            if view
-                .palette
-                .as_ref()
-                .and_then(|palette| palette.configuration.as_ref())
-                .is_none_or(|form| form.entity_id() != id)
-            {
-                return;
-            }
-            match event {
-                crate::workbench::CreationEvent::Back => {
-                    let palette = view.palette.as_mut().expect("current palette");
-                    palette.configuration = None;
-                    palette.configuration_subscription = None;
-                    cx.notify();
+        let catalog = (source.is_none() && self.catalog_language == crate::text::locale())
+            .then(|| self.catalog.clone());
+        let palette =
+            cx.new(|cx| NodePalette::new(self.services.clone(), target, catalog, window, cx));
+        let subscription =
+            cx.subscribe_in(&palette, window, move |view, palette, event, window, cx| {
+                if view
+                    .palette
+                    .as_ref()
+                    .is_none_or(|current| current.view != *palette)
+                {
+                    return;
                 }
-                crate::workbench::CreationEvent::Create {
-                    parameters,
-                    port_counts,
-                } => {
-                    view.submit_creation(
+                match event {
+                    PaletteEvent::ConfigurationChanged => {}
+                    PaletteEvent::Dismiss => {
+                        view.palette = None;
+                        window.focus(&view.focus, cx);
+                    }
+                    PaletteEvent::Create {
+                        descriptor,
+                        parameters,
+                        port_counts,
+                    } => view.submit_creation(
                         yss_graph_editor::EditorGraphMutation::CreateNode {
                             descriptor: descriptor.clone(),
                             position,
-                            connect_from: connect_from.clone(),
+                            connect_from: source.clone(),
                             parameters: parameters.clone(),
                             port_counts: port_counts.clone(),
                             user_label: None,
                         },
                         version,
                         cx,
-                    );
+                    ),
                 }
-            }
+                cx.notify();
+            });
+        self.palette = Some(Palette {
+            point: point - self.bounds.get().origin,
+            view: palette,
+            _subscription: subscription,
         });
-        let palette = self.palette.as_mut().expect("palette open");
-        palette.configuration = Some(form);
-        palette.configuration_subscription = Some(subscription);
         cx.notify();
     }
 }

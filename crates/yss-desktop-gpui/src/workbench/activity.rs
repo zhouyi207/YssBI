@@ -264,6 +264,7 @@ impl Render for ActivityPanel {
                     key: _,
                     title,
                     creation,
+                    ..
                 }) => {
                     let node_type = match creation {
                         NodeCreation::Static { node_type_id }

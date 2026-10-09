@@ -9,5 +9,8 @@ publish = false
 yss-data-contract = { path = "../yss-data-contract" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 serde.workspace = true
+pinyin_pro.workspace = true
+unicode-normalization.workspace = true
+unicode-casefold.workspace = true
 yss-node-protocol = { path = "../yss-node-protocol" }
 yss-node-registry = { path = "../yss-node-registry" }

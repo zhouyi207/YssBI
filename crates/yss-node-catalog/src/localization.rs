@@ -524,81 +524,8 @@ fn locale_chain(locale: &str) -> Vec<String> {
     chain
 }
 
-fn normalize_search_text(value: &str) -> Box<str> {
-    let mut output = String::with_capacity(value.len());
-    let mut separated = true;
-    for original in value.chars() {
-        if is_combining_mark(original) {
-            continue;
-        }
-        let folded = fold_width(original);
-        if let Some(replacement) = fold_latin_diacritic(folded) {
-            push_search_char(&mut output, replacement, &mut separated);
-            continue;
-        }
-        if folded == 'ß' || folded == 'ẞ' {
-            push_search_char(&mut output, 's', &mut separated);
-            push_search_char(&mut output, 's', &mut separated);
-            continue;
-        }
-        for character in folded.to_lowercase() {
-            push_search_char(&mut output, character, &mut separated);
-        }
-    }
-    output.trim_end().into()
-}
-
 fn search<'a>(parts: impl IntoIterator<Item = &'a str>) -> Box<str> {
-    normalize_search_text(
-        &parts
-            .into_iter()
-            .filter(|part| !part.is_empty())
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
-}
-
-fn push_search_char(output: &mut String, character: char, separated: &mut bool) {
-    if character.is_alphanumeric() || character == '_' {
-        output.push(character);
-        *separated = false;
-    } else if !*separated {
-        output.push(' ');
-        *separated = true;
-    }
-}
-
-fn fold_width(character: char) -> char {
-    match character {
-        '\u{3000}' => ' ',
-        '\u{ff01}'..='\u{ff5e}' => match char::from_u32(character as u32 - 0xfee0) {
-            Some(folded) => folded,
-            None => character,
-        },
-        _ => character,
-    }
-}
-
-fn is_combining_mark(character: char) -> bool {
-    ('\u{0300}'..='\u{036f}').contains(&character)
-        || ('\u{1ab0}'..='\u{1aff}').contains(&character)
-        || ('\u{1dc0}'..='\u{1dff}').contains(&character)
-        || ('\u{20d0}'..='\u{20ff}').contains(&character)
-        || ('\u{fe20}'..='\u{fe2f}').contains(&character)
-}
-
-fn fold_latin_diacritic(character: char) -> Option<char> {
-    Some(match character {
-        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => 'a',
-        'Ç' | 'ç' => 'c',
-        'È' | 'É' | 'Ê' | 'Ë' | 'è' | 'é' | 'ê' | 'ë' => 'e',
-        'Ì' | 'Í' | 'Î' | 'Ï' | 'ì' | 'í' | 'î' | 'ï' => 'i',
-        'Ñ' | 'ñ' => 'n',
-        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => 'o',
-        'Ù' | 'Ú' | 'Û' | 'Ü' | 'ù' | 'ú' | 'û' | 'ü' => 'u',
-        'Ý' | 'Ÿ' | 'ý' | 'ÿ' => 'y',
-        _ => return None,
-    })
+    crate::normalize_catalog_search_text(&parts.into_iter().collect::<Vec<_>>().join(" "))
 }
 
 pub(crate) use Message::{Aliases, Text};
