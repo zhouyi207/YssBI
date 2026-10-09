@@ -19,6 +19,7 @@ gpui-base = "=0.7.1"
 gpui-kit-assets = "=0.7.1"
 yss-application = { path = "../yss-application" }
 yss-graph-editor = { path = "../yss-graph-editor" }
+yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-graph-diagnostics = { path = "../yss-graph-diagnostics" }
 yss-graph-execution = { path = "../yss-graph-execution" }
 yss-node-kernel = { path = "../yss-node-kernel" }

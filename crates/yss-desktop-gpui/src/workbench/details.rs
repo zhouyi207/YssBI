@@ -237,16 +237,23 @@ impl DetailsPanel {
         }
         let mut fields = if same_node {
             std::mem::take(&mut self.fields)
+                .into_iter()
+                .map(|field| (field.model.key.clone(), field))
+                .collect::<std::collections::BTreeMap<_, _>>()
         } else {
-            vec![]
+            std::collections::BTreeMap::new()
         };
         self.fields = node
             .iter()
             .flat_map(|node| node.parameter_groups.iter())
             .flat_map(|group| group.parameters.iter())
             .map(|parameter| {
-                if let Some(index) = fields.iter().position(|field| field.model == *parameter) {
-                    fields.remove(index)
+                if let Some(mut field) = fields
+                    .remove(&parameter.key)
+                    .filter(|field| field.accepts_projection(parameter))
+                {
+                    field.model = parameter.clone();
+                    field
                 } else {
                     ParameterField::new(parameter.clone(), window, cx)
                 }
@@ -328,6 +335,10 @@ impl DetailsPanel {
         let node_id = node.node_id;
         let field = &mut self.fields[index];
         field.error = None;
+        if field.model.value.as_ref() == Some(&value) && !value.is_null() {
+            cx.notify();
+            return;
+        }
         let key = field.model.key.clone();
         self.submit(
             GraphCommand::SetParameter {

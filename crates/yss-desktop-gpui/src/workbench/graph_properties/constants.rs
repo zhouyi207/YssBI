@@ -173,7 +173,7 @@ impl GraphProperties {
         let names = self.names();
         let name = (1..)
             .map(|number| format!("常量{number}"))
-            .find(|name| names.iter().all(|(_, existing)| existing != name))
+            .find(|name| names.clone().all(|(_, existing)| existing != name))
             .expect("finite constants list");
         let id = ConstantId::new();
         let constant = GraphConstant {

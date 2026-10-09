@@ -12498,6 +12498,7 @@ dependencies = [
  "yss-database-schema",
  "yss-dataset-profile",
  "yss-filesystem",
+ "yss-graph-analysis-contract",
  "yss-graph-diagnostics",
  "yss-graph-document",
  "yss-graph-editor",

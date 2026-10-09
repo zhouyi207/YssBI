@@ -1,97 +1,99 @@
-//! Bounded pages for text and numeric series parameter drafts.
+//! Bounded series pages reuse the same draft for input, reordering and submission.
+mod draft;
 use super::{DetailsPanel, ParameterDraft, controls};
-use gpui::{AnyElement, Context, Entity, IntoElement, div, prelude::*};
+use crate::text::translate;
+pub(super) use draft::ListDraft;
+use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use gpui_component::{
-    Disableable, IconName, Sizable,
+    Disableable, Sizable,
     button::{Button, ButtonVariants},
-    input::{Input, InputState},
+    input::Input,
 };
+use gpui_kit_assets::IconName;
 
 impl DetailsPanel {
-    pub(super) fn render_list_parameter(
+    pub(in crate::workbench::details::parameters) fn render_list_parameter(
         &self,
         index: usize,
-        rows: &[Entity<InputState>],
-        page: &usize,
+        draft: &ListDraft,
         busy: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let epoch = self.epoch;
-        let page = (*page).min(rows.len().saturating_sub(1) / 25);
+        let page = draft.page;
+        let pages = draft.pages();
+        let values = div()
+            .id(("series-values", index))
+            .max_h(px(256.))
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .children(draft.visible().map(|(row, input)| {
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(div().text_xs().child((row + 1).to_string()))
+                    .child(Input::new(input).small().flex_1().min_w_0().disabled(busy))
+                    .children(
+                        [
+                            (-1, IconName::ChevronUp, "conversion.moveUp"),
+                            (1, IconName::ChevronDown, "conversion.moveDown"),
+                        ]
+                        .into_iter()
+                        .map(|(direction, icon, label)| {
+                            Button::new(gpui::SharedString::from(format!(
+                                "series-move-{index}-{row}-{direction}"
+                            )))
+                            .small()
+                            .ghost()
+                            .icon(icon)
+                            .tooltip(translate(label))
+                            .disabled(
+                                busy || (direction < 0 && row == 0)
+                                    || (direction > 0 && row + 1 == draft.len()),
+                            )
+                            .on_click(cx.listener(
+                                move |view, _, window, cx| {
+                                    if view.accepts_input(epoch, cx)
+                                        && let ParameterDraft::List(draft) =
+                                            &mut view.fields[index].draft
+                                    {
+                                        draft.move_row(row, direction, window, cx);
+                                        cx.notify();
+                                    }
+                                },
+                            ))
+                        }),
+                    )
+                    .child(
+                        Button::new(gpui::SharedString::from(format!(
+                            "series-remove-{index}-{row}"
+                        )))
+                        .small()
+                        .ghost()
+                        .icon(IconName::Minus)
+                        .tooltip(translate("conversion.removeValue"))
+                        .disabled(busy)
+                        .on_click(cx.listener(
+                            move |view, _, window, cx| {
+                                if view.accepts_input(epoch, cx)
+                                    && let ParameterDraft::List(draft) =
+                                        &mut view.fields[index].draft
+                                {
+                                    draft.remove(row, window, cx);
+                                    cx.notify();
+                                }
+                            },
+                        )),
+                    )
+            }));
         div()
             .flex()
             .flex_col()
             .gap_2()
-            .children(
-                rows.iter()
-                    .enumerate()
-                    .skip(page * 25)
-                    .take(25)
-                    .map(|(row, input)| {
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(Input::new(input).small().flex_1().min_w_0().disabled(busy))
-                            .child(
-                                Button::new(gpui::SharedString::from(format!(
-                                    "list-up-{index}-{row}"
-                                )))
-                                .small()
-                                .ghost()
-                                .icon(IconName::ChevronUp)
-                                .tooltip("上移")
-                                .disabled(busy || row == 0)
-                                .on_click(cx.listener(
-                                    move |view, _, _, cx| {
-                                        if view.accepts_input(epoch, cx) {
-                                            view.move_list_value(index, row, -1, cx);
-                                        }
-                                    },
-                                )),
-                            )
-                            .child(
-                                Button::new(gpui::SharedString::from(format!(
-                                    "list-down-{index}-{row}"
-                                )))
-                                .small()
-                                .ghost()
-                                .icon(IconName::ChevronDown)
-                                .tooltip("下移")
-                                .disabled(busy || row + 1 == rows.len())
-                                .on_click(cx.listener(
-                                    move |view, _, _, cx| {
-                                        if view.accepts_input(epoch, cx) {
-                                            view.move_list_value(index, row, 1, cx);
-                                        }
-                                    },
-                                )),
-                            )
-                            .child(
-                                Button::new(gpui::SharedString::from(format!(
-                                    "list-remove-{index}-{row}"
-                                )))
-                                .small()
-                                .ghost()
-                                .icon(IconName::Minus)
-                                .disabled(busy)
-                                .on_click(cx.listener(
-                                    move |view, _, _, cx| {
-                                        if !view.accepts_input(epoch, cx) {
-                                            return;
-                                        }
-                                        if let ParameterDraft::List { rows, .. } =
-                                            &mut view.fields[index].draft
-                                            && row < rows.len()
-                                        {
-                                            rows.remove(row);
-                                        }
-                                        cx.notify();
-                                    },
-                                )),
-                            )
-                    }),
-            )
+            .child(values)
             .child(
                 div()
                     .flex()
@@ -102,59 +104,59 @@ impl DetailsPanel {
                             .small()
                             .ghost()
                             .icon(IconName::Plus)
-                            .label("添加值")
+                            .label(translate("conversion.addValue"))
                             .disabled(busy)
                             .on_click(cx.listener(move |view, _, window, cx| {
-                                if !view.accepts_input(epoch, cx) {
-                                    return;
-                                }
-                                if let ParameterDraft::List { rows, page, .. } =
-                                    &mut view.fields[index].draft
+                                if view.accepts_input(epoch, cx)
+                                    && let ParameterDraft::List(draft) =
+                                        &mut view.fields[index].draft
                                 {
-                                    rows.push(cx.new(|cx| InputState::new(window, cx)));
-                                    *page = rows.len().saturating_sub(1) / 25;
+                                    draft.add(window, cx);
+                                    cx.notify();
                                 }
-                                cx.notify();
                             })),
                     )
                     .child(
                         controls::apply(("list-apply", index), busy).on_click(cx.listener(
                             move |view, _, _, cx| {
                                 if view.accepts_input(epoch, cx) {
-                                    view.apply_parameter(index, cx)
+                                    view.apply_parameter(index, cx);
                                 }
                             },
                         )),
                     )
-                    .when(page > 0, |view| {
-                        view.child(
+                    .when(pages > 1, |bar| {
+                        bar.child(
                             Button::new(("list-prev", index))
                                 .small()
                                 .ghost()
                                 .icon(IconName::ChevronLeft)
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                                .tooltip(translate("conversion.previousValues"))
+                                .disabled(busy || page == 0)
+                                .on_click(cx.listener(move |view, _, window, cx| {
                                     if view.accepts_input(epoch, cx)
-                                        && let ParameterDraft::List { page, .. } =
+                                        && let ParameterDraft::List(draft) =
                                             &mut view.fields[index].draft
                                     {
-                                        *page = page.saturating_sub(1);
+                                        draft.show_page(page.saturating_sub(1), window, cx);
                                         cx.notify();
                                     }
                                 })),
                         )
-                    })
-                    .when((page + 1) * 25 < rows.len(), |view| {
-                        view.child(
+                        .child(div().text_xs().child(format!("{} / {pages}", page + 1)))
+                        .child(
                             Button::new(("list-next", index))
                                 .small()
                                 .ghost()
                                 .icon(IconName::ChevronRight)
-                                .on_click(cx.listener(move |view, _, _, cx| {
+                                .tooltip(translate("conversion.nextValues"))
+                                .disabled(busy || page + 1 == pages)
+                                .on_click(cx.listener(move |view, _, window, cx| {
                                     if view.accepts_input(epoch, cx)
-                                        && let ParameterDraft::List { page, .. } =
+                                        && let ParameterDraft::List(draft) =
                                             &mut view.fields[index].draft
                                     {
-                                        *page += 1;
+                                        draft.show_page(page + 1, window, cx);
                                         cx.notify();
                                     }
                                 })),
@@ -162,23 +164,5 @@ impl DetailsPanel {
                     }),
             )
             .into_any_element()
-    }
-
-    fn move_list_value(
-        &mut self,
-        index: usize,
-        row: usize,
-        direction: isize,
-        cx: &mut Context<Self>,
-    ) {
-        if let ParameterDraft::List { rows, page, .. } = &mut self.fields[index].draft
-            && let Some(target) = row.checked_add_signed(direction)
-            && row < rows.len()
-            && target < rows.len()
-        {
-            rows.swap(row, target);
-            *page = target / 25;
-            cx.notify();
-        }
     }
 }

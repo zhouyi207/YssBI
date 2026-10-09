@@ -287,6 +287,18 @@
 - 现有业务回归 `cargo test -p yss-graph-runtime --lib resolution_tests::connection_candidates_match_append_replace_and_type_rejections_without_editing -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::bounded_connection_limits_reject_overflow_and_reopen_after_disconnect -- --exact` 各实际运行 1 项并通过。本批累计审查 144/265 项。
 - 工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；5 个 Rust 文件局部格式、15 个复用文案双语键、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 239 条依赖声明）和 `git diff --check` 通过。
 
+### 节点参数编辑与字段诊断
+
+- 逐项阅读 NodeParameterEditor 的开关、选项、常量、列表、普通文本/数值及回退分支，跟随表单提交与诊断来源；关系选列/筛选和语义域仍由独立编辑器负责，其完整审查继续保留在各自组件行。
+- `parameters` 按稳定 ParameterKey 复用未变化草稿，直接比较值/类型/配置而不复制模型做比较；显示标签变化不清空输入。单行及列表订阅原 Input 事件，Enter 应用、Escape/按钮恢复；保留原生显式应用，不引入失焦自动提交，多行 Enter 保留换行。
+- `parameters/choices` 打开时才生成菜单，复用参考选项的本地化键与当前项勾选；常量名称借用原 GraphProperties，读取期间禁用。`parameters/list` 每页 50 行，按访问页创建输入，同一行草稿随排序移动；应用时完整解析，整数不经过 f64，文本保留空白。
+- `parameters/render` 按节点和参数位置显示原诊断，直接依赖已有纯 Graph Analysis Contract 并复用 Problems 格式化，不重做分析。默认值操作先丢弃暂态输入，再提交 Null；解析失败保留输入，继续编辑清除本地错误，重复相同非 Null 值不提交。
+- 原 Graph Editor 已支持按键合并参数，删除 GraphCanvas 提交前的文档读取与整份参数复制；版本保护、默认值和历史继续由原事务负责。资源与其他结构值保留既有文本/JSON 编辑及后端校验，未复制 React 的只读回退。
+- 临时 `cargo build -p yss-desktop-gpui --example node_parameters_review` 使用隔离项目和六个真实节点。通过 GPUI Window 的鼠标/键盘事件分发目视核对 103/104 项数值/文本列表：首次各 50 个输入、数值第二页后 100 个，跨页草稿/排序、尾页新增/删除及提交后其他参数保留；NaN 的 Enter 错误、继续编辑清除提示、Escape 恢复和文本空格读回已核对。
+- 同一预览核对单行文本 Enter/恢复、默认值与默认状态下丢弃输入、重复相同值版本不变、常量菜单名称/勾选与必填诊断消失、数值选项中英文标签及提交协议值。提交后原图投影读回 `9007199254740995`，保持完整整数。
+- 桌面的 XTest 输入未稳定送达，因此样例手动操作使用 GPUI 事件分发；截图依赖尺寸变化触发重绘。物理键鼠、IME、多行、失效菜单/迟到回执、后端失败、多窗口和完整撤销/保存仍待验收；不增加 UI 单元测试，临时入口不提交。
+- L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过。`cargo test -p yss-graph-editor --lib tests::creation_and_partial_edits_share_parameter_rules_without_requiring_complete_values -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::grouped_parameters_merge_reset_and_undo_atomically -- --exact` 各实际运行 1 项并通过；9 个 Rust 文件格式、41 个复用双语键/参数、文档元信息/相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。累计审查 145/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -458,7 +470,7 @@
 | [modules/details/internal/ui/node/NodePinConnectionField.tsx](../../react/src/modules/details/internal/ui/node/NodePinConnectionField.tsx) | 迁移/优化：连接选择复用原生虚拟 List，Application 决定候选和替换 | `connections` 安装对端名称和逐条删除，50 条分页；picker 按需查询、搜索、键盘确认和失败重试，版本/投影/控件拒绝过期操作 | 样例已核对双向连接、替换与分支保留；失败/过期/大列表验收开放 |
 | [modules/details/internal/ui/node/NodePinInterfacePanel.tsx](../../react/src/modules/details/internal/ui/node/NodePinInterfacePanel.tsx) | 迁移/优化：输入、输出默认折叠，内容按展开构建 | `ports/list` 分组及空状态；原字面量与实例操作复用原事务，提交失败直接呈现在节点属性 | 样例已核对折叠、连接与实例操作；完整字面量/多窗口验收开放 |
 | [modules/details/internal/ui/node/NodePortInstanceControls.tsx](../../react/src/modules/details/internal/ui/node/NodePortInstanceControls.tsx) | 复核原生实现：增删/顺序由投影与原编辑事务控制 | 复用 `ports`，分组添加入口沿用 can_add/can_remove 与捕获版本；不迁移每按钮独立业务状态 | 样例已核对最小数量、增删及带连接重排/删除；分组联动与失败验收开放 |
-| [modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx) | 优化：草稿按参数键复用，菜单与列表输入按需构建，提交/默认值/诊断沿用原 owner | `parameters` 拆分草稿、选择、分页与渲染；补齐 Enter/恢复、选项翻译和字段诊断，保留显式应用及原文本/JSON 后端校验 | 隔离图的 GPUI 事件与回执已核对；物理输入、IME、多行和失效/失败交互仍待验收 |
 | [modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/ChartDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/ChartDetailPanel.tsx) | 优化：共享当前草稿及元数据，菜单按需生成，列清单有界呈现 | `charts/details` 数据源/类型/编码和清除入口；重复选择保留配置，旧菜单版本校验，列清单分页 | 代码已覆盖；人工验收待完成 |
@@ -479,7 +491,7 @@
 | [modules/details/internal/ui/shared/DetailCollapsibleSection.tsx](../../react/src/modules/details/internal/ui/shared/DetailCollapsibleSection.tsx) | 复用原生 Collapsible/Button 与既有局部折叠状态 | 日志消息/字段默认展开，同条记录重选保留状态；其余 Details 消费者按各自初始展开策略核对 | 日志已接入；其他消费者随功能验收 |
 | [modules/details/internal/ui/shared/DetailColumnList.tsx](../../react/src/modules/details/internal/ui/shared/DetailColumnList.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/shared/DetailFieldRow.tsx](../../react/src/modules/details/internal/ui/shared/DetailFieldRow.tsx) | 复用原生 flex 布局与 Input 标签 | 日志元信息使用有界标签/值列与只读输入，长内容可选择和水平查看；无需另建 CSS wrapper 层 | 日志已接入；其他消费者随功能验收 |
-| [modules/details/internal/ui/shared/DetailForm.tsx](../../react/src/modules/details/internal/ui/shared/DetailForm.tsx) | 只读字段复用 Input，长文本复用 Textarea | 日志原值可选择复制；可编辑 DetailCommitInput 的 Enter/失焦提交与 Escape 恢复须由各参数 owner 继续核对 | 只读日志已接入；编辑提交语义待参数批次 |
+| [modules/details/internal/ui/shared/DetailForm.tsx](../../react/src/modules/details/internal/ui/shared/DetailForm.tsx) | 只读字段复用 Input，长文本复用 Textarea；参数草稿由原 owner 提交 | 日志原值可选择复制；参数单行/列表 Enter 应用、Escape 恢复，保留显式应用且不做失焦自动提交 | 日志已接入；参数事件样例已核对，物理键盘/IME 和多行仍待验收 |
 | [modules/details/internal/ui/shared/DetailPanelShell.tsx](../../react/src/modules/details/internal/ui/shared/DetailPanelShell.tsx) | 复用既有 Details 滚动容器 | 日志详情在原面板展示，沿用根 DockArea 的位置和尺寸，不加入第二套布局或 ScrollArea 包装 | 已采用；跨面板交互待验收 |
 | [modules/details/internal/ui/shared/DetailText.tsx](../../react/src/modules/details/internal/ui/shared/DetailText.tsx) | 复用 ActiveTheme、字体与只读原生文本 | 日志级别/领域、元信息和正文来自原记录；原生主题替代 CSS tone，全文按纯文本显示 | 日志已接入；其他消费者随功能验收 |
 | [modules/details/internal/ui/shared/PinEditor.tsx](../../react/src/modules/details/internal/ui/shared/PinEditor.tsx) | 复用原生参数草稿和按需类型菜单，保留当前单返回值契约 | 参数名/类型/容器与增删排序继续走原签名事务，补齐恢复与无输入提示；不复制 React 无法提交的额外输出 | 样例类型选择/提交/恢复已核对；排序/调用方/失败交互待验收 |

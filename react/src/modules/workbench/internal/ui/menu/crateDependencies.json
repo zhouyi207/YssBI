@@ -576,6 +576,12 @@
         "target": null
       },
       {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-graph-diagnostics",
         "kind": "normal",
         "optional": false,

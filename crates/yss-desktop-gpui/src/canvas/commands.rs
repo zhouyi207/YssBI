@@ -105,27 +105,13 @@ impl GraphCanvas {
                     node_id,
                     key,
                     value,
-                } => {
-                    let document = application.current_graph_document(
-                        &request.project_instance_id,
-                        &request.graph_path,
-                        request.version,
-                    )?;
-                    let mut parameters = document
-                        .nodes
-                        .get(&node_id)
-                        .ok_or_else(|| anyhow::anyhow!("node disappeared"))?
-                        .parameters
-                        .clone();
-                    parameters.insert(key, value);
-                    application.edit_graph(
-                        request,
-                        EditorGraphMutation::SetParameters {
-                            node_id,
-                            parameters,
-                        },
-                    )?
-                }
+                } => application.edit_graph(
+                    request,
+                    EditorGraphMutation::SetParameters {
+                        node_id,
+                        parameters: [(key, value)].into_iter().collect(),
+                    },
+                )?,
             };
             Ok(response)
         });

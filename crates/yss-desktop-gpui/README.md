@@ -271,6 +271,13 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   `graph_properties` 的匹配版本查询，迟到查询不能安装到另一图或项目。
   日志检查只覆盖当前 Details 展示，保留原编辑器绑定与未提交输入；日志实体由 LogsPanel 持有，Details 使用弱引用。
   显式图选择恢复图属性，后台图投影继续更新原表单而不抢占日志检查；资源切换和项目替换沿用原清理入口。
+- `workbench/details/parameters`：复用稳定 ParameterKey 的草稿与原 Input 事件；单行和列表 Enter 调用同一应用入口，
+  失焦不隐式提交，多行换行保留为输入。Escape 或恢复按钮放弃当前字段草稿，默认值按钮先放弃输入再提交原重置事务。
+  忙碌或失效控件不提交，重复相同非 Null 值不创建请求；解析失败保留输入，继续编辑清除本地错误。
+  `parameters/choices` 按打开时生成选项并使用原翻译键；常量名称借用 GraphProperties，读取期间禁用选择。
+  `parameters/list` 每页 50 行，按访问页创建输入；排序、分页及增删保留同一草稿，应用时完整解析，整数不经过 f64。
+  `parameters/render` 按当前节点与参数键展示原诊断，复用 Problems 文案格式化；不在视图重做图分析。
+  关系选列/筛选与语义域继续委派原独立草稿；资源/其他结构值保留已有文本/JSON 编辑方式，最终校验归后端。
 - `workbench/details/connections`：从当前选择的图投影安装端口连接行，逐条断开按 ConnectionId 提交，超过 50 条分页。
   `connections/picker` 复用原生 List 的搜索、键盘选择与虚拟列表；打开时才从 Application 查询当前端口的候选，
   只呈现后端允许的 append/replace，并提示替换。候选及其标签来自同一语义快照，不在视图推断类型或容量。
@@ -385,7 +392,8 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
 依赖方向为原生宿主 → Application/共享投影与协议。Application/Project/Graph 不依赖 GPUI。
 Project 是 GraphDocument、历史和保存身份的唯一 authority；没有原生图草稿、UI 历史或格式转换。
 Activity 条目直接消费 Rust ActivityPanelDocument；搜索与分类展开留在视图，不从磁盘重建目录。
-Details 参数输入是未提交暂态；应用参数时通过匹配版本的后端文档保留其他参数，再提交现有编辑事务。
+Details 参数输入是未提交暂态；应用参数只提交变更键，由原 Graph Editor 在匹配版本的事务内合并其他参数。
+恢复默认值提交 Null 清除显式覆盖；界面不再额外读取并复制整份节点参数。
 
 ## 当前交互
 

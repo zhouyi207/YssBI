@@ -50,11 +50,10 @@ impl GraphProperties {
         }
     }
 
-    pub fn names(&self) -> Vec<(String, String)> {
+    pub fn names(&self) -> impl Iterator<Item = (yss_graph_document::ConstantId, &str)> + Clone {
         self.constants
             .iter()
-            .map(|field| (field.model.id.to_string(), field.model.name.clone()))
-            .collect()
+            .map(|field| (field.model.id, field.model.name.as_str()))
     }
 
     pub fn loading(&self) -> bool {

@@ -2809,7 +2809,14 @@
       "editConstantValue": "编辑值 · {{value0}}",
       "elementCount": "{{value0}} 个元素",
       "structuredValue": "结构化值",
-      "textBytes": "{{value0}} 字节文本"
+      "textBytes": "{{value0}} 字节文本",
+      "choose": "请选择",
+      "chooseParameter": "请选择参数值",
+      "constantUnavailable": "常量不可用",
+      "invalidStructuredValue": "请输入有效的结构化值",
+      "noConstants": "此图尚无常量",
+      "noParameters": "此节点无需参数配置",
+      "resetParameter": "恢复默认值或清除参数"
     },
     "logs": {
       "copyMessage": "复制消息",
