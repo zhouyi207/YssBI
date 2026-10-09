@@ -476,6 +476,15 @@ without altering its observed prefix or random draw order; final residual and
 variance buffers restore units in place. Public unit regressions cover representable
 positive variances when the empirical scale squared underflows and EGARCH intercept
 rounding near subnormal variance, alongside the existing arch references.
+Volatility objective evaluations stream residual/variance pairs through one
+`max(p, q)` lag history and accumulate only the likelihood. The same path collects
+the complete report arrays once after fitting, retaining presample backcasts,
+alpha/gamma-before-beta accumulation and periodic execution-control checks.
+EGARCH simulation reuses that direct-index variance recursion. Bounded fitting
+histories overwrite one ring slot per row without shifting or resizing; the
+optimizer does not allocate observation-length result arrays.
+The fitted coefficient lengths own the history window; private recursion receives
+only the volatility method rather than unrelated forecast and optimizer settings.
 PP/KPSS normalize the series once before fitting and moment accumulation, retaining
 dimensionless statistics and the existing MacKinnon/table calibration. They restore
 only the reported long-run variance, applying response units after the normalized

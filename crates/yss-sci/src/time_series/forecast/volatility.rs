@@ -50,31 +50,38 @@ fn decode(raw: &[f64], o: VolatilityOptions) -> Result<Model> {
 }
 fn next_variance(
     m: &Model,
-    o: VolatilityOptions,
+    method: VolatilityMethod,
     e: &[f64],
     variance: &[f64],
+    cursor: usize,
     backcast: f64,
 ) -> Result<f64> {
     let t = variance.len();
     let mut h = m.omega;
     for (j, a) in m.alpha.iter().enumerate() {
-        if o.method == VolatilityMethod::Egarch {
+        // The cursor is the next ring slot, or the length for an appended forecast history.
+        let lag = if t > j {
+            if cursor > j {
+                cursor - j - 1
+            } else {
+                t - (j + 1 - cursor)
+            }
+        } else {
+            0
+        };
+        if method == VolatilityMethod::Egarch {
             // E|Z| = sqrt(2/pi), so the presample centered shock is zero.
             if t > j {
-                let z = e[t - j - 1] / variance[t - j - 1].sqrt();
+                let z = e[lag] / variance[lag].sqrt();
                 h += a * (z.abs() - (2.0 / std::f64::consts::PI).sqrt()) + m.gamma[j] * z;
             }
         } else {
-            let shock = if t > j {
-                e[t - j - 1].powi(2)
-            } else {
-                backcast
-            };
+            let shock = if t > j { e[lag].powi(2) } else { backcast };
             h += a * shock;
             if !m.gamma.is_empty() {
                 h += m.gamma[j]
                     * if t > j {
-                        if e[t - j - 1] < 0.0 { shock } else { 0.0 }
+                        if e[lag] < 0.0 { shock } else { 0.0 }
                     } else {
                         0.5 * backcast
                     };
@@ -82,14 +89,23 @@ fn next_variance(
         }
     }
     for (j, b) in m.beta.iter().enumerate() {
-        let v = if t > j { variance[t - j - 1] } else { backcast };
-        h += b * if o.method == VolatilityMethod::Egarch {
+        let v = if t > j {
+            let lag = if cursor > j {
+                cursor - j - 1
+            } else {
+                t - (j + 1 - cursor)
+            };
+            variance[lag]
+        } else {
+            backcast
+        };
+        h += b * if method == VolatilityMethod::Egarch {
             v.ln()
         } else {
             v
         };
     }
-    let h = finite(if o.method == VolatilityMethod::Egarch {
+    let h = finite(if method == VolatilityMethod::Egarch {
         h.exp()
     } else {
         h
@@ -102,22 +118,44 @@ fn next_variance(
 fn path(
     y: &[f64],
     m: &Model,
-    o: VolatilityOptions,
+    method: VolatilityMethod,
     backcast: f64,
     control: &Control,
-) -> Result<(Vec<f64>, Vec<f64>, f64)> {
-    let e: Vec<_> = y.iter().map(|v| v - m.mean).collect();
-    let mut variance = Vec::with_capacity(y.len());
+    mut observe: impl FnMut(f64, f64),
+) -> Result<f64> {
+    let lookback = m.alpha.len().max(m.beta.len());
+    let mut residual_history = Vec::with_capacity(lookback);
+    let mut variance_history = Vec::with_capacity(lookback);
+    let mut cursor = 0;
     let mut loss = 0.0;
-    for (i, v) in e.iter().enumerate() {
+    for (i, v) in y.iter().enumerate() {
         if i % 256 == 0 {
             control.check()?;
         }
-        let h = next_variance(m, o, &e, &variance, backcast)?;
-        variance.push(h);
-        loss += 0.5 * (h.ln() + v * v / h) / y.len() as f64;
+        let residual = v - m.mean;
+        let h = next_variance(
+            m,
+            method,
+            &residual_history,
+            &variance_history,
+            cursor,
+            backcast,
+        )?;
+        loss += 0.5 * (h.ln() + residual * residual / h) / y.len() as f64;
+        observe(residual, h);
+        if variance_history.len() == lookback {
+            residual_history[cursor] = residual;
+            variance_history[cursor] = h;
+        } else {
+            residual_history.push(residual);
+            variance_history.push(h);
+        }
+        cursor += 1;
+        if cursor == lookback {
+            cursor = 0;
+        }
     }
-    Ok((e, variance, finite(loss)?))
+    finite(loss)
 }
 pub fn volatility(y: &[f64], o: VolatilityOptions, control: &Control) -> Result<VolatilityResult> {
     validate(y, &[], control)?;
@@ -170,10 +208,24 @@ pub fn volatility(y: &[f64], o: VolatilityOptions, control: &Control) -> Result<
             initial.extend(vec![(b / o.q as f64 / slack).ln(); o.q]);
         }
     }
-    let objective = |b: &[f64]| path(&scaled, &decode(b, o)?, o, backcast, control).map(|v| v.2);
+    let objective = |b: &[f64]| {
+        path(
+            &scaled,
+            &decode(b, o)?,
+            o.method,
+            backcast,
+            control,
+            |_, _| {},
+        )
+    };
     let fit = minimize(&objective, initial, o.iteration, control)?;
     let m = decode(&fit.beta, o)?;
-    let (mut e, mut variance, loss) = path(&scaled, &m, o, backcast, control)?;
+    let mut e = Vec::with_capacity(y.len());
+    let mut variance = Vec::with_capacity(y.len());
+    let loss = path(&scaled, &m, o.method, backcast, control, |residual, h| {
+        e.push(residual);
+        variance.push(h);
+    })?;
     let mut forecasts = vec![0.0; o.horizon];
     let lookback = o.p.max(o.q);
     let observed_residuals = &e[y.len() - lookback..];
@@ -191,7 +243,7 @@ pub fn volatility(y: &[f64], o: VolatilityOptions, control: &Control) -> Result<
                 if h.len() % 256 == 0 {
                     control.check()?;
                 }
-                let v = next_variance(&m, o, &residuals, &h, backcast)?;
+                let v = next_variance(&m, o.method, &residuals, &h, h.len(), backcast)?;
                 *forecast += v / o.simulations as f64;
                 let u = 1.0 - rng.random::<f64>();
                 let z = (-2.0 * u.ln()).sqrt()
