@@ -1,6 +1,6 @@
 use crate::ProjectOperationError;
 use crate::manifest::ProjectManifest;
-use crate::{GraphResourceFile, ProjectSession, ProjectState, ProjectTransactionContext};
+use crate::{ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
@@ -125,7 +125,9 @@ fn prepare_error(error: impl ToString) -> ProjectOperationError {
 pub(crate) fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
     match path.extension().and_then(|extension| extension.to_str()) {
         Some("yssbi-event" | "yssbi-function") => {
-            serde_json::from_slice::<GraphResourceFile>(contents)
+            let relative = path.to_string_lossy().replace('\\', "/");
+            let graph = GraphResourcePath::new(relative).map_err(|error| error.to_string())?;
+            crate::project_io::parse_graph_resource_document(contents, path, graph.kind())
                 .map(|_| ())
                 .map_err(|error| error.to_string())
         }
@@ -264,5 +266,71 @@ impl ProjectState {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yss_data_contract::{DataValue, ValueType};
+    use yss_graph_document::{ConstantId, GraphConstant, GraphResourceKind};
+    use yss_project_model::GraphResourceDocument;
+
+    #[test]
+    fn save_as_rejects_invalid_constants_in_an_unloaded_graph() {
+        let fixture =
+            crate::fixtures::TempProject::activate("copy-invalid-constant", ProjectData::new());
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let path = GraphResourcePath::new("events/Invalid.yssbi-event").unwrap();
+        let mut graph = GraphResourceDocument::new("Invalid", GraphResourceKind::EventGraph);
+        let id = ConstantId::new();
+        std::sync::Arc::make_mut(&mut graph.document)
+            .constants
+            .insert(
+                id,
+                GraphConstant {
+                    id,
+                    name: "invalid_table".into(),
+                    data_type: ValueType::DataFrame,
+                    data_value: DataValue::String("not-json".into()),
+                    tabular: None,
+                    description: String::new(),
+                    tags: vec![],
+                },
+            );
+        let mut file_data = ProjectData::new();
+        file_data.graphs.insert(path.clone(), graph);
+        crate::fixtures::write_graph(&file_data, session.root.as_path().to_str().unwrap(), &path)
+            .unwrap();
+        assert!(!state.has_resident_graph(&path).unwrap());
+        let source = session.root.as_path().join(path.as_str());
+        let before = std::fs::read(&source).unwrap();
+        let destination = session.root.as_path().parent().unwrap().join(format!(
+            "yssbi-copy-invalid-destination-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let result = state.save_project_as_transaction(
+            &session.instance_id,
+            &destination,
+            OperationId::new(),
+        );
+        let destination_survived = destination.exists();
+        if destination_survived {
+            std::fs::remove_dir_all(&destination).unwrap();
+        }
+        assert!(
+            matches!(
+                result,
+                Err(ProjectOperationError::TransactionPrepareFailed { .. })
+            ),
+            "Save As must validate unloaded graph constants before copying them; got {result:?}"
+        );
+        assert!(
+            !destination_survived,
+            "failed validation left a copied project behind"
+        );
+        assert_eq!(std::fs::read(source).unwrap(), before);
+        assert!(!state.has_resident_graph(&path).unwrap());
     }
 }

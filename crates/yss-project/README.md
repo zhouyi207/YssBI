@@ -74,6 +74,10 @@ Graph、Chart、Mind、Doc 和 Database 的复制接受可选目标名称，在�
 
 所有项目写入在暂存阶段显式调用 Project 的文档校验器；通用 FS prepare 默认不限制文件格式。项目删除前对 metadata.yssbi 的校验也由 Project 执行。FilesystemError 在 Project 边界映射为既有业务错误类别，前端错误 wire 不变。
 
+创建、Save As 与资源 Writer 共用同一个文档校验入口。图文件复用正式读取解析器，
+同时核对路径种类、函数文档形态和常量定义；未加载图的复制也必须通过校验，
+校验不会把其正文安装为驻留状态。非项目文档资产保留普通文件复制路径。
+
 ## Graph resource revisions
 
 项目格式版本以 [`CURRENT_PROJECT_SCHEMA_VERSION`](src/manifest.rs) 为准。命名常量随 Event Graph/Function Graph 的 `GraphDocument.constants` 保存，属于 Graph 资源事务，不再维护全局变量、变量 revision、作用域迁移或 `variables.yssbi-vars` 的日常读写。

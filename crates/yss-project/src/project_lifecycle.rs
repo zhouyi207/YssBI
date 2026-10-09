@@ -1,10 +1,8 @@
 use crate::ProjectOperationError;
 use crate::filesystem::validate_deletion_root;
-use crate::manifest::ProjectManifest;
 use crate::{PreparedProjectActivation, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use yss_chart_document::ChartDocument;
 use yss_filesystem::{
     FilesystemTransaction, NormalizedRoot, RootBinding, RootLifecycleGuard,
     StagedFilesystemMutation, ensure_directory, read_file_inventory, remove_directory_if_created,
@@ -199,7 +197,7 @@ impl ProjectState {
             context.filesystem_context(),
             lease,
             new_project_mutations(&data)?,
-            validate_project_copy_file,
+            crate::project_writers::validate_document,
         )?;
         root_guard.binding.revalidate()?;
         let committed = prepared.commit()?;
@@ -448,35 +446,9 @@ fn validate_project_copy_staged_file(relative: &Path, staged: &Path) -> Result<(
         )
     {
         let contents = std::fs::read(staged).map_err(|error| error.to_string())?;
-        validate_project_copy_file(relative, &contents)
+        crate::project_writers::validate_document(relative, &contents)
     } else {
         Ok(())
-    }
-}
-
-fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String> {
-    if path == Path::new(PROJECT_METADATA_FILE) {
-        return serde_json::from_slice::<ProjectManifest>(contents)
-            .map(|_| ())
-            .map_err(|error| error.to_string());
-    }
-    let relative = path.to_string_lossy().replace('\\', "/");
-    if yss_project_model::mind::MindPath::parse(&relative).is_ok() {
-        return yss_project_model::mind::MindDocument::decode(contents).map(|_| ());
-    }
-    if yss_project_model::doc::DocPath::parse(&relative).is_ok() {
-        return yss_project_model::doc::DocDocument::decode(contents).map(|_| ());
-    }
-    match path.extension().and_then(|extension| extension.to_str()) {
-        Some("yssbi-event" | "yssbi-function") => {
-            serde_json::from_slice::<crate::GraphResourceFile>(contents)
-                .map(|_| ())
-                .map_err(|error| error.to_string())
-        }
-        Some(CHART_EXTENSION) => serde_json::from_slice::<ChartDocument>(contents)
-            .map(|_| ())
-            .map_err(|error| error.to_string()),
-        _ => Ok(()),
     }
 }
 
