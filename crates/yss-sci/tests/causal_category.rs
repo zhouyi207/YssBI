@@ -505,6 +505,85 @@ fn causal_hc3_keeps_finite_inference_for_large_response_units() {
     );
 }
 
+fn check_heckman_response_units(scale: f64) {
+    let f = fixture();
+    let d = &f["heckman"];
+    let response = serde_json::from_value::<Vec<Option<f64>>>(d["response"].clone()).unwrap();
+    let selected = vector(&d["selected"]);
+    let predictors = matrix(&d["predictors"]);
+    let selection_predictors = matrix(&d["selection_predictors"]);
+    let options = HeckmanOptions {
+        iteration: IterationOptions::default(),
+        bootstrap: BootstrapOptions {
+            replications: 0,
+            seed: 37,
+        },
+    };
+    let baseline = econometrics::heckman(
+        &response,
+        &selected,
+        &predictors,
+        &selection_predictors,
+        options,
+        &control(),
+    )
+    .unwrap();
+    let scaled_response = response
+        .iter()
+        .map(|value| value.map(|value| value * scale))
+        .collect::<Vec<_>>();
+    let result = econometrics::heckman(
+        &scaled_response,
+        &selected,
+        &predictors,
+        &selection_predictors,
+        options,
+        &control(),
+    )
+    .expect("reported Heckman sigma and rho are finite in these response units");
+    for (actual, expected) in result
+        .outcome_coefficients
+        .iter()
+        .zip(vector(&d["coefficients"]))
+    {
+        assert!(actual.estimate.is_finite());
+        close(actual.estimate / scale, expected, 1e-7);
+        assert!(actual.standard_error.is_none());
+    }
+    assert!(result.sigma.is_finite() && result.sigma > 0.0);
+    close(result.sigma / scale, d["sigma"].as_f64().unwrap(), 1e-7);
+    close(result.rho, d["rho"].as_f64().unwrap(), 1e-7);
+    assert_eq!(result.selected_rows, baseline.selected_rows);
+    assert_eq!(
+        result.selection_probabilities,
+        baseline.selection_probabilities
+    );
+    assert_eq!(result.inverse_mills, baseline.inverse_mills);
+    for (actual, expected) in result.fitted_selected.iter().zip(baseline.fitted_selected) {
+        assert!(actual.is_finite());
+        close(actual / scale, expected, 1e-7);
+    }
+    for (actual, expected) in result
+        .residuals_selected
+        .iter()
+        .zip(baseline.residuals_selected)
+    {
+        assert!(actual.is_finite());
+        close(actual / scale, expected, 1e-7);
+    }
+    assert!(result.outcome_covariance.is_none());
+}
+
+#[test]
+fn heckman_response_units_keep_large_sigma_finite() {
+    check_heckman_response_units(1e200);
+}
+
+#[test]
+fn heckman_response_units_keep_small_sigma_identified() {
+    check_heckman_response_units(1e-200);
+}
+
 #[test]
 fn selection_and_frontier_match_probit_and_likelihood_references() {
     let f = fixture();

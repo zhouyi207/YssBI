@@ -504,6 +504,15 @@ response/predictor units against the existing independent statsmodels references
 The [GMM estimator and sandwich equations](https://www.stata.com/manuals/rivregress.pdf)
 define the retained one/two-step inference contract.
 
+Heckman keeps the existing Probit and selected-row outcome fits. Its sigma moment
+uses the largest absolute outcome residual or Mills coefficient as a common
+response-unit scale, squares bounded components and restores sigma units once.
+The reported rho remains the Mills coefficient divided by sigma; zero scale and
+out-of-range correlation remain failures. A controlled scan accumulates the Mills
+correction mean directly without another observation vector. Large and small
+response-unit regressions retain fitted/residual units, selection facts and the
+existing independent sigma/rho reference.
+
 `causal::treatment` reuses controlled Logit and OLS for nearest-neighbour propensity
 matching with replacement, normalized Hájek IPW, RA and AIPW. Matching includes exact
 distance ties and rejects caliper failures instead of changing the estimand by

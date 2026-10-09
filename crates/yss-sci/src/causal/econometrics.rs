@@ -286,14 +286,29 @@ fn heckman_point(
         .collect::<Vec<_>>();
     let (beta, _) = design.raw(&beta, None);
     let lambda = *beta.last().expect("Mills coefficient");
-    let delta = indices
-        .iter()
-        .zip(&mills)
-        .map(|(&i, &m)| m * (m + eta[i]))
-        .collect::<Vec<_>>();
-    let variance = residuals.iter().map(|e| e * e / count as f64).sum::<f64>()
-        + lambda * lambda * mean(&delta);
-    let sigma = finite(variance.sqrt())?;
+    let mut scale = finite(lambda.abs())?;
+    for (i, &residual) in residuals.iter().enumerate() {
+        if i.is_multiple_of(256) {
+            control.check()?;
+        }
+        scale = scale.max(finite(residual.abs())?);
+    }
+    if scale == 0.0 {
+        return Err(failed());
+    }
+    let mut residual_variance = 0.0;
+    let mut delta_mean = 0.0;
+    for (row, (&index, &mills)) in indices.iter().zip(&mills).enumerate() {
+        if row.is_multiple_of(256) {
+            control.check()?;
+        }
+        residual_variance += (residuals[row] / scale).powi(2) / count as f64;
+        delta_mean += mills * (mills + eta[index]) / count as f64;
+    }
+    // Report sigma directly in response units; its raw variance need not be
+    // representable. Both normalized components stay bounded before squaring.
+    let variance = residual_variance + (lambda / scale).powi(2) * delta_mean;
+    let sigma = finite(variance.sqrt() * scale)?;
     if sigma <= 0.0 {
         return Err(failed());
     }
