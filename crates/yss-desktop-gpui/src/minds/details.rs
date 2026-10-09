@@ -1,13 +1,14 @@
 //! Forms mount in the existing Details panel; captured targets guard delayed callbacks.
+mod parent;
+
 use super::MindCanvas;
 use gpui::{Context, IntoElement, Window, div, prelude::*};
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Textarea,
-    menu::{DropdownMenu, PopupMenuItem},
 };
-use yss_project_model::{file::FileVersion, mind::MindEdit};
+use yss_project_model::file::FileVersion;
 
 #[derive(Clone)]
 struct TopicTarget {
@@ -54,8 +55,18 @@ impl MindCanvas {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(self.path().to_owned()),
-            );
-        let Some(topic) = self.selected_topic().cloned() else {
+            )
+            .when_some(self.error.as_ref(), |view, error| {
+                view.child(
+                    div()
+                        .id("mind-details-error")
+                        .role(gpui::accesskit::Role::Alert)
+                        .text_sm()
+                        .text_color(cx.theme().danger)
+                        .child(error.clone()),
+                )
+            });
+        let Some(id) = self.selected_topic().map(|topic| topic.id.clone()) else {
             return view
                 .child(
                     div()
@@ -69,11 +80,14 @@ impl MindCanvas {
                 )
                 .into_any_element();
         };
-        let Some(input) = self.ensure_buffer(&topic.id, window, cx) else {
+        let Some(input) = self.ensure_buffer(&id, window, cx) else {
+            return view.into_any_element();
+        };
+        let Some(topic) = self.selected_topic() else {
             return view.into_any_element();
         };
         let target = TopicTarget {
-            id: topic.id.clone(),
+            id,
             version: self.snapshot.version.clone(),
         };
         let busy = self.busy();
@@ -129,19 +143,19 @@ impl MindCanvas {
             );
         if !root {
             view = view
-                .child(self.parent_picker(&topic, target.clone(), cx))
+                .child(self.parent_picker(topic, target.clone(), cx))
                 .child(
                     div()
                         .flex()
                         .gap_2()
-                        .child(self.topic_button("topic-up", "上移", TopicAction::Up, &target, cx))
-                        .child(self.topic_button(
-                            "topic-down",
-                            "下移",
-                            TopicAction::Down,
-                            &target,
-                            cx,
-                        )),
+                        .child(
+                            self.topic_button("topic-up", "上移", TopicAction::Up, &target, cx)
+                                .disabled(busy || self.sibling_edit(false).is_none()),
+                        )
+                        .child(
+                            self.topic_button("topic-down", "下移", TopicAction::Down, &target, cx)
+                                .disabled(busy || self.sibling_edit(true).is_none()),
+                        ),
                 );
         }
         let collapse_label = if self.collapsed.contains(&topic.id) {
@@ -165,12 +179,12 @@ impl MindCanvas {
                         .disabled(busy || root),
                 ),
         )
-        .when_some(topic.reference, |view, reference| {
+        .when_some(topic.reference.as_ref(), |view, reference| {
             view.child(
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!("引用：{}", reference_label(&reference))),
+                    .child(format!("引用：{}", reference_label(reference))),
             )
         })
         .into_any_element()
@@ -204,117 +218,15 @@ impl MindCanvas {
                     TopicAction::DiscardInput => view.discard_input(&target.id, window, cx),
                     TopicAction::AddChild => view.add_topic(false, window, cx),
                     TopicAction::AddSibling => view.add_topic(true, window, cx),
-                    TopicAction::Up => view.reorder_topic(-1, window, cx),
-                    TopicAction::Down => view.reorder_topic(1, window, cx),
+                    TopicAction::Up | TopicAction::Down => {
+                        if let Some(edit) = view.sibling_edit(matches!(action, TopicAction::Down)) {
+                            view.apply_edits(vec![edit], window, cx);
+                        }
+                    }
                     TopicAction::Collapse => view.toggle_branch(target.id.clone(), cx),
                     TopicAction::Delete => view.delete_topics(window, cx),
                 }
             }))
-    }
-    fn parent_picker(
-        &self,
-        topic: &yss_project_model::mind::MindNode,
-        target: TopicTarget,
-        cx: &mut Context<Self>,
-    ) -> gpui::AnyElement {
-        let parent_name = topic
-            .parent_id
-            .as_ref()
-            .and_then(|id| {
-                self.snapshot
-                    .content
-                    .nodes
-                    .iter()
-                    .find(|node| &node.id == id)
-            })
-            .map(|node| node.content.lines().next().unwrap_or("主题").to_owned())
-            .unwrap_or_else(|| "主题".into());
-        let owner = cx.entity().downgrade();
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("父主题"),
-            )
-            .child(
-                Button::new("mind-parent")
-                    .small()
-                    .ghost()
-                    .label(parent_name)
-                    .disabled(self.busy())
-                    .dropdown_menu(move |mut menu, _, cx| {
-                        let candidates = owner
-                            .update(cx, |view, _| {
-                                if view.accepts_topic(&target) {
-                                    view.parent_choices(&target.id)
-                                } else {
-                                    vec![]
-                                }
-                            })
-                            .unwrap_or_default();
-                        for (parent_id, title) in candidates {
-                            let owner = owner.clone();
-                            let target = target.clone();
-                            menu = menu.item(PopupMenuItem::new(title).on_click(
-                                move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        if view.accepts_topic(&target) {
-                                            view.apply_edits(
-                                                vec![MindEdit::MoveNode {
-                                                    node_id: target.id.clone(),
-                                                    parent_id: parent_id.clone(),
-                                                    before_id: None,
-                                                }],
-                                                window,
-                                                cx,
-                                            );
-                                        }
-                                    });
-                                },
-                            ));
-                        }
-                        menu
-                    }),
-            )
-            .into_any_element()
-    }
-    fn parent_choices(&self, id: &str) -> Vec<(String, String)> {
-        // Filtering a picker is disposable presentation; Project validates the actual move.
-        let mut children = std::collections::HashMap::<&str, Vec<&str>>::new();
-        for node in &self.snapshot.content.nodes {
-            if let Some(parent) = node.parent_id.as_deref() {
-                children.entry(parent).or_default().push(&node.id);
-            }
-        }
-        let mut descendants = std::collections::HashSet::new();
-        let mut pending = vec![id];
-        while let Some(node) = pending.pop() {
-            descendants.insert(node);
-            if let Some(group) = children.get(node) {
-                pending.extend(group);
-            }
-        }
-        self.snapshot
-            .content
-            .nodes
-            .iter()
-            .filter(|node| !descendants.contains(node.id.as_str()))
-            .map(|node| {
-                (
-                    node.id.clone(),
-                    node.content
-                        .lines()
-                        .next()
-                        .filter(|text| !text.is_empty())
-                        .unwrap_or("未命名主题")
-                        .to_owned(),
-                )
-            })
-            .collect()
     }
 }
 fn reference_label(reference: &yss_project_model::mind::MindReference) -> String {

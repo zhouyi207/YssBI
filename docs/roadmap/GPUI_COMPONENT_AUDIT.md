@@ -255,6 +255,17 @@
 - 临时 `cargo build -p yss-desktop-gpui --example details_routing_review` 使用独立项目和两个真实数学常量节点。Linux/X11 目视核对单选节点表单、多选图属性、清空绑定的通用空状态；另用临时失效节点投影核对图属性回退。文档实际输入后显示未保存状态，切换预览保留路径和状态，注入的忙碌/错误样例按同一编辑器状态显示。
 - 该预览不覆盖真实外部删除、保存失败、函数签名/常量草稿及多窗口完整交互；X11 截图仍依赖调整尺寸触发重绘，自动重绘与其他平台验收开放。临时样例已移出仓库，没有增加 UI 单元测试。
 
+### Mind 属性表单与结构操作
+
+- 逐项阅读 MindDetailPanel 及文本输入/结构提交调用，保留现有 MindCanvas、TopicBuffer 与类型化 Application 用例。原生继续提供显式应用/恢复和保存，不引入失焦自动提交与结构按钮之间的第二套请求队列。
+- Details 借用所选主题，去掉逐帧长正文复制；父主题菜单按打开时生成可滚动候选，排除自身/后代并勾选当前项，重复选择不重排。排序启用状态与提交共用同一兄弟位置派生。
+- `topics` 拥有结构意图与成功后的暂态选择，新增展开父主题并选择新主题、单主题删除回到父主题；原选择已改变时保留后来的选择，不触发编辑器激活或焦点抢占。
+- `buffers` 在成功回执中确认本次已提交且未再修改的输入，使删除主题及其后代不遗留脏草稿；失败与较新的输入仍保留。提交错误也显示在 Details 中。
+- L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；6 个 Rust 文件局部格式、3 个双语主题文案、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 239 条依赖声明）与 `git diff --check` 通过。后端契约未改变，不重复后端测试；累计审查 135/265 项。
+- 临时 `cargo build -p yss-desktop-gpui --example mind_details_review` 使用独立项目和真实 Mind Application 提交。Linux/X11 目视核对根保护、排序边界/上下移、父主题当前勾选与排除自身/后代、重复选择不重排，以及折叠分支内新增后的展开和选择。
+- 实际输入父子主题草稿后删除整支，回执中相应脏输入清空并选中父主题；随后编辑另一主题并通过文件菜单保存，核对磁盘中的现行 Mind 内容。临时入口在新增请求发出后改选另一主题，真实回执保持后来的选择；当前工作区英文切换也保留主题内容。
+- 预览没有登记生产快捷键，保存使用实际文件菜单，未据此声称快捷键验收通过。X11 截图依赖调整尺寸触发重绘，自动重绘、真实失败/外部变化、提交期间新输入、多窗口、长树性能与完整资源生命周期验收仍开放；临时样例不提交，不增加 UI 单元测试。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -441,7 +452,7 @@
 | [modules/details/internal/ui/panels/FunctionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/FunctionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/GraphConstantsPanel.tsx](../../react/src/modules/details/internal/ui/panels/GraphConstantsPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/LogDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/LogDetailPanel.tsx) | 复用原 Details 容器与原生只读控件 | 当前日志实体唯一归 LogsPanel，Details 弱引用展示时间/流/序列/领域/来源及原消息/字段；默认展开、文本选择与复制不解析 Markdown | 代码已接入；完整交互验收待完成 |
-| [modules/details/internal/ui/panels/MindDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/MindDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/panels/MindDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/MindDetailPanel.tsx) | 优化现有原生表单，复用同一输入草稿与 MindEdit 提交 | 按回执跟随新增/删除选择、确认提交草稿、排序边界禁用、父主题勾选与无变化保护；保留显式应用/恢复和保存 | 样例新增/删除/排序/保存已核对；完整生命周期与长树性能待完成 |
 | [modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDefinitionDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/panels/NodeDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/NodeDetailPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/details/internal/ui/shared/DetailCollapsibleSection.tsx](../../react/src/modules/details/internal/ui/shared/DetailCollapsibleSection.tsx) | 复用原生 Collapsible/Button 与既有局部折叠状态 | 日志消息/字段默认展开，同条记录重选保留状态；其余 Details 消费者按各自初始展开策略核对 | 日志已接入；其他消费者随功能验收 |

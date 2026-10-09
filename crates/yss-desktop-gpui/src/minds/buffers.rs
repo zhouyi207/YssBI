@@ -9,6 +9,7 @@ pub(super) struct TopicBuffer {
     pub version: FileVersion,
     pub original: String,
     pub dirty: bool,
+    generation: u64,
     _subscription: Subscription,
 }
 impl MindCanvas {
@@ -58,6 +59,7 @@ impl MindCanvas {
         let subscription = cx.subscribe(&input, move |view, input, event, cx| {
             if matches!(event, InputEvent::Change) {
                 if let Some(buffer) = view.buffers.get_mut(&key) {
+                    buffer.generation += 1;
                     buffer.dirty = input.read(cx).value().as_ref() != buffer.original.as_str();
                 }
                 view.changed(cx);
@@ -69,11 +71,32 @@ impl MindCanvas {
                 input: input.clone(),
                 original,
                 dirty: false,
+                generation: 0,
                 version: self.snapshot.version.clone(),
                 _subscription: subscription,
             },
         );
         Some(input)
+    }
+
+    pub(super) fn submitted_inputs(&self) -> Vec<(String, u64)> {
+        self.buffers
+            .iter()
+            .filter(|(_, buffer)| buffer.dirty)
+            .map(|(id, buffer)| (id.clone(), buffer.generation))
+            .collect()
+    }
+
+    pub(super) fn acknowledge_inputs(&mut self, submitted: &[(String, u64)]) {
+        for (id, generation) in submitted {
+            if let Some(buffer) = self.buffers.get_mut(id)
+                && buffer.generation == *generation
+            {
+                // A deleted topic has no content in the receipt to acknowledge its draft.
+                // Retain a draft typed after submission, including on a removed topic.
+                buffer.dirty = false;
+            }
+        }
     }
 
     pub(super) fn pending_edits(&mut self, cx: &mut Context<Self>) -> Option<Vec<MindEdit>> {

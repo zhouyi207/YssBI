@@ -5,6 +5,7 @@ mod details;
 mod input;
 mod layout;
 mod render;
+mod topics;
 
 use crate::services::NativeServices;
 use buffers::TopicBuffer;
