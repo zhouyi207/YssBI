@@ -19,7 +19,7 @@ Z=\begin{cases}
 \end{cases}
 $$
 
-Without ties, $V=n(n-1)(2n+5)/18$ and $Z\overset{H_0}{\approx}N(0,1)$. The current tie adjustment subtracts $\sum_g(t_g^3-t_g)/18$, where $t_g$ are tied-group sizes. This differs from the [usual Mann–Kendall tie correction](https://search.r-project.org/CRAN/refmans/trend/html/mk.test.html); results with ties need separate verification.
+Without ties, $V=n(n-1)(2n+5)/18$ and $Z\overset{H_0}{\approx}N(0,1)$. With ties, subtract $\sum_g t_g(t_g-1)(2t_g+5)/18$, where $t_g$ are tied-group sizes, using the [Mann–Kendall tie correction](https://search.r-project.org/CRAN/refmans/trend/html/mk.test.html). Zero scores retain $Z=0$, including constant observations.
 
 Observations must be independent. The node does not correct serial correlation or seasonality. Positive $Z$ indicates increasing trend and negative $Z$ decreasing trend.
 

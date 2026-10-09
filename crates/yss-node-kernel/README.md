@@ -419,6 +419,8 @@ admits linear category indexes before constructing them, then uses actual row an
 column cardinalities for the dense table. These are conservative workspace
 estimates, not process RSS limits. Classical kernels use revision 6, except the
 paired t, McNemar, CMH and categorical independence kernels, which use revision 7;
+Mann–Whitney, Kruskal–Wallis, Friedman, Runs, Mann–Kendall and the rank-family
+selector also use revision 7, covering corrected rank moments and tie handling.
 Fisher exact, exact Binomial and Poisson use revision 8. Binomial/Poisson count
 admission uses invocation resources and execution control; SCI retains numeric
 representation checks and samples the shared control during exact enumeration.

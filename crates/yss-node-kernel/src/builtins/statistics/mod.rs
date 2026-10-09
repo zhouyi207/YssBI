@@ -96,6 +96,12 @@ pub(super) fn install(
                         | "yssbi.statistics.test.mcnemar"
                         | "yssbi.statistics.test.cmh"
                         | "yssbi.statistics.test.chisquare.crosstab"
+                        | "yssbi.statistics.test.mann_whitney"
+                        | "yssbi.statistics.test.kruskal_wallis"
+                        | "yssbi.statistics.test.friedman"
+                        | "yssbi.statistics.test.runs"
+                        | "yssbi.statistics.test.mann_kendall"
+                        | "yssbi.statistics.test.nonparametric.family"
                 ) {
                     6
                 } else if matches!(
@@ -112,14 +118,8 @@ pub(super) fn install(
                         | "yssbi.statistics.test.equivalence"
                         | "yssbi.statistics.test.wilcoxon.one_sample"
                         | "yssbi.statistics.test.wilcoxon.paired"
-                        | "yssbi.statistics.test.mann_whitney"
-                        | "yssbi.statistics.test.kruskal_wallis"
                         | "yssbi.statistics.test.mood_median"
-                        | "yssbi.statistics.test.friedman"
                         | "yssbi.statistics.test.cochran_q"
-                        | "yssbi.statistics.test.runs"
-                        | "yssbi.statistics.test.mann_kendall"
-                        | "yssbi.statistics.test.nonparametric.family"
                         | "yssbi.statistics.test.levene"
                         | "yssbi.statistics.test.brown_forsythe"
                         | "yssbi.statistics.test.bartlett"

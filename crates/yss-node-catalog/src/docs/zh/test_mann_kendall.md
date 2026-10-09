@@ -19,7 +19,7 @@ Z=\begin{cases}
 \end{cases}
 $$
 
-无并列值时 $V=n(n-1)(2n+5)/18$，使用 $Z\overset{H_0}{\approx}N(0,1)$。当前并列修正从该方差减去 $\sum_g(t_g^3-t_g)/18$，$t_g$ 为各并列组大小；这与[常用 Mann–Kendall 并列修正](https://search.r-project.org/CRAN/refmans/trend/html/mk.test.html)不同，含并列值时应另行核对结果。
+无并列值时 $V=n(n-1)(2n+5)/18$，使用 $Z\overset{H_0}{\approx}N(0,1)$。有并列值时从该方差减去 $\sum_g t_g(t_g-1)(2t_g+5)/18$，$t_g$ 为各并列组大小，采用 [Mann–Kendall 并列修正](https://search.r-project.org/CRAN/refmans/trend/html/mk.test.html)。分数为零时保留 $Z=0$，包括所有观测相同的情况。
 
 观测应独立；节点不校正自相关或季节性。正 $Z$ 对应上升，负 $Z$ 对应下降。
 

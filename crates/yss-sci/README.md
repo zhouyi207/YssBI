@@ -617,6 +617,12 @@ use the shared OLS configuration. Result organization does not change solver or
 convergence policy.
 
 Classical hypothesis tests are organized under `hypothesis`: `sample_mean` owns mean, proportion, Poisson and equivalence tests; `categorical` owns count-table tests; `nonparametric` owns rank and sequence tests; and `variance` owns variance-homogeneity tests. These functions accept neutral contract requests and return common result records. The node catalog and kernel own graph-facing interfaces and dispatch.
+Rank moments convert sample cardinalities before polynomial arithmetic. Shared
+rank preparation retains only repeated-group sizes; Mann–Kendall derives its
+score tie correction while compressing its existing sorted values, without a
+second ranking/sort. Compression and lookup treat signed zero as one value.
+Mann–Kendall uses the standard `t*(t-1)*(2*t+5)` variance adjustment and retains
+zero corrected z for zero scores, including constant observations.
 Categorical count-table preparation borrows labels from its owned input arrays in
 one ordered index per dimension. It keeps lexical row/column order and exact cell
 counts without cloning labels per observation or retaining separate level vectors.

@@ -211,22 +211,18 @@ fn mann_whitney(
             rank1 += rank[i];
         }
     }
-    let u1 = rank1 - (n1 * (n1 + 1) / 2) as f64;
+    let first_n = n1 as f64;
+    let second_n = n2 as f64;
+    let pair_count = first_n * second_n;
+    let u1 = rank1 - first_n * (first_n + 1.0) / 2.0;
     let total = n1 + n2;
-    let tie_term = ties
-        .iter()
-        .map(|t| (t.pow(3) - t) as f64)
-        .enumerate()
-        .try_fold(0.0, |sum, (i, v)| {
-            checkpoint(control, i)?;
-            Ok::<_, Error>(sum + v)
-        })?;
-    let variance = n1 as f64 * n2 as f64 / 12.0
-        * ((total + 1) as f64 - tie_term / (total * (total - 1)) as f64);
+    let total_n = total as f64;
+    let tie_term = rank_tie_sum(&ties, control)?;
+    let variance = pair_count / 12.0 * (total_n + 1.0 - tie_term / (total_n * (total_n - 1.0)));
     if variance <= 0.0 {
         return Err(invalid(Violation::DataOutOfRange));
     }
-    let z = (u1 - (n1 * n2) as f64 / 2.0) / variance.sqrt();
+    let z = (u1 - pair_count / 2.0) / variance.sqrt();
     let mut result = base(
         "mann_whitney",
         "the two populations have the same distribution",
@@ -239,7 +235,7 @@ fn mann_whitney(
     result.alternative = alternative_name(alternative).into();
     result
         .details
-        .insert("u_complement".into(), (n1 * n2) as f64 - u1);
+        .insert("u_complement".into(), pair_count - u1);
     Ok(result)
 }
 
@@ -294,16 +290,8 @@ fn kruskal_wallis(
         offset += size;
     }
     let raw = 12.0 / (n as f64 * (n + 1) as f64) * sum - 3.0 * (n + 1) as f64;
-    let corr = 1.0
-        - ties
-            .iter()
-            .map(|t| (t.pow(3) - t) as f64)
-            .enumerate()
-            .try_fold(0.0, |sum, (i, v)| {
-                checkpoint(control, i)?;
-                Ok::<_, Error>(sum + v)
-            })?
-            / ((n * n * n - n) as f64);
+    let total_n = n as f64;
+    let corr = 1.0 - rank_tie_sum(&ties, control)? / (total_n * (total_n * total_n - 1.0));
     if corr <= 0.0 {
         return Err(invalid(Violation::DataOutOfRange));
     }
@@ -374,16 +362,11 @@ fn friedman(
             checkpoint(control, j)?;
             sums[j] += r[j];
         }
-        tie_total += t
-            .iter()
-            .map(|v| (v.pow(3) - v) as f64)
-            .enumerate()
-            .try_fold(0.0, |sum, (i, v)| {
-                checkpoint(control, i)?;
-                Ok::<_, Error>(sum + v)
-            })?;
+        tie_total += rank_tie_sum(&t, control)?;
     }
-    let raw = 12.0 / (n * k * (k + 1)) as f64
+    let rows = n as f64;
+    let groups = k as f64;
+    let raw = 12.0 / (rows * groups * (groups + 1.0))
         * sums
             .iter()
             .map(|r| r * r)
@@ -392,8 +375,8 @@ fn friedman(
                 checkpoint(control, i)?;
                 Ok::<_, Error>(sum + v)
             })?
-        - 3.0 * n as f64 * (k + 1) as f64;
-    let correction = 1.0 - tie_total / (n as f64 * k as f64 * ((k * k - 1) as f64));
+        - 3.0 * rows * (groups + 1.0);
+    let correction = 1.0 - tie_total / (rows * groups * (groups * groups - 1.0));
     if correction <= 0.0 {
         return Err(invalid(Violation::DataOutOfRange));
     }
@@ -523,8 +506,9 @@ fn runs(
         return Err(invalid(Violation::DataOutOfRange));
     }
     let mean = 1.0 + 2.0 * n0 as f64 * n1 as f64 / n as f64;
+    let total_n = n as f64;
     let variance = 2.0 * n0 as f64 * n1 as f64 * (2.0 * n0 as f64 * n1 as f64 - n as f64)
-        / (n * n * (n - 1)) as f64;
+        / (total_n * total_n * (total_n - 1.0));
     if variance <= 0.0 {
         return Err(invalid(Violation::DataOutOfRange));
     }
@@ -634,12 +618,21 @@ fn mann_kendall(
     ordered.sort_by(f64::total_cmp);
     control.check()?;
     let mut unique = 0;
-    for i in 0..ordered.len() {
+    let mut i = 0;
+    let mut tie = 0.0;
+    while i < ordered.len() {
         checkpoint(control, i)?;
-        if unique == 0 || ordered[unique - 1] != ordered[i] {
-            ordered[unique] = ordered[i];
-            unique += 1;
+        let start = i;
+        let value = ordered[i];
+        i += 1;
+        while i < ordered.len() && ordered[i] == value {
+            checkpoint(control, i)?;
+            i += 1;
         }
+        let count = (i - start) as f64;
+        tie += count * (count - 1.0) * (2.0 * count + 5.0);
+        ordered[unique] = value;
+        unique += 1;
     }
     ordered.truncate(unique);
     let mut tree = vec![0i64; ordered.len() + 1];
@@ -647,7 +640,7 @@ fn mann_kendall(
     for (i, value) in values.iter().enumerate() {
         checkpoint(control, i)?;
         let rank = ordered
-            .binary_search_by(|candidate| candidate.total_cmp(value))
+            .binary_search_by(|candidate| candidate.partial_cmp(value).expect("finite observation"))
             .expect("compressed value")
             + 1;
         let less = fenwick_sum(&tree, rank - 1);
@@ -659,18 +652,10 @@ fn mann_kendall(
             index += index & index.wrapping_neg();
         }
     }
-    let (_, ties) = ranks(&values, control)?;
-    let tie = ties
-        .iter()
-        .map(|t| (t.pow(3) - t) as f64)
-        .enumerate()
-        .try_fold(0.0, |sum, (i, v)| {
-            checkpoint(control, i)?;
-            Ok::<_, Error>(sum + v)
-        })?;
-    let variance = (n * (n - 1) * (2 * n + 5)) as f64 / 18.0 - tie / 18.0;
-    if variance <= 0.0 {
-        return Err(invalid(Violation::DataOutOfRange));
+    let total_n = n as f64;
+    let variance = (total_n * (total_n - 1.0) * (2.0 * total_n + 5.0) - tie) / 18.0;
+    if variance < 0.0 {
+        return Err(failed());
     }
     let corrected = if s > 0 {
         (s - 1) as f64
@@ -679,7 +664,11 @@ fn mann_kendall(
     } else {
         0.0
     };
-    let z = corrected / variance.sqrt();
+    let z = if s == 0 {
+        0.0
+    } else {
+        corrected / variance.sqrt()
+    };
     let p = normal_p(z, alternative, control)?;
     let mut result = base(
         "mann_kendall",
@@ -692,9 +681,10 @@ fn mann_kendall(
     );
     result.alternative = alternative_name(alternative).into();
     result.details.insert("s_statistic".into(), s as f64);
-    result
-        .details
-        .insert("kendall_tau".into(), s as f64 / (n * (n - 1) / 2) as f64);
+    result.details.insert(
+        "kendall_tau".into(),
+        s as f64 / (total_n * (total_n - 1.0) / 2.0),
+    );
     Ok(result)
 }
 
@@ -736,10 +726,20 @@ fn ranks(
             checkpoint(control, offset)?;
             output[*index] = rank;
         }
-        ties.push(j - i);
+        if j - i > 1 {
+            ties.push(j - i);
+        }
         i = j;
     }
     Ok((output, ties))
+}
+
+fn rank_tie_sum(ties: &[usize], control: &ScientificExecutionControl) -> Result<f64, Error> {
+    ties.iter().enumerate().try_fold(0.0, |sum, (i, count)| {
+        checkpoint(control, i)?;
+        let count = *count as f64;
+        Ok(sum + count * (count * count - 1.0))
+    })
 }
 
 fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<(), Error> {
