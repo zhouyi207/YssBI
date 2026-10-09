@@ -418,7 +418,8 @@ references do not create an unadmitted full-column string expansion. Count-table
 admits linear category indexes before constructing them, then uses actual row and
 column cardinalities for the dense table. These are conservative workspace
 estimates, not process RSS limits. Classical kernels use revision 6, except the
-paired t, McNemar, CMH, categorical independence and chi-square goodness-of-fit kernels,
+paired t, McNemar, CMH, categorical independence, chi-square goodness-of-fit and
+multiple-proportion kernels,
 which use revision 7;
 Mann–Whitney, Kruskal–Wallis, Friedman, Runs, Mann–Kendall and the rank-family
 selector also use revision 7, covering corrected rank moments and tie handling.
@@ -437,6 +438,7 @@ p-value and table counts remain usable. The common report path preserves this
 optional statistic instead of rejecting the entire result as nonfinite.
 Goodness-of-fit retains SCI's positive, matching frequency-total requirement and
 roundoff tolerance through the existing numeric-input error boundary.
+Multiple-proportion input preserves ordered success/trial pairs for SCI's shared Pearson test.
 
 Paired t and McNemar tests use the shared numeric-column reader to pair equal-length
 measurements by their current positions. Database series from independent sources and

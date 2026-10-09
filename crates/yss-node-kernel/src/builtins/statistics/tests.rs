@@ -2176,6 +2176,25 @@ fn scale_limits_mixed_estimators_preserve_replicated_reference_fits() {
 
 #[test]
 fn scale_limits_classification_and_classical_groups_keep_valid_results() {
+    let result = run(
+        "yssbi.statistics.test.proportion.multiple",
+        &[(
+            "successes_and_trials",
+            series(&[20.0, 100.0, 40.0, 100.0, 60.0, 100.0]),
+        )],
+        &[],
+        1,
+    )
+    .unwrap();
+    let statistic =
+        super::super::numeric_input(Some(field(&result[0], "statistic").unwrap())).unwrap();
+    let p = super::super::numeric_input(Some(field(&result[0], "p_value").unwrap())).unwrap();
+    assert!(
+        (statistic - 100.0 / 3.0).abs() < 1e-12,
+        "multiple-proportion adapter returned {statistic}, p={p}"
+    );
+    assert!((p - 5.777_748_519_419_133e-8).abs() < 1e-15);
+
     for (id, parameter, null, expected_statistic, expected_p) in [
         (
             "yssbi.statistics.test.t.one_sample",

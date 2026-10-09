@@ -630,6 +630,8 @@ Chi-square goodness-of-fit requires a positive observed total matching the expec
 total within floating-point roundoff. Mismatched totals retain the existing data-domain
 input violation rather than producing a p-value; finite-input total overflow remains
 a computation failure.
+Multiple-proportion inputs retain ordered success/trial pairs. Each group's success
+and failure counts share one column in the two-row table passed to the shared Pearson test.
 `tests/categorical_tables.rs` covers repeated long labels whose first appearance
 order differs from the table's lexical order.
 For 2x2 Fisher tests, the statistic is the sample odds ratio `a*d/(b*c)`;

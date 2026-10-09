@@ -350,7 +350,7 @@ fn multiple_proportions(
         return Err(invalid(Violation::EmptyInput));
     }
     let groups = values.len() / 2;
-    let mut counts = Vec::with_capacity(groups * 2);
+    let mut counts = vec![0.0; values.len()];
     let mut total = 0.0;
     let mut successes = 0.0;
     for (i, pair) in values.chunks_exact(2).enumerate() {
@@ -366,8 +366,8 @@ fn multiple_proportions(
         if n == 0.0 || success > n {
             return Err(invalid(Violation::DataOutOfRange));
         }
-        counts.push(success);
-        counts.push(n - success);
+        counts[i] = success;
+        counts[groups + i] = n - success;
         successes += success;
         total += n;
     }

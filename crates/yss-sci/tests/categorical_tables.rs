@@ -6,6 +6,30 @@ use yss_sci_contract::{
 };
 
 #[test]
+fn multiple_proportions_keeps_each_groups_counts_in_one_column() {
+    let control = ScientificExecutionControl {
+        cancellation: ScientificCancellationToken::new(),
+        deadline: Instant::now() + Duration::from_secs(30),
+    };
+    let report = categorical::run(
+        CategoricalHypothesisTest::MultipleProportions {
+            successes_and_trials: vec![20.0, 100.0, 40.0, 100.0, 60.0, 100.0],
+        },
+        &control,
+    )
+    .unwrap();
+    assert!(
+        (report.statistic.unwrap() - 100.0 / 3.0).abs() < 1e-12,
+        "group counts were placed in the wrong table cells: {report:?}"
+    );
+    assert!((report.p_value - 5.777_748_519_419_133e-8).abs() < 1e-15);
+    assert_eq!(report.degrees_of_freedom, [2.0]);
+    assert_eq!(report.sample_sizes, [300]);
+    assert_eq!(report.details["overall_proportion"], 0.4);
+    assert_eq!(report.details["minimum_expected_count"], 40.0);
+}
+
+#[test]
 fn fisher_reports_sample_odds_ratio_and_retains_exact_p_when_ratio_is_infinite() {
     let control = ScientificExecutionControl {
         cancellation: ScientificCancellationToken::new(),
