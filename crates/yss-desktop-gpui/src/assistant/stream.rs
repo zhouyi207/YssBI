@@ -131,7 +131,7 @@ impl ConversationPanel {
             let result = job
                 .await
                 .unwrap_or_else(|_| Err("会话读取未完成，请刷新后重试。".into()));
-            let _ = view.update_in(cx, |view, window, cx| {
+            let _ = view.update_in(cx, |view, _, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -163,7 +163,6 @@ impl ConversationPanel {
                             view.stream_error = None;
                             view.recovering = false;
                             view.stopping = false;
-                            view.load_resources(window, cx);
                             cx.emit(ConversationEvent::DirectoryChanged);
                         } else {
                             view.stream_error = Some("会话历史存在缺口，请刷新后重试。".into());

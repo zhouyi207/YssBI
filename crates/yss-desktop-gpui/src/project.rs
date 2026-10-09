@@ -1,5 +1,6 @@
 //! Native project and editor read models; mutation authority stays in Application/Project.
 use std::sync::Arc;
+pub(crate) mod resources;
 
 use anyhow::{Result, anyhow};
 use yss_application::{
@@ -16,12 +17,18 @@ use yss_project_identity::ProjectInstanceId;
 pub struct DesktopProject {
     pub identity: ProjectInstanceId,
     pub index: Arc<yss_project::ProjectIndex>,
+    pub resources: Arc<resources::ResourceCatalog>,
     pub panels: Vec<Arc<ActivityPanelDocument>>,
 }
 
 impl DesktopProject {
     pub fn new(identity: ProjectInstanceId, snapshot: ProjectIndexSnapshot) -> Self {
+        let resources = Arc::new(resources::ResourceCatalog::new(
+            identity.clone(),
+            &snapshot.index,
+        ));
         Self {
+            resources,
             identity,
             index: Arc::new(snapshot.index),
             panels: snapshot.activity_panels.into_iter().map(Arc::new).collect(),

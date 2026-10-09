@@ -175,6 +175,11 @@ impl Workbench {
     ) {
         self.index_generation = self.index_generation.wrapping_add(1);
         self.refreshing_index = false;
+        for conversation in self.conversations.values() {
+            conversation.update(cx, |view, cx| {
+                view.set_resource_catalog(Some(project.resources.clone()), cx);
+            });
+        }
         for document in &project.panels {
             if let Some(panel) = self
                 .activities

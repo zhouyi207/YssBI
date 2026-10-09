@@ -7,6 +7,7 @@ mod inspect;
 mod models;
 mod options;
 mod projection;
+mod references;
 mod render;
 mod stream;
 mod thread;
@@ -19,7 +20,7 @@ use gpui::{
 };
 use gpui_component::{
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
-    input::{InputEvent, InputState, TextareaState},
+    input::{InputEvent, TextareaState},
 };
 use std::{
     collections::{BTreeSet, VecDeque},
@@ -59,15 +60,11 @@ pub(crate) struct ConversationPanel {
     focus: FocusHandle,
     input: Entity<TextareaState>,
     _input_subscription: Subscription,
-    resource_search: Entity<InputState>,
-    _search_subscription: Subscription,
-    reference_picker: bool,
-    resource_generation: u64,
     viewport: thread::Viewport,
     transcript: projection::Transcript,
     catalog: Option<Arc<LanguageModelCatalog>>,
     references: Vec<ProjectResourceRef>,
-    resource_choices: Vec<yss_harness_contract::HarnessResourceReference>,
+    resource_catalog: Option<Arc<crate::project::resources::ResourceCatalog>>,
     options: HarnessTurnOptions,
     pending: Option<Submission>,
     unsent: Option<DraftMessage>,
@@ -104,13 +101,6 @@ impl ConversationPanel {
                 cx.notify();
             }
         });
-        let resource_search =
-            cx.new(|cx| InputState::new(window, cx).placeholder("搜索资源名称或路径"));
-        let search_subscription = cx.subscribe(&resource_search, |_, _, event, cx| {
-            if matches!(event, InputEvent::Change) {
-                cx.notify();
-            }
-        });
         let mut panel = Self {
             services,
             session,
@@ -118,15 +108,11 @@ impl ConversationPanel {
             focus: cx.focus_handle(),
             input,
             _input_subscription: subscription,
-            resource_search,
-            _search_subscription: search_subscription,
-            reference_picker: false,
-            resource_generation: 0,
             viewport: Default::default(),
             transcript: Default::default(),
             catalog: None,
             references: vec![],
-            resource_choices: vec![],
+            resource_catalog: None,
             options: Default::default(),
             pending: None,
             unsent: None,

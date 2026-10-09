@@ -320,39 +320,61 @@ impl Workbench {
             self.subscriptions.push(cx.subscribe_in(
                 &panel,
                 window,
-                |view, _, event, window, cx| match event {
-                    ConversationEvent::OptionsChanged => {
-                        view.dock.update(cx, |_, cx| cx.notify());
+                |view, panel, event, window, cx| {
+                    if matches!(
+                        event,
+                        ConversationEvent::OpenResource(_) | ConversationEvent::OpenResult(_)
+                    ) && view.project.as_ref().is_none_or(|project| {
+                        &project.identity != panel.read(cx).session.project.project_instance_id()
+                    }) {
+                        view.error =
+                            Some(crate::text::t("panel.assistantResourceUnavailable").into());
+                        cx.notify();
+                        return;
                     }
-                    ConversationEvent::DirectoryChanged => {
-                        view.refresh_assistant_directory(window, cx)
-                    }
-                    ConversationEvent::Settings => view.show_settings(window, cx),
-                    ConversationEvent::OpenResource(resource) => match resource.kind {
-                        ProjectResourceKind::Database => {
-                            view.open_database(resource.id.clone(), None, window, cx)
+                    match event {
+                        ConversationEvent::OptionsChanged => {
+                            view.dock.update(cx, |_, cx| cx.notify());
                         }
-                        ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph => {
-                            view.open_graph(resource.id.clone(), window, cx)
+                        ConversationEvent::DirectoryChanged => {
+                            view.refresh_assistant_directory(window, cx)
                         }
-                        ProjectResourceKind::Doc => {
-                            view.open_document(resource.id.clone(), None, window, cx)
+                        ConversationEvent::Settings => view.show_settings(window, cx),
+                        ConversationEvent::OpenResource(resource) => match resource.kind {
+                            ProjectResourceKind::Database => {
+                                view.open_database(resource.id.clone(), None, window, cx)
+                            }
+                            ProjectResourceKind::EventGraph
+                            | ProjectResourceKind::FunctionGraph => {
+                                view.open_graph(resource.id.clone(), window, cx)
+                            }
+                            ProjectResourceKind::Doc => {
+                                view.open_document(resource.id.clone(), None, window, cx)
+                            }
+                            ProjectResourceKind::Mind => {
+                                view.open_mind(resource.id.clone(), None, window, cx)
+                            }
+                            ProjectResourceKind::Chart => {
+                                view.open_chart(resource.id.clone(), None, window, cx)
+                            }
+                        },
+                        ConversationEvent::OpenResult(reference) => {
+                            view.open_result(*reference, None, window, cx)
                         }
-                        ProjectResourceKind::Mind => {
-                            view.open_mind(resource.id.clone(), None, window, cx)
-                        }
-                        ProjectResourceKind::Chart => {
-                            view.open_chart(resource.id.clone(), None, window, cx)
-                        }
-                    },
-                    ConversationEvent::OpenResult(reference) => {
-                        view.open_result(*reference, None, window, cx)
                     }
                 },
             ));
             self.conversations.insert(id.clone(), panel.clone());
             panel
         };
+        panel.update(cx, |view, cx| {
+            view.set_resource_catalog(
+                self.project
+                    .as_ref()
+                    .map(|project| project.resources.clone()),
+                cx,
+            )
+        });
         self.present_panel(panel_handle(panel), DockPlacement::Center, window, cx);
         self.sync_active_conversation(cx);
     }

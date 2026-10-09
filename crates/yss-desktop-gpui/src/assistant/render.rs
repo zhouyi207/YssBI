@@ -105,7 +105,16 @@ impl ConversationPanel {
                     SharedString::from(format!("user-{id}")),
                     text,
                 ))
-                .child(self.resource_chips(turn, cx)),
+                .child(
+                    self.reference_chips(
+                        format!("history-references-{}", turn.id),
+                        turn.resources
+                            .iter()
+                            .map(|reference| (&reference.resource, Some(reference.name.as_str()))),
+                        false,
+                        cx,
+                    ),
+                ),
         );
         item = item.child(self.execution_header(turn, cx));
         if !turn.reasoning.is_empty() {
@@ -235,25 +244,7 @@ impl ConversationPanel {
         }
         item.child(citations).into_any_element()
     }
-    fn resource_chips(&self, turn: &Turn, cx: &mut Context<Self>) -> AnyElement {
-        let mut chips = div().flex().flex_wrap().gap_1();
-        for (index, reference) in turn.resources.iter().enumerate() {
-            let resource = reference.resource.clone();
-            chips = chips.child(
-                Button::new(SharedString::from(format!(
-                    "history-resource-{}-{index}",
-                    turn.id
-                )))
-                .small()
-                .ghost()
-                .label(reference.name.clone())
-                .on_click(cx.listener(move |_, _, _, cx| {
-                    cx.emit(ConversationEvent::OpenResource(resource.clone()))
-                })),
-            );
-        }
-        chips.into_any_element()
-    }
+
     fn tool_list(&self, tools: &[Tool], running: bool, cx: &mut Context<Self>) -> AnyElement {
         let mut list = div().flex().flex_col().gap_1();
         for tool in tools {

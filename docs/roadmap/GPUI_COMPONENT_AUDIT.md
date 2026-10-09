@@ -500,6 +500,15 @@
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过；9 个改动 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true`、20 个双语键/参数、文档元信息与相对链接检查通过。`node scripts/generate-crate-dependencies.mjs --check` 校验 59 个 crate、240 条依赖声明，`git diff --check` 通过；没有运行全工作区验证。
 - 临时预览与数据不提交，不新增依赖或 UI 单元测试；真实供应商调用、持久事件回放、物理键鼠/IME、读屏和其他平台仍待验收。其余 Assistant 组件继续独立审查，累计完成源码审查 183/265 项。
 
+### 对话资源引用（AssistantReferences）
+
+- 已逐项阅读 ResourcePicker、ReferenceChip、DraftReferences、UserReferences 及打开/入队调用方。`project/resources` 从工作台已接纳索引建立共享 Arc 目录，缓存类型身份、名称、路径查找与搜索文本；会话挂载和索引更新分发同一目录，移除每个对话独立查询索引、搜索订阅及弹出状态。
+- `assistant/references` 共用草稿、队列、未确认原文和历史引用标签；历史保留记录名称，打开与移除分离，失效引用仍可移除。打开复用工作台原资源入口、并发打开保护与错误反馈，事件路由重新校验会话所属项目。
+- `references/picker` 复用 Popover 和虚拟 List，支持名称/路径搜索、去除首尾空白、大小写匹配、键盘确认及连续增删；目录更新保留查询，隐藏会话释放控件状态。当前 List 按旧行数设置初选，搜索接纳后补齐首项选择，修复无结果恢复后 Enter 不生效。
+- 工作区及独立提交副本通过临时 `assistant_references_review` Linux/X11 窗口验收。实际项目索引与原打开入口覆盖数据库、文档、Mind、图表、函数图；独立副本验证真实文档移走后引用失效、仍可移除、恢复后目录更新、搜索词保留、两会话共用同一 Arc、隐藏后清除搜索。两处均复验无结果恢复后的键盘确认。工作区另以合成轮次核对队列/未确认消息的引用隔离及历史记录名称，并验证长名称截断、新增文档、Esc 返回输入焦点、中英文与保留 sidebar 的展开布局。没有模型调用或持久事件写入。
+- L2：两处 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过；10 个 Rust 文件局部格式、6 个双语键/参数、文档元信息与相对链接、模块索引和 `git diff --check` 均通过。工作区预览曾遇并行 SCI 修改中的编译错误，稳定后重建通过；独立副本刷新受共享 target 影响的 SCI 契约产物后通过，未修改 SCI 源码。不新增依赖或 UI 单元测试，不运行全工作区验证；临时入口不提交。
+- 跨项目迟到打开、打开失败的实际交互、大目录压力、物理键鼠/IME、读屏、真实模型引用读取、持久回放和其他平台继续验收。Composer、Resources 及其余 Assistant 组件仍分别审查，累计完成源码审查 184/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -607,7 +616,7 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/assistant/internal/ui/AssistantComposer.tsx](../../react/src/modules/assistant/internal/ui/AssistantComposer.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantComposer.tsx](../../react/src/modules/assistant/internal/ui/AssistantComposer.tsx) | 待查 | 已读源码；引用接入共用标签，输入展开、@ 触发、恢复与队列交互继续审查 | 部分迁移，完整审查开放 |
 | [modules/assistant/internal/ui/AssistantConversationHeader.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationHeader.tsx) | 迁移 | dock/conversation 单行标题与原会话选项；新建/重命名/刷新/设置/关闭复用原入口，展开读取根 DockArea 并保留 sidebar | Linux/X11 已覆盖主要操作；局部重绘、读屏/物理输入及跨平台待验收 |
 | [modules/assistant/internal/ui/AssistantConversationPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationPanel.tsx) | 优化 | 复用按会话缓存的 ConversationPanel；目录同步标题但保留输入/运行选项，根 DockArea 分离对话与编辑列，不迁移 React Provider 包装层 | 草稿切换/关闭重开、独立布局重启已验收；消息及运行时组件继续独立审查 |
 | [modules/assistant/internal/ui/AssistantConversationToggle.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationToggle.tsx) | 优化 | 原 DockArea、目录查询和 Application 会话入口补齐整组关闭、上次/最近恢复、空目录新建及生命周期隔离；无项目沿用临时会话目录 | 代码已覆盖；本批窗口验收见记录，故障与跨平台余项开放 |
@@ -616,8 +625,8 @@
 | [modules/assistant/internal/ui/AssistantMarkdown.tsx](../../react/src/modules/assistant/internal/ui/AssistantMarkdown.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantModelPicker.tsx](../../react/src/modules/assistant/internal/ui/AssistantModelPicker.tsx) | 迁移 | assistant/models 复用可搜索 Combobox；会话回执拥有选择，当前目录校验身份与凭据，隐藏释放弹出状态 | Linux/X11 合成目录与真实会话选择验收通过；真实供应商/其他平台待验收 |
 | [modules/assistant/internal/ui/AssistantPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantPanel.tsx) | 复用原生组件 | 薄包装由既有 ActivityPanel 与根 DockArea 承接，不增加会话列表或状态 owner | 包装无独立业务；目录交互随本批验收 |
-| [modules/assistant/internal/ui/AssistantReferences.tsx](../../react/src/modules/assistant/internal/ui/AssistantReferences.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantReferences.tsx](../../react/src/modules/assistant/internal/ui/AssistantReferences.tsx) | 迁移并优化：复用共享项目目录、原生 Popover/List 与资源打开入口 | project/resources、assistant/references；连续选择和四处共用引用标签，移除会话重复查询 | 代码已覆盖；两处隔离窗口已验收，跨项目/失败/真实模型与平台验收仍开放 |
+| [modules/assistant/internal/ui/AssistantResources.tsx](../../react/src/modules/assistant/internal/ui/AssistantResources.tsx) | 待查 | 已读源码；Artifacts、Results 与来源卡片的当前资源校验及交互继续审查 | 完整审查开放 |
 | [modules/assistant/internal/ui/AssistantRunOptions.tsx](../../react/src/modules/assistant/internal/ui/AssistantRunOptions.tsx) | 迁移 | assistant/options 复用 HarnessTurnOptions、目录限制/默认档位；模式说明、勾选、重置与失效覆盖核对，保留队列配置 | Linux/X11 草稿/目录/队列交互验收通过；真实运行/其他平台待验收 |
 | [modules/assistant/internal/ui/AssistantTasks.tsx](../../react/src/modules/assistant/internal/ui/AssistantTasks.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantThread.tsx](../../react/src/modules/assistant/internal/ui/AssistantThread.tsx) | 待查 | 已阅读主组件；历史范围、加载锚点、最新消息跳转与底部跟随已迁入 assistant/thread；消息子组件及依赖继续审查 | 视口已通过合成事件的原生窗口验收；整体未完成 |
