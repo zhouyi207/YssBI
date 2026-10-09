@@ -1,6 +1,7 @@
 //! Native conversation views consume durable Harness facts and retain only input state.
 mod commands;
 mod composer;
+mod execution;
 mod header;
 mod inspect;
 mod projection;

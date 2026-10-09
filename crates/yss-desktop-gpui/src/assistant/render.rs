@@ -11,7 +11,8 @@ use gpui_component::{
 use yss_harness_contract::{AgentRole, AgentRunState, ModelCallPurpose};
 
 impl Render for ConversationPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.refresh_timing(window, cx);
         div()
             .id("assistant-conversation")
             .key_context("AssistantConversation")
@@ -106,6 +107,7 @@ impl ConversationPanel {
                 ))
                 .child(self.resource_chips(turn, cx)),
         );
+        item = item.child(self.execution_header(turn, cx));
         if !turn.reasoning.is_empty() {
             let key = format!("reasoning-{id}");
             let expanded = self.expanded.contains(&key);
@@ -134,13 +136,13 @@ impl ConversationPanel {
                 ));
             }
         }
-        item = item.child(self.tool_list(&turn.tools, cx));
+        item = item.child(self.tool_list(&turn.tools, turn.state == TurnState::Running, cx));
         for task in turn
             .tasks
             .values()
             .filter(|task| task.role != AgentRole::Manager)
         {
-            item = item.child(self.task_card(task, cx));
+            item = item.child(self.task_card(task, turn.state == TurnState::Running, cx));
         }
         if let Some(plan) = &turn.plan {
             item = item.child(
@@ -184,10 +186,6 @@ impl ConversationPanel {
                     .gap_2()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!(
-                        "{} / {}",
-                        turn.model.provider_name, turn.model.model_name
-                    ))
                     .child(match turn.state {
                         TurnState::Running => "生成中",
                         TurnState::Completed => "已完成",
@@ -256,7 +254,7 @@ impl ConversationPanel {
         }
         chips.into_any_element()
     }
-    fn tool_list(&self, tools: &[Tool], cx: &mut Context<Self>) -> AnyElement {
+    fn tool_list(&self, tools: &[Tool], running: bool, cx: &mut Context<Self>) -> AnyElement {
         let mut list = div().flex().flex_col().gap_1();
         for tool in tools {
             let id = tool.id.clone();
@@ -276,35 +274,54 @@ impl ConversationPanel {
                 title
             };
             let state = if tool.failure.is_some() {
-                "失败"
-            } else if !tool.finished {
-                "运行中"
+                crate::text::t("panel.assistantToolFailed")
+            } else if tool.finished {
+                crate::text::t("panel.assistantToolCompleted")
+            } else if !running {
+                crate::text::t("panel.assistantToolInterrupted")
+            } else if !self.timing_connected() {
+                crate::text::t("panel.assistantToolUnknown")
             } else {
-                "完成"
+                crate::text::t("panel.assistantToolRunning")
             };
             list = list.child(
-                Button::new(SharedString::from(format!("tool-{id}")))
-                    .small()
-                    .ghost()
-                    .label(format!(
-                        "{title} · {state}{}",
-                        tool.execution
-                            .as_ref()
-                            .map(|status| format!(" · {status}"))
-                            .unwrap_or_default()
-                    ))
-                    .on_click(cx.listener(move |view, _, window, cx| {
-                        view.inspect_tool(id.clone(), window, cx)
-                    })),
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Button::new(SharedString::from(format!("tool-{id}")))
+                            .small()
+                            .ghost()
+                            .label(format!(
+                                "{title} · {state}{}",
+                                tool.execution
+                                    .as_ref()
+                                    .map(|status| format!(" · {status}"))
+                                    .unwrap_or_default()
+                            ))
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                view.inspect_tool(id.clone(), window, cx)
+                            })),
+                    )
+                    .child(self.elapsed(
+                        format!("tool-time-{}", tool.id),
+                        tool.timing,
+                        running && !tool.finished,
+                        cx,
+                    )),
             );
         }
         list.into_any_element()
     }
-    fn task_card(&self, task: &Task, cx: &mut Context<Self>) -> AnyElement {
+    fn task_card(&self, task: &Task, running: bool, cx: &mut Context<Self>) -> AnyElement {
         let key = format!("task-{}", task.id);
         let expanded = self.expanded.contains(&key);
         let state = match task.state {
-            None => "运行中",
+            None if !running => crate::text::t("panel.assistantToolInterrupted"),
+            None if !self.timing_connected() => crate::text::t("panel.assistantToolUnknown"),
+            None => crate::text::t("panel.assistantToolRunning"),
             Some(AgentRunState::Completed) => "完成",
             Some(AgentRunState::Stale) => "已过期",
             Some(AgentRunState::Blocked) => "受阻",
@@ -332,7 +349,13 @@ impl ConversationPanel {
                         }
                         cx.notify();
                     })),
-            );
+            )
+            .child(self.elapsed(
+                format!("task-time-{}", task.id),
+                Some(task.timing),
+                running && task.state.is_none(),
+                cx,
+            ));
         if expanded {
             if let Some(summary) = &task.summary {
                 card = card.child(TextView::markdown(
@@ -351,7 +374,7 @@ impl ConversationPanel {
             for warning in &task.warnings {
                 card = card.child(div().text_xs().child(warning.clone()));
             }
-            card = card.child(self.tool_list(&task.tools, cx));
+            card = card.child(self.tool_list(&task.tools, running && task.state.is_none(), cx));
             for (index, artifact) in task.artifacts.iter().enumerate() {
                 let resource = artifact.resource.clone();
                 card = card.child(

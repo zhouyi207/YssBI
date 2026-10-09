@@ -6,8 +6,8 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     text::TextView,
 };
-use yss_harness_contract::{KnowledgeCitation, ToolInvocationId};
 use yss_harness_contract::{AssistantResultReference, AssistantToolInspection};
+use yss_harness_contract::{KnowledgeCitation, ToolInvocationId};
 
 impl ConversationPanel {
     pub(super) fn inspect_tool(&self, id: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -78,9 +78,15 @@ impl ConversationPanel {
                             for (name, value) in &detail.parameters {
                                 body = body.child(format!("{name}：{value}"));
                             }
-                            body = body.child(format!("开始：{}", time(detail.started_at)));
+                            body = body.child(format!(
+                                "开始：{}",
+                                super::execution::timestamp(detail.started_at)
+                            ));
                             if let Some(finished) = detail.finished_at {
-                                body = body.child(format!("结束：{}", time(finished)));
+                                body = body.child(format!(
+                                    "结束：{}",
+                                    super::execution::timestamp(finished)
+                                ));
                             }
                             if let Some(failure) = &detail.failure {
                                 body = body.child(
@@ -253,11 +259,4 @@ impl ConversationPanel {
             ));
         }
     }
-}
-fn time(milliseconds: u64) -> String {
-    i64::try_from(milliseconds)
-        .ok()
-        .and_then(chrono::DateTime::from_timestamp_millis)
-        .map(|time| time.naive_utc().format("%Y-%m-%d %H:%M:%S").to_string())
-        .unwrap_or_else(|| "时间不可用".into())
 }

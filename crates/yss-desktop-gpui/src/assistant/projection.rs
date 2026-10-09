@@ -5,9 +5,30 @@ use yss_harness_contract::{
     LanguageModelIdentity, ModelCallPurpose, ModelTokenUsage, StatisticalPlan,
 };
 use yss_harness_contract::{
-    AssistantEvent, AssistantEventKind as Event, AssistantResultReference,
-    AssistantToolIdentity,
+    AssistantEvent, AssistantEventKind as Event, AssistantResultReference, AssistantToolIdentity,
 };
+
+#[derive(Clone, Copy)]
+pub(super) struct Timing {
+    pub started_at: u64,
+    pub updated_at: u64,
+    pub finished_at: Option<u64>,
+}
+impl Timing {
+    fn started(at: u64) -> Self {
+        Self {
+            started_at: at,
+            updated_at: at,
+            finished_at: None,
+        }
+    }
+    fn finish(&mut self, at: u64) {
+        if self.finished_at.is_none() {
+            self.updated_at = at;
+            self.finished_at = Some(at);
+        }
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum TurnState {
@@ -23,12 +44,14 @@ pub(super) struct Tool {
     pub finished: bool,
     pub failure: Option<String>,
     pub execution: Option<String>,
+    pub timing: Option<Timing>,
 }
 #[derive(Clone)]
 pub(super) struct Task {
     pub id: String,
     pub role: AgentRole,
     pub objective: String,
+    pub timing: Timing,
     pub state: Option<AgentRunState>,
     pub summary: Option<String>,
     pub error: Option<String>,
@@ -42,6 +65,7 @@ pub(super) struct Turn {
     pub id: String,
     pub user: String,
     pub model: LanguageModelIdentity,
+    pub timing: Timing,
     pub resources: Vec<HarnessResourceReference>,
     pub text: String,
     pub reasoning: String,
@@ -49,7 +73,7 @@ pub(super) struct Turn {
     pub tasks: BTreeMap<String, Task>,
     pub citations: Vec<KnowledgeCitation>,
     pub plan: Option<StatisticalPlan>,
-    pub options: HarnessTurnOptions,
+    pub options: Option<HarnessTurnOptions>,
     pub usage: Vec<(ModelTokenUsage, Option<u32>, ModelCallPurpose)>,
     pub activity: Option<String>,
     pub error: Option<String>,
@@ -83,6 +107,7 @@ impl Transcript {
                 id: event.turn_id.ok_or(())?,
                 user: user_message,
                 model,
+                timing: Timing::started(event.occurred_at),
                 resources,
                 text: String::new(),
                 reasoning: String::new(),
@@ -90,7 +115,7 @@ impl Transcript {
                 tasks: BTreeMap::new(),
                 citations: vec![],
                 plan: None,
-                options: Default::default(),
+                options: None,
                 usage: vec![],
                 activity: None,
                 error: None,
@@ -100,16 +125,25 @@ impl Transcript {
             let Some(turn) = self.turns.iter_mut().rev().find(|turn| turn.id == id) else {
                 return Err(());
             };
-            turn.accept(event.event);
+            turn.accept(event.occurred_at, event.event);
         }
         self.sequence = event.sequence;
         Ok(())
     }
 }
 impl Turn {
-    fn accept(&mut self, event: Event) {
+    fn finish_timing(&mut self, at: u64) {
+        self.timing.finish(at);
+        finish_tool_timings(&mut self.tools, at);
+        for task in self.tasks.values_mut().filter(|task| task.state.is_none()) {
+            task.timing.finish(at);
+            finish_tool_timings(&mut task.tools, at);
+        }
+    }
+    fn accept(&mut self, at: u64, event: Event) {
+        self.timing.updated_at = at;
         match event {
-            Event::TurnConfigured { options } => self.options = options,
+            Event::TurnConfigured { options } => self.options = Some(options),
             Event::TextDelta { delta } => self.text.push_str(&delta),
             Event::TextRetracted { characters } => {
                 let count = self.text.chars().count().saturating_sub(characters);
@@ -130,14 +164,17 @@ impl Turn {
             Event::TurnCompleted { final_text } => {
                 self.text = final_text;
                 self.state = TurnState::Completed;
+                self.finish_timing(at);
                 self.activity = None;
             }
             Event::TurnFailed => {
                 self.state = TurnState::Failed;
+                self.finish_timing(at);
                 self.activity = None;
             }
             Event::TurnCancelled => {
                 self.state = TurnState::Cancelled;
+                self.finish_timing(at);
                 self.activity = None;
             }
             Event::KnowledgeCited { citation } => {
@@ -172,6 +209,7 @@ impl Turn {
                         id: run_id,
                         role,
                         objective,
+                        timing: Timing::started(at),
                         state: None,
                         summary: None,
                         error: None,
@@ -188,9 +226,10 @@ impl Turn {
                     .get(&run_id)
                     .is_some_and(|task| task.role == AgentRole::Manager)
                 {
-                    self.accept(*event);
+                    self.accept(at, *event);
                 } else if let Some(task) = self.tasks.get_mut(&run_id) {
-                    apply_tool(&mut task.tools, *event);
+                    task.timing.updated_at = at;
+                    apply_tool(&mut task.tools, at, *event);
                 }
             }
             Event::AgentRunFinished {
@@ -206,6 +245,8 @@ impl Turn {
                 ..
             } => {
                 if let Some(task) = self.tasks.get_mut(&run_id) {
+                    task.timing.finish(at);
+                    finish_tool_timings(&mut task.tools, at);
                     task.state = Some(state);
                     task.summary = summary;
                     task.error = failure_code.map(|code| code.to_string()).or(blocked_reason);
@@ -219,14 +260,22 @@ impl Turn {
             }
             Event::AgentRunInvalidated { run_id } => {
                 if let Some(task) = self.tasks.get_mut(&run_id) {
+                    task.timing.updated_at = at;
                     task.state = Some(AgentRunState::Stale);
                 }
             }
-            event => apply_tool(&mut self.tools, event),
+            event => apply_tool(&mut self.tools, at, event),
         }
     }
 }
-fn apply_tool(tools: &mut Vec<Tool>, event: Event) {
+fn finish_tool_timings(tools: &mut [Tool], at: u64) {
+    for tool in tools {
+        if let Some(timing) = &mut tool.timing {
+            timing.finish(at);
+        }
+    }
+}
+fn apply_tool(tools: &mut Vec<Tool>, at: u64, event: Event) {
     match event {
         Event::ToolInvocationStarted {
             invocation_id,
@@ -237,9 +286,13 @@ fn apply_tool(tools: &mut Vec<Tool>, event: Event) {
             finished: false,
             failure: None,
             execution: None,
+            timing: Some(Timing::started(at)),
         }),
         Event::ToolInvocationCompleted { invocation_id, .. } => {
             if let Some(tool) = tools.iter_mut().find(|tool| tool.id == invocation_id) {
+                if let Some(timing) = &mut tool.timing {
+                    timing.finish(at);
+                }
                 tool.finished = true;
             }
         }
@@ -249,6 +302,9 @@ fn apply_tool(tools: &mut Vec<Tool>, event: Event) {
             ..
         } => {
             if let Some(tool) = tools.iter_mut().find(|tool| tool.id == invocation_id) {
+                if let Some(timing) = &mut tool.timing {
+                    timing.finish(at);
+                }
                 tool.finished = true;
                 tool.failure = Some(failure_code);
             }

@@ -473,6 +473,15 @@
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；后者已接纳并发的 SCI 提交并重新编译消费者。局部格式、使用到的双语键/参数、两份文档的元信息和相对链接、模块索引及 `git diff --check` 按本批范围检查；不添加 UI 单元测试，不运行全工作区测试。
 - 此前静态文字漏绘在本轮展开/切换预览中未复现，独立显示环境仍待验证。触摸板惯性、物理键鼠、IME、读屏与其他平台尚未验收。用户消息的纯文本与局部选择、复制反馈、推理/失败展示、运行信息以及 Markdown 代码/资源/外部链接继续审查；Thread 与 Markdown 不标记整体完成，累计完整审查仍为 179/265 项。
 
+### 对话运行信息（AssistantExecution）
+
+- 逐项阅读 AssistantElapsed、AssistantTurnTiming、AssistantTurnModel、AssistantTurnOptions，核对运行快照选择、消息元信息以及任务/工具消费者；RuntimeProvider、Thread、Tasks、ToolCalls 和 Markdown 的其他职责继续独立审查。
+- `assistant/projection` 保留事件的开始、最近进展和结束时间。`assistant/execution` 共用秒/分/小时时长和悬停时间提示，轮次、任务和工具不各自定义计时规则。轮次/任务终态结算仍运行的子项，已有完成耗时保持原值；缺少开始事件不填补猜测时间。
+- 一个可见会话只持有一个窗口元素状态中的每秒刷新任务。连接不可用、重放、会话隐藏或运行结束后释放；历史耗时来自事件，未确认终态不继续外推。任务和工具的运行提示使用同一连接条件，轮次终止后的未完成工具显示中断。
+- 回复标题呈现该轮记录中的模型名和供应商提示、Ask/Write 与推理档位；配置事件到达前不显示选项，后续草稿设置不改变历史。长模型名截断，模式和档位成组换行；移除页脚重复模型信息，时间提示延迟到悬停时格式化；工具详情复用同一系统本地时区格式，删除重复的 UTC 格式化函数。
+- 工作区及独立提交内容使用临时 `assistant_execution_review` 原生窗口验收：合成 AssistantEvent 经原投影入口交付，核对 1.2 秒、1 分 2 秒、1 小时 1 分 1 秒、持续运行、断流停止、恢复及取消后的固定耗时。工作区另核对任务/工具独立结束、会话切换后的计时器释放、历史与草稿隔离、配置缺失/到达、时间/模型提示、中英文及窄列/展开排版。没有模型请求或事件账本写入，不代表真实执行和持久回放验收。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；两处受影响 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true` 通过。20 个文案键及双语参数、两份文档的元信息与相对链接均通过检查；`node scripts/generate-crate-dependencies.mjs --check` 校验 59 个 crate、240 条依赖声明，`git diff --check` 通过。不新增依赖或 UI 单元测试，不运行全工作区验证。真实模型运行、重启/持久回放、工具详情窗口的实际账本读取、物理键鼠/IME、读屏和其他平台保持待验收。累计完成源码审查 180/265 项，Assistant 其余组件仍开放。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -585,7 +594,7 @@
 | [modules/assistant/internal/ui/AssistantConversationPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationPanel.tsx) | 优化 | 复用按会话缓存的 ConversationPanel；目录同步标题但保留输入/运行选项，根 DockArea 分离对话与编辑列，不迁移 React Provider 包装层 | 草稿切换/关闭重开、独立布局重启已验收；消息及运行时组件继续独立审查 |
 | [modules/assistant/internal/ui/AssistantConversationToggle.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationToggle.tsx) | 优化 | 原 DockArea、目录查询和 Application 会话入口补齐整组关闭、上次/最近恢复、空目录新建及生命周期隔离；无项目沿用临时会话目录 | 代码已覆盖；本批窗口验收见记录，故障与跨平台余项开放 |
 | [modules/assistant/internal/ui/AssistantConversations.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversations.tsx) | 优化 | 原 Activity 目录与虚拟列表补齐时间、名称回退搜索、重命名按钮、窗口激活刷新；DockArea 决定当前会话，重复激活关闭，缓存重开仍校验 Application | 代码已覆盖；本批交互验收见批次记录，跨项目/平台验收开放 |
-| [modules/assistant/internal/ui/AssistantExecution.tsx](../../react/src/modules/assistant/internal/ui/AssistantExecution.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantExecution.tsx](../../react/src/modules/assistant/internal/ui/AssistantExecution.tsx) | 迁移 | assistant/execution 共用事件计时、模型与记录选项；窗口仅为可见且连接正常的运行会话刷新 | 原生合成事件窗口通过；真实运行/持久回放与跨平台待验收 |
 | [modules/assistant/internal/ui/AssistantMarkdown.tsx](../../react/src/modules/assistant/internal/ui/AssistantMarkdown.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantModelPicker.tsx](../../react/src/modules/assistant/internal/ui/AssistantModelPicker.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/assistant/internal/ui/AssistantPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantPanel.tsx) | 复用原生组件 | 薄包装由既有 ActivityPanel 与根 DockArea 承接，不增加会话列表或状态 owner | 包装无独立业务；目录交互随本批验收 |
