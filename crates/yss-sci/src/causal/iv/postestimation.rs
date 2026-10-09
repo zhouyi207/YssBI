@@ -7,7 +7,8 @@ use statrs::{
     statistics::Statistics,
 };
 use yss_sci_contract::causal::iv::{
-    EndogenousTest, FirstStageResult, FirstStageSummary, HausmanTest, OveridTest,
+    EndogenousTest, FirstStageResult, FirstStageSummary, HausmanTest, InstrumentalVariableFit,
+    LimlOveridTest, OveridTest,
 };
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve};
 
@@ -382,62 +383,41 @@ impl IvModel {
 
         Ok((hausman, endogenous))
     }
-    pub fn liml_overidentification(
-        &self,
-        betas: &Col<f64>,
-    ) -> Result<Option<yss_sci_contract::causal::iv::LimlOveridTest>, String> {
-        use yss_sci_contract::causal::iv::LimlOveridTest;
-        let n = self.endog.nrows();
-        let k_iv = self.instruments.ncols();
-        let k_endog = self.endog_reg.ncols();
-        let PreparedIvDesign {
-            z,
-            ztz_inverse: ztz_inv_nd,
-            x_struct,
-            ..
-        } = self.design()?;
-        let k_z = z.ncols();
-        let covariance = &self.options.covariance;
-        let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas.as_ref());
-        // Overidentification test (estat overid): Anderson-Rubin chi2, Basmann F.
-        // Only when nonrobust VCE. With robust (vce(robust)), Stata does not compute overid.
-        let overid = if k_iv > k_endog && !is_robust_covariance(covariance) {
-            let df_overid = k_iv - k_endog;
-            let df_denom = n.saturating_sub(k_z);
-            let uu = u_structural.transpose() * u_structural.as_ref();
-            if df_denom > 0 && uu > 1e-300 {
-                let ztu = z.transpose() * u_structural.as_ref();
-                let ztz_inv_ztu = ztz_inv_nd.as_ref() * ztu.as_ref();
-                let u_pz_u = ztu.transpose() * ztz_inv_ztu.as_ref();
-                let sargan_stat = n as f64 * u_pz_u / uu;
-                let basmann_chi2 = if (n as f64 - sargan_stat).abs() > 1e-10 {
-                    sargan_stat * (n as f64 - k_z as f64) / (n as f64 - sargan_stat)
-                } else {
-                    sargan_stat
-                };
-                let chi2_dist = ChiSquared::new(df_overid as f64)
-                    .map_err(|e| format!("IVLIML overid ChiSquared: {}", e))?;
-                let ar_p = chi2_dist.sf(sargan_stat);
-                let basmann_f_stat = basmann_chi2 / (df_overid as f64);
-                let f_dist = FisherSnedecor::new(df_overid as f64, df_denom as f64)
-                    .map_err(|e| format!("IVLIML overid FisherSnedecor: {}", e))?;
-                let basmann_p = crate::distribution::fisher_snedecor_sf(&f_dist, basmann_f_stat);
+}
 
-                Some(LimlOveridTest {
-                    anderson_rubin_stat: sargan_stat,
-                    anderson_rubin_p_value: ar_p,
-                    basmann_stat: basmann_f_stat,
-                    basmann_p_value: basmann_p,
-                    df: df_overid,
-                    df_denom,
-                })
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        Ok(overid)
+pub(super) fn liml_overidentification(
+    fit: &InstrumentalVariableFit,
+) -> Result<Option<LimlOveridTest>, String> {
+    let k_iv = fit.design.instruments.len();
+    let k_endog = fit.design.endogenous.len();
+    if k_iv <= k_endog || is_robust_covariance(&fit.options.covariance) {
+        return Ok(None);
     }
+    let n = fit.residuals.len();
+    let k_z = fit.design.exogenous.len() + k_iv + usize::from(fit.options.constant);
+    let Some(df_denom) = n.checked_sub(k_z).filter(|&degrees| degrees > 0) else {
+        return Ok(None);
+    };
+    let excess_kappa = fit.statistics.kappa - 1.0;
+    if !excess_kappa.is_finite() || excess_kappa < 0.0 {
+        return Err("IVLIML overid: fitted kappa is invalid".into());
+    }
+    let df = k_iv - k_endog;
+    let anderson_rubin_stat = n as f64 * excess_kappa;
+    let basmann_stat = excess_kappa * (df_denom as f64 / df as f64);
+    if !anderson_rubin_stat.is_finite() || !basmann_stat.is_finite() {
+        return Err("IVLIML overid: statistic is undefined".into());
+    }
+    let chi2 =
+        ChiSquared::new(df as f64).map_err(|error| format!("IVLIML overid ChiSquared: {error}"))?;
+    let f = FisherSnedecor::new(df as f64, df_denom as f64)
+        .map_err(|error| format!("IVLIML overid FisherSnedecor: {error}"))?;
+    Ok(Some(LimlOveridTest {
+        anderson_rubin_stat,
+        anderson_rubin_p_value: chi2.sf(anderson_rubin_stat),
+        basmann_stat,
+        basmann_p_value: crate::distribution::fisher_snedecor_sf(&f, basmann_stat),
+        df,
+        df_denom,
+    }))
 }

@@ -82,7 +82,7 @@ pub fn fit_instrumental_variables(
     })
 }
 
-fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IvModel, SciError> {
+fn validate_diagnostic_fit(fit: &InstrumentalVariableFit) -> Result<(), SciError> {
     let op = SciOperationCode::InstrumentalVariables;
     let n = fit.residuals.len();
     let data = &fit.design;
@@ -109,6 +109,14 @@ fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IvModel, SciError> 
     {
         return Err(invalid_input(op, ScientificInputViolation::ShapeMismatch));
     }
+    Ok(())
+}
+
+fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IvModel, SciError> {
+    validate_diagnostic_fit(fit)?;
+    let op = SciOperationCode::InstrumentalVariables;
+    let n = fit.residuals.len();
+    let data = &fit.design;
     Ok(IvModel {
         endog: Col::from_iter(fit.fitted.iter().zip(&fit.residuals).map(|(f, r)| f + r)),
         exog: if data.exogenous.is_empty() {
@@ -160,8 +168,8 @@ pub fn liml_overidentification(
             ScientificInputViolation::ParameterOutOfRange,
         ));
     }
-    diagnostic_model(fit)?
-        .liml_overidentification(&Col::from_iter(fit.coefficients.iter().copied()))
+    validate_diagnostic_fit(fit)?;
+    super::postestimation::liml_overidentification(fit)
         .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))
 }
 

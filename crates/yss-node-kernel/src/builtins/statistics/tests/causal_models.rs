@@ -95,6 +95,78 @@ fn iv_fit_summary_preserves_small_sample_references_and_constraint_inference() {
 }
 
 #[test]
+fn liml_summary_reports_kappa_overidentification_and_covariance_availability() {
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1) + signal(row, 2))
+        .collect::<Vec<_>>();
+    let instrument = |bit| (0..16).map(|row| signal(row, bit)).collect::<Vec<_>>();
+    let response = (0..16)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + signal(row, 1) + 2.0 * signal(row, 3))
+        .collect::<Vec<_>>();
+    let numeric = |value: &RuntimeValue| super::super::super::numeric_input(Some(value)).unwrap();
+    for covariance in ["nonrobust", "HC1"] {
+        let fit = run(
+            "yssbi.statistics.iv.liml.fit",
+            &[
+                ("y", series(&response)),
+                ("endogenous", series(&endogenous)),
+                ("instruments", series(&instrument(0))),
+                ("instruments", series(&instrument(1))),
+            ],
+            &[
+                ("constant", flag(true)),
+                ("covariance", string(covariance)),
+                ("small", flag(false)),
+            ],
+            3,
+        )
+        .unwrap();
+        let mut parameters = iv_summary_parameters("liml", false);
+        parameters
+            .iter_mut()
+            .find(|(key, _)| *key == "overidentification")
+            .unwrap()
+            .1 = flag(true);
+        let report = run(
+            "yssbi.statistics.iv.liml.summary",
+            &[("model", fit[0].clone())],
+            &parameters,
+            1,
+        )
+        .unwrap();
+        let result = field(&report[0], "overidentification").unwrap();
+        if covariance == "nonrobust" {
+            assert!(
+                (numeric(field(result, "anderson_rubin_stat").unwrap()) - 3.7509690068058035).abs()
+                    < 1e-10
+            );
+            assert!(
+                (numeric(field(result, "anderson_rubin_p_value").unwrap()) - 0.05277690687650115)
+                    .abs()
+                    < 1e-10
+            );
+            assert!(
+                (numeric(field(result, "basmann_stat").unwrap()) - 3.0476623180297153).abs()
+                    < 1e-10
+            );
+            assert!(
+                (numeric(field(result, "basmann_p_value").unwrap()) - 0.10442600666024893).abs()
+                    < 1e-10
+            );
+            assert_eq!(numeric(field(result, "df").unwrap()), 1.0);
+            assert_eq!(numeric(field(result, "df_denom").unwrap()), 13.0);
+        } else {
+            assert_eq!(result, &RuntimeValue::Scalar(TabularScalar::Null));
+            assert_eq!(
+                field(&report[0], "overidentificationUnavailable").unwrap(),
+                &string("requires_nonrobust_covariance")
+            );
+        }
+    }
+}
+
+#[test]
 fn iv_first_stage_reports_share_covariance_and_f_reference_after_model_roundtrip() {
     let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
     let endogenous = (0..8)

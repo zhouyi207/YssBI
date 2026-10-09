@@ -611,6 +611,117 @@ fn liml_overidentified_robust_covariance_preserves_k_class_bread() {
 }
 
 #[test]
+fn liml_root_preserves_singular_residual_covariance_and_response_units() {
+    use yss_sci::causal::iv::fit::fit_instrumental_variables;
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1) + signal(row, 2))
+        .collect::<Vec<_>>();
+    let instruments = (0..2)
+        .map(|bit| (0..16).map(|row| signal(row, bit)).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    // With no independent response noise, det(A-kB)=5-k and B has rank one.
+    // The full-rank noise case has the existing quadratic root, regardless of units.
+    for (noise, scale, kappa, slope) in [
+        (0.0, 1.0, 5.0, 2.5),
+        (2.0, 1e-7, 1.2344355629253627, 0.6245154965970993),
+    ] {
+        let response = (0..16)
+            .map(|row| {
+                scale * (1.0 + 0.5 * endogenous[row] + signal(row, 1) + noise * signal(row, 3))
+            })
+            .collect::<Vec<_>>();
+        let fit = fit_instrumental_variables(
+            InstrumentalVariableKind::LimitedInformationMaximumLikelihood,
+            response,
+            &[],
+            std::slice::from_ref(&endogenous),
+            &instruments,
+            OlsOptions {
+                constant: true,
+                covariance: OlsCovariance::NonRobust,
+            },
+            false,
+        )
+        .unwrap();
+        assert!(
+            (fit.statistics.kappa - kappa).abs() < 1e-10,
+            "noise={noise}, scale={scale}: {:?}",
+            fit.statistics
+        );
+        assert!((fit.coefficients[0] / scale - 1.0).abs() < 1e-10);
+        assert!((fit.coefficients[1] / scale - slope).abs() < 1e-10);
+    }
+}
+
+#[test]
+fn liml_overidentification_uses_fitted_kappa_and_valid_reference_distributions() {
+    use yss_sci::causal::iv::fit::{fit_instrumental_variables, liml_overidentification};
+    use yss_sci_contract::{
+        SciError, SciOperationCode,
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1) + signal(row, 2))
+        .collect::<Vec<_>>();
+    let instruments = (0..2)
+        .map(|bit| (0..16).map(|row| signal(row, bit)).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let response = (0..16)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + signal(row, 1) + 2.0 * signal(row, 3))
+        .collect::<Vec<_>>();
+    let mut fit = fit_instrumental_variables(
+        InstrumentalVariableKind::LimitedInformationMaximumLikelihood,
+        response,
+        &[],
+        &[endogenous],
+        &instruments,
+        OlsOptions {
+            constant: true,
+            covariance: OlsCovariance::NonRobust,
+        },
+        false,
+    )
+    .unwrap();
+    // Exact Walsh moments: 4*kappa^2 - 26*kappa + 26 = 0.
+    let result = liml_overidentification(&fit).unwrap().unwrap();
+    assert!(
+        (result.anderson_rubin_stat - 3.7509690068058035).abs() < 1e-10,
+        "{result:?}"
+    );
+    assert!((result.anderson_rubin_p_value - 0.05277690687650115).abs() < 1e-10);
+    assert!((result.basmann_stat - 3.0476623180297153).abs() < 1e-10);
+    assert!((result.basmann_p_value - 0.10442600666024893).abs() < 1e-10);
+    assert_eq!((result.df, result.df_denom), (1, 13));
+
+    fit.statistics.kappa = 1.0;
+    let zero = liml_overidentification(&fit).unwrap().unwrap();
+    assert_eq!((zero.anderson_rubin_stat, zero.basmann_stat), (0.0, 0.0));
+    assert_eq!(
+        (zero.anderson_rubin_p_value, zero.basmann_p_value),
+        (1.0, 1.0)
+    );
+    for invalid in [f64::NAN, 0.5, f64::MAX] {
+        fit.statistics.kappa = invalid;
+        assert!(
+            matches!(
+                liml_overidentification(&fit),
+                Err(SciError::ComputationFailed {
+                    operation: SciOperationCode::InstrumentalVariables
+                })
+            ),
+            "invalid fitted kappa {invalid} must not produce a report"
+        );
+    }
+}
+
+#[test]
 fn iv_first_stage_inference_uses_selected_covariance_and_matching_f_reference() {
     use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
     let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };

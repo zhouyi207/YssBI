@@ -188,6 +188,11 @@ Both estimator entries consume SCI's single numerical IV input and prepared desi
 LIML covariance uses projected score rows with its k-class inverse and observed
 structural residuals; Runtime projects those results directly and retains source
 labels. The neutral Fit model/report shape and summary selections stay the same.
+LIML overidentification projects SCI's Anderson–Rubin `n*(kappa-1)` and Basmann F
+results from the fitted kappa, with their actual reference degrees. SCI validates
+the retained model without reconstructing a numerical IV design; unavailable
+analyses remain null with existing reasons, and invalid inference propagates before
+encoding.
 `causal::iv::summary` requests first-stage, overidentification and endogeneity analyses
 only when selected. SCI's insufficient first-stage residual-degree failure propagates
 before report encoding; summaries that omit that analysis retain the structural fit. Runtime

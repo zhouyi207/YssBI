@@ -246,6 +246,13 @@ and matrix/vector copies in the estimators.
 LIML keeps its k-class cross-product inverse for covariance but uses instrument-
 projected score rows, structural residuals and projected leverage for HC2/HC3.
 The same projected scores feed HC0/HC1, cluster and serially robust covariance.
+The kappa eigenproblem is reversed and Cholesky-whitened on the positive-definite
+included-regressor residual cross-product. Its largest reciprocal root retains
+singular instrument residual covariances without treating a null direction as
+kappa zero. Residual cross-products are formed directly from projected columns,
+without subtracting nearly equal cross-products or using an absolute eigenvalue
+cutoff. The endogenous projections reuse the prepared IV design. The projection
+ordering enforces kappa >= 1 under roundoff; undefined roots fail before inference.
 At exact identification its coefficient/covariance results agree with 2SLS;
 overidentified LIML retains its estimated kappa and corresponding cross-product.
 Both estimators share `IvEstimate` and coefficient statistics. The existing
@@ -259,8 +266,15 @@ p-value. Invalid coefficient variances and undefined or nonfinite statistics and
 intervals return a scientific failure before probability evaluation or serialization.
 These conventions follow the [Stata IV manual](https://www.stata.com/manuals/rivregress.pdf).
 Their first-stage, overidentification and endogeneity analyses are separate calls
-in `causal::iv::fit`;
-first-stage analysis reuses the same implementation for both estimators.
+in `causal::iv::fit`. LIML overidentification borrows the fitted kappa and validated
+sample/design counts: Anderson–Rubin is `n*(kappa-1)` with chi-square reference, and
+Basmann F is `(kappa-1)*(n-k_z)/m` with degrees `m, n-k_z`, where `m` is excluded
+instruments minus endogenous regressors. It reuses the existing diagnostic-fit
+validation without reconstructing matrices, coefficients or structural residuals.
+Exact identification, robust covariance and nonpositive instrument-regression
+residual degrees retain unavailable results; invalid fitted kappa or overflowing
+statistics return scientific failure. The numerical-model overidentification method is removed; the neutral fitted-model entry owns this analysis.
+First-stage analysis reuses the same implementation for both estimators.
 It requires positive first-stage residual degrees before preparing the design;
 saturated instrument regressions return a scientific failure while the structural
 fit and summaries that omit this analysis remain available. The existing IV design

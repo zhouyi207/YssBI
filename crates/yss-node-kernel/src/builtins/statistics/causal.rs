@@ -267,7 +267,7 @@ fn summary(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         overidentification: boolean(inv, "overidentification")?,
         endogeneity: is_2sls && boolean(inv, "endogeneity")?,
     };
-    if options.first_stage || options.overidentification || options.endogeneity {
+    if options.first_stage || options.endogeneity || (options.overidentification && is_2sls) {
         check_fit_workspace(
             fit.residuals.len(),
             fit.design.exogenous.len() + fit.design.endogenous.len() + fit.design.instruments.len(),

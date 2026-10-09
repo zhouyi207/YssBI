@@ -17,6 +17,7 @@ impl IvModel {
         let PreparedIvDesign {
             z,
             ztz_inverse,
+            endog_hat,
             x: projected_x,
             x_struct: x,
             ..
@@ -45,36 +46,47 @@ impl IvModel {
             .checked_cholesky()
             .map_err(|_| "IVLIML: X1'X1 not pd".to_string())?
             .solve(&Mat::identity(included, included));
-        let yty = y_tilde.transpose() * y_tilde.as_ref();
-        let zty = z.transpose() * y_tilde.as_ref();
-        let ytmz: Mat<f64> =
-            &yty - &((zty.transpose() * ztz_inverse.as_ref()).as_ref() * zty.as_ref());
-        let x1ty = x1.transpose() * y_tilde.as_ref();
-        let ytmx1: Mat<f64> =
-            &yty - &((x1ty.transpose() * x1tx1_inverse.as_ref()).as_ref() * x1ty.as_ref());
-
-        // The smaller generalized eigenvalue is the LIML k-class parameter.
-        let evd = yss_sci_linalg::SymmetricEigen::factor(ytmz.as_ref())
-            .map_err(|_| "IVLIML: EVD of Ỹ'MZ Ỹ failed".to_string())?;
-        let values = evd.values();
-        let vectors = evd.vectors();
-        let size = k_endog + 1;
-        let mut inverse_sqrt = Mat::zeros(size, size);
-        for i in 0..size {
-            if values[i] > 1e-12 {
-                inverse_sqrt[(i, i)] = 1.0 / values[i].sqrt();
+        let response_hat = z.as_ref()
+            * (ztz_inverse.as_ref() * (z.transpose() * self.endog.as_ref()).as_ref()).as_ref();
+        let mz_y = Mat::from_fn(n, k_endog + 1, |row, column| {
+            if column == 0 {
+                self.endog[row] - response_hat[row]
+            } else {
+                self.endog_reg[(row, column - 1)] - endog_hat[(row, column - 1)]
             }
-        }
-        let whitening = (vectors.as_ref() * inverse_sqrt.as_ref()).as_ref() * vectors.transpose();
-        let g = whitening.as_ref() * ytmx1.as_ref() * whitening.as_ref();
+        });
+        let x1ty = x1.transpose() * y_tilde.as_ref();
+        let mx1_y = y_tilde.as_ref() - (x1 * (x1tx1_inverse.as_ref() * x1ty.as_ref())).as_ref();
+        let ytmz = mz_y.transpose() * mz_y.as_ref();
+        let ytmx1 = mx1_y.transpose() * mx1_y.as_ref();
+
+        // Reverse the eigenproblem: MZ can be singular, while MX1 is the
+        // positive-definite denominator. The largest reciprocal root gives kappa.
+        let size = k_endog + 1;
+        let lower = ytmx1
+            .checked_cholesky()
+            .map_err(|_| "IVLIML: Ỹ'MX1 Ỹ not positive definite".to_string())?
+            .lower();
+        let mut inverse_lower = Mat::identity(size, size);
+        lower
+            .as_ref()
+            .solve_lower_triangular_in_place(inverse_lower.as_mut());
+        let g = inverse_lower.as_ref() * ytmz.as_ref() * inverse_lower.transpose();
         let evd_g = yss_sci_linalg::SymmetricEigen::factor(g.as_ref())
             .map_err(|_| "IVLIML: EVD of G failed".to_string())?;
-        let kappa = evd_g
+        let reciprocal_kappa = evd_g
             .values()
             .iter()
             .copied()
-            .fold(f64::INFINITY, f64::min)
-            .max(0.0);
+            .fold(f64::NEG_INFINITY, f64::max);
+        if !reciprocal_kappa.is_finite() || reciprocal_kappa <= 0.0 {
+            return Err("IVLIML: k-class root is undefined".into());
+        }
+        // MZ <= MX1 implies kappa >= 1; retain that boundary under roundoff.
+        let kappa = reciprocal_kappa.recip().max(1.0);
+        if !kappa.is_finite() {
+            return Err("IVLIML: k-class root is nonfinite".into());
+        }
 
         // X'(I-κMZ)X = (1-κ)X'X + κ Xhat'Xhat; Xhat=PZ X.
         let xtx = x.transpose() * x.as_ref();
