@@ -193,17 +193,19 @@ impl PluginManager {
         let deadline = Instant::now() + duration;
         let poll_interval = Duration::from_millis(250);
         lease.process.diagnostics.task(&task_id, true);
-        let wire_context = json!({"contextId":context.context_id,"project":context.project,"remainingBudgetMs":duration.as_millis() as u64});
+        let wire_context = |request_deadline: Instant| json!({"contextId":context.context_id,"project":context.project,"remainingBudgetMs":request_deadline.saturating_duration_since(Instant::now()).as_millis() as u64});
         let mut remote_may_run = false;
         let result = (|| {
-            let mut cancellation_started = None;
+            let mut cancellation_deadline = None;
             let mut last_storage_check = Instant::now();
             lease
                 .process
                 .request(
                     "tasks.start",
-                    json!({"context":wire_context,"input":{"taskId":task_id,"taskType":task_type,"parameters":parameters}}),
-                    Duration::from_secs(30).min(duration),
+                    json!({"context":wire_context(deadline),"input":{"taskId":task_id,"taskType":task_type,"parameters":parameters}}),
+                    deadline
+                        .saturating_duration_since(Instant::now())
+                        .min(Duration::from_secs(30)),
                 )
                 .inspect_err(|error| {
                     // A caught handler panic may follow remote work admission.
@@ -223,14 +225,16 @@ impl PluginManager {
                 }
                 let invalid = self.context(&context.context_id).is_err();
                 if state == TaskState::CancelRequested || invalid || Instant::now() >= deadline {
-                    let started = cancellation_started.get_or_insert_with(Instant::now);
-                    if started.elapsed() > Duration::from_secs(10) {
+                    let grace = cancellation_deadline
+                        .get_or_insert_with(|| Instant::now() + Duration::from_secs(10));
+                    let remaining = grace.saturating_duration_since(Instant::now());
+                    if remaining.is_zero() {
                         return Err(fail("plugin_cancel_timeout"));
                     }
                     let cancelled = lease.process.request(
                         "tasks.cancel",
-                        json!({"context":wire_context,"input":{"taskId":task_id}}),
-                        Duration::from_secs(10),
+                        json!({"context":wire_context(*grace),"input":{"taskId":task_id}}),
+                        remaining,
                     );
                     if let Err(error) = cancelled {
                         lease
@@ -240,18 +244,29 @@ impl PluginManager {
                         return Err(fail("plugin_cancel_failed"));
                     }
                 }
+                let reply_deadline = cancellation_deadline.unwrap_or(deadline);
+                let remaining = reply_deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    continue;
+                }
                 let snapshot = match lease.process.request(
                     "tasks.get",
-                    json!({"context":wire_context,"input":{"taskId":task_id}}),
-                    Duration::from_secs(10),
+                    json!({"context":wire_context(reply_deadline),"input":{"taskId":task_id}}),
+                    remaining.min(Duration::from_secs(10)),
                 ) {
                     Ok(snapshot) => snapshot,
                     Err(error) if error.code == "plugin_resource_exhausted" => {
-                        std::thread::park_timeout(poll_interval);
+                        std::thread::park_timeout(
+                            poll_interval
+                                .min(reply_deadline.saturating_duration_since(Instant::now())),
+                        );
                         continue;
                     }
                     Err(error) => return Err(error),
                 };
+                if Instant::now() >= reply_deadline {
+                    return Err(fail("plugin_request_timeout"));
+                }
                 let remote: TaskState = serde_json::from_value(snapshot["state"].clone())
                     .map_err(|_| fail("plugin_response_invalid"))?;
                 if snapshot["taskId"].as_str() != Some(task_id.as_str()) {
@@ -278,7 +293,7 @@ impl PluginManager {
                     }
                     let result = lease.process.request(
                         "tasks.result",
-                        json!({"context":wire_context,"input":{"taskId":task_id}}),
+                        json!({"context":wire_context(Instant::now() + Duration::from_secs(30)),"input":{"taskId":task_id}}),
                         Duration::from_secs(30),
                     )?;
                     self.context(&context.context_id)?;
@@ -311,7 +326,9 @@ impl PluginManager {
                 if state != TaskState::CancelRequested {
                     self.update_task(&task_id, remote, None, None)?;
                 }
-                std::thread::park_timeout(poll_interval);
+                std::thread::park_timeout(
+                    poll_interval.min(reply_deadline.saturating_duration_since(Instant::now())),
+                );
             }
         })();
         if let Err(error) = result {

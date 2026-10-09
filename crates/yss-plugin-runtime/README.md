@@ -140,6 +140,13 @@ confirmed remote completion fails only that task, while transport faults retain 
 policy. Budget, cancellation and observation failures use the same instance-failure owner once.
 Backend task lifecycle regressions live in [tasks/tests.rs](src/tasks/tests.rs).
 
+Startup and active polling cap their RPC waits by the remaining absolute task deadline.
+Cancellation creates one absolute grace deadline shared by cancellation requests, polling and
+polling pauses; individual requests cannot renew it. Replies processed after that deadline cannot
+establish a terminal result. Each wire context derives `remainingBudgetMs` from the same current
+phase deadline. A timed-out pending RPC retains the SDK connection-fault policy; result fetching
+after confirmed remote completion retains its separate bounded 30-second handoff window.
+
 A task cancellation first goes to its plugin task. If cancellation fails, exceeds its grace
 period or the process is lost, the host treats it as a process-level fault: all nonterminal tasks
 of that exact plugin instance become `outcomeUnknown` and contexts are revoked. Windows stops the

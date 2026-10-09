@@ -286,6 +286,10 @@ mod observation {
         }
 
         fn run(&self) {
+            self.run_for(Duration::from_secs(5));
+        }
+
+        fn run_for(&self, duration: Duration) {
             let task = self.manager.task("task-0").unwrap();
             self.process.leases.fetch_add(1, Ordering::AcqRel);
             self.manager.monitor_task(TaskExecution {
@@ -297,7 +301,7 @@ mod observation {
                     process: self.process.clone(),
                     data_dir: self.root.join("extensions/data/example.compute"),
                 }),
-                duration: Duration::from_secs(5),
+                duration,
                 produces_artifacts: false,
             });
         }
@@ -524,5 +528,81 @@ mod observation {
         assert_eq!(fixture.snapshot(1).state, TaskState::Admitted);
         assert_eq!(fixture.snapshot(2).state, TaskState::Admitted);
         assert_eq!(fixture.snapshot(3).state, TaskState::Succeeded);
+    }
+
+    #[test]
+    fn monitor_poll_wait_respects_the_remaining_task_deadline() {
+        let (entered, receiving) = std::sync::mpsc::sync_channel(1);
+        let (release, blocked) = std::sync::mpsc::sync_channel(1);
+        let blocked = Mutex::new(blocked);
+        let fixture = Fixture::new(Arc::new(move |_, request| match request.method.as_str() {
+            "tasks.start" => Ok(Value::Null),
+            "tasks.get" => {
+                entered.send(()).unwrap();
+                blocked.lock().unwrap().recv().unwrap();
+                Ok(json!({"taskId":"task-0","state":"succeeded"}))
+            }
+            "tasks.result" => Ok(json!({"viewData":{"value":42}})),
+            _ => Err(fail("plugin_method_unknown")),
+        }));
+        let (done, finished) = std::sync::mpsc::sync_channel(1);
+        let ended_before_reply = std::thread::scope(|scope| {
+            let monitor = scope.spawn(|| {
+                fixture.run_for(Duration::from_secs(1));
+                done.send(()).unwrap();
+            });
+            receiving.recv_timeout(Duration::from_secs(5)).unwrap();
+            let ended = finished.recv_timeout(Duration::from_secs(2)).is_ok();
+            release.send(()).unwrap();
+            monitor.join().unwrap();
+            ended
+        });
+        assert!(ended_before_reply, "poll wait outlived the task deadline");
+        let task = fixture.snapshot(0);
+        assert_eq!(task.state, TaskState::OutcomeUnknown);
+        assert_eq!(task.error.unwrap().code, "plugin_request_timeout");
+        assert!(!fixture.process.is_running());
+    }
+
+    #[test]
+    fn monitor_cancel_poll_uses_the_remaining_grace_period() {
+        let (entered, receiving) = std::sync::mpsc::sync_channel(1);
+        let (release, blocked) = std::sync::mpsc::sync_channel(1);
+        let blocked = Mutex::new(blocked);
+        let fixture = Fixture::new(Arc::new(move |_, request| match request.method.as_str() {
+            "tasks.start" => Ok(Value::Null),
+            "tasks.cancel" => {
+                std::thread::sleep(Duration::from_secs(8));
+                Ok(Value::Null)
+            }
+            "tasks.get" => {
+                entered.send(()).unwrap();
+                blocked.lock().unwrap().recv().unwrap();
+                Ok(json!({"taskId":"task-0","state":"cancelled"}))
+            }
+            _ => Err(fail("plugin_method_unknown")),
+        }));
+        fixture
+            .manager
+            .update_task("task-0", TaskState::CancelRequested, None, None)
+            .unwrap();
+        let (done, finished) = std::sync::mpsc::sync_channel(1);
+        let ended_before_reply = std::thread::scope(|scope| {
+            let monitor = scope.spawn(|| {
+                fixture.run();
+                done.send(()).unwrap();
+            });
+            receiving.recv_timeout(Duration::from_secs(12)).unwrap();
+            let ended = finished.recv_timeout(Duration::from_secs(3)).is_ok();
+            release.send(()).unwrap();
+            monitor.join().unwrap();
+            ended
+        });
+        assert!(
+            ended_before_reply,
+            "poll reset the cancellation grace period"
+        );
+        assert_eq!(fixture.snapshot(0).state, TaskState::OutcomeUnknown);
+        assert!(!fixture.process.is_running());
     }
 }
