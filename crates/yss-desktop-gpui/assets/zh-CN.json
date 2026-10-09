@@ -600,6 +600,7 @@
     "problems": "问题",
     "problemsLocate": "定位问题",
     "problemsRelated": "关联位置",
+    "problemsRelatedLocation": "关联位置：{{location}}",
     "problemsBlocking": "阻止运行",
     "outputNoGraph": "请打开图以查看程序输出",
     "outputEmpty": "当前图暂无运行错误",

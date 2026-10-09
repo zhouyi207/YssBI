@@ -2,6 +2,7 @@
 mod domain;
 mod field;
 mod relational;
+mod reveal;
 
 use super::{controls, graph_properties::GraphProperties};
 use field::{ParameterDraft, ParameterField};
@@ -27,6 +28,7 @@ pub(super) struct ParameterForm {
     groups: Vec<Group>,
     diagnostics: Vec<EditorDiagnosticModel>,
     epoch: u64,
+    reveal: Option<reveal::Reveal>,
     can_edit: Box<dyn Fn(&App) -> bool>,
     properties: Entity<GraphProperties>,
     _properties_observer: Subscription,
@@ -47,6 +49,7 @@ impl ParameterForm {
             groups: vec![],
             diagnostics: vec![],
             epoch: 0,
+            reveal: None,
             can_edit: Box::new(can_edit),
             properties,
             _properties_observer: observer,
@@ -55,6 +58,7 @@ impl ParameterForm {
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
+        self.reveal = None;
         self.fields.clear();
         self.groups.clear();
         self.diagnostics.clear();
@@ -78,6 +82,7 @@ impl ParameterForm {
         } else {
             BTreeMap::new()
         };
+        self.reveal = None;
         self.fields.clear();
         self.groups.clear();
         self.diagnostics = diagnostics;

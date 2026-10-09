@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use gpui::{Bounds, Path, PathBuilder, Pixels, Point, Window, point, px, rgb};
 use gpui_base::plot::{PathCache, ShapeKey};
-use yss_graph_document::{NodeId, NodePosition, PortAddress};
+use yss_graph_document::{ConnectionId, NodeId, NodePosition, PortAddress};
 use yss_graph_editor::projection::EditorProjectionModel;
 
 use super::geometry;
@@ -27,6 +27,7 @@ impl PortAnchor {
 }
 
 struct Connection {
+    id: ConnectionId,
     output: PortAnchor,
     input: PortAnchor,
     path: PathCache,
@@ -65,6 +66,7 @@ impl ConnectionLayer {
             .iter()
             .filter_map(|connection| {
                 Some(Connection {
+                    id: connection.connection_id,
                     output: *anchors.get(&connection.output)?,
                     input: *anchors.get(&connection.input)?,
                     path: PathCache::default(),
@@ -95,6 +97,7 @@ impl ConnectionLayer {
         offset: Point<Pixels>,
         zoom: f32,
         preview: &BTreeMap<NodeId, NodePosition>,
+        selected: Option<ConnectionId>,
         window: &mut Window,
     ) {
         self.paint_grid(bounds, offset, zoom, window);
@@ -115,7 +118,11 @@ impl ConnectionLayer {
                     &mut connection.path,
                     a,
                     delta,
-                    rgb(appearance::BLUE),
+                    rgb(if selected == Some(connection.id) {
+                        appearance::GREEN
+                    } else {
+                        appearance::BLUE
+                    }),
                     window,
                 );
             }

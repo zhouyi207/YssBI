@@ -597,6 +597,16 @@
 - L2：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过，迭代 `cargo check` 与两处临时原生预览构建通过。5 个 Rust 文件局部格式、44/33 个双语键及参数（英文沿用工作区目录）、两份文档元信息与 275/271 条相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。临时预览与数据不提交，不运行全工作区测试。
 - 后端接口、依赖和 UI 单元测试均未改动；真实函数内部失败、跨项目/执行会话切换、物理输入、读屏、Windows/macOS，以及已有嵌套 Xwayland 重绘与外观问题继续验收。问题面板的位置、阻断标识及关联导航继续迁移；累计完成源码审查 189/265 项。
 
+### 图问题面板与诊断位置导航
+
+- 已逐项阅读 `GraphProblemsPanel`、原定位事件与 canonical diagnostics。原生固定标题栏显示总数，区分未打开图与没有问题；各行展示后端严重程度、独立 blocking 标识、位置名称、代码、消息及关联位置。
+- 面板、Canvas 与 Details 共享同一不可变编辑投影；原生变高 `ListState` 只构建可见行，宽度变化后补充未测量行的高度估计，修复长列表无法远距离滚动的问题。位置名称与 Details 复用，资源链接和 Assistant 共用现有打开入口。
+- 图、节点、端口、连线、参数与资源导航直接解析当前投影。Canvas 适配当前编辑区域居中显示目标，端口与连线保留原生焦点/高亮，选中连线的删除使用原图事务及撤销。参数定位展开 Details、滚动并聚焦现有输入，不另建草稿或隐式提交。
+- 点击与延迟回调核对活动编辑器和原投影；Dock 展开后再读取画布尺寸，参数滚动后再聚焦，新用户焦点与表单代次取消迟到请求。图刷新和切换文档后重放旧诊断事件，未重新选择或打开旧图。
+- Linux/X11 实际窗口验证真实未连接输入诊断及端口定位；明确的展示样例覆盖六类位置、三种严重程度、独立 blocking、关联链接和 2,000 条长列表。窄窗口中屏外 Number 参数可滚动、接收键盘输入并经原入口提交；关闭 Details 后定位仍居中，连线删除与撤销恢复原边数。关联节点/图点击、缺失资源保持原视图及数据库资源打开均通过；展示样例不代表所有诊断生产路径已端到端验收。
+- L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`，迭代 `cargo check` 与临时原生预览构建通过。18 个 Rust 文件局部格式、26/15 个双语键及参数（英文沿用工作区目录）、两份文档元信息与 275/271 条相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。后端契约与依赖未变，不重复后端测试或运行全工作区检查。
+- 物理键鼠、读屏、Windows/macOS、跨项目切换、复杂参数控件和各类真实诊断生产路径仍待人工验收；不增加 UI 单元测试，临时预览代码和数据不提交。累计完成源码审查 190/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -873,7 +883,7 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/problems/internal/ui/GraphProblemsPanel.tsx](../../react/src/modules/problems/internal/ui/GraphProblemsPanel.tsx) | 待查 | 已读参考组件、canonical diagnostics 与定位入口；原生尚缺数量、位置/代码、blocking、关联位置与导航 | 待补齐并验收 |
+| [modules/problems/internal/ui/GraphProblemsPanel.tsx](../../react/src/modules/problems/internal/ui/GraphProblemsPanel.tsx) | 迁移 | 共享 canonical 投影与位置名称，原生变高虚拟列表、独立阻断标识及六类位置导航；过期点击/迟到聚焦校验 | Linux 窗口核对真实端口诊断、展示样例导航、屏外参数、连线历史及 2,000 条列表；跨平台和其余真实生产路径待验收 |
 
 ## modules/project-explorer
 

@@ -122,7 +122,7 @@ impl ParameterForm {
                 )
                 .into_any_element(),
         };
-        div()
+        let content = div()
             .on_action(
                 cx.listener(move |view, _: &gpui_component::input::Escape, window, cx| {
                     if view.accepts_input(epoch, cx) {
@@ -193,7 +193,7 @@ impl ParameterForm {
                     .as_deref()
                     .map(|text| controls::hint(text, cx)),
             )
-            .child(editor)
+            .child(self.reveal_editor(index, editor))
             .children(diagnostics.iter().map(|diagnostic| {
                 let color = match diagnostic.severity {
                     EditorDiagnosticSeverity::Error => cx.theme().danger,
@@ -213,6 +213,7 @@ impl ParameterForm {
                     .text_color(cx.theme().danger)
                     .child(error.clone())
             }))
-            .into_any_element()
+            .into_any_element();
+        self.reveal_field(index, content, cx)
     }
 }

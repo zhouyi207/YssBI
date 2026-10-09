@@ -5,6 +5,7 @@ mod connections;
 mod constant_drag;
 mod execution;
 mod geometry;
+mod navigation;
 mod palette;
 mod render;
 mod toolbar;
@@ -27,6 +28,8 @@ use yss_graph_editor::projection::EditorProjectionModel;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
 use yss_node_protocol::PortDirection;
 use yss_project::GraphEditVersion;
+
+use navigation::LocatedElement;
 
 use crate::{project::OpenedGraph, services::NativeServices};
 pub use authoring::ConstantValueInput;
@@ -85,6 +88,8 @@ pub struct GraphCanvas {
     catalog: Arc<ActivityPanelDocument>,
     catalog_language: String,
     focus: FocusHandle,
+    port_focus: FocusHandle,
+    located: Option<LocatedElement>,
     offset: Point<Pixels>,
     zoom: f32,
     gesture: Option<Gesture>,
@@ -120,6 +125,8 @@ impl GraphCanvas {
             catalog,
             catalog_language,
             focus: cx.focus_handle(),
+            port_focus: cx.focus_handle(),
+            located: None,
             offset: point(px(40.), px(40.)),
             zoom: 1.,
             gesture: None,
@@ -200,6 +207,7 @@ impl GraphCanvas {
             else {
                 return false;
             };
+            self.located = None;
             self.selected = BTreeSet::from([id]);
             self.offset = point(
                 px(40. - node.position.x as f32 * self.zoom),
@@ -281,6 +289,7 @@ impl GraphCanvas {
             return;
         }
         cx.stop_propagation();
+        self.located = None;
         window.focus(&self.focus, cx);
         self.palette = None;
         let additive = event.modifiers.shift || event.modifiers.control || event.modifiers.platform;
@@ -319,6 +328,7 @@ impl GraphCanvas {
         if self.busy && event.button == MouseButton::Left {
             return;
         }
+        self.located = None;
         window.focus(&self.focus, cx);
         if event.modifiers.alt {
             self.submit(
@@ -386,6 +396,7 @@ impl GraphCanvas {
         if self.busy {
             return;
         }
+        self.located = None;
         window.focus(&self.focus, cx);
         self.palette = None;
         if matches!(event.button, MouseButton::Right | MouseButton::Middle) {

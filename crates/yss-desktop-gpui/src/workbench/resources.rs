@@ -4,6 +4,7 @@ mod charts;
 mod databases;
 mod files;
 mod names;
+mod navigation;
 mod operations;
 mod reveal;
 use super::Workbench;

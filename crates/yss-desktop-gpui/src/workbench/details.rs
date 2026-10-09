@@ -38,6 +38,7 @@ pub struct DetailsPanel {
     diagnostics_open: bool,
     diagnostics_page: usize,
     diagnostics_scroll: gpui::ScrollHandle,
+    scroll: gpui::ScrollHandle,
     properties: Entity<super::graph_properties::GraphProperties>,
     documentation: Entity<documentation::NodeDocumentation>,
     description: Entity<description::NodeDescription>,
@@ -106,6 +107,7 @@ impl DetailsPanel {
             diagnostics_open: true,
             diagnostics_page: 0,
             diagnostics_scroll: gpui::ScrollHandle::new(),
+            scroll: gpui::ScrollHandle::new(),
             properties,
             documentation,
             description,
@@ -127,6 +129,22 @@ impl DetailsPanel {
             ports: vec![],
             epoch: 0,
             error: None,
+        }
+    }
+
+    pub(in crate::workbench) fn reveal_parameter(
+        &mut self,
+        node_id: NodeId,
+        key: &yss_node_protocol::ParameterKey,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.node().is_some_and(|node| node.node_id == node_id)
+            && self.accepts_input(self.epoch, cx)
+        {
+            self.parameters.update(cx, |form, cx| {
+                form.reveal(key, self.scroll.clone(), window, cx)
+            });
         }
     }
 
@@ -389,6 +407,7 @@ impl Render for DetailsPanel {
             .track_focus(&self.focus)
             .size_full()
             .overflow_y_scroll()
+            .track_scroll(&self.scroll)
             .bg(cx.theme().background);
         if let Some(node_type) = &self.node_definition {
             return panel

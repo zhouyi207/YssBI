@@ -15,7 +15,6 @@ use gpui_component::{
 use std::sync::Arc;
 use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, ActivityRowContent};
 use yss_harness_contract::{HarnessSessionId, HarnessSessionRecord};
-use yss_project_identity::ProjectResourceKind;
 
 impl Workbench {
     pub(super) fn show_assistant(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -340,24 +339,9 @@ impl Workbench {
                             view.refresh_assistant_directory(window, cx)
                         }
                         ConversationEvent::Settings => view.show_settings(window, cx),
-                        ConversationEvent::OpenResource(resource) => match resource.kind {
-                            ProjectResourceKind::Database => {
-                                view.open_database(resource.id.clone(), None, window, cx)
-                            }
-                            ProjectResourceKind::EventGraph
-                            | ProjectResourceKind::FunctionGraph => {
-                                view.open_graph(resource.id.clone(), window, cx)
-                            }
-                            ProjectResourceKind::Doc => {
-                                view.open_document(resource.id.clone(), None, window, cx)
-                            }
-                            ProjectResourceKind::Mind => {
-                                view.open_mind(resource.id.clone(), None, window, cx)
-                            }
-                            ProjectResourceKind::Chart => {
-                                view.open_chart(resource.id.clone(), None, window, cx)
-                            }
-                        },
+                        ConversationEvent::OpenResource(resource) => {
+                            view.open_project_resource(resource, window, cx)
+                        }
                         ConversationEvent::OpenResult(reference) => {
                             view.open_result(*reference, None, window, cx)
                         }

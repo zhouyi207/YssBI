@@ -228,6 +228,13 @@ impl Workbench {
     fn connect_panels(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.connect_logs(window, cx);
         self.subscriptions.push(cx.subscribe_in(
+            &self.problems,
+            window,
+            |view, _, event: &problems::LocateProblem, window, cx| {
+                view.locate_problem(event, window, cx)
+            },
+        ));
+        self.subscriptions.push(cx.subscribe_in(
             &self.output,
             window,
             |view, _, event, window, cx| {
