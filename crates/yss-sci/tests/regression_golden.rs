@@ -736,6 +736,108 @@ fn liml_root_preserves_singular_residual_covariance_and_response_units() {
 }
 
 #[test]
+fn iv_2sls_overidentification_preserves_response_units() {
+    use yss_sci::causal::iv::fit::{fit_instrumental_variables, overidentification};
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1) + signal(row, 2))
+        .collect::<Vec<_>>();
+    let instruments = (0..2)
+        .map(|bit| (0..16).map(|row| signal(row, bit)).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    for covariance in [OlsCovariance::NonRobust, OlsCovariance::Hc1] {
+        for scale in [1.0, 1e-151] {
+            let response = (0..16)
+                .map(|row| {
+                    scale * (1.0 + 0.5 * endogenous[row] + signal(row, 1) + 2.0 * signal(row, 3))
+                })
+                .collect();
+            let fit = fit_instrumental_variables(
+                InstrumentalVariableKind::TwoStageLeastSquares,
+                response,
+                &[],
+                std::slice::from_ref(&endogenous),
+                &instruments,
+                OlsOptions {
+                    constant: true,
+                    covariance: covariance.clone(),
+                },
+                false,
+            )
+            .unwrap();
+            let result = overidentification(&fit)
+                .unwrap()
+                .expect("positive structural residuals remain testable in every response unit");
+            assert_eq!(result.df, 1);
+            // Independent Walsh moments and chi-square(1) erfc tails.
+            if covariance == OlsCovariance::NonRobust {
+                assert_eq!(result.test_type, "sargan_basmann");
+                assert!((result.sargan_stat.unwrap() - 544.0 / 179.0).abs() < 1e-10);
+                assert!((result.sargan_p_value.unwrap() - 0.08128066178548843).abs() < 1e-10);
+                assert!((result.basmann_stat.unwrap() - 442.0 / 145.0).abs() < 1e-10);
+                assert!((result.basmann_p_value.unwrap() - 0.08082290229285172).abs() < 1e-10);
+                assert!(result.wooldridge_stat.is_none());
+            } else {
+                assert_eq!(result.test_type, "wooldridge");
+                assert!((result.wooldridge_stat.unwrap() - 9248.0 / 3171.0).abs() < 1e-10);
+                assert!((result.wooldridge_p_value.unwrap() - 0.0876816485900194).abs() < 1e-10);
+                assert!(result.sargan_stat.is_none() && result.basmann_stat.is_none());
+            }
+        }
+    }
+}
+
+#[test]
+fn iv_2sls_basmann_uses_auxiliary_residuals_and_positive_degrees() {
+    use yss_sci::causal::iv::fit::{fit_instrumental_variables, overidentification};
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    for (n, eta) in [(16, 1e-6), (16, 0.0), (4, 0.0)] {
+        let endogenous = (0..n).map(|row| 2.0 * signal(row, 0)).collect::<Vec<_>>();
+        let mut instruments = (0..2)
+            .map(|bit| (0..n).map(|row| signal(row, bit)).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        if n == 4 {
+            instruments.push((0..n).map(|row| signal(row, 0) * signal(row, 1)).collect());
+        }
+        let response = (0..n)
+            .map(|row| 1.0 + 0.5 * endogenous[row] + signal(row, 1) + eta * signal(row, 3))
+            .collect();
+        let mut fit = fit_instrumental_variables(
+            InstrumentalVariableKind::TwoStageLeastSquares,
+            response,
+            &[],
+            &[endogenous],
+            &instruments,
+            OlsOptions {
+                constant: true,
+                covariance: OlsCovariance::NonRobust,
+            },
+            false,
+        )
+        .unwrap();
+        let result = overidentification(&fit).unwrap().unwrap();
+        assert!((result.sargan_stat.unwrap() - n as f64 / (1.0 + eta * eta)).abs() < 1e-10);
+        if eta > 0.0 {
+            // N-S is below the former absolute cutoff, but auxiliary RSS is positive.
+            assert!((result.basmann_stat.unwrap() / (13.0 / (eta * eta)) - 1.0).abs() < 1e-8);
+            assert_eq!(result.basmann_p_value, Some(0.0));
+        } else {
+            assert!(result.basmann_stat.is_none() && result.basmann_p_value.is_none());
+        }
+        fit.residuals.fill(0.0);
+        assert!(overidentification(&fit).unwrap().is_none());
+    }
+}
+
+#[test]
 fn liml_overidentification_uses_fitted_kappa_and_valid_reference_distributions() {
     use yss_sci::causal::iv::fit::{fit_instrumental_variables, liml_overidentification};
     use yss_sci_contract::{

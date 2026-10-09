@@ -1,13 +1,16 @@
 use super::estimate::{coefficient_inference, goodness_of_fit};
 use super::first_stage::{compute_first_stage_summary, is_robust_covariance};
-use super::{design::PreparedIvDesign, model::IvModel};
+use super::{
+    design::{PreparedIvDesign, prepare_instruments, project_endogenous, regressor_design},
+    model::IvModel,
+};
 use crate::regression::covariance::compute_cov_beta;
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use yss_sci_contract::causal::iv::{
     EndogenousTest, FirstStageResult, FirstStageSummary, HausmanTest, InstrumentalVariableFit,
     LimlOveridTest, OveridTest,
 };
-use yss_sci_linalg::{Col, Mat, MatrixExt, Solve};
+use yss_sci_linalg::{Col, ColRef, Mat, MatrixExt, Solve};
 
 impl IvModel {
     pub fn first_stage(
@@ -59,123 +62,6 @@ impl IvModel {
             compute_first_stage_summary(self, &design, &first_stage, for_liml)?;
 
         Ok((first_stage, first_stage_summary))
-    }
-
-    pub fn overidentification(&self, betas: &Col<f64>) -> Result<Option<OveridTest>, String> {
-        let n = self.endog.nrows();
-        let k_iv = self.instruments.ncols();
-        let k_endog = self.endog_reg.ncols();
-        let PreparedIvDesign {
-            z,
-            ztz_inverse: ztz_inv_nd,
-            x,
-            x_struct,
-            ..
-        } = self.design()?;
-        let k_z = z.ncols();
-        let covariance = &self.options.covariance;
-        let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas.as_ref());
-        // Overidentification test (estat overid): Sargan/Basmann (homoskedastic) or Wooldridge (1995) robust score (robust VCE).
-        // Stata: "If you used the 2SLS estimator and requested a robust VCE, Wooldridge's robust score test of
-        // overidentifying restrictions is performed instead; without a robust VCE, Wooldridge's test statistic is identical to Sargan's."
-        let overid = if k_iv > k_endog {
-            let df_overid = k_iv - k_endog;
-            let chi2_dist = ChiSquared::new(df_overid as f64)
-                .map_err(|e| format!("IV2SLS overid ChiSquared: {}", e))?;
-
-            let is_robust = is_robust_covariance(covariance);
-
-            if is_robust {
-                // Wooldridge (1995) robust score test. Stata Methods: Let Ŷ = endog_hat, Q = excluded instruments (m cols).
-                // q̂_j = residuals from regressing jth column of Q on [X1, Ŷ]. k̂_ij = q̂_ij * û_i.
-                // Regress 1 on [k̂_1,...,k̂_m]: W = N - RSS ~ χ²(m).
-                let m = df_overid;
-                let w_mat = &x; // W = [X1, Ŷ] = [const?, exog, endog_hat]
-                let wtw = w_mat.transpose() * w_mat.as_ref();
-                let wtw_inv = wtw
-                    .as_ref()
-                    .to_owned()
-                    .checked_cholesky()
-                    .map_err(|_| "IV2SLS Wooldridge overid: W'W not positive definite".to_string())?
-                    .solve(&Mat::identity(wtw.nrows(), wtw.nrows()));
-                let wtw_inv_nd = wtw_inv.as_ref().to_owned();
-
-                // Build K: n × m, columns k̂_j = (Q_j - W*γ_j) .* u, where γ_j = (W'W)^{-1} W' Q_j
-                let mut k_mat = Mat::zeros(n, m);
-                for j in 0..m {
-                    let q_j = self.instruments.col(j).to_owned();
-                    let wtq = w_mat.transpose() * q_j.as_ref();
-                    let gamma_j = wtw_inv_nd.as_ref() * wtq.as_ref();
-                    let q_hat = w_mat.as_ref() * gamma_j.as_ref(); // fitted = W * γ
-                    let q_resid = &q_j - &q_hat; // q̂_j = residuals
-                    for i in 0..n {
-                        k_mat[(i, j)] = q_resid[i] * u_structural[i];
-                    }
-                }
-
-                // Regress 1 on K: 1 = K*θ + ε. RSS = (1 - K*θ)^2. W = N - RSS.
-                let ones = Col::full(n, 1.0);
-                let ktk = k_mat.transpose() * k_mat.as_ref();
-                let kt1 = k_mat.transpose() * ones.as_ref();
-                let ktk_inv = ktk
-                    .as_ref()
-                    .to_owned()
-                    .checked_cholesky()
-                    .map_err(|_| "IV2SLS Wooldridge overid: K'K not positive definite".to_string())?
-                    .solve(&Mat::identity(ktk.nrows(), ktk.nrows()));
-                let theta = ktk_inv.as_ref() * kt1.as_ref();
-                let fitted = k_mat.as_ref() * theta.as_ref();
-                let rss: f64 = ones
-                    .iter()
-                    .zip(fitted.iter())
-                    .map(|(a, b)| (a - b).powi(2))
-                    .sum();
-                let wooldridge_stat = n as f64 - rss;
-                let wooldridge_p = chi2_dist.sf(wooldridge_stat);
-                Some(OveridTest {
-                    test_type: "wooldridge".to_string(),
-                    sargan_stat: None,
-                    sargan_p_value: None,
-                    basmann_stat: None,
-                    basmann_p_value: None,
-                    wooldridge_stat: Some(wooldridge_stat),
-                    wooldridge_p_value: Some(wooldridge_p),
-                    df: df_overid,
-                })
-            } else {
-                // Sargan & Basmann (homoskedastic)
-                let uu = u_structural.transpose() * u_structural.as_ref();
-                if uu > 1e-300 {
-                    let ztu = z.transpose() * u_structural.as_ref();
-                    let ztz_inv_ztu = ztz_inv_nd.as_ref() * ztu.as_ref();
-                    let u_pz_u = ztu.transpose() * ztz_inv_ztu.as_ref();
-                    let sargan_stat = n as f64 * u_pz_u / uu;
-                    let basmann_stat = if (n as f64 - sargan_stat).abs() > 1e-10 {
-                        sargan_stat * (n as f64 - k_z as f64) / (n as f64 - sargan_stat)
-                    } else {
-                        sargan_stat
-                    };
-                    let sargan_p = chi2_dist.sf(sargan_stat);
-                    let basmann_p = chi2_dist.sf(basmann_stat);
-                    Some(OveridTest {
-                        test_type: "sargan_basmann".to_string(),
-                        sargan_stat: Some(sargan_stat),
-                        sargan_p_value: Some(sargan_p),
-                        basmann_stat: Some(basmann_stat),
-                        basmann_p_value: Some(basmann_p),
-                        wooldridge_stat: None,
-                        wooldridge_p_value: None,
-                        df: df_overid,
-                    })
-                } else {
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        Ok(overid)
     }
 
     pub fn endogeneity(
@@ -365,6 +251,119 @@ impl IvModel {
 
         Ok((hausman, endogenous))
     }
+}
+
+pub(super) fn overidentification(
+    fit: &InstrumentalVariableFit,
+) -> Result<Option<OveridTest>, String> {
+    let data = &fit.design;
+    let df = data.instruments.len() - data.endogenous.len();
+    if df == 0 {
+        return Ok(None);
+    }
+    // Both auxiliary regressions are invariant to a common structural-residual scale.
+    let scale = fit.residuals.iter().map(|u| u.abs()).fold(0.0, f64::max);
+    if scale == 0.0 {
+        return Ok(None);
+    }
+    let n = fit.residuals.len();
+    let residuals = Col::from_fn(n, |row| fit.residuals[row] / scale);
+    let columns = data
+        .exogenous
+        .iter()
+        .chain(&data.instruments)
+        .map(|values| ColRef::from_slice(values))
+        .collect::<Vec<_>>();
+    let (z, inverse) = prepare_instruments(n, &columns, fit.options.constant)?;
+    let distribution =
+        ChiSquared::new(df as f64).map_err(|error| format!("IV2SLS overid ChiSquared: {error}"))?;
+    if is_robust_covariance(&fit.options.covariance) {
+        let statistic = wooldridge_score(fit, &z, &inverse, residuals.as_ref())?;
+        return Ok(Some(OveridTest {
+            test_type: "wooldridge".into(),
+            sargan_stat: None,
+            sargan_p_value: None,
+            basmann_stat: None,
+            basmann_p_value: None,
+            wooldridge_stat: Some(statistic),
+            wooldridge_p_value: Some(distribution.sf(statistic)),
+            df,
+        }));
+    }
+    let ztu = z.transpose() * residuals.as_ref();
+    let delta = inverse.as_ref() * ztu.as_ref();
+    let fitted = z.as_ref() * delta.as_ref();
+    let auxiliary_residuals = &residuals - &fitted;
+    let total = residuals.transpose() * residuals.as_ref();
+    let explained = fitted.transpose() * fitted.as_ref();
+    let remaining = auxiliary_residuals.transpose() * auxiliary_residuals.as_ref();
+    let sargan = n as f64 * (explained / total);
+    if !sargan.is_finite() || !remaining.is_finite() {
+        return Err("IV2SLS overid: auxiliary regression is undefined".into());
+    }
+    // This equivalent Basmann ratio avoids cancellation in N-S near perfect projection.
+    let basmann = n
+        .checked_sub(z.ncols())
+        .filter(|&degrees| degrees > 0)
+        .filter(|_| remaining > 0.0)
+        .map(|degrees| degrees as f64 * (explained / remaining));
+    if basmann.is_some_and(|statistic| !statistic.is_finite()) {
+        return Err("IV2SLS overid: Basmann statistic is undefined".into());
+    }
+    Ok(Some(OveridTest {
+        test_type: "sargan_basmann".into(),
+        sargan_stat: Some(sargan),
+        sargan_p_value: Some(distribution.sf(sargan)),
+        basmann_stat: basmann,
+        basmann_p_value: basmann.map(|statistic| distribution.sf(statistic)),
+        wooldridge_stat: None,
+        wooldridge_p_value: None,
+        df,
+    }))
+}
+
+fn wooldridge_score(
+    fit: &InstrumentalVariableFit,
+    z: &Mat<f64>,
+    inverse: &Mat<f64>,
+    residuals: ColRef<'_, f64>,
+) -> Result<f64, String> {
+    let columns = fit
+        .design
+        .endogenous
+        .iter()
+        .map(|values| ColRef::from_slice(values))
+        .collect::<Vec<_>>();
+    let (_, projected) = project_endogenous(z, inverse, &columns);
+    let included = fit.design.exogenous.len() + usize::from(fit.options.constant);
+    let w = regressor_design(z.subcols(0, included), projected.as_ref());
+    let wtw = w.transpose() * w.as_ref();
+    let factor = wtw
+        .checked_cholesky()
+        .map_err(|_| "IV2SLS Wooldridge overid: W'W not positive definite")?;
+    let restrictions = fit.design.instruments.len() - fit.design.endogenous.len();
+    let mut scores = Mat::zeros(z.nrows(), restrictions);
+    for j in 0..restrictions {
+        let q = z.col(included + j);
+        let wtq = w.transpose() * q;
+        let gamma = factor.solve(&wtq);
+        let fitted = w.as_ref() * gamma.as_ref();
+        for row in 0..z.nrows() {
+            scores[(row, j)] = (q[row] - fitted[row]) * residuals[row];
+        }
+    }
+    let cross = scores.transpose() * scores.as_ref();
+    let sums = Col::from_fn(restrictions, |j| scores.col(j).iter().sum());
+    let theta = cross
+        .checked_cholesky()
+        .map_err(|_| "IV2SLS Wooldridge overid: K'K not positive definite")?
+        .solve(&sums);
+    // 1'K(K'K)^-1 K'1 equals N-RSS without subtracting nearly equal totals.
+    let statistic = sums.transpose() * theta.as_ref();
+    if !statistic.is_finite() || statistic < 0.0 {
+        return Err("IV2SLS Wooldridge overid: statistic is undefined".into());
+    }
+    Ok(statistic)
 }
 
 pub(super) fn liml_overidentification(

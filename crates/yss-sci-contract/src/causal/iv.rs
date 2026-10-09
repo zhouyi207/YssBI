@@ -187,6 +187,7 @@ pub struct OveridTest {
     /// Sargan/Basmann（同方差时有效）
     pub sargan_stat: Option<f64>,
     pub sargan_p_value: Option<f64>,
+    /// 工具变量回归剩余自由度非正或辅助残差变异为零时，两字段为 None；Sargan 可保留。
     pub basmann_stat: Option<f64>,
     pub basmann_p_value: Option<f64>,
     /// Wooldridge score（稳健 VCE 时有效，Stata estat overid）

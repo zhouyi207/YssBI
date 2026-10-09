@@ -126,7 +126,11 @@ the borrowed model contract.
   F test. First-stage inference uses OLS residual degrees independently of the
   structural `small` option. First-stage, overidentification, Hausman and
   endogenous-regressor results are independent records, selected through
-  `IvSummaryOptions` rather than embedded in every fit.
+  `IvSummaryOptions` rather than embedded in every fit. `OveridTest` retains
+  Sargan and Basmann as separately nullable statistic/probability pairs. Basmann
+  is unavailable without positive instrument-regression residual degrees and
+  auxiliary residual variation; an available Sargan pair remains present.
+  Zero structural residuals leave the complete overidentification record absent.
 - `causal::did`: DID inputs, inference results and typed unavailable/error codes.
 - `causal::models`: linear IV GMM, sharp RDD, treatment-group interaction tests,
   Heckman two-step, half-normal frontiers, SUR and synthetic-control options/results.

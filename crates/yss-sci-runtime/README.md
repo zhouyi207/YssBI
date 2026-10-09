@@ -192,6 +192,13 @@ Structural and first-stage R²/adjusted R² share SCI's scaled residual-ratio
 calculation, preserving microscopic units and centered/uncentered conventions.
 Undefined goodness of fit propagates from Fit as a scientific failure; Summary
 retains the stored structural metrics without refitting or replacing them with zero.
+2SLS overidentification projects SCI's unit-invariant auxiliary-regression results
+from the retained structural residuals. Sargan remains available when Basmann's
+auxiliary residual variation or instrument-regression residual degrees are zero;
+only Basmann's statistic/probability fields become null. Zero structural residuals
+retain the existing whole-analysis unavailable reason. SCI owns the instrument
+preparation and conditional endogenous projection; Runtime does not reconstruct
+response/coefficient buffers or numerical statistics.
 LIML overidentification projects SCI's Anderson–Rubin `n*(kappa-1)` and Basmann F
 results from the fitted kappa, with their actual reference degrees. SCI validates
 the retained model without reconstructing a numerical IV design; unavailable

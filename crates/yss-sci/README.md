@@ -273,14 +273,28 @@ p-value. Invalid coefficient variances and undefined or nonfinite statistics and
 intervals return a scientific failure before probability evaluation or serialization.
 These conventions follow the [Stata IV manual](https://www.stata.com/manuals/rivregress.pdf).
 Their first-stage, overidentification and endogeneity analyses are separate calls
-in `causal::iv::fit`. LIML overidentification borrows the fitted kappa and validated
+in `causal::iv::fit`. 2SLS overidentification borrows the retained structural
+residuals and scales them by their largest magnitude for both auxiliary regressions.
+Positive microscopic units remain testable; zero residuals retain unavailable
+results. Sargan uses the fitted auxiliary sum of squares divided by the structural
+sum. Basmann uses `(n-k_z)*fitted_sum/auxiliary_residual_sum`, avoiding cancellation
+in `n-Sargan`. Its statistic and probability are separately null when auxiliary
+residual variation or instrument-regression residual degrees are zero; it never
+substitutes Sargan. Undefined or nonfinite computation returns scientific failure.
+The existing IV design owner supplies instrument preparation, endogenous projection
+and regressor assembly for estimation and diagnostics. Nonrobust analysis prepares
+only instruments; the Wooldridge branch prepares projected regressors on demand and
+solves its score cross-product directly. Neither branch reconstructs response,
+coefficients or observed structural regressors. The numerical
+`IvModel::overidentification` method is removed; callers use the existing neutral
+fitted-model entry. LIML overidentification borrows the fitted kappa and validated
 sample/design counts: Anderson–Rubin is `n*(kappa-1)` with chi-square reference, and
 Basmann F is `(kappa-1)*(n-k_z)/m` with degrees `m, n-k_z`, where `m` is excluded
 instruments minus endogenous regressors. It reuses the existing diagnostic-fit
 validation without reconstructing matrices, coefficients or structural residuals.
 Exact identification, robust covariance and nonpositive instrument-regression
 residual degrees retain unavailable results; invalid fitted kappa or overflowing
-statistics return scientific failure. The numerical-model overidentification method is removed; the neutral fitted-model entry owns this analysis.
+statistics return scientific failure. The neutral fitted-model entry owns this analysis.
 First-stage analysis reuses the same implementation for both estimators.
 It requires positive first-stage residual degrees before preparing the design;
 saturated instrument regressions return a scientific failure while the structural

@@ -154,8 +154,8 @@ pub fn overidentification(
             ScientificInputViolation::ParameterOutOfRange,
         ));
     }
-    diagnostic_model(fit)?
-        .overidentification(&Col::from_iter(fit.coefficients.iter().copied()))
+    validate_diagnostic_fit(fit)?;
+    super::postestimation::overidentification(fit)
         .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))
 }
 

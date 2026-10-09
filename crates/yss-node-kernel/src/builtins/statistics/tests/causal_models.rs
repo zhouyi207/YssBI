@@ -145,6 +145,91 @@ fn iv_fit_summary_preserves_small_sample_references_and_constraint_inference() {
 }
 
 #[test]
+fn iv_2sls_summary_retains_scaled_overidentification_and_nullable_basmann() {
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1) + signal(row, 2))
+        .collect::<Vec<_>>();
+    let instrument = |bit| (0..16).map(|row| signal(row, bit)).collect::<Vec<_>>();
+    let numeric = |value: &RuntimeValue| super::super::super::numeric_input(Some(value)).unwrap();
+    let mut parameters = iv_summary_parameters("2sls", false);
+    parameters
+        .iter_mut()
+        .find(|(key, _)| *key == "overidentification")
+        .unwrap()
+        .1 = flag(true);
+    for (covariance, perfect_first_stage) in
+        [("nonrobust", false), ("HC1", false), ("nonrobust", true)]
+    {
+        let endogenous = if perfect_first_stage {
+            (0..16).map(|row| 2.0 * signal(row, 0)).collect::<Vec<_>>()
+        } else {
+            endogenous.clone()
+        };
+        let response = (0..16)
+            .map(|row| {
+                1e-151
+                    * (1.0
+                        + 0.5 * endogenous[row]
+                        + signal(row, 1)
+                        + if perfect_first_stage {
+                            0.0
+                        } else {
+                            2.0 * signal(row, 3)
+                        })
+            })
+            .collect::<Vec<_>>();
+        let fit = run(
+            "yssbi.statistics.iv.2sls.fit",
+            &[
+                ("y", series(&response)),
+                ("endogenous", series(&endogenous)),
+                ("instruments", series(&instrument(0))),
+                ("instruments", series(&instrument(1))),
+            ],
+            &[
+                ("constant", flag(true)),
+                ("covariance", string(covariance)),
+                ("small", flag(false)),
+            ],
+            3,
+        )
+        .unwrap();
+        let report = run(
+            "yssbi.statistics.iv.2sls.summary",
+            &[("model", fit[0].clone())],
+            &parameters,
+            1,
+        )
+        .unwrap();
+        let result = field(&report[0], "overidentification").unwrap();
+        assert_ne!(result, &RuntimeValue::Scalar(TabularScalar::Null));
+        assert_eq!(numeric(field(result, "df").unwrap()), 1.0);
+        if perfect_first_stage {
+            assert!((numeric(field(result, "sargan_stat").unwrap()) - 16.0).abs() < 1e-10);
+            assert_eq!(
+                field(result, "basmann_stat").unwrap(),
+                &RuntimeValue::Scalar(TabularScalar::Null)
+            );
+            assert_eq!(
+                field(result, "basmann_p_value").unwrap(),
+                &RuntimeValue::Scalar(TabularScalar::Null)
+            );
+        } else if covariance == "nonrobust" {
+            assert!((numeric(field(result, "sargan_stat").unwrap()) - 544.0 / 179.0).abs() < 1e-10);
+            assert!(
+                (numeric(field(result, "basmann_stat").unwrap()) - 442.0 / 145.0).abs() < 1e-10
+            );
+        } else {
+            assert!(
+                (numeric(field(result, "wooldridge_stat").unwrap()) - 9248.0 / 3171.0).abs()
+                    < 1e-10
+            );
+        }
+    }
+}
+
+#[test]
 fn liml_summary_reports_kappa_overidentification_and_covariance_availability() {
     let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
     let endogenous = (0..16)
