@@ -11,6 +11,9 @@
 条目还必需包含函数签名、签名版本和编辑投影。调用目录直接消费 Function 索引。
 节点图的驻留正文、历史、解析及执行继续使用共享 Graph 基础设施；Graph 不作为项目文件分类。
 文件定位接口按 Event、Function、Chart、Mind、Doc 的具体种类校验路径。
+Event/Function 的种类检查位于实际定位入口，直接构造和反序列化请求同样受校验。
+定位 Graph 文件复用路径扫描，不解码正文；正文损坏的文件仍可被定位以便修复。
+其他资源只在一致读取边界借用所需成员或数据库声明，不复制无关文档正文。
 
 该 crate 组合 `yss-project-model`、`yss-project-history`、`yss-project-operation`、`yss-resource-lifecycle` 与 `yss-filesystem` 等更低层 crate，但不依赖 Tauri、Commands、IPC schema、Application 工作流或 Database runtime。
 

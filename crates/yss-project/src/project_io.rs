@@ -432,18 +432,6 @@ fn read_node_file_headers(
         .collect()
 }
 
-pub(crate) fn find_graph_document_path(
-    root: &Path,
-    graph_path: &GraphResourcePath,
-) -> Result<Option<(PathBuf, GraphResourceKind, GraphResourceFile)>, ProjectError> {
-    if let Some(resource) = load_graph_resource_index(root)?.get_by_path(graph_path.as_str()) {
-        let path = root.join(resource.path.as_str());
-        let document = read_graph_document(path.as_path(), resource.kind)?;
-        return Ok(Some((path, resource.kind, document)));
-    }
-    Ok(None)
-}
-
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, ProjectError> {
     let content = std::fs::read_to_string(path)?;
     serde_json::from_str(&content).map_err(ProjectError::Deserialize)
