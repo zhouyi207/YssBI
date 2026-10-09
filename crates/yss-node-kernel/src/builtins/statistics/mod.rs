@@ -171,6 +171,7 @@ pub(super) fn install(
                 | "yssbi.statistics.causal.aipw"
                 | "yssbi.statistics.causal.ipw"
                 | "yssbi.statistics.causal.psm"
+                | "yssbi.statistics.causal.rdd"
                 | "yssbi.statistics.causal.regression_adjustment"
                 | "yssbi.statistics.diagnostic.information_matrix"
                 | "yssbi.statistics.diagnostic.ph"
@@ -199,12 +200,12 @@ pub(super) fn install(
                 | "yssbi.statistics.plot.funnel"
                 | "yssbi.statistics.sem.path"
                 | "yssbi.statistics.test.cochran_q"
+                | "yssbi.statistics.test.heterogeneity"
                 | "yssbi.statistics.timeseries.ecm"
                 | "yssbi.statistics.timeseries.granger"
                 | "yssbi.statistics.workflow.moderation"
                 | "yssbi.statistics.workflow.moderation_advanced" => 6,
-                "yssbi.statistics.causal.rdd"
-                | "yssbi.statistics.diagnostic.breusch_godfrey"
+                "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
                 | "yssbi.statistics.diagnostic.ljung_box"
                 | "yssbi.statistics.diagnostic.nested_comparison"
@@ -230,7 +231,6 @@ pub(super) fn install(
                 | "yssbi.statistics.survey.linear_regression"
                 | "yssbi.statistics.survey.logistic"
                 | "yssbi.statistics.survey.poisson"
-                | "yssbi.statistics.test.heterogeneity"
                 | "yssbi.statistics.test.normality"
                 | "yssbi.statistics.workflow.delphi" => 5,
                 _ if id.starts_with("yssbi.statistics.survival.")

@@ -291,6 +291,96 @@ fn discontinuity_and_group_interactions_match_hc3_inference() {
 }
 
 #[test]
+fn causal_hc3_keeps_resolved_weighted_leverage_below_one() {
+    let edge = 1.0 - 2.0_f64.powi(-44);
+    let running = [-0.25, -0.5, -edge, 0.25, 0.5, edge];
+    let response = running
+        .iter()
+        .enumerate()
+        .map(|(i, &x)| {
+            if x < 0.0 {
+                1.0 + 2.0 * x + if i == 2 { 1.0 } else { 0.0 }
+            } else {
+                4.0 + x - if i == 5 { 2.0 } else { 0.0 }
+            }
+        })
+        .collect::<Vec<_>>();
+    let result = designs::rdd(
+        &response,
+        &running,
+        RddOptions {
+            cutoff: 0.0,
+            bandwidth: 1.0,
+            triangular: true,
+        },
+        &control(),
+    )
+    .expect("positive resolved HC3 remainders must not have an absolute cutoff");
+    for (coefficient, expected) in result.coefficients.iter().zip([1.0, 3.0, 2.0, -1.0]) {
+        close(coefficient.estimate, expected, 1e-8);
+        assert!(coefficient.standard_error.unwrap().is_finite());
+        assert!(coefficient.standard_error.unwrap() > 0.0);
+    }
+    assert!(result.covariance.iter().flatten().all(|v| v.is_finite()));
+    assert_eq!(result.left_observations, 3);
+    assert_eq!(result.right_observations, 3);
+}
+
+#[test]
+fn causal_hc3_keeps_finite_inference_for_large_response_units() {
+    let f = fixture();
+    let scale = 1e154;
+    let check = |actual: &[Vec<f64>], expected: &Value| {
+        let expected = matrix(expected);
+        for (row, reference) in actual.iter().zip(expected) {
+            for (&value, expected) in row.iter().zip(reference) {
+                assert!(value.is_finite());
+                close(value / scale / scale, expected, 1e-8);
+            }
+        }
+    };
+    let d = &f["rdd"];
+    let response = vector(&d["response"])
+        .into_iter()
+        .map(|v| v * scale)
+        .collect::<Vec<_>>();
+    for case in d["cases"].as_array().unwrap() {
+        let result = designs::rdd(
+            &response,
+            &vector(&d["running"]),
+            RddOptions {
+                cutoff: 0.0,
+                bandwidth: 1.0,
+                triangular: case["triangular"].as_bool().unwrap(),
+            },
+            &control(),
+        )
+        .expect("RDD HC3 coefficient covariance is finite in these units");
+        check(&result.covariance, &case["covariance"]);
+    }
+    let d = &f["treatment"];
+    let h = &f["heterogeneity"];
+    let response = vector(&d["response"])
+        .into_iter()
+        .map(|v| v * scale)
+        .collect::<Vec<_>>();
+    let result = designs::heterogeneity(
+        &response,
+        &vector(&d["treatment"]),
+        &serde_json::from_value::<Vec<usize>>(h["groups"].clone()).unwrap(),
+        &matrix(&d["predictors"]),
+        &control(),
+    )
+    .expect("unweighted HC3 coefficient covariance is finite in these units");
+    check(&result.covariance, &h["covariance"]);
+    close(
+        result.equality_test.statistic,
+        h["statistic"].as_f64().unwrap(),
+        1e-8,
+    );
+}
+
+#[test]
 fn selection_and_frontier_match_probit_and_likelihood_references() {
     let f = fixture();
     let d = &f["heckman"];

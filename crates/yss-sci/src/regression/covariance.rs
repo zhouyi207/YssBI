@@ -3,7 +3,10 @@
 
 use yss_sci_linalg::{Col, ColRef, Mat};
 
-use yss_sci_contract::regression::OlsCovariance;
+use yss_sci_contract::{
+    execution::{ScientificComputationError, ScientificExecutionControl},
+    regression::OlsCovariance,
+};
 
 /// 计算参数协方差矩阵 cov_beta
 /// - x: (n × k) 设计矩阵
@@ -30,9 +33,18 @@ pub fn compute_cov_beta(
         OlsCovariance::FixedScale { scale } => cov_fixed_scale(xtx_inv, *scale),
         OlsCovariance::Hc0 => cov_hc0(x, xtx_inv, u),
         OlsCovariance::Hc1 => cov_hc1(x, xtx_inv, u, n, df_residual),
-        OlsCovariance::Hc2 | OlsCovariance::Hc3 => {
-            cov_hc_leverage(x, xtx_inv, u, matches!(covariance, OlsCovariance::Hc3))
-        }
+        OlsCovariance::Hc2 | OlsCovariance::Hc3 => cov_hc_leverage(
+            x,
+            xtx_inv,
+            u,
+            matches!(covariance, OlsCovariance::Hc3),
+            None,
+            None,
+        )
+        .map_err(|error| match error {
+            HcCovarianceError::Computation(message) => message.to_owned(),
+            HcCovarianceError::Interrupted(error) => format!("HC2/HC3: {error}"),
+        }),
         OlsCovariance::Cluster {
             cluster_id,
             xtreg_fe_style,
@@ -81,31 +93,58 @@ fn cov_hc1(
     Ok(yss_sci_linalg::Scale(scale) * hc0)
 }
 
+#[derive(Debug)]
+pub(crate) enum HcCovarianceError {
+    Computation(&'static str),
+    Interrupted(ScientificComputationError),
+}
+
+impl HcCovarianceError {
+    pub(crate) fn into_scientific(self) -> ScientificComputationError {
+        match self {
+            Self::Computation(_) => ScientificComputationError::ComputationFailed,
+            Self::Interrupted(error) => error,
+        }
+    }
+}
+
 /// Accumulate coefficient influences before squaring to avoid oversized score meat.
 /// HC2 divides each influence by sqrt(1-h); HC3 divides it by 1-h.
-fn cov_hc_leverage(
+pub(crate) fn cov_hc_leverage(
     x: &Mat<f64>,
     bread: &Mat<f64>,
     u: ColRef<'_, f64>,
     hc3: bool,
-) -> Result<Mat<f64>, String> {
+    weights: Option<&[f64]>,
+    control: Option<&ScientificExecutionControl>,
+) -> Result<Mat<f64>, HcCovarianceError> {
     let k = x.ncols();
     let mut covariance = Mat::zeros(k, k);
     let mut influence = Col::zeros(k);
     for row in 0..x.nrows() {
+        if row.is_multiple_of(256)
+            && let Some(control) = control
+        {
+            control.check().map_err(HcCovarianceError::Interrupted)?;
+        }
+        let weight = weights.map_or(1.0, |weights| weights[row]);
         for r in 0..k {
             influence[r] = (0..k).map(|c| bread[(r, c)] * x[(row, c)]).sum::<f64>();
         }
-        let leverage = x.row(row) * influence.as_ref();
+        let leverage = weight * (x.row(row) * influence.as_ref());
         if !leverage.is_finite() || !(0.0..1.0).contains(&leverage) {
-            return Err("HC2/HC3: leverage is outside the defined range [0, 1)".into());
+            return Err(HcCovarianceError::Computation(
+                "HC2/HC3: leverage is outside the defined range [0, 1)",
+            ));
         }
         let remainder = 1.0 - leverage;
         let denominator = if hc3 { remainder } else { remainder.sqrt() };
         for r in 0..k {
-            influence[r] = influence[r] * u[row] / denominator;
+            influence[r] = influence[r] * weight * u[row] / denominator;
             if !influence[r].is_finite() {
-                return Err("HC2/HC3: coefficient influence is nonfinite".into());
+                return Err(HcCovarianceError::Computation(
+                    "HC2/HC3: coefficient influence is nonfinite",
+                ));
             }
         }
         for r in 0..k {
@@ -118,7 +157,9 @@ fn cov_hc_leverage(
         .col_iter()
         .any(|column| column.iter().any(|value| !value.is_finite()))
     {
-        return Err("HC2/HC3: coefficient covariance is nonfinite".into());
+        return Err(HcCovarianceError::Computation(
+            "HC2/HC3: coefficient covariance is nonfinite",
+        ));
     }
     Ok(covariance)
 }
@@ -450,6 +491,41 @@ mod tests {
     use super::*;
     use crate::regression::linear::OLS;
     use yss_sci_contract::regression::{CovParams, OlsOptions};
+
+    #[test]
+    fn controlled_leverage_covariance_preserves_interruption() {
+        use std::time::Instant;
+        use yss_sci_contract::execution::ScientificCancellationToken;
+
+        let design = Mat::from_fn(4, 1, |_, _| 1.0);
+        let bread = Mat::from_fn(1, 1, |_, _| 0.25);
+        let residuals = Col::from_iter([-1.0, -1.0, 1.0, 1.0]);
+        let cancellation = ScientificCancellationToken::new();
+        cancellation.cancel();
+        let cancelled = ScientificExecutionControl {
+            cancellation,
+            deadline: Instant::now() + std::time::Duration::from_secs(5),
+        };
+        let expired = ScientificExecutionControl {
+            cancellation: ScientificCancellationToken::new(),
+            deadline: Instant::now(),
+        };
+        for (control, expected) in [
+            (cancelled, ScientificComputationError::Cancelled),
+            (expired, ScientificComputationError::DeadlineExceeded),
+        ] {
+            let error = cov_hc_leverage(
+                &design,
+                &bread,
+                residuals.as_ref(),
+                true,
+                None,
+                Some(&control),
+            )
+            .unwrap_err();
+            assert_eq!(error.into_scientific(), expected);
+        }
+    }
 
     #[test]
     fn test_hac_bartlett_bw1_equals_hc0() {

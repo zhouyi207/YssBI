@@ -39,38 +39,6 @@ pub(super) fn chi_square(statistic: f64, df: usize) -> Result<CausalWaldTest> {
     })
 }
 
-/// HC3 for a fixed design, including observation weights in both bread and scores.
-pub(super) fn hc3(
-    x: &Mat<f64>,
-    residuals: &[f64],
-    weights: Option<&[f64]>,
-    bread: &Mat<f64>,
-    control: &Control,
-) -> Result<Mat<f64>> {
-    let p = x.ncols();
-    let mut meat = Mat::zeros(p, p);
-    for i in 0..x.nrows() {
-        if i.is_multiple_of(256) {
-            control.check()?;
-        }
-        let w = weights.map_or(1.0, |w| w[i]);
-        let leverage = w
-            * (0..p)
-                .map(|j| x[(i, j)] * (0..p).map(|k| bread[(j, k)] * x[(i, k)]).sum::<f64>())
-                .sum::<f64>();
-        if leverage >= 1.0 - 1e-12 {
-            return Err(parameter());
-        }
-        let score = w * residuals[i] / (1.0 - leverage);
-        for j in 0..p {
-            for k in 0..p {
-                meat[(j, k)] += score * score * x[(i, j)] * x[(i, k)];
-            }
-        }
-    }
-    Ok(bread.as_ref() * meat.as_ref() * bread.as_ref())
-}
-
 /// Resample whole observations and refit every stage. Failed replicates are errors,
 /// never silently dropped. Online covariance avoids retaining B full model results.
 pub(super) fn bootstrap_covariance(

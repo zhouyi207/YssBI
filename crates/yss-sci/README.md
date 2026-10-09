@@ -483,6 +483,15 @@ HC3 inference, HC3 treatment-by-group Wald tests and pre-period-only simplex
 synthetic controls. SUR solves block normal equations without an observation-square
 Kronecker covariance; synthetic controls retain all periods only for predictions.
 
+RDD and treatment heterogeneity reuse regression's HC3 coefficient-influence
+accumulator. RDD supplies its observation weights to both effective leverage and
+coefficient influence; heterogeneity uses unweighted rows. Both borrow their existing
+design, bread and residuals and retain typed cancellation/deadline checks during the
+row scan. Positive resolved leverage remainders have no fixed cutoff. Unit/invalid
+leverage or nonfinite covariance returns computation failure, without a separate
+score-meat matrix or an additional whitened observation buffer. Boundary and response-
+unit regressions live in `tests/causal_category.rs`.
+
 Linear GMM normalizes the response before moment covariance and two-step weighting,
 then combines that scale with the existing design coordinate map. Coefficients and
 covariance retain their original response/predictor units without squaring the scale

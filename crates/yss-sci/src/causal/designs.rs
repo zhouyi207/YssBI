@@ -1,6 +1,8 @@
 //! Sharp local-linear RDD, treatment-effect heterogeneity and synthetic controls.
 use super::common::*;
+use crate::regression::covariance::{HcCovarianceError, cov_hc_leverage};
 use yss_sci_contract::causal::models::*;
+use yss_sci_linalg::ColRef;
 
 pub fn rdd(
     y: &[f64],
@@ -62,7 +64,15 @@ pub fn rdd(
         .zip(&fitted)
         .map(|(y, f)| y - f)
         .collect::<Vec<_>>();
-    let covariance = hc3(&design.x, &residuals, Some(&weights), &bread, control)?;
+    let covariance = cov_hc_leverage(
+        &design.x,
+        &bread,
+        ColRef::from_slice(&residuals),
+        true,
+        Some(&weights),
+        Some(control),
+    )
+    .map_err(HcCovarianceError::into_scientific)?;
     let (beta, covariance) = design.raw(&beta, Some(covariance));
     let covariance = covariance.expect("covariance");
     Ok(RddResult {
@@ -157,7 +167,15 @@ pub fn heterogeneity(
         .zip(predicted)
         .map(|(y, f)| y - f)
         .collect::<Vec<_>>();
-    let covariance = hc3(&design.x, &residuals, None, &bread, control)?;
+    let covariance = cov_hc_leverage(
+        &design.x,
+        &bread,
+        ColRef::from_slice(&residuals),
+        true,
+        None,
+        Some(control),
+    )
+    .map_err(HcCovarianceError::into_scientific)?;
     let (beta, covariance) = design.raw(&beta, Some(covariance));
     let covariance = covariance.expect("covariance");
     let differences = Col::from_fn(count - 1, |i| beta[interaction_start + i]);
