@@ -20,10 +20,8 @@ impl Render for GraphCanvas {
         let bounds_cell = self.bounds.clone();
         let connection_layer = self.connection_layer.clone();
         let preview = self.preview.clone();
-        let selected_connection = match self.located {
-            Some(super::LocatedElement::Connection(id)) => Some(id),
-            _ => None,
-        };
+        let selected_connections = self.selected_connections.clone();
+        let hovered_connection = self.hovered_connection;
         let pending = match &self.gesture {
             Some(Gesture::Connection {
                 source, current, ..
@@ -75,10 +73,10 @@ impl Render for GraphCanvas {
                 }
             }))
             .on_action(cx.listener(|view, _: &DeleteSelection, _, cx| {
-                if let Some(super::LocatedElement::Connection(id)) = view.located {
+                if !view.selected_connections.is_empty() {
                     view.submit(
                         GraphCommand::Edit(EditorGraphMutation::DisconnectConnections {
-                            connection_ids: vec![id],
+                            connection_ids: view.selected_connections.iter().copied().collect(),
                         }),
                         None,
                         cx,
@@ -104,7 +102,9 @@ impl Render for GraphCanvas {
                 }
             }))
             .on_action(cx.listener(|view, _: &SelectAll, _, cx| {
-                view.located = None;
+                view.located_port = None;
+                view.selected_connections.clear();
+                view.connection_click = None;
                 view.selected = view
                     .graph
                     .projection
@@ -118,7 +118,8 @@ impl Render for GraphCanvas {
             .on_action(cx.listener(|view, _: &CancelGesture, window, cx| {
                 view.cancel_gesture();
                 view.palette = None;
-                view.located = None;
+                view.located_port = None;
+                view.connection_click = None;
                 window.focus(&view.focus, cx);
                 view.emit_selection(cx);
                 cx.notify();
@@ -197,6 +198,14 @@ impl Render for GraphCanvas {
                     cx,
                 );
             }))
+            .when(self.hovered_connection.is_some(), |view| {
+                view.cursor_pointer()
+            })
+            .on_hover(cx.listener(|view, hovered, _, cx| {
+                if !hovered && view.hovered_connection.take().is_some() {
+                    cx.notify();
+                }
+            }))
             .on_mouse_move(cx.listener(Self::pointer_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::pointer_up))
             .on_mouse_up(MouseButton::Right, cx.listener(Self::pointer_up))
@@ -209,7 +218,14 @@ impl Render for GraphCanvas {
                     },
                     move |bounds, _, window, _| {
                         let mut layer = connection_layer.borrow_mut();
-                        layer.paint(bounds, offset, zoom, &preview, selected_connection, window);
+                        layer.paint(
+                            bounds,
+                            offset,
+                            zoom,
+                            &preview,
+                            (&selected_connections, hovered_connection),
+                            window,
+                        );
                         if let Some((start, current)) = pending {
                             layer.paint_pending(bounds.origin + start, current, window);
                         }
@@ -219,6 +235,9 @@ impl Render for GraphCanvas {
                 .size_full(),
             )
             .children(nodes)
+            .when_some(self.connection_menu.as_ref(), |view, menu| {
+                view.child(menu.render())
+            })
             .when_some(self.selection_bounds(), |view, rect| {
                 view.child(
                     div()
@@ -431,13 +450,10 @@ impl GraphCanvas {
             .min_w_0()
             .text_size(px(12. * self.zoom))
             .text_color(rgb(appearance::MUTED))
-            .when(
-                self.located.as_ref() == Some(&super::LocatedElement::Port(port.address.clone())),
-                |view| {
-                    view.track_focus(&self.port_focus)
-                        .bg(rgb(appearance::BLUE).opacity(0.2))
-                },
-            )
+            .when(self.located_port.as_ref() == Some(&port.address), |view| {
+                view.track_focus(&self.port_focus)
+                    .bg(rgb(appearance::BLUE).opacity(0.2))
+            })
             .cursor_crosshair()
             .on_mouse_down(
                 MouseButton::Left,

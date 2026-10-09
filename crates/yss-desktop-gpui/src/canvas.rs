@@ -23,13 +23,11 @@ use gpui::{
 };
 use gpui_component::dock::{BasePanel, Panel, PanelEvent};
 use yss_application::activity_panel::ActivityPanelDocument;
-use yss_graph_document::{NodeId, NodePosition, PortAddress};
+use yss_graph_document::{ConnectionId, NodeId, NodePosition, PortAddress};
 use yss_graph_editor::projection::EditorProjectionModel;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
 use yss_node_protocol::PortDirection;
 use yss_project::GraphEditVersion;
-
-use navigation::LocatedElement;
 
 use crate::{project::OpenedGraph, services::NativeServices};
 pub use authoring::ConstantValueInput;
@@ -67,6 +65,7 @@ enum Gesture {
         press: Point<Pixels>,
         current: Point<Pixels>,
         previous: BTreeSet<NodeId>,
+        previous_connections: BTreeSet<ConnectionId>,
         additive: bool,
     },
     Connection {
@@ -89,7 +88,11 @@ pub struct GraphCanvas {
     catalog_language: String,
     focus: FocusHandle,
     port_focus: FocusHandle,
-    located: Option<LocatedElement>,
+    located_port: Option<PortAddress>,
+    selected_connections: BTreeSet<ConnectionId>,
+    hovered_connection: Option<ConnectionId>,
+    connection_menu: Option<connections::ConnectionMenu>,
+    connection_click: Option<connections::ConnectionClick>,
     offset: Point<Pixels>,
     zoom: f32,
     gesture: Option<Gesture>,
@@ -126,7 +129,11 @@ impl GraphCanvas {
             catalog_language,
             focus: cx.focus_handle(),
             port_focus: cx.focus_handle(),
-            located: None,
+            located_port: None,
+            selected_connections: BTreeSet::new(),
+            hovered_connection: None,
+            connection_menu: None,
+            connection_click: None,
             offset: point(px(40.), px(40.)),
             zoom: 1.,
             gesture: None,
@@ -207,7 +214,9 @@ impl GraphCanvas {
             else {
                 return false;
             };
-            self.located = None;
+            self.located_port = None;
+            self.selected_connections.clear();
+            self.connection_click = None;
             self.selected = BTreeSet::from([id]);
             self.offset = point(
                 px(40. - node.position.x as f32 * self.zoom),
@@ -268,14 +277,22 @@ impl GraphCanvas {
     }
 
     fn cancel_gesture(&mut self) {
-        if let Some(Gesture::Selection { previous, .. }) = self.gesture.take() {
+        if let Some(Gesture::Selection {
+            previous,
+            previous_connections,
+            ..
+        }) = self.gesture.take()
+        {
             self.selected = previous;
+            self.selected_connections = previous_connections;
         }
         self.gesture = None;
         if !self.busy {
             self.preview.clear();
         }
         self.connection_candidates = None;
+        self.hovered_connection = None;
+        self.connection_menu = None;
     }
 
     fn begin_node(
@@ -289,9 +306,13 @@ impl GraphCanvas {
             return;
         }
         cx.stop_propagation();
-        self.located = None;
+        self.located_port = None;
+        self.selected_connections.clear();
+        self.connection_click = None;
         window.focus(&self.focus, cx);
         self.palette = None;
+        self.hovered_connection = None;
+        self.connection_menu = None;
         let additive = event.modifiers.shift || event.modifiers.control || event.modifiers.platform;
         if additive {
             if !self.selected.insert(id) {
@@ -328,8 +349,12 @@ impl GraphCanvas {
         if self.busy && event.button == MouseButton::Left {
             return;
         }
-        self.located = None;
+        self.located_port = None;
+        self.selected_connections.clear();
+        self.connection_click = None;
         window.focus(&self.focus, cx);
+        self.hovered_connection = None;
+        self.connection_menu = None;
         if event.modifiers.alt {
             self.submit(
                 GraphCommand::Edit(EditorGraphMutation::DisconnectPort { address }),
@@ -396,7 +421,13 @@ impl GraphCanvas {
         if self.busy {
             return;
         }
-        self.located = None;
+        if self.begin_connection(event, window, cx) {
+            return;
+        }
+        self.located_port = None;
+        self.connection_click = None;
+        self.connection_menu = None;
+        self.hovered_connection = None;
         window.focus(&self.focus, cx);
         self.palette = None;
         if matches!(event.button, MouseButton::Right | MouseButton::Middle) {
@@ -407,15 +438,18 @@ impl GraphCanvas {
             });
         } else {
             let previous = self.selected.clone();
+            let previous_connections = self.selected_connections.clone();
             let additive =
                 event.modifiers.shift || event.modifiers.control || event.modifiers.platform;
             if !additive {
                 self.selected.clear();
+                self.selected_connections.clear();
             }
             self.gesture = Some(Gesture::Selection {
                 press: event.position,
                 current: event.position,
                 previous,
+                previous_connections,
                 additive,
             });
             self.emit_selection(cx);
@@ -425,6 +459,7 @@ impl GraphCanvas {
 
     fn pointer_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
         if self.gesture.is_none() {
+            self.hover_connection(event.position, cx);
             return;
         }
         if event.pressed_button.is_none() {
@@ -467,6 +502,7 @@ impl GraphCanvas {
                 current,
                 previous,
                 additive,
+                ..
             } => {
                 *current = event.position;
                 let a = self.world(*press);
@@ -568,6 +604,10 @@ impl BasePanel for GraphCanvas {
     fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
         if active {
             self.emit_selection(cx);
+        } else {
+            self.cancel_gesture();
+            self.connection_click = None;
+            cx.notify();
         }
     }
     fn dump(&self, cx: &App) -> gpui_component::dock::PanelState {

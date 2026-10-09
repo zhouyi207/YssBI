@@ -78,6 +78,17 @@ impl GraphCanvas {
         if self.busy {
             return;
         }
+        let reroute_selection = if matches!(
+            &command,
+            GraphCommand::Edit(EditorGraphMutation::InsertReroute { .. })
+        ) {
+            self.connection_click.take()
+        } else {
+            self.connection_click = None;
+            None
+        };
+        self.connection_menu = None;
+        self.hovered_connection = None;
         self.gesture = None;
         if creation.is_none() {
             self.palette = None;
@@ -158,6 +169,9 @@ impl GraphCanvas {
                         }
                     }
                     Err(error) => {
+                        if let Some(selection) = reroute_selection {
+                            view.restore_connection_click(selection, cx);
+                        }
                         tracing::error!(
                             code = "native_graph_command_failed",
                             "Native graph command failed"

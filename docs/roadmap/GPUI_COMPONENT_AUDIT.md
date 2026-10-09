@@ -607,6 +607,18 @@
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`，迭代 `cargo check` 与临时原生预览构建通过。18 个 Rust 文件局部格式、26/15 个双语键及参数（英文沿用工作区目录）、两份文档元信息与 275/271 条相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。后端契约与依赖未变，不重复后端测试或运行全工作区检查。
 - 物理键鼠、读屏、Windows/macOS、跨项目切换、复杂参数控件和各类真实诊断生产路径仍待人工验收；不增加 UI 单元测试，临时预览代码和数据不提交。累计完成源码审查 190/265 项。
 
+### 连线选择、菜单与转接点交互
+
+- 已逐项阅读 `ConnectionContextMenu`，并核对 `Edge`、`GraphFlowEdge`、`GraphFlowConnection` 及画布连线选择、删除和双击入口。原生连线现在支持悬停、单选、Ctrl/Cmd/Shift 多选、右键断开/删除及 Delete；菜单直接复用 PopupMenu 和原 Application 图事务。
+- 命中先检查控制点包围盒，再复用 GPUI 对同一曲线的 12px 描边网格；网格按相对几何缓存，平移不重新细分，重叠线按绘制顺序选取，节点覆盖区域和拖动期间不拾取连线。普通描边与选择/悬停高亮分别复用原路径缓存。
+- 诊断定位与鼠标操作共享 Canvas 的连线选择，投影替换只保留仍存在的连线，避免每个选中项分别扫描全部连线。框选取消恢复原节点/连线选择；Escape 取消手势，保留静态选择。
+- 右键已选连线保留整组，否则只选目标；菜单操作核对菜单实体、原投影和编辑版本，刷新、隐藏标签或提交关闭旧菜单。双击使用原 InsertReroute 事务，失败只在投影与临时选择仍相同时恢复单击前的选择。菜单释放仅恢复仍在菜单上的焦点，不抢占其他输入。
+- 工作区与独立提交副本以临时 `edges_review` 入口，在隔离 Linux/X11 窗口通过 GPUI Window 输入核对悬停、单选/多选、右键整组断开、危险删除、Delete、双击转接点和一次撤销。图编辑使用真实 Application；临时入口、事件注入及项目数据不提交。
+- 工作区另核对框选取消恢复与静态 Escape、刷新和切换标签关闭菜单、缩放至 179% 后两端均在视口外的曲线命中、中键平移、反向曲线，以及越过画布边缘的菜单点击。双击前由后端修改图导致版本拒绝时，没有留下转接点且恢复了先前节点选择。
+- 两份窗口复验刷新关闭菜单后立即 Delete，以及菜单打开时切换文档后继续输入；工作区另核对删除后的 Ctrl+Z 连续快捷键。菜单释放回调修复了程序关闭菜单后焦点停在已移除实体上的问题。
+- 聚焦验证：两份内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；临时窗口使用 `cargo build -p yss-desktop-gpui --example edges_review --locked` 构建。另检查本批 8 个 Rust 文件格式、两份文档的声明/相对链接、复用的中英文键及参数、265 项目录与 `git diff --check`；模块索引检查通过。本批未运行全工作区验证，未增加 UI 单元测试；物理输入、读屏及 Windows/macOS 仍待验收。
+- 连线运行/缓存外观、类型配色、连接预览方向和候选反馈继续迁移；相关 Edge、GraphFlowEdge、GraphFlowConnection 和 GraphFlowCanvas 不标记整体完成。累计完成源码审查 191/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -818,20 +830,20 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 待查 | 已读曲线、命中、选择/悬停与状态样式；原生命中/高亮已补齐，运行/缓存外观继续迁移 | 连线交互窗口验收见本批；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 已核对连线选择、菜单、删除与双击入口并接入原生；其他画布手势、框选和连接反馈继续审查 | 连线交互窗口验收见本批；整体未完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 待查 | 已读正式手势及节点菜单中的预览；原生输入侧曲线方向、候选颜色/理由与替换反馈仍待补齐 | 整体待完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 待查 | 已读几何、端口类型/阻断、运行/缓存和替换反馈 selector；原生选择与命中已接入，其余外观继续迁移 | 整体待完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx) | 迁移 | 原生 PopupMenu，单选/多选断开与危险删除；菜单/投影/版本校验，复用原图事务 | Linux 窗口核对多选、断开、Delete、转接点与历史；物理输入、读屏和跨平台待验收 |
 | [modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/NodePalette.tsx](../../react/src/modules/graph-editor/internal/ui/NodePalette.tsx) | 迁移：完整目录检索与分类浏览，创建复用原图事务 | `canvas/palette` 保存索引、输入与读取代次；Catalog 生成全拼/首字母搜索，GPUI 虚拟列表只绘制可见行 | 分类/查询/键盘、不可用项、配置返回、错误重试、过期图及关闭后迟到回复已预览核对；物理 IME、完整项目切换及压力验收开放 |

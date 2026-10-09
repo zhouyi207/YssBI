@@ -3,12 +3,6 @@ use super::{GraphCanvas, geometry};
 use gpui::{Bounds, Context, Window, point, px};
 use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 
-#[derive(Clone, PartialEq, Eq)]
-pub(super) enum LocatedElement {
-    Port(PortAddress),
-    Connection(ConnectionId),
-}
-
 impl GraphCanvas {
     pub(crate) fn reveal_node(
         &mut self,
@@ -27,7 +21,9 @@ impl GraphCanvas {
         }
         self.cancel_gesture();
         self.palette = None;
-        self.located = None;
+        self.located_port = None;
+        self.selected_connections.clear();
+        self.connection_click = None;
         self.selected = [id].into();
         self.frame_nodes(Some(&[id]));
         window.focus(&self.focus, cx);
@@ -52,7 +48,7 @@ impl GraphCanvas {
             return false;
         }
         self.reveal_node(address.node_id, window, cx);
-        self.located = Some(LocatedElement::Port(address.clone()));
+        self.located_port = Some(address.clone());
         window.focus(&self.port_focus, cx);
         cx.notify();
         true
@@ -86,7 +82,9 @@ impl GraphCanvas {
         self.cancel_gesture();
         self.palette = None;
         self.selected.clear();
-        self.located = Some(LocatedElement::Connection(id));
+        self.located_port = None;
+        self.selected_connections = [id].into();
+        self.connection_click = None;
         self.frame_nodes(Some(&nodes));
         window.focus(&self.focus, cx);
         self.emit_selection(cx);
@@ -133,23 +131,16 @@ impl GraphCanvas {
     }
 
     pub(super) fn retain_located(&mut self) {
-        let valid = match &self.located {
-            Some(LocatedElement::Port(address)) => self
+        self.retain_connections();
+        if self.located_port.as_ref().is_some_and(|address| {
+            !self
                 .graph
                 .projection
                 .nodes
                 .iter()
-                .any(|node| node.ports.iter().any(|port| port.address == *address)),
-            Some(LocatedElement::Connection(id)) => self
-                .graph
-                .projection
-                .connections
-                .iter()
-                .any(|connection| connection.connection_id == *id),
-            None => true,
-        };
-        if !valid {
-            self.located = None;
+                .any(|node| node.ports.iter().any(|port| port.address == *address))
+        }) {
+            self.located_port = None;
         }
     }
 }
