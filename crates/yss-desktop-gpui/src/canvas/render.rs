@@ -217,26 +217,6 @@ impl Render for GraphCanvas {
                 )
             })
             .child(
-                div()
-                    .absolute()
-                    .bottom_2()
-                    .left_2()
-                    .text_xs()
-                    .text_color(rgb(appearance::MUTED))
-                    .child(format!(
-                        "{} 个节点 · {} 条连线 · {:.0}%{}{}",
-                        self.graph.projection.nodes.len(),
-                        self.graph.projection.connections.len(),
-                        self.zoom * 100.,
-                        if self.busy { " · 正在提交…" } else { "" },
-                        if self.run_status().is_empty() {
-                            String::new()
-                        } else {
-                            format!(" · {}", self.run_status())
-                        }
-                    )),
-            )
-            .child(
                 div().absolute().bottom_2().right_2().child(
                     Button::new("reset-view")
                         .small()

@@ -68,23 +68,6 @@ impl Workbench {
             .as_ref()
             .map(|project| project.index.project_name.clone())
             .unwrap_or_else(|| "工作台".into());
-        let status = self.error.clone().unwrap_or_else(|| {
-            if self.busy {
-                "正在处理项目…".into()
-            } else if dirty_files > 0 && pending_databases > 0 {
-                format!("{dirty_files} 个文件待保存 · {pending_databases} 个数据库待保存检查点")
-            } else if pending_databases > 0 {
-                format!("{pending_databases} 个数据库待保存检查点")
-            } else if dirty_files > 0 {
-                format!("{dirty_files} 个文件有未保存的更改")
-            } else if self.settings.read(cx).dirty() {
-                "设置有未保存的更改".into()
-            } else if self.project.is_some() {
-                "所有更改已保存".into()
-            } else {
-                "打开项目目录以开始".into()
-            }
-        });
         div()
             .key_context("Workbench")
             .track_focus(&self.focus)
@@ -271,6 +254,6 @@ impl Workbench {
                         )
                     }),
             )
-            .child(self.render_status_bar(status, dirty > 0, cx))
+            .child(self.render_status_bar(cx))
     }
 }

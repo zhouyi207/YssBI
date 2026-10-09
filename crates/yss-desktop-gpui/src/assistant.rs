@@ -1,6 +1,7 @@
 //! Native conversation views consume durable Harness facts and retain only input state.
 mod commands;
 mod composer;
+mod header;
 mod inspect;
 mod projection;
 mod render;
@@ -28,6 +29,7 @@ actions!(native_assistant, [SendMessage, CancelResponse]);
 
 pub(crate) enum ConversationEvent {
     DirectoryChanged,
+    OptionsChanged,
     OpenResource(ProjectResourceRef),
     OpenResult(yss_graph_execution::result::ResultReference),
     Settings,
@@ -151,6 +153,13 @@ impl ConversationPanel {
             .is_some_and(|pending| !pending.accepted)
             || self.selecting
     }
+    pub(crate) fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.refreshing {
+            return;
+        }
+        self.error = None;
+        self.reload(false, window, cx);
+    }
     fn running(&self) -> bool {
         self.transcript.running() || self.pending.is_some()
     }
@@ -209,12 +218,7 @@ impl BasePanel for ConversationPanel {
 }
 impl Panel for ConversationPanel {
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
-        self.session
-            .conversation
-            .as_ref()
-            .map(|metadata| metadata.title.clone())
-            .filter(|title| !title.is_empty())
-            .unwrap_or_else(|| "新对话".into())
+        self.display_title()
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

@@ -13,7 +13,7 @@ use gpui_component::{
     dock::{DockPlacement, PaneRef, panel_handle},
 };
 use std::sync::Arc;
-use yss_application::activity_panel::ActivityPanelDocument;
+use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, ActivityRowContent};
 use yss_harness_contract::{HarnessSessionId, HarnessSessionRecord};
 use yss_project_identity::ProjectResourceKind;
 
@@ -103,6 +103,29 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let mut titles_changed = false;
+        for row in &document.rows {
+            if let ActivityRowContent::Item(ActivityItem::Conversation {
+                session_id, title, ..
+            }) = &row.content
+                && let Some(panel) = self.conversations.get(session_id)
+            {
+                titles_changed |= panel.update(cx, |panel, cx| {
+                    if let Some(metadata) = &mut panel.session.conversation
+                        && metadata.title != *title
+                    {
+                        metadata.title.clone_from(title);
+                        cx.notify();
+                        true
+                    } else {
+                        false
+                    }
+                });
+            }
+        }
+        if titles_changed {
+            self.dock.update(cx, |_, cx| cx.notify());
+        }
         let panel = self.ensure_assistant_directory(window, cx);
         panel.update(cx, |panel, cx| {
             panel.replace_document(Arc::new(document), cx)
@@ -298,6 +321,9 @@ impl Workbench {
                 &panel,
                 window,
                 |view, _, event, window, cx| match event {
+                    ConversationEvent::OptionsChanged => {
+                        view.dock.update(cx, |_, cx| cx.notify());
+                    }
                     ConversationEvent::DirectoryChanged => {
                         view.refresh_assistant_directory(window, cx)
                     }

@@ -151,6 +151,7 @@ impl Workbench {
         let catalog_language = crate::text::locale().to_owned();
         let canvas =
             cx.new(|cx| GraphCanvas::new(services, graph, catalog, catalog_language, window, cx));
+        self.observe_graph_status(&canvas, cx);
         let mut diagnostic_count = canvas.read(cx).graph.projection.diagnostics.len();
         self.subscriptions.push(cx.subscribe_in(
             &canvas,

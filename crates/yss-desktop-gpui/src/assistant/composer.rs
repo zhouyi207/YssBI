@@ -331,8 +331,7 @@ impl ConversationPanel {
                     let owner = owner.clone();
                     menu = menu.item(PopupMenuItem::new(label).on_click(move |_, _, cx| {
                         let _ = owner.update(cx, |view, cx| {
-                            view.options.mode = mode;
-                            cx.notify();
+                            view.set_mode(mode, cx);
                         });
                     }));
                 }

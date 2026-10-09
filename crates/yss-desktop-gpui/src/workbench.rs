@@ -12,6 +12,7 @@ mod details;
 mod node_creation;
 mod parameters;
 pub(crate) use node_creation::{CreationEvent, CreationTarget, NodeCreationView};
+mod dock;
 mod documents;
 mod events;
 mod graphs;
@@ -30,6 +31,7 @@ pub(crate) mod projects;
 mod results;
 mod saving;
 mod settings;
+mod sidebar;
 mod status_bar;
 mod welcome;
 
@@ -37,10 +39,8 @@ use gpui::{
     Context, Entity, FocusHandle, IntoElement, Render, WeakEntity, Window, WindowHandle,
     prelude::*, px,
 };
-use gpui_component::Root;
-use gpui_component::dock::{
-    DockArea, DockLayout, DockPlacement, DockSkin, PanelStyle, panel_handle,
-};
+use gpui_component::dock::{DockArea, DockLayout, DockPlacement, panel_handle};
+use gpui_component::{Root, WindowExt, notification::Notification};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Arc,
@@ -80,6 +80,7 @@ pub struct Workbench {
     assistant_reopen: bool,
     assistant_closed: Option<String>,
     dock: Entity<DockArea>,
+    dock_renderer: std::rc::Rc<dock::WorkbenchDock>,
     details: Entity<DetailsPanel>,
     problems: Entity<ProblemsPanel>,
     logs: Entity<LogsPanel>,
@@ -125,10 +126,7 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let (dock, skin) = DockSkin::dock_area("yssbi-workbench", None, window, cx);
-        skin.set_panel_style(PanelStyle::TabBar, cx);
-        skin.set_close_button_visible(true, cx);
-        skin.set_toggle_button_visible(false, cx);
+        let (dock, dock_renderer) = dock::create(cx.weak_entity(), window, cx);
         let details = cx.new(|cx| DetailsPanel::new(services.clone(), window, cx));
         let problems = cx.new(ProblemsPanel::new);
         let logs = cx.new(|cx| LogsPanel::new(services.clone(), window, cx));
@@ -160,6 +158,7 @@ impl Workbench {
             assistant_reopen: false,
             assistant_closed: None,
             dock,
+            dock_renderer,
             details,
             problems,
             logs,
@@ -200,7 +199,9 @@ impl Workbench {
         view.install_activity(window, cx);
         view.connect_panels(window, cx);
         view.connect_events(window, cx);
-        view.connect_layout(cx);
+        view.connect_layout(window, cx);
+        view.subscriptions
+            .push(cx.observe(&view.dock, |_, _, cx| cx.notify()));
         view.connect_recent(window, cx);
         view.plugin_subscription = Some(cx.observe(&view.plugins, |_, _, cx| cx.notify()));
         view.settings_subscription = Some(cx.observe(&view.settings, |_, _, cx| cx.notify()));
@@ -462,6 +463,12 @@ impl Workbench {
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(error) = self.error.take() {
+            window.defer(cx, move |window, cx| {
+                window.push_notification(Notification::error(error), cx);
+            });
+        }
+        self.dock_renderer.update_style(self.dock.read(cx), cx);
         self.prepare_menus(cx);
         self.render_chrome(window, cx)
     }

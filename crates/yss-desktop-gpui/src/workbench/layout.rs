@@ -1,4 +1,5 @@
 //! Native DockArea persistence and resource rehydration. The DockArea owns the live topology.
+pub(super) mod columns;
 mod missing;
 
 use super::Workbench;
@@ -14,6 +15,26 @@ use yss_application::graph::open::OpenGraphRequest;
 use yss_graph_document::GraphResourcePath;
 
 impl Workbench {
+    pub(in crate::workbench) fn active_editor_panel(
+        &self,
+        cx: &App,
+    ) -> Option<Arc<dyn BasePanelView>> {
+        let details = self.details.read(cx);
+        let panel = if let Some(document) = details.document() {
+            panel_handle(document)
+        } else if let Some(mind) = details.mind() {
+            panel_handle(mind)
+        } else if let Some(database) = details.database() {
+            panel_handle(database)
+        } else if let Some(chart) = details.chart() {
+            panel_handle(chart)
+        } else {
+            panel_handle(details.graph()?)
+        };
+        self.displayed_panel_placement(panel.panel_id(cx), cx)?;
+        Some(panel)
+    }
+
     pub(super) fn panel_placement(&self, id: PanelId, cx: &App) -> Option<DockPlacement> {
         let dock = self.dock.read(cx);
         [
@@ -55,8 +76,21 @@ impl Workbench {
         let id = panel.panel_id(cx);
         let placement = self.panel_placement(id, cx);
         self.dock.update(cx, |dock, cx| {
+            if columns::is_conversation(&panel) {
+                if !columns::conversation_zoomed(dock) {
+                    dock.set_zoomed_out(window, cx);
+                }
+                columns::present(dock, panel.clone(), window, cx);
+                window.focus(&panel.focus_handle(cx), cx);
+                return;
+            }
+            if columns::conversation_zoomed(dock) && !super::sidebar::is_navigation(&panel) {
+                dock.set_zoomed_out(window, cx);
+            }
             if placement.is_some() {
                 dock.select_panel(id, window, cx);
+            } else if fallback == DockPlacement::Center {
+                columns::present(dock, panel, window, cx);
             } else {
                 dock.add_panel_view(panel, fallback, None, window, cx);
             }
@@ -90,20 +124,35 @@ impl Workbench {
         });
     }
 
-    pub(super) fn connect_layout(&mut self, cx: &mut Context<Self>) {
-        self.layout_subscription = Some(cx.subscribe(&self.dock, |view, _, event, cx| {
-            if matches!(event, DockEvent::LayoutChanged) {
+    pub(super) fn connect_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let subscription = cx.subscribe_in(&self.dock, window, |view, _, event, window, cx| {
+            if !matches!(event, DockEvent::LayoutChanged) {
+                return;
+            }
+            cx.notify();
+            if view.restoring_layout {
+                return;
+            }
+            let lifecycle = view.lifecycle;
+            // Closing the last editor first inserts its watermark, then emits a
+            // native close event. Reconcile after both, so the insertion event
+            // cannot remove the watermark before the editor has actually closed.
+            cx.defer_in(window, move |view, window, cx| {
+                if view.restoring_layout || view.lifecycle != lifecycle {
+                    return;
+                }
+                view.dock.update(cx, |dock, cx| {
+                    columns::maintain_editor_space(dock, window, cx)
+                });
                 view.sync_active_conversation(cx);
-                cx.notify();
-            }
-            if matches!(event, DockEvent::LayoutChanged) && !view.restoring_layout {
-                let timer = cx.background_executor().timer(Duration::from_millis(300));
-                view.layout_task = Some(cx.spawn(async move |view, cx| {
-                    timer.await;
-                    let _ = view.update(cx, |view, cx| view.persist_layout(cx));
-                }));
-            }
-        }));
+            });
+            let timer = cx.background_executor().timer(Duration::from_millis(300));
+            view.layout_task = Some(cx.spawn(async move |view, cx| {
+                timer.await;
+                let _ = view.update(cx, |view, cx| view.persist_layout(cx));
+            }));
+        });
+        self.layout_subscription = Some(subscription);
     }
 
     pub(super) fn persist_layout(&self, cx: &mut Context<Self>) {
@@ -343,6 +392,8 @@ impl Workbench {
                                 cx.notify();
                             });
                         }
+                        view.dock
+                            .update(cx, |dock, cx| columns::restore(dock, window, cx));
                         view.restoring_layout = false;
                         let path = initial_resource.or_else(|| {
                             if restored {
@@ -394,6 +445,9 @@ impl Workbench {
     }
 
     fn register_layout_panels(&self, cx: &mut Context<Self>) {
+        register_panel(cx, "empty-editor", |_, _, cx| {
+            panel_handle(cx.new(super::dock::EmptyEditor::new))
+        });
         register_fixed("details", self.details.downgrade(), cx);
         register_fixed("problems", self.problems.downgrade(), cx);
         register_fixed("output", self.output.downgrade(), cx);

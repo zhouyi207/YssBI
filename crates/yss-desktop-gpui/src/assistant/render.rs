@@ -2,7 +2,7 @@ use super::{
     CancelResponse, ConversationEvent, ConversationPanel, SendMessage,
     projection::{Task, Tool, Turn, TurnState},
 };
-use gpui::{AnyElement, Context, IntoElement, Render, SharedString, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, IntoElement, Render, SharedString, Window, div, prelude::*};
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
@@ -22,47 +22,6 @@ impl Render for ConversationPanel {
             .bg(cx.theme().background)
             .on_action(cx.listener(|view, _: &SendMessage, window, cx| view.send(window, cx)))
             .on_action(cx.listener(|view, _: &CancelResponse, _, cx| view.cancel(cx)))
-            .child(
-                div()
-                    .h(px(42.))
-                    .flex_shrink_0()
-                    .px_3()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        div().flex_1().min_w_0().text_sm().truncate().child(
-                            self.session
-                                .conversation
-                                .as_ref()
-                                .map(|metadata| metadata.title.clone())
-                                .filter(|title| !title.is_empty())
-                                .unwrap_or_else(|| "新对话".into()),
-                        ),
-                    )
-                    .child(
-                        Button::new("assistant-refresh")
-                            .small()
-                            .ghost()
-                            .label("刷新")
-                            .disabled(self.refreshing)
-                            .on_click(cx.listener(|view, _, window, cx| {
-                                view.error = None;
-                                view.reload(false, window, cx);
-                            })),
-                    )
-                    .child(
-                        Button::new("assistant-settings")
-                            .small()
-                            .ghost()
-                            .label("模型设置")
-                            .on_click(
-                                cx.listener(|_, _, _, cx| cx.emit(ConversationEvent::Settings)),
-                            ),
-                    ),
-            )
             .child(self.render_thread(cx))
             .child(self.status(cx))
             .child(self.render_composer(cx))

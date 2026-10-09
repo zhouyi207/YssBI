@@ -155,6 +155,14 @@ impl GraphCanvas {
         self.busy
     }
 
+    pub(crate) fn zoom(&self) -> f32 {
+        self.zoom
+    }
+
+    pub(crate) fn viewport_offset(&self) -> Point<Pixels> {
+        self.offset
+    }
+
     pub fn set_catalog(
         &mut self,
         catalog: Arc<ActivityPanelDocument>,

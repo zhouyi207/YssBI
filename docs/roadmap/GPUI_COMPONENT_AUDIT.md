@@ -452,6 +452,17 @@
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；7/6 个 Rust 文件局部格式、31/6 个双语文案键、两份文档元信息及 275/270 条相对链接、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过。后端契约未改变，不重复后端测试或全工作区验证。
 - 本批不修改后端接口、不添加依赖或 UI 单元测试；验证限定 GPUI 宿主与文档/格式。物理键鼠、IME、读屏、删除后的恢复回退、创建/打开失败、无项目窗口和 Windows/macOS 验收继续开放。Header、完整 StatusBar 组合与 Assistant 其他组件保持原待查状态；累计审查 177/265 项。
 
+### 对话标题栏、面板与原生列布局
+
+- 已逐项阅读 AssistantConversationHeader 与 AssistantConversationPanel，连同其运行时 Provider 依赖、目录标题来源和面板控制入口；运行时、消息及 composer 的完整行为仍单独审查。
+- `assistant/header` 读取原会话标题与后续 turn 选项，锁按钮和 composer 共用 `set_mode`；变更只触发 Dock 重绘，不写布局。目录查询接纳后同步已有会话标题，保留原输入、选项、队列与订阅，不引入第二份会话状态。
+- `dock/conversation` 承接单行标题、新建、展开、更多菜单；重命名复用 NameForm 和 Application，失败反馈沿原路径。重命名、刷新及关闭拒绝旧生命周期菜单；框架标题/标签在纯会话组隐藏，混合资源仍可访问。
+- 整理现有 `dock`、`sidebar`、`layout/columns` 实现进入同一提交：根 DockArea 持有唯一拓扑、宽度和选择；展开保留 sidebar，底部工具内容/手柄/图标只占编辑区。统计移至底栏右侧，移除画布叠层；最后一个编辑器关闭由原生命周期处理并保留空编辑占位。
+- 工作区与独立提交内容均通过临时 `cargo build -p yss-desktop-gpui --example assistant_header_review`，在隔离数据目录和真实 Application 的 Linux/X11 窗口以 GPUI Window 事件验收模式双向同步、外部真实重命名后的标题刷新、新建和刷新保留输入。工作区另验收标题菜单重命名、两会话草稿/选项隔离、关闭重开及英文默认标题；图 session/revision 在会话操作中保持。
+- 展开保留 sidebar，切换目录/会话保持展开，打开 Problems 恢复布局；调整列宽后收放 sidebar 仍保持像素宽度，工具区和底栏对齐。工作区显式保存后关闭最后一个图显示同宽水印；独立提交内容重启恢复两会话、活动会话、471px 列宽和底部工具区。模型设置入口打开既有窗口。
+- 嵌套 Xwayland 的局部重绘曾漏画部分静态文字，窗口尺寸变化后完整呈现；独立显示环境的重绘验收保持开放。物理键鼠、IME、读屏、混合拖放、跨项目迟到菜单、真实运行中的选项/队列和 Windows/macOS 仍待验收，不据此标记整个 Assistant 或工作台完成。
+- L2：工作区与独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`。独立预览首次构建的 SCI 字段错误来自共享 target 中另一个工作区的产物；重建对应契约后构建成功，未修改 SCI 代码。23/22 个 Rust 文件局部格式、31 个中英文文案键/参数、两份文档元信息及 275/270 条相对链接、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过；没有后端接口、依赖或 UI 单元测试变更，不运行全仓验证。累计审查 179/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -560,8 +571,8 @@
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
 | [modules/assistant/internal/ui/AssistantComposer.tsx](../../react/src/modules/assistant/internal/ui/AssistantComposer.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/assistant/internal/ui/AssistantConversationHeader.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationHeader.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/assistant/internal/ui/AssistantConversationPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationPanel.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/assistant/internal/ui/AssistantConversationHeader.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationHeader.tsx) | 迁移 | dock/conversation 单行标题与原会话选项；新建/重命名/刷新/设置/关闭复用原入口，展开读取根 DockArea 并保留 sidebar | Linux/X11 已覆盖主要操作；局部重绘、读屏/物理输入及跨平台待验收 |
+| [modules/assistant/internal/ui/AssistantConversationPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationPanel.tsx) | 优化 | 复用按会话缓存的 ConversationPanel；目录同步标题但保留输入/运行选项，根 DockArea 分离对话与编辑列，不迁移 React Provider 包装层 | 草稿切换/关闭重开、独立布局重启已验收；消息及运行时组件继续独立审查 |
 | [modules/assistant/internal/ui/AssistantConversationToggle.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationToggle.tsx) | 优化 | 原 DockArea、目录查询和 Application 会话入口补齐整组关闭、上次/最近恢复、空目录新建及生命周期隔离；无项目沿用临时会话目录 | 代码已覆盖；本批窗口验收见记录，故障与跨平台余项开放 |
 | [modules/assistant/internal/ui/AssistantConversations.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversations.tsx) | 优化 | 原 Activity 目录与虚拟列表补齐时间、名称回退搜索、重命名按钮、窗口激活刷新；DockArea 决定当前会话，重复激活关闭，缓存重开仍校验 Application | 代码已覆盖；本批交互验收见批次记录，跨项目/平台验收开放 |
 | [modules/assistant/internal/ui/AssistantExecution.tsx](../../react/src/modules/assistant/internal/ui/AssistantExecution.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

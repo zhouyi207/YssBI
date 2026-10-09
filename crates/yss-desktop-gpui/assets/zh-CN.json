@@ -2644,7 +2644,8 @@
       "storageType": "存储类型",
       "semantics": "数据语义",
       "unset": "未设置",
-      "readFailed": "数据读取未完成，请刷新项目后重试。"
+      "readFailed": "数据读取未完成，请刷新项目后重试。",
+      "submitting": "正在提交…"
     },
     "charts": {
       "unnamedDataset": "未命名数据集",
@@ -2878,7 +2879,28 @@
       "conversationNameInvalid": "会话名称无效，请修改后重试。",
       "conversationUnavailable": "此对话不可用，请刷新会话目录。",
       "renameSession": "重命名会话",
-      "renameSessionFailed": "会话重命名未完成，请刷新目录后重试。"
+      "renameSessionFailed": "会话重命名未完成，请刷新目录后重试。",
+      "closeConversationColumn": "关闭对话列",
+      "conversationOptions": "对话选项",
+      "edgeCount": "{{value0}} 条连线",
+      "expandConversation": "展开对话",
+      "modelSettings": "模型设置…",
+      "newConversation": "新建对话",
+      "nodeCatalog": "节点目录",
+      "nodeCount": "{{value0}} 个节点",
+      "properties": "属性",
+      "refreshConversation": "刷新对话",
+      "renameConversation": "重命名对话…",
+      "restoreLayout": "恢复布局",
+      "runOutput": "运行输出",
+      "runResults": "运行结果",
+      "switchPanel": "切换此区域的面板",
+      "toggleBottomPanel": "切换底部工具区",
+      "toggleLeftSidebar": "切换左侧栏",
+      "toggleRightSidebar": "切换右侧栏",
+      "viewportPosition": "画布视口平移坐标",
+      "viewportZoom": "画布缩放比例",
+      "zoomPanel": "放大面板"
     },
     "logs": {
       "copyMessage": "复制消息",

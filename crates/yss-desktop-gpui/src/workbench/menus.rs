@@ -78,11 +78,11 @@ impl Workbench {
         panel: WorkbenchPanel,
     ) -> Option<(Arc<dyn BasePanelView>, DockPlacement)> {
         Some(match panel {
-            WorkbenchPanel::Project | WorkbenchPanel::Nodes => {
-                let key = if matches!(panel, WorkbenchPanel::Project) {
-                    "project"
-                } else {
-                    "nodes"
+            WorkbenchPanel::Project | WorkbenchPanel::Nodes | WorkbenchPanel::Assistant => {
+                let key = match panel {
+                    WorkbenchPanel::Project => "project",
+                    WorkbenchPanel::Nodes => "nodes",
+                    _ => "assistant",
                 };
                 let panel = self
                     .activities
@@ -97,7 +97,7 @@ impl Workbench {
             WorkbenchPanel::Output => (panel_handle(self.output.clone()), DockPlacement::Bottom),
             WorkbenchPanel::Results => (panel_handle(self.results.clone()), DockPlacement::Bottom),
             WorkbenchPanel::Logs => (panel_handle(self.logs.clone()), DockPlacement::Bottom),
-            WorkbenchPanel::Assistant | WorkbenchPanel::Plugins | WorkbenchPanel::Settings => {
+            WorkbenchPanel::Plugins | WorkbenchPanel::Settings => {
                 return None;
             }
         })
@@ -117,6 +117,12 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         if self.is_closing(cx) {
+            return;
+        }
+        if self.dock.read(cx).is_zoomed() {
+            self.dock
+                .update(cx, |dock, cx| dock.set_zoomed_out(window, cx));
+            self.show_panel(panel, window, cx);
             return;
         }
         let displayed = self
