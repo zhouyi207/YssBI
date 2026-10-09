@@ -198,7 +198,11 @@ auxiliary residual variation or instrument-regression residual degrees are zero;
 only Basmann's statistic/probability fields become null. Zero structural residuals
 retain the existing whole-analysis unavailable reason. SCI owns the instrument
 preparation and conditional endogenous projection; Runtime does not reconstruct
-response/coefficient buffers or numerical statistics.
+response/coefficient buffers or numerical statistics. The robust score uses all
+independent instrument restriction directions, preserving instrument order changes.
+Cluster and HAC/Newey settings retained by the neutral model reach SCI's shared
+raw score covariance; the report retains the chi-square restriction degrees and
+propagates undefined covariance failures before encoding.
 LIML overidentification projects SCI's Anderson–Rubin `n*(kappa-1)` and Basmann F
 results from the fitted kappa, with their actual reference degrees. SCI validates
 the retained model without reconstructing a numerical IV design; unavailable

@@ -145,6 +145,92 @@ fn iv_fit_summary_preserves_small_sample_references_and_constraint_inference() {
 }
 
 #[test]
+fn iv_2sls_summary_decodes_covariance_and_uses_valid_constraints() {
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let instrument = |bit| (0..16).map(|row| signal(row, bit)).collect::<Vec<_>>();
+    let numeric = |value: &RuntimeValue| super::super::super::numeric_input(Some(value)).unwrap();
+    let mut parameters = iv_summary_parameters("2sls", false);
+    parameters
+        .iter_mut()
+        .find(|(key, _)| *key == "overidentification")
+        .unwrap()
+        .1 = flag(true);
+    let control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(30),
+    );
+    let inv = KernelInvocation {
+        relations: &crate::tests::relations(),
+        inputs: &[],
+        input_keys: &[],
+        parameters: Default::default(),
+        outputs: &[],
+        control: &control,
+    };
+    for (covariance, perfect_projection, expected) in [
+        (OlsCovariance::Hc1, true, 16.0 / 5.0),
+        (
+            OlsCovariance::Hac {
+                kernel: "bartlett".into(),
+                bandwidth: Some(2),
+            },
+            false,
+            2176.0 / 893.0,
+        ),
+        (
+            OlsCovariance::Cluster {
+                cluster_id: (0..16).map(|row| row / 2).collect(),
+                xtreg_fe_style: false,
+            },
+            false,
+            2312.0 / 1449.0,
+        ),
+    ] {
+        let endogenous = (0..16)
+            .map(|row| {
+                2.0 * signal(row, 0)
+                    + if perfect_projection {
+                        0.0
+                    } else {
+                        0.5 * signal(row, 1) + signal(row, 2)
+                    }
+            })
+            .collect::<Vec<_>>();
+        let response = (0..16)
+            .map(|row| 1.0 + 0.5 * endogenous[row] + signal(row, 1) + 2.0 * signal(row, 3))
+            .collect::<Vec<_>>();
+        let fit = yss_sci_runtime::causal::iv::fit_instrumental_variables(
+            InstrumentalVariableKind::TwoStageLeastSquares,
+            response,
+            &[],
+            &[endogenous],
+            &[instrument(0), instrument(1)],
+            OlsOptions {
+                constant: true,
+                covariance,
+            },
+            false,
+        )
+        .unwrap();
+        let model = super::super::common::value(fit, &inv).unwrap();
+        let report = run(
+            "yssbi.statistics.iv.2sls.summary",
+            &[("model", model)],
+            &parameters,
+            1,
+        )
+        .unwrap();
+        let result = field(&report[0], "overidentification").unwrap();
+        assert_eq!(numeric(field(result, "df").unwrap()), 1.0);
+        assert!((numeric(field(result, "wooldridge_stat").unwrap()) - expected).abs() < 1e-10);
+    }
+}
+
+#[test]
 fn iv_2sls_summary_retains_scaled_overidentification_and_nullable_basmann() {
     let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
     let endogenous = (0..16)

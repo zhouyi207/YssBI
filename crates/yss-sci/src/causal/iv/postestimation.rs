@@ -4,13 +4,13 @@ use super::{
     design::{PreparedIvDesign, prepare_instruments, project_endogenous, regressor_design},
     model::IvModel,
 };
-use crate::regression::covariance::compute_cov_beta;
+use crate::regression::covariance::{compute_cov_beta, score_covariance};
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use yss_sci_contract::causal::iv::{
     EndogenousTest, FirstStageResult, FirstStageSummary, HausmanTest, InstrumentalVariableFit,
     LimlOveridTest, OveridTest,
 };
-use yss_sci_linalg::{Col, ColRef, Mat, MatrixExt, Solve};
+use yss_sci_linalg::{Col, ColRef, Mat, MatrixExt, Solve, Svd};
 
 impl IvModel {
     pub fn first_stage(
@@ -337,28 +337,34 @@ fn wooldridge_score(
     let (_, projected) = project_endogenous(z, inverse, &columns);
     let included = fit.design.exogenous.len() + usize::from(fit.options.constant);
     let w = regressor_design(z.subcols(0, included), projected.as_ref());
-    let wtw = w.transpose() * w.as_ref();
-    let factor = wtw
-        .checked_cholesky()
-        .map_err(|_| "IV2SLS Wooldridge overid: W'W not positive definite")?;
     let restrictions = fit.design.instruments.len() - fit.design.endogenous.len();
-    let mut scores = Mat::zeros(z.nrows(), restrictions);
-    for j in 0..restrictions {
-        let q = z.col(included + j);
-        let wtq = w.transpose() * q;
-        let gamma = factor.solve(&wtq);
-        let fitted = w.as_ref() * gamma.as_ref();
-        for row in 0..z.nrows() {
-            scores[(row, j)] = (q[row] - fitted[row]) * residuals[row];
+    // A restriction direction Z*c must be orthogonal to the nuisance design W.
+    // Decompose W'Z in parameter coordinates; its right nullspace spans every
+    // overidentifying restriction without observation-square factors or a tall SVD.
+    let orthogonality = w.transpose() * z.as_ref();
+    let basis = Svd::factor(orthogonality.as_ref())
+        .map_err(|_| "IV2SLS Wooldridge overid: restriction decomposition failed")?;
+    if basis.values().nrows() < w.ncols()
+        || !basis.values()[w.ncols() - 1].is_finite()
+        || basis.values()[w.ncols() - 1] <= 0.0
+    {
+        return Err("IV2SLS Wooldridge overid: nuisance design is undefined".into());
+    }
+    let directions = basis.right_vectors().subcols(w.ncols(), restrictions);
+    let mut scores = z.as_ref() * directions;
+    for row in 0..scores.nrows() {
+        for j in 0..restrictions {
+            scores[(row, j)] *= residuals[row];
         }
     }
-    let cross = scores.transpose() * scores.as_ref();
+    let cross = score_covariance(&scores, &fit.options.covariance)?;
     let sums = Col::from_fn(restrictions, |j| scores.col(j).iter().sum());
     let theta = cross
         .checked_cholesky()
-        .map_err(|_| "IV2SLS Wooldridge overid: K'K not positive definite")?
+        .map_err(|_| "IV2SLS Wooldridge overid: score covariance not positive definite")?
         .solve(&sums);
-    // 1'K(K'K)^-1 K'1 equals N-RSS without subtracting nearly equal totals.
+    // The score quadratic equals N-RSS for independent errors and uses the
+    // retained group/serial covariance for dependent observations.
     let statistic = sums.transpose() * theta.as_ref();
     if !statistic.is_finite() || statistic < 0.0 {
         return Err("IV2SLS Wooldridge overid: statistic is undefined".into());

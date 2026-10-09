@@ -28,8 +28,8 @@ pub fn compute_cov_beta(
     match covariance {
         OlsCovariance::NonRobust => cov_nonrobust(xtx_inv, u, df_residual),
         OlsCovariance::FixedScale { scale } => cov_fixed_scale(xtx_inv, *scale),
-        OlsCovariance::Hc0 => cov_hc0(x, xtx_inv, u, n, k),
-        OlsCovariance::Hc1 => cov_hc1(x, xtx_inv, u, n, k, df_residual),
+        OlsCovariance::Hc0 => cov_hc0(x, xtx_inv, u),
+        OlsCovariance::Hc1 => cov_hc1(x, xtx_inv, u, n, df_residual),
         OlsCovariance::Hc2 => cov_hc2(x, xtx_inv, u, n, k),
         OlsCovariance::Hc3 => cov_hc3(x, xtx_inv, u, n, k),
         OlsCovariance::Cluster {
@@ -57,23 +57,8 @@ fn cov_fixed_scale(xtx_inv: &Mat<f64>, scale: f64) -> Result<Mat<f64>, String> {
 }
 
 /// HC0: (X'X)⁻¹ X' diag(u²) X (X'X)⁻¹
-fn cov_hc0(
-    x: &Mat<f64>,
-    xtx_inv: &Mat<f64>,
-    u: &Col<f64>,
-    n: usize,
-    k: usize,
-) -> Result<Mat<f64>, String> {
-    let mut meat = Mat::<f64>::zeros(k, k);
-    for i in 0..n {
-        let u2 = u[i] * u[i];
-        let xi = x.row(i);
-        for r in 0..k {
-            for c in 0..k {
-                meat[(r, c)] += u2 * xi[r] * xi[c];
-            }
-        }
-    }
+fn cov_hc0(x: &Mat<f64>, xtx_inv: &Mat<f64>, u: &Col<f64>) -> Result<Mat<f64>, String> {
+    let meat = lagged_score_meat(x, |row| u[row], "bartlett", 1);
     let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }
@@ -84,10 +69,9 @@ fn cov_hc1(
     xtx_inv: &Mat<f64>,
     u: &Col<f64>,
     n: usize,
-    k: usize,
     df_residual: usize,
 ) -> Result<Mat<f64>, String> {
-    let hc0 = cov_hc0(x, xtx_inv, u, n, k)?;
+    let hc0 = cov_hc0(x, xtx_inv, u)?;
     let scale = n as f64 / df_residual as f64;
     Ok(yss_sci_linalg::Scale(scale) * hc0)
 }
@@ -191,12 +175,12 @@ fn hac_kernel_weight(j: usize, bandwidth: usize, kernel: &str) -> f64 {
 /// f = (u .* X) * h with h=1 for exog cols, h=0 for the configured intercept.
 fn newey_west_1994_bandwidth(
     x: &Mat<f64>,
-    u: &Col<f64>,
-    n: usize,
-    k: usize,
+    row_weight: impl Fn(usize) -> f64,
     intercept_col: Option<usize>,
     kernel: &str,
 ) -> usize {
+    let n = x.nrows();
+    let k = x.ncols();
     let t = n as f64;
     let one_t = 1.0 / t;
     let (expo, q, cgamma) = match kernel.to_lowercase().as_str() {
@@ -219,7 +203,7 @@ fn newey_west_1994_bandwidth(
         .map(|i| {
             let mut s = 0.0;
             for c in 0..k {
-                s += u[i] * x[(i, c)] * h[c];
+                s += row_weight(i) * x[(i, c)] * h[c];
             }
             s
         })
@@ -260,46 +244,8 @@ fn cov_hac(
     kernel: &str,
     bandwidth: Option<i64>,
 ) -> Result<Mat<f64>, String> {
-    let n = x.nrows();
-    let k = x.ncols();
-
-    // ivreg2 bw(b): max lag = b-1, weight = 1 - j/b.
-    // bw(auto): full Newey-West (1994) procedure (mstar=20*(T/100)^expo, data-dependent optlag).
-    let bw = match bandwidth {
-        Some(q) if q > 0 => q as usize,
-        Some(0) | Some(1) => 1usize, // bandwidth 0 or 1 => max_lag 0
-        Some(_) => return Err("HAC bandwidth must be non-negative".to_string()),
-        None => newey_west_1994_bandwidth(x, u, n, k, intercept_col, kernel),
-    };
-    let max_lag = bw.saturating_sub(1);
-
-    let mut meat: Mat<f64> = Mat::zeros(k, k);
-
-    // j=0: Σ_t e_t² x_t x_t'
-    for t in 0..n {
-        let e2 = u[t] * u[t];
-        let xt = x.row(t);
-        for r in 0..k {
-            for c in 0..k {
-                meat[(r, c)] += e2 * xt[r] * xt[c];
-            }
-        }
-    }
-
-    // j=1..max_lag: w_j * Σ_{t=j+1}^{n} e_t e_{t-j} (x_t x_{t-j}' + x_{t-j} x_t')
-    for j in 1..=max_lag.min(n.saturating_sub(1)) {
-        let w = hac_kernel_weight(j, bw, kernel);
-        for t in j..n {
-            let e_e = u[t] * u[t - j] * w;
-            let xt = x.row(t);
-            let xtj = x.row(t - j);
-            for r in 0..k {
-                for c in 0..k {
-                    meat[(r, c)] += e_e * (xt[r] * xtj[c] + xtj[r] * xt[c]);
-                }
-            }
-        }
-    }
+    let bw = hac_bandwidth(x, |row| u[row], intercept_col, kernel, bandwidth)?;
+    let meat = lagged_score_meat(x, |row| u[row], kernel, bw);
 
     let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
@@ -315,38 +261,8 @@ fn cov_newey(
     lag: Option<i64>,
 ) -> Result<Mat<f64>, String> {
     let n = x.nrows();
-    let k = x.ncols();
-
-    let l = match lag {
-        Some(q) if q >= 0 => q as usize,
-        Some(_) => return Err("Newey lag must be non-negative".to_string()),
-        None => (4.0 * (n as f64 / 100.0).powf(2.0 / 9.0)).floor() as usize,
-    };
-
-    let mut meat = Mat::<f64>::zeros(k, k);
-    for t in 0..n {
-        let e2 = u[t] * u[t];
-        let xt = x.row(t);
-        for r in 0..k {
-            for c in 0..k {
-                meat[(r, c)] += e2 * xt[r] * xt[c];
-            }
-        }
-    }
-    // Stata newey: weight = 1 - j/(l+1), so bandwidth = l+1 for Bartlett
-    for j in 1..=l.min(n.saturating_sub(1)) {
-        let w = hac_kernel_weight(j, l + 1, "bartlett");
-        for t in j..n {
-            let e_e = u[t] * u[t - j] * w;
-            let xt = x.row(t);
-            let xtj = x.row(t - j);
-            for r in 0..k {
-                for c in 0..k {
-                    meat[(r, c)] += e_e * (xt[r] * xtj[c] + xtj[r] * xt[c]);
-                }
-            }
-        }
-    }
+    let bw = newey_bandwidth(n, lag)?;
+    let meat = lagged_score_meat(x, |row| u[row], "bartlett", bw);
 
     let scale = if df_residual > 0 {
         n as f64 / df_residual as f64
@@ -366,6 +282,101 @@ fn cov_cluster(
     cluster_id: &[usize],
     xtreg_fe_style: bool,
 ) -> Result<Mat<f64>, String> {
+    let (meat, groups) = clustered_score_meat(x, |row| u[row], cluster_id)?;
+
+    let g = groups as f64;
+    let n = x.nrows() as f64;
+    let k_f = x.ncols() as f64;
+    let scale = if g > 1.0 && n > k_f {
+        let denom = if xtreg_fe_style {
+            (n - k_f - 1.0).max(1.0)
+        } else {
+            (n - k_f).max(1.0)
+        };
+        g / (g - 1.0) * (n - 1.0) / denom
+    } else {
+        1.0
+    };
+    let meat_scaled = yss_sci_linalg::Scale(scale) * meat;
+    let sandwich = (xtx_inv.as_ref() * meat_scaled.as_ref()).as_ref() * xtx_inv.as_ref();
+    Ok(sandwich)
+}
+
+fn lagged_score_meat(
+    x: &Mat<f64>,
+    row_weight: impl Fn(usize) -> f64,
+    kernel: &str,
+    bandwidth: usize,
+) -> Mat<f64> {
+    let n = x.nrows();
+    let k = x.ncols();
+    let bw = bandwidth;
+    let max_lag = bw.saturating_sub(1);
+    let mut meat: Mat<f64> = Mat::zeros(k, k);
+
+    // j=0: Σ_t e_t² x_t x_t'
+    for t in 0..n {
+        let e2 = row_weight(t) * row_weight(t);
+        let xt = x.row(t);
+        for r in 0..k {
+            for c in 0..k {
+                meat[(r, c)] += e2 * xt[r] * xt[c];
+            }
+        }
+    }
+
+    // j=1..max_lag: w_j * Σ_{t=j+1}^{n} e_t e_{t-j} (x_t x_{t-j}' + x_{t-j} x_t')
+    for j in 1..=max_lag.min(n.saturating_sub(1)) {
+        let w = hac_kernel_weight(j, bw, kernel);
+        for t in j..n {
+            let e_e = row_weight(t) * row_weight(t - j) * w;
+            let xt = x.row(t);
+            let xtj = x.row(t - j);
+            for r in 0..k {
+                for c in 0..k {
+                    meat[(r, c)] += e_e * (xt[r] * xtj[c] + xtj[r] * xt[c]);
+                }
+            }
+        }
+    }
+
+    meat
+}
+
+fn hac_bandwidth(
+    x: &Mat<f64>,
+    row_weight: impl Fn(usize) -> f64,
+    intercept_col: Option<usize>,
+    kernel: &str,
+    bandwidth: Option<i64>,
+) -> Result<usize, String> {
+    match bandwidth {
+        Some(q) if q > 0 => Ok(q as usize),
+        Some(0) => Ok(1),
+        Some(_) => Err("HAC bandwidth must be non-negative".into()),
+        None => Ok(newey_west_1994_bandwidth(
+            x,
+            row_weight,
+            intercept_col,
+            kernel,
+        )),
+    }
+}
+
+fn newey_bandwidth(observations: usize, lag: Option<i64>) -> Result<usize, String> {
+    let lag = match lag {
+        Some(q) if q >= 0 => q as usize,
+        Some(_) => return Err("Newey lag must be non-negative".into()),
+        None => (4.0 * (observations as f64 / 100.0).powf(2.0 / 9.0)).floor() as usize,
+    };
+    Ok(lag + 1)
+}
+
+fn clustered_score_meat(
+    x: &Mat<f64>,
+    row_weight: impl Fn(usize) -> f64,
+    cluster_id: &[usize],
+) -> Result<(Mat<f64>, usize), String> {
     if cluster_id.len() != x.nrows() {
         return Err(format!(
             "cluster_id length {} does not match n={}",
@@ -385,7 +396,7 @@ fn cov_cluster(
     for (_g, indices) in groups.iter() {
         let mut s_g = Col::<f64>::zeros(k);
         for &i in indices {
-            let ui = u[i];
+            let ui = row_weight(i);
             let xi = x.row(i);
             for r in 0..k {
                 s_g[r] += ui * xi[r];
@@ -398,22 +409,35 @@ fn cov_cluster(
         }
     }
 
-    let g = groups.len() as f64;
-    let n = x.nrows() as f64;
-    let k_f = k as f64;
-    let scale = if g > 1.0 && n > k_f {
-        let denom = if xtreg_fe_style {
-            (n - k_f - 1.0).max(1.0)
-        } else {
-            (n - k_f).max(1.0)
-        };
-        g / (g - 1.0) * (n - 1.0) / denom
-    } else {
-        1.0
-    };
-    let meat_scaled = yss_sci_linalg::Scale(scale) * meat;
-    let sandwich = (xtx_inv.as_ref() * meat_scaled.as_ref()).as_ref() * xtx_inv.as_ref();
-    Ok(sandwich)
+    Ok((meat, groups.len()))
+}
+
+/// Covariance of the sum of score rows, without coefficient small-sample corrections.
+pub(crate) fn score_covariance(
+    scores: &Mat<f64>,
+    covariance: &OlsCovariance,
+) -> Result<Mat<f64>, String> {
+    match covariance {
+        OlsCovariance::Hc0 | OlsCovariance::Hc1 | OlsCovariance::Hc2 | OlsCovariance::Hc3 => {
+            Ok(lagged_score_meat(scores, |_| 1.0, "bartlett", 1))
+        }
+        OlsCovariance::Cluster { cluster_id, .. } => {
+            let (meat, groups) = clustered_score_meat(scores, |_| 1.0, cluster_id)?;
+            if groups <= 1 {
+                return Err("Score covariance requires independent clusters".into());
+            }
+            Ok(meat)
+        }
+        OlsCovariance::Hac { kernel, bandwidth } => {
+            let bw = hac_bandwidth(scores, |_| 1.0, None, kernel, *bandwidth)?;
+            Ok(lagged_score_meat(scores, |_| 1.0, kernel, bw))
+        }
+        OlsCovariance::Newey { lag } => {
+            let bw = newey_bandwidth(scores.nrows(), *lag)?;
+            Ok(lagged_score_meat(scores, |_| 1.0, "bartlett", bw))
+        }
+        _ => Err("Score covariance requires a robust covariance specification".into()),
+    }
 }
 
 #[cfg(test)]
@@ -651,8 +675,8 @@ mod tests {
         let single = Mat::from_fn(n, 1, |_, _| 1.0);
         let residuals = Col::from_iter(response);
         assert_eq!(
-            newey_west_1994_bandwidth(&single, &residuals, n, 1, Some(0), "bartlett"),
-            newey_west_1994_bandwidth(&single, &residuals, n, 1, None, "bartlett")
+            newey_west_1994_bandwidth(&single, |row| residuals[row], Some(0), "bartlett"),
+            newey_west_1994_bandwidth(&single, |row| residuals[row], None, "bartlett")
         );
     }
 }

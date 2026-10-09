@@ -276,15 +276,28 @@ Their first-stage, overidentification and endogeneity analyses are separate call
 in `causal::iv::fit`. 2SLS overidentification borrows the retained structural
 residuals and scales them by their largest magnitude for both auxiliary regressions.
 Positive microscopic units remain testable; zero residuals retain unavailable
-results. Sargan uses the fitted auxiliary sum of squares divided by the structural
+results. Sargan uses `n` times the fitted auxiliary sum of squares divided by the structural
 sum. Basmann uses `(n-k_z)*fitted_sum/auxiliary_residual_sum`, avoiding cancellation
 in `n-Sargan`. Its statistic and probability are separately null when auxiliary
 residual variation or instrument-regression residual degrees are zero; it never
 substitutes Sargan. Undefined or nonfinite computation returns scientific failure.
 The existing IV design owner supplies instrument preparation, endogenous projection
 and regressor assembly for estimation and diagnostics. Nonrobust analysis prepares
-only instruments; the Wooldridge branch prepares projected regressors on demand and
-solves its score cross-product directly. Neither branch reconstructs response,
+only instruments; the Wooldridge branch prepares projected regressors on demand.
+It decomposes the parameter-sized nuisance/instrument cross-product `W'Z` with
+Linalg's existing SVD and uses its `m` right-nullspace directions. Multiplying those
+loadings by the prepared instruments covers the complete constraint space. Original
+instrument order cannot choose a zero residual direction; neither a tall SVD nor
+observation-square factors are required.
+The score quadratic uses the existing covariance owner: HC0–HC3 use independent-row
+score covariance, cluster uses cluster sums, and HAC/Newey use the retained kernel,
+bandwidth or lag. Score tests use the raw covariance with chi-square `m` reference;
+coefficient finite-sample and leverage adjustments remain in coefficient inference.
+The shared raw lagged/cluster producers also feed regression covariance; coefficient
+sandwiches and their corrections keep their current behavior. HAC uses that owner's
+bandwidth selector and direct kernel covariance, without VAR prewhitening. Undefined
+constraint directions, invalid groups/lags or singular score covariance return
+scientific failure. Neither branch reconstructs response,
 coefficients or observed structural regressors. The numerical
 `IvModel::overidentification` method is removed; callers use the existing neutral
 fitted-model entry. LIML overidentification borrows the fitted kappa and validated

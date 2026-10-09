@@ -131,6 +131,9 @@ the borrowed model contract.
   is unavailable without positive instrument-regression residual degrees and
   auxiliary residual variation; an available Sargan pair remains present.
   Zero structural residuals leave the complete overidentification record absent.
+  Robust score fields retain the chi-square statistic/probability and restriction
+  count. The fit's stored HC/cluster/HAC/Newey choice supplies the score covariance;
+  coefficient finite-sample/leverage adjustments are separate inference facts.
 - `causal::did`: DID inputs, inference results and typed unavailable/error codes.
 - `causal::models`: linear IV GMM, sharp RDD, treatment-group interaction tests,
   Heckman two-step, half-normal frontiers, SUR and synthetic-control options/results.

@@ -177,9 +177,9 @@ pub struct EndogenousTest {
     pub wu_df_denom: usize,
 }
 
-/// 过度识别检验结果（Stata estat overid）
+/// 过度识别检验结果
 /// - 同方差（nonrobust）：Sargan、Basmann
-/// - 稳健 VCE（HC0/HC1/HC2/HC3/cluster/HAC/newey）：Wooldridge (1995) robust score test
+/// - HC0–HC3：Wooldridge 得分检验；cluster/HAC/newey：采用保留设定的得分协方差
 #[derive(Debug, Clone, Serialize)]
 pub struct OveridTest {
     /// "sargan_basmann" | "wooldridge"
@@ -190,7 +190,7 @@ pub struct OveridTest {
     /// 工具变量回归剩余自由度非正或辅助残差变异为零时，两字段为 None；Sargan 可保留。
     pub basmann_stat: Option<f64>,
     pub basmann_p_value: Option<f64>,
-    /// Wooldridge score（稳健 VCE 时有效，Stata estat overid）
+    /// 渐近稳健得分检验，参考 χ²(df)，不应用系数有限样本调整。
     pub wooldridge_stat: Option<f64>,
     pub wooldridge_p_value: Option<f64>,
     pub df: usize,

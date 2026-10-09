@@ -736,6 +736,162 @@ fn liml_root_preserves_singular_residual_covariance_and_response_units() {
 }
 
 #[test]
+fn iv_robust_overidentification_uses_the_complete_constraint_space() {
+    use yss_sci::causal::iv::fit::{fit_instrumental_variables, overidentification};
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    for (endogenous_count, n, statistic, probability) in [
+        (1, 16, 16.0 / 5.0, 0.07363827012030265),
+        (2, 32, 2848.0 / 425.0, 0.035063722314259034),
+    ] {
+        let endogenous = (0..endogenous_count)
+            .map(|bit| {
+                (0..n)
+                    .map(|row| (bit + 2) as f64 * signal(row, bit))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let mut instruments = (0..2 * endogenous_count)
+            .map(|bit| (0..n).map(|row| signal(row, bit)).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let response = (0..n)
+            .map(|row| {
+                1.0 + 0.5 * endogenous[0][row]
+                    + if endogenous_count == 1 {
+                        signal(row, 1) + 2.0 * signal(row, 3)
+                    } else {
+                        -0.7 * endogenous[1][row]
+                            + signal(row, 2)
+                            + 0.5 * signal(row, 3)
+                            + 2.0 * signal(row, 4)
+                    }
+            })
+            .collect::<Vec<_>>();
+        for _ in 0..2 {
+            let fit = fit_instrumental_variables(
+                InstrumentalVariableKind::TwoStageLeastSquares,
+                response.clone(),
+                &[],
+                &endogenous,
+                &instruments,
+                OlsOptions {
+                    constant: true,
+                    covariance: OlsCovariance::Hc1,
+                },
+                false,
+            )
+            .unwrap();
+            let result = overidentification(&fit).unwrap().unwrap();
+            assert_eq!(result.df, endogenous_count);
+            assert!((result.wooldridge_stat.unwrap() - statistic).abs() < 1e-10);
+            assert!((result.wooldridge_p_value.unwrap() - probability).abs() < 1e-10);
+            instruments.reverse();
+        }
+    }
+}
+
+#[test]
+fn iv_robust_overidentification_respects_cluster_and_serial_covariance() {
+    use yss_sci::causal::iv::fit::{fit_instrumental_variables, overidentification};
+    use yss_sci_contract::{
+        causal::iv::InstrumentalVariableKind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..16)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1) + signal(row, 2))
+        .collect::<Vec<_>>();
+    let instruments = (0..2)
+        .map(|bit| (0..16).map(|row| signal(row, bit)).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let response = (0..16)
+        .map(|row| 1.0 + 0.5 * endogenous[row] + signal(row, 1) + 2.0 * signal(row, 3))
+        .collect::<Vec<_>>();
+    // Exact raw score covariance, independent of coefficient finite-sample corrections.
+    for (covariance, statistic, probability) in [
+        (
+            OlsCovariance::Cluster {
+                cluster_id: (0..16).map(|row| row / 2).collect(),
+                xtreg_fe_style: false,
+            },
+            2312.0 / 1449.0,
+            0.2065302660557055,
+        ),
+        (
+            OlsCovariance::Cluster {
+                cluster_id: (0..16).map(|row| row % 8).collect(),
+                xtreg_fe_style: false,
+            },
+            9248.0 / 1429.0,
+            0.010960819750393237,
+        ),
+        (
+            OlsCovariance::Hac {
+                kernel: "bartlett".into(),
+                bandwidth: Some(2),
+            },
+            2176.0 / 893.0,
+            0.11852306138344071,
+        ),
+        (
+            OlsCovariance::Hac {
+                kernel: "bartlett".into(),
+                bandwidth: Some(5),
+            },
+            23120.0 / 7673.0,
+            0.08259098125308185,
+        ),
+        (
+            OlsCovariance::Hac {
+                kernel: "parzen".into(),
+                bandwidth: Some(2),
+            },
+            73984.0 / 27865.0,
+            0.10321910754328997,
+        ),
+        (
+            OlsCovariance::Newey { lag: Some(1) },
+            2176.0 / 893.0,
+            0.11852306138344071,
+        ),
+        (
+            OlsCovariance::Newey { lag: Some(0) },
+            9248.0 / 3171.0,
+            0.0876816485900194,
+        ),
+    ] {
+        let mut fit = fit_instrumental_variables(
+            InstrumentalVariableKind::TwoStageLeastSquares,
+            response.clone(),
+            &[],
+            std::slice::from_ref(&endogenous),
+            &instruments,
+            OlsOptions {
+                constant: true,
+                covariance,
+            },
+            false,
+        )
+        .unwrap();
+        let result = overidentification(&fit).unwrap().unwrap();
+        assert_eq!(result.df, 1);
+        assert!(
+            (result.wooldridge_stat.unwrap() - statistic).abs() < 1e-10,
+            "{result:?}"
+        );
+        assert!((result.wooldridge_p_value.unwrap() - probability).abs() < 1e-10);
+        fit.options.covariance = OlsCovariance::Cluster {
+            cluster_id: vec![0; 15],
+            xtreg_fe_style: false,
+        };
+        assert!(overidentification(&fit).is_err());
+    }
+}
+
+#[test]
 fn iv_2sls_overidentification_preserves_response_units() {
     use yss_sci::causal::iv::fit::{fit_instrumental_variables, overidentification};
     use yss_sci_contract::{
