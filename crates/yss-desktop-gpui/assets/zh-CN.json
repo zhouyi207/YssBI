@@ -2835,7 +2835,10 @@
       "lessOrEqual": "小于或等于",
       "lessThan": "小于",
       "notEqual": "不等于",
-      "trueValue": "真"
+      "trueValue": "真",
+      "applyMapping": "应用完整映射",
+      "domainMappingFailed": "无法提交编码映射",
+      "invalidDomainMapping": "请检查重复编码、正值选择及映射长度"
     },
     "logs": {
       "copyMessage": "复制消息",

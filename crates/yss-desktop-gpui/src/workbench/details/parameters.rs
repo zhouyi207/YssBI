@@ -109,7 +109,7 @@ impl ParameterField {
         {
             ParameterDraft::Toggle
         } else if model.editor == ParameterEditorKind::SemanticDomain {
-            ParameterDraft::Domain(DomainDraft::new(model.value.as_ref(), window, cx))
+            ParameterDraft::Domain(DomainDraft::new(&model, window, cx))
         } else if model.editor == ParameterEditorKind::GraphConstant {
             ParameterDraft::Constant
         } else if let Some(ValueType::DataSeries(inner)) = &model.value_type
@@ -226,7 +226,17 @@ pub(super) fn subscribe_input<T: EventEmitter<InputEvent> + 'static>(
         };
         match event {
             InputEvent::PressEnter { .. } => view.apply_parameter(index, cx),
-            InputEvent::Change if view.fields[index].error.take().is_some() => cx.notify(),
+            InputEvent::Change => {
+                let field = &mut view.fields[index];
+                let mut refresh = field.error.take().is_some();
+                if let ParameterDraft::Domain(draft) = &mut field.draft {
+                    draft.input_changed(input_id);
+                    refresh = true;
+                }
+                if refresh {
+                    cx.notify();
+                }
+            }
             _ => {}
         }
     })
@@ -248,6 +258,7 @@ impl ParameterField {
                 ..
             } => input.entity_id() == id,
             ParameterDraft::List(draft) => draft.owns_input(id),
+            ParameterDraft::Domain(draft) => draft.owns_input(id),
             ParameterDraft::Relational(draft) => draft.owns_input(id),
             _ => false,
         }

@@ -311,6 +311,17 @@
 - 预览沿用 GPUI 事件分发，截图仍依赖尺寸变化；物理键鼠/IME、未知结构筛选、过期菜单/迟到回执、后端失败、多窗口及完整撤销/保存继续开放。临时入口不提交。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；`cargo test -p yss-graph-analysis --lib schema_resolution::tests::column_parameters_preserve_intent_across_unknown_empty_and_replaced_schemas -- --exact` 和 `cargo test -p yss-graph-analysis --lib semantic_validation::tests::nominal_parameters_are_revalidated_against_changed_input_schema -- --exact` 各实际运行 1 项并通过。9 个 Rust 文件局部格式、41 个双语键/参数、文档元信息及 269 条相对链接（工作区 275 条）、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过；累计审查 146/265 项。
 
+### 语义域编码、标签与正值编辑
+
+- 逐项阅读 SemanticDomainEditor，核对每页 50 行、增删和排序、唯一编码、标签回退、正值跟随以及提交/恢复行为，并追踪 `ConversionDomain` 与节点参数校验的当前契约。
+- `domain/draft` 用同一有序草稿保存编码、标签和正值所在行；仅为访问页创建成对 Input，不另存已创建输入的字符串副本。列表高度限制为 256，翻页和跨页排序保留草稿；重复编码结果按编码/结构变化失效，标签编辑和普通重绘复用缓存。
+- `domain/positive` 打开时才生成菜单，显示标签、原编码或空字符串符号，选择时检查当前字段与候选编码。重命名和排序保留正值身份，删除所在行清除选择；两行映射或已有正值时显示选择器，保留当前领域契约允许的其他行数，不增加兼容转换。
+- 提交复用原参数事务和 `ConversionDomain::is_valid`，保留编码空白、空字符串、标签及顺序，遵守 65,536 项和 1 MiB 上限。Enter 应用、Escape/按钮恢复、默认值和错误反馈共用现有参数入口；重复编码立即提示并禁用应用，删除最后一个调用者后移除旧 `controls::choice` 包装。未新增依赖或 UI 单元测试。
+- 临时 `cargo build -p yss-desktop-gpui --example semantic_domain_review` 使用隔离项目、真实 Application 和六个节点。GPUI Window 事件分发与目视核对正值随编码/标签/排序更新、删除后清除、空字符串正值提交、重复编码阻止写入、继续编辑与 Escape 恢复；提交均从当前图投影读回。
+- 103 行样例首次创建 100 个输入，访问三页后分别为 200/206 个；跨页排序及未提交标签经语言切换仍保留，Enter 后读回完整顺序。65,536 行样例首次为 100 个输入、第二页后为 200 个，添加按钮禁用；空配置新增及共享数值/列表 Enter 提交亦已核对。
+- 预览沿用 GPUI 事件分发，截图依赖尺寸变化；物理键鼠/IME、滚轮、过期菜单/迟到回执、后端失败、多窗口及完整撤销/保存继续开放。临时入口不提交。
+- L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；`cargo test -p yss-database-arrow --lib tests::semantic_domains_and_identifiers_keep_codes_and_reject_undeclared_levels -- --exact` 和 `cargo test -p yss-database-arrow --lib tests::categorical_conversion_infers_complete_exact_domains_without_replacing_values -- --exact` 各实际运行 1 项并通过，覆盖编码/顺序/正值、重复与未声明等级、域继承及数量/字节限制。5 个 Rust 文件局部格式、18 个双语键/参数、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过；累计审查 147/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -484,7 +495,7 @@
 | [modules/details/internal/ui/node/NodePortInstanceControls.tsx](../../react/src/modules/details/internal/ui/node/NodePortInstanceControls.tsx) | 复核原生实现：增删/顺序由投影与原编辑事务控制 | 复用 `ports`，分组添加入口沿用 can_add/can_remove 与捕获版本；不迁移每按钮独立业务状态 | 样例已核对最小数量、增删及带连接重排/删除；分组联动与失败验收开放 |
 | [modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/NodeParameterEditor.tsx) | 优化：草稿按参数键复用，菜单与列表输入按需构建，提交/默认值/诊断沿用原 owner | `parameters` 拆分草稿、选择、分页与渲染；补齐 Enter/恢复、选项翻译和字段诊断，保留显式应用及原文本/JSON 后端校验 | 隔离图的 GPUI 事件与回执已核对；物理输入、IME、多行和失效/失败交互仍待验收 |
 | [modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/RelationalParameterEditors.tsx) | 优化既有关系参数编辑器 | 已知列按 50 项分页并显示输出顺序/失效列，未知列复用共享列表；筛选使用类型化草稿与按需菜单，复用原提交/恢复/诊断入口 | 主要原生交互已核对；未知结构筛选、失效交付与完整历史/保存待验收 |
-| [modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx](../../react/src/modules/details/internal/ui/node/parameterEditors/SemanticDomainEditor.tsx) | 优化：按访问页创建输入，正值跟随同一行草稿 | domain/draft 分页/排序/重复缓存，positive 懒菜单；复用参数事务与 ConversionDomain 校验 | 代码已覆盖；分页、正值和提交预览通过，其余人工验收开放 |
 | [modules/details/internal/ui/panels/ChartDetailPanel.tsx](../../react/src/modules/details/internal/ui/panels/ChartDetailPanel.tsx) | 优化：共享当前草稿及元数据，菜单按需生成，列清单有界呈现 | `charts/details` 数据源/类型/编码和清除入口；重复选择保留配置，旧菜单版本校验，列清单分页 | 代码已覆盖；人工验收待完成 |
 | [modules/details/internal/ui/panels/ConstantValueFields.tsx](../../react/src/modules/details/internal/ui/panels/ConstantValueFields.tsx) | 优化原生标量、布尔、Null 和结构值入口，复用原 Input/Checkbox | 普通 JSON 取代 Rust 枚举格式；摘要保留原始数量并在渲染时本地化；常量逐行恢复 | 样例结构值/恢复已核对；其余类型和失败场景待验收 |
 | [modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx](../../react/src/modules/details/internal/ui/panels/DataColumnSemanticDialog.tsx) | 迁移/优化：复用当前对话框宿主与类型化提交，视图只拥有未提交草稿 | `semantic` 补齐类别切换保留映射、失败重试、重复/数量校验、未修改直接关闭与过期保护 | 代码已覆盖；人工验收待完成 |

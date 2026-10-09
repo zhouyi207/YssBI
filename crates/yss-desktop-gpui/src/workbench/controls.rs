@@ -1,42 +1,9 @@
 //! Stateless controls shared by native graph property and node editors.
-use gpui::{App, ElementId, Window, div, prelude::*};
+use gpui::{App, ElementId, div, prelude::*};
 use gpui_component::{
     ActiveTheme, Disableable, IconName, Sizable,
     button::{Button, ButtonVariants},
-    menu::{DropdownMenu, PopupMenuItem},
 };
-use std::rc::Rc;
-
-pub(super) fn choice(
-    id: impl Into<ElementId>,
-    label: String,
-    current: Option<String>,
-    options: Vec<(String, String)>,
-    disabled: bool,
-    on_choose: impl Fn(&String, &mut Window, &mut App) + 'static,
-) -> gpui::AnyElement {
-    let on_choose = Rc::new(on_choose);
-    Button::new(id)
-        .small()
-        .w_full()
-        .label(label)
-        .icon(IconName::ChevronDown)
-        .disabled(disabled || options.is_empty())
-        .dropdown_menu(move |mut menu, _, _| {
-            menu = menu.scrollable(true);
-            for (value, label) in &options {
-                let value = value.clone();
-                let choose = on_choose.clone();
-                menu = menu.item(
-                    PopupMenuItem::new(label.clone())
-                        .checked(current.as_ref() == Some(&value))
-                        .on_click(move |_, window, cx| choose(&value, window, cx)),
-                );
-            }
-            menu
-        })
-        .into_any_element()
-}
 
 pub(super) fn hint(text: impl Into<String>, cx: &App) -> gpui::Div {
     div()
