@@ -1,10 +1,9 @@
 use super::{design::PreparedIvDesign, model::IvModel};
 use crate::causal::iv::{
     IvEstimate,
-    estimate::{coefficient_inference, model_test},
+    estimate::{coefficient_inference, goodness_of_fit, model_test},
 };
 use crate::regression::covariance::compute_cov_beta;
-use statrs::statistics::Statistics;
 use yss_sci_contract::causal::iv::InstrumentalVariableStatistics;
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve, matrix_rank};
 
@@ -20,13 +19,6 @@ impl IvModel {
             return Err("Insufficient residual degrees of freedom".to_string());
         }
         let df_residual = n - rank;
-        let df_model = if self.options.constant {
-            rank - 1
-        } else {
-            rank
-        };
-        let df_total = df_residual + df_model;
-
         let covariance_type = self.options.covariance.name().to_owned();
 
         // OLS on second stage: β = (X'X)^{-1} X'y
@@ -46,26 +38,12 @@ impl IvModel {
         // Stata: ESS = y'y - 2β'X'y + β'X'Xβ, σ² = ESS/(n-k), VCE = σ² (X'P_Z X)^{-1}.
         let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas.as_ref());
 
-        let y_mean = self.endog.iter().mean();
-        let ss_total = if self.options.constant {
-            self.endog.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
-        } else {
-            self.endog.iter().map(|v| v.powi(2)).sum::<f64>()
-        };
-        let ss_residual = u_structural.transpose() * u_structural.as_ref();
-        let r2 = if ss_total > 1e-300 {
-            1.0 - ss_residual / ss_total
-        } else {
-            0.0
-        };
-
-        let ms_residual = ss_residual / df_residual as f64;
-        let ms_total = ss_total / df_total as f64;
-        let r2_adjusted = if ms_total > 1e-300 {
-            1.0 - ms_residual / ms_total
-        } else {
-            0.0
-        };
+        let (r2, r2_adjusted) = goodness_of_fit(
+            self.endog.as_ref(),
+            u_structural.as_ref(),
+            self.options.constant,
+            df_residual,
+        )?;
 
         // Stata: s² = ESS/(n-k) if small, else ESS/n. Affects VCE and robust scale.
         let sigma2_df = if self.small { df_residual } else { n };

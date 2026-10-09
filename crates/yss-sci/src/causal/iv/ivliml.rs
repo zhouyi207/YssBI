@@ -2,10 +2,9 @@
 use super::{
     IvEstimate, IvModel,
     design::PreparedIvDesign,
-    estimate::{coefficient_inference, model_test},
+    estimate::{coefficient_inference, goodness_of_fit, model_test},
 };
 use crate::regression::covariance::compute_cov_beta;
-use statrs::statistics::Statistics;
 use yss_sci_contract::causal::iv::InstrumentalVariableStatistics;
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve, matrix_rank};
 
@@ -30,8 +29,6 @@ impl IvModel {
             return Err("Insufficient residual degrees of freedom".into());
         }
         let df_residual = n - rank;
-        let df_model = rank - usize::from(self.options.constant);
-        let df_total = df_residual + df_model;
 
         let x1 = z.subcols(0, included);
         let y_tilde = Mat::from_fn(n, k_endog + 1, |row, column| {
@@ -104,25 +101,12 @@ impl IvModel {
         let betas = k_class_inverse.as_ref() * k_class_response.as_ref();
 
         let residuals: Col<f64> = &self.endog - &(x.as_ref() * betas.as_ref());
-        let ss_residual = residuals.transpose() * residuals.as_ref();
-        let y_mean = self.endog.iter().mean();
-        let ss_total = if self.options.constant {
-            self.endog.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
-        } else {
-            self.endog.iter().map(|v| v.powi(2)).sum::<f64>()
-        };
-        let r2 = if ss_total > 1e-300 {
-            1.0 - ss_residual / ss_total
-        } else {
-            0.0
-        };
-        let ms_residual = ss_residual / df_residual as f64;
-        let ms_total = ss_total / df_total as f64;
-        let adjusted_r2 = if ms_total > 1e-300 {
-            1.0 - ms_residual / ms_total
-        } else {
-            0.0
-        };
+        let (r2, adjusted_r2) = goodness_of_fit(
+            self.endog.as_ref(),
+            residuals.as_ref(),
+            self.options.constant,
+            df_residual,
+        )?;
         let sigma2_df = if self.small { df_residual } else { n };
         // LIML uses the k-class bread with instrument-projected score rows,
         // while the residuals remain structural (Stata ivregress VCE formula).

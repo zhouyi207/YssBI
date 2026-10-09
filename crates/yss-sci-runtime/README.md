@@ -188,6 +188,10 @@ Both estimator entries consume SCI's single numerical IV input and prepared desi
 LIML covariance uses projected score rows with its k-class inverse and observed
 structural residuals; Runtime projects those results directly and retains source
 labels. The neutral Fit model/report shape and summary selections stay the same.
+Structural and first-stage R²/adjusted R² share SCI's scaled residual-ratio
+calculation, preserving microscopic units and centered/uncentered conventions.
+Undefined goodness of fit propagates from Fit as a scientific failure; Summary
+retains the stored structural metrics without refitting or replacing them with zero.
 LIML overidentification projects SCI's Anderson–Rubin `n*(kappa-1)` and Basmann F
 results from the fitted kappa, with their actual reference degrees. SCI validates
 the retained model without reconstructing a numerical IV design; unavailable

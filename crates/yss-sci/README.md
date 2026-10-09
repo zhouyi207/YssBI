@@ -256,8 +256,15 @@ ordering enforces kappa >= 1 under roundoff; undefined roots fail before inferen
 At exact identification its coefficient/covariance results agree with 2SLS;
 overidentified LIML retains its estimated kappa and corresponding cross-product.
 Both estimators share `IvEstimate` and coefficient statistics. The existing
-estimate owner also computes both estimators' coefficient and joint inference from
-the selected covariance. Default coefficient tests and 95% intervals use a normal
+estimate owner computes structural and first-stage R²/adjusted R² once through
+one borrowed-input calculation. It centers only models with an intercept and uses
+the actual residual degrees and total degrees `n-constant`. A common scale for
+centered observations and structural residuals cancels in RSS/TSS, preserving
+microscopic response units without fixed variance floors or underflowing mean
+squares. Negative IV R² remains valid; zero/undefined total variation or nonfinite
+metrics returns scientific failure before encoding. No observation buffers or
+parallel statistics model are introduced. The same owner computes both estimators'
+coefficient and joint inference from the selected covariance. Default coefficient tests and 95% intervals use a normal
 reference; `small=true` uses Student-t with the structural residual degrees.
 The joint test excludes an estimated intercept: its Wald statistic uses chi-square
 by default, or F after division by the number of restrictions with `small=true`.

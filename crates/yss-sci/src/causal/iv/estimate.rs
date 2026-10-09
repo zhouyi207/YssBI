@@ -2,6 +2,7 @@
 use crate::distribution::{fisher_snedecor_sf, normal_two_sided_p, student_t_probability};
 use crate::regression::design::covariance_rows;
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT};
+use statrs::statistics::Statistics;
 use yss_sci_contract::causal::iv::{InstrumentalVariableModelTest, InstrumentalVariableStatistics};
 use yss_sci_contract::hypothesis::Alternative;
 use yss_sci_contract::regression::fit::RegressionCoefficientStatistics;
@@ -14,6 +15,47 @@ pub struct IvEstimate {
     pub residuals: Col<f64>,
     pub inference: RegressionCoefficientStatistics,
     pub statistics: InstrumentalVariableStatistics,
+}
+
+pub(super) fn goodness_of_fit(
+    response: ColRef<'_, f64>,
+    residuals: ColRef<'_, f64>,
+    constant: bool,
+    df_residual: usize,
+) -> Result<(f64, f64), String> {
+    let mean = if constant {
+        response.iter().mean()
+    } else {
+        0.0
+    };
+    // A common scale cancels in RSS/TSS and keeps both squared sums representable.
+    let scale = response
+        .iter()
+        .map(|value| value - mean)
+        .chain(residuals.iter().copied())
+        .fold(0.0_f64, |scale, value| scale.max(value.abs()));
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err("IV: response variation is undefined".into());
+    }
+    let total = response
+        .iter()
+        .map(|value| ((value - mean) / scale).powi(2))
+        .sum::<f64>();
+    if !total.is_finite() || total <= 0.0 {
+        return Err("IV: response variation is undefined".into());
+    }
+    let residual = residuals
+        .iter()
+        .map(|value| (value / scale).powi(2))
+        .sum::<f64>();
+    let unexplained = residual / total;
+    let r2 = 1.0 - unexplained;
+    let adjusted_r2 = 1.0
+        - unexplained * ((response.nrows() - usize::from(constant)) as f64 / df_residual as f64);
+    if !r2.is_finite() || !adjusted_r2.is_finite() {
+        return Err("IV: R-squared is undefined".into());
+    }
+    Ok((r2, adjusted_r2))
 }
 
 pub(super) fn coefficient_inference(

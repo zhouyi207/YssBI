@@ -16,6 +16,56 @@ fn iv_summary_parameters(kind: &str, first_stage: bool) -> Vec<(&'static str, Ru
 }
 
 #[test]
+fn iv_fit_summary_preserves_microscopic_response_goodness_of_fit() {
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..8)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1))
+        .collect::<Vec<_>>();
+    let instrument = (0..8).map(|row| signal(row, 0)).collect::<Vec<_>>();
+    let response = (0..8)
+        .map(|row| 1e-151 * (1.0 + 0.5 * endogenous[row] + 2.0 * signal(row, 2)))
+        .collect::<Vec<_>>();
+    let numeric = |value: &RuntimeValue| super::super::super::numeric_input(Some(value)).unwrap();
+    for kind in ["2sls", "liml"] {
+        for (constant, r2, adjusted) in [
+            (true, 17.0 / 81.0, 19.0 / 243.0),
+            (false, 17.0 / 97.0, 39.0 / 679.0),
+        ] {
+            let fit = run(
+                &format!("yssbi.statistics.iv.{kind}.fit"),
+                &[
+                    ("y", series(&response)),
+                    ("endogenous", series(&endogenous)),
+                    ("instruments", series(&instrument)),
+                ],
+                &[
+                    ("constant", flag(constant)),
+                    ("covariance", string("nonrobust")),
+                    ("small", flag(false)),
+                ],
+                3,
+            )
+            .unwrap();
+            let statistics = field(&fit[0], "statistics").unwrap();
+            assert!(
+                (numeric(field(statistics, "r2").unwrap()) - r2).abs() < 1e-10,
+                "{kind}, constant={constant}: {statistics:?}"
+            );
+            assert!((numeric(field(statistics, "adjustedR2").unwrap()) - adjusted).abs() < 1e-10);
+            let report = run(
+                &format!("yssbi.statistics.iv.{kind}.summary"),
+                &[("model", fit[0].clone())],
+                &iv_summary_parameters(kind, false),
+                1,
+            )
+            .unwrap();
+            let retained = field(field(&report[0], "model").unwrap(), "statistics").unwrap();
+            assert_eq!(retained, statistics);
+        }
+    }
+}
+
+#[test]
 fn iv_fit_summary_preserves_small_sample_references_and_constraint_inference() {
     let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
     let endogenous = (0..8)

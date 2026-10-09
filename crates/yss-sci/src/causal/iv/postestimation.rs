@@ -1,11 +1,8 @@
-use super::estimate::coefficient_inference;
+use super::estimate::{coefficient_inference, goodness_of_fit};
 use super::first_stage::{compute_first_stage_summary, is_robust_covariance};
 use super::{design::PreparedIvDesign, model::IvModel};
 use crate::regression::covariance::compute_cov_beta;
-use statrs::{
-    distribution::{ChiSquared, ContinuousCDF, FisherSnedecor},
-    statistics::Statistics,
-};
+use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use yss_sci_contract::causal::iv::{
     EndogenousTest, FirstStageResult, FirstStageSummary, HausmanTest, InstrumentalVariableFit,
     LimlOveridTest, OveridTest,
@@ -31,23 +28,8 @@ impl IvModel {
             let gamma = design.first_stage_coefficients.col(j);
 
             let resid = endog_col - design.endog_hat.col(j);
-            let ss_resid = resid.iter().map(|v| v.powi(2)).sum::<f64>();
-            let y_mean = if self.options.constant {
-                endog_col.iter().mean()
-            } else {
-                0.0
-            };
-            let ss_tot = endog_col.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>();
-            if !ss_tot.is_finite() || ss_tot <= 0.0 {
-                return Err("IV firststage: response variation is undefined".into());
-            }
-            let unexplained = ss_resid / ss_tot;
-            let r2 = 1.0 - unexplained;
-            let r2_adj =
-                1.0 - unexplained * (n - usize::from(self.options.constant)) as f64 / df_z as f64;
-            if !r2.is_finite() || !r2_adj.is_finite() {
-                return Err("IV firststage: R-squared is undefined".into());
-            }
+            let (r2, r2_adj) =
+                goodness_of_fit(endog_col, resid.as_ref(), self.options.constant, df_z)?;
             let cov_gamma = compute_cov_beta(
                 &design.z,
                 &design.ztz_inverse,

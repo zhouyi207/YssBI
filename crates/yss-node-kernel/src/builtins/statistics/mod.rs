@@ -82,12 +82,12 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(match id {
-                "yssbi.statistics.iv.2sls.summary" => 15,
-                "yssbi.statistics.iv.liml.summary" => 15,
-                "yssbi.statistics.iv.liml.fit" => 12,
+                "yssbi.statistics.iv.2sls.summary" => 16,
+                "yssbi.statistics.iv.liml.summary" => 16,
+                "yssbi.statistics.iv.2sls.fit" => 11,
+                "yssbi.statistics.iv.liml.fit" => 13,
                 "yssbi.statistics.panel.fit" => 11,
                 "yssbi.statistics.econometrics.panel.re"
-                | "yssbi.statistics.iv.2sls.fit"
                 | "yssbi.statistics.test.nonparametric.family" => 10,
                 "yssbi.statistics.adf.test"
                 | "yssbi.statistics.econometrics.panel.between"

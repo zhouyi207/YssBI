@@ -611,6 +611,78 @@ fn liml_overidentified_robust_covariance_preserves_k_class_bread() {
 }
 
 #[test]
+fn iv_goodness_of_fit_preserves_response_units_and_rejects_undefined_variation() {
+    use yss_sci::causal::iv::fit::fit_instrumental_variables;
+    use yss_sci_contract::{
+        SciError, SciOperationCode,
+        causal::iv::InstrumentalVariableKind as Kind,
+        regression::{OlsCovariance, OlsOptions},
+    };
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let endogenous = (0..8)
+        .map(|row| 2.0 * signal(row, 0) + 0.5 * signal(row, 1))
+        .collect::<Vec<_>>();
+    let instrument = (0..8).map(|row| signal(row, 0)).collect::<Vec<_>>();
+    let undefined = fit_instrumental_variables(
+        Kind::TwoStageLeastSquares,
+        vec![1.0; 8],
+        &[],
+        std::slice::from_ref(&endogenous),
+        std::slice::from_ref(&instrument),
+        OlsOptions {
+            constant: true,
+            covariance: OlsCovariance::FixedScale { scale: 1.0 },
+        },
+        false,
+    );
+    assert!(
+        matches!(
+            undefined,
+            Err(SciError::ComputationFailed {
+                operation: SciOperationCode::InstrumentalVariables
+            })
+        ),
+        "zero centered variation must not become zero R2: {undefined:?}"
+    );
+    // Exact Walsh sums give 17/81 and 19/243 with an intercept, or
+    // uncentered 17/97 and 39/679 without it, independent of response units.
+    for kind in [
+        Kind::TwoStageLeastSquares,
+        Kind::LimitedInformationMaximumLikelihood,
+    ] {
+        for (constant, r2, adjusted) in [
+            (true, 17.0 / 81.0, 19.0 / 243.0),
+            (false, 17.0 / 97.0, 39.0 / 679.0),
+        ] {
+            for scale in [1.0, 1e-151] {
+                let response = (0..8)
+                    .map(|row| scale * (1.0 + 0.5 * endogenous[row] + 2.0 * signal(row, 2)))
+                    .collect::<Vec<_>>();
+                let fit = fit_instrumental_variables(
+                    kind,
+                    response,
+                    &[],
+                    std::slice::from_ref(&endogenous),
+                    std::slice::from_ref(&instrument),
+                    OlsOptions {
+                        constant,
+                        covariance: OlsCovariance::NonRobust,
+                    },
+                    false,
+                )
+                .unwrap();
+                assert!(
+                    (fit.statistics.r2 - r2).abs() < 1e-10,
+                    "{kind:?}, constant={constant}, scale={scale}: {:?}",
+                    fit.statistics
+                );
+                assert!((fit.statistics.adjusted_r2 - adjusted).abs() < 1e-10);
+            }
+        }
+    }
+}
+
+#[test]
 fn liml_root_preserves_singular_residual_covariance_and_response_units() {
     use yss_sci::causal::iv::fit::fit_instrumental_variables;
     use yss_sci_contract::{
@@ -655,6 +727,11 @@ fn liml_root_preserves_singular_residual_covariance_and_response_units() {
         );
         assert!((fit.coefficients[0] / scale - 1.0).abs() < 1e-10);
         assert!((fit.coefficients[1] / scale - slope).abs() < 1e-10);
+        if noise == 0.0 {
+            // Structural RSS/n=20 and centered TSS/n=45/16: negative IV R2 is valid.
+            assert!((fit.statistics.r2 + 55.0 / 9.0).abs() < 1e-10);
+            assert!((fit.statistics.adjusted_r2 + 139.0 / 21.0).abs() < 1e-10);
+        }
     }
 }
 
