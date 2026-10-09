@@ -509,6 +509,15 @@
 - L2：两处 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过；10 个 Rust 文件局部格式、6 个双语键/参数、文档元信息与相对链接、模块索引和 `git diff --check` 均通过。工作区预览曾遇并行 SCI 修改中的编译错误，稳定后重建通过；独立副本刷新受共享 target 影响的 SCI 契约产物后通过，未修改 SCI 源码。不新增依赖或 UI 单元测试，不运行全工作区验证；临时入口不提交。
 - 跨项目迟到打开、打开失败的实际交互、大目录压力、物理键鼠/IME、读屏、真实模型引用读取、持久回放和其他平台继续验收。Composer、Resources 及其余 Assistant 组件仍分别审查，累计完成源码审查 184/265 项。
 
+### 对话输入与队列恢复（AssistantComposer）
+
+- 已逐项阅读 Composer 及 Session/Runtime 的提交、入队、恢复和继续任务调用。`assistant/composer` 组合控件、输入布局和键盘行为；`assistant/drafts` 捕获未提交参数及恢复操作，commands 仍只提交原 Application/Harness，用于接纳与重放的事实继续由 stream 管理。
+- 新会话输入铺满内容区；有历史时提供展开/收起，输入区最多占会话高度的 75%，工具栏保留在滚动正文之外。按当前原生交互使用 Enter 发送、Shift+Enter 换行；生成中 Enter 入队且保留独立停止按钮，移除旧整列 Ctrl/Cmd+Enter action。行首或空白后的 `@` 打开原资源选择器，邮箱文本中的 `@` 正常输入；重新打开列表补齐键盘初选。
+- 队列使用捕获的模型、模式和推理档位，成功且已确认连续历史后才发送下一条；取消、失败或模型不可用时暂停，保留逐项移除与手动发送。未发送原文恢复时合并文本和引用，不重复追加相同文本，并经原 Application 恢复原模型/选项；会话未就绪或模型选择进行中不消耗待恢复内容。“继续任务”保留当前输入与引用，连接失败提供原位重试。
+- 工作区和独立提交内容通过隔离 Linux/X11 原生窗口、本机模拟 OpenAI 接口及真实 Harness 提交/持久事件验证连续队列；独立内容核对取消后的暂停与手动发送。工作区核对入队后切换模型/选项仍按原捕获参数发送、400 拒绝后暂停、继续任务保留草稿/引用、实际会话校验失败的原文恢复、不同文本合并与相同文本去重、引用合并、原模型/选项恢复、断流恢复保护及重新加载、邮箱/中文 `@` 与 Shift+Enter。最终独立内容复验 `@` 首次/重复打开后的键盘选择及新会话布局。另验证 70 行及约 2,900 字符原生粘贴、输入展开与低高度窗口工具栏；一次批量逐字注入曾使排版阻塞，恢复后队列继续，标准粘贴正常，注入压力不记为性能通过。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；12 个 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true`、23 个双语键/参数与文档元信息/相对链接检查通过。`node scripts/generate-crate-dependencies.mjs --check` 校验 59 个 crate、240 条依赖声明；`git diff --check` 通过。不新增依赖或 UI 单元测试，不运行全工作区验证，临时模型接口、预览和数据不提交。
+- 真实供应商差异、物理键鼠/IME、读屏、跨项目迟到提交、跨重启草稿及 Windows/macOS 验收继续开放；不以 Composer 完成替代 Runtime/Thread 的剩余审查。累计完成源码审查 185/265 项。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -616,7 +625,7 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/assistant/internal/ui/AssistantComposer.tsx](../../react/src/modules/assistant/internal/ui/AssistantComposer.tsx) | 待查 | 已读源码；引用接入共用标签，输入展开、@ 触发、恢复与队列交互继续审查 | 部分迁移，完整审查开放 |
+| [modules/assistant/internal/ui/AssistantComposer.tsx](../../react/src/modules/assistant/internal/ui/AssistantComposer.tsx) | 迁移/优化：复用原生输入、选择器及原提交入口 | composer 负责布局/键盘；drafts 捕获参数、连续队列与恢复；stream 保留接纳事实与历史验证 | 原生窗口与本机模拟接口验收通过；物理输入、重启和其他平台继续验收 |
 | [modules/assistant/internal/ui/AssistantConversationHeader.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationHeader.tsx) | 迁移 | dock/conversation 单行标题与原会话选项；新建/重命名/刷新/设置/关闭复用原入口，展开读取根 DockArea 并保留 sidebar | Linux/X11 已覆盖主要操作；局部重绘、读屏/物理输入及跨平台待验收 |
 | [modules/assistant/internal/ui/AssistantConversationPanel.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationPanel.tsx) | 优化 | 复用按会话缓存的 ConversationPanel；目录同步标题但保留输入/运行选项，根 DockArea 分离对话与编辑列，不迁移 React Provider 包装层 | 草稿切换/关闭重开、独立布局重启已验收；消息及运行时组件继续独立审查 |
 | [modules/assistant/internal/ui/AssistantConversationToggle.tsx](../../react/src/modules/assistant/internal/ui/AssistantConversationToggle.tsx) | 优化 | 原 DockArea、目录查询和 Application 会话入口补齐整组关闭、上次/最近恢复、空目录新建及生命周期隔离；无项目沿用临时会话目录 | 代码已覆盖；本批窗口验收见记录，故障与跨平台余项开放 |

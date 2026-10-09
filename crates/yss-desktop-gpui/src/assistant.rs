@@ -1,6 +1,7 @@
 //! Native conversation views consume durable Harness facts and retain only input state.
 mod commands;
 mod composer;
+mod drafts;
 mod execution;
 mod header;
 mod inspect;
@@ -31,7 +32,7 @@ use yss_harness_contract::{
     LanguageModelSelection, PrincipalId, ProjectResourceRef,
 };
 
-actions!(native_assistant, [SendMessage, CancelResponse]);
+actions!(native_assistant, [CancelResponse]);
 
 pub(crate) enum ConversationEvent {
     DirectoryChanged,
@@ -69,6 +70,8 @@ pub(crate) struct ConversationPanel {
     pending: Option<Submission>,
     unsent: Option<DraftMessage>,
     queue: VecDeque<DraftMessage>,
+    queue_paused: bool,
+    input_expanded: bool,
     selecting: bool,
     ready: bool,
     refreshing: bool,
@@ -94,6 +97,7 @@ impl ConversationPanel {
         let input = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .auto_grow(3, 10)
+                .submit_on_enter(true)
                 .placeholder("向 YssBI 提问，或描述要完成的分析…")
         });
         let subscription = cx.subscribe(&input, |_, _, event, cx| {
@@ -117,6 +121,8 @@ impl ConversationPanel {
             pending: None,
             unsent: None,
             queue: VecDeque::new(),
+            queue_paused: true,
+            input_expanded: false,
             selecting: false,
             ready: false,
             refreshing: false,

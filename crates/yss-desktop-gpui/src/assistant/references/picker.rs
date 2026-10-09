@@ -7,7 +7,8 @@ use gpui_component::{
     popover::Popover,
 };
 
-struct Picker {
+pub(in crate::assistant) struct Picker {
+    open: bool,
     list: Entity<ListState<Resources>>,
     attached: Vec<ProjectResourceRef>,
 }
@@ -131,6 +132,21 @@ impl ListDelegate for Resources {
 }
 
 impl Picker {
+    pub(in crate::assistant) fn set_open(
+        &mut self,
+        open: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.open = open;
+        if open {
+            self.list.update(cx, |list, cx| {
+                if list.selected_index().is_none() && !list.delegate().matches.is_empty() {
+                    list.set_selected_index(Some(IndexPath::default()), window, cx);
+                }
+            });
+        }
+    }
     fn new(
         owner: WeakEntity<ConversationPanel>,
         window: &mut Window,
@@ -151,6 +167,7 @@ impl Picker {
             .searchable(true)
         });
         Self {
+            open: false,
             list,
             attached: vec![],
         }
@@ -188,7 +205,7 @@ impl ConversationPanel {
         &self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> AnyElement {
+    ) -> (AnyElement, Entity<Picker>) {
         let owner = cx.entity().downgrade();
         let picker = window.use_keyed_state("assistant-resource-picker", cx, |window, cx| {
             Picker::new(owner.clone(), window, cx)
@@ -198,7 +215,10 @@ impl ConversationPanel {
             picker.list.clone()
         });
         let focus = list.focus_handle(cx);
-        Popover::new("assistant-resources")
+        let open = picker.read(cx).open;
+        let control = picker.clone();
+        let element = Popover::new("assistant-resources")
+            .open(open)
             .anchor(Anchor::BottomLeft)
             .track_focus(&focus)
             .trigger(
@@ -211,10 +231,12 @@ impl ConversationPanel {
                     .accessibility_label(crate::text::t("panel.assistantAttachResource")),
             )
             .on_open_change(move |open, window, cx| {
+                control.update(cx, |picker, cx| picker.set_open(*open, window, cx));
                 let _ = owner.update(cx, |view, cx| {
                     if !open {
                         view.input.focus_handle(cx).focus(window, cx);
                     }
+                    cx.notify();
                 });
             })
             .content(move |_, _, cx| {
@@ -235,6 +257,7 @@ impl ConversationPanel {
                             .child(crate::text::t("panel.assistantReferenceHint")),
                     )
             })
-            .into_any_element()
+            .into_any_element();
+        (element, picker)
     }
 }

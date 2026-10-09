@@ -1,8 +1,10 @@
 use super::{
-    CancelResponse, ConversationEvent, ConversationPanel, SendMessage,
+    CancelResponse, ConversationEvent, ConversationPanel,
     projection::{Task, Tool, Turn, TurnState},
 };
-use gpui::{AnyElement, Context, IntoElement, Render, SharedString, Window, div, prelude::*};
+use gpui::{
+    AnyElement, Context, Empty, IntoElement, Render, SharedString, Window, div, prelude::*,
+};
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
@@ -13,15 +15,17 @@ use yss_harness_contract::{AgentRole, AgentRunState, ModelCallPurpose};
 impl Render for ConversationPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.refresh_timing(window, cx);
+        self.sync_input(window, cx);
         div()
             .id("assistant-conversation")
             .key_context("AssistantConversation")
             .track_focus(&self.focus)
             .size_full()
+            .min_w_0()
+            .overflow_hidden()
             .flex()
             .flex_col()
             .bg(cx.theme().background)
-            .on_action(cx.listener(|view, _: &SendMessage, window, cx| view.send(window, cx)))
             .on_action(cx.listener(|view, _: &CancelResponse, _, cx| view.cancel(cx)))
             .child(self.render_thread(cx))
             .child(self.status(cx))
@@ -40,6 +44,14 @@ impl ConversationPanel {
                     .and_then(|turn| turn.error.as_deref())
                     .map(super::commands::failure_text)
             });
+        if error.is_none()
+            && !self.refreshing
+            && self.model_available()
+            && !self.running()
+            && !self.stopping
+        {
+            return Empty.into_any_element();
+        }
         let text = error.clone().unwrap_or_else(|| {
             if self.refreshing {
                 "正在恢复会话…".into()
@@ -52,7 +64,7 @@ impl ConversationPanel {
                     .and_then(|turn| turn.activity.clone())
                     .unwrap_or_else(|| "正在处理…".into())
             } else {
-                "就绪 · Ctrl+Enter 发送".into()
+                crate::text::t("panel.assistantStatusReady").into()
             }
         });
         div()

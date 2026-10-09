@@ -131,7 +131,7 @@ impl ConversationPanel {
             let result = job
                 .await
                 .unwrap_or_else(|_| Err("会话读取未完成，请刷新后重试。".into()));
-            let _ = view.update_in(cx, |view, _, cx| {
+            let _ = view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -171,6 +171,7 @@ impl ConversationPanel {
                     Err(error) => view.stream_error = Some(error),
                 }
                 view.buffered.clear();
+                view.advance_queue(window, cx);
                 cx.notify();
             });
         })

@@ -1,11 +1,15 @@
-//! Composer controls use the original model catalog, options and project resource identities.
+//! Input layout composes existing draft commands, reference and model controls.
+mod drafts;
+mod input;
+
 use super::ConversationPanel;
-use gpui::{AnyElement, Context, IntoElement, Window, div, prelude::*, px};
+use gpui::{AnyElement, Context, IntoElement, Window, div, prelude::*, relative};
 use gpui_component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
-    input::Textarea,
+    input::Enter,
 };
+use gpui_kit_assets::IconName;
 
 impl ConversationPanel {
     pub(super) fn render_composer(
@@ -13,151 +17,114 @@ impl ConversationPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let mut composer = div()
+        let empty = self.transcript.turns.is_empty();
+        let (reference_button, picker) = self.reference_picker(window, cx);
+        let editor = div()
+            .id("assistant-composer-body")
+            .min_w_0()
+            .min_h_0()
+            .overflow_y_scroll()
             .flex()
             .flex_col()
             .gap_2()
-            .p_3()
+            .when(empty, |editor| editor.flex_1())
+            .child(self.render_drafts(cx))
+            .child(self.reference_chips(
+                "draft-references",
+                self.references.iter().map(|r| (r, None)),
+                true,
+                cx,
+            ))
+            .child(self.render_input(empty, picker, cx));
+        div()
+            .id("assistant-composer")
+            .on_action(cx.listener(Self::submit_input))
+            .flex()
+            .flex_col()
+            .min_w_0()
+            .min_h_0()
+            .gap_2()
+            .p_2()
+            .bg(cx.theme().tab_active)
+            .when(empty, |composer| composer.flex_1())
+            .when(!empty, |composer| {
+                composer
+                    .flex_shrink_0()
+                    .max_h(relative(0.75))
+                    .border_t_1()
+                    .border_color(cx.theme().border)
+            })
+            .child(editor)
+            .child(self.render_controls(reference_button, window, cx))
+            .into_any_element()
+    }
+
+    fn render_controls(
+        &self,
+        reference_button: AnyElement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let running = self.running();
+        let empty = self.input.read(cx).value().trim().is_empty();
+        div()
+            .flex()
+            .flex_wrap()
             .flex_shrink_0()
-            .border_t_1()
-            .border_color(cx.theme().border);
-        if let Some(message) = &self.unsent {
-            composer = composer.child(
-                div()
-                    .p_2()
-                    .rounded_md()
-                    .bg(cx.theme().muted)
-                    .text_xs()
-                    .child("未确认的原文已保留，请检查历史后再决定是否重发。")
-                    .child(
-                        div()
-                            .max_h(px(65.))
-                            .overflow_hidden()
-                            .child(message.text.clone()),
-                    )
-                    .child(self.reference_chips(
-                        "unsent-references",
-                        message.resources.iter().map(|resource| (resource, None)),
-                        false,
-                        cx,
-                    ))
-                    .child(
-                        Button::new("assistant-restore")
-                            .small()
-                            .ghost()
-                            .label("恢复到输入区")
-                            .on_click(
-                                cx.listener(|view, _, window, cx| view.restore_unsent(window, cx)),
-                            ),
-                    ),
-            );
-        }
-        if !self.queue.is_empty() {
-            let mut queued = div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .p_2()
-                .rounded_md()
-                .bg(cx.theme().muted);
-            for message in &self.queue {
-                let id = message.id;
-                queued = queued.child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .items_center()
-                        .child(
-                            div()
-                                .text_xs()
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .flex_col()
-                                .child(div().truncate().child(message.text.clone()))
-                                .child(self.reference_chips(
-                                    format!("queued-references-{id}"),
-                                    message.resources.iter().map(|resource| (resource, None)),
-                                    false,
-                                    cx,
-                                )),
-                        )
-                        .child(
-                            Button::new(gpui::SharedString::from(format!("queued-{id}")))
-                                .small()
-                                .ghost()
-                                .label("移除")
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.queue.retain(|message| message.id != id);
-                                    cx.notify();
-                                })),
-                        ),
-                );
-            }
-            composer = composer.child(
-                queued.child(
-                    Button::new("assistant-send-queued")
-                        .small()
-                        .ghost()
-                        .label("发送下一条")
-                        .disabled(!self.can_send())
-                        .on_click(cx.listener(|view, _, window, cx| view.send_queued(window, cx))),
-                ),
-            );
-        }
-        composer = composer.child(self.reference_chips(
-            "draft-references",
-            self.references.iter().map(|resource| (resource, None)),
-            true,
-            cx,
-        ));
-        composer
-            .child(Textarea::new(&self.input).bordered(false).appearance(false))
+            .items_center()
+            .gap_1()
+            .child(reference_button)
+            .child(self.effort_picker(cx))
             .child(
                 div()
+                    .flex_1()
+                    .min_w_0()
                     .flex()
                     .flex_wrap()
                     .items_center()
+                    .justify_end()
                     .gap_1()
                     .child(self.usage_indicator(cx))
-                    .child(self.model_picker(window, cx))
                     .child(self.mode_picker(cx))
-                    .child(self.effort_picker(cx))
-                    .child(self.reference_picker(window, cx))
-                    .child(div().flex_1())
-                    .child(
-                        Button::new("assistant-queue")
-                            .small()
-                            .ghost()
-                            .label("加入队列")
-                            .disabled(
-                                !self.ready
-                                    || self.selecting
-                                    || self.input.read(cx).value().trim().is_empty(),
-                            )
-                            .on_click(
-                                cx.listener(|view, _, window, cx| view.queue_message(window, cx)),
-                            ),
-                    )
-                    .child(if self.running() {
+                    .child(self.model_picker(window, cx))
+                    .when(running && !empty, |controls| {
+                        controls.child(
+                            Button::new("assistant-queue")
+                                .xsmall()
+                                .ghost()
+                                .icon(IconName::ListPlus)
+                                .tooltip(crate::text::t("panel.assistantQueueHint"))
+                                .accessibility_label(crate::text::t("panel.assistantQueueMessage"))
+                                .disabled(!self.ready || self.selecting || !self.model_available())
+                                .on_click(cx.listener(|view, _, window, cx| {
+                                    view.queue_message(window, cx)
+                                })),
+                        )
+                    })
+                    .child(if running {
                         Button::new("assistant-stop")
-                            .small()
+                            .xsmall()
                             .danger()
-                            .label(if self.stopping {
-                                "正在停止"
-                            } else {
-                                "停止"
-                            })
+                            .icon(IconName::Square)
+                            .tooltip(crate::text::t("panel.assistantCancel"))
+                            .accessibility_label(crate::text::t("panel.assistantCancel"))
                             .disabled(self.stopping)
                             .on_click(cx.listener(|view, _, _, cx| view.cancel(cx)))
                     } else {
                         Button::new("assistant-send")
-                            .small()
+                            .xsmall()
                             .primary()
-                            .label("发送")
-                            .disabled(
-                                !self.can_send() || self.input.read(cx).value().trim().is_empty(),
+                            .icon(IconName::ArrowUp)
+                            .tooltip_with_action(
+                                crate::text::t("panel.assistantSend"),
+                                &Enter {
+                                    secondary: false,
+                                    shift: false,
+                                },
+                                Some("Input"),
                             )
+                            .accessibility_label(crate::text::t("panel.assistantSend"))
+                            .disabled(empty || !self.can_send())
                             .on_click(cx.listener(|view, _, window, cx| view.send(window, cx)))
                     }),
             )

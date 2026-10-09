@@ -92,16 +92,6 @@ fn main() -> Result<()> {
             window_chrome::init(cx);
             cx.bind_keys([
                 KeyBinding::new(
-                    "ctrl-enter",
-                    assistant::SendMessage,
-                    Some("AssistantConversation"),
-                ),
-                KeyBinding::new(
-                    "cmd-enter",
-                    assistant::SendMessage,
-                    Some("AssistantConversation"),
-                ),
-                KeyBinding::new(
                     "escape",
                     assistant::CancelResponse,
                     Some("AssistantConversation"),

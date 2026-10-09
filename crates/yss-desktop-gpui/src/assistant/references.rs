@@ -1,5 +1,6 @@
 //! Draft and recorded references share the accepted project catalog and opening route.
 mod picker;
+pub(super) use picker::Picker;
 
 use super::{ConversationEvent, ConversationPanel};
 use crate::project::resources::ResourceCatalog;

@@ -1,8 +1,8 @@
 //! The loaded history range and reading position belong to this conversation view.
 use super::ConversationPanel;
-use gpui::{AnyElement, Context, Pixels, ScrollHandle, div, prelude::*, px};
+use gpui::{AnyElement, Context, Empty, Pixels, ScrollHandle, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme, Sizable,
+    Sizable,
     button::{Button, ButtonVariants},
 };
 use gpui_kit_assets::IconName;
@@ -138,6 +138,9 @@ impl Viewport {
 
 impl ConversationPanel {
     pub(super) fn render_thread(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        if self.transcript.turns.is_empty() {
+            return Empty.into_any_element();
+        }
         let first = self.viewport.first_turn(self.transcript.turns.len());
         let owner = cx.entity().downgrade();
         let mut body = div()
@@ -192,15 +195,6 @@ impl ConversationPanel {
                         )
                     }),
             );
-        if self.transcript.turns.is_empty() {
-            body = body.child(
-                div()
-                    .py_8()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(crate::text::t("panel.assistantEmptyDescription")),
-            );
-        }
         for turn in &self.transcript.turns[first..] {
             body = body.child(
                 div()

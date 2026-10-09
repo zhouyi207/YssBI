@@ -6,20 +6,11 @@ use yss_harness_contract::LanguageModelSelection;
 use yss_harness_core::HarnessError;
 
 impl ConversationPanel {
-    fn capture_message(&self, cx: &gpui::App) -> Option<DraftMessage> {
-        let text = self.input.read(cx).value().to_string();
-        if text.trim().is_empty() {
-            return None;
-        }
-        Some(DraftMessage {
-            id: uuid::Uuid::new_v4(),
-            text,
-            resources: self.references.clone(),
-            model: self.selection(),
-            options: self.options,
-        })
-    }
     pub(super) fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.running() {
+            self.queue_message(window, cx);
+            return;
+        }
         if !self.can_send() {
             return;
         }
@@ -31,8 +22,13 @@ impl ConversationPanel {
         self.references.clear();
         self.submit(message, window, cx);
     }
-    fn submit(&mut self, message: DraftMessage, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.can_send() {
+    pub(super) fn submit(
+        &mut self,
+        message: DraftMessage,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.can_submit(&message) {
             self.unsent = Some(message);
             cx.notify();
             return;
@@ -48,6 +44,7 @@ impl ConversationPanel {
             accepted: false,
         });
         self.error = None;
+        self.queue_paused = false;
         let job = self.services.executor.spawn(async move {
             let requested = message.clone();
             let result = async {
@@ -101,6 +98,7 @@ impl ConversationPanel {
                     return;
                 }
                 if let Err(error) = result {
+                    view.queue_paused = true;
                     view.error = Some(error);
                     if !pending.accepted && !accepted {
                         view.unsent = Some(pending.message);
@@ -119,51 +117,13 @@ impl ConversationPanel {
         if !self.running() || self.stopping {
             return;
         }
+        self.queue_paused = true;
         self.stopping = self
             .services
             .application
             .harness
             .host
             .cancel_turn(&self.session.id);
-        cx.notify();
-    }
-    pub(super) fn queue_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.ready || self.selecting || !self.model_available() {
-            return;
-        }
-        let Some(message) = self.capture_message(cx) else {
-            return;
-        };
-        self.queue.push_back(message);
-        self.input
-            .update(cx, |input, cx| input.set_value("", window, cx));
-        self.references.clear();
-        cx.notify();
-    }
-    pub(super) fn send_queued(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.can_send()
-            && let Some(message) = self.queue.pop_front()
-        {
-            self.submit(message, window, cx);
-        }
-    }
-    pub(super) fn restore_unsent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(message) = self.unsent.take() else {
-            return;
-        };
-        let current = self.input.read(cx).value();
-        let text = if current.is_empty() {
-            message.text
-        } else {
-            format!("{current}\n\n{}", message.text)
-        };
-        self.input
-            .update(cx, |input, cx| input.set_value(text, window, cx));
-        for reference in message.resources {
-            if !self.references.contains(&reference) {
-                self.references.push(reference);
-            }
-        }
         cx.notify();
     }
     pub(super) fn select_model(
