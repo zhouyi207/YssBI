@@ -275,6 +275,80 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
 }
 
 #[test]
+fn iv_first_stage_rejects_saturated_instrument_inference_without_invalidating_fit() {
+    let n = 6;
+    let mut state = 1_u64;
+    let mut random = || {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        (state >> 32) as u32 as f64 / u32::MAX as f64 - 0.5
+    };
+    let instruments = Mat::from_fn(n, n - 1, |_, _| random());
+    let endogenous = Mat::from_fn(n, 2, |_, _| random());
+    let response = Col::from_fn(n, |i| {
+        1.0 + endogenous[(i, 0)] + 0.7 * endogenous[(i, 1)] + random()
+    });
+    let model = IV2SLS {
+        endog: response,
+        exog: Mat::zeros(n, 0),
+        endog_reg: endogenous,
+        instruments,
+        options: yss_sci_contract::regression::OlsOptions::default(),
+        small: false,
+        endog_names: None,
+        z_var_names: None,
+    };
+    // Structural residual degrees are positive; only first-stage inference is unavailable.
+    assert_eq!(model.fit().unwrap().statistics.df_residual, 3);
+    for for_liml in [false, true] {
+        let result = std::panic::catch_unwind(|| model.first_stage(for_liml));
+        assert!(matches!(result, Ok(Err(_))), "{result:?}");
+    }
+}
+
+#[test]
+fn iv_first_stage_minimum_eigenvalue_preserves_generalized_problem_and_column_units() {
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let n = 64;
+    let instruments = Mat::from_fn(n, 2, signal);
+    let endogenous = Mat::from_fn(n, 2, |row, col| {
+        if col == 0 {
+            2.0 * signal(row, 0) + signal(row, 2)
+        } else {
+            signal(row, 1) + signal(row, 2) + signal(row, 3)
+        }
+    });
+    for constant in [true, false] {
+        // det(diag(4,1) - lambda*[[1,1],[1,2]]) = lambda² - 9lambda + 4.
+        let expected = (9.0 - 65.0_f64.sqrt()) / 2.0 * (n - 2 - usize::from(constant)) as f64 / 2.0;
+        for (order, scales) in [([0, 1], [1., 1.]), ([1, 0], [1., 1.]), ([0, 1], [1., 100.])] {
+            let model = IV2SLS {
+                endog: Col::from_fn(n, |row| signal(row, 4)),
+                exog: Mat::zeros(n, 0),
+                endog_reg: Mat::from_fn(n, 2, |row, col| {
+                    endogenous[(row, order[col])] * scales[col]
+                }),
+                instruments: instruments.clone(),
+                options: yss_sci_contract::regression::OlsOptions {
+                    constant,
+                    ..Default::default()
+                },
+                small: false,
+                endog_names: None,
+                z_var_names: None,
+            };
+            for for_liml in [false, true] {
+                let (_, result) = model.first_stage(for_liml).unwrap();
+                assert!(
+                    approx_eq(result.min_eigenvalue, expected, 1e-10, 1e-10),
+                    "{order:?} {scales:?}: {} != {expected}",
+                    result.min_eigenvalue
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn test_ols_golden() {
     let (exog, endog, _weights) = load_iris();
     let ols = OLS {

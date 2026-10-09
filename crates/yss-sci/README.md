@@ -237,6 +237,21 @@ entity/time Between, rejecting unsupported covariance/effect combinations.
 IV 2SLS and LIML share `IvEstimate` and coefficient statistics. Their first-stage,
 overidentification and endogeneity analyses are separate calls in `causal::iv::fit`;
 first-stage analysis reuses the same implementation for both estimators.
+It requires positive first-stage residual degrees before preparing the design;
+saturated instrument regressions return a scientific failure while the structural
+fit and summaries that omit this analysis remain available. The existing IV design
+preparation owns instrument coefficients, fitted endogenous columns and the
+instrument cross-product inverse; inference consumes those facts once.
+Included-instrument residualization applies the projection directly to the required
+columns, and instrument residuals reuse the fitted columns. This avoids observation-
+square projection matrices, repeated first-stage fitting/factorization and per-row
+mean scans. Cragg–Donald inference uses Cholesky whitening of its generalized
+symmetric eigenproblem, preserving column-order and unit invariance when residual
+covariances are correlated. The excluded-instrument normalization and Stock–Yogo
+critical tables retain their existing conventions. See the
+[LAPACK reduction](https://netlib.org/lapack/lug/node54.html) for the symmetric
+generalized eigenproblem and the worked first-stage examples in the
+[Stata postestimation manual](https://www.stata.com/manuals/rivregresspostestimation.pdf).
 An undefined adjusted first-stage R² at zero centered variation remains `None`.
 Rank-zero traditional Hausman tests and endogeneity bundles without positive
 Wu denominator degrees of freedom likewise remain unavailable in the existing

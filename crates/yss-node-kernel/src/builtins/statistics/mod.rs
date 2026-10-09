@@ -82,11 +82,14 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(match id {
-                "yssbi.statistics.iv.2sls.summary" => 12,
-                "yssbi.statistics.iv.liml.summary" | "yssbi.statistics.panel.fit" => 11,
+                "yssbi.statistics.iv.2sls.summary" => 13,
+                "yssbi.statistics.iv.liml.summary" => 12,
+                "yssbi.statistics.panel.fit" => 11,
                 "yssbi.statistics.econometrics.panel.re"
                 | "yssbi.statistics.test.nonparametric.family" => 10,
                 "yssbi.statistics.adf.test"
+                | "yssbi.statistics.iv.2sls.fit"
+                | "yssbi.statistics.iv.liml.fit"
                 | "yssbi.statistics.econometrics.panel.between"
                 | "yssbi.statistics.econometrics.panel.fd"
                 | "yssbi.statistics.econometrics.panel.fe"
@@ -107,8 +110,6 @@ pub(super) fn install(
                 | "yssbi.statistics.var.summary"
                 | "yssbi.statistics.workflow.subgroup" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
-                | "yssbi.statistics.iv.2sls.fit"
-                | "yssbi.statistics.iv.liml.fit"
                 | "yssbi.statistics.meta.fixed_effect"
                 | "yssbi.statistics.meta.inverse_variance"
                 | "yssbi.statistics.meta.leave_one_out"

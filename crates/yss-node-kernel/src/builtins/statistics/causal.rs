@@ -173,8 +173,7 @@ fn iv(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, Ker
     let exog = group(inv, "x").len();
     let endog = group(inv, "endogenous").len();
     let constant = boolean(inv, "constant")?;
-    // IV first-stage and identification diagnostics form dense observation projections.
-    check_fit_workspace(response.len(), data.len(), constant, "GLS", inv)?;
+    check_fit_workspace(response.len(), data.len(), constant, "OLS", inv)?;
     let mut fit = yss_sci_runtime::causal::iv::fit_instrumental_variables(
         kind,
         response,
@@ -273,7 +272,7 @@ fn summary(kind: IvKind, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             fit.residuals.len(),
             fit.design.exogenous.len() + fit.design.endogenous.len() + fit.design.instruments.len(),
             fit.options.constant,
-            "GLS",
+            "OLS",
             inv,
         )?;
     }

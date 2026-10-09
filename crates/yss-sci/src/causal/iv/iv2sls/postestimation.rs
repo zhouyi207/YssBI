@@ -13,31 +13,22 @@ impl IV2SLS {
     ) -> Result<(Vec<FirstStageResult>, FirstStageSummary), String> {
         let n = self.endog.nrows();
         let k_endog = self.endog_reg.ncols();
-        let PreparedIvDesign {
-            z,
-            ztz_inverse: ztz_inv,
-            mut endog_hat,
-            ..
-        } = self.design()?;
-        let k_z = z.ncols();
-        let df_z = n.saturating_sub(k_z);
-        let z_matrix = z.as_ref().to_owned();
-        let ztz_inv_nd = ztz_inv.as_ref().to_owned();
-        let covariance = &self.options.covariance;
+        let k_z = self.exog.ncols() + self.instruments.ncols() + usize::from(self.options.constant);
+        let df_z = n
+            .checked_sub(k_z)
+            .filter(|&degrees| degrees > 0)
+            .ok_or("IV firststage: insufficient residual degrees of freedom")?;
+        let design = self.design()?;
+        let t_dist = StudentsT::new(0.0, 1.0, df_z as f64)
+            .map_err(|error| format!("IV firststage: {error}"))?;
+        let t_crit = t_dist.inverse_cdf(0.975);
         let mut first_stage: Vec<FirstStageResult> = Vec::with_capacity(k_endog);
         for j in 0..k_endog {
-            let endog_col = self.endog_reg.col(j).to_owned();
-            let endog_vector = endog_col.as_ref().to_owned();
-            let zty = z_matrix.transpose() * endog_vector.as_ref();
-            let gamma = ztz_inv.as_ref() * zty.as_ref();
-            let hat = z_matrix.as_ref() * gamma.as_ref();
-            let hat_arr = hat.as_ref().to_owned();
-            for i in 0..n {
-                endog_hat[(i, j)] = hat_arr[i];
-            }
+            let endog_col = self.endog_reg.col(j);
+            let gamma = design.first_stage_coefficients.col(j);
 
             // First-stage stats: resid, r2, cov_gamma, stds, t, p
-            let resid = &endog_col - &hat_arr;
+            let resid = endog_col - design.endog_hat.col(j);
             let ss_resid = resid.iter().map(|v| v.powi(2)).sum::<f64>();
             let y_mean = endog_col.iter().mean();
             let ss_tot = endog_col.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>();
@@ -46,29 +37,18 @@ impl IV2SLS {
             } else {
                 0.0
             };
-            let ms_resid = if df_z > 0 {
-                ss_resid / df_z as f64
-            } else {
-                0.0
-            };
-            let ms_tot = if n > 1 { ss_tot / (n - 1) as f64 } else { 0.0 };
+            let ms_resid = ss_resid / df_z as f64;
+            let ms_tot = ss_tot / (n - 1) as f64;
             let r2_adj = if ms_tot > 1e-300 {
                 1.0 - ms_resid / ms_tot
             } else {
                 0.0
             };
 
-            let sigma2 = if df_z > 0 {
-                (ss_resid / df_z as f64).max(1e-300)
-            } else {
-                1e-300
-            };
-            let cov_gamma = yss_sci_linalg::Scale(sigma2) * &ztz_inv_nd;
+            let sigma2 = ms_resid.max(1e-300);
+            let cov_gamma = yss_sci_linalg::Scale(sigma2) * &design.ztz_inverse;
             let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[(i, i)].sqrt()).collect();
-            let gamma_nd = gamma.as_ref().to_owned();
-            let t_dist = StudentsT::new(0.0, 1.0, df_z as f64)
-                .unwrap_or(StudentsT::new(0.0, 1.0, 1.0).unwrap());
-            let t_values: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] / stds[i]).collect();
+            let t_values: Vec<f64> = (0..k_z).map(|i| gamma[i] / stds[i]).collect();
             let p_values: Vec<f64> = t_values
                 .iter()
                 .map(|&t| {
@@ -79,9 +59,8 @@ impl IV2SLS {
                     )
                 })
                 .collect();
-            let t_crit = t_dist.inverse_cdf(0.975);
-            let ci_left: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] - t_crit * stds[i]).collect();
-            let ci_right: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] + t_crit * stds[i]).collect();
+            let ci_left: Vec<f64> = (0..k_z).map(|i| gamma[i] - t_crit * stds[i]).collect();
+            let ci_right: Vec<f64> = (0..k_z).map(|i| gamma[i] + t_crit * stds[i]).collect();
 
             let name = self
                 .endog_names
@@ -100,7 +79,7 @@ impl IV2SLS {
             first_stage.push(FirstStageResult {
                 endog_name: name,
                 var_names,
-                betas: gamma_nd.iter().copied().collect(),
+                betas: gamma.iter().copied().collect(),
                 stds,
                 tvalues: t_values,
                 pvalues: p_values,
@@ -112,19 +91,7 @@ impl IV2SLS {
         }
 
         // estat firststage: First-stage regression summary statistics
-        let first_stage_summary = compute_first_stage_summary(
-            &z,
-            &endog_hat,
-            &self.endog_reg,
-            &self.exog,
-            &self.instruments,
-            crate::causal::iv::iv2sls::FirstStageOptions {
-                has_constant: self.options.constant,
-                covariance,
-                small: self.small,
-                for_liml,
-            },
-        )?;
+        let first_stage_summary = compute_first_stage_summary(self, &design, for_liml)?;
 
         Ok((first_stage, first_stage_summary))
     }

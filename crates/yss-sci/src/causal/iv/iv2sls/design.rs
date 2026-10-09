@@ -4,6 +4,7 @@ use yss_sci_linalg::{Mat, MatrixExt, Solve};
 pub(super) struct PreparedIvDesign {
     pub z: Mat<f64>,
     pub ztz_inverse: Mat<f64>,
+    pub first_stage_coefficients: Mat<f64>,
     pub endog_hat: Mat<f64>,
     pub x: Mat<f64>,
     pub x_struct: Mat<f64>,
@@ -29,23 +30,19 @@ impl IV2SLS {
         } else {
             k_exog + k_iv
         };
-        let mut z_raw = Vec::with_capacity(n * k_z);
-        for i in 0..n {
-            if self.options.constant {
-                z_raw.push(1.0);
+        let included = k_exog + usize::from(self.options.constant);
+        let z = Mat::from_fn(n, k_z, |row, col| {
+            if self.options.constant && col == 0 {
+                1.0
+            } else if col < included {
+                self.exog[(row, col - usize::from(self.options.constant))]
+            } else {
+                self.instruments[(row, col - included)]
             }
-            for j in 0..k_exog {
-                z_raw.push(self.exog[(i, j)]);
-            }
-            for j in 0..k_iv {
-                z_raw.push(self.instruments[(i, j)]);
-            }
-        }
-        let z = yss_sci_linalg::MatRef::from_row_major_slice(&(z_raw), n, k_z).to_owned();
+        });
 
         // Stage 1: endog_hat = Z * (Z'Z)^{-1} Z' * endog for each endogenous
-        let z_matrix = z.as_ref().to_owned();
-        let ztz = z_matrix.transpose() * z_matrix.as_ref();
+        let ztz = z.transpose() * z.as_ref();
         let ztz_inv = ztz
             .checked_cholesky()
             .map_err(|_| {
@@ -54,15 +51,16 @@ impl IV2SLS {
             .solve(&Mat::identity(ztz.nrows(), ztz.nrows()));
 
         let mut endog_hat = Mat::zeros(n, k_endog);
+        let mut first_stage_coefficients = Mat::zeros(k_z, k_endog);
         for j in 0..k_endog {
-            let endog_col = self.endog_reg.col(j).to_owned();
-            let endog_vector = endog_col.as_ref().to_owned();
-            let zty = z_matrix.transpose() * endog_vector.as_ref();
+            let zty = z.transpose() * self.endog_reg.col(j);
             let gamma = ztz_inv.as_ref() * zty.as_ref();
-            let hat = z_matrix.as_ref() * gamma.as_ref();
-            let hat_arr = hat.as_ref().to_owned();
+            let hat = z.as_ref() * gamma.as_ref();
+            for i in 0..k_z {
+                first_stage_coefficients[(i, j)] = gamma[i];
+            }
             for i in 0..n {
-                endog_hat[(i, j)] = hat_arr[i];
+                endog_hat[(i, j)] = hat[i];
             }
         }
 
@@ -72,37 +70,24 @@ impl IV2SLS {
         } else {
             k_exog + k_endog
         };
-        let mut x_raw = Vec::with_capacity(n * k_x);
-        for i in 0..n {
-            if self.options.constant {
-                x_raw.push(1.0);
+        let x = Mat::from_fn(n, k_x, |row, col| {
+            if col < included {
+                z[(row, col)]
+            } else {
+                endog_hat[(row, col - included)]
             }
-            for j in 0..k_exog {
-                x_raw.push(self.exog[(i, j)]);
+        });
+        let x_struct = Mat::from_fn(n, k_x, |row, col| {
+            if col < included {
+                z[(row, col)]
+            } else {
+                self.endog_reg[(row, col - included)]
             }
-            for j in 0..k_endog {
-                x_raw.push(endog_hat[(i, j)]);
-            }
-        }
-        let x = yss_sci_linalg::MatRef::from_row_major_slice(&(x_raw), n, k_x).to_owned();
-
-        let mut x_struct_raw = Vec::with_capacity(n * k_x);
-        for i in 0..n {
-            if self.options.constant {
-                x_struct_raw.push(1.0);
-            }
-            for j in 0..k_exog {
-                x_struct_raw.push(self.exog[(i, j)]);
-            }
-            for j in 0..k_endog {
-                x_struct_raw.push(self.endog_reg[(i, j)]);
-            }
-        }
-        let x_struct =
-            yss_sci_linalg::MatRef::from_row_major_slice(&(x_struct_raw), n, k_x).to_owned();
+        });
         Ok(PreparedIvDesign {
             z,
             ztz_inverse: ztz_inv,
+            first_stage_coefficients,
             endog_hat,
             x,
             x_struct,

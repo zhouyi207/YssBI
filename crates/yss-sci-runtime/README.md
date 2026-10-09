@@ -180,7 +180,11 @@ fitted values, residuals, coefficient inference and the design needed for later 
 Its Fit entry returns the shared `InstrumentalVariableFit` directly; Kernel restores
 source labels and applies its existing finite-value output conversion before JSON encoding.
 `causal::iv::summary` requests first-stage, overidentification and endogeneity analyses
-only when selected. First-stage rows, equations and weak-instrument display fields
+only when selected. SCI's insufficient first-stage residual-degree failure propagates
+before report encoding; summaries that omit that analysis retain the structural fit. Runtime
+consumes the same prepared analysis for 2SLS and LIML and does not refit or construct
+an observation-square projection.
+First-stage rows, equations and weak-instrument display fields
 use the typed analysis results before JSON encoding, without decoding report values
 or replacing coefficients with zero. Undefined adjusted R² and unavailable Hausman
 or endogeneity tests arrive as SCI's existing `None` values. If both endogeneity

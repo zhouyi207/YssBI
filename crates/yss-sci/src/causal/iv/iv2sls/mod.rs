@@ -15,5 +15,4 @@ mod fit;
 mod postestimation;
 mod types;
 
-pub(crate) use first_stage::FirstStageOptions;
 pub use types::*;
