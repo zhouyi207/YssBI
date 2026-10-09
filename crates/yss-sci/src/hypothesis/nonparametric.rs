@@ -552,11 +552,7 @@ fn mood_median(
     control.check()?;
     all.sort_by(f64::total_cmp);
     control.check()?;
-    let median = if all.len() % 2 == 0 {
-        (all[all.len() / 2 - 1] + all[all.len() / 2]) / 2.0
-    } else {
-        all[all.len() / 2]
-    };
+    let median = crate::descriptive::quantile_sorted(&all, 0.5);
     drop(all);
     let mut table = vec![0.0; groups.len() * 2];
     for (i, g) in groups.iter().enumerate() {

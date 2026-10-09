@@ -2296,6 +2296,21 @@ fn scale_limits_classification_and_classical_groups_keep_valid_results() {
             "{id} lost group margins: statistic={statistic}, p={p}"
         );
         assert!((p - 0.049_787_068_367_863_944).abs() < 1e-12);
+        let report = run(
+            id,
+            &[
+                ("groups", series(&[f64::MAX / 2.0; 4])),
+                ("groups", series(&[f64::MAX; 4])),
+            ],
+            &parameters,
+            1,
+        )
+        .expect("finite observations must not overflow the pooled median");
+        let statistic =
+            super::super::numeric_input(Some(field(&report[0], "statistic").unwrap())).unwrap();
+        let p = super::super::numeric_input(Some(field(&report[0], "p_value").unwrap())).unwrap();
+        assert_eq!(statistic, 8.0);
+        assert!((p - 0.004_677_734_981_047_265).abs() < 1e-14, "{id}");
     }
     let result = run(
         "yssbi.statistics.test.proportion.multiple",

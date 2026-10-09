@@ -79,8 +79,9 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
 直接使用该准备的回归模型内核采用 revision 4，逐步回归采用 revision 5；五个参数生存拟合内核
 （Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 8。
-复用该准备的 Mixed/GEE、因果估计和共线性诊断采用 revision 5；Meta 模型/诊断/绘图及
-中介 bootstrap 采用 revision 6，能力指纹涵盖共享输入错误契约。
+复用该准备的 Mixed/GEE、因果估计和共线性诊断采用 revision 5；Meta 模型/诊断/绘图
+采用 revision 6，能力指纹涵盖共享输入错误契约。中介 bootstrap 采用 revision 7，
+同时涵盖稳定分位数二分点。
 
 `builtins/statistics/diagnostics/models` 接入共线性、Harman、NRI/IDI、残差/Cook、
 AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线性值或预算化的二元模型
@@ -238,6 +239,8 @@ Binary codes, including inverted Boolean meanings. Coefficient plots consume
 native OLS/WLS/GLS models. Adapters share controlled materialization, budgets and
 finite-result encoding, then call `yss-sci-runtime::visualization`.
 Each result is one `plot.data` record; rendering does not run inside a kernel.
+Boxplot and violin use revision 6 for stable shared quantile midpoints; Delphi
+uses revision 5, and both mediation bootstrap kernels use revision 7.
 
 `KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明有序输入键及数量范围、实际参数键集合和输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
 
@@ -419,15 +422,18 @@ admits linear category indexes before constructing them, then uses actual row an
 column cardinalities for the dense table. These are conservative workspace
 estimates, not process RSS limits. Classical kernels use revision 6, except the
 paired t, McNemar, CMH, categorical independence, Pearson contingency, chi-square goodness-of-fit and
-multiple-proportion, Mood median, Levene, Brown-Forsythe and Bartlett kernels,
+multiple-proportion, Levene and Bartlett kernels,
 which use revision 7;
 Mann–Whitney, Kruskal–Wallis, Friedman, Runs and Mann–Kendall also use revision 7,
 covering corrected rank moments and tie handling. The rank-family selector uses
-revision 8, including Mood's shared Pearson calculation and data-error contract.
+revision 9, including Mood's shared Pearson calculation, data-error contract and
+stable shared median. Mood median and Brown-Forsythe use revision 8 for that
+shared median calculation.
 Fisher exact, exact Binomial and Poisson use revision 8. Binomial/Poisson count
 admission uses invocation resources and execution control; SCI retains numeric
 representation checks and samples the shared control during exact enumeration.
-Item discrimination reuses the same Welch computation errors and uses revision 6.
+Item discrimination reuses the same Welch computation errors and the stable
+shared quantile midpoint, using revision 7.
 CMH exposure and outcome reuse the controlled scalar-column and binary numeric
 reader, without encoding numeric observations as category strings. Each temporary
 column is released after conversion; admission includes retained earlier columns,

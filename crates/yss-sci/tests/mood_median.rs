@@ -47,4 +47,17 @@ fn mood_median_preserves_group_margins_and_ignores_pooled_median_ties() {
         assert_eq!(report.details["pooled_median"], median);
         assert!(report.estimate.is_none() && report.standard_error.is_none());
     }
+
+    let report = nonparametric::run(
+        RankHypothesisTest::MoodMedian {
+            groups: vec![vec![f64::MAX / 2.0; 4], vec![f64::MAX; 4]],
+        },
+        &control,
+    )
+    .expect("finite observations must not overflow their pooled median");
+    assert_eq!(report.statistic, Some(8.0));
+    assert!((report.p_value - 0.004_677_734_981_047_265).abs() < 1e-14);
+    let median = report.details["pooled_median"];
+    assert!(median.is_finite() && median > f64::MAX / 2.0 && median < f64::MAX);
+    assert_eq!(report.sample_sizes, [4, 4]);
 }

@@ -186,11 +186,7 @@ fn median(values: &[f64], control: &ScientificExecutionControl) -> Result<f64, E
     control.check()?;
     v.sort_by(f64::total_cmp);
     control.check()?;
-    Ok(if v.len() % 2 == 0 {
-        (v[v.len() / 2 - 1] + v[v.len() / 2]) / 2.0
-    } else {
-        v[v.len() / 2]
-    })
+    Ok(crate::descriptive::quantile_sorted(&v, 0.5))
 }
 
 fn result(

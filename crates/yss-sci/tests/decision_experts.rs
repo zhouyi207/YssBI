@@ -28,6 +28,13 @@ fn delphi_reuses_concordance_with_experts_on_rows_and_sample_quartiles() {
     assert!((a.standard_deviation.unwrap() - (2.75_f64 / 3.).sqrt()).abs() < 1e-12);
     assert_eq!((a.q1, a.median, a.q3), (1., 1.5, 2.25));
     assert_eq!(fit.rows[2].full_score_percent, 50.);
+    let smallest = f64::from_bits(1);
+    let tiny = delphi(&[vec![smallest; 2]], 5., &control()).unwrap();
+    assert_eq!(
+        tiny.rows[0].median.to_bits(),
+        smallest.to_bits(),
+        "equal finite observations must retain their sample median"
+    );
     let one = delphi(&[vec![3.], vec![5.]], 5., &control()).unwrap();
     assert!(one.summary.concordance.is_none() && one.rows[0].standard_deviation.is_none());
     let zero = delphi(&[vec![-1., 1.]], 5., &control()).unwrap();

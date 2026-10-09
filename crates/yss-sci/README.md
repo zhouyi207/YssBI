@@ -69,7 +69,10 @@ closure/SCC level extraction. Linalg remains the sole matrix-factorization owner
 `decision/fuzzy` composes normalized criterion/grade memberships with four operators.
 `decision/experts` summarizes one Delphi round and reuses tie-corrected Kendall W.
 Type-7 sample quantiles now belong to `descriptive/quantiles` and are shared by
-Delphi and distribution plots. Undefined coefficients remain optional values.
+Delphi, distribution plots, item discrimination, path bootstrap intervals and
+the Mood/Brown-Forsythe medians. Halfway interpolation uses the standard-library
+midpoint so finite large endpoints do not overflow and equal subnormal endpoints
+do not round separately to zero. Undefined coefficients remain optional values.
 `decision/conjoint` fits additive ratings with the shared least-squares solver,
 then transforms coefficients and covariance to within-attribute zero-sum utilities.
 Saturated identifiable designs return utilities without residual-based standard errors.

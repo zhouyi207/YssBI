@@ -82,13 +82,16 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(
-                1 + if (id.starts_with("yssbi.statistics.survival.")
+                1 + if id == "yssbi.statistics.test.nonparametric.family" {
+                    8
+                } else if (id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks")
                     || id == "yssbi.statistics.workflow.subgroup"
                     || id == "yssbi.statistics.test.fisher_exact"
                     || id == "yssbi.statistics.test.binomial"
                     || id == "yssbi.statistics.test.poisson"
-                    || id == "yssbi.statistics.test.nonparametric.family"
+                    || id == "yssbi.statistics.test.mood_median"
+                    || id == "yssbi.statistics.test.brown_forsythe"
                 {
                     7
                 } else if matches!(
@@ -100,15 +103,16 @@ pub(super) fn install(
                         | "yssbi.statistics.test.chisquare.general"
                         | "yssbi.statistics.test.chisquare.goodness_of_fit"
                         | "yssbi.statistics.test.proportion.multiple"
-                        | "yssbi.statistics.test.mood_median"
                         | "yssbi.statistics.test.mann_whitney"
                         | "yssbi.statistics.test.kruskal_wallis"
                         | "yssbi.statistics.test.friedman"
                         | "yssbi.statistics.test.runs"
                         | "yssbi.statistics.test.mann_kendall"
                         | "yssbi.statistics.test.levene"
-                        | "yssbi.statistics.test.brown_forsythe"
                         | "yssbi.statistics.test.bartlett"
+                        | "yssbi.statistics.psychometrics.item_analysis"
+                        | "yssbi.statistics.workflow.mediation"
+                        | "yssbi.statistics.workflow.moderated_mediation"
                 ) {
                     6
                 } else if matches!(
@@ -123,7 +127,8 @@ pub(super) fn install(
                         | "yssbi.statistics.test.wilcoxon.one_sample"
                         | "yssbi.statistics.test.wilcoxon.paired"
                         | "yssbi.statistics.test.cochran_q"
-                        | "yssbi.statistics.psychometrics.item_analysis"
+                        | "yssbi.plot.boxplot"
+                        | "yssbi.plot.violin"
                 ) {
                     5
                 } else if matches!(
@@ -150,8 +155,6 @@ pub(super) fn install(
                         | "yssbi.statistics.meta.funnel"
                         | "yssbi.statistics.plot.forest"
                         | "yssbi.statistics.plot.funnel"
-                        | "yssbi.statistics.workflow.mediation"
-                        | "yssbi.statistics.workflow.moderated_mediation"
                         | "yssbi.statistics.diagnostic.ph"
                 ) {
                     5
@@ -223,6 +226,7 @@ pub(super) fn install(
                     || matches!(
                         id,
                         "yssbi.statistics.workflow.moderation"
+                            | "yssbi.statistics.workflow.delphi"
                             | "yssbi.statistics.diagnostic.white"
                             | "yssbi.statistics.diagnostic.information_matrix"
                             | "yssbi.statistics.workflow.moderation_advanced"
