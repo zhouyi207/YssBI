@@ -174,6 +174,11 @@ this boundary.
 SCI's fit admission preserves distinct shape, nonfinite-data and data-domain failures
 for WLS weights and GLS covariance data through the shared error adapter.
 
+HC2/HC3 coefficient inference retains SCI's resolved leverage correction, including
+weighted designs. Unit or invalid effective leverage fails the requested fit or
+first-stage analysis; Runtime propagates the scientific failure. It does not clamp
+corrections or substitute a covariance result.
+
 Binary and Prais entry points accept their shared options instead of rebuilding defaults.
 IV accepts separate exogenous, endogenous and instrument column collections, preserving
 fitted values, residuals, coefficient inference and the design needed for later analyses.

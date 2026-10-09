@@ -780,6 +780,18 @@ design retains its score. WLS preserves the column's role through weighting.
 The raw matrix entry accepts an explicit column index and rejects an out-of-range
 index instead of guessing an intercept from column values or position.
 
+HC2/HC3 share one coefficient-influence accumulator. It scales each residual's
+coefficient influence by the computed leverage remainder before forming outer
+products, avoiding large score-meat intermediates and duplicate per-row buffers.
+A finite leverage strictly in `[0, 1)` is required; unit, out-of-range or nonfinite
+leverage and nonfinite influences/covariance return a computation failure. Positive
+resolved remainders keep their magnitude, without a fixed HC2 or squared HC3 floor.
+WLS supplies its whitened design/residuals; IV supplies its existing projected
+score design and estimator bread. Those leverage conventions are unchanged.
+The four-row exact reference and response-unit regressions are in
+`tests/weighted_statistics.rs`; the standard HC corrections and their unit-leverage
+boundary are described by the [sandwich implementation](https://raw.githubusercontent.com/cran/sandwich/master/R/vcovHC.R).
+
 GLS takes a relative error covariance structure `sigma`: `Var(error) = scale * sigma`.
 It estimates scale from whitened residual sums of squares divided by residual
 degrees of freedom. Parameter covariance includes that scale; coefficient tests

@@ -432,3 +432,109 @@ fn correlated_gls_centers_against_the_whitened_constant() {
         near(result.f_p_value, scaled.f_p_value);
     }
 }
+
+#[test]
+fn leverage_covariance_preserves_resolved_remainders_and_response_units() {
+    use yss_sci::regression::linear::fit::fit_linear_regression;
+    use yss_sci_contract::regression::fit::RegressionStatistics;
+    use yss_sci_contract::regression::linear::LinearRegressionMethod;
+    use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+    use yss_sci_contract::{MissingValuePolicy, StatisticalObservationMetadata};
+    // Separate cases expose the HC3 squared-gap floor, the HC2 gap floor,
+    // weighted intermediate overflow, and small response units.
+    let mut discrepancies = Vec::new();
+    for (m, unit, weighted, covariance) in [
+        (1e4_f64, 1.0, false, OlsCovariance::Hc3),
+        (1e6, 1.0, false, OlsCovariance::Hc2),
+        (1e6, 1e150, true, OlsCovariance::Hc3),
+        (1e6, 1e-151, true, OlsCovariance::Hc2),
+    ] {
+        let effective_m = if weighted { 2.0 * m } else { m };
+        let s = effective_m * effective_m + 2.0;
+        let expected = if matches!(covariance, OlsCovariance::Hc2) {
+            2.0 * effective_m.powi(4) / (s * s * (s - 1.0))
+        } else {
+            (effective_m.powi(4) + 2.0 * effective_m.powi(4) / (s - 1.0).powi(2)) / (s * s)
+        };
+        let fit = fit_linear_regression(
+            [0.0, 1.0, -1.0, 2.0].map(|y| y * unit).to_vec(),
+            &[vec![m, 1.0, -1.0, 0.0]],
+            OlsOptions {
+                constant: false,
+                covariance: covariance.clone(),
+            },
+            if weighted {
+                LinearRegressionMethod::Wls {
+                    weights: vec![4.0, 1.0, 1.0, 1.0],
+                }
+            } else {
+                LinearRegressionMethod::Ols
+            },
+            StatisticalObservationMetadata {
+                original_observation_count: 4,
+                used_observation_count: 4,
+                dropped_null_count: 0,
+                dropped_nan_count: 0,
+                missing_value_policy: MissingValuePolicy::Reject,
+            },
+        );
+        let fit = match fit {
+            Ok(fit) => fit,
+            Err(error) => {
+                discrepancies.push(format!(
+                    "{covariance:?} weighted={weighted} unit={unit}: {error:?}"
+                ));
+                continue;
+            }
+        };
+        let RegressionStatistics::Linear { coefficients, .. } = fit.statistics else {
+            panic!("linear fit expected")
+        };
+        let actual = coefficients.covariance[0][0] / unit / unit;
+        // Subtracting computed leverage from one amplifies a few ulps by 1/(2/S).
+        // The exact rational reference is independent of the sandwich implementation.
+        let tolerance = 32.0 * f64::EPSILON / (2.0 / s);
+        if !actual.is_finite() || (actual / expected - 1.0).abs() >= tolerance {
+            discrepancies.push(format!("{covariance:?} weighted={weighted} unit={unit}: {actual} != {expected} (relative tolerance {tolerance})"));
+        }
+        assert!((fit.coefficients[0] / unit / (2.0 / s) - 1.0).abs() < 1e-10);
+        assert!(
+            coefficients.standard_errors[0].is_finite() && coefficients.standard_errors[0] > 0.0
+        );
+    }
+    assert!(discrepancies.is_empty(), "{discrepancies:?}");
+}
+
+#[test]
+fn leverage_covariance_rejects_unit_leverage_instead_of_fabricating_weights() {
+    use yss_sci::regression::covariance::compute_cov_beta;
+    use yss_sci_contract::regression::OlsCovariance;
+    // The first observation is the only row in its group: h_00=1, u_0=0.
+    // HC2/HC3 corrections are undefined even though structural residual df is positive.
+    let design = Mat::from_fn(
+        4,
+        2,
+        |row, column| if column == 0 || row > 0 { 1.0 } else { 0.0 },
+    );
+    let inverse = Mat::from_fn(2, 2, |row, column| match (row, column) {
+        (0, 0) => 1.0,
+        (1, 1) => 4.0 / 3.0,
+        _ => -1.0,
+    });
+    let residuals = Col::from_iter([0.0, -1.0, 0.0, 1.0]);
+    let available = [OlsCovariance::Hc2, OlsCovariance::Hc3].map(|covariance| {
+        let result = compute_cov_beta(
+            &design,
+            &inverse,
+            residuals.as_ref(),
+            2,
+            Some(0),
+            &covariance,
+        );
+        (covariance, result.is_ok())
+    });
+    assert!(
+        available.iter().all(|(_, available)| !available),
+        "{available:?}"
+    );
+}

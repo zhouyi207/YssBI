@@ -30,8 +30,9 @@ pub fn compute_cov_beta(
         OlsCovariance::FixedScale { scale } => cov_fixed_scale(xtx_inv, *scale),
         OlsCovariance::Hc0 => cov_hc0(x, xtx_inv, u),
         OlsCovariance::Hc1 => cov_hc1(x, xtx_inv, u, n, df_residual),
-        OlsCovariance::Hc2 => cov_hc2(x, xtx_inv, u, n, k),
-        OlsCovariance::Hc3 => cov_hc3(x, xtx_inv, u, n, k),
+        OlsCovariance::Hc2 | OlsCovariance::Hc3 => {
+            cov_hc_leverage(x, xtx_inv, u, matches!(covariance, OlsCovariance::Hc3))
+        }
         OlsCovariance::Cluster {
             cluster_id,
             xtreg_fe_style,
@@ -80,57 +81,46 @@ fn cov_hc1(
     Ok(yss_sci_linalg::Scale(scale) * hc0)
 }
 
-/// HC2: 权重 w_i = 1 / (1 - h_ii)
-fn cov_hc2(
+/// Accumulate coefficient influences before squaring to avoid oversized score meat.
+/// HC2 divides each influence by sqrt(1-h); HC3 divides it by 1-h.
+fn cov_hc_leverage(
     x: &Mat<f64>,
-    xtx_inv: &Mat<f64>,
+    bread: &Mat<f64>,
     u: ColRef<'_, f64>,
-    n: usize,
-    k: usize,
+    hc3: bool,
 ) -> Result<Mat<f64>, String> {
-    let mut meat = Mat::<f64>::zeros(k, k);
-    for i in 0..n {
-        let h_ii = hat_diag_i(x, xtx_inv, i);
-        let wi = 1.0 / (1.0 - h_ii).max(1e-10);
-        let u2w = u[i] * u[i] * wi;
-        let xi = x.row(i);
+    let k = x.ncols();
+    let mut covariance = Mat::zeros(k, k);
+    let mut influence = Col::zeros(k);
+    for row in 0..x.nrows() {
+        for r in 0..k {
+            influence[r] = (0..k).map(|c| bread[(r, c)] * x[(row, c)]).sum::<f64>();
+        }
+        let leverage = x.row(row) * influence.as_ref();
+        if !leverage.is_finite() || !(0.0..1.0).contains(&leverage) {
+            return Err("HC2/HC3: leverage is outside the defined range [0, 1)".into());
+        }
+        let remainder = 1.0 - leverage;
+        let denominator = if hc3 { remainder } else { remainder.sqrt() };
+        for r in 0..k {
+            influence[r] = influence[r] * u[row] / denominator;
+            if !influence[r].is_finite() {
+                return Err("HC2/HC3: coefficient influence is nonfinite".into());
+            }
+        }
         for r in 0..k {
             for c in 0..k {
-                meat[(r, c)] += u2w * xi[r] * xi[c];
+                covariance[(r, c)] += influence[r] * influence[c];
             }
         }
     }
-    let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
-    Ok(sandwich)
-}
-
-/// HC3: 权重 w_i = 1 / (1 - h_ii)²
-fn cov_hc3(
-    x: &Mat<f64>,
-    xtx_inv: &Mat<f64>,
-    u: ColRef<'_, f64>,
-    n: usize,
-    k: usize,
-) -> Result<Mat<f64>, String> {
-    let mut meat = Mat::<f64>::zeros(k, k);
-    for i in 0..n {
-        let h_ii = hat_diag_i(x, xtx_inv, i);
-        let wi = 1.0 / ((1.0 - h_ii) * (1.0 - h_ii)).max(1e-10);
-        let u2w = u[i] * u[i] * wi;
-        let xi = x.row(i);
-        for r in 0..k {
-            for c in 0..k {
-                meat[(r, c)] += u2w * xi[r] * xi[c];
-            }
-        }
+    if covariance
+        .col_iter()
+        .any(|column| column.iter().any(|value| !value.is_finite()))
+    {
+        return Err("HC2/HC3: coefficient covariance is nonfinite".into());
     }
-    let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
-    Ok(sandwich)
-}
-
-fn hat_diag_i(x: &Mat<f64>, xtx_inv: &Mat<f64>, i: usize) -> f64 {
-    let xi = x.row(i);
-    xi * xtx_inv * xi.transpose()
+    Ok(covariance)
 }
 
 /// HAC kernel weight at lag j (ivreg2 / Andrews 1991 style).

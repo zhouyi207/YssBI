@@ -82,20 +82,20 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(match id {
-                "yssbi.statistics.iv.2sls.summary" => 21,
+                "yssbi.statistics.iv.2sls.summary" => 22,
                 "yssbi.statistics.diagnostic.hausman" => 8,
-                "yssbi.statistics.iv.liml.summary" => 18,
-                "yssbi.statistics.iv.2sls.fit" => 11,
-                "yssbi.statistics.iv.liml.fit" => 13,
-                "yssbi.statistics.panel.fit" => 11,
-                "yssbi.statistics.econometrics.panel.re"
+                "yssbi.statistics.iv.liml.summary" => 19,
+                "yssbi.statistics.iv.2sls.fit" => 12,
+                "yssbi.statistics.iv.liml.fit" => 14,
+                "yssbi.statistics.panel.fit" => 12,
+                "yssbi.statistics.econometrics.panel.re" => 11,
+                "yssbi.statistics.econometrics.panel.fe"
+                | "yssbi.statistics.econometrics.panel.fd"
+                | "yssbi.statistics.panel.compare"
                 | "yssbi.statistics.test.nonparametric.family" => 10,
                 "yssbi.statistics.adf.test"
                 | "yssbi.statistics.econometrics.panel.between"
-                | "yssbi.statistics.econometrics.panel.fd"
-                | "yssbi.statistics.econometrics.panel.fe"
                 | "yssbi.statistics.logit.summary"
-                | "yssbi.statistics.panel.compare"
                 | "yssbi.statistics.panel.did.twfe"
                 | "yssbi.statistics.prais.fit"
                 | "yssbi.statistics.prais.summary"
