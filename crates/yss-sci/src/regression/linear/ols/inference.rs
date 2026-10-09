@@ -55,7 +55,7 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     let cov_beta = compute_cov_beta(
         &x,
         &xtx_inv,
-        &u,
+        u.as_ref(),
         df_residual,
         model.config.constant.then_some(0),
         &model.config.covariance,

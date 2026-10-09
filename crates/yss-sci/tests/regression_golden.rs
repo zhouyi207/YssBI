@@ -7,6 +7,38 @@ use yss_sci::causal::iv::IvModel;
 use yss_sci::diagnostics;
 use yss_sci::regression::linear::{OLS, WLS, WLSConfig};
 
+fn first_stage(
+    model: &IvModel,
+    for_liml: bool,
+) -> Result<
+    (
+        Vec<yss_sci_contract::causal::iv::FirstStageResult>,
+        yss_sci_contract::causal::iv::FirstStageSummary,
+    ),
+    yss_sci_contract::SciError,
+> {
+    use yss_sci_contract::causal::iv::{InstrumentalVariableDesign, InstrumentalVariableKind};
+    let columns = |matrix: &Mat<f64>| {
+        matrix
+            .col_iter()
+            .map(|column| column.iter().copied().collect())
+            .collect()
+    };
+    yss_sci::causal::iv::first_stage::analyze(
+        &InstrumentalVariableDesign {
+            exogenous: columns(&model.exog),
+            endogenous: columns(&model.endog_reg),
+            instruments: columns(&model.instruments),
+        },
+        &model.options,
+        if for_liml {
+            InstrumentalVariableKind::LimitedInformationMaximumLikelihood
+        } else {
+            InstrumentalVariableKind::TwoStageLeastSquares
+        },
+    )
+}
+
 #[test]
 fn iv_endogeneity_preserves_units_and_joint_references() {
     use yss_sci::causal::iv::fit::{endogeneity, fit_instrumental_variables};
@@ -282,7 +314,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 small: false,
             };
             let result = estimator.fit_2sls().unwrap();
-            let (first_stage, first_stage_summary) = estimator.first_stage(false).unwrap();
+            let (first_stage, first_stage_summary) = first_stage(&estimator, false).unwrap();
             let expected = &[1.0, 0.7, 2.0, -0.5][..2 + endogenous_count];
             assert_eq!(result.betas.nrows(), expected.len());
             for (&actual, &expected) in result.betas.iter().zip(expected) {
@@ -350,7 +382,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
             options: yss_sci_contract::regression::OlsOptions::default(),
             small: false,
         };
-        let (_, summary) = estimator.first_stage(false).unwrap();
+        let (_, summary) = first_stage(&estimator, false).unwrap();
         assert_eq!(summary.shea_partial_r2.len(), order.len());
         for (&index, &actual) in order.iter().zip(&summary.shea_partial_r2) {
             let expected = signal_scale[index].powi(2)
@@ -374,7 +406,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
         small: false,
     };
     estimator.fit_2sls().unwrap();
-    assert!(estimator.first_stage(false).is_err());
+    assert!(first_stage(&estimator, false).is_err());
     let neutral_fit = |response: Vec<f64>| {
         let n = response.len();
         yss_sci::causal::iv::fit::fit_instrumental_variables(
@@ -425,7 +457,7 @@ fn iv_first_stage_rejects_saturated_instrument_inference_without_invalidating_fi
     // Structural residual degrees are positive; only first-stage inference is unavailable.
     assert_eq!(model.fit_2sls().unwrap().statistics.df_residual, 3);
     for for_liml in [false, true] {
-        let result = std::panic::catch_unwind(|| model.first_stage(for_liml));
+        let result = std::panic::catch_unwind(|| first_stage(&model, for_liml));
         assert!(matches!(result, Ok(Err(_))), "{result:?}");
     }
 }
@@ -460,7 +492,7 @@ fn iv_first_stage_minimum_eigenvalue_preserves_generalized_problem_and_column_un
                 small: false,
             };
             for for_liml in [false, true] {
-                let (_, result) = model.first_stage(for_liml).unwrap();
+                let (_, result) = first_stage(&model, for_liml).unwrap();
                 assert!(
                     approx_eq(result.min_eigenvalue, expected, 1e-10, 1e-10),
                     "{order:?} {scales:?}: {} != {expected}",
@@ -1250,7 +1282,7 @@ fn iv_first_stage_inference_uses_selected_covariance_and_matching_f_reference() 
                 },
                 small: false,
             };
-            let (equations, summary) = model.first_stage(false).unwrap();
+            let (equations, summary) = first_stage(&model, false).unwrap();
             let df = if constant { 6 } else { 7 };
             let base = if constant { 5.0 / 32.0 } else { 9.0 / 32.0 };
             let variance = match covariance {
@@ -1314,7 +1346,7 @@ fn iv_first_stage_rejects_zero_variance_and_preserves_tiny_response_units() {
     };
     assert!(exact.fit_2sls().is_ok());
     assert!(
-        exact.first_stage(false).is_err(),
+        first_stage(&exact, false).is_err(),
         "exact first-stage variance must not be replaced by a floor"
     );
     let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
@@ -1332,7 +1364,7 @@ fn iv_first_stage_rejects_zero_variance_and_preserves_tiny_response_units() {
             },
             small: false,
         };
-        let (_, summary) = model.first_stage(false).unwrap();
+        let (_, summary) = first_stage(&model, false).unwrap();
         assert!(
             (summary.f_stat.unwrap() - 1.2).abs() < 1e-10,
             "scale={scale}: {:?}",

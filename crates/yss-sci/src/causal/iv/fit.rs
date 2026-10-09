@@ -112,25 +112,6 @@ fn validate_diagnostic_fit(fit: &InstrumentalVariableFit) -> Result<(), SciError
     Ok(())
 }
 
-fn diagnostic_model(fit: &InstrumentalVariableFit) -> Result<IvModel, SciError> {
-    validate_diagnostic_fit(fit)?;
-    let op = SciOperationCode::InstrumentalVariables;
-    let n = fit.residuals.len();
-    let data = &fit.design;
-    Ok(IvModel {
-        endog: Col::from_iter(fit.fitted.iter().zip(&fit.residuals).map(|(f, r)| f + r)),
-        exog: if data.exogenous.is_empty() {
-            yss_sci_linalg::Mat::zeros(n, 0)
-        } else {
-            design_matrix(&data.exogenous, n, false, op)?
-        },
-        endog_reg: design_matrix(&data.endogenous, n, false, op)?,
-        instruments: design_matrix(&data.instruments, n, false, op)?,
-        options: fit.options.clone(),
-        small: fit.small,
-    })
-}
-
 pub fn first_stage(
     fit: &InstrumentalVariableFit,
 ) -> Result<
@@ -140,9 +121,13 @@ pub fn first_stage(
     ),
     SciError,
 > {
-    diagnostic_model(fit)?
-        .first_stage(fit.family == "iv_liml")
-        .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))
+    validate_diagnostic_fit(fit)?;
+    let kind = if fit.family == "iv_liml" {
+        InstrumentalVariableKind::LimitedInformationMaximumLikelihood
+    } else {
+        InstrumentalVariableKind::TwoStageLeastSquares
+    };
+    super::first_stage::analyze(&fit.design, &fit.options, kind)
 }
 
 pub fn overidentification(

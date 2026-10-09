@@ -247,8 +247,9 @@ accepts multiple endogenous and excluded-instrument columns. Panel dispatch cove
 FE/LSDV, entity first differences, entity/time/two-way RE FGLS and MLE, and
 entity/time Between, rejecting unsupported covariance/effect combinations.
 IV 2SLS and LIML share the numerical `causal::iv::IvModel` input and its existing
-`PreparedIvDesign` producer. `fit_2sls` and `fit_liml` consume the same instrument
-matrix, inverse, projected regressors and observed structural design. Their method
+`PreparedIvDesign` producer. It prepares the instrument matrix, inverse, first-stage
+coefficients and fitted endogenous columns from borrowed columns. `fit_2sls` and
+`fit_liml` assemble their projected and observed structural regressors on demand. Their method
 implementations and shared postestimation live together under `causal/iv`; the
 neutral `causal::iv::fit` entry prepares one numerical input before dispatch.
 Numerical input carries no display labels: Runtime restores source labels on the
@@ -321,6 +322,15 @@ Exact identification, robust covariance and nonpositive instrument-regression
 residual degrees retain unavailable results; invalid fitted kappa or overflowing
 statistics return scientific failure. The neutral fitted-model entry owns this analysis.
 First-stage analysis reuses the same implementation for both estimators.
+`causal::iv::first_stage::analyze` borrows `InstrumentalVariableDesign` and
+`OlsOptions`; `InstrumentalVariableKind` selects the critical-value table. This
+entry remains available before structural fitting. The fitted-model entry
+`causal::iv::fit::first_stage` validates the existing fit and delegates directly;
+it neither reconstructs a response nor allocates a numerical `IvModel` or second-stage
+designs. The numerical `IvModel::first_stage` method is removed. One residual matrix
+feeds equation inference and the summary. Shea residualization borrows target
+columns and assembles the other-column designs directly without intermediate row
+buffers, copied matrices or unreachable single-column branches.
 It requires positive first-stage residual degrees before preparing the design;
 saturated instrument regressions return a scientific failure while the structural
 fit and summaries that omit this analysis remain available. The existing IV design
@@ -753,7 +763,8 @@ asymmetric GLS covariance data as `DataOutOfRange`. Unsupported GLS covariance
 options remain `ParameterOutOfRange`. Direct `fit_ols` reports insufficient samples
 as `EmptyInput` and nonfinite observations as `NonFiniteInput`.
 
-`compute_cov_beta` borrows the selected `OlsCovariance` directly. It reads cluster
+`compute_cov_beta` accepts a borrowed `ColRef` residual column and borrows the
+selected `OlsCovariance` directly. It reads cluster
 IDs, HAC kernels and lag settings from that selection rather than reconstructing
 named parameters; OLS, WLS and IV reuse their existing design, inverse cross product
 and residual buffers. IV 2SLS/LIML models consume the same `OlsOptions`, with `small`

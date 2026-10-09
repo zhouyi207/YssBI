@@ -6,8 +6,6 @@ pub(super) struct PreparedIvDesign {
     pub ztz_inverse: Mat<f64>,
     pub first_stage_coefficients: Mat<f64>,
     pub endog_hat: Mat<f64>,
-    pub x: Mat<f64>,
-    pub x_struct: Mat<f64>,
 }
 
 pub(super) fn prepare_instruments(
@@ -34,7 +32,7 @@ pub(super) fn prepare_instruments(
 }
 
 pub(super) fn project_endogenous(
-    z: &Mat<f64>,
+    z: MatRef<'_, f64>,
     inverse: &Mat<f64>,
     columns: &[ColRef<'_, f64>],
 ) -> (Mat<f64>, Mat<f64>) {
@@ -43,7 +41,7 @@ pub(super) fn project_endogenous(
     for (j, column) in columns.iter().enumerate() {
         let zty = z.transpose() * *column;
         let gamma = inverse.as_ref() * zty.as_ref();
-        let hat = z.as_ref() * gamma.as_ref();
+        let hat = z * gamma.as_ref();
         for i in 0..z.ncols() {
             coefficients[(i, j)] = gamma[i];
         }
@@ -71,41 +69,47 @@ pub(super) fn regressor_design(
     )
 }
 
+pub(super) fn prepare_design(
+    exogenous: &[ColRef<'_, f64>],
+    endogenous: &[ColRef<'_, f64>],
+    instruments: &[ColRef<'_, f64>],
+    constant: bool,
+) -> Result<PreparedIvDesign, String> {
+    if instruments.len() < endogenous.len() {
+        return Err(format!(
+            "IV: underidentified — {} instruments < {} endogenous. Need at least {} instruments.",
+            instruments.len(),
+            endogenous.len(),
+            endogenous.len()
+        ));
+    }
+    let n = endogenous
+        .first()
+        .ok_or("IV: no endogenous columns")?
+        .nrows();
+    let instrument_columns = exogenous
+        .iter()
+        .chain(instruments)
+        .copied()
+        .collect::<Vec<_>>();
+    let (z, ztz_inverse) = prepare_instruments(n, &instrument_columns, constant)?;
+    let (first_stage_coefficients, endog_hat) =
+        project_endogenous(z.as_ref(), &ztz_inverse, endogenous);
+    Ok(PreparedIvDesign {
+        z,
+        ztz_inverse,
+        first_stage_coefficients,
+        endog_hat,
+    })
+}
+
 impl IvModel {
     pub(super) fn design(&self) -> Result<PreparedIvDesign, String> {
-        let n = self.endog.nrows();
-        let k_exog = self.exog.ncols();
-        let k_endog = self.endog_reg.ncols();
-        let k_iv = self.instruments.ncols();
-
-        if k_iv < k_endog {
-            return Err(format!(
-                "IV: underidentified — {} instruments < {} endogenous. Need at least {} instruments.",
-                k_iv, k_endog, k_endog
-            ));
-        }
-
-        let included = k_exog + usize::from(self.options.constant);
-        let instrument_columns = self
-            .exog
-            .col_iter()
-            .chain(self.instruments.col_iter())
-            .collect::<Vec<_>>();
-        let (z, ztz_inv) = prepare_instruments(n, &instrument_columns, self.options.constant)?;
-        let endogenous_columns = self.endog_reg.col_iter().collect::<Vec<_>>();
-        let (first_stage_coefficients, endog_hat) =
-            project_endogenous(&z, &ztz_inv, &endogenous_columns);
-        let included_design = z.subcols(0, included);
-        let projected_columns = endog_hat.col_iter().collect::<Vec<_>>();
-        let x = regressor_design(included_design, &projected_columns);
-        let x_struct = regressor_design(included_design, &endogenous_columns);
-        Ok(PreparedIvDesign {
-            z,
-            ztz_inverse: ztz_inv,
-            first_stage_coefficients,
-            endog_hat,
-            x,
-            x_struct,
-        })
+        prepare_design(
+            &self.exog.col_iter().collect::<Vec<_>>(),
+            &self.endog_reg.col_iter().collect::<Vec<_>>(),
+            &self.instruments.col_iter().collect::<Vec<_>>(),
+            self.options.constant,
+        )
     }
 }

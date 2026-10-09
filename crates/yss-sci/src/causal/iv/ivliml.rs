@@ -1,7 +1,7 @@
 //! Limited-information maximum likelihood using the shared IV design.
 use super::{
     IvEstimate, IvModel,
-    design::PreparedIvDesign,
+    design::{PreparedIvDesign, regressor_design},
     estimate::{coefficient_inference, goodness_of_fit, model_test},
 };
 use crate::regression::covariance::compute_cov_beta;
@@ -17,10 +17,15 @@ impl IvModel {
             z,
             ztz_inverse,
             endog_hat,
-            x: projected_x,
-            x_struct: x,
             ..
         } = self.design()?;
+        let included_design = z.subcols(0, included);
+        let projected_x =
+            regressor_design(included_design, &endog_hat.col_iter().collect::<Vec<_>>());
+        let x = regressor_design(
+            included_design,
+            &self.endog_reg.col_iter().collect::<Vec<_>>(),
+        );
         let (rank, cond_no) = matrix_rank(x.as_ref()).map_err(|error| error.to_string())?;
         if rank == 0 || rank < x.ncols() {
             return Err("Design matrix is rank deficient".into());
@@ -113,7 +118,7 @@ impl IvModel {
         let covariance = compute_cov_beta(
             &projected_x,
             &k_class_inverse,
-            &residuals,
+            residuals.as_ref(),
             sigma2_df,
             self.options.constant.then_some(0),
             &self.options.covariance,

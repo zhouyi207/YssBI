@@ -2,7 +2,7 @@ mod critical_values;
 mod design;
 mod estimate;
 pub use estimate::IvEstimate;
-mod first_stage;
+pub mod first_stage;
 pub mod fit;
 mod iv2sls;
 mod ivliml;

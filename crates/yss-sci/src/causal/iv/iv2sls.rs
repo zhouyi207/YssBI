@@ -1,4 +1,4 @@
-use super::{design::PreparedIvDesign, model::IvModel};
+use super::{design::regressor_design, model::IvModel};
 use crate::causal::iv::{
     IvEstimate,
     estimate::{coefficient_inference, goodness_of_fit, model_test},
@@ -10,7 +10,21 @@ use yss_sci_linalg::{Col, Mat, MatrixExt, Solve, matrix_rank};
 impl IvModel {
     pub fn fit_2sls(&self) -> Result<IvEstimate, String> {
         let n = self.endog.nrows();
-        let PreparedIvDesign { x, x_struct, .. } = self.design()?;
+        let (x, x_struct) = {
+            let design = self.design()?;
+            let included = self.exog.ncols() + usize::from(self.options.constant);
+            let included_design = design.z.subcols(0, included);
+            (
+                regressor_design(
+                    included_design,
+                    &design.endog_hat.col_iter().collect::<Vec<_>>(),
+                ),
+                regressor_design(
+                    included_design,
+                    &self.endog_reg.col_iter().collect::<Vec<_>>(),
+                ),
+            )
+        };
         let (rank, cond_no) = matrix_rank(x.as_ref()).map_err(|e| e.to_string())?;
         if rank == 0 || rank < x.ncols() {
             return Err("Design matrix is rank deficient".to_string());
@@ -51,7 +65,7 @@ impl IvModel {
         let cov_beta = compute_cov_beta(
             &x,
             &xtx_inv,
-            &u_structural,
+            u_structural.as_ref(),
             sigma2_df,
             self.options.constant.then_some(0),
             &self.options.covariance,

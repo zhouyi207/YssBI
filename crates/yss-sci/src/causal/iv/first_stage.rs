@@ -2,54 +2,154 @@ use super::critical_values::{
     stock_yogo_cv_1_endog, stock_yogo_cv_2_endog, stock_yogo_cv_liml_1_endog,
     stock_yogo_cv_liml_2_endog,
 };
-use super::{design::PreparedIvDesign, estimate::model_test, model::IvModel};
-use yss_sci_contract::causal::iv::{
-    FirstStageResult, FirstStageSummary, InstrumentalVariableModelTest,
+use super::{
+    design::{PreparedIvDesign, prepare_design, project_endogenous},
+    estimate::{coefficient_inference, goodness_of_fit, model_test},
 };
-use yss_sci_contract::regression::OlsCovariance;
+use crate::error::{computation_failed, invalid_input};
+use crate::regression::covariance::compute_cov_beta;
+use yss_sci_contract::causal::iv::{
+    FirstStageResult, FirstStageSummary, InstrumentalVariableDesign, InstrumentalVariableKind,
+    InstrumentalVariableModelTest,
+};
+use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 
-use yss_sci_linalg::{Col, Mat};
+use yss_sci_linalg::{Col, ColRef, Mat, MatRef};
 use yss_sci_linalg::{MatrixExt, Solve};
 
-/// When true, use LIML Stock-Yogo size critical values (bias=None). When false, use 2SLS.
-pub(crate) fn compute_first_stage_summary(
-    model: &IvModel,
+/// Analyze instrument relevance without fitting or reconstructing a structural response.
+/// `kind` selects the estimator's Stock–Yogo critical table; equations use OLS inference.
+pub fn analyze(
+    data: &InstrumentalVariableDesign,
+    options: &OlsOptions,
+    kind: InstrumentalVariableKind,
+) -> Result<(Vec<FirstStageResult>, FirstStageSummary), SciError> {
+    let op = SciOperationCode::InstrumentalVariables;
+    let n = data.endogenous.first().map_or(0, Vec::len);
+    if n == 0
+        || data.instruments.len() < data.endogenous.len()
+        || data
+            .exogenous
+            .iter()
+            .chain(&data.endogenous)
+            .chain(&data.instruments)
+            .any(|column| column.len() != n)
+    {
+        return Err(invalid_input(op, ScientificInputViolation::ShapeMismatch));
+    }
+    if data
+        .exogenous
+        .iter()
+        .chain(&data.endogenous)
+        .chain(&data.instruments)
+        .flatten()
+        .any(|value| !value.is_finite())
+    {
+        return Err(invalid_input(op, ScientificInputViolation::NonFiniteInput));
+    }
+    compute_first_stage(data, options, kind).map_err(|_| computation_failed(op))
+}
+
+fn compute_first_stage(
+    data: &InstrumentalVariableDesign,
+    options: &OlsOptions,
+    kind: InstrumentalVariableKind,
+) -> Result<(Vec<FirstStageResult>, FirstStageSummary), String> {
+    let n = data.endogenous[0].len();
+    let k_z = data.exogenous.len() + data.instruments.len() + usize::from(options.constant);
+    let df_z = n
+        .checked_sub(k_z)
+        .filter(|&degrees| degrees > 0)
+        .ok_or("IV firststage: insufficient residual degrees of freedom")?;
+    let design = prepare_design(
+        &borrowed_columns(&data.exogenous),
+        &borrowed_columns(&data.endogenous),
+        &borrowed_columns(&data.instruments),
+        options.constant,
+    )?;
+    let residuals = Mat::from_fn(n, data.endogenous.len(), |row, column| {
+        data.endogenous[column][row] - design.endog_hat[(row, column)]
+    });
+    let mut equations = Vec::with_capacity(data.endogenous.len());
+    for (j, column) in data.endogenous.iter().enumerate() {
+        let gamma = design.first_stage_coefficients.col(j);
+        let resid = residuals.col(j);
+        let (r2, r2_adjusted) =
+            goodness_of_fit(ColRef::from_slice(column), resid, options.constant, df_z)?;
+        let covariance = compute_cov_beta(
+            &design.z,
+            &design.ztz_inverse,
+            resid,
+            df_z,
+            options.constant.then_some(0),
+            &options.covariance,
+        )?;
+        let inference = coefficient_inference(gamma, &covariance, df_z, true)?;
+        equations.push(FirstStageResult {
+            endog_name: format!("endog_{}", j + 1),
+            var_names: (0..k_z).map(|i| format!("z{}", i + 1)).collect(),
+            betas: gamma.iter().copied().collect(),
+            inference,
+            df_residual: df_z,
+            r2,
+            r2_adjusted,
+        });
+    }
+    let summary =
+        compute_first_stage_summary(data, options, kind, &design, residuals.as_ref(), &equations)?;
+    Ok((equations, summary))
+}
+
+fn borrowed_columns(columns: &[Vec<f64>]) -> Vec<ColRef<'_, f64>> {
+    columns
+        .iter()
+        .map(|column| ColRef::from_slice(column))
+        .collect()
+}
+
+fn compute_first_stage_summary(
+    data: &InstrumentalVariableDesign,
+    options: &OlsOptions,
+    kind: InstrumentalVariableKind,
     design: &PreparedIvDesign,
+    residuals: MatRef<'_, f64>,
     equations: &[FirstStageResult],
-    for_liml: bool,
 ) -> Result<FirstStageSummary, String> {
     let z = &design.z;
     let endog_hat = &design.endog_hat;
-    let endog_reg = &model.endog_reg;
-    let instruments = &model.instruments;
-    let has_constant = model.options.constant;
-    let covariance = &model.options.covariance;
+    let has_constant = options.constant;
+    let covariance = &options.covariance;
     let n = z.nrows();
     let k_z = z.ncols();
-    let k_exog = model.exog.ncols();
-    let k_iv = instruments.ncols();
-    let k_endog = endog_reg.ncols();
-    let k1 = if has_constant { k_exog + 1 } else { k_exog };
+    let k_exog = data.exogenous.len();
+    let k_iv = data.instruments.len();
+    let k_endog = data.endogenous.len();
+    let k1 = k_exog + usize::from(has_constant);
     let df_z = n - k_z;
 
-    // X1 is the included-instrument prefix of the already prepared design.
-    let x1 = z.subcols(0, k1).to_owned();
-
-    let x1tx1 = x1.transpose() * x1.as_ref();
-    let x1tx1_inv_nd = x1tx1
+    let x1 = z.subcols(0, k1);
+    let x1tx1 = x1.transpose() * x1;
+    let x1tx1_inverse = x1tx1
         .checked_cholesky()
         .map_err(|_| "IV2SLS firststage: X1'X1 not pd".to_string())?
-        .solve(&Mat::identity(x1tx1.nrows(), x1tx1.nrows()));
-    // Apply projections to the required columns, without materializing an N-by-N matrix.
-    let mx1_y = endog_reg.as_ref()
-        - (x1.as_ref() * (x1tx1_inv_nd.as_ref() * (x1.transpose() * endog_reg.as_ref()))).as_ref();
-    let mx1_x2 = instruments.as_ref()
-        - (x1.as_ref() * (x1tx1_inv_nd.as_ref() * (x1.transpose() * instruments.as_ref())))
-            .as_ref();
-    let mz_y = endog_reg.as_ref() - endog_hat.as_ref();
+        .solve(&Mat::identity(k1, k1));
+    // Reuse the projection owner and turn fitted buffers into residualized columns.
+    let endogenous_columns = borrowed_columns(&data.endogenous);
+    let instrument_columns = borrowed_columns(&data.instruments);
+    let (_, mut mx1_y) = project_endogenous(x1, &x1tx1_inverse, &endogenous_columns);
+    let (_, mut mx1_x2) = project_endogenous(x1, &x1tx1_inverse, &instrument_columns);
+    for row in 0..n {
+        for column in 0..k_endog {
+            mx1_y[(row, column)] = data.endogenous[column][row] - mx1_y[(row, column)];
+        }
+        for column in 0..k_iv {
+            mx1_x2[(row, column)] = data.instruments[column][row] - mx1_x2[(row, column)];
+        }
+    }
 
     // Σ_VV = (1/(N-k_z)) Y' M_Z Y
-    let sigma_vv = (mz_y.transpose() * mz_y.as_ref()) / yss_sci_linalg::Scale(df_z as f64);
+    let sigma_vv = (residuals.transpose() * residuals) / yss_sci_linalg::Scale(df_z as f64);
 
     // Instrument-explained variation after removing included exogenous columns.
     let x2_mx1_x2 = mx1_x2.transpose() * mx1_x2.as_ref();
@@ -93,7 +193,7 @@ pub(crate) fn compute_first_stage_summary(
     let min_eigenvalue = min_eigenvalue_from_cd;
     let is_robust = is_robust_covariance(covariance);
     let min_eigenvalue_cv = if !is_robust {
-        if for_liml {
+        if kind == InstrumentalVariableKind::LimitedInformationMaximumLikelihood {
             if k_endog == 1 {
                 stock_yogo_cv_liml_1_endog(k_iv)
             } else if k_endog == 2 {
@@ -135,7 +235,7 @@ pub(crate) fn compute_first_stage_summary(
         let equation = &equations[0];
 
         // Partial R2: regress M_X1*Y on M_X1*X2
-        let my = mx1_y.col(0).to_owned();
+        let my = mx1_y.col(0);
         let mx2t_my = mx1_x2.transpose() * my.as_ref();
         let xi = x2_mx1_x2_inv.as_ref() * mx2t_my.as_ref();
         let fitted = mx1_x2.as_ref() * xi.as_ref();
@@ -184,82 +284,41 @@ pub(crate) fn compute_first_stage_summary(
         let mut shea_partial = Vec::with_capacity(k_endog);
         let mut shea_adj = Vec::with_capacity(k_endog);
         for j in 0..k_endog {
-            let y1 = endog_reg.col(j).to_owned();
-            let y1_hat = endog_hat.col(j).to_owned();
-            let (y0, y0_hat) = if k_endog > 1 {
-                let mut y0_data = Vec::with_capacity(n * (k_endog - 1));
-                let mut y0_hat_data = Vec::with_capacity(n * (k_endog - 1));
-                for i in 0..n {
-                    for jj in 0..k_endog {
-                        if jj != j {
-                            y0_data.push(endog_reg[(i, jj)]);
-                            y0_hat_data.push(endog_hat[(i, jj)]);
-                        }
-                    }
+            let y1 = ColRef::from_slice(&data.endogenous[j]);
+            let y1_hat = endog_hat.col(j);
+            // This branch has multiple endogenous columns; preserve row order directly.
+            let w = Mat::from_fn(n, k1 + k_endog - 1, |row, column| {
+                if column < k1 {
+                    x1[(row, column)]
+                } else {
+                    let other = column - k1;
+                    data.endogenous[other + usize::from(other >= j)][row]
                 }
-                let y0_mat =
-                    yss_sci_linalg::MatRef::from_row_major_slice(&(y0_data), n, k_endog - 1)
-                        .to_owned();
-                let y0_hat_mat =
-                    yss_sci_linalg::MatRef::from_row_major_slice(&(y0_hat_data), n, k_endog - 1)
-                        .to_owned();
-                (Some(y0_mat), Some(y0_hat_mat))
-            } else {
-                (None, None)
-            };
-
-            let w = if let Some(ref y0) = y0 {
-                let mut w = Mat::zeros(n, k1 + y0.ncols());
-                for i in 0..n {
-                    for c in 0..k1 {
-                        w[(i, c)] = x1[(i, c)];
-                    }
-                    for c in 0..y0.ncols() {
-                        w[(i, k1 + c)] = y0[(i, c)];
-                    }
+            });
+            let w_hat = Mat::from_fn(n, k1 + k_endog - 1, |row, column| {
+                if column < k1 {
+                    x1[(row, column)]
+                } else {
+                    let other = column - k1;
+                    endog_hat[(row, other + usize::from(other >= j))]
                 }
-                w
-            } else {
-                x1.clone()
-            };
+            });
             let wtw = w.transpose() * w.as_ref();
-            let wtw_inv = wtw
-                .as_ref()
-                .to_owned()
+            let wtw_inverse = wtw
                 .checked_cholesky()
                 .map_err(|_| "IV2SLS firststage: W'W not pd".to_string())?
                 .solve(&Mat::identity(wtw.nrows(), wtw.nrows()));
-            let wtw_inv_nd = wtw_inv.as_ref().to_owned();
-
-            let y1_tilde = &y1
-                - &(w.as_ref()
-                    * (wtw_inv_nd.as_ref() * (w.transpose() * y1.as_ref()).as_ref()).as_ref());
-            let y1_hat_tilde = if let Some(ref y0h) = y0_hat {
-                let mut w_hat = Mat::zeros(n, k1 + y0h.ncols());
-                for i in 0..n {
-                    for c in 0..k1 {
-                        w_hat[(i, c)] = x1[(i, c)];
-                    }
-                    for c in 0..y0h.ncols() {
-                        w_hat[(i, k1 + c)] = y0h[(i, c)];
-                    }
-                }
-                let w_hat_t_w_hat = w_hat.transpose() * w_hat.as_ref();
-                let w_hat_t_w_hat_inv = w_hat_t_w_hat
-                    .as_ref()
-                    .to_owned()
-                    .checked_cholesky()
-                    .map_err(|_| "IV2SLS firststage: W_hat'W_hat not pd".to_string())?
-                    .solve(&Mat::identity(w_hat_t_w_hat.nrows(), w_hat_t_w_hat.nrows()));
-                let proj = w_hat.as_ref()
-                    * (w_hat_t_w_hat_inv.as_ref() * (w_hat.transpose() * y1_hat.as_ref()));
-                &y1_hat - &proj
-            } else {
-                &y1_hat
-                    - &(x1.as_ref()
-                        * (x1tx1_inv_nd.as_ref() * (x1.transpose() * y1_hat.as_ref()).as_ref())
-                            .as_ref())
-            };
+            let y1_tilde =
+                y1 - (w.as_ref() * (wtw_inverse.as_ref() * (w.transpose() * y1).as_ref())).as_ref();
+            let w_hat_t_w_hat = w_hat.transpose() * w_hat.as_ref();
+            let w_hat_inverse = w_hat_t_w_hat
+                .checked_cholesky()
+                .map_err(|_| "IV2SLS firststage: W_hat'W_hat not pd".to_string())?
+                .solve(&Mat::identity(w_hat_t_w_hat.nrows(), w_hat_t_w_hat.nrows()));
+            let y1_hat_tilde = y1_hat
+                - (w_hat.as_ref()
+                    * (w_hat_inverse.as_ref() * (w_hat.transpose() * y1_hat).as_ref()))
+                .as_ref();
 
             let ss_tot = y1_tilde.iter().map(|v| v.powi(2)).sum::<f64>();
             let ss_resid = y1_tilde

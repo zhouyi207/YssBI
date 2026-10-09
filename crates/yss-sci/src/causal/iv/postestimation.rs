@@ -1,69 +1,11 @@
-use super::estimate::{coefficient_inference, goodness_of_fit};
-use super::first_stage::{compute_first_stage_summary, is_robust_covariance};
-use super::{
-    design::{prepare_instruments, project_endogenous, regressor_design},
-    model::IvModel,
-};
-use crate::regression::covariance::{compute_cov_beta, score_covariance};
+use super::design::{prepare_instruments, project_endogenous, regressor_design};
+use super::first_stage::is_robust_covariance;
+use crate::regression::covariance::score_covariance;
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use yss_sci_contract::causal::iv::{
-    EndogenousTest, FirstStageResult, FirstStageSummary, HausmanTest, InstrumentalVariableFit,
-    LimlOveridTest, OveridTest,
+    EndogenousTest, HausmanTest, InstrumentalVariableFit, LimlOveridTest, OveridTest,
 };
 use yss_sci_linalg::{Col, ColRef, Mat, MatrixExt, Solve, Svd};
-
-impl IvModel {
-    pub fn first_stage(
-        &self,
-        for_liml: bool,
-    ) -> Result<(Vec<FirstStageResult>, FirstStageSummary), String> {
-        let n = self.endog.nrows();
-        let k_endog = self.endog_reg.ncols();
-        let k_z = self.exog.ncols() + self.instruments.ncols() + usize::from(self.options.constant);
-        let df_z = n
-            .checked_sub(k_z)
-            .filter(|&degrees| degrees > 0)
-            .ok_or("IV firststage: insufficient residual degrees of freedom")?;
-        let design = self.design()?;
-        let mut first_stage: Vec<FirstStageResult> = Vec::with_capacity(k_endog);
-        for j in 0..k_endog {
-            let endog_col = self.endog_reg.col(j);
-            let gamma = design.first_stage_coefficients.col(j);
-
-            let resid = endog_col - design.endog_hat.col(j);
-            let (r2, r2_adj) =
-                goodness_of_fit(endog_col, resid.as_ref(), self.options.constant, df_z)?;
-            let cov_gamma = compute_cov_beta(
-                &design.z,
-                &design.ztz_inverse,
-                &resid,
-                df_z,
-                self.options.constant.then_some(0),
-                &self.options.covariance,
-            )?;
-            // First-stage equations are OLS regressions regardless of structural `small`.
-            let inference = coefficient_inference(gamma, &cov_gamma, df_z, true)?;
-
-            let name = format!("endog_{}", j + 1);
-            let var_names = (0..k_z).map(|i| format!("z{}", i + 1)).collect();
-            first_stage.push(FirstStageResult {
-                endog_name: name,
-                var_names,
-                betas: gamma.iter().copied().collect(),
-                inference,
-                df_residual: df_z,
-                r2,
-                r2_adjusted: r2_adj,
-            });
-        }
-
-        // estat firststage: First-stage regression summary statistics
-        let first_stage_summary =
-            compute_first_stage_summary(self, &design, &first_stage, for_liml)?;
-
-        Ok((first_stage, first_stage_summary))
-    }
-}
 
 pub(super) fn endogeneity(
     fit: &InstrumentalVariableFit,
@@ -96,7 +38,7 @@ pub(super) fn endogeneity(
         .map(|column| ColRef::from_slice(column))
         .collect::<Vec<_>>();
     let (z, inverse) = prepare_instruments(n, &instrument_columns, fit.options.constant)?;
-    let (_, mut v) = project_endogenous(&z, &inverse, &endogenous_columns);
+    let (_, mut v) = project_endogenous(z.as_ref(), &inverse, &endogenous_columns);
     let mut x = regressor_design(z.subcols(0, included), &endogenous_columns);
     let column_scales = (0..k)
         .map(|j| {
@@ -314,7 +256,7 @@ fn wooldridge_score(
         .iter()
         .map(|values| ColRef::from_slice(values))
         .collect::<Vec<_>>();
-    let (_, projected) = project_endogenous(z, inverse, &columns);
+    let (_, projected) = project_endogenous(z.as_ref(), inverse, &columns);
     let included = fit.design.exogenous.len() + usize::from(fit.options.constant);
     let projected_columns = projected.col_iter().collect::<Vec<_>>();
     let w = regressor_design(z.subcols(0, included), &projected_columns);

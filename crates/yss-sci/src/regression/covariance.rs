@@ -1,7 +1,7 @@
 //! OLS 协方差矩阵计算
 //! 支持 nonrobust, HC0, HC1, HC2, HC3, fixed scale, cluster, HAC 等
 
-use yss_sci_linalg::{Col, Mat};
+use yss_sci_linalg::{Col, ColRef, Mat};
 
 use yss_sci_contract::regression::OlsCovariance;
 
@@ -14,7 +14,7 @@ use yss_sci_contract::regression::OlsCovariance;
 pub fn compute_cov_beta(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
-    u: &Col<f64>,
+    u: ColRef<'_, f64>,
     df_residual: usize,
     intercept_col: Option<usize>,
     covariance: &OlsCovariance,
@@ -43,7 +43,11 @@ pub fn compute_cov_beta(
     }
 }
 
-fn cov_nonrobust(xtx_inv: &Mat<f64>, u: &Col<f64>, df_residual: usize) -> Result<Mat<f64>, String> {
+fn cov_nonrobust(
+    xtx_inv: &Mat<f64>,
+    u: ColRef<'_, f64>,
+    df_residual: usize,
+) -> Result<Mat<f64>, String> {
     let sigma2 = (u.transpose() * u.as_ref()) / df_residual as f64;
     Ok(yss_sci_linalg::Scale(sigma2) * xtx_inv)
 }
@@ -57,7 +61,7 @@ fn cov_fixed_scale(xtx_inv: &Mat<f64>, scale: f64) -> Result<Mat<f64>, String> {
 }
 
 /// HC0: (X'X)⁻¹ X' diag(u²) X (X'X)⁻¹
-fn cov_hc0(x: &Mat<f64>, xtx_inv: &Mat<f64>, u: &Col<f64>) -> Result<Mat<f64>, String> {
+fn cov_hc0(x: &Mat<f64>, xtx_inv: &Mat<f64>, u: ColRef<'_, f64>) -> Result<Mat<f64>, String> {
     let meat = lagged_score_meat(x, |row| u[row], "bartlett", 1);
     let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
@@ -67,7 +71,7 @@ fn cov_hc0(x: &Mat<f64>, xtx_inv: &Mat<f64>, u: &Col<f64>) -> Result<Mat<f64>, S
 fn cov_hc1(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
-    u: &Col<f64>,
+    u: ColRef<'_, f64>,
     n: usize,
     df_residual: usize,
 ) -> Result<Mat<f64>, String> {
@@ -80,7 +84,7 @@ fn cov_hc1(
 fn cov_hc2(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
-    u: &Col<f64>,
+    u: ColRef<'_, f64>,
     n: usize,
     k: usize,
 ) -> Result<Mat<f64>, String> {
@@ -104,7 +108,7 @@ fn cov_hc2(
 fn cov_hc3(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
-    u: &Col<f64>,
+    u: ColRef<'_, f64>,
     n: usize,
     k: usize,
 ) -> Result<Mat<f64>, String> {
@@ -252,7 +256,7 @@ fn newey_west_1994_bandwidth(
 fn cov_hac(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
-    u: &Col<f64>,
+    u: ColRef<'_, f64>,
     intercept_col: Option<usize>,
     kernel: &str,
     bandwidth: Option<i64>,
@@ -269,7 +273,7 @@ fn cov_hac(
 fn cov_newey(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
-    u: &Col<f64>,
+    u: ColRef<'_, f64>,
     df_residual: usize,
     lag: Option<i64>,
 ) -> Result<Mat<f64>, String> {
@@ -291,7 +295,7 @@ fn cov_newey(
 fn cov_cluster(
     x: &Mat<f64>,
     xtx_inv: &Mat<f64>,
-    u: &Col<f64>,
+    u: ColRef<'_, f64>,
     cluster_id: &[usize],
     xtreg_fe_style: bool,
 ) -> Result<Mat<f64>, String> {
@@ -662,7 +666,7 @@ mod tests {
                     let at_end = compute_cov_beta(
                         &Mat::from_fn(n, k, |i, j| design[(i, order[j])]),
                         &Mat::from_fn(k, k, |i, j| inverse[(order[i], order[j])]),
-                        &expected.residuals,
+                        expected.residuals.as_ref(),
                         expected.df_residual,
                         Some(k - 1),
                         &OlsCovariance::Hac {

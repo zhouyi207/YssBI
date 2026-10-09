@@ -100,7 +100,7 @@ impl WLS {
         let cov_beta = compute_cov_beta(
             &zz,
             &xtx_inv,
-            &u,
+            u.as_ref(),
             df_residual,
             self.config.constant.then_some(0),
             &self.config.covariance,

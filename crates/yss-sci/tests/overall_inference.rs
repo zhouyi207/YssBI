@@ -15,7 +15,7 @@ fn named_covariance_rejects_unknown_or_incomplete_configuration() {
         compute_cov_beta(
             &x,
             &inverse,
-            &residuals,
+            residuals.as_ref(),
             2,
             Some(0),
             &OlsCovariance::NonRobust
@@ -26,7 +26,7 @@ fn named_covariance_rejects_unknown_or_incomplete_configuration() {
         compute_cov_beta(
             &x,
             &inverse,
-            &residuals,
+            residuals.as_ref(),
             2,
             Some(1),
             &OlsCovariance::NonRobust

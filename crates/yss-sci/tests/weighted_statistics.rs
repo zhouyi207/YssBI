@@ -145,7 +145,7 @@ fn automatic_hac_rejects_undefined_pilot_covariance() {
             compute_cov_beta(
                 &design,
                 &inverse,
-                &residuals,
+                residuals.as_ref(),
                 1,
                 Some(0),
                 &OlsCovariance::Hac {
@@ -369,7 +369,7 @@ fn weighted_statistics_use_the_transformed_intercept() {
         compute_cov_beta(
             &transformed,
             &inverse,
-            &residuals,
+            residuals.as_ref(),
             expected.df_residual,
             intercept_col,
             &OlsCovariance::Hac {
