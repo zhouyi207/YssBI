@@ -1,5 +1,5 @@
 use super::common::*;
-use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+use statrs::distribution::FisherSnedecor;
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl as Control,
 };
@@ -67,11 +67,10 @@ pub fn hierarchical(
             if new > 0.0 {
                 let f = ((old - new).max(0.0) / size as f64) / (new / df as f64);
                 s.change_f = Some(finite(f)?);
-                s.change_p_value = Some(
-                    FisherSnedecor::new(size as f64, df as f64)
-                        .map_err(|_| failed())?
-                        .sf(f),
-                );
+                s.change_p_value = Some(crate::distribution::fisher_snedecor_sf(
+                    &FisherSnedecor::new(size as f64, df as f64).map_err(|_| failed())?,
+                    f,
+                ));
             }
         }
         stages.push(s);

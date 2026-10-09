@@ -85,7 +85,7 @@ pub(super) fn f_power(
             .map_err(|_| parameter())?
             .inverse_cdf(alpha);
     if lambda == 0. {
-        return probability(f.sf(critical));
+        return probability(crate::distribution::fisher_snedecor_sf(&f, critical));
     }
     let root = lambda.sqrt();
     if root > 12. && upper_bound(df2, (root - 12.).powi(2) / (df1 * critical))? < EPS {

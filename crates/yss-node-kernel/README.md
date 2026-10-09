@@ -77,7 +77,7 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
 不归为参数错误。`inference.cluster_robust` 使用 revision 5。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
-直接使用该准备的回归模型内核采用 revision 4，逐步回归采用 revision 5；五个参数生存拟合内核
+直接使用该准备的其余回归模型内核采用 revision 4，层次和逐步回归采用 revision 5；五个参数生存拟合内核
 （Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 8。
 复用该准备的 Mixed/GEE、因果估计和共线性诊断采用 revision 5；Meta 模型/诊断/绘图
 采用 revision 6，能力指纹涵盖共享输入错误契约。中介 bootstrap 采用 revision 7，
@@ -162,7 +162,7 @@ To Categorical 和分类 Data Labels 在空配置且没有源值域时，复用 
 Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocation.rs) 负责从计划生成这些信息。它在准备好的资源绑定中解析资源参数，保留图端口地址、Schema 血缘和结果类别，并将返回值映射到对应输出。内核不接收 `GraphDocument`、`PlanOutputRef`、项目状态或资源授权服务。
 
 `KernelError` 表达维度、参数、行对齐、预算、调用契约、科学计算、取消和超时等稳定原因，不携带图地址。Execution 的 `OperationExecutionError` 补充图来源与阶段；Application 的类型化 `RunApplicationEventKind::RunErrored` 携带对应 `RunFailure`，经图活动和调用方 sink 交付原生宿主。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。
-纵向、生存、多元分析、推断、ANOVA、空间、线性回归、回归模型、时序预测、因果模型、相关一致性、不平等统计与可视化适配共用 `statistics::common::computation_error`，保持 SCI 的取消、超时、形状、参数范围与计算失败分类，不各自维护同一映射。SCI Contract 的 `DataOutOfRange` 保持为数值输入错误；非法置信度、覆盖率与推断选项保持为参数错误。相关一致性内核使用 revision 3，使能力指纹涵盖修正后的错误分类。
+纵向、生存、多元分析、推断、ANOVA、空间、线性回归、回归模型、时序预测、因果模型、相关一致性、不平等统计与可视化适配共用 `statistics::common::computation_error`，保持 SCI 的取消、超时、形状、参数范围与计算失败分类，不各自维护同一映射。SCI Contract 的 `DataOutOfRange` 保持为数值输入错误；非法置信度、覆盖率与推断选项保持为参数错误。能力指纹涵盖修正后的错误分类；ICC 另外复用稳定的共享 F 尾概率。
 
 `statistics/survival` 适配 15 个生存分析节点，复用统计输入的联合物化、精确分类标签、
 预算和取消协议。普通事件列支持布尔或 0/1；竞争风险原因保留整数代码。
@@ -255,13 +255,17 @@ uses revision 5, and both mediation bootstrap kernels use revision 7.
 
 实现行为变化需要递增 revision。输入布局、参数或输出形状变化需要同步节点声明和消费者，并复核解析与计划缓存的能力身份。透明重路由不产生执行操作，也不注册无效的同名内核。
 
-OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。统一线性 Fit（OLS/WLS/GLS）使用 revision 12，保留 WLS 权重和 GLS 协方差数据的形状、非有限及定义域错误分类；Prais Fit 使用 revision 6。Summary/Predict 不重新拟合。
-DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 6。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，实现同步使用 revision 6。
-IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；非有限模型在 JSON 编码前返回 `NonFiniteResult`，两个 Fit 使用 revision 6。Summary 仍从已存运行值解码模型并按所选内容计算报告，不改其输入或输出形状。
-IV 两个 Summary 使用 revision 7；第一阶段的多内生变量矩阵保持观测行与变量列的对应关系，修正三个及更多内生变量时的 Shea 指标。报告展示直接使用第一阶段的共享类型字段，不再从已编码的 JSON 重读系数。
-ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 6。Drift 的 Student-t 约定、辅助回归与临界值保持原契约。
-Panel Fit/Compare 使用 revision 7：双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Summary/Predict 沿用已拟合模型。
+OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。统一线性 Fit（OLS/WLS/GLS）使用 revision 13，保留 WLS 权重和 GLS 协方差数据的形状、非有限及定义域错误分类，以及 SCI 的稳定 F 尾概率；Prais Fit 使用 revision 8。Summary/Predict 不重新拟合。
+DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 7。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，稳定 F 尾概率的实现使用 revision 8。
+IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；非有限模型在 JSON 编码前返回 `NonFiniteResult`，两个 Fit 使用 revision 7。Summary 仍从已存运行值解码模型并按所选内容计算报告，不改其输入或输出形状。
+IV 2SLS Summary 使用 revision 10，LIML Summary 使用 revision 9，保留 SCI 第一阶段、内生性、过度识别及 Wald 检验的稳定 F 尾概率。第一阶段的多内生变量矩阵保持观测行与变量列的对应关系，修正三个及更多内生变量时的 Shea 指标。报告展示直接使用第一阶段的共享类型字段，不再从已编码的 JSON 重读系数。
+ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 7。Drift 的 Student-t 约定、辅助回归与临界值保持原契约。
+Panel Fit 使用 revision 9，Compare 使用 revision 8：双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Fit 保留 SCI 的稳定整体 F 尾概率；Summary/Predict 沿用已拟合模型。
 系数约束的负或 NaN 对比方差在原 SCI 校验边界返回计算失败，不再把开方后的 NaN 交给参考分布。线性、Logit/Probit/Prais、IV Summary 和实际复用 Summary 检验的 diagnostic.wald 同步更新实现 revision。普通样本均值 t 检验使用另一算法入口。
+稳定 F 尾概率由 SCI 分布模块统一计算。线性 Summary 使用 revision 12，Prais Summary 使用
+revision 8，独立 Wald 使用 revision 6；RESET、嵌套模型比较、测量系统、ANOVA 与线性回归
+效能规划使用 revision 5；七个 ANOVA 入口使用 revision 5；ICC 使用 revision 4；
+独立 FE/RE/FD/Between 面板入口使用 revision 8。参数、控制和报告形状保持各适配器的原契约。
 
 ## 验证
 
@@ -422,13 +426,13 @@ admits linear category indexes before constructing them, then uses actual row an
 column cardinalities for the dense table. These are conservative workspace
 estimates, not process RSS limits. Classical kernels use revision 6, except the
 paired t, McNemar, CMH, categorical independence, Pearson contingency, chi-square goodness-of-fit and
-multiple-proportion, Levene and Bartlett kernels,
+multiple-proportion and Bartlett kernels,
 which use revision 7;
 Mann–Whitney, Kruskal–Wallis, Friedman, Runs and Mann–Kendall also use revision 7,
 covering corrected rank moments and tie handling. The rank-family selector uses
 revision 9, including Mood's shared Pearson calculation, data-error contract and
-stable shared median. Mood median and Brown-Forsythe use revision 8 for that
-shared median calculation.
+stable shared median. Mood median uses revision 8 for that shared median.
+Levene uses revision 8 and Brown-Forsythe revision 9 for the stable shared F tail.
 Fisher exact, exact Binomial and Poisson use revision 8. Binomial/Poisson count
 admission uses invocation resources and execution control; SCI retains numeric
 representation checks and samples the shared control during exact enumeration.
@@ -483,7 +487,8 @@ explicit optional `None` fields remain valid. Panel category and model-diagnosti
 share `common::computation_error`, preserving cancellation, deadline and typed input failures.
 Linear Fit, association and inequality adapters use the same mapping. SCI data-domain violations
 remain `InvalidNumericInput`, while invalid confidence/coverage and inference options
-map to `InvalidParameter`. Association kernels use revision 3 for this error contract.
+map to `InvalidParameter`. Association kernels retain this error contract; ICC
+also retains the stable shared F tail.
 
 `builtins/conversion` shares one controlled scalar/list/lazy-series conversion path between
 the seven fixed-target To nodes and Data Labels. The label entry accepts only categorical and ordinal target meanings; semantic-domain validation remains in the existing data owner.

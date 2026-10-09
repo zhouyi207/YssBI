@@ -412,7 +412,7 @@ impl IV2SLS {
                         durbin_stat,
                         durbin_p_value: durbin_p,
                         wu_stat,
-                        wu_p_value: 1.0 - distribution.cdf(wu_stat),
+                        wu_p_value: crate::distribution::fisher_snedecor_sf(&distribution, wu_stat),
                         df: p1,
                         wu_df_denom: wudf_denom,
                     })
@@ -466,7 +466,7 @@ impl IV2SLS {
                 let basmann_f_stat = basmann_chi2 / (df_overid as f64);
                 let f_dist = FisherSnedecor::new(df_overid as f64, df_denom as f64)
                     .map_err(|e| format!("IVLIML overid FisherSnedecor: {}", e))?;
-                let basmann_p = 1.0 - f_dist.cdf(basmann_f_stat);
+                let basmann_p = crate::distribution::fisher_snedecor_sf(&f_dist, basmann_f_stat);
 
                 Some(LimlOveridTest {
                     anderson_rubin_stat: sargan_stat,

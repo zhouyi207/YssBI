@@ -229,9 +229,10 @@ pub fn compare_models(
                 statistic,
                 degrees_of_freedom: df,
                 denominator_df: Some(n - kf),
-                p_value: FisherSnedecor::new(df as f64, (n - kf) as f64)
-                    .map_err(|_| failed())?
-                    .sf(statistic),
+                p_value: crate::distribution::fisher_snedecor_sf(
+                    &FisherSnedecor::new(df as f64, (n - kf) as f64).map_err(|_| failed())?,
+                    statistic,
+                ),
             });
         }
     } else if method != ComparisonMethod::LikelihoodRatio {

@@ -142,7 +142,7 @@ SCI does not depend on the catalog or use node IDs to select algorithms.
 | Multivariate analysis                    | `multivariate`                                                     | PCA, principal-axis factors, CCA, correspondence, LDA/QDA, RDA and classical MDS                                         |
 | Longitudinal and multilevel models       | `longitudinal`                                                     | GEE; Gaussian ML/REML with independent random slopes and nested/crossed intercepts; random-intercept GLMM Laplace ML     |
 | Model diagnostics                        | `diagnostics`                                                      | Heteroskedasticity, normality, RESET, VIF, leverage and serial correlation                                               |
-| Probability distributions                | `distribution`                                                     | Sampling                                                                                                                 |
+| Probability distributions                | `distribution`                                                     | Sampling and shared F upper tails                                                                                        |
 | Descriptive statistics                   | `descriptive`                                                      | Empirical Gini, Dagum decomposition and Theil T                                                                          |
 | Density estimation used by visualization | `density`                                                          | Kernel-density numerical computation                                                                                     |
 | Visualization plot data                  | `visualization`                                                    | Controlled distributions, paired points, category frequencies and matrix projections                                     |
@@ -184,6 +184,13 @@ OLS, WLS, GLS and Prais return their existing fit error when coefficient divisio
 produces a NaN t-statistic, before calling the Student-t distribution. Prais also
 rejects a NaN F-statistic before its Fisher distribution call. Infinite statistics
 keep the existing distribution path; adapters retain their finite-output validation.
+`distribution::fisher_snedecor_sf` owns the shared F upper-tail calculation for
+ANOVA, regression/Wald, panel and IV inference, ICC, measurement studies and
+central-F power. It reuses the validated native distribution and reciprocal F
+CDF with swapped degrees when the native survival function would subtract a
+beta argument near one. The lower-statistic branch retains native SF, including
+zero statistics, without overflowing a reciprocal. Domain callers retain their
+parameter/error and execution-control boundaries; none duplicates the tail calculation.
 
 These neutral fit entries consume shared binary/Prais and panel options, and IV
 accepts multiple endogenous and excluded-instrument columns. Panel dispatch covers

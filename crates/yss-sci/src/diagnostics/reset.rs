@@ -1,4 +1,4 @@
-use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+use statrs::distribution::FisherSnedecor;
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve};
 
 // ======================== Ramsey RESET 检验 ========================
@@ -73,7 +73,7 @@ fn f_test_restricted_unrestricted(
 
     let dist = FisherSnedecor::new(q as f64, df_resid_u as f64)
         .map_err(|e| format!("RESET: FisherSnedecor: {}", e))?;
-    let p_value = 1.0 - dist.cdf(f_stat);
+    let p_value = crate::distribution::fisher_snedecor_sf(&dist, f_stat);
 
     Ok(ResetTestResult {
         f_stat,

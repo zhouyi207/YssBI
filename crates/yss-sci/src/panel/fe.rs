@@ -631,7 +631,7 @@ pub fn fit_panel_fe(
         let df2 = (df_residual as f64).max(1.0);
         let dist =
             FisherSnedecor::new(df1, df2).map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
-        (f, 1.0 - dist.cdf(f))
+        (f, crate::distribution::fisher_snedecor_sf(&dist, f))
     } else {
         (result.fvalue, result.f_p_value)
     };
@@ -938,7 +938,7 @@ pub fn fit_panel_fe_time(
         let df2 = (df_residual as f64).max(1.0);
         let dist =
             FisherSnedecor::new(df1, df2).map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
-        (f, 1.0 - dist.cdf(f))
+        (f, crate::distribution::fisher_snedecor_sf(&dist, f))
     } else {
         (result.fvalue, result.f_p_value)
     };
@@ -1234,7 +1234,7 @@ pub fn fit_panel_fe_twoway(
         let df2 = (df_residual as f64).max(1.0);
         let dist =
             FisherSnedecor::new(df1, df2).map_err(|e| format!("Panel FE FisherSnedecor: {}", e))?;
-        (f, 1.0 - dist.cdf(f))
+        (f, crate::distribution::fisher_snedecor_sf(&dist, f))
     } else {
         (result.fvalue, result.f_p_value)
     };

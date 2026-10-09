@@ -9,7 +9,7 @@ pub use multivariate::manova;
 pub use repeated::repeated_measures;
 
 use design::{Design, fit, response_matrix, term_indices};
-use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+use statrs::distribution::FisherSnedecor;
 use yss_sci_contract::{anova::*, execution::*};
 
 type Result<T> = std::result::Result<T, ScientificComputationError>;
@@ -34,11 +34,12 @@ fn f_probability(statistic: f64, df1: f64, df2: f64) -> Result<f64> {
     if !statistic.is_finite() || statistic < 0.0 || df1 <= 0.0 || df2 <= 0.0 {
         return Err(ScientificComputationError::ComputationFailed);
     }
-    finite(
-        FisherSnedecor::new(df1, df2)
-            .map_err(|_| ScientificComputationError::ComputationFailed)?
-            .sf(statistic),
-    )
+    let distribution =
+        FisherSnedecor::new(df1, df2).map_err(|_| ScientificComputationError::ComputationFailed)?;
+    finite(crate::distribution::fisher_snedecor_sf(
+        &distribution,
+        statistic,
+    ))
 }
 fn factor_levels(factors: &[Factor]) -> Vec<FactorLevels> {
     factors

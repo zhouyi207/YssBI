@@ -1,13 +1,24 @@
-//! Sampling uses the existing statistical library; no node IDs or runtime containers here.
+//! Sampling and shared reference-distribution tails; no node IDs or runtime containers here.
 use rand::{
     Rng, RngExt,
     distr::{Distribution, Open01},
 };
-use statrs::distribution as native;
+use statrs::distribution::{self as native, ContinuousCDF};
 use yss_sci_contract::distribution::{SampleValue, SamplingDistribution};
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl, ScientificInputViolation,
 };
+
+/// F upper tails avoid the native SF's subtraction when its beta argument is near one.
+pub(crate) fn fisher_snedecor_sf(distribution: &native::FisherSnedecor, statistic: f64) -> f64 {
+    if statistic <= distribution.freedom_2() / distribution.freedom_1() {
+        return distribution.sf(statistic);
+    }
+    let reciprocal =
+        native::FisherSnedecor::new(distribution.freedom_2(), distribution.freedom_1())
+            .expect("validated F degrees remain valid when swapped");
+    reciprocal.cdf(1.0 / statistic)
+}
 
 fn invalid() -> Error {
     Error::InvalidInput {

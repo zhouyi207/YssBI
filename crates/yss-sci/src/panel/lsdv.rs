@@ -160,7 +160,7 @@ pub fn fit_panel_lsdv(
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
-        use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+        use statrs::distribution::FisherSnedecor;
 
         let beta_s = result.betas.subrows(1, n_report - 1);
         let v_s = cov_slope.submatrix(1, 1, n_report - 1, n_report - 1);
@@ -185,7 +185,7 @@ pub fn fit_panel_lsdv(
         let df2 = (df_residual as f64).max(1.0);
         let dist = FisherSnedecor::new(df1, df2)
             .map_err(|e| format!("Panel LSDV FisherSnedecor: {}", e))?;
-        (f, 1.0 - dist.cdf(f))
+        (f, crate::distribution::fisher_snedecor_sf(&dist, f))
     } else {
         (0.0, 1.0)
     };
@@ -394,7 +394,7 @@ pub fn fit_panel_lsdv_time(
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
-        use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+        use statrs::distribution::FisherSnedecor;
 
         let beta_s = result.betas.subrows(1, n_report - 1);
         let v_s = cov_slope.submatrix(1, 1, n_report - 1, n_report - 1);
@@ -419,7 +419,7 @@ pub fn fit_panel_lsdv_time(
         let df2 = (df_residual as f64).max(1.0);
         let dist = FisherSnedecor::new(df1, df2)
             .map_err(|e| format!("Panel LSDV FisherSnedecor: {}", e))?;
-        (f, 1.0 - dist.cdf(f))
+        (f, crate::distribution::fisher_snedecor_sf(&dist, f))
     } else {
         (0.0, 1.0)
     };
@@ -640,7 +640,7 @@ pub fn fit_panel_lsdv_twoway(
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
-        use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+        use statrs::distribution::FisherSnedecor;
 
         let beta_s = result.betas.subrows(1, n_report - 1);
         let v_s = cov_slope.submatrix(1, 1, n_report - 1, n_report - 1);
@@ -662,7 +662,7 @@ pub fn fit_panel_lsdv_twoway(
         let df2 = (df_residual as f64).max(1.0);
         let dist = FisherSnedecor::new(df1, df2)
             .map_err(|e| format!("Panel LSDV FisherSnedecor: {}", e))?;
-        (f, 1.0 - dist.cdf(f))
+        (f, crate::distribution::fisher_snedecor_sf(&dist, f))
     } else {
         (0.0, 1.0)
     };

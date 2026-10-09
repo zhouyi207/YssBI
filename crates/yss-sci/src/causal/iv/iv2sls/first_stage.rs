@@ -298,7 +298,7 @@ pub(crate) fn compute_first_stage_summary(
             };
             let f_dist =
                 FisherSnedecor::new(k_iv as f64, df_z as f64).map_err(|e| format!("{}", e))?;
-            let f_p = 1.0 - f_dist.cdf(f_val);
+            let f_p = crate::distribution::fisher_snedecor_sf(&f_dist, f_val);
             (f_val, f_p, k_iv, df_z)
         };
 

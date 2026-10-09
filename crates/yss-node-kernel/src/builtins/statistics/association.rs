@@ -122,7 +122,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(format!("yssbi.statistics.{id}").into()).expect("association ID"),
-                std::num::NonZeroU32::new(3).unwrap(),
+                std::num::NonZeroU32::new(if matches!(method, Icc) { 4 } else { 3 }).unwrap(),
                 contract,
                 move |inv| execute(method, inv),
             )

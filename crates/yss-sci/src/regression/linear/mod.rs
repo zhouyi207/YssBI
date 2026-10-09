@@ -17,7 +17,7 @@ fn overall_f_test(
     df_residual: usize,
     classical_f: Option<f64>,
 ) -> Result<(f64, f64), String> {
-    use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+    use statrs::distribution::FisherSnedecor;
     use yss_sci_linalg::{MatrixExt, Solve};
 
     let start = usize::from(constant);
@@ -42,7 +42,7 @@ fn overall_f_test(
     };
     let distribution = FisherSnedecor::new(restrictions as f64, df_residual as f64)
         .map_err(|error| format!("Overall F distribution: {error}"))?;
-    Ok((f, distribution.sf(f)))
+    Ok((f, crate::distribution::fisher_snedecor_sf(&distribution, f)))
 }
 
 /// Total variation after whitening, centered along the transformed intercept.

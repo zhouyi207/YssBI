@@ -1,6 +1,71 @@
 use super::*;
 
 #[test]
+fn f_inference_keeps_small_tails_in_anova_and_linear_nodes() {
+    let response = [
+        1.,
+        2.,
+        3.,
+        1e10 + 1.,
+        1e10 + 2.,
+        1e10 + 3.,
+        2e10 + 1.,
+        2e10 + 2.,
+        2e10 + 3.,
+    ];
+    let factor = RuntimeValue::List((0..9).map(|row| int(row / 3)).collect());
+    let anova = run(
+        "yssbi.statistics.anova.one_way",
+        &[("y", series(&response)), ("factors", factor)],
+        &[],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(terms) = field(&anova[0], "table").unwrap() else {
+        panic!("ANOVA table");
+    };
+    let statistic =
+        super::super::super::numeric_input(Some(field(&terms[0], "f_statistic").unwrap())).unwrap();
+    let p = super::super::super::numeric_input(Some(field(&terms[0], "p_value").unwrap())).unwrap();
+    let first = (0..9)
+        .map(|row| f64::from(row / 3 == 1))
+        .collect::<Vec<_>>();
+    let second = (0..9)
+        .map(|row| f64::from(row / 3 == 2))
+        .collect::<Vec<_>>();
+    let fit = run(
+        "yssbi.statistics.linear.fit",
+        &[
+            ("y", series(&response)),
+            ("x", series(&first)),
+            ("x", series(&second)),
+        ],
+        &[
+            ("method", string("OLS")),
+            ("constant", flag(true)),
+            ("covariance", string("nonrobust")),
+        ],
+        3,
+    )
+    .unwrap();
+    let RuntimeValue::LinearRegression(model) = &fit[0] else {
+        panic!("linear model");
+    };
+    let linear = &model.report.model_basic_info;
+    let reports = [
+        ("anova", statistic, p),
+        ("linear", linear.f_statistic, linear.prob_f_statistic),
+    ];
+    for (method, statistic, p) in reports {
+        let expected = (3.0 / (3.0 + statistic)).powi(3);
+        assert!(
+            (p / expected - 1.0).abs() < 1e-12,
+            "{method} lost its representable F tail: {reports:?}"
+        );
+    }
+}
+
+#[test]
 fn model_diagnostics_have_no_default_workspace_budget() {
     let n = 512;
     let p = 40;

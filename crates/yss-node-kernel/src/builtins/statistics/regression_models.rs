@@ -153,7 +153,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
                 std::num::NonZeroU32::new(
-                    1 + if method == "regression.stepwise" {
+                    1 + if matches!(method, "regression.stepwise" | "regression.hierarchical") {
                         4
                     } else if matches!(
                         method,
@@ -178,7 +178,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                             | "regression.cloglog"
                             | "regression.beta"
                             | "regression.fractional_response"
-                            | "regression.hierarchical"
                             | "regression.curve"
                             | "workflow.regression.baseline"
                             | "workflow.regression.univariate_multivariable"

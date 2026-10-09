@@ -82,7 +82,15 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(
-                1 + if id == "yssbi.statistics.test.nonparametric.family" {
+                1 + if id == "yssbi.statistics.iv.2sls.summary" {
+                    9
+                } else if matches!(
+                    id,
+                    "yssbi.statistics.test.nonparametric.family"
+                        | "yssbi.statistics.test.brown_forsythe"
+                        | "yssbi.statistics.iv.liml.summary"
+                        | "yssbi.statistics.panel.fit"
+                ) {
                     8
                 } else if (id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks")
@@ -91,7 +99,17 @@ pub(super) fn install(
                     || id == "yssbi.statistics.test.binomial"
                     || id == "yssbi.statistics.test.poisson"
                     || id == "yssbi.statistics.test.mood_median"
-                    || id == "yssbi.statistics.test.brown_forsythe"
+                    || id == "yssbi.statistics.test.levene"
+                    || matches!(
+                        id,
+                        "yssbi.statistics.prais.fit"
+                            | "yssbi.statistics.prais.summary"
+                            | "yssbi.statistics.panel.did.twfe"
+                            | "yssbi.statistics.econometrics.panel.fe"
+                            | "yssbi.statistics.econometrics.panel.re"
+                            | "yssbi.statistics.econometrics.panel.fd"
+                            | "yssbi.statistics.econometrics.panel.between"
+                    )
                 {
                     7
                 } else if matches!(
@@ -108,7 +126,6 @@ pub(super) fn install(
                         | "yssbi.statistics.test.friedman"
                         | "yssbi.statistics.test.runs"
                         | "yssbi.statistics.test.mann_kendall"
-                        | "yssbi.statistics.test.levene"
                         | "yssbi.statistics.test.bartlett"
                         | "yssbi.statistics.psychometrics.item_analysis"
                         | "yssbi.statistics.workflow.mediation"
@@ -129,6 +146,7 @@ pub(super) fn install(
                         | "yssbi.statistics.test.cochran_q"
                         | "yssbi.plot.boxplot"
                         | "yssbi.plot.violin"
+                        | "yssbi.statistics.diagnostic.wald"
                 ) {
                     5
                 } else if matches!(
@@ -158,13 +176,9 @@ pub(super) fn install(
                         | "yssbi.statistics.diagnostic.ph"
                 ) {
                     5
-                } else if id == "yssbi.statistics.iv.2sls.summary" {
-                    8
                 } else if matches!(
                     id,
-                    "yssbi.statistics.panel.fit"
-                        | "yssbi.statistics.panel.compare"
-                        | "yssbi.statistics.iv.liml.summary"
+                    "yssbi.statistics.panel.compare"
                         | "yssbi.statistics.logit.summary"
                         | "yssbi.statistics.probit.summary"
                         | "yssbi.statistics.var.summary"
@@ -173,23 +187,14 @@ pub(super) fn install(
                 } else if matches!(
                     id,
                     "yssbi.statistics.diagnostic.breusch_pagan"
-                        | "yssbi.statistics.prais.summary"
-                        | "yssbi.statistics.prais.fit"
                         | "yssbi.statistics.panel.did.randomization"
-                        | "yssbi.statistics.panel.did.twfe"
                         | "yssbi.statistics.iv.2sls.fit"
                         | "yssbi.statistics.iv.liml.fit"
                         | "yssbi.statistics.adf.test"
                         | "yssbi.statistics.timeseries.irf"
                         | "yssbi.statistics.timeseries.fevd"
-                        | "yssbi.statistics.econometrics.panel.fe"
-                        | "yssbi.statistics.econometrics.panel.re"
-                        | "yssbi.statistics.econometrics.panel.fd"
-                        | "yssbi.statistics.econometrics.panel.between"
                 ) {
                     6
-                } else if id == "yssbi.statistics.diagnostic.wald" {
-                    4
                 } else if id.contains(".logit.")
                     || id.contains(".probit.")
                     || id.contains(".prais.")
@@ -222,11 +227,17 @@ pub(super) fn install(
                             | "yssbi.statistics.plot.nomogram"
                     )
                     || id.starts_with("yssbi.plot.")
+                    || id.starts_with("yssbi.statistics.anova.")
                     || id.ends_with(".granger")
                     || matches!(
                         id,
                         "yssbi.statistics.workflow.moderation"
                             | "yssbi.statistics.workflow.delphi"
+                            | "yssbi.statistics.diagnostic.reset"
+                            | "yssbi.statistics.diagnostic.nested_comparison"
+                            | "yssbi.statistics.quality.measurement_system"
+                            | "yssbi.statistics.power.anova"
+                            | "yssbi.statistics.power.linear_regression"
                             | "yssbi.statistics.diagnostic.white"
                             | "yssbi.statistics.diagnostic.information_matrix"
                             | "yssbi.statistics.workflow.moderation_advanced"

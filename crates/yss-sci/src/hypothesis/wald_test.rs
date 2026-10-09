@@ -2,7 +2,7 @@
 //!
 //! 统一处理单/多约束，F = W/q ~ F(q, df_residual)。
 
-use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+use statrs::distribution::FisherSnedecor;
 use yss_sci_linalg::{Col, Mat};
 
 use yss_sci_contract::hypothesis::{Alternative, WaldTestResult};
@@ -62,7 +62,7 @@ pub(super) fn wald_test(
     let f_stat = w / q as f64;
     let dist = FisherSnedecor::new(q as f64, df_residual as f64)
         .map_err(|e| format!("F 分布参数错误: {}", e))?;
-    let mut p_value = 1.0 - dist.cdf(f_stat);
+    let mut p_value = crate::distribution::fisher_snedecor_sf(&dist, f_stat);
 
     // 单侧：q=1 时按方向调整
     if q == 1 {
@@ -135,5 +135,25 @@ mod tests {
         assert!((result.r_beta_minus_r - 2.0).abs() < 1e-10);
         assert!(result.stat > 0.0);
         assert!(result.p_value > 0.0 && result.p_value <= 1.0);
+
+        for (alternative, expected) in [
+            (Alternative::TwoSided, 6.75e-71),
+            (Alternative::Greater, 3.375e-71),
+        ] {
+            let result = wald_test(
+                &col![1.0, 1e12],
+                &mat![[1.0, 0.0], [0.0, 1.0]],
+                &r,
+                &r_vec,
+                6,
+                alternative,
+                "x = 0",
+            )
+            .unwrap();
+            assert!(
+                (result.p_value / expected - 1.0).abs() < 1e-12,
+                "Wald lost its representable upper tail: {result:?}"
+            );
+        }
     }
 }

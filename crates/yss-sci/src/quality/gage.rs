@@ -1,6 +1,6 @@
 //! Balanced crossed random-effects ANOVA. Error denominators differ from fixed-effects ANOVA.
 use super::*;
-use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+use statrs::distribution::FisherSnedecor;
 struct CrossedStudy {
     n: usize,
     a: usize,
@@ -151,9 +151,8 @@ fn term(
         .filter(|(value, _)| *value > 0.)
         .map(|(value, df2)| {
             let f = finite(ms / value)?;
-            let p = FisherSnedecor::new(df as f64, df2 as f64)
-                .map_err(|_| failed())?
-                .sf(f);
+            let distribution = FisherSnedecor::new(df as f64, df2 as f64).map_err(|_| failed())?;
+            let p = crate::distribution::fisher_snedecor_sf(&distribution, f);
             Ok((f, finite(p)?))
         })
         .transpose()?;

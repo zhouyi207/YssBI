@@ -75,10 +75,8 @@ fn levene(
     let df2 = (n - k) as f64;
     let statistic = finite((between / df1) / (within / df2))?;
     control.check()?;
-    // Reciprocal F swaps the degrees of freedom and avoids subtracting a CDF near one.
-    let p = FisherSnedecor::new(df2, df1)
-        .map_err(|_| failed())?
-        .cdf(1.0 / statistic);
+    let distribution = FisherSnedecor::new(df1, df2).map_err(|_| failed())?;
+    let p = crate::distribution::fisher_snedecor_sf(&distribution, statistic);
     control.check()?;
     Ok(result(
         if median_center {

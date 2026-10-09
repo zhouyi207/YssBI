@@ -331,7 +331,11 @@ pub fn icc(
         let distribution = FisherSnedecor::new(df1, df2).map_err(|_| Error::ComputationFailed)?;
         (
             f.is_finite().then_some(f),
-            Some(bounded(distribution.sf(f), 0.0, 1.0)?),
+            Some(bounded(
+                crate::distribution::fisher_snedecor_sf(&distribution, f),
+                0.0,
+                1.0,
+            )?),
         )
     } else {
         (None, (msb > 0.0).then_some(0.0))

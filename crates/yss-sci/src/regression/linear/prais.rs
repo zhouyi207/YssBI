@@ -225,7 +225,7 @@ impl Prais {
 
                 let dist_f = FisherSnedecor::new(df_model as f64, df_residual as f64)
                     .map_err(|e| format!("Prais: {}", e))?;
-                let f_p_value = 1.0 - dist_f.cdf(f);
+                let f_p_value = crate::distribution::fisher_snedecor_sf(&dist_f, f);
 
                 // cov(β) = σ² (X*'X*)⁻¹, σ² = ms_residual
                 let xtx_inv_nd = xtx_inv_s.as_ref().to_owned();
