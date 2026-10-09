@@ -1,4 +1,5 @@
-use crate::{DocumentError, validate_graph_document};
+use crate::{DocumentError, GraphDocumentRead, validate_graph_document};
+use std::borrow::Cow;
 use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicPortBinding, GraphDocument, GraphDocumentOperation,
     GraphDocumentPatch, InputState, PortAddress,
@@ -184,6 +185,40 @@ pub fn prepare_graph_document_patch(
     Ok(document)
 }
 
+/// Reuse one private candidate and its original structural proof across temporary patches.
+pub struct GraphDocumentPatchPreview<'a> {
+    document: Cow<'a, GraphDocument>,
+    validated: Option<bool>,
+}
+
+impl<'a> GraphDocumentPatchPreview<'a> {
+    pub fn new(document: &'a GraphDocument) -> Self {
+        Self {
+            document: Cow::Borrowed(document),
+            validated: None,
+        }
+    }
+
+    pub fn document(&self) -> &GraphDocument {
+        &self.document
+    }
+
+    pub fn read(&mut self) -> GraphDocumentRead<'_> {
+        let validated = *self
+            .validated
+            .get_or_insert_with(|| validate_graph_document(&self.document).is_ok());
+        GraphDocumentRead::from_validity(&self.document, validated)
+    }
+
+    pub fn prepare<'stage>(
+        &'stage mut self,
+        patch: &'stage GraphDocumentPatch,
+    ) -> Result<PreparedGraphDocumentPatch<'stage>, DocumentError> {
+        let validated = self.read().is_validated();
+        prepare_patch(self.document.to_mut(), patch, validated)
+    }
+}
+
 /// A validated temporary patch whose changes are restored when the scope ends.
 #[must_use = "the staged patch is restored when its guard is dropped"]
 pub struct PreparedGraphDocumentPatch<'a> {
@@ -197,11 +232,15 @@ impl PreparedGraphDocumentPatch<'_> {
         self.document
     }
 
+    pub fn read(&self) -> GraphDocumentRead<'_> {
+        GraphDocumentRead::from_validity(self.document, true)
+    }
+
     pub fn prepare<'stage>(
         &'stage mut self,
         patch: &'stage GraphDocumentPatch,
     ) -> Result<PreparedGraphDocumentPatch<'stage>, DocumentError> {
-        prepare_graph_document_patch_in_place(self.document, patch)
+        prepare_patch(self.document, patch, true)
     }
 
     fn commit(mut self) {
@@ -222,6 +261,14 @@ pub fn prepare_graph_document_patch_in_place<'a>(
     document: &'a mut GraphDocument,
     patch: &'a GraphDocumentPatch,
 ) -> Result<PreparedGraphDocumentPatch<'a>, DocumentError> {
+    prepare_patch(document, patch, false)
+}
+
+fn prepare_patch<'a>(
+    document: &'a mut GraphDocument,
+    patch: &'a GraphDocumentPatch,
+    validated: bool,
+) -> Result<PreparedGraphDocumentPatch<'a>, DocumentError> {
     let mut candidate = PreparedGraphDocumentPatch {
         document,
         operations: &patch.operations,
@@ -231,7 +278,11 @@ pub fn prepare_graph_document_patch_in_place<'a>(
         apply_operation(operation, candidate.document)?;
         candidate.applied += 1;
     }
-    validate_graph_document(candidate.document)?;
+    crate::validation::validate_graph_document_patch(
+        candidate.document,
+        &patch.operations,
+        validated,
+    )?;
     Ok(candidate)
 }
 
@@ -292,14 +343,160 @@ fn restore_operation(operation: &GraphDocumentOperation, document: &mut GraphDoc
 #[cfg(test)]
 mod tests {
     use super::{
-        DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
-        prepare_graph_document_patch, prepare_graph_document_patch_in_place,
+        DocumentError, GraphDocumentOperation, GraphDocumentPatch, GraphDocumentPatchPreview,
+        apply_graph_document_patch, prepare_graph_document_patch,
+        prepare_graph_document_patch_in_place,
     };
     use yss_graph_document::{
         DocumentNode, DynamicPortBinding, GraphDocument, NodeId, NodePosition, OrderKey,
         ParameterValues, PortAddress,
     };
     use yss_node_protocol::{NodeTypeId, PortKey};
+
+    fn document_with_bound_connection() -> GraphDocument {
+        use yss_graph_document::{ConnectionId, DocumentConnection, PortInstanceId};
+        let nodes = [NodeId::new(), NodeId::new()];
+        let mut document = GraphDocument::default();
+        for id in nodes {
+            document.nodes.insert(
+                id,
+                DocumentNode {
+                    id,
+                    node_type: "yssbi.test.patch".parse().unwrap(),
+                    position: NodePosition { x: 0.0, y: 0.0 },
+                    parameters: ParameterValues::new(),
+                    user_label: None,
+                },
+            );
+        }
+        let input =
+            PortAddress::instance(nodes[1], "input".parse().unwrap(), PortInstanceId::new());
+        document.port_bindings.insert(
+            input.clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey::new("first"),
+            },
+        );
+        let connection = DocumentConnection {
+            id: ConnectionId::new(),
+            output: PortAddress::declared(nodes[0], "output".parse().unwrap()),
+            input,
+            order: None,
+        };
+        document.connections.insert(connection.id, connection);
+        document
+    }
+
+    #[test]
+    fn preview_repairs_invalid_sources_without_reusing_the_repaired_scope_as_its_baseline() {
+        use std::collections::BTreeMap;
+        let mut document = document_with_bound_connection();
+        let address = document.connections.values().next().unwrap().output.clone();
+        let binding = DynamicPortBinding::UserCreated {
+            order: OrderKey::new("invalid"),
+        };
+        document
+            .port_bindings
+            .insert(address.clone(), binding.clone());
+        let repair = GraphDocumentPatch::new([GraphDocumentOperation::RemovePortBinding {
+            address: address.clone(),
+            binding,
+        }]);
+        let empty = GraphDocumentPatch::new([]);
+        let mut preview = GraphDocumentPatchPreview::new(&document);
+        assert_eq!(
+            preview.prepare(&empty).err(),
+            Some(DocumentError::UnexpectedPortBinding(address.clone()))
+        );
+        {
+            let mut repaired = preview.prepare(&repair).unwrap();
+            repaired
+                .read()
+                .validate_connection_candidate(&BTreeMap::new(), &BTreeMap::new())
+                .unwrap();
+            let nested = repaired.prepare(&empty).unwrap();
+            assert!(!nested.document().port_bindings.contains_key(&address));
+        }
+        assert_eq!(preview.document(), &document);
+        assert_eq!(
+            preview.prepare(&empty).err(),
+            Some(DocumentError::UnexpectedPortBinding(address.clone()))
+        );
+        assert_eq!(
+            preview
+                .read()
+                .validate_connection_candidate(&BTreeMap::new(), &BTreeMap::new()),
+            Err(DocumentError::UnexpectedPortBinding(address))
+        );
+    }
+
+    #[test]
+    fn validated_previews_preserve_structural_errors_and_restore_each_rejected_patch() {
+        use yss_graph_document::{ConnectionId, DocumentConnection, InputState, PortInstanceId};
+        let document = document_with_bound_connection();
+        let connection = document.connections.values().next().unwrap();
+        let input = &connection.input;
+        let unbound = PortAddress::instance(
+            input.node_id,
+            "input".parse().unwrap(),
+            PortInstanceId::new(),
+        );
+        let missing_node = NodeId::new();
+        let mut preview = GraphDocumentPatchPreview::new(&document);
+        for (operation, expected) in [
+            (
+                GraphDocumentOperation::RemovePortBinding {
+                    address: input.clone(),
+                    binding: document.port_bindings[input].clone(),
+                },
+                DocumentError::MissingPortBinding(input.clone()),
+            ),
+            (
+                GraphDocumentOperation::RemoveNode {
+                    node: document.nodes[&input.node_id].clone(),
+                },
+                DocumentError::EndpointNodeNotFound(input.node_id),
+            ),
+            (
+                GraphDocumentOperation::InsertPortBinding {
+                    address: connection.output.clone(),
+                    binding: DynamicPortBinding::UserCreated {
+                        order: OrderKey::new("invalid"),
+                    },
+                },
+                DocumentError::UnexpectedPortBinding(connection.output.clone()),
+            ),
+            (
+                GraphDocumentOperation::SetInputState {
+                    address: unbound.clone(),
+                    before: None,
+                    after: Some(InputState {
+                        literal_override: None,
+                    }),
+                },
+                DocumentError::MissingPortBinding(unbound),
+            ),
+            (
+                GraphDocumentOperation::InsertConnection {
+                    connection: DocumentConnection {
+                        id: ConnectionId::new(),
+                        output: PortAddress::declared(missing_node, "output".parse().unwrap()),
+                        input: input.clone(),
+                        order: None,
+                    },
+                },
+                DocumentError::EndpointNodeNotFound(missing_node),
+            ),
+        ] {
+            let patch = GraphDocumentPatch::new([operation]);
+            assert_eq!(preview.prepare(&patch).err(), Some(expected.clone()));
+            assert_eq!(
+                prepare_graph_document_patch(document.clone(), &patch).unwrap_err(),
+                expected
+            );
+            assert_eq!(preview.document(), &document);
+        }
+    }
 
     #[test]
     fn prepared_patch_keeps_source_and_checks_sequential_before_states() {
@@ -461,7 +658,7 @@ mod tests {
 
     #[test]
     fn borrowed_connection_candidates_preserve_removal_preconditions_and_result_validation() {
-        use crate::validate_graph_document_connection_candidate;
+        use crate::GraphDocumentRead;
         use std::collections::BTreeMap;
         use yss_graph_document::{ConnectionId, DocumentConnection};
         let mut document = GraphDocument::default();
@@ -492,7 +689,9 @@ mod tests {
         };
         let removals = BTreeMap::from([(id, original.clone())]);
         let insertions = BTreeMap::from([(id, replacement.clone())]);
-        validate_graph_document_connection_candidate(&document, &removals, &insertions).unwrap();
+        GraphDocumentRead::new(&document)
+            .validate_connection_candidate(&removals, &insertions)
+            .unwrap();
         let patch = GraphDocumentPatch::new([
             GraphDocumentOperation::RemoveConnection {
                 connection: original.clone(),
@@ -507,17 +706,20 @@ mod tests {
 
         let wrong_before = BTreeMap::from([(id, replacement.clone())]);
         assert_eq!(
-            validate_graph_document_connection_candidate(&document, &wrong_before, &insertions),
+            GraphDocumentRead::new(&document)
+                .validate_connection_candidate(&wrong_before, &insertions),
             Err(DocumentError::ConnectionContentMismatch(id))
         );
         assert_eq!(
-            validate_graph_document_connection_candidate(&document, &BTreeMap::new(), &insertions),
+            GraphDocumentRead::new(&document)
+                .validate_connection_candidate(&BTreeMap::new(), &insertions),
             Err(DocumentError::DuplicateConnection(id))
         );
         let invalid_after = BTreeMap::from([(id, original.clone())]);
         let missing = original.input.node_id;
         assert_eq!(
-            validate_graph_document_connection_candidate(&document, &removals, &invalid_after),
+            GraphDocumentRead::new(&document)
+                .validate_connection_candidate(&removals, &invalid_after),
             Err(DocumentError::EndpointNodeNotFound(missing))
         );
     }

@@ -9,7 +9,7 @@ use yss_graph_document::{
     FunctionParameterId, GraphDocument, GraphResourcePath, LastKnownPortMetadata, NodeId,
     NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
 };
-use yss_graph_document_edit::apply_graph_document_patch;
+use yss_graph_document_edit::{GraphDocumentRead, apply_graph_document_patch};
 use yss_node_catalog::{authoritative_static_descriptor, build_builtin_node_system};
 use yss_node_protocol::{NodeTypeId, PortKey, TypeExpr};
 use yss_node_registry::NodeRegistry;
@@ -724,7 +724,7 @@ fn grouped_initial_ports_are_offered_and_created_as_complete_members() {
     }
     .into_patch_with_context(
         &graph_path(),
-        &document,
+        GraphDocumentRead::new(&document),
         &registry,
         EditorMutationContext {
             catalog: Some(&authority),
@@ -767,7 +767,7 @@ fn grouped_initial_ports_are_offered_and_created_as_complete_members() {
         }
         .into_patch_with_context(
             &graph_path(),
-            &document,
+            GraphDocumentRead::new(&document),
             &registry,
             EditorMutationContext {
                 catalog: Some(&authority),
@@ -899,7 +899,12 @@ fn function_connection_fallback_checks_the_member_resolver_before_its_type() {
         };
         let error = connect
             .clone()
-            .into_patch_with_context(&graph_path(), &document, &registry, context)
+            .into_patch_with_context(
+                &graph_path(),
+                GraphDocumentRead::new(&document),
+                &registry,
+                context,
+            )
             .expect_err("matching numeric types cannot authorize a member from the wrong resolver");
         assert!(matches!(error, crate::MutationConflict::Editor(error)
             if error.code == EditorMutationErrorCode::GraphConnectionTypeUnavailable));
@@ -907,7 +912,12 @@ fn function_connection_fallback_checks_the_member_resolver_before_its_type() {
         document.port_bindings.insert(member, binding(correct));
         let before = document.clone();
         let patch = connect
-            .into_patch_with_context(&graph_path(), &document, &registry, context)
+            .into_patch_with_context(
+                &graph_path(),
+                GraphDocumentRead::new(&document),
+                &registry,
+                context,
+            )
             .unwrap();
         apply_graph_document_patch(&mut document, &patch).unwrap();
         assert_eq!(document.connections.len(), 1);
@@ -944,7 +954,7 @@ fn create_and_connect_plans_one_atomic_patch() {
     }
     .into_patch_with_context(
         &graph_path(),
-        &document,
+        GraphDocumentRead::new(&document),
         registry.as_ref(),
         EditorMutationContext {
             catalog: Some(&catalog),
@@ -978,7 +988,7 @@ fn create_and_connect_plans_one_atomic_patch() {
     }
     .into_patch_with_context(
         &graph_path(),
-        &document,
+        GraphDocumentRead::new(&document),
         &registry,
         EditorMutationContext {
             catalog: Some(&catalog),
@@ -1265,7 +1275,7 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
     }
     .into_patch_with_context(
         &graph_path(),
-        &target,
+        GraphDocumentRead::new(&target),
         &registry,
         EditorMutationContext {
             catalog: Some(&catalog),
@@ -1314,7 +1324,7 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
     }
     .into_patch_with_context(
         &graph_path(),
-        &source,
+        GraphDocumentRead::new(&source),
         &registry,
         EditorMutationContext {
             catalog: Some(&catalog),
@@ -1371,7 +1381,7 @@ fn clipboard_connection_limits_reject_partial_imports_and_allow_undo() {
         }
         .into_patch_with_context(
             &graph_path(),
-            &before,
+            GraphDocumentRead::new(&before),
             &builtin.registry,
             EditorMutationContext {
                 catalog: Some(&catalog),

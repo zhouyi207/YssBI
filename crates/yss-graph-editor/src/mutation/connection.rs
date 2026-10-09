@@ -1,5 +1,4 @@
 use super::*;
-use yss_graph_document_edit::validate_graph_document_connection_candidate;
 
 type MutationPort<'a> = crate::compatibility::ResolvedEditorPort<'a>;
 
@@ -41,7 +40,7 @@ pub(super) fn update_connection_operations(
     )?;
     for proposal in proposals {
         let mut next = connect_operations(
-            &staged,
+            GraphDocumentRead::new(&staged),
             registry,
             context,
             proposal.output,
@@ -80,12 +79,13 @@ pub(super) fn resolve_mutation_port<'a>(
 }
 
 pub(crate) fn move_connection_operations(
-    document: &GraphDocument,
+    document_read: GraphDocumentRead<'_>,
     registry: &NodeRegistry,
     context: EditorMutationContext<'_>,
     source: PortAddress,
     target: PortAddress,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    let document = document_read.document();
     let source_port = resolve_mutation_port(document, registry, &source)?;
     let target_port = resolve_mutation_port(document, registry, &target)?;
     validate_move_endpoints(&source_port, &target_port)?;
@@ -138,7 +138,7 @@ pub(crate) fn move_connection_operations(
         .map(|connection| (connection.id, connection))
         .collect::<BTreeMap<_, _>>();
     let mut insertions = BTreeMap::new();
-    validate_graph_document_connection_candidate(document, &removals, &insertions)?;
+    document_read.validate_connection_candidate(&removals, &insertions)?;
     match endpoint_capacity(
         document
             .connections
@@ -379,13 +379,14 @@ pub(crate) fn validate_subgraph_connection(
 }
 
 pub(super) fn connect_operations(
-    document: &GraphDocument,
+    document_read: GraphDocumentRead<'_>,
     registry: &NodeRegistry,
     context: EditorMutationContext<'_>,
     output: PortAddress,
     input: PortAddress,
     order: Option<OrderKey>,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    let document = document_read.document();
     let output_port = resolve_mutation_port(document, registry, &output)?;
     let input_port = resolve_mutation_port(document, registry, &input)?;
     validate_document_connection_endpoints(&output_port, &input_port)?;
@@ -393,7 +394,7 @@ pub(super) fn connect_operations(
     crate::compatibility::validate_connection_types(document, registry, context, &output, &input)
         .map_err(MutationConflict::Editor)?;
     plan_connection_operations_after_type_validation(
-        document,
+        document_read,
         output_port.spec.connections,
         input_port.spec.connections,
         output,
@@ -422,13 +423,14 @@ fn validate_connection_does_not_exist(
 }
 
 fn plan_connection_operations_after_type_validation(
-    document: &GraphDocument,
+    document_read: GraphDocumentRead<'_>,
     output_connections: ConnectionsPerPort,
     input_connections: ConnectionsPerPort,
     output: PortAddress,
     input: PortAddress,
     order: Option<OrderKey>,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    let document = document_read.document();
     validate_connection_order(input_connections, order.as_ref())?;
     let output_capacity =
         endpoint_capacity(document.connections.values(), &output, output_connections)?;
@@ -442,7 +444,7 @@ fn plan_connection_operations_after_type_validation(
             }
         }
     }
-    validate_graph_document_connection_candidate(document, &incumbents, &BTreeMap::new())?;
+    document_read.validate_connection_candidate(&incumbents, &BTreeMap::new())?;
     validate_connection_capacity(
         document
             .connections

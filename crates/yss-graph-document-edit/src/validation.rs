@@ -1,8 +1,8 @@
 use crate::DocumentError;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_document::{
-    ConnectionId, DocumentConnection, DynamicPortBinding, GraphDocument, NodeId, PortAddress,
-    PortInstanceId,
+    ConnectionId, DocumentConnection, DynamicPortBinding, GraphDocument, GraphDocumentOperation,
+    NodeId, PortAddress, PortInstanceId,
 };
 use yss_node_protocol::{PortKey, PortMemberGroupSpec};
 
@@ -83,11 +83,47 @@ pub fn validate_graph_document(document: &GraphDocument) -> Result<(), DocumentE
     validate_document_with_connections(document, document.connections.iter())
 }
 
-/// Validate removals followed by insertions while borrowing the unchanged document content.
-pub fn validate_graph_document_connection_candidate(
+/// A document borrow whose structural proof, when present, is owned by a patch scope.
+#[derive(Clone, Copy)]
+pub struct GraphDocumentRead<'a> {
+    document: &'a GraphDocument,
+    validated: bool,
+}
+
+impl<'a> GraphDocumentRead<'a> {
+    pub fn new(document: &'a GraphDocument) -> Self {
+        Self::from_validity(document, false)
+    }
+
+    pub fn document(self) -> &'a GraphDocument {
+        self.document
+    }
+
+    pub fn validate_connection_candidate(
+        self,
+        removals: &BTreeMap<ConnectionId, DocumentConnection>,
+        insertions: &BTreeMap<ConnectionId, DocumentConnection>,
+    ) -> Result<(), DocumentError> {
+        validate_connection_candidate(self.document, removals, insertions, self.validated)
+    }
+
+    pub(crate) fn from_validity(document: &'a GraphDocument, validated: bool) -> Self {
+        Self {
+            document,
+            validated,
+        }
+    }
+
+    pub(crate) fn is_validated(self) -> bool {
+        self.validated
+    }
+}
+
+fn validate_connection_candidate(
     document: &GraphDocument,
     removals: &BTreeMap<ConnectionId, DocumentConnection>,
     insertions: &BTreeMap<ConnectionId, DocumentConnection>,
+    validated: bool,
 ) -> Result<(), DocumentError> {
     for (id, connection) in removals {
         if id != &connection.id {
@@ -101,6 +137,12 @@ pub fn validate_graph_document_connection_candidate(
         {
             return Err(DocumentError::DuplicateConnection(connection.id));
         }
+    }
+    if validated {
+        for (id, connection) in insertions {
+            validate_connection(document, id, connection)?;
+        }
+        return Ok(());
     }
     let mut retained = document
         .connections
@@ -117,34 +159,115 @@ pub fn validate_graph_document_connection_candidate(
     validate_document_with_connections(document, connections)
 }
 
+pub(crate) fn validate_graph_document_patch(
+    document: &GraphDocument,
+    operations: &[GraphDocumentOperation],
+    validated: bool,
+) -> Result<(), DocumentError> {
+    // Destructive changes can invalidate retained references. Invalid source documents
+    // must also be checked in full, since a patch may repair their original defects.
+    if !validated
+        || operations.iter().any(|operation| match operation {
+            GraphDocumentOperation::RemoveNode { node } => !document.nodes.contains_key(&node.id),
+            GraphDocumentOperation::RemovePortBinding { address, .. } => {
+                !document.port_bindings.contains_key(address)
+            }
+            _ => false,
+        })
+    {
+        return validate_graph_document(document);
+    }
+    let mut constants_changed = false;
+    let mut bindings = BTreeSet::new();
+    let mut input_states = BTreeSet::new();
+    let mut connections = BTreeSet::new();
+    for operation in operations {
+        match operation {
+            GraphDocumentOperation::SetConstant { .. } => constants_changed = true,
+            GraphDocumentOperation::InsertPortBinding { address, .. } => {
+                bindings.insert(address);
+            }
+            GraphDocumentOperation::SetInputState { address, .. } => {
+                input_states.insert(address);
+            }
+            GraphDocumentOperation::InsertConnection { connection } => {
+                connections.insert(connection.id);
+            }
+            // Successful node operations already preserve their map key and identity.
+            GraphDocumentOperation::InsertNode { .. }
+            | GraphDocumentOperation::UpdateNode { .. }
+            | GraphDocumentOperation::RemoveNode { .. }
+            | GraphDocumentOperation::RemovePortBinding { .. }
+            | GraphDocumentOperation::RemoveConnection { .. } => {}
+        }
+    }
+    // Keep the full validator's category and key order when several changes are invalid.
+    if constants_changed {
+        validate_constants(document)?;
+    }
+    for address in bindings {
+        if document.port_bindings.contains_key(address) {
+            validate_binding(document, address)?;
+        }
+    }
+    for address in input_states {
+        if document.input_states.contains_key(address) {
+            validate_address(document, address)?;
+        }
+    }
+    for id in connections {
+        if let Some(connection) = document.connections.get(&id) {
+            validate_connection(document, &id, connection)?;
+        }
+    }
+    Ok(())
+}
+
 fn validate_document_with_connections<'a>(
     document: &GraphDocument,
     connections: impl Iterator<Item = (&'a ConnectionId, &'a DocumentConnection)>,
 ) -> Result<(), DocumentError> {
-    yss_graph_document::validate_constant_definitions(&document.constants)
-        .map_err(|error| DocumentError::InvalidConstant(error.id))?;
+    validate_constants(document)?;
     for (id, node) in &document.nodes {
         if id != &node.id {
             return Err(DocumentError::DuplicateNode(node.id));
         }
     }
     for address in document.port_bindings.keys() {
-        validate_endpoint(document, address)?;
-        if !address.is_instance() {
-            return Err(DocumentError::UnexpectedPortBinding(address.clone()));
-        }
+        validate_binding(document, address)?;
     }
     for address in document.input_states.keys() {
         validate_address(document, address)?;
     }
     for (id, connection) in connections {
-        if id != &connection.id {
-            return Err(DocumentError::DuplicateConnection(connection.id));
-        }
-        validate_address(document, &connection.output)?;
-        validate_address(document, &connection.input)?;
+        validate_connection(document, id, connection)?;
     }
     Ok(())
+}
+
+fn validate_constants(document: &GraphDocument) -> Result<(), DocumentError> {
+    yss_graph_document::validate_constant_definitions(&document.constants)
+        .map_err(|error| DocumentError::InvalidConstant(error.id))
+}
+
+fn validate_binding(document: &GraphDocument, address: &PortAddress) -> Result<(), DocumentError> {
+    validate_endpoint(document, address)?;
+    if !address.is_instance() {
+        return Err(DocumentError::UnexpectedPortBinding(address.clone()));
+    }
+    Ok(())
+}
+
+fn validate_connection(
+    document: &GraphDocument,
+    id: &ConnectionId,
+    connection: &DocumentConnection,
+) -> Result<(), DocumentError> {
+    if id != &connection.id {
+        return Err(DocumentError::DuplicateConnection(connection.id));
+    }
+    validate_address(document, &connection.output)?;
+    validate_address(document, &connection.input)
 }
 
 fn validate_address(document: &GraphDocument, address: &PortAddress) -> Result<(), DocumentError> {

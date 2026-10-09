@@ -1,15 +1,14 @@
 use super::*;
 use crate::binding_cleanup::BindingCleanup;
-use std::borrow::Cow;
 use std::collections::BTreeSet;
-use yss_graph_document_edit::prepare_graph_document_patch_in_place;
+use yss_graph_document_edit::GraphDocumentPatchPreview;
 
 pub(super) struct EditorMutationPlanner<'a> {
     graph_path: &'a GraphResourcePath,
     registry: &'a NodeRegistry,
     catalog: &'a CatalogMutationValidationSnapshot,
     semantics: Option<&'a GraphSemanticSnapshot>,
-    candidate: Cow<'a, GraphDocument>,
+    candidate: GraphDocumentPatchPreview<'a>,
     cleanup: BindingCleanup<'a>,
 }
 
@@ -26,7 +25,7 @@ impl<'a> EditorMutationPlanner<'a> {
             registry,
             catalog,
             semantics: analysis.map(GraphAnalysis::semantic_snapshot),
-            candidate: Cow::Borrowed(document),
+            candidate: GraphDocumentPatchPreview::new(document),
             cleanup: BindingCleanup::new(document),
         }
     }
@@ -43,22 +42,21 @@ impl<'a> EditorMutationPlanner<'a> {
         let operations = if claims.operations.is_empty() {
             let patch = mutation.into_patch_with_context(
                 self.graph_path,
-                &self.candidate,
+                self.candidate.read(),
                 self.registry,
                 context,
             )?;
-            let staged = prepare_graph_document_patch_in_place(self.candidate.to_mut(), &patch)?;
+            let staged = self.candidate.prepare(&patch)?;
             let cleanup = self.cleanup.operations(staged.document(), &patch);
             drop(staged);
             let mut operations = patch.operations;
             operations.extend(cleanup);
             operations
         } else {
-            let mut claimed =
-                prepare_graph_document_patch_in_place(self.candidate.to_mut(), &claims)?;
+            let mut claimed = self.candidate.prepare(&claims)?;
             let patch = mutation.into_patch_with_context(
                 self.graph_path,
-                claimed.document(),
+                claimed.read(),
                 self.registry,
                 context,
             )?;
@@ -80,7 +78,7 @@ impl<'a> EditorMutationPlanner<'a> {
     ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
         let mut operations = Vec::new();
         let mut claimed = BTreeSet::new();
-        for address in mutation.referenced_ports(&self.candidate) {
+        for address in mutation.referenced_ports(self.candidate.document()) {
             if !claimed.insert(address) {
                 continue;
             }
@@ -96,7 +94,7 @@ impl<'a> EditorMutationPlanner<'a> {
                     },
                 ));
             }
-            if let Some(previous) = self.candidate.port_bindings.get(address) {
+            if let Some(previous) = self.candidate.document().port_bindings.get(address) {
                 if let DynamicPortBinding::Orphan { origin, order, .. } = previous {
                     operations.push(GraphDocumentOperation::RemovePortBinding {
                         address: address.clone(),

@@ -6,7 +6,7 @@ use yss_graph_document::{
 };
 use yss_graph_document::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_graph_document_edit::{
-    DocumentError, port_member_group_state, prepare_graph_document_patch,
+    DocumentError, GraphDocumentRead, port_member_group_state, prepare_graph_document_patch,
     user_created_port_instance_count,
 };
 use yss_node_catalog::reroute_node_type;
@@ -278,7 +278,7 @@ impl EditorGraphMutation {
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         self.into_patch_with_context(
             graph_path,
-            document,
+            GraphDocumentRead::new(document),
             registry,
             EditorMutationContext::default(),
         )
@@ -287,10 +287,11 @@ impl EditorGraphMutation {
     pub fn into_patch_with_context(
         self,
         graph_path: &GraphResourcePath,
-        document: &GraphDocument,
+        document_read: GraphDocumentRead<'_>,
         registry: &NodeRegistry,
         context: EditorMutationContext<'_>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
+        let document = document_read.document();
         let catalog_validation = context.catalog;
         let operations = match self {
             Self::SetNodeLabel { node_id, label } => {
@@ -493,9 +494,9 @@ impl EditorGraphMutation {
                 output,
                 input,
                 order,
-            } => connect_operations(document, registry, context, output, input, order)?,
+            } => connect_operations(document_read, registry, context, output, input, order)?,
             Self::MoveConnections { source, target } => {
-                move_connection_operations(document, registry, context, source, target)?
+                move_connection_operations(document_read, registry, context, source, target)?
             }
             Self::DisconnectConnections { connection_ids } => {
                 validate_direct_targets(&connection_ids)?;
@@ -968,7 +969,12 @@ fn append_atomic_connection(
         ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. } => None,
     };
     operations.extend(connect_operations(
-        &staged, registry, context, output, input, order,
+        GraphDocumentRead::new(&staged),
+        registry,
+        context,
+        output,
+        input,
+        order,
     )?);
     Ok(())
 }
