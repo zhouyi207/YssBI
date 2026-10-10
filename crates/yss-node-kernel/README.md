@@ -581,8 +581,11 @@ and inverse-inclusion-probability output preserve the source relation via existi
 series expressions. Estimator adapters account for fit, PSU score and covariance storage.
 Shared `regression_outputs` receives explicit predictor labels, excluding survey design
 columns from coefficient-axis names; complete observations remain paged relations.
-The three survey regression kernels use revision 7 for shared parameter restoration
-and bounded Student-t coefficient intervals.
+The three survey regression kernels use revision 8 for shared parameter restoration,
+bounded Student-t intervals and direct design-based inference from the shared GLM fit.
+They do not construct model inference that will be overwritten. Matching/IPW/AIPW use
+revision 9 and request only fitted propensity probabilities; Regression Adjustment
+retains revision 8. Full GLM and Heckman continue to request their reported inference.
 
 `builtins/statistics/power` converts model-specific scalar parameters to neutral designs.
 There are no observation inputs; bounded report admission and cooperative scientific

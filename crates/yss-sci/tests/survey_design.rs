@@ -131,6 +131,46 @@ fn survey_means_and_proportions_match_stratum_psu_linearization_and_weight_scali
     close(scaled.standard_error, result.standard_error);
 }
 #[test]
+fn survey_regression_keeps_finite_design_inference_without_unused_unweighted_rss() {
+    let scale = 1.2e154;
+    let result = regression(
+        &[-scale, scale, 0.0, 0.0],
+        &[],
+        SurveyDesign {
+            weights: &[0.25, 0.25, 1.75, 1.75],
+            strata: None,
+            clusters: None,
+            lonely_psu: LonelyPsu::Fail,
+        },
+        SurveyRegressionOptions {
+            family: GlmFamily::Gaussian,
+            constant: true,
+            iteration: IterationOptions::default(),
+        },
+        &control(),
+    )
+    .unwrap();
+    let coefficient = &result.model.coefficients[0];
+    assert_eq!(coefficient.estimate, 0.0);
+    // Four PSUs: bread=1/4; score variance=(4/3)*2*(scale/4)^2.
+    assert!((coefficient.standard_error.unwrap() / scale - 1.0 / 96.0_f64.sqrt()).abs() < 1e-12);
+    assert!(
+        (result.model.covariance.as_ref().unwrap()[0][0] / scale / scale - 1.0 / 96.0).abs()
+            < 1e-14
+    );
+    assert_eq!(result.diagnostics.coefficient_degrees_of_freedom, 3);
+    assert_eq!(result.model.fitted, vec![0.0; 4]);
+    assert!(result.model.statistics.rss.is_none());
+    assert!(
+        coefficient
+            .confidence_interval
+            .unwrap()
+            .iter()
+            .all(|v| v.is_finite())
+    );
+}
+
+#[test]
 fn survey_regressions_match_weighted_glm_and_design_covariance() {
     let d = data();
     let f = reference();

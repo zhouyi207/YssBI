@@ -121,7 +121,10 @@ pub(super) fn install(
                 | "yssbi.statistics.workflow.subgroup"
                 | "yssbi.statistics.econometrics.heckman_two_step"
                 | "yssbi.statistics.workflow.mediation"
-                | "yssbi.statistics.workflow.moderated_mediation" => 9,
+                | "yssbi.statistics.workflow.moderated_mediation"
+                | "yssbi.statistics.causal.aipw"
+                | "yssbi.statistics.causal.ipw"
+                | "yssbi.statistics.causal.psm" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
                 | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.sur"
@@ -134,15 +137,15 @@ pub(super) fn install(
                 | "yssbi.statistics.test.poisson"
                 | "yssbi.statistics.test.runs"
                 | "yssbi.statistics.test.t.paired"
-                | "yssbi.statistics.causal.aipw"
-                | "yssbi.statistics.causal.ipw"
-                | "yssbi.statistics.causal.psm"
                 | "yssbi.statistics.causal.regression_adjustment"
                 | "yssbi.statistics.meta.begg"
                 | "yssbi.statistics.meta.cochran_q"
                 | "yssbi.statistics.meta.i_squared"
                 | "yssbi.statistics.meta.tau_squared"
-                | "yssbi.statistics.posthoc.multiple_comparisons" => 8,
+                | "yssbi.statistics.posthoc.multiple_comparisons"
+                | "yssbi.statistics.survey.linear_regression"
+                | "yssbi.statistics.survey.logistic"
+                | "yssbi.statistics.survey.poisson" => 8,
                 "yssbi.statistics.diagnostic.wald"
                 | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
@@ -198,10 +201,7 @@ pub(super) fn install(
                 | "yssbi.statistics.inference.cluster_robust"
                 | "yssbi.statistics.spatial.ols"
                 | "yssbi.statistics.spatial.slx"
-                | "yssbi.statistics.spatial.panel"
-                | "yssbi.statistics.survey.linear_regression"
-                | "yssbi.statistics.survey.logistic"
-                | "yssbi.statistics.survey.poisson" => 7,
+                | "yssbi.statistics.spatial.panel" => 7,
                 "yssbi.plot.boxplot"
                 | "yssbi.plot.violin"
                 | "yssbi.statistics.diagnostic.information_matrix"

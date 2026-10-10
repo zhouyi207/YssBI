@@ -3,7 +3,10 @@ use super::common::*;
 use super::likelihood::logistic;
 use statrs::distribution::{Continuous, ContinuousCDF, Normal};
 use statrs::function::gamma::ln_gamma;
-use yss_sci_contract::{execution::ScientificExecutionControl as Control, regression::models::*};
+use yss_sci_contract::{
+    execution::{ScientificComputationError as Error, ScientificExecutionControl as Control},
+    regression::models::*,
+};
 use yss_sci_linalg::Mat;
 pub fn glm(
     y: &[f64],
@@ -11,18 +14,27 @@ pub fn glm(
     options: GlmOptions,
     control: &Control,
 ) -> Result<RegressionModelResult> {
-    fit(y, predictors, options, None, control)
+    PreparedGlm::new(y, predictors, options, None, control)?
+        .fit(control)?
+        .model(control)
 }
-/// The survey owner replaces model-based covariance with design-based linearization.
-pub(crate) fn weighted_glm(
-    y: &[f64],
-    predictors: &[Vec<f64>],
-    weights: &[f64],
+
+pub(crate) struct PreparedGlm<'a> {
+    pub design: Design,
+    y: &'a [f64],
     options: GlmOptions,
-    control: &Control,
-) -> Result<RegressionModelResult> {
-    fit(y, predictors, options, Some(weights), control)
+    prior_weights: Option<&'a [f64]>,
 }
+
+pub(crate) struct GlmFit<'a> {
+    pub prepared: PreparedGlm<'a>,
+    pub beta: Vec<f64>,
+    pub fitted: Vec<f64>,
+    pub deviance: f64,
+    pub iterations: usize,
+    derivative: Vec<f64>,
+}
+
 fn mean_link(eta: f64, link: GlmLink) -> Result<(f64, f64)> {
     let (mu, d) = match link {
         GlmLink::Identity => (eta, 1.0),
@@ -79,244 +91,292 @@ fn unit_deviance(y: f64, mu: f64, family: GlmFamily) -> f64 {
         GlmFamily::InverseGaussian => (y - mu).powi(2) / (y * mu * mu),
     }
 }
-fn fit(
-    y: &[f64],
-    predictors: &[Vec<f64>],
-    options: GlmOptions,
-    prior_weights: Option<&[f64]>,
-    control: &Control,
-) -> Result<RegressionModelResult> {
-    validate(y, predictors, control)?;
-    check_iteration(options.iteration)?;
-    if prior_weights
-        .is_some_and(|w| w.len() != y.len() || w.iter().any(|v| !v.is_finite() || *v <= 0.))
-    {
-        return Err(parameter());
-    }
-    let prior = |i: usize| prior_weights.map_or(1., |w| w[i]);
-    let valid = matches!(
-        (options.family, options.link),
-        (GlmFamily::Gaussian, GlmLink::Identity | GlmLink::Log)
-            | (
-                GlmFamily::Binomial,
-                GlmLink::Logit | GlmLink::Probit | GlmLink::Cloglog
-            )
-            | (
-                GlmFamily::Poisson | GlmFamily::Gamma | GlmFamily::InverseGaussian,
-                GlmLink::Log
-            )
-    );
-    if !valid
-        || (options.fractional && options.family != GlmFamily::Binomial)
-        || y.iter().any(|&v| match options.family {
-            GlmFamily::Binomial => {
-                if options.fractional {
-                    !(0.0..=1.0).contains(&v)
-                } else {
-                    v != 0.0 && v != 1.0
+impl<'a> PreparedGlm<'a> {
+    pub fn new(
+        y: &'a [f64],
+        predictors: &[Vec<f64>],
+        options: GlmOptions,
+        prior_weights: Option<&'a [f64]>,
+        control: &Control,
+    ) -> Result<Self> {
+        validate(y, predictors, control)?;
+        check_iteration(options.iteration)?;
+        if prior_weights
+            .is_some_and(|w| w.len() != y.len() || w.iter().any(|v| !v.is_finite() || *v <= 0.))
+        {
+            return Err(parameter());
+        }
+        let valid = matches!(
+            (options.family, options.link),
+            (GlmFamily::Gaussian, GlmLink::Identity | GlmLink::Log)
+                | (
+                    GlmFamily::Binomial,
+                    GlmLink::Logit | GlmLink::Probit | GlmLink::Cloglog
+                )
+                | (
+                    GlmFamily::Poisson | GlmFamily::Gamma | GlmFamily::InverseGaussian,
+                    GlmLink::Log
+                )
+        );
+        if !valid
+            || (options.fractional && options.family != GlmFamily::Binomial)
+            || y.iter().any(|&v| match options.family {
+                GlmFamily::Binomial => {
+                    if options.fractional {
+                        !(0.0..=1.0).contains(&v)
+                    } else {
+                        v != 0.0 && v != 1.0
+                    }
                 }
-            }
-            GlmFamily::Poisson => v < 0.0 || v.fract() != 0.0,
-            GlmFamily::Gamma | GlmFamily::InverseGaussian => v <= 0.0,
-            GlmFamily::Gaussian => false,
-        })
-    {
-        return Err(parameter());
-    }
-    let design = Design::new(predictors, y.len(), options.constant, true, true, control)?;
-    let x = &design.x;
-    let p = x.ncols();
-    let n = y.len();
-    let ym = if let Some(w) = prior_weights {
-        let total = finite(w.iter().sum())?;
-        finite(y.iter().zip(w).map(|(y, w)| y * (w / total)).sum())?
-    } else {
-        mean(y)
-    };
-    if options.family == GlmFamily::Binomial && (ym <= 0.0 || ym >= 1.0) {
-        return Err(parameter());
-    }
-    if options.link == GlmLink::Log && ym <= 0.0 {
-        return Err(parameter());
-    }
-    let mut beta = vec![0.0; p];
-    if options.constant {
-        beta[0] = match options.link {
-            GlmLink::Identity => ym,
-            GlmLink::Log => ym.ln(),
-            GlmLink::Logit => (ym / (1.0 - ym)).ln(),
-            GlmLink::Probit => Normal::new(0.0, 1.0).expect("normal").inverse_cdf(ym),
-            GlmLink::Cloglog => (-(1.0 - ym).ln()).ln(),
-        };
-    }
-    let evaluate = |b: &[f64]| -> Result<(Vec<f64>, Vec<f64>, f64)> {
-        let eta = fitted(x, b);
-        let mut mu = Vec::with_capacity(n);
-        let mut d = Vec::with_capacity(n);
-        let mut dev = 0.0;
-        for i in 0..n {
-            if i % 1024 == 0 {
-                control.check()?;
-            }
-            let (m, derivative) = mean_link(eta[i], options.link)?;
-            let v = variance(m, options.family);
-            if v <= 0.0 || !v.is_finite() {
-                return Err(failed());
-            }
-            dev += prior(i) * unit_deviance(y[i], m, options.family);
-            mu.push(m);
-            d.push(derivative);
-        }
-        Ok((mu, d, finite(dev)?))
-    };
-    let mut current = evaluate(&beta)?;
-    let mut done = None;
-    for iter in 1..=options.iteration.max_iterations {
-        control.check()?;
-        let eta = fitted(x, &beta);
-        let weights = (0..n)
-            .map(|i| prior(i) * current.1[i].powi(2) / variance(current.0[i], options.family))
-            .collect::<Vec<_>>();
-        let z = (0..n)
-            .map(|i| eta[i] + (y[i] - current.0[i]) / current.1[i])
-            .collect::<Vec<_>>();
-        let (proposal, _) = least_squares(x, &z, Some(&weights), control)?;
-        let mut accepted = None;
-        let mut step = 1.0;
-        for _ in 0..40 {
-            let trial = beta
-                .iter()
-                .zip(&proposal)
-                .map(|(a, b)| a + step * (b - a))
-                .collect::<Vec<_>>();
-            match evaluate(&trial) {
-                Ok(v) if v.2 <= current.2 + 1e-10 * (1.0 + current.2.abs()) => {
-                    accepted = Some((trial, v));
-                    break;
-                }
-                Err(
-                    e @ (yss_sci_contract::execution::ScientificComputationError::Cancelled
-                    | yss_sci_contract::execution::ScientificComputationError::DeadlineExceeded),
-                ) => return Err(e),
-                _ => {
-                    step *= 0.5;
-                }
-            }
-        }
-        let (next, new) = accepted.ok_or_else(failed)?;
-        let change = next
-            .iter()
-            .zip(&beta)
-            .map(|(a, b)| (a - b).abs() / (1.0 + b.abs()))
-            .fold(0.0, f64::max);
-        beta = next;
-        current = new;
-        if change <= options.iteration.tolerance {
-            done = Some(iter);
-            break;
-        }
-    }
-    let iterations = done.ok_or_else(failed)?;
-    let (mu, derivative, deviance) = current;
-    let weights = (0..n)
-        .map(|i| prior(i) * derivative[i].powi(2) / variance(mu[i], options.family))
-        .collect::<Vec<_>>();
-    let bread = inverse(&gram(x, Some(&weights), control)?)?;
-    let dispersion = match options.family {
-        GlmFamily::Gaussian | GlmFamily::Gamma | GlmFamily::InverseGaussian => {
-            (0..n)
-                .map(|i| prior(i) * (y[i] - mu[i]).powi(2) / variance(mu[i], options.family))
-                .sum::<f64>()
-                / (n - p) as f64
-        }
-        _ => 1.0,
-    };
-    let cov = if options.fractional {
-        let scores = (0..n)
-            .map(|i| {
-                (prior(i) * (y[i] - mu[i]) * derivative[i] / variance(mu[i], options.family))
-                    .powi(2)
+                GlmFamily::Poisson => v < 0.0 || v.fract() != 0.0,
+                GlmFamily::Gamma | GlmFamily::InverseGaussian => v <= 0.0,
+                GlmFamily::Gaussian => false,
             })
-            .collect::<Vec<_>>();
-        bread.as_ref() * gram(x, Some(&scores), control)?.as_ref() * bread.as_ref()
-    } else {
-        Mat::from_fn(p, p, |i, j| bread[(i, j)] * dispersion)
-    };
-    let (raw, cov) = design.raw(&beta, Some(cov));
-    let mut r = result(
-        if options.fractional {
-            "fractional_response"
-        } else {
-            "glm"
-        },
-        y,
-        mu.clone(),
-        raw,
-        names(predictors.len(), options.constant),
-        cov,
-        options.constant,
-        if options.family == GlmFamily::Gaussian {
-            Some(n - p)
-        } else {
-            None
-        },
-        RegressionDetails::Glm {
-            family: options.family,
-            link: options.link,
-            dispersion: finite(dispersion)?,
-            deviance,
-            covariance_method: if options.fractional {
-                "HC0 sandwich".into()
-            } else {
-                "model Fisher information".into()
-            },
-        },
-    )?;
-    r.statistics.df_residual = Some(n - p);
-    r.iterations = iterations;
-    if options.family != GlmFamily::Gaussian {
-        r.statistics.r_squared = None;
-        r.statistics.adjusted_r_squared = None;
+        {
+            return Err(parameter());
+        }
+        let design = Design::new(predictors, y.len(), options.constant, true, true, control)?;
+        Ok(Self {
+            design,
+            y,
+            options,
+            prior_weights,
+        })
     }
-    if !options.fractional && prior_weights.is_none() {
-        if options.family == GlmFamily::Gaussian {
-            gaussian_likelihood(&mut r)?;
+
+    pub fn fit(self, control: &Control) -> Result<GlmFit<'a>> {
+        control.check()?;
+        let y = self.y;
+        let options = self.options;
+        let prior_weights = self.prior_weights;
+        let prior = |i: usize| prior_weights.map_or(1., |w| w[i]);
+        let x = &self.design.x;
+        let p = x.ncols();
+        let n = y.len();
+        let ym = if let Some(w) = prior_weights {
+            let total = finite(w.iter().sum())?;
+            finite(y.iter().zip(w).map(|(y, w)| y * (w / total)).sum())?
         } else {
-            let ll = (0..n)
-                .map(|i| match options.family {
-                    GlmFamily::Binomial => {
-                        if y[i] == 1.0 {
-                            mu[i].ln()
-                        } else {
-                            (-mu[i]).ln_1p()
-                        }
+            mean(y)
+        };
+        if options.family == GlmFamily::Binomial && (ym <= 0.0 || ym >= 1.0) {
+            return Err(parameter());
+        }
+        if options.link == GlmLink::Log && ym <= 0.0 {
+            return Err(parameter());
+        }
+        let mut beta = vec![0.0; p];
+        if options.constant {
+            beta[0] = match options.link {
+                GlmLink::Identity => ym,
+                GlmLink::Log => ym.ln(),
+                GlmLink::Logit => (ym / (1.0 - ym)).ln(),
+                GlmLink::Probit => Normal::new(0.0, 1.0).expect("normal").inverse_cdf(ym),
+                GlmLink::Cloglog => (-(1.0 - ym).ln()).ln(),
+            };
+        }
+        let evaluate = |b: &[f64]| -> Result<(Vec<f64>, Vec<f64>, f64)> {
+            let eta = fitted(x, b);
+            let mut mu = Vec::with_capacity(n);
+            let mut d = Vec::with_capacity(n);
+            let mut dev = 0.0;
+            for i in 0..n {
+                if i % 1024 == 0 {
+                    control.check()?;
+                }
+                let (m, derivative) = mean_link(eta[i], options.link)?;
+                let v = variance(m, options.family);
+                if v <= 0.0 || !v.is_finite() {
+                    return Err(failed());
+                }
+                dev += prior(i) * unit_deviance(y[i], m, options.family);
+                mu.push(m);
+                d.push(derivative);
+            }
+            Ok((mu, d, finite(dev)?))
+        };
+        let mut current = evaluate(&beta)?;
+        let mut done = None;
+        for iter in 1..=options.iteration.max_iterations {
+            control.check()?;
+            let eta = fitted(x, &beta);
+            let weights = (0..n)
+                .map(|i| prior(i) * current.1[i].powi(2) / variance(current.0[i], options.family))
+                .collect::<Vec<_>>();
+            let z = (0..n)
+                .map(|i| eta[i] + (y[i] - current.0[i]) / current.1[i])
+                .collect::<Vec<_>>();
+            let (proposal, _) = least_squares(x, &z, Some(&weights), control)?;
+            let mut accepted = None;
+            let mut step = 1.0;
+            for _ in 0..40 {
+                let trial = beta
+                    .iter()
+                    .zip(&proposal)
+                    .map(|(a, b)| a + step * (b - a))
+                    .collect::<Vec<_>>();
+                match evaluate(&trial) {
+                    Ok(v) if v.2 <= current.2 + 1e-10 * (1.0 + current.2.abs()) => {
+                        accepted = Some((trial, v));
+                        break;
                     }
-                    GlmFamily::Poisson => y[i] * mu[i].ln() - mu[i] - ln_gamma(y[i] + 1.0),
-                    GlmFamily::Gamma => {
-                        let a = 1.0 / dispersion;
-                        a * (a / mu[i]).ln() - ln_gamma(a) + (a - 1.0) * y[i].ln()
-                            - a * y[i] / mu[i]
+                    Err(e @ (Error::Cancelled | Error::DeadlineExceeded)) => return Err(e),
+                    _ => {
+                        step *= 0.5;
                     }
-                    GlmFamily::InverseGaussian => {
-                        -0.5 * ((2.0 * std::f64::consts::PI * dispersion).ln()
-                            + 3.0 * y[i].ln()
-                            + (y[i] - mu[i]).powi(2) / (dispersion * y[i] * mu[i] * mu[i]))
-                    }
-                    GlmFamily::Gaussian => unreachable!(),
-                })
-                .sum::<f64>();
-            if ll.is_finite() {
-                likelihood_statistics(
-                    &mut r,
-                    ll,
-                    p + usize::from(matches!(
-                        options.family,
-                        GlmFamily::Gamma | GlmFamily::InverseGaussian
-                    )),
-                );
+                }
+            }
+            let (next, new) = accepted.ok_or_else(failed)?;
+            let change = next
+                .iter()
+                .zip(&beta)
+                .map(|(a, b)| (a - b).abs() / (1.0 + b.abs()))
+                .fold(0.0, f64::max);
+            beta = next;
+            current = new;
+            if change <= options.iteration.tolerance {
+                done = Some(iter);
+                break;
             }
         }
+        let iterations = done.ok_or_else(failed)?;
+        let (mu, derivative, deviance) = current;
+        control.check()?;
+        Ok(GlmFit {
+            prepared: self,
+            beta,
+            fitted: mu,
+            derivative,
+            deviance,
+            iterations,
+        })
     }
-    control.check()?;
-    Ok(r)
+}
+
+impl GlmFit<'_> {
+    pub fn dispersion(&self) -> Result<f64> {
+        let y = self.prepared.y;
+        let options = self.prepared.options;
+        let prior = |i: usize| self.prepared.prior_weights.map_or(1., |w| w[i]);
+        let mu = &self.fitted;
+        let (n, p) = (y.len(), self.prepared.design.x.ncols());
+        let dispersion = match options.family {
+            GlmFamily::Gaussian | GlmFamily::Gamma | GlmFamily::InverseGaussian => {
+                (0..n)
+                    .map(|i| prior(i) * (y[i] - mu[i]).powi(2) / variance(mu[i], options.family))
+                    .sum::<f64>()
+                    / (n - p) as f64
+            }
+            _ => 1.0,
+        };
+        finite(dispersion)
+    }
+
+    fn model(self, control: &Control) -> Result<RegressionModelResult> {
+        let y = self.prepared.y;
+        let options = self.prepared.options;
+        let design = &self.prepared.design;
+        let x = &design.x;
+        let (n, p) = (y.len(), x.ncols());
+        let mu = &self.fitted;
+        let derivative = &self.derivative;
+        let deviance = self.deviance;
+        let prior = |i: usize| self.prepared.prior_weights.map_or(1., |w| w[i]);
+        let dispersion = self.dispersion()?;
+        let weights = (0..n)
+            .map(|i| prior(i) * derivative[i].powi(2) / variance(mu[i], options.family))
+            .collect::<Vec<_>>();
+        let bread = inverse(&gram(x, Some(&weights), control)?)?;
+        let cov = if options.fractional {
+            let scores = (0..n)
+                .map(|i| {
+                    (prior(i) * (y[i] - mu[i]) * derivative[i] / variance(mu[i], options.family))
+                        .powi(2)
+                })
+                .collect::<Vec<_>>();
+            bread.as_ref() * gram(x, Some(&scores), control)?.as_ref() * bread.as_ref()
+        } else {
+            Mat::from_fn(p, p, |i, j| bread[(i, j)] * dispersion)
+        };
+        let (raw, cov) = design.raw(&self.beta, Some(cov));
+        let mut r = result(
+            if options.fractional {
+                "fractional_response"
+            } else {
+                "glm"
+            },
+            y,
+            self.fitted,
+            raw,
+            names(design.scales.len(), options.constant),
+            cov,
+            options.constant,
+            if options.family == GlmFamily::Gaussian {
+                Some(n - p)
+            } else {
+                None
+            },
+            RegressionDetails::Glm {
+                family: options.family,
+                link: options.link,
+                dispersion,
+                deviance,
+                covariance_method: if options.fractional {
+                    "HC0 sandwich".into()
+                } else {
+                    "model Fisher information".into()
+                },
+            },
+        )?;
+        r.statistics.df_residual = Some(n - p);
+        r.iterations = self.iterations;
+        if options.family != GlmFamily::Gaussian {
+            r.statistics.r_squared = None;
+            r.statistics.adjusted_r_squared = None;
+        }
+        if !options.fractional {
+            if options.family == GlmFamily::Gaussian {
+                gaussian_likelihood(&mut r)?;
+            } else {
+                let ll = (0..n)
+                    .map(|i| match options.family {
+                        GlmFamily::Binomial => {
+                            if y[i] == 1.0 {
+                                r.fitted[i].ln()
+                            } else {
+                                (-r.fitted[i]).ln_1p()
+                            }
+                        }
+                        GlmFamily::Poisson => {
+                            y[i] * r.fitted[i].ln() - r.fitted[i] - ln_gamma(y[i] + 1.0)
+                        }
+                        GlmFamily::Gamma => {
+                            let a = 1.0 / dispersion;
+                            a * (a / r.fitted[i]).ln() - ln_gamma(a) + (a - 1.0) * y[i].ln()
+                                - a * y[i] / r.fitted[i]
+                        }
+                        GlmFamily::InverseGaussian => {
+                            -0.5 * ((2.0 * std::f64::consts::PI * dispersion).ln()
+                                + 3.0 * y[i].ln()
+                                + (y[i] - r.fitted[i]).powi(2)
+                                    / (dispersion * y[i] * r.fitted[i] * r.fitted[i]))
+                        }
+                        GlmFamily::Gaussian => unreachable!(),
+                    })
+                    .sum::<f64>();
+                if ll.is_finite() {
+                    likelihood_statistics(
+                        &mut r,
+                        ll,
+                        p + usize::from(matches!(
+                            options.family,
+                            GlmFamily::Gamma | GlmFamily::InverseGaussian
+                        )),
+                    );
+                }
+            }
+        }
+        control.check()?;
+        Ok(r)
+    }
 }

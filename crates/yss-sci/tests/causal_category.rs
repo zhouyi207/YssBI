@@ -116,6 +116,43 @@ fn treatment_estimands_match_independent_references_and_bootstrap_refits() {
 }
 
 #[test]
+fn propensity_scores_do_not_require_unrepresentable_raw_coefficient_covariance() {
+    let f = fixture();
+    let d = &f["treatment"];
+    let predictors = matrix(&d["predictors"])
+        .into_iter()
+        .map(|column| column.into_iter().map(|v| v * 1e-200).collect())
+        .collect::<Vec<_>>();
+    let result = treatment::estimate(
+        &vector(&d["response"]),
+        &vector(&d["treatment"]),
+        &predictors,
+        options(TreatmentMethod::Ipw),
+        &control(),
+    )
+    .unwrap();
+    close(
+        result.ate.estimate,
+        d["cases"]["ipw"][0].as_f64().unwrap(),
+        1e-8,
+    );
+    close(
+        result.att.estimate,
+        d["cases"]["ipw"][1].as_f64().unwrap(),
+        1e-8,
+    );
+    for (actual, expected) in result
+        .propensity_scores
+        .unwrap()
+        .iter()
+        .zip(vector(&d["propensity"]))
+    {
+        close(*actual, expected, 1e-8);
+    }
+    assert!(result.ate.standard_error.is_none() && result.att.standard_error.is_none());
+}
+
+#[test]
 fn treatment_response_units_keep_ipw_effects_finite() {
     let f = fixture();
     let d = &f["treatment"];

@@ -1,6 +1,6 @@
 //! Binary-treatment matching, weighting and outcome-regression estimators.
 use super::common::*;
-use crate::regression::models::glm;
+use crate::regression::models::glm::PreparedGlm;
 use yss_sci_contract::causal::models::*;
 use yss_sci_contract::regression::models::{GlmFamily, GlmLink, GlmOptions};
 
@@ -188,7 +188,7 @@ fn point(
         if !options.overlap.is_finite() || options.overlap <= 0.0 || options.overlap >= 0.5 {
             return Err(parameter());
         }
-        let model = glm(
+        let scores = PreparedGlm::new(
             treatment,
             predictors,
             GlmOptions {
@@ -198,16 +198,18 @@ fn point(
                 fractional: false,
                 iteration: options.iteration,
             },
+            None,
             control,
-        )?;
-        if model
-            .fitted
+        )?
+        .fit(control)?
+        .fitted;
+        if scores
             .iter()
             .any(|&e| e < options.overlap || e > 1.0 - options.overlap)
         {
             return Err(parameter());
         }
-        Some(model.fitted)
+        Some(scores)
     } else {
         None
     };

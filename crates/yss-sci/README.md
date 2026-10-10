@@ -1071,9 +1071,16 @@ all directed-path products without enumerating paths. It does not implement late
 `survey` separates weight summaries, nested stratum/PSU preparation, mean/proportion
 linearization and regression score covariance. It implements single-stage with-replacement
 Taylor variance; certainty-stratum handling is explicit. `regression/models/glm` owns
-shared unweighted/positive-prior-weight IRLS; `likelihood` retains other likelihood models.
-Survey regression replaces model information covariance with design covariance and survey
-t degrees of freedom. Kish summaries describe unequal weighting only.
+shared unweighted/positive-prior-weight IRLS. Its private preparation owns the validated
+design, observations, options and prior weights; one fitted state owns normalized
+coefficients, means, derivatives, deviance and iteration facts. Full GLM model inference
+is projected only by the ordinary model entry, which moves fitted means into its report.
+Survey regression reuses that fit and design, restores coefficients and design covariance
+together, and constructs survey t inference directly. It does not calculate discarded
+model covariance or unweighted RSS. Propensity fitting requests only means, avoiding
+unused raw coefficient inference; Heckman still requests its reported selection
+coefficients. `likelihood` retains other likelihood models. Kish summaries describe
+unequal weighting only.
 
 `power` separates model domains/sample units, test-specific noncentralities, distribution
 tails and integer sample-size solving. Noncentral t/F tails sum centered Poisson/beta
