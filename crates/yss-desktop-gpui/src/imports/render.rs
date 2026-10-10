@@ -99,7 +99,7 @@ impl Render for ImportDialog {
                                 Some(ImportTask::Import) => {
                                     crate::text::t("dataOperation.importing")
                                 }
-                                None => "",
+                                None => "".into(),
                             }),
                     )
                     .child(
@@ -191,7 +191,7 @@ impl ImportDialog {
                     .flex_col()
                     .gap_2()
                     .child(
-                        Button::new(kind.label())
+                        Button::new(gpui_kit::SharedString::from(kind.label()))
                             .ghost()
                             .label(kind.label())
                             .disabled(self.busy())
@@ -282,7 +282,9 @@ impl ImportDialog {
                 )
                 .child(
                     Checkbox::new("csv-header")
-                        .label(crate::text::t("native.imports.firstRowHeader"))
+                        .label(gpui_kit::SharedString::from(crate::text::t(
+                            "native.imports.firstRowHeader",
+                        )))
                         .checked(self.has_header)
                         .disabled(self.busy())
                         .on_click(cx.listener(|view, checked: &bool, _, cx| {
@@ -311,7 +313,9 @@ impl ImportDialog {
             .child(div().text_sm().child(kind.label()))
             .child(
                 Checkbox::new("sql-raw")
-                    .label(crate::text::t("native.imports.useConnectionString"))
+                    .label(gpui_kit::SharedString::from(crate::text::t(
+                        "native.imports.useConnectionString",
+                    )))
                     .checked(self.connection.raw)
                     .disabled(self.busy())
                     .on_click(cx.listener(|view, checked: &bool, _, cx| {

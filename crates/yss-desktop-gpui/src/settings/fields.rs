@@ -5,11 +5,13 @@ use gpui_kit::{AnyElement, App, IntoElement, div, prelude::*, px};
 impl crate::settings::SettingsPanel {
     pub(in crate::settings) fn render_field(
         &self,
-        label: &str,
-        description: &str,
+        label: impl AsRef<str>,
+        description: impl AsRef<str>,
         control: impl IntoElement,
         cx: &App,
     ) -> AnyElement {
+        let label = label.as_ref();
+        let description = description.as_ref();
         let compact = self.render_width <= 720.;
         let control_width = if self.render_width <= 900. {
             240.

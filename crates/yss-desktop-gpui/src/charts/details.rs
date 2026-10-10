@@ -13,7 +13,7 @@ use yss_chart_document::{ChartEncodings, ChartType};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_database_schema::DatabaseColumnFact;
 
-pub(super) fn chart_type_label(kind: ChartType) -> &'static str {
+pub(super) fn chart_type_label(kind: ChartType) -> std::borrow::Cow<'static, str> {
     match kind {
         ChartType::Histogram => crate::text::t("chartsSidebar.chartTypes.histogram"),
         ChartType::Scatter => crate::text::t("chartsSidebar.chartTypes.scatter"),

@@ -69,7 +69,7 @@ impl ModelDraft {
             Default::default()
         } else {
             serde_json::from_str(parameters.as_ref()).map_err(|_| {
-                crate::text::t("native.settings.parametersObjectRequired").to_owned()
+                crate::text::t("native.settings.parametersObjectRequired").into_owned()
             })?
         };
         let id = self.id.read(cx).value().trim().to_owned();
@@ -79,12 +79,12 @@ impl ModelDraft {
             id,
             context_window: optional(
                 &self.context,
-                crate::text::t("native.settings.contextCapacity"),
+                &crate::text::t("native.settings.contextCapacity"),
                 cx,
             )?,
             max_output_tokens: optional(
                 &self.output,
-                crate::text::t("native.settings.maxOutput"),
+                &crate::text::t("native.settings.maxOutput"),
                 cx,
             )?,
             temperature: optional(&self.temperature, "Temperature", cx)?,
@@ -151,8 +151,8 @@ impl SettingsPanel {
             base_url: self.field(config.base_url, None, window, cx),
             key: self.field(
                 String::new(),
-                Some(if has_api_key {
-                    "********"
+                Some(&if has_api_key {
+                    "********".into()
                 } else {
                     crate::text::t("settings.models.enterKey")
                 }),
@@ -314,7 +314,7 @@ impl SettingsPanel {
         let provider = self
             .editor
             .as_ref()
-            .ok_or_else(|| crate::text::t("native.settings.chooseProvider").to_owned())?;
+            .ok_or_else(|| crate::text::t("native.settings.chooseProvider").into_owned())?;
         let mut config = provider.configuration(cx);
         if let Some(model) = &self.model {
             let value = model.configuration(cx)?;

@@ -186,7 +186,7 @@ impl ConversationPanel {
                 } else {
                     "settings.models.chooseModel"
                 })
-                .to_owned();
+                .into_owned();
                 (label.clone(), label)
             },
             |(provider, model)| {

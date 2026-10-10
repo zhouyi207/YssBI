@@ -22,7 +22,7 @@ impl State {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> std::borrow::Cow<'static, str> {
         text::t(match self {
             Self::Unexecuted => "canvas.graphState.unexecuted",
             Self::Running => "canvas.graphState.running",

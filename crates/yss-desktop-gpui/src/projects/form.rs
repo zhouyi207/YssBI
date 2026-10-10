@@ -27,7 +27,7 @@ pub(crate) enum ProjectFormKind {
     SaveAs,
 }
 impl ProjectFormKind {
-    pub(crate) fn title(self) -> &'static str {
+    pub(crate) fn title(self) -> std::borrow::Cow<'static, str> {
         if self == Self::Create {
             crate::text::t("projectPicker.newProjectModal.title")
         } else {
@@ -121,7 +121,10 @@ impl ProjectForm {
             _subscriptions: subscriptions,
         }
     }
-    fn destination(&self, cx: &gpui_kit::App) -> Result<(String, PathBuf), &'static str> {
+    fn destination(
+        &self,
+        cx: &gpui_kit::App,
+    ) -> Result<(String, PathBuf), std::borrow::Cow<'static, str>> {
         let name = self.name.read(cx).value().to_string();
         let name = name.trim();
         let parts = Path::new(name).components().collect::<Vec<_>>();
@@ -269,11 +272,11 @@ impl ProjectForm {
         }
         self.confirming = true;
         let prompt = crate::modal_window::prompt(
-            crate::text::t("native.projects.discardTitle"),
-            Some(crate::text::t("native.projects.discardMessage")),
+            &crate::text::t("native.projects.discardTitle"),
+            Some(&crate::text::t("native.projects.discardMessage")),
             &[
-                crate::text::t("native.projects.discardInput"),
-                crate::text::t("native.projects.keepEditing"),
+                &crate::text::t("native.projects.discardInput"),
+                &crate::text::t("native.projects.keepEditing"),
             ],
             window,
             cx,

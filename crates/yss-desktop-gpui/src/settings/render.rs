@@ -209,10 +209,10 @@ impl SettingsPanel {
             .error
             .clone()
             .or_else(|| self.preference_error.map(crate::text::translate))
-            .or_else(|| self.task.map(str::to_owned))
+            .or_else(|| self.task.as_ref().map(|task| task.to_string()))
             .or_else(|| {
                 self.loading
-                    .then(|| crate::text::t("native.settings.loadingModels").to_owned())
+                    .then(|| crate::text::t("native.settings.loadingModels").into_owned())
             })
             .or_else(|| self.feedback.clone());
         let Some(message) = message else {
@@ -247,7 +247,7 @@ impl SettingsPanel {
     }
 
     fn overview(&self, cx: &mut Context<Self>) -> AnyElement {
-        let mut label = crate::text::t("native.settings.noDefaultModel").to_owned();
+        let mut label = crate::text::t("native.settings.noDefaultModel").into_owned();
         let mut options = vec![];
         if let Some(catalog) = &self.catalog {
             for provider in &catalog.providers {

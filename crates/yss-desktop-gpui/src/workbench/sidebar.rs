@@ -140,7 +140,7 @@ pub(super) fn render_header(
                     .rounded(px(4.))
                     // A child icon keeps its explicit pixel size independent of Button's size.
                     .child(Icon::new(icon).with_size(px(16.)))
-                    .accessibility_label(title)
+                    .accessibility_label(title.clone())
                     .tooltip(title)
                     .selected(active)
                     .disabled(disabled)

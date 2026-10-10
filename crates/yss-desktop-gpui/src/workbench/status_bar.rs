@@ -240,7 +240,7 @@ impl Workbench {
         &self,
         id: &'static str,
         icon: IconName,
-        tooltip: &'static str,
+        tooltip: std::borrow::Cow<'static, str>,
         panel: WorkbenchPanel,
         cx: &mut Context<Self>,
     ) -> Button {
@@ -261,7 +261,7 @@ impl Workbench {
         &self,
         id: &'static str,
         icon: IconName,
-        tooltip: &'static str,
+        tooltip: std::borrow::Cow<'static, str>,
         placement: DockPlacement,
         cx: &mut Context<Self>,
     ) -> Button {
@@ -307,7 +307,7 @@ impl Workbench {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct GraphStatus {
     nodes: usize,
     connections: usize,
@@ -315,7 +315,7 @@ struct GraphStatus {
     offset_y: i32,
     zoom_percent: u16,
     busy: bool,
-    run_status: &'static str,
+    run_status: std::borrow::Cow<'static, str>,
 }
 
 impl GraphStatus {

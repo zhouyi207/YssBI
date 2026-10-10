@@ -29,7 +29,7 @@ impl ConversationPanel {
             (u128::from(input) * 100 + u128::from(capacity) / 2) / u128::from(capacity)
         });
         let label = percent.map_or_else(
-            || crate::text::t("panel.assistantTokens").to_owned(),
+            || crate::text::t("panel.assistantTokens").into_owned(),
             |value| {
                 crate::text::format(
                     "panel.assistantContextPercent",
@@ -159,7 +159,7 @@ fn row(key: &str, value: String) -> AnyElement {
 
 fn count(value: Option<u128>) -> String {
     let Some(value) = value else {
-        return crate::text::t("panel.assistantUsageUnknown").to_owned();
+        return crate::text::t("panel.assistantUsageUnknown").into_owned();
     };
     // Both supported locales use comma-separated groups of three for integers.
     let digits = value.to_string();

@@ -8,11 +8,11 @@ use gpui_kit::component::{
 };
 use gpui_kit::{AnyElement, Div, Stateful};
 
-pub(super) fn title(value: &str) -> &str {
+pub(super) fn title(value: &str) -> std::borrow::Cow<'_, str> {
     if value.is_empty() {
         crate::text::t("panel.assistantNewConversation")
     } else {
-        value
+        value.into()
     }
 }
 
@@ -43,7 +43,7 @@ impl ActivityPanel {
             return item.into_any_element();
         };
         let selected = self.active_resource.as_deref() == Some(session_id);
-        let label = title(name).to_owned();
+        let label = title(name).into_owned();
         let time = i64::try_from(*last_opened_at)
             .ok()
             .and_then(chrono::DateTime::from_timestamp_millis)

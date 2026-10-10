@@ -105,7 +105,6 @@ impl SettingsPanel {
                 } else {
                     "settings.knowledge.choose"
                 })
-                .to_owned()
             });
         let choices: Vec<_> = documents
             .into_iter()
@@ -144,8 +143,8 @@ impl SettingsPanel {
             });
         let expected = project.clone();
         self.render_field(
-            &t("settings.knowledge.document"),
-            &t("settings.knowledge.description"),
+            t("settings.knowledge.document"),
+            t("settings.knowledge.description"),
             div()
                 .flex()
                 .flex_col()
@@ -221,7 +220,10 @@ impl SettingsPanel {
                     div()
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child(t("settings.knowledge.updated").replace("{{value}}", &updated)),
+                        .child(crate::text::format(
+                            "settings.knowledge.updated",
+                            &[("value", updated)],
+                        )),
                 )
             })
             .child(

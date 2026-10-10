@@ -137,10 +137,10 @@ impl ConversationPanel {
                     let label = if Some(effort) == default {
                         crate::text::format(
                             "panel.assistantEffortDefault",
-                            &[("value", effort_label(effort).to_owned())],
+                            &[("value", effort_label(effort).into_owned())],
                         )
                     } else {
-                        effort_label(effort).to_owned()
+                        effort_label(effort).into_owned()
                     };
                     menu = menu.item(
                         PopupMenuItem::new(label)
@@ -169,7 +169,7 @@ fn mode_hint(mode: HarnessMode) -> &'static str {
         HarnessMode::Write => "panel.assistantModeHint.write",
     }
 }
-fn effort_label(effort: ReasoningEffort) -> &'static str {
+fn effort_label(effort: ReasoningEffort) -> std::borrow::Cow<'static, str> {
     crate::text::t(match effort {
         ReasoningEffort::Low => "panel.assistantEffort.low",
         ReasoningEffort::Medium => "panel.assistantEffort.medium",

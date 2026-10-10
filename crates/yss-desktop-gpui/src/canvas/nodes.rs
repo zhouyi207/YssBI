@@ -285,7 +285,7 @@ impl GraphCanvas {
                 )
             })
             .tooltip(move |window, cx| {
-                let mut lines = vec![display.state.label().to_owned()];
+                let mut lines = vec![display.state.label().into_owned()];
                 if let Some(code) = display.failure {
                     lines.push(text::run_failure(code));
                 }
@@ -294,7 +294,7 @@ impl GraphCanvas {
                 }
                 if display.cache.total > 0 {
                     if display.cache.state() != display.state {
-                        lines.push(display.cache.state().label().to_owned());
+                        lines.push(display.cache.state().label().into_owned());
                     }
                     lines.push(text::format(
                         "canvas.resultCount",

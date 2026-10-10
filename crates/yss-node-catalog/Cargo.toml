@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+yss-i18n = { path = "../yss-i18n" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 serde.workspace = true

@@ -189,7 +189,7 @@ impl Render for SettingsWindow {
         } else {
             crate::text::t("native.workbench.settingsWindowTitle")
         };
-        window.set_window_title(title);
+        window.set_window_title(&title);
         div()
             .key_context("Settings")
             .size_full()

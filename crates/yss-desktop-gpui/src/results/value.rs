@@ -47,7 +47,7 @@ pub fn rows(value: &RuntimeValue, expanded: &BTreeSet<String>, tables: bool) -> 
     walk(
         value,
         "",
-        crate::text::t("detail.description.result"),
+        &crate::text::t("detail.description.result"),
         0,
         expanded,
         tables,

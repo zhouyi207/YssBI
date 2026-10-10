@@ -83,12 +83,10 @@ impl ActivityPanel {
             .aria_label(row_label(&row.content))
             .aria_level(row.depth + 1)
             .when(focused, |row| row.aria_active_descendant())
-            .border_1()
-            .border_color(if focused && self.focus.is_focused(window) {
-                cx.theme().ring
-            } else {
-                gpui_kit::hsla(0., 0., 0., 0.)
-            })
+            .when(
+                focused && self.focus.is_focused(window) && window.last_input_was_keyboard(),
+                |row| row.bg(cx.theme().muted),
+            )
             .on_mouse_down(
                 gpui_kit::MouseButton::Left,
                 cx.listener(move |view, _, window, cx| {
@@ -156,7 +154,7 @@ fn row_label(content: &ActivityRowContent) -> String {
         | ActivityRowContent::Message { label, .. }
         | ActivityRowContent::Item(ActivityItem::Command { label, .. }) => activity_text(label),
         ActivityRowContent::Item(ActivityItem::Conversation { title, .. }) if title.is_empty() => {
-            conversations::title("").to_owned()
+            conversations::title("").into_owned()
         }
         ActivityRowContent::Item(
             ActivityItem::Conversation { title, .. } | ActivityItem::Node { title, .. },

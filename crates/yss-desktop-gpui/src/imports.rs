@@ -44,10 +44,10 @@ enum ImportKind {
     Mariadb,
 }
 impl ImportKind {
-    fn label(self) -> &'static str {
+    fn label(self) -> std::borrow::Cow<'static, str> {
         match self {
             Self::Csv => crate::text::t("importModal.types.csv.label"),
-            Self::Parquet => "Parquet",
+            Self::Parquet => "Parquet".into(),
             Self::Excel => crate::text::t("importModal.types.xlsx.label"),
             Self::Sqlite => crate::text::t("importModal.types.sqlite.label"),
             Self::Postgres => crate::text::t("importModal.types.postgres.label"),
@@ -325,11 +325,11 @@ impl ImportDialog {
         }
         self.confirming_close = true;
         let prompt = crate::modal_window::prompt(
-            crate::text::t("native.imports.closeTitle"),
-            Some(crate::text::t("native.imports.closeMessage")),
+            &crate::text::t("native.imports.closeTitle"),
+            Some(&crate::text::t("native.imports.closeMessage")),
             &[
-                crate::text::t("common.close"),
-                crate::text::t("native.imports.keepEditing"),
+                &crate::text::t("common.close"),
+                &crate::text::t("native.imports.keepEditing"),
             ],
             window,
             cx,

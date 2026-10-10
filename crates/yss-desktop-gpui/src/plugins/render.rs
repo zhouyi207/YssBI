@@ -33,7 +33,7 @@ impl PluginsPanel {
             .child(
                 self.error
                     .clone()
-                    .or_else(|| self.task.map(str::to_owned))
+                    .or_else(|| self.task.as_ref().map(|task| task.to_string()))
                     .or_else(|| self.feedback.clone())
                     .unwrap_or_else(|| {
                         crate::text::format(

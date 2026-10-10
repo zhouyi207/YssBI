@@ -194,7 +194,7 @@ impl Render for PackageInstaller {
                             } else {
                                 manifest
                                     .permissions
-                                    .join(crate::text::t("common.listSeparator"))
+                                    .join(&crate::text::t("common.listSeparator"))
                             })
                             .to_string(),
                         )],
@@ -222,7 +222,9 @@ impl Render for PackageInstaller {
                 )
                 .child(
                     Checkbox::new("plugin-native-consent")
-                        .label(crate::text::t("native.plugins.trustPublisher"))
+                        .label(gpui_kit::SharedString::from(crate::text::t(
+                            "native.plugins.trustPublisher",
+                        )))
                         .checked(self.approved)
                         .disabled(self.busy)
                         .on_click(cx.listener(|view, checked: &bool, _, cx| {
@@ -256,7 +258,9 @@ impl Render for PackageInstaller {
                     )
                     .child(
                         Checkbox::new("plugin-signer-consent")
-                            .label(crate::text::t("native.plugins.confirmNewSigner"))
+                            .label(gpui_kit::SharedString::from(crate::text::t(
+                                "native.plugins.confirmNewSigner",
+                            )))
                             .checked(self.signer_approved)
                             .disabled(self.busy)
                             .on_click(cx.listener(|view, checked: &bool, _, cx| {

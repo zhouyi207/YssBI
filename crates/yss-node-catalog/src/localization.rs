@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
+use yss_i18n::{Backend, SimpleBackend, resolve_locale, translate};
 use yss_node_protocol::{I18nKey, NodeTypeId};
 use yss_node_registry::{I18nManifest, NodeRegistry};
 
@@ -11,11 +14,26 @@ pub(crate) enum Message {
     Aliases(&'static [&'static str]),
 }
 
-type Bundle = BTreeMap<I18nKey, Message>;
+type AliasBundle = BTreeMap<I18nKey, &'static [&'static str]>;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BuiltinCatalog {
-    bundles: BTreeMap<Box<str>, Bundle>,
+    messages: Arc<CatalogMessages>,
+}
+
+struct CatalogMessages {
+    text: SimpleBackend,
+    aliases: BTreeMap<&'static str, AliasBundle>,
+}
+
+impl std::fmt::Debug for BuiltinCatalog {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BuiltinCatalog")
+            .field("locales", &self.messages.text.available_locales())
+            .field("aliases", &self.messages.aliases)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,7 +245,7 @@ impl BuiltinCatalog {
     pub(crate) fn new(
         entries: &[(&'static str, String, Message)],
     ) -> Result<Self, yss_node_protocol::ProtocolError> {
-        let mut bundles = BTreeMap::<Box<str>, Bundle>::new();
+        let mut bundles = BTreeMap::<&'static str, BTreeMap<I18nKey, Message>>::new();
         for (locale, key, message) in entries {
             let key = I18nKey::new(key.as_str()).map_err(|source| {
                 yss_node_protocol::ProtocolError::InvalidSemanticId {
@@ -236,11 +254,32 @@ impl BuiltinCatalog {
                 }
             })?;
             bundles
-                .entry((*locale).into())
+                .entry(*locale)
                 .or_default()
                 .insert(key, message.clone());
         }
-        Ok(Self { bundles })
+        let mut text = SimpleBackend::new();
+        let mut aliases = BTreeMap::new();
+        for (locale, bundle) in bundles {
+            let mut translations = HashMap::new();
+            let mut alias_bundle = AliasBundle::new();
+            for (key, message) in bundle {
+                match message {
+                    Message::Text(value) => {
+                        translations
+                            .insert(Cow::Owned(key.as_str().to_owned()), Cow::Borrowed(value));
+                    }
+                    Message::Aliases(values) => {
+                        alias_bundle.insert(key, values);
+                    }
+                }
+            }
+            text.add_translations(Cow::Borrowed(locale), translations);
+            aliases.insert(locale, alias_bundle);
+        }
+        Ok(Self {
+            messages: Arc::new(CatalogMessages { text, aliases }),
+        })
     }
 
     pub fn localize(&self, registry: &NodeRegistry, locale: &str) -> LocalizedCatalog {
@@ -253,12 +292,13 @@ impl BuiltinCatalog {
         locale: &str,
         resources: &[CatalogResourceEntry],
     ) -> LocalizedCatalog {
-        let locale = normalize_locale(locale);
+        let requested_locale = locale.trim().replace('_', "-");
+        let locale = resolve_locale(locale, DEFAULT_LOCALE);
         let categories = registry
             .categories()
             .iter()
             .map(|(id, category)| {
-                let title = self.text(&locale, &category.title_key);
+                let title = self.text(locale, &category.title_key);
                 LocalizedCategory {
                     category_id: id.as_str().into(),
                     parent_category_id: category
@@ -275,7 +315,7 @@ impl BuiltinCatalog {
             .iter()
             .filter_map(|(_, node)| {
                 let descriptor = authoritative_static_descriptor(node.protocol())?;
-                Some(self.static_item(node.protocol(), &locale, descriptor))
+                Some(self.static_item(node.protocol(), locale, descriptor))
             })
             .collect::<Vec<_>>();
         let mut resources = resources.iter().collect::<Vec<_>>();
@@ -287,10 +327,10 @@ impl BuiltinCatalog {
         items.extend(resources.into_iter().filter_map(|entry| {
             let node = registry.get(&entry.node_type_id)?;
             (!node.protocol().catalog.hidden)
-                .then(|| self.resource_item(entry, node.protocol(), &locale))
+                .then(|| self.resource_item(entry, node.protocol(), locale))
         }));
         LocalizedCatalog {
-            locale: locale.into(),
+            locale: requested_locale.into(),
             categories,
             items,
         }
@@ -301,21 +341,27 @@ impl BuiltinCatalog {
         required: &I18nManifest,
         alias_keys: &BTreeSet<I18nKey>,
     ) -> Result<(), I18nBundleValidationError> {
-        let default_bundle = self.bundles.get(DEFAULT_LOCALE);
+        let default_aliases = self.messages.aliases.get(DEFAULT_LOCALE);
         let keys: Vec<_> = required
             .keys
             .iter()
-            .filter(|key| default_bundle.is_none_or(|bundle| !bundle.contains_key(*key)))
+            .filter(|key| {
+                self.messages
+                    .text
+                    .translate(DEFAULT_LOCALE, key.as_str())
+                    .is_none()
+                    && default_aliases.is_none_or(|bundle| !bundle.contains_key(*key))
+            })
             .map(|key| key.as_str().into())
             .collect();
         if !keys.is_empty() {
             return Err(I18nBundleValidationError::MissingDefaultLocale { keys });
         }
-        for (locale, bundle) in &self.bundles {
+        for locale in self.messages.aliases.keys() {
             for key in alias_keys {
-                if matches!(bundle.get(key), Some(Message::Text(_))) {
+                if self.messages.text.translate(locale, key.as_str()).is_some() {
                     return Err(I18nBundleValidationError::AliasesNotArray {
-                        locale: locale.clone(),
+                        locale: (*locale).into(),
                         key: key.as_str().into(),
                     });
                 }
@@ -444,84 +490,36 @@ impl BuiltinCatalog {
             .catalog
             .aliases_key
             .as_ref()
-            .and_then(|key| self.bundles.get(DEFAULT_LOCALE)?.get(key))
+            .and_then(|key| self.messages.aliases.get(DEFAULT_LOCALE)?.get(key))
         {
-            Some(Message::Aliases(values)) => values
+            Some(values) => values
                 .iter()
                 .map(|value| Box::<str>::from(*value))
                 .collect(),
-            Some(Message::Text(_)) | None => Vec::new(),
+            None => Vec::new(),
         }
-    }
-
-    fn message(&self, locale: &str, key: &I18nKey) -> Option<&Message> {
-        if let Some(message) = self.bundles.get(locale).and_then(|bundle| bundle.get(key)) {
-            return Some(message);
-        }
-        locale_chain(locale).into_iter().find_map(|candidate| {
-            self.bundles
-                .get(candidate.as_str())
-                .or_else(|| {
-                    self.bundles
-                        .iter()
-                        .find(|(name, _)| name.eq_ignore_ascii_case(candidate.as_str()))
-                        .map(|(_, bundle)| bundle)
-                })
-                .or_else(|| {
-                    (!candidate.contains('-'))
-                        .then(|| {
-                            self.bundles
-                                .iter()
-                                .find(|(name, _)| {
-                                    name.split('-').next().is_some_and(|language| {
-                                        language.eq_ignore_ascii_case(candidate.as_str())
-                                    })
-                                })
-                                .map(|(_, bundle)| bundle)
-                        })
-                        .flatten()
-                })?
-                .get(key)
-        })
     }
 
     /// Looks up node metadata text, returning the key when no translation exists.
     pub fn text(&self, locale: &str, key: &I18nKey) -> Box<str> {
-        match self.message(locale, key) {
-            Some(Message::Text(value)) => (*value).into(),
-            _ => key.as_str().into(),
-        }
+        translate(&self.messages.text, locale, key.as_str(), DEFAULT_LOCALE)
+            .into_owned()
+            .into_boxed_str()
     }
 
     fn aliases(&self, locale: &str, key: &I18nKey) -> Vec<Box<str>> {
-        match self.message(locale, key) {
-            Some(Message::Aliases(values)) => values.iter().map(|value| (*value).into()).collect(),
-            _ => vec![key.as_str().into()],
+        let locale = resolve_locale(locale, DEFAULT_LOCALE);
+        let values = self
+            .messages
+            .aliases
+            .get(locale)
+            .and_then(|bundle| bundle.get(key))
+            .or_else(|| self.messages.aliases.get(DEFAULT_LOCALE)?.get(key));
+        match values {
+            Some(values) => values.iter().map(|value| (*value).into()).collect(),
+            None => vec![key.as_str().into()],
         }
     }
-}
-
-fn normalize_locale(locale: &str) -> String {
-    locale.trim().replace('_', "-")
-}
-
-fn locale_chain(locale: &str) -> Vec<String> {
-    let normalized = normalize_locale(locale);
-    let language = match normalized.split('-').next() {
-        Some(language) => language.to_owned(),
-        None => normalized.clone(),
-    };
-    let mut chain = vec![normalized];
-    if !language.is_empty() && language != chain[0] {
-        chain.push(language);
-    }
-    if !chain
-        .iter()
-        .any(|item| item.eq_ignore_ascii_case(DEFAULT_LOCALE))
-    {
-        chain.push(DEFAULT_LOCALE.into());
-    }
-    chain
 }
 
 fn search<'a>(parts: impl IntoIterator<Item = &'a str>) -> Box<str> {
@@ -540,16 +538,9 @@ mod tests {
         for (baseline, requested) in [("zh-CN", "ZH_CN"), ("en-US", "zhx")] {
             let expected = system.catalog.localize(&system.registry, baseline);
             let actual = system.catalog.localize(&system.registry, requested);
-            assert_eq!(actual.items.len(), expected.items.len());
-            for (actual, expected) in actual.items.iter().zip(&expected.items) {
-                assert_eq!(actual.node_type_id, expected.node_type_id);
-                assert_eq!(actual.title, expected.title, "{}", actual.node_type_id);
-                assert_eq!(
-                    actual.documentation, expected.documentation,
-                    "{}: {requested}",
-                    actual.node_type_id
-                );
-            }
+            assert_eq!(actual.locale.as_ref(), requested.trim().replace('_', "-"));
+            assert_eq!(actual.items, expected.items, "{requested}");
+            assert_eq!(actual.categories, expected.categories, "{requested}");
         }
     }
 
@@ -565,12 +556,88 @@ mod tests {
             ("en-US", "Example"),
             ("EN-us", "Example"),
             ("EN_US", "Example"),
+            (" en_GB ", "Example"),
             ("zh-CN", "示例"),
             ("ZH_cn", "示例"),
             ("ZH-tw", "示例"),
+            (" zh_Hant_TW ", "示例"),
             ("fr-FR", "Example"),
+            ("", "Example"),
         ] {
             assert_eq!(catalog.text(locale, &key).as_ref(), expected, "{locale}");
         }
+    }
+
+    #[test]
+    fn text_falls_back_to_default_then_preserves_missing_keys() {
+        let key = I18nKey::new("nodes.example.documentation").unwrap();
+        let missing = I18nKey::new("nodes.example.missing").unwrap();
+        let catalog = BuiltinCatalog::new(&[(
+            "en-US",
+            key.as_str().to_owned(),
+            Text("Example documentation"),
+        )])
+        .unwrap();
+        assert_eq!(
+            catalog.text("zh-CN", &key).as_ref(),
+            "Example documentation"
+        );
+        assert_eq!(catalog.text("zh-CN", &missing).as_ref(), missing.as_str());
+    }
+
+    #[test]
+    fn cloned_catalogs_keep_concurrent_request_locales_isolated() {
+        let system = crate::build_builtin_node_system().unwrap();
+        let english = system.catalog.localize(&system.registry, "en-US");
+        let chinese = system.catalog.localize(&system.registry, "zh-CN");
+        assert_ne!(english.items, chinese.items);
+        std::thread::scope(|scope| {
+            let registry = &system.registry;
+            for (locales, expected) in [
+                (["en-US", " EN_gb ", "unknown"], english),
+                (["zh-CN", " ZH_tw ", "zh_Hant"], chinese),
+            ] {
+                let catalog = system.catalog.clone();
+                scope.spawn(move || {
+                    for locale in locales.into_iter().cycle().take(12) {
+                        let actual = catalog.localize(registry, locale);
+                        assert_eq!(actual.locale.as_ref(), locale.trim().replace('_', "-"));
+                        assert_eq!(actual.items, expected.items, "{locale}");
+                        assert_eq!(actual.categories, expected.categories, "{locale}");
+                    }
+                });
+            }
+        });
+    }
+
+    #[test]
+    fn catalog_validation_preserves_required_defaults_and_typed_aliases() {
+        let title = I18nKey::new("nodes.example.title").unwrap();
+        let aliases = I18nKey::new("nodes.example.aliases").unwrap();
+        let required = I18nManifest {
+            keys: BTreeSet::from([title.clone(), aliases.clone()]),
+        };
+        let alias_keys = BTreeSet::from([aliases.clone()]);
+        let mut entries = vec![
+            ("zh-CN", title.as_str().to_owned(), Text("示例")),
+            ("en-US", aliases.as_str().to_owned(), Aliases(&["example"])),
+            ("zh-CN", aliases.as_str().to_owned(), Text("not an array")),
+        ];
+        let catalog = BuiltinCatalog::new(&entries).unwrap();
+        assert_eq!(
+            catalog.validate(&required, &alias_keys),
+            Err(I18nBundleValidationError::MissingDefaultLocale {
+                keys: vec![title.as_str().into()],
+            })
+        );
+        entries.push(("en-US", title.as_str().to_owned(), Text("Example")));
+        let catalog = BuiltinCatalog::new(&entries).unwrap();
+        assert_eq!(
+            catalog.validate(&required, &alias_keys),
+            Err(I18nBundleValidationError::AliasesNotArray {
+                locale: "zh-CN".into(),
+                key: aliases.as_str().into(),
+            })
+        );
     }
 }

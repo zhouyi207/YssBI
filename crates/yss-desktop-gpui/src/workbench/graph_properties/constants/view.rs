@@ -67,7 +67,9 @@ impl GraphProperties {
             ))
             .child(
                 Checkbox::new(("constant-null", row))
-                    .label(crate::text::t("native.workbench.nullValue"))
+                    .label(gpui_kit::SharedString::from(crate::text::t(
+                        "native.workbench.nullValue",
+                    )))
                     .checked(field.is_null)
                     .disabled(disabled)
                     .on_click(cx.listener(move |view, value: &bool, _, cx| {
@@ -87,7 +89,9 @@ impl GraphProperties {
             if field.data_type == ValueType::Scalar(SemanticType::Binary) {
                 content = content.child(
                     Checkbox::new(("constant-bool", row))
-                        .label(crate::text::t("native.workbench.trueValue"))
+                        .label(gpui_kit::SharedString::from(crate::text::t(
+                            "native.workbench.trueValue",
+                        )))
                         .checked(input.value(cx) == "true")
                         .disabled(disabled || field.is_null)
                         .on_click(cx.listener(move |view, value: &bool, window, cx| {

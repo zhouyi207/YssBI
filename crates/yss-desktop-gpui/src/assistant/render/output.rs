@@ -321,12 +321,12 @@ pub(super) fn status_text(event: &yss_harness_contract::AssistantEventKind) -> S
                 AgentRuntimePhase::Compacting => "native.assistant.compactContext",
             });
             return if *attempt == 0 {
-                label.to_owned()
+                label.into_owned()
             } else {
                 format(
                     "native.assistant.attempt",
                     &[
-                        ("label", label.to_owned()),
+                        ("label", label.into_owned()),
                         ("attempt", attempt.to_string()),
                     ],
                 )
@@ -399,9 +399,9 @@ pub(super) fn status_text(event: &yss_harness_contract::AssistantEventKind) -> S
                 if retriable {
                     t("native.assistant.retryable")
                 } else {
-                    ""
+                    "".into()
                 }
-                .to_owned(),
+                .into_owned(),
             ),
         ],
     )

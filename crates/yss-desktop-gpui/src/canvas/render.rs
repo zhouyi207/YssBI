@@ -215,7 +215,10 @@ impl Render for GraphCanvas {
             .children(feedback)
             .when_some(label, |view, label| {
                 view.tooltip(move |window, cx| {
-                    gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
+                    gpui_kit::component::tooltip::Tooltip::new(gpui_kit::SharedString::from(
+                        label.clone(),
+                    ))
+                    .build(window, cx)
                 })
             })
             .when_some(self.context_menu.as_ref(), |view, menu| {

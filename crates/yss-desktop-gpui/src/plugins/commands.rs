@@ -10,7 +10,12 @@ pub(super) enum PluginAction {
     CollectPackages,
 }
 impl PluginAction {
-    fn confirmation(self) -> Option<(&'static str, &'static str)> {
+    fn confirmation(
+        self,
+    ) -> Option<(
+        std::borrow::Cow<'static, str>,
+        std::borrow::Cow<'static, str>,
+    )> {
         match self {
             Self::Uninstall => Some((
                 crate::text::t("native.plugins.uninstallTitle"),
@@ -46,11 +51,11 @@ impl PluginsPanel {
         if let Some((title, message)) = action.confirmation() {
             let generation = self.generation;
             let prompt = crate::modal_window::prompt(
-                title,
-                Some(message),
+                &title,
+                Some(&message),
                 &[
-                    crate::text::t("native.plugins.confirm"),
-                    crate::text::t("common.cancel"),
+                    &crate::text::t("native.plugins.confirm"),
+                    &crate::text::t("common.cancel"),
                 ],
                 window,
                 cx,

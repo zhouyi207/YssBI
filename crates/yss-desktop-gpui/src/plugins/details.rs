@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 use yss_plugin_runtime::{InstalledPlugin, TaskSnapshot, TaskState, ViewScope};
 
-pub(super) fn task_state(state: TaskState) -> &'static str {
+pub(super) fn task_state(state: TaskState) -> std::borrow::Cow<'static, str> {
     match state {
         TaskState::Admitted => crate::text::t("native.plugins.accepted"),
         TaskState::Running => crate::text::t("common.running"),
@@ -198,7 +198,7 @@ impl PluginsPanel {
                         plugin
                             .manifest
                             .permissions
-                            .join(crate::text::t("common.listSeparator"))
+                            .join(&crate::text::t("common.listSeparator"))
                     }),
             );
         if let Some(detail) = &self.detail {
@@ -235,7 +235,7 @@ impl PluginsPanel {
                                 plugin
                                     .manifest
                                     .cache_directories
-                                    .join(crate::text::t("common.listSeparator"))
+                                    .join(&crate::text::t("common.listSeparator"))
                             })
                             .to_string(),
                         )],

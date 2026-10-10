@@ -330,7 +330,9 @@ impl GraphProperties {
             )
             .child(
                 gpui_kit::component::checkbox::Checkbox::new("signature-has-return")
-                    .label(crate::text::t("native.workbench.returnValue"))
+                    .label(gpui_kit::SharedString::from(crate::text::t(
+                        "native.workbench.returnValue",
+                    )))
                     .checked(draft.has_return)
                     .disabled(busy)
                     .on_click(cx.listener(move |view, value: &bool, _, cx| {

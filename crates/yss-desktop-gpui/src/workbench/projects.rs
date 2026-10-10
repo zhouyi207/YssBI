@@ -60,10 +60,15 @@ impl ProjectOperation {
             dialog,
         }
     }
-    pub(super) fn fail(&self, lifecycle: u64, message: &str, cx: &mut Context<Workbench>) {
+    pub(super) fn fail(
+        &self,
+        lifecycle: u64,
+        message: impl AsRef<str>,
+        cx: &mut Context<Workbench>,
+    ) {
         if let Some(dialog) = &self.dialog {
             let _ = dialog.update(cx, |view, cx| {
-                view.finish(lifecycle, Some(message.into()), None, cx)
+                view.finish(lifecycle, Some(message.as_ref().into()), None, cx)
             });
         }
     }
@@ -344,19 +349,19 @@ impl Workbench {
         };
         let buttons: &[&str] = if save_as {
             &[
-                crate::text::t("native.workbench.saveAndContinue"),
-                crate::text::t("common.cancel"),
+                &crate::text::t("native.workbench.saveAndContinue"),
+                &crate::text::t("common.cancel"),
             ]
         } else {
             &[
-                crate::text::t("native.workbench.saveAndContinue"),
-                crate::text::t("native.workbench.continueWithoutSaving"),
-                crate::text::t("common.cancel"),
+                &crate::text::t("native.workbench.saveAndContinue"),
+                &crate::text::t("native.workbench.continueWithoutSaving"),
+                &crate::text::t("common.cancel"),
             ]
         };
         let prompt = crate::modal_window::prompt(
-            crate::text::t("native.workbench.unsavedChangesTitle"),
-            Some(message),
+            &crate::text::t("native.workbench.unsavedChangesTitle"),
+            Some(&message),
             buttons,
             window,
             cx,

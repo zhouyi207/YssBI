@@ -386,5 +386,5 @@ fn failure(error: &ModelSettingsError) -> String {
             _ => crate::text::t("native.settings.serviceFailed"),
         },
     }
-    .to_owned()
+    .into_owned()
 }

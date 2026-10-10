@@ -12883,6 +12883,7 @@ dependencies = [
  "ratex-parser",
  "ratex-svg",
  "ratex-types",
+ "rust-i18n-support",
  "serde",
  "serde_json",
  "tokio",
@@ -12905,6 +12906,7 @@ dependencies = [
  "yss-graph-execution",
  "yss-harness-contract",
  "yss-harness-core",
+ "yss-i18n",
  "yss-logging",
  "yss-node-catalog",
  "yss-node-kernel",
@@ -12982,6 +12984,7 @@ name = "yss-graph-diagnostics"
 version = "0.1.0"
 dependencies = [
  "yss-graph-analysis-contract",
+ "yss-i18n",
 ]
 
 [[package]]
@@ -13166,6 +13169,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-i18n"
+version = "0.4.0"
+dependencies = [
+ "rust-i18n",
+ "smallvec",
+]
+
+[[package]]
 name = "yss-logging"
 version = "0.1.0"
 dependencies = [
@@ -13199,6 +13210,7 @@ dependencies = [
  "unicode-casefold",
  "unicode-normalization",
  "yss-data-contract",
+ "yss-i18n",
  "yss-node-protocol",
  "yss-node-registry",
  "yss-sci-contract",

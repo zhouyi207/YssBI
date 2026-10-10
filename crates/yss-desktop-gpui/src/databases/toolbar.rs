@@ -58,7 +58,7 @@ impl DatabaseEditor {
                     .dropdown_menu(move |mut menu, _, _| {
                         for (label, format) in [
                             (t("importModal.types.csv.label"), "csv"),
-                            ("Parquet".to_owned(), "parquet"),
+                            ("Parquet".into(), "parquet"),
                         ] {
                             let owner = owner.clone();
                             menu = menu.item(PopupMenuItem::new(label).on_click(

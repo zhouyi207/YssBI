@@ -505,9 +505,5 @@ fn select_locale(documentation: Documentation, locale: &str) -> &'static str {
 }
 
 pub(crate) fn is_chinese_locale(locale: &str) -> bool {
-    locale
-        .trim()
-        .split(['-', '_'])
-        .next()
-        .is_some_and(|language| language.eq_ignore_ascii_case("zh"))
+    yss_i18n::resolve_locale(locale, "en-US") == "zh-CN"
 }

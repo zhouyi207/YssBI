@@ -112,7 +112,7 @@ pub(super) fn elapsed(id: String, timing: Option<Timing>, active: bool, cx: &App
             .min(u128::from(u64::MAX)) as u64;
         crate::text::format("panel.assistantElapsed", &[("value", duration(elapsed))])
     } else {
-        crate::text::t("panel.assistantTimingUnconfirmed").to_owned()
+        crate::text::t("panel.assistantTimingUnconfirmed").into_owned()
     };
     div()
         .id(SharedString::from(id))

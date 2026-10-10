@@ -185,7 +185,9 @@ impl DetailsPanel {
             let disabled = busy || port.connections.current > 0;
             let editor = if *kind == SemanticType::Binary {
                 Checkbox::new(("literal-toggle", index))
-                    .label(crate::text::t("native.workbench.trueValue"))
+                    .label(gpui_kit::SharedString::from(crate::text::t(
+                        "native.workbench.trueValue",
+                    )))
                     .checked(state.read(cx).value() == "true")
                     .disabled(disabled)
                     .on_click(cx.listener(move |view, value: &bool, window, cx| {

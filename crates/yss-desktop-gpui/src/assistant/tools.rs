@@ -126,7 +126,7 @@ impl ToolState {
         !matches!(self, Self::Running | Self::Completed | Self::GraphSucceeded)
     }
 
-    pub(super) fn label(self, connected: bool) -> &'static str {
+    pub(super) fn label(self, connected: bool) -> std::borrow::Cow<'static, str> {
         crate::text::t(match self {
             Self::Running if !connected => "panel.assistantToolUnknown",
             Self::Running => "panel.assistantToolRunning",

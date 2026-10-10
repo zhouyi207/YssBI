@@ -106,7 +106,7 @@ fn source_caption(source: &SourceLocation) -> (String, String) {
                 .map(|url| url[url::Position::BeforeHost..url::Position::AfterPort].to_owned());
             let title = match server {
                 Some(server) => format!("{} · {server}", kind.label()),
-                None => kind.label().to_owned(),
+                None => kind.label().into_owned(),
             };
             (title.clone(), title)
         }

@@ -59,7 +59,7 @@ impl ConversationPanel {
             } else {
                 IconName::ChevronRight
             })
-            .accessibility_label(role)
+            .accessibility_label(role.clone())
             .child(
                 div()
                     .flex_1()

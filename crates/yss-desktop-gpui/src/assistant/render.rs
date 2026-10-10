@@ -126,11 +126,11 @@ impl ConversationPanel {
                 .when(turn.state != TurnState::Completed, |footer| {
                     footer.child(match turn.state {
                         TurnState::Running => crate::text::t("native.assistant.generating"),
-                        TurnState::Completed => "",
+                        TurnState::Completed => "".into(),
                         TurnState::Failed if turn.output.failure().is_none() => {
                             crate::text::t("panel.assistantReplyInterrupted")
                         }
-                        TurnState::Failed => "",
+                        TurnState::Failed => "".into(),
                         TurnState::Cancelled => crate::text::t("panel.assistantReplyStopped"),
                     })
                 })
@@ -152,7 +152,7 @@ impl ConversationPanel {
         });
         Clipboard::new(SharedString::from(format!("copy-{user}-{id}")))
             .xsmall()
-            .tooltip(label)
+            .tooltip(label.clone())
             .accessibility_label(label)
             .value_fn(move |_, cx| {
                 owner

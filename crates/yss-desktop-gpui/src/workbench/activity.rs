@@ -63,7 +63,7 @@ pub struct ActivityPanel {
     focus: FocusHandle,
     active_resource: Option<String>,
     search: Option<Entity<InputState>>,
-    search_default_title: &'static str,
+    search_default_title: std::borrow::Cow<'static, str>,
     conversation_owner: Option<gpui_kit::WeakEntity<super::Workbench>>,
     search_subscription: Option<gpui_kit::Subscription>,
     activation_subscription: Option<gpui_kit::Subscription>,

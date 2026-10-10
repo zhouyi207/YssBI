@@ -68,7 +68,7 @@ pub(crate) struct PluginsPanel {
     search: Entity<InputState>,
     _search_subscription: Subscription,
     generation: u64,
-    task: Option<&'static str>,
+    task: Option<std::borrow::Cow<'static, str>>,
     reload_again: bool,
     error: Option<String>,
     feedback: Option<String>,

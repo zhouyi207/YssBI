@@ -24,14 +24,14 @@ impl SettingsPanel {
             .flex()
             .flex_col()
             .child(self.render_field(
-                &t("settings.models.customName"),
-                &t("settings.models.customNameDescription"),
+                t("settings.models.customName"),
+                t("settings.models.customNameDescription"),
                 Input::new(&draft.custom_name).disabled(busy),
                 cx,
             ))
             .child(
                 self.render_field(
-                    &t("settings.models.providerName"),
+                    t("settings.models.providerName"),
                     "",
                     Combobox::new(&draft.preset)
                         .w_full()
@@ -57,8 +57,8 @@ impl SettingsPanel {
             )
             .child(self.protocol_field(cx))
             .child(self.render_field(
-                &t("settings.models.baseUrl"),
-                &t("settings.models.endpointHint"),
+                t("settings.models.baseUrl"),
+                t("settings.models.endpointHint"),
                 Input::new(&draft.base_url).disabled(busy),
                 cx,
             ))
@@ -66,7 +66,7 @@ impl SettingsPanel {
         if draft.authentication == Authentication::ApiKey {
             content = content.child(self.render_field(
                 "API Key",
-                &t(if self.replacement_key_required() {
+                t(if self.replacement_key_required() {
                     "settings.models.newProviderKeyHint"
                 } else {
                     "settings.models.keyHint"
@@ -84,7 +84,7 @@ impl SettingsPanel {
         let epoch = self.epoch;
         let owner = cx.weak_entity();
         self.render_field(
-            &t("settings.models.protocol"),
+            t("settings.models.protocol"),
             "",
             Button::new("provider-protocol")
                 .label(protocol_label(selected))
@@ -125,7 +125,7 @@ impl SettingsPanel {
         let epoch = self.epoch;
         let owner = cx.weak_entity();
         self.render_field(
-            &t("settings.models.authentication"),
+            t("settings.models.authentication"),
             "",
             Button::new("provider-auth")
                 .label(if selected == Authentication::None {
@@ -136,7 +136,7 @@ impl SettingsPanel {
                 .disabled(self.busy())
                 .dropdown_menu(move |mut menu, _, _| {
                     for (label, value) in [
-                        ("API Key".to_owned(), Authentication::ApiKey),
+                        ("API Key".into(), Authentication::ApiKey),
                         (t("settings.models.noAuthentication"), Authentication::None),
                     ] {
                         let owner = owner.clone();

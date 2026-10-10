@@ -117,7 +117,7 @@ impl ConversationPanel {
                 .models
                 .catalog()
                 .await
-                .map_err(|_| crate::text::t("native.assistant.catalogUnavailable").to_owned())?;
+                .map_err(|_| crate::text::t("native.assistant.catalogUnavailable").into_owned())?;
             services
                 .application
                 .application

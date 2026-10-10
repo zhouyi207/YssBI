@@ -222,7 +222,7 @@ impl MindCanvas {
     fn topic_button(
         &self,
         id: &'static str,
-        label: &'static str,
+        label: std::borrow::Cow<'static, str>,
         action: TopicAction,
         target: &TopicTarget,
         cx: &mut Context<Self>,

@@ -48,7 +48,7 @@ impl ConversationPanel {
                             } else {
                                 IconName::Maximize
                             })
-                            .tooltip(label)
+                            .tooltip(label.clone())
                             .accessibility_label(label)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.input_expanded = !view.input_expanded;

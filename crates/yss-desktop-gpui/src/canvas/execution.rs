@@ -157,7 +157,7 @@ impl GraphCanvas {
         }
     }
 
-    pub(crate) fn run_status(&self) -> &'static str {
+    pub(crate) fn run_status(&self) -> std::borrow::Cow<'static, str> {
         if self.execution.cancelling
             || self
                 .execution
@@ -183,7 +183,7 @@ impl GraphCanvas {
                 Some(RunApplicationEventKind::RunErrored { .. }) => {
                     crate::text::t("native.canvas.runFailed")
                 }
-                _ => "",
+                _ => "".into(),
             }
         }
     }

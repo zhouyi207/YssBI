@@ -230,7 +230,7 @@ impl Workbench {
     }
 }
 
-fn section_header(title: &'static str, cx: &App) -> impl IntoElement {
+fn section_header(title: std::borrow::Cow<'static, str>, cx: &App) -> impl IntoElement {
     div()
         .flex()
         .items_center()
@@ -245,7 +245,7 @@ fn section_header(title: &'static str, cx: &App) -> impl IntoElement {
 
 fn quick_action(
     id: &'static str,
-    label: &'static str,
+    label: std::borrow::Cow<'static, str>,
     icon: IconName,
     shortcut: Option<Kbd>,
     cx: &App,
@@ -256,7 +256,7 @@ fn quick_action(
         .w_full()
         .h(px(30.))
         .px_2()
-        .accessibility_label(label)
+        .accessibility_label(label.clone())
         .child(
             div()
                 .w_full()

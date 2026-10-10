@@ -88,7 +88,7 @@ impl Details {
             .unwrap_or(&port.display.label);
         let data_type = match &port.type_state {
             EditorPortTypeState::Exact { display, .. }
-            | EditorPortTypeState::Constrained { display, .. } => display,
+            | EditorPortTypeState::Constrained { display, .. } => display.as_ref().into(),
             EditorPortTypeState::Unknown { .. } => text::t("native.canvas.portTypeUnknown"),
             EditorPortTypeState::Conflict { .. } => text::t("native.canvas.portTypeConflict"),
         };
@@ -111,9 +111,9 @@ impl Details {
                 .unwrap_or(&port.display.label);
             lines.push(format!("{title} · {label}"));
         }
-        lines.push(appearance.state.label().to_owned());
+        lines.push(appearance.state.label().into_owned());
         if appearance.state == super::State::Error && appearance.cache != super::State::Unexecuted {
-            lines.push(appearance.cache.label().to_owned());
+            lines.push(appearance.cache.label().into_owned());
         }
         lines.join("\n")
     }

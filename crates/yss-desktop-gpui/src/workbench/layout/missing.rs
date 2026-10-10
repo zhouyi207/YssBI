@@ -55,14 +55,16 @@ impl BasePanel for MissingPanel {
 impl Panel for MissingPanel {
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         if self.state.panel_name == "result" {
-            crate::text::t("native.workbench.previousResults").to_owned()
+            crate::text::t("native.workbench.previousResults").into_owned()
         } else if let gpui_kit::component::dock::PanelInfo::Panel(info) = &self.state.info {
             info.get("graphPath")
                 .or_else(|| info.get("documentPath"))
                 .or_else(|| info.get("mindPath"))
                 .and_then(serde_json::Value::as_str)
-                .unwrap_or(crate::text::t("native.workbench.resourceUnavailable"))
-                .to_owned()
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    crate::text::t("native.workbench.resourceUnavailable").into_owned()
+                })
         } else {
             crate::text::t("native.workbench.resourceUnavailable").into()
         }

@@ -22,7 +22,7 @@ impl Workbench {
         let title = if title.is_empty() {
             crate::text::t("panel.assistantNewConversation")
         } else {
-            &title
+            title.as_str().into()
         };
         let owner = cx.entity().downgrade();
         let lifecycle = self.lifecycle;

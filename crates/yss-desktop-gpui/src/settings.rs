@@ -49,7 +49,7 @@ pub(crate) struct SettingsPanel {
     epoch: u64,
     generation: u64,
     loading: bool,
-    task: Option<&'static str>,
+    task: Option<std::borrow::Cow<'static, str>>,
     error: Option<String>,
     preference_error: Option<&'static str>,
     load_failed: bool,

@@ -26,6 +26,7 @@
 - **应用层**：`yss-application` 提供平台中立的服务与类型化用例；宿主在 worker 中执行阻塞业务，向视图交付类型化回执、事件和只读投影。
 - **领域层**：Project、Graph、Database、Execution、SCI 和 Harness 各自拥有业务状态；领域与应用层不依赖 GPUI。
 - **基础设施**：文件系统、日志、数据库存储与插件适配按各自模块边界接入。外部计算插件不改变桌面前端的 Rust 架构。
+- **本地化**：`yss-i18n` 封装 `rust-i18n` 的文本查询与单次插值，供原生业务文案、节点元数据和图诊断复用；领域查询显式传入语言，不依赖 GPUI 的界面语言状态。桌面组件自身沿用 GPUI Kit 的间接依赖。
 
 状态所有权和依赖关系见[系统架构](docs/src/development/architecture.md)，模块入口见[开发指南](docs/src/development.md)。
 

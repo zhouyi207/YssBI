@@ -20,7 +20,7 @@ impl ConversationPanel {
             .bg(cx.theme().danger.opacity(0.05))
             .text_xs()
             .child(if label == code {
-                crate::text::t("panel.assistantReplyInterrupted").to_owned()
+                crate::text::t("panel.assistantReplyInterrupted").into_owned()
             } else {
                 label
             })
