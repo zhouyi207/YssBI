@@ -5,7 +5,7 @@
 > Canonical owners: 本文件只拥有路由；各模块 README、适用的 .rules 和源码拥有具体内容
 > Update when: 文档 owner、模块入口、维护规则或计划位置改变时
 
-先读[系统总览](architecture/ARCHITECTURE.md)了解边界，再进入对应模块的 README。模块职责、接口和生命周期写在源码旁；修改模块时需要遵守的开发约束放在适用的 `.rules`。
+项目采用 GPUI 原生前端与 Rust 业务层，统一通过根 Cargo workspace 构建。先读[系统总览](architecture/ARCHITECTURE.md)了解边界，再进入对应模块的 README。模块职责、接口和生命周期写在源码旁；修改模块时需要遵守适用的 `.rules`。
 
 ## 按用途查找
 
@@ -20,7 +20,7 @@
 | `reference/`     | 生成索引与更多源码旁说明                       | [实现参考](reference/README.md)           |
 | `benchmark/`     | 测量方法、样本与结果                           | [基准索引](benchmark/README.md)           |
 
-GPUI 原生宿主见 [GPUI host](../crates/yss-desktop-gpui/README.md)，开放工作见 [GPUI 迁移](roadmap/GPUI_MIGRATION.md)。
+GPUI 原生宿主见 [GPUI host](../crates/yss-desktop-gpui/README.md)，未完成能力与人工验收见 [GPUI 功能计划](roadmap/GPUI_MIGRATION.md)。`react/` 仅保留参考源码，其说明不拥有当前架构、构建或状态契约。
 
 ## 模块契约入口
 
@@ -53,11 +53,11 @@ GPUI 原生宿主见 [GPUI host](../crates/yss-desktop-gpui/README.md)，开放�
 ## 开发与交付
 
 - [根规则](../.rules)拥有验证纪律，[Agent 规则](development/AGENT_RULES.md)维护变更纪律与跨系统约束。
-- [启动与全仓命令](../README.md#快速开始)：环境版本、依赖安装、开发与打包。
+- [启动与构建](../README.md#快速开始)：Rust 工具链、Cargo 入口与分发资源。
 - [变更流程](development/CHANGE_PROCESS.md)：实现与自审要求。
 - [架构复核与文档检查](development/ARCHITECTURE_GATES.md)：人工边界复核及独立文档契约。
 
-原生启动和 Cargo 验证见[根 README](../README.md)与 [GPUI host](../crates/yss-desktop-gpui/README.md)。生成索引见[实现参考](reference/README.md)，类型化插件 schema 由 [Plugin protocol](../crates/yss-plugin-protocol/README.md) 的 Rust 入口生成。`react/` 中的模块说明保留为参考契约，不构成原生功能的完成证据。
+原生启动和 Cargo 验证见[根 README](../README.md)与 [GPUI host](../crates/yss-desktop-gpui/README.md)。文档检查见[架构复核与文档检查](development/ARCHITECTURE_GATES.md)，生成索引见[实现参考](reference/README.md)，插件 schema 由 [Plugin protocol](../crates/yss-plugin-protocol/README.md) 的 Rust 入口生成。
 
 ## 维护约定
 

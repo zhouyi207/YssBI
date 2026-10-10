@@ -7,6 +7,10 @@
 
 本文是目标方案与实施记录，工具目录不表示已经全部验收。P0–P5、P6 的图表工具及代表性任务测量已完成下文记录的聚焦验证，剩余工作为 P6 的 Assistant 人工界面验收，具体操作与通过标准见 14.4。后台测量与契约检查不能替代该验收。
 
+当前原生调用链为 GPUI → ApplicationServices / 类型化 Harness 用例 → Core / Gateway → 原领域 owner。
+阻塞业务在 worker 执行，持久事件与 Assistant 读投影由 `yss-harness-contract` 交付宿主；
+工作台根 DockArea 只拥有拓扑。参考界面记录不代表 GPUI 已验收，14.4 的全部人工项继续开放。
+
 ## 1. 目标与范围
 
 将模型可见工具按业务对象和明确动作拆开。模型应当能够直接表达“创建这些节点”“读取这张结果表”“替换这一段文字”，不需要了解通用编辑操作枚举、文件 JSON 结构或前后端同步协议。
@@ -49,7 +53,7 @@
 - [Database application](../../crates/yss-application/src/database/README.md)：数据库数据、编辑、历史与保存。
 - [Project model](../../crates/yss-project-model/README.md)：Mind 和 Markdown 文档。
 - [Chart application](../../crates/yss-application/src/chart/README.md)：图表配置。
-- [Results application](../../react/src/features/application/results/README.md)：结果引用、生命周期与展示。
+- [Results application](../../crates/yss-application/src/graph/README.md)：结果引用、查询与租约；[GPUI host](../../crates/yss-desktop-gpui/README.md) 拥有原生呈现。
 
 ## 3. 模块职责、数据流和依赖
 
@@ -62,13 +66,13 @@
 | `yss-harness-rig`                          | 将工具契约注册到 Rig，接收调用并转交 Core                                | 重复定义业务 schema、资源同步逻辑和权限判断         |
 | `yss-application`                          | 将明确工具命令适配为原业务用例，组织跨 owner 的必要流程                  | 在适配器中直接拼装和覆盖资源 JSON                   |
 | Graph / Database / Project / Results owner | 校验、查询、原子修改、执行、保存和权威回执                               | 依赖模型提示词或前端临时状态实现一致性              |
-| Assistant 前端                             | 显示工具名、业务参数、进度、耗时、结果和失败                             | 重新执行工具、补 revision、成为提交是否成功的判断源 |
+| GPUI Assistant                             | 消费类型化事件/读投影，显示工具名、业务参数、进度、耗时、结果和失败 | 重新执行工具、补 revision、成为提交是否成功的判断源 |
 
 模型契约按资源、图、节点、连接、数据库、Mind、文档、结果等领域组织；具体文件粒度按现有目录调整，不为了工具数量增加 crate 或独立服务。
 
 ### 3.2 调用链
 
-模型意图 → Rig schema 校验 → Core 授权和上下文绑定 → Application 用例 → 原业务 owner 校验与提交 → 权威回执 → Core 账本、模型结果和前端事件。
+模型意图 → Rig schema 校验 → Core 授权和上下文绑定 → Application 用例 → 原业务 owner 校验与提交 → 权威回执 → Core 持久账本、模型结果和类型化原生事件。
 
 一次成功修改的回执用于更新内部观察状态，后续调用复用它，不要求模型再调用一次检查工具来“刷新版本”。读取与写入依赖的版本始终在 Rust 侧保留。
 
@@ -350,32 +354,27 @@ Chart 资源与图中的绘图节点分开。当前支持的图表类型和参�
 
 每阶段先补必要 owner 能力，再切换模型契约与消费方，完成聚焦验证后更新本计划和对应模块 README。未勾选条目仍需完成，阶段内的部分进展不能替代整阶段验收。
 
-当前进度（2026-10-06）：
+阶段完成摘要（2026-10-06 的业务验证记录，非本次检查）：
 
-- 已接通 `list_resources`、`create_resource`、`rename_resource`、`duplicate_resource`、`delete_resource`、`save_resource` 和 `import_database` 的公开契约、角色授权、账本身份、Rig 注册和前端名称。模型侧 `manage_resource` 已移除，内部资源生命周期用例继续复用。
-- Project 增加轻量资源目录，复用现有路径扫描和状态，不读取正文、不复制 ProjectData、不打开关闭图。列表支持种类、名称/路径筛选及分页；`inspect_resource` 已收窄为元信息，公开正文参数与旧正文分支均已移除，函数签名保留既有读取能力。
-- 修改回执交付与提交版本一致的资源状态及 Mind 根主题引用，Core 在实时与重放中使用它们推进基线。元信息读取失败或并发变更不改写已提交事实，也不采用较新的版本强行重试。
-- 各资源 owner 的复制支持在原事务内指定名称，已更新原消费者；不使用复制后重命名的组合。
-- P2 已接通节点类型发现/精确类型读取、节点与连接定向查询、图概览，以及节点/连接/常量的明确写入工具。创建参数、5 个 X Pin 与初始连接可单批提交；无效末项整批回滚，成功批次可一步撤销。Graph owner 的复制交付实际节点和 Pin 映射，连接重接保留 ID 并支持交换已占用输入。
-- 常量读写复用 Data Contract 与 Graph 原校验，创建映射随提交回执重放。长文本按 Unicode 字符、表格按列和行读取；列表只返回摘要。已验证精确整数、值更新失败回滚、删除保留引用节点及撤销。
-- `validate_graph` 已接入 Execution 依赖范围和 Analysis 诊断归属，诊断分页不影响就绪判断；`execute_graph` 的公开输入改为 graph、可选 nodeId/mode，仍调用原执行用例。局部校验、无关分支隔离和两种节点执行模式已通过 Application 聚焦集成测试。
-- 结果概览与 `read_result_table` 已拆分，公开结果与表格使用完整业务引用；委派授权、实时及重放共享该引用。图结果支持运行/节点/Pin 筛选、分页及有效性，读取区分过期会话、结果回收和表不存在。运行计时由原 RunRegistry 记录准入、运行和收尾阶段，终态后固定；运行阶段包含调度和结果物化，不标作纯节点计算耗时。
-- Graph 和 Database 历史使用 `undo_resource` / `redo_resource`；模型侧 `apply_graph_edit` 和 `save_graph` 已退役，内部原子编辑与旧调用记录的业务投影保留。明确节点更新还支持按真实 Pin ID 删除中间实例，并可撤销恢复原身份。
-- P3 的八个行列编辑工具已贯通公开 schema、Data 授权、版本绑定、原子提交、账本及显示名称。Store 按稳定 rowId 更新和删除，批量插入初始化值并返回实际 ID；列名称统一校验，可交换名称且保持身份，类型转换一次物化，语义校验只扫描所选列。每次调用形成一个 Runtime 历史单位，末项失败不发布；原模型数据库通用编辑分支已移除。
-- 行列批次已有真实 Store 与 Application 回归，覆盖末项失败、null、ID 分配、补丁、名称交换、精确类型及整批撤销。最新 Contract/Core/Rig/IPC 的 91 个用例和八包 Clippy 通过；Clippy 保留既存 SCI 与消息枚举警告。
-- Database owner 已支持列投影、AND 条件筛选、多列排序和实际继续状态，复用原筛选与 Ordinal 排序实现；并列值以显示顺序和 rowId 稳定定位，空页保留列结构。Engine/Store/Runtime 的 66 个库用例与 Application 的 21 个数据库用例通过，新增回归已核对按筛选页 rowId 修改及旧读取版本拒绝。
-- P3 四种读取工具已贯通角色授权、原读取基线、精简结果与重放；画像只计算明确指定列和指标。导入名称在原事务确定，导出改为 `export_database` 并保留路径与版本授权。旧 schema/profile 工具已退出模型目录。Application 的 41 项 Automation、21 项数据库库测试和 4 项数据库集成测试通过，前端类型、14 项契约/文档检查及改动文件 lint 通过；这些仍是聚焦验证，未运行全仓库 CI。
-- P4 已在 Mind owner 补齐局部大纲、子树搜索、主题定位和分支复制，以及批量建树、移动和删除。八个公开主题工具贯通 Contract/Core/Rig/Application/IPC；正文和子主题分别分页，创建与复制返回真实 ID，删除报告全部实际范围。旧模型 Mind 通用编辑分支已移除，Report 的授权和保存判据支持独立 Mind 交付。
-- P4 的 3 项 Mind 模型测试、4 项 Project 文件事务测试、92 项 Harness/IPC 测试及 41 项 Application Automation 测试通过。覆盖向后声明的父主题、最终树关系、Unicode 分页、失效外部引用保留、失败后正文/版本不变、旧基线拒绝和保存后再编辑。五包 Clippy、前端类型及 14 项契约/文档检查通过，保留既存 lint 警告；Application 测试仍按前述环境限制顺序运行。
-- P5 已在 Doc owner 增加 Markdown 结构、章节/字符范围、原文分页与精确搜索查询。通过解析器事件识别真实标题和块边界，不持久化 AST；两项模型查询测试覆盖重复标题、代码块、Unicode、重叠命中及长文跨页原样重建。六个公开文档工具已贯通，章节引用在实时调用与重放中保留原读取基线，文档变更后旧定位拒绝执行。
-- P5 的两项 Doc 查询测试、93 项 Harness/IPC 测试和 41 项 Application Automation 测试通过。真实事务覆盖超过通用 JSON 编辑预算的长文写入、局部读取与修改、替换末项失败整批回滚、Unicode 范围、结果字节预算及显式保存；五包 Clippy、前端类型和 14 项契约/文档检查通过，保留既存 lint 警告。
-- 本轮 Contract/Core/Rig/IPC 的 90 个用例、Execution 的 33 个用例及 Application automation 的 39 个用例顺序运行通过，六包 Clippy 完成；先前 Application Results 的 17 个用例通过。默认并发运行仍在不同用例初始化时出现内存访问异常，已在仓库外的纯标准库程序和两版 Rust 复现，不能据顺序通过宣称默认并发验证通过。
-- P6 的 `inspect_chart` / `update_chart` 已贯通注册、角色、绑定、立即保存、账本和显示名称；省略设置保留原值，轴的 null 明确清空，数据源变更检查读取授权。图表真实保存回归、94 项 Harness/IPC 测试及 41 项 Application Automation 测试通过。六包 Clippy、前端类型和 14 项契约/文档检查通过，保留既存 SCI lint 警告。
-- P1 元信息收口复用 Project 资源目录和 Database 原查询基线，不再读取文档、树、数据行或图正文。函数签名检查通过原 Project 加载入口处理未驻留副本；既有生命周期、函数签名、图/数据库历史和版本保护回归保持通过。
-- P0 的绑定、授权和解码失败已进入原工具账本及失败事件；有类型的业务输入参与回放，畸形参数不留存。启动恢复区分尚未执行的请求与提交结果未知的写入。104 项 Harness/SQLite/IPC 聚焦测试通过（Core 的长任务及启动恢复用例在修正断言后单独复验），六包 Clippy 通过并保留既存 SCI 警告。
-- P6 已核对六角色的领域写入边界、Ask 模式、知识和界面意图能力，以及委派、继续任务、统计计划的既有控制入口。新旧同功能工具不在模型目录并存，函数签名及 Workflow 内部用例仍按范围保留。Assistant 新增领域摘要字段已有中英文本地化；代表性任务已通过独立后台入口实测，记录见 14.2；界面人工验收仍未完成。
-- 真实模型测量发现并修复只读角色工具缺口：Manager/Review 注册 `validate_graph`，Report 可读取获准数据库的概览和 schema。Manager 图校验通过原读取用例捕获基线，Worker 的旧基线拒绝不变；真实模型复验没有再次出现 `resource_read_required`。共享说明明确只可调用本角色注册工具，`resultRef` / `tableRef` 必须使用返回的完整字符串。
-- P0 已补齐三种控制工具的逐次生命周期，参数解码、准入和计划拒绝、取消都记录开始及终态；未收尾调用经原事件流恢复为结果未知，不重做任务。IPC、详情查询和前端解析沿用工具卡通路，任务和计划内容仍归原展示。Contract/Core/Rig/SQLite/IPC 共 108 项库测试、六包 Clippy、前端类型和 14 项契约/文档检查通过，保留既存 SCI lint 警告。
+- 项目资源工具已贯通 Contract/Core/Rig/Application。轻量检查读索引或元信息，不打开正文；
+  创建/复制在原事务确定名称和身份，回执与提交版本一致，失效后不强行刷新基线重试写入。
+- 节点类型/实例、连接、常量与图历史已切换明确工具。参数、多 X Pin、初始连接同批提交，
+  无效末项整体回滚；复制回执给出实际 ID，重接保留连接 ID，撤销恢复真实身份。
+- 校验与执行使用实际依赖范围；概览与结果表读取分开，完整 resultRef/tableRef 贯穿授权、
+  实时投影与重放。运行计时来自原 RunRegistry，不用工具往返时间冒充计算时间。
+- 数据行列操作由 Database 原 owner 原子提交，稳定 rowId 支撑排序分页后的修改；
+  列投影、AND 筛选、多列排序、schema/profile、导入导出与 checkpoint 保持原授权和版本边界。
+- Mind 提供有界大纲/搜索/主题查询、批量树编辑与分支复制，真实 ID 和完整删除范围进入回执；
+  Doc 使用结构/范围查询与精确文本事务，章节定位绑定读取基线。两者编辑与显式保存区分。
+- Chart inspect/update 使用类型化配置与立即持久化；省略保留，轴的 null 明确清空，
+  改数据源核对读取授权。六角色注册、Ask 模式与知识/意图/委派能力仍按现有策略筛选。
+- 绑定、解码、准入、控制工具拒绝、取消和终态都进入原调用生命周期；未确认提交保持结果未知，
+  恢复不重做写操作。真实模型测量补齐 Manager/Review 的 validate_graph 及 Report 的获准数据读取。
+- 当时已有聚焦业务回归及代表性模型任务证据，详见 14.2；完整工作区和 UI 不由局部结果推定通过。
+  默认并发测试初始化曾出现内存访问异常，独立标准库程序和两版 Rust 也有复现记录；
+  顺序运行通过不能证明默认并发已通过，环境根因仍独立排查。
+
+详细实现日志由 Git 保留，当前工具目录以 Harness Core README 为准；原生工具卡和历史重放仍待 14.4 验收。
 
 ### P0：公开契约与调用链基础
 
@@ -478,7 +477,7 @@ Chart 资源与图中的绘图节点分开。当前支持的图表类型和参�
 
 #### 2026-10-06 实测记录
 
-入口为根脚本 `pnpm measure:harness <configuration.json>`，配置、场景 Markdown、计数口径和合成数据生成方式见 [Application 测量说明](../../crates/yss-application/examples/measure_harness/README.md)。独立项目复用生产 Core/Rig/Application/SQLite 及配置的真实模型，不启动或操作桌面。数据为 5,000 行、6 列的合成回归数据；图包含 205 个节点、5 个 X Pin、9 条连接和一个有无关阻塞诊断的分支。使用配置模型 `deepseek-flash`（显示名 `DeepSeek-V4.1-Flash`），Write 模式，未覆盖 reasoning effort；统计为单次任务观察，不是模型性能排名或旧工具基线对照。
+当前可用入口为仓库根目录的 `cargo run -p yss-application --example measure_harness -- <configuration.json>`，配置、场景 Markdown、计数口径和合成数据生成方式见 [Application 测量说明](../../crates/yss-application/examples/measure_harness/README.md)。下述为 2026-10-06 的历史测量，不表示本次重跑。独立项目复用生产 Core/Rig/Application/SQLite 及配置的真实模型，不操作桌面。数据为 5,000 行、6 列的合成回归数据；图包含 205 个节点、5 个 X Pin、9 条连接和一个无关阻塞分支。模型为 `deepseek-flash`（显示名 `DeepSeek-V4.1-Flash`），Write 模式，未覆盖 reasoning effort；统计为单次任务观察，不是模型排名或旧工具同条件基线对照。
 
 下表调用数、返回体积、重复读取和重试来自模型执行器边界，排除 Core 自动补齐的基线读取；另列原业务账本调用数。返回体积为公开成功/失败投影，排除供应商信封与控制工具结果。同参重试只比较可解码的业务参数；畸形原始参数不保留，无法推断其重复次数。
 
@@ -518,13 +517,13 @@ Chart 资源与图中的绘图节点分开。当前支持的图表类型和参�
 
 ### 14.3 验证范围
 
-实施时按阶段选择受影响的 Contract/Core/Rig、Application 和业务 owner 的聚焦 Rust 检查，并覆盖公开契约消费方；Assistant 展示通过人工验收。根 `package.json` 和[变更流程](../development/CHANGE_PROCESS.md)拥有实际命令与验证等级。
+实施时按阶段选择受影响的 Contract/Core/Rig、Application 和业务 owner 的聚焦 Cargo 检查，并覆盖公开契约消费方；GPUI Assistant 展示通过人工验收。根 `Cargo.toml` 拥有 workspace 入口，[根 README](../../README.md)、各模块 README 与[变更流程](../development/CHANGE_PROCESS.md)拥有命令和验证范围。
 
-纯计划文档修改只运行文档契约、变更 Markdown 格式检查及 `git diff --check`。实现变更按上述受影响 owner 和消费者选择检查；尚未运行的领域功能、人工验收及代表性任务测量不得标记完成。
+文档修改遵循根文档检查规则，由集成者统一验证；本次整理未运行检查。尚未运行的领域功能、原生人工验收和测量不得标记完成。
 
 ### 14.4 Assistant 人工界面验收
 
-以下各项均待验收；用户已要求暂不操作桌面。恢复桌面操作后，在独立测试项目和新对话中通过真实 Harness 调用执行，不改写 14.2 留存的测量样本。当前显示契约归 [Harness Core](../../crates/yss-harness-core/README.md)；这里仅记录本轮尚待确认的界面行为。
+以下各项均待验收；此前用户要求暂不操作桌面的限制保留为当时记录，不冒称已有通过反馈。实际开展时，从根目录 `cargo run`，在独立测试项目和新对话中通过真实 Harness 调用执行，不改写 14.2 留存样本。业务显示事实归 [Harness Core](../../crates/yss-harness-core/README.md)，原生呈现归 [GPUI host](../../crates/yss-desktop-gpui/README.md)；这里记录尚待确认的界面行为。
 
 | 场景               | 操作                                                                                                   | 通过标准                                                                                                                         |
 | ------------------ | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |

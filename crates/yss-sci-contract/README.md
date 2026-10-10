@@ -187,7 +187,7 @@ options (`ParameterOutOfRange`). Both scientific error types use this vocabulary
 data-domain failures must not be represented as invalid options.
 
 This crate owns data and execution-control contracts, not algorithms, report rendering,
-project/database state, Tauri, Polars, faer or concrete backend implementations.
+project/database state, desktop presentation, Polars, faer or concrete backend implementations.
 Observation metadata records row selection counts and the applied missing-value
 policy. There is no global approximate-equality tolerance configuration.
 

@@ -15,7 +15,7 @@ Event/Function 的种类检查位于实际定位入口，直接构造和反序�
 定位 Graph 文件复用路径扫描，不解码正文；正文损坏的文件仍可被定位以便修复。
 其他资源只在一致读取边界借用所需成员或数据库声明，不复制无关文档正文。
 
-该 crate 组合 `yss-project-model`、`yss-project-history`、`yss-project-operation`、`yss-resource-lifecycle` 与 `yss-filesystem` 等更低层 crate，但不依赖 Tauri、Commands、IPC schema、Application 工作流或 Database runtime。
+该 crate 组合 `yss-project-model`、`yss-project-history`、`yss-project-operation`、`yss-resource-lifecycle` 与 `yss-filesystem` 等更低层 crate，但不依赖桌面框架、宿主交付协议、Application 工作流或 Database runtime。
 
 边界约束：
 
@@ -113,7 +113,7 @@ Manifest 只接受当前 `schemaVersion`、`projectName` 和 `exportTime` 字段
 | [Function mutation](src/project_state/function_mutation.rs) 与 [resource publication](src/project_state/resource_publication.rs) | 检查提交身份、预期版本与 patch before-state，按已提交变更推进资源版本                      |
 | [Execution authority](src/execution_authority.rs)                                                                                | 将 Graph resource revision 映射为执行资源 version/grant，参与资源 currentness 校验         |
 
-因此当前不能直接删除此索引。移除 Graph Projection Channel 仅移除了那条传输链的 request-generation 协调；Save 不再接受 frontend `expectedRevision`，也没有移除 Rust 事务内部的版本校验。
+因此该索引仍属于当前业务契约。原生宿主直接接收类型化投影，并不改变 Rust 事务内部的资源版本校验；Graph Save 通过编辑版本读取当前文档，而非让界面提交另一份正文。
 
 以下字段不能互相替代：`ResourceRevision` 标识已提交资源版本；frontend lifecycle token 拒绝旧 editor 请求；编辑版本标识当前文档；semantic input hash 标识语义内容与分析输入，供运行校验和计划复用。单独的 revision 也不能替代 Project instance/session identity。若以后合并 revision 的存储位置，必须同时迁移以上使用方，保持提交前重验与事务/执行资源校验语义。
 

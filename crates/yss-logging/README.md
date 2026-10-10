@@ -20,7 +20,7 @@ Drop 随后停止 console 入队并排空队列。console 关闭等待约 250 ms
 
 `LogRuntime` 提供 typed query、statistics、recent snapshot 和 subscribe/unsubscribe。
 订阅使用中立 sink 回调；关闭释放原 worker。Logs 清空只清视图，不删除持久记录。
-保留的 `FrontendLogEntryDto` 是日志输入契约，不会加载浏览器或 Tauri runtime。
+`FrontendLogEntryDto` 是显式 UI 日志输入的数据契约，不引入桌面框架依赖；原生日志呈现与操作由 [GPUI host](../yss-desktop-gpui/README.md) 拥有。
 
 ## 采集与数据最小化
 

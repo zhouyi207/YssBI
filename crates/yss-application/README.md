@@ -9,7 +9,7 @@
 
 ## 调用方与依赖方向
 
-原生宿主 `yss-desktop-gpui` 直接调用 `ApplicationServices::initialize` 和类型化用例；阻塞调用在宿主 worker 中完成。界面和业务之间不再经过 Tauri 命令注册表。
+原生宿主 `yss-desktop-gpui` 直接调用 `ApplicationServices::initialize` 和类型化用例；阻塞调用在宿主 worker 中完成，回执与事件以 Rust 类型交付。
 
 下图展示主要直接依赖方向；Project、Graph、Database 和契约节点各自代表一组 crate，不是完整的 workspace 依赖图。
 
@@ -63,7 +63,7 @@ Harness 与界面意图共用 `ProjectResourceRef`；提交通过 Harness gatewa
 
 ### 桌面初始化
 
-[ApplicationServices::initialize](src/runtime.rs) 接收 `ApplicationPaths`（应用数据目录与示例目录）和 Harness 端口组装回调，返回拥有 ApplicationState、项目登记、Harness、Plugin Manager 和 watcher 的服务集合。它不访问窗口或 Tauri。宿主保持这些服务和异步执行器存活，并在 UI 线程以外执行阻塞业务调用。
+[ApplicationServices::initialize](src/runtime.rs) 接收 `ApplicationPaths`（应用数据目录与示例目录）和 Harness 端口组装回调，返回拥有 ApplicationState、项目登记、Harness、Plugin Manager 和 watcher 的服务集合。它不访问窗口或桌面框架。宿主保持这些服务和异步执行器存活，并在 UI 线程以外执行阻塞业务调用。
 
 GPUI 宿主先初始化 `yss-logging::LogCollection`，再组装 Application 和原生窗口。节点目录装配或内核绑定失败时保留具体启动原因；Application 使用普通 `tracing` 报告运行观测，不持有日志运行时。
 

@@ -16,10 +16,10 @@ sync-baseline reset, assertions and mock-history cleanup are outside the timed b
 minimum timed duration and a minimum of 30 measured iterations.
 Setup assertions check the full scenario; sample hooks check fresh frozen input,
 no-change reuse and unchanged entity/table identities.
-No real Tauri transport, Rust processing, React render, layout, paint or desktop
+No real desktop transport, Rust processing, React render, layout, paint or desktop
 interaction is measured. Independent phase means cannot be added or subtracted
 as an exact decomposition. High-RME groups have substantial observed long tails.
-This is current-implementation evidence, not an Immer comparison or rule exception.
+This is historical implementation evidence, not a GPUI measurement, Immer comparison or rule exception.
 
 Dirty-tree context:
 The worktree contains substantial uncommitted architecture work. HEAD below is

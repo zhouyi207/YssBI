@@ -9,6 +9,6 @@
 # Native desktop localization
 
 - 用户可见固定文案使用 `text::t` / `text::translate`；带参数的句子使用 `text::format`，不拼接翻译后的句子片段。
-- 更新文案时同时维护 `assets/zh-CN.json` 和 `assets/en-US.json`，优先复用已有 React 语义键；原生专用键放在 `native` 对应模块下。
+- 更新文案时同时维护 `assets/zh-CN.json` 和 `assets/en-US.json`，优先复用已有语义键；原生专用键放在 `native` 对应模块下。
 - 本地化查询从 `text::locale()` 捕获当前语言；迟到查询不得覆盖新语言，语言变化不得清空未提交输入或改变领域状态。
 - 用户内容、资源标识与协议值不翻译；运行时语言、持久化及回退契约见 [README.md](README.md)。

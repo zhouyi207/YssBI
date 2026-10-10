@@ -22,7 +22,7 @@
 - [ ] 为每项 durable/runtime/UI state 指定唯一 owner，并写清 projection 或 draft 如何恢复。
 - [ ] 保持依赖方向；framework/transport adapter 不拥有业务 workflow 或 domain state。
 - [ ] 明确输入/output、identity、currentness、commit point、atomicity 和 late-result behavior。
-- [ ] 跨 process/IPC 时选择 command、event 或 ordered channel，并定义 serialization、ordering、bounds、backpressure、gap 和 terminal semantics。
+- [ ] GPUI 与 Application 之间使用类型化用例、回执与订阅，定义 ordering、bounds、backpressure、gap 和 terminal semantics；外部插件等跨进程边界另由其协议 owner 定义序列化与传输。
 - [ ] 对 project replacement、save/close、cancel/timeout、restart 和 concurrent request 给出行为。
 - [ ] 所有 I/O/long work 在锁外执行，commit 前重新验证 session/revision。
 
@@ -38,7 +38,7 @@
 
 ## 3. Scale, safety, and errors
 
-- [ ] 写出代表性的 graph/table/result/task 规模；大数据使用 paging/projection/batching，不通过 IPC 复制全量 DataFrame。
+- [ ] 写出代表性的 graph/table/result/task 规模；大数据使用 paging/projection/batching，不向界面复制全量 DataFrame。
 - [ ] 高频/长任务有 resource budget、progress、cancellation 和 bounded queue；慢 consumer 不得无限阻塞 producer。
 - [ ] domain/application/infrastructure/transport seam 使用 typed failures，只向 UI 交付 stable code 和安全结构化数据。
 - [ ] 检查数据最小化：日志、error details 和 external requests 不泄漏 row/cell、document、clipboard、SQL、connection、credential、prompt、memory 或 model/tool payload。
@@ -48,7 +48,7 @@
 
 - [ ] 每个新增测试对应一个不同、项目自有的回归风险，并通过 stable public seam 验证。
 - [ ] 行为变更先增加最小聚焦回归；行为保持重构优先复用已有覆盖。
-- [ ] 跨 wire/adapter 变更覆盖代表性 success/failure parsing 或 exhaustive mapping，不堆叠重复 matrix。
+- [ ] 类型化用例与 adapter 变更覆盖代表性的成功、失败和穷尽映射；只有真实序列化边界才验证 parsing，不堆叠重复 matrix。
 - [ ] 更新唯一 canonical owner；不要把同一规则复制到 `.rules`、总架构、checklist 和专项文档。
 - [ ] Current、Accepted Decision、Planned、Historical 内容放入正确目录并更新 `docs/README.md` 索引。
 - [ ] 版本、路径、阈值、commands 和 module inventory 尽量引用 manifest/source 或 generated reference。

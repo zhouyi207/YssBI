@@ -1,22 +1,19 @@
-# Output
+# Output 参考视图
 
-> Status: Current
-> Scope: 图运行失败摘要、节点定位与终态交付
-> Canonical owners: Rust Execution 拥有运行事实；本模块展示失败摘要
-> Update when: 本模块的公开入口、状态归属、生命周期或契约改变时
+> Status: Historical
+> Scope: React 图运行失败摘要与节点定位的行为参考
+> Canonical owners: 本模块只拥有参考呈现；当前运行事实由 Rust Execution/Application 拥有
+> Update when: 参考反馈行为或当前执行契约入口改变时
+
+此处不是当前原生运行事件或宿主反馈接口。入口见[根 README](../../../../README.md)、[文档索引](../../../../docs/README.md)、[Graph application](../../../../crates/yss-application/src/graph/README.md)、[Execution](../../../../crates/yss-graph-execution/README.md)和 [GPUI host](../../../../crates/yss-desktop-gpui/README.md)。
 
 ## 运行失败反馈
 
-Execution channel 直接交付 `RunEventDto`，传递运行生命周期与结果通知；前端严格解析事件并以执行会话和运行身份隔离迟到消息。Analysis Graph 没有 Print/Effect，不提供 stdout/stderr 消息、缓存或订阅。
+- Output 参考面板从类型化运行失败事实展示原因、阶段、节点及可用的 incidentId；运行开始前的拒绝使用安全错误代码反馈。
+- 失败摘要不从日志重建。Graph Problems、Results、Assistant 文本和技术日志各自独立；Analysis Graph 不把该面板当作用户程序 stdout/stderr。
+- 当前图来自所属编辑器选择；切到非 Graph 标签不回退到旧会话。运行身份、语义身份和执行会话共同约束可见失败。
+- 分组失败保留外层到内层来源及函数路径，节点定位使用实际失败位置；界面不推测组或重放数据。
+- 清除摘要或开始下一次运行只影响对应展示，不修改已有 Result 数据。旧终态不能覆盖后继运行或后继项目。
+- incidentId 用于关联排障，原始异常文字不是用户文案；本地化由呈现层处理。
 
-Output panel 展示当前图的运行失败摘要：从 RunErrored 投影原因、阶段和节点，可定位失败节点；运行开始前的 command rejection 使用安全错误代码回退。失败时 Application 打开 Output；清除错误或开始下一次运行清除本地摘要，不改变 Rust 的运行结果。日志、Assistant text 和 Graph Problems 各自保持原有职责与生命周期。
-
-分组失败展示执行事件中的外层到内层组编号及函数路径，空来源明确显示结构探测。
-该上下文与主失败节点分开保留，节点定位继续指向函数内部实际失败位置；前端不推测组或重放数据。
-
-当前图来自 `useActiveGraphContext` 对 FlexLayout 顶部活动 Graph 的读取；切到非 Graph 标签时不继续显示旧加载会话的失败。点击底部或右侧面板不会覆盖顶部选择。
-失败摘要保存 Rust 事件的完整运行身份；加载图只展示与当前语义 hash 和执行会话匹配的失败。Execution owner 在一次发布中结束该运行的输出活动，并写入 error 终态及失败详情，面板从同一身份读取 RunId。
-
-API 在成功交付 terminal event 后，用 command error details 的 `terminalRunEventSent: true` 标识拒绝路径；ProjectService 等待 channel 排空后才结束失败调用，确保原因投影先于错误收尾。incidentId 只用于关联技术诊断，前端不把 IpcError.message 作为用户文案。
-
-Harness 事件及其恢复、插件进程通信由各自协议拥有，不通过 Graph 执行通道转发。
+原生终态交付与清理顺序由当前 Rust owners 说明，不沿用参考适配细节。人工验收状态见[迁移计划](../../../../docs/roadmap/GPUI_MIGRATION.md)。

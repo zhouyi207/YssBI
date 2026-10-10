@@ -185,10 +185,9 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   并释放已准备的控件；实际文件保存分别提交，部分失败仍安装已成功或已编辑的原回执。
   图保存与画布单图 Save 复用 `canvas/commands` 的输入捕获、worker 和回执接纳；准备完成即锁定画布，失焦不再并行提交同一草稿。
   整批准备中止时释放已准备画布及输入的提交标记；保存失败仍保留当前图与未完成输入，项目后续操作只在全部保存成功后继续。
-- `workbench/menus/catalog`：按 [React 菜单配置](../../react/src/app/windows/workbench/menuContributionRegistry.tsx)
-  和 [视图菜单配置](../../react/src/features/application/menubar/menubarViewItems.ts) 提供文件、编辑、数据、视图、窗口、工具、帮助七组菜单，
-  名称沿用已有 locale key，顺序与分隔一致；AppMenuBar 和 macOS 系统菜单消费同一份 GPUI Menu 定义。
-  macOS 另保留平台应用菜单。Schema 查看器、调试器和性能分析器沿用参考实现的禁用项。
+- [workbench/menus/catalog](src/workbench/menus/catalog.rs) 提供文件、编辑、数据、视图、窗口、工具、帮助七组菜单；
+  名称使用宿主 locale key，顺序与分隔由该目录统一定义；AppMenuBar 和 macOS 系统菜单消费同一份 GPUI Menu 定义。
+  macOS 另保留平台应用菜单。Schema 查看器、调试器和性能分析器当前为禁用项。
 - `workbench/menus`：从当前编辑器能力、项目可用性和根 DockArea 派生菜单可用性及勾选项；缓存只是菜单投影，不拥有布局状态。
   `menus/commands` 将 Action 路由到现有资源、项目和面板入口，执行时重新检查可用性；当前保存须有仍显示的编辑器。
   `menus/editing` 复用图历史/删除、文档文本编辑、Mind 删除与数据库复制；图剪贴板等尚未提供的原生能力禁用。
@@ -196,7 +195,7 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
 - `workbench/menus/layout`：分屏移动当前编辑器到右侧或下方，至少需要同组有两个标签；不复制图文档或编辑器实体。
   重置将已打开资源归回中心标签、目录归回左侧、属性归回右侧、工具面板归回底部，恢复默认尺寸并收起底部，保留未保存输入和结果租约。
   所有重排调用同一个根 DockArea 的公开操作。
-- `workbench/menus/help`：文档、发行说明、仓库和反馈地址沿用 React APP_LINKS；架构打开当前系统架构文档，关于对话框显示 Cargo 包版本。
+- [workbench/menus/help](src/workbench/menus/help.rs) 拥有文档、发行说明、仓库和反馈入口；架构打开当前系统架构文档，关于对话框显示 Cargo 包版本。
 - `plugins`：读取已有进程级 PluginManager 的登记、有效授权、存储、任务历史和有界 stderr 诊断。
   原生搜索和选中身份是视图暂态，列表名称与状态消费原 Activity 投影；详情读取前后核验捕获的安装身份。
   commands 在 worker 调用原启停、卸载及缓存/包回收入口，完成后重读真实登记；失败反馈保留到显式刷新或重新选择。
@@ -215,8 +214,7 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   布局只保存插件/视图标识，恢复时异步读取当前签名视图；重复打开从实际拓扑定位现有面板。
   Dock 面板移除与模态窗口关闭调用同一会话释放入口；实体释放、读取失败和迟到的 attach 回执也会释放原会话。
   任务继续由后端管理，不因视图关闭隐式取消。
-- `settings`：参考 [React 设置页面](../../react/src/modules/settings/internal/ui/SettingsView.tsx) 与其 settings.css，
-  使用可搜索的 AI / 项目知识库 / 外观分类，AI 概览展示默认模型与供应商配置入口；供应商列表及编辑通过面包屑返回。
+- `settings`：使用可搜索的 AI / 项目知识库 / 外观分类，AI 概览展示默认模型与供应商配置入口；供应商列表及编辑通过面包屑返回。
   Sidebar 宽 208px（中等窗口 184px），页面操作栏高 64px、内容最大宽 920px；正文独立滚动，保存与提示保持可见。
   窗口不超过 720px 时导航放到顶部，字段自动换行；搜索无结果提供清空入口，搜索和重复选择当前分类保留未提交草稿。
   `settings/navigation` 拥有分类过滤，`settings/appearance` 提供简体中文 / English 选择；语言偏好自动保存成功后应用，失败保留当前语言并提示。
@@ -561,7 +559,6 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   `ports/list` 按输入、输出分组，默认折叠，展开后构建内容；更换节点重置分组，原生列表打开后聚焦搜索输入。
   端口字面量、实例增删/顺序、连接和撤销仍通过原图编辑入口；提交失败在节点表单显示，失败保留输入。
 - `workbench/details/documentation`：通过 Application 按类型读取本地化节点帮助，在节点参数与端口之后呈现默认展开的“文档”折叠区，
-  样式对照 [React 节点文档面板](../../react/src/modules/details/internal/ui/node/NodeDocumentationPanel.tsx)。
   复用原生 `TextView` 展示可选择的 Markdown，窄面板中的表格横向滚动，公式使用共享 `markdown` 扩展。
   不生成或扫描整份节点目录；只保留当前项目、类型与语言的读取投影，项目/类型变化取消旧交付并重新展开。
   `documentation/render` 仅在展开时构造正文视图；语言变化与重试保留折叠状态，旧语言交付拒绝安装。
@@ -648,7 +645,7 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   数值与文本复用 Input，布尔开关复用原生 toggle Button 的键盘和无障碍行为；所有尺寸跟随画布缩放，文本宽度有界。
   `field` 只持有控件、未提交草稿及捕获版本；同类型刷新与语言变化保留草稿，成功回执恢复后端格式化值。
   新增连接、端口删除或类型不再支持时释放控件；不可见且无草稿/焦点的输入不驻留。运行装饰更新复用原实体。
-  Enter 与失焦提交，Escape 恢复当前投影并取消本次失焦提交；空数字、负号及未完成的小数点按 React 规则提交为零。
+  Enter 与失焦提交，Escape 恢复当前投影并取消本次失焦提交；空数字、负号及未完成的小数点提交为零。
   数值解析与 Details 复用同一入口，整数不经过 f64；越界和过期草稿保留输入，错误按当前语言呈现。
 - `canvas/ports/input/commit` 与 `canvas/commands/worker`：将控件输入接入现有图命令，不建立图草稿或另一份历史。
   指针手势期间延后失焦提交，结束时先提交输入，再执行连线/节点移动等命令；单图保存、保存全部、关闭前保存及运行也先应用待提交输入。
@@ -744,7 +741,7 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   窗口登记仅保存原生句柄和面板弱引用，不参与根 DockArea 拓扑，也不保存第二份结果索引。
   交接期间临时共享原 Application 自动租约，新窗口在 worker 取得自己的租约后释放交接持有；关闭来源标签不会使交接结果提前回收。
   关闭窗口使用与标签相同的幂等释放入口，取消交付和报告追加；项目实际替换、执行会话变化及主工作台关闭均清理对应窗口。
-  原会话租约继续由 Application 释放；普通图重跑不替换窗口快照，窗口不创建 Tauri 路由、IPC 协议或另一个结果 store。
+  原会话租约继续由 Application 释放；普通图重跑不替换窗口快照，窗口直接复用类型化结果用例，不创建另一个结果 store。
 - `results/reading`：结果面板的初次读取与分页交付；只有成功回执更新显示的页与表标识。
   失败保留原页和原表/偏移的重试目标，返回概览或关闭会拒收旧分页。`render` 和 `toolbar` 只负责内容、失败反馈与控制，
   显示范围和页码取自已接纳页，未知总数采用原 `has_more`；空页统一显示 0 行。语言切换不重新查询或清空展开状态。
@@ -810,9 +807,9 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   关闭日志窗口释放该订阅，关闭主工作台一并关闭日志窗口。
 - `services/paths`：保持应用标识和各平台数据/日志目录约定；`YSSBI_APP_DATA_DIR` 可指定绝对路径，
   用于隔离迁移验收的项目注册、Harness、模型设置、插件状态和日志；示例优先使用可执行文件旁的 resources/samples。
-- `text`：原生 UI 本地化；`assets/zh-CN.json` / `assets/en-US.json` 沿用 [React 文案键](../../react/src/app/i18n/index.ts)，
+- `text`：原生 UI 本地化由内嵌 `assets/zh-CN.json` / `assets/en-US.json` 提供，
   原生专用提示放在 `native` 下。默认及缺失翻译回退为简体中文；组件库的进程 locale 是运行时唯一语言 owner，
-  应用的 `en-US` 对应组件库 `en`。资源随二进制嵌入，不在运行时读取 React 文件，不依赖 Node 或在线服务。
+  应用的 `en-US` 对应组件库 `en`。资源随二进制嵌入，不依赖 Node 或在线服务。
   `t` 读取固定文案，`format` 用 `{{name}}` 单次插值，用户名称中的占位符保持字面量；用户正文、资源名、模型 ID 与协议值不翻译。
   图诊断直接按当前语言读取 Rust 的原始模板定义，校验 code/message key 及参数后一次替换；未知模板或缺失参数显示通用提示。
   Problems 按后端 severity 呈现图标和颜色，blocking 仍由后端独立决定。
@@ -1122,7 +1119,7 @@ ACF/PACF 的正负柱、原置信带与 Q/p 悬浮；箱线/小提琴的四分�
 未保存/忙碌/运行中的关闭保护；900px 窄窗口、目录选中/悬停、画布网格/节点/连线及表格选区对比度。
 这些界面项目须按实际操作分别确认，编译或静态检查不代表人工验收已完成。
 
-顶栏人工验收：逐项对照 React 的七组菜单、顺序、分隔与快捷键，悬停切换、方向键/Enter 导航和 Escape 关闭；
+顶栏人工验收：逐项对照原生 `workbench/menus/catalog` 的七组菜单、顺序、分隔与快捷键，悬停切换、方向键/Enter 导航和 Escape 关闭；
 标题栏右侧只有设置入口，没有保存全部和插件按钮；保存快捷键与窗口/项目关闭时的保存确认可用；
 新建 Event 图、项目另存为、导入及工具菜单设置；图历史/删除、文档剪切复制粘贴与文本撤销、Mind 删除、数据库复制；
 打开菜单前的文档、图或设置焦点恢复后再编辑/保存，结果或插件标签不能保存此前的图，忙碌和无项目时禁用相应命令；

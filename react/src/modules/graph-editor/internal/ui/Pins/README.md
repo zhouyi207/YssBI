@@ -1,4 +1,15 @@
-# Graph Pin UI
+# Graph Pin UI reference
+
+> Status: Historical
+> Scope: Pin presentation and input behavior in retained React source
+> Canonical owners: This directory owns reference components, not native UI or graph semantics
+> Update when: Reference behavior or current contract routing changes
+
+This source is not a native build entry, and the behaviors below are not evidence of completed
+native migration. See the [root README](../../../../../../../README.md),
+[documentation index](../../../../../../../docs/README.md),
+[Graph application](../../../../../../../crates/yss-application/src/graph/README.md) and
+[GPUI host](../../../../../../../crates/yss-desktop-gpui/README.md) for current contracts.
 
 `GraphPinController` consumes one normalized Rust editor-projection `PinData` object. Component
 callbacks and context-menu capabilities remain separate props and must never be copied into Canvas

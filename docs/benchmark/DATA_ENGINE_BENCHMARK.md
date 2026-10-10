@@ -2,7 +2,7 @@
 
 > Status: Historical
 > Scope: 2026-09-10 写入编码、有序前缀读取和编辑过滤优化后的本地测量
-> Canonical owners: `src-tauri/crates/yss-database-store/examples/dataset_engine_bench.rs`、`src-tauri/crates/yss-graph-execution/examples/ols_bench.rs` 与实际运行输出
+> Canonical owners: `crates/yss-database-store/examples/dataset_engine_bench.rs`、`crates/yss-graph-execution/examples/ols_bench.rs` 与实际运行输出
 > Update when: 修正本次测量记录时；后续复测单独注明环境和范围
 
 本次在 Windows、Intel Core i9-13900HX（24 核、32 逻辑处理器）、约 32 GiB RAM 上运行。
@@ -67,12 +67,12 @@ OLS 输入从 401.1 ms 降至约 24.5 ms。原编辑后过滤记录为 426.6 ms�
 
 ## 复现与验证
 
-以下命令为一组测量。每次完整重复都使用新的空目录，因为 measure 会提交编辑、压实和转换：
+以下为当前 Cargo workspace 的复测入口，不是历史命令的逐字记录。每次完整重复都使用新的空目录，因为 measure 会提交编辑、压实和转换：
 
 ```powershell
-pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-dataset-store --example dataset_engine_bench -- D:/Temp/yss-bench-new generate
-pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-dataset-store --example dataset_engine_bench -- D:/Temp/yss-bench-new measure
-pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-graph-execution --example ols_bench
+cargo run -p yss-database-store --example dataset_engine_bench -- D:/Temp/yss-bench-new generate
+cargo run -p yss-database-store --example dataset_engine_bench -- D:/Temp/yss-bench-new measure
+cargo run -p yss-graph-execution --example ols_bench
 ```
 
 数据引擎 example 保留 OLS 输入物化测量；纯 OLS 计算测量已独立到 Execution 的 `ols_bench`，
@@ -80,16 +80,12 @@ pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-graph-execution 
 拆分后尚未重测，独立进程的内存与耗时不能直接视为原流程的新测量结果。
 
 程序逐场景输出 JSON。内存采样在构建结束后直接启动
-`src-tauri/target/debug/examples/dataset_engine_bench.exe`，不采样 Cargo 构建进程。
+`target/debug/examples/dataset_engine_bench.exe`，不采样 Cargo 构建进程。
 release 测量需在相同入口增加 `--release` 并重新生成数据；本文未运行 release。
 
-本次聚焦验证覆盖：
-
-- `pnpm test:rs:package -p yss-datafusion -p yss-tabular-io -p yss-dataset-store --lib`：4 / 8 / 14 项通过。
-- `pnpm test:rs:package -p yss-datafusion -p yss-dataset-store -p yss-database-runtime --lib`：最终查询改动及多文件逆序枚举回归，4 / 14 / 9 项通过。
-- `pnpm test:rs:package -p yss-application --test numeric_execution`：5 项通过，包含真实 Project Graph → OLS → Results。
-- `pnpm lint:rs:package -p yss-datafusion -p yss-tabular-io -p yss-dataset-store -p yss-relational-contract --lib --tests '--' -D warnings`：通过。
-- `pnpm lint:rs:package -p yss-application --example dataset_engine_bench --no-deps '--' -D warnings`：测量当时 example 位于 Application，聚焦检查通过；当前入口已移至 `yss-dataset-store`。包含依赖的同一检查被未修改的 yss-sci 既有 67 项 lint 错误阻断。
-- debug example 构建及完整复测通过；未运行 workspace 完整 CI、桌面端交互或 release 基准。
+历史验证覆盖了查询、编辑、存储、序列化和 Application 的 Project Graph → OLS → Results 路径，
+并完成当时 debug example 构建与完整复测。部分底层包和 example 此后已调整归属，
+旧命令与测试数量不作为当前 workspace 的验证证据；后续复测按现有模块 README 选择检查。
+该记录没有覆盖完整 workspace CI、GPUI 桌面交互或 release 基准。
 
 恢复、精确类型、取消和发布一致性依靠相关功能测试验证，以上性能测量不替代这些契约。

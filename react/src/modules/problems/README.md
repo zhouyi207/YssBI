@@ -1,9 +1,14 @@
-# Problems module
+# Problems 参考视图
 
-> Status: Current
-> Scope: 图诊断展示、定位与 canonical projection
-> Canonical owners: Rust 语义快照拥有诊断，本模块只呈现其只读投影
-> Update when: 本模块的公开入口、状态归属、生命周期或契约改变时
+> Status: Historical
+> Scope: React 参考源码中的图诊断展示与定位
+> Canonical owners: 本模块只拥有参考呈现；当前语义诊断由 Rust Graph Analysis 拥有
+> Update when: 参考行为或当前诊断契约入口改变时
+
+本目录不参与原生构建，下文只描述保留的 React 行为，不表示原生迁移或验收完成。
+当前入口见[根 README](../../../../README.md)、[文档索引](../../../../docs/README.md)、
+[Graph analysis](../../../../crates/yss-graph-analysis/README.md)和
+[GPUI host](../../../../crates/yss-desktop-gpui/README.md)。
 
 ## Graph Problems
 

@@ -1,5 +1,10 @@
 # Dataset store
 
+> Status: Current
+> Scope: Dataset catalogs, immutable generations, typed edits and snapshot publication
+> Canonical owners: `src/lib.rs` and `src/catalog.rs` own store operations and durable catalog state
+> Update when: Storage layout, edit preparation, snapshot or publication contracts change
+
 This adapter owns the dataset catalog and immutable data generations used by production Project
 activation, DataView editing, and relation sources. Cross-module boundaries are described in
 [Graph and Execution](../yss-application/src/graph/README.md).
@@ -84,7 +89,7 @@ integer constraints. Text admits string representations (including string dictio
 admits timezone-free date, time and timestamp representations. Categorical, Ordinal, Binary and
 Identifier can use multiple scalar representations, subject to actual values and supported casts.
 The Arrow adapter derives each column's supported Semantic choices from the same Physical compatibility
-predicate used by semantic admission. Schema facts and IPC carry that list to Details; the frontend
+predicate used by semantic admission. Typed schema facts carry that list to the native Details view; the host
 does not reconstruct compatibility from display labels. Choosing a supported kind still requires
 valid domain values and constraints, including the two-value Binary domain.
 Category/level/binary codes are exact strings in metadata and on the wire, so wide integers do not

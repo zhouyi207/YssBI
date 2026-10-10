@@ -20,13 +20,13 @@
 - [ ] 按产品需求补齐 DataFrame Series 的 `length`、`count`、`sum`、`mean` 执行实现；当前仅有定义，不进入 GUI 创建目录与 AI 节点搜索，已有图通过缺少内核诊断阻断执行。
 - [ ] 按 [SCI](crates/yss-sci/README.md) 与 [Linalg](crates/yss-sci-linalg/README.md) 当前契约继续核对其余模型的秩不足策略、模型参数与报告，并评估 SVD 重复计算。
 - [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`。数值循环/模型参数重构需结合 SCI golden tests；共享序列化值须保持现有契约，不能为消除 lint 随意改协议。
-- [ ] 评估前端既有的 14 条 Oxlint 警告；涉及遍历集合副本和测试 observer 的条目应先确认快照/回调语义，再决定简化或注明必要原因。
-- [ ] immer, zod, zustand, json patch 前端可以充分利用这些库来实现优化
 - [ ] codex resume 01a0f185-385c-7531-b9f2-bc5013a7078b
 
 ## Routed roadmaps
 
 - [Statistical Harness](docs/roadmap/STATISTICAL_HARNESS.md)
+- [GPUI 功能与人工验收](docs/roadmap/GPUI_MIGRATION.md)
+- [GPUI 组件审查](docs/roadmap/GPUI_COMPONENT_AUDIT.md)
 - [v0.3](docs/roadmap/v0_3.md)
 - [v1.0](docs/roadmap/v1_0.md)
 - [motion](docs/roadmap/motion.md)

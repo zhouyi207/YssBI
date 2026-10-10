@@ -1,42 +1,52 @@
-# motion：React / Harness 共用入口与投影同步
+# motion：GPUI / Harness 共用入口与投影交付
 
 > Status: Planned
-> Scope: 各领域共用 Application、后端投影、界面意图与剩余验收
-> Canonical owners: 本文维护覆盖矩阵与进度；当前 Graph、Presentation、Harness、Project 和 IPC 文档拥有稳定契约
-> Update when: 操作覆盖、同步协议、界面意图或验收状态改变时
+> Scope: 各领域共用 Application、类型化投影、界面意图与剩余验收
+> Canonical owners: 本文维护覆盖与进度；当前契约由 Application、GPUI、Graph、Harness、Project 与 UI Contract 维护
+> Update when: 操作覆盖、交付方式、界面意图或验收状态改变时
 
-React 和 Harness 都是 Application 能力的客户端。业务状态继续归既有领域；Rust 管理打开/聚焦意图，FlexLayout 继续作为工作台物理布局的唯一权威。当前界面意图实现见 [Presentation](../../crates/yss-ui-contract/README.md)。
+GPUI 和 Harness 都消费已有 Application 能力。业务状态留在原 Rust 领域，宿主把阻塞用例交给 worker，
+接纳类型化回执与事件。根 DockArea 唯一拥有工作台拓扑，界面意图只请求动作，不另存布局。
+当前契约见 [Application](../../crates/yss-application/README.md)、[UI Contract](../../crates/yss-ui-contract/README.md)
+和 [GPUI host](../../crates/yss-desktop-gpui/README.md)。
 
 ## 当前覆盖
 
-| 领域     | GUI                              | Harness                                          | owner / 交付                                                  |
-| -------- | -------------------------------- | ------------------------------------------------ | ------------------------------------------------------------- |
-| Graph    | 编辑、历史、显式保存、执行       | inspect/edit/validate/execute/save               | Project 当前文档；共用 Application；Graph 快照/增量与活动通知 |
-| Project  | 创建、打开、切换、另存等生命周期 | inspect_project 查询资源索引                     | Project；项目发布协调器安装索引/Activity 增量                 |
-| Data     | 导入、管理、编辑、保存、分页查询 | schema/profile 检查                              | Database / Project；既有查询和项目发布，无 Harness 数据写能力 |
-| Chart    | 资源管理、配置草稿、保存         | 尚无 Chart 写能力                                | Project 持久化，现有前端资源草稿；项目发布安装                |
-| Results  | 保留、分页、分析、报告、打开视图 | inspect_result、list_graph_results、打开结果意图 | Execution ResultStore；共用读取与租约入口                     |
-| Plugin   | 安装、启停、视图、任务管理       | 尚无插件管理能力                                 | Plugin Manager；现有插件协议与投影                            |
-| 界面意图 | 工作台认领与执行                 | request_ui_intent / inspect_ui_intent 回执       | Application 验证和排队；工作台认领、执行并确认                |
+| 领域 | 原生 GUI | Harness | Owner / 交付 |
+| --- | --- | --- | --- |
+| Graph | 编辑、历史、显式保存、运行与结果 | 定向查询、节点/连接/常量工具、校验、执行与保存 | Project 当前文档/历史；Graph 语义；Execution 运行/结果；共用 Application |
+| Project 资源 | 项目生命周期、资源菜单与目录 | 列表/检查、创建、重命名、复制、删除和保存等领域工具 | Project 资源权威；项目生命周期权限不由资源工具自动扩大 |
+| Data | 导入、分页、只读表格、类型/语义、checkpoint、导出 | 概览/schema/profile/分页、获准行列批量编辑、导入导出和历史 | Database / Project；GUI 不因模型写能力存在就具备行编辑入口 |
+| Chart | 配置草稿、版本化预览与显式保存 | inspect_chart / update_chart | Project 文件；Application 用例；模型更新遵循原立即持久化约定 |
+| Doc / Mind | 未提交输入、应用/保存、资源导航 | 定向查询、文本/主题操作和显式保存 | Project 与模型校验；原生表单不拥有持久正文 |
+| Results | 保留、分页、报告/分析/图形及独立窗口 | 列表、概览、表格读取和打开意图 | Execution ResultStore；完整结果身份与租约 |
+| Plugin | 安装、启停、原生视图与任务管理 | 不由已有资源工具推断插件管理写权限 | Plugin Manager / Runtime |
+| 界面意图 | 认领、串行执行、完成确认 | request_ui_intent / inspect_ui_intent | Application 请求与回执；宿主执行原打开/定位/面板入口 |
 
-Graph 的 GUI 显式 Save 与 Harness 原子保存编辑批次继续保持既定差异。Graph 已有的活动通知后刷新适合当前业务投影边界；报告按需读取，界面意图通过有界 Channel 交付。没有把所有领域拼成一个可任意 patch 的全局 JSON Store。
+工具精确目录由 [Harness Core](../../crates/yss-harness-core/README.md)拥有，阶段及界面验收见
+[领域工具计划](HARNESS_TOOL_ARCHITECTURE.md)。Data/Chart 写能力已有接入，不再列为从零新增。
+
+Graph 的 GUI 显式 Save 与 Harness 批次原子保存保持差异。图通知后重读、有界运行事件、按需结果查询、
+项目发布与界面意图是不同数据流，不合并成可任意修改的全局 JSON Store。
 
 ## 已接入
 
-- [x] 记录各领域 GUI / Harness 的现有覆盖、唯一状态 owner 和交付方式；未开放给 Harness 的业务写操作仍单独跟踪。
-- [x] 受控界面意图支持打开已有图、定位节点、打开保留结果和显示登记面板；复用既有面板、编辑器和结果租约入口。
-- [x] 意图按调用者/clientKey 去重，目标为 main 工作台；前端先认领再串行执行，回执区分 pending/claimed/applied/failed/expired，Harness 可以查询。
-- [x] 项目、结果和 Application session 校验；旧会话结束订阅，工作台关闭、队列容量、请求过期与失效目标明确失败。
-- [x] 后端回归覆盖重复认领、结果保留和 GUI/Harness 查询同一操作回执；不以自动检查替代桌面操作验收。
+- [x] 既有 GUI/Harness 用例与原领域 owner 共用；原生宿主直接消费类型化入口。
+- [x] 受控打开资源、定位图节点、打开保留结果与显示面板复用现有实体和租约。
+- [x] 意图按调用者/clientKey 去重，面向 main 工作台，回执区分 pending/claimed/applied/failed/expired。
+- [x] Application 校验项目/会话/结果；宿主认领后串行执行，旧 binding 不得结算新队列。
+
+这些实现记录不替代完整人工验收；图首次读取、通知缺口与重连的具体局部证据见组件审查。
 
 ## 剩余工作
 
-- [ ] 人工验收重复意图、打开与定位、面板关闭重开、会话替换、迟到投影和恢复；记录实际结果。
-- [ ] 对 Graph 的通知后刷新与直接增量推送做端到端测量，再决定是否调整既有协议。
-- [ ] 按产品需求补齐 Project、Data、Chart、Plugin 等 Harness 写能力；复用各自 Application 用例，沿用批准、幂等、提交与恢复要求。
-- [ ] 在有需求时增加界面意图取消、更多资源打开方式或多工作台目标；超时只表示没有完成证据，不宣称已取消正在执行的界面操作。
-- [ ] CLI / MCP 后续客户端按 [Harness 路线图](STATISTICAL_HARNESS.md) 接入，不从当前内部工具存在推导生产 MCP 已完成。
+- [ ] 人工验收重复意图、打开/定位、面板关闭重开、会话替换、迟到投影与恢复；同一目标不同生命周期不能串用回执。
+- [ ] 对 Graph 通知后刷新和直接增量交付做同场景端到端测量，再决定是否调整协议；处理、布局、绘制分别计量。
+- [ ] 已有 Project 资源、Data、Chart 写工具完成原生展示与失败/恢复验收；项目生命周期、Plugin 等额外写能力仅在明确产品需求与授权后扩展，沿用幂等和提交判据。
+- [ ] 按需评估意图取消、更多资源方式及多工作台目标；超时只表示没有完成证据，不代表正在执行的界面动作已取消。
+- [ ] CLI / MCP 及后台客户端遵循 [Harness 路线图](STATISTICAL_HARNESS.md)的准入，不因内部工具存在就标记生产接入完成。
 
-业务协议、报告查询、Graph 编辑和 Graph 投影保持独立。报告验收见 [Results views](../../react/src/modules/results/README.md#剩余人工验收)。
+报告与结果验收见 [GPUI 组件审查](GPUI_COMPONENT_AUDIT.md)和[组件重构验收](COMPONENT_REFACTOR.md#102-界面人工验收)。
+从仓库根 `cargo run`；本次文档整理未运行检查或交互验收。
 
 [返回专项计划](README.md)

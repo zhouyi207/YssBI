@@ -31,10 +31,11 @@ flowchart LR
   NATIVE --> LOGS[yss-logging]
 ```
 
-根目录是纯 Cargo workspace，默认运行 [GPUI host](../../crates/yss-desktop-gpui/README.md)。
-宿主组合原生窗口、执行器、日志和平台中立 ApplicationServices，直接调用类型化用例。
-阻塞业务调用在 worker 中执行，指针交互不访问文件系统。
-`react/` 是保留的参考源码和契约样本，不参与原生构建。
+根目录是纯 Rust Cargo workspace，默认运行 [GPUI host](../../crates/yss-desktop-gpui/README.md)。
+桌面前端使用 GPUI Kit 原生组件与 GPU 绘制；宿主组合窗口、执行器、日志和平台中立 ApplicationServices，
+在同一进程中直接调用类型化用例，通过回执、订阅与只读投影更新视图，不建立界面专用的命令传输层。
+阻塞业务调用在 worker 中执行，指针交互不访问文件系统。领域与应用层不依赖 GUI。
+`react/` 仅保留参考源码，不参与原生构建，也不定义当前模块的状态或生命周期契约。
 
 ## Authority model
 
@@ -105,4 +106,4 @@ Save 不运行图，Execute 不隐式保存。执行捕获文档与语义身份�
 工作台布局直接保存组件库的 DockAreaState，不镜像另一套拓扑。
 
 模块入口见 [文档索引](../README.md)，待实现能力和各平台人工验收见
-[GPUI 迁移](../roadmap/GPUI_MIGRATION.md)。宿主切换不表示功能迁移或验收已全部完成。
+[GPUI 功能计划](../roadmap/GPUI_MIGRATION.md)。采用原生架构不表示功能或人工验收已全部完成。

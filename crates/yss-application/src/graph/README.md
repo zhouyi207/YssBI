@@ -294,7 +294,7 @@ GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操�
 文档时，从匹配版本的 Project 读取 Rust 快照；新建、导入或粘贴等操作仍携带自身的真实输入。
 过期版本被拒绝，不自动合并并行修改。
 
-读取和写入回执直接交付类型化完整投影，不经过 JSON 路径补丁、窗口传输基线或 React Store。
+读取和写入回执直接交付类型化完整投影；宿主按捕获的图身份接纳，不维护另一份已提交图模型。
 `OpenGraphApplicationReceipt::result_state` 与 `GraphEditResponse::result_state` 都来自对应的
 图读取或提交。ResultStore 在更新输入依据的同一锁内捕获结果摘要，携带执行会话内的
 结果 revision；运行发布、运行准入和依赖重验推进该顺序，独立于图编辑 revision。
@@ -382,7 +382,7 @@ Save 接收当前编辑 version 与 operation ID，由 Rust 读取匹配的当�
 Assistant 的 `apply_graph_edit` 默认通过同一文件事务保存整个当前图文档，包含调用前已有的手动编辑。
 Project 在一次提交内安装编辑、保存指纹、历史及幂等回执；写入失败或版本失效时回滚文件，保留调用前的内存文档和历史。
 自动保存保留批次的撤销记录；手动撤销使图重新变为未保存，重做回到已保存内容后清除 dirty。
-助手编辑不要求打开图面板，也不通过 Webview 确认提交。
+助手编辑不要求打开图面板，提交结果由 Rust 事务回执确认。
 
 图表的保存与配置草稿契约由 [Chart application](../chart/README.md#保存与版本) 维护。
 

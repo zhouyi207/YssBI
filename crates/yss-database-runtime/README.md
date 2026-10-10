@@ -214,7 +214,7 @@ Arrow values. Column renames preserve that identity, and row IDs are independent
 positions. No separate cell identity or cell object lifecycle is maintained.
 
 The private `edit_history::EditHistory` owns before/after snapshot references. Its public
-projection, `EditState`, belongs to `yss-database-contract`; Application and IPC consume that
+projection, `EditState`, belongs to `yss-database-contract`; Application and the native host consume that
 contract without accessing the history container. `DatabaseInstance` keeps its runtime state
 private to this crate. Cell edits, inserts,
 deletes, column operations and undo/redo prepare new immutable views. Row IDs are never reused;

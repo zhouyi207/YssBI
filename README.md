@@ -12,15 +12,22 @@
   <img src="https://img.shields.io/badge/status-开发中-orange" alt="status" />
 </p>
 
-<br />
-
-<img src="imgs/demo.png" alt="YssBI 界面预览" width="800" />
-
 </div>
 
 ---
 
 项目架构、开发流程和路线图从 [文档索引](docs/README.md) 进入。
+
+## 项目架构
+
+桌面前端与业务实现均使用 Rust，以根 Cargo workspace 作为构建入口：
+
+- **GPUI 原生前端**：`yss-desktop-gpui` 使用 GPUI Kit 组装窗口、工作台、画布和面板；根 `DockArea` 拥有工作台布局。
+- **应用层**：`yss-application` 提供平台中立的服务与类型化用例；宿主在 worker 中执行阻塞业务，向视图交付类型化回执、事件和只读投影。
+- **领域层**：Project、Graph、Database、Execution、SCI 和 Harness 各自拥有业务状态；领域与应用层不依赖 GPUI。
+- **基础设施**：文件系统、日志、数据库存储与插件适配按各自模块边界接入。外部计算插件不改变桌面前端的 Rust 架构。
+
+状态所有权和依赖关系见[系统架构](docs/architecture/ARCHITECTURE.md)，模块入口见[文档索引](docs/README.md)。
 
 ## 功能模块
 
@@ -69,7 +76,7 @@
 从仓库根目录运行 Cargo 命令。Rust 版本及开发组件统一由
 [rust-toolchain.toml](rust-toolchain.toml) 定义，不另行声明最低支持版本。
 rustup 会自动选择该版本并安装配置的工具链及组件。根目录是纯 Rust workspace，默认成员为
-`yss-desktop-gpui`；启动和构建不需要 Node.js、pnpm 或 Tauri 配置。
+`yss-desktop-gpui`；启动和构建只使用 Cargo，无需 JavaScript 工具链。
 
 ```bash
 # 启动 GPUI 工作台

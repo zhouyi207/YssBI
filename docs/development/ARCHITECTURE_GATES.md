@@ -5,8 +5,8 @@
 > Canonical owners: 当前架构与 Agent Rules 拥有跨系统约束；Cargo metadata 与文档生成器拥有可执行入口检查
 > Update when: 架构复核范围、验证方式或文档检查入口改变时
 
-前后端均已移除源码架构审计、逐文件/逐符号的测试许可表及其专用扫描器。
-状态归属、依赖方向和业务边界继续按[当前架构](../architecture/ARCHITECTURE.md)、[Agent Rules](AGENT_RULES.md)与子系统契约执行。
+架构复核面向 Rust workspace 的原生宿主、应用层、领域层和基础设施。
+状态归属、依赖方向和业务边界按[当前架构](../architecture/ARCHITECTURE.md)、[Agent Rules](AGENT_RULES.md)与子系统契约执行。
 
 ## 1. 架构复核
 
@@ -41,9 +41,9 @@ node scripts/generate-crate-dependencies.mjs --check
 ```
 
 它以根 Cargo metadata 为唯一 workspace 来源，保护模块索引及保留的依赖图数据。
-文档改动同时检查相对链接、owner 与状态声明；移动模块后修正其入口，不把参考 React
-说明当作原生功能完成证据。旧 `react/src/tests/documentationContract.test.ts` 保留为参考，
-不作为当前原生构建的必需检查；根目录已没有 pnpm scripts。
+文档改动同时检查相对链接、owner、状态声明及改动行的空白格式，并运行 `git diff --check`。
+移动模块后修正其入口；参考源码、历史测量和计划不得作为当前 GPUI 功能完成证据。
+文档检查不依赖参考前端的测试或构建配置，也不要求编译桌面应用。
 
 架构文档可以是 `Current`，或明确声明 `Contract: Target Architecture` 的 `Accepted Decision`；
 开发工作流使用 `Current`。目标架构和历史验证记录不能作为当前完成证据。

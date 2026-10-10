@@ -270,7 +270,7 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 | [alignment](src/builtins/alignment.rs)         | 数据帧时间网格与面板对齐的原生关系计划请求                |
 | [transforms](src/builtins/transforms.rs)       | 数列变换、排序、筛选、重塑与标量聚合结果消费              |
 
-科学计算继续调用 `yss-sci-runtime`，数值算法属于 SCI，关系执行使用 `yss-relational-contract` 的句柄。这里不直接依赖 Graph、Project、Application、Tauri、DataFusion 或 Linalg。
+科学计算继续调用 `yss-sci-runtime`，数值算法属于 SCI，关系执行使用 `yss-relational-contract` 的句柄。这里不直接依赖 Graph、Project、Application、桌面框架、DataFusion 或 Linalg。
 
 `statistics::panel::models` 绑定七个 `econometrics.panel.*` 入口。数值输入复用共同物化和配对长度检查，
 FE/RE/FD/Between 直接取得共享 `PanelFit`，恢复列名并输出可连接现有 Summary 的模型。

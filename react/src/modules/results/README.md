@@ -1,9 +1,14 @@
-# Results views
+# Results views 参考
 
-> Status: Current
-> Scope: Result 面板、报告组件和统计内容呈现
-> Canonical owners: 本模块拥有呈现；查询与租约由 Application results 维护，数值由 Rust ResultStore 拥有
-> Update when: 结果视图、报告渲染或数据绑定改变时
+> Status: Historical
+> Scope: 保留的 React 结果面板、报告组件与统计呈现行为
+> Canonical owners: 本模块只拥有参考呈现；当前结果数据与查询由 Rust Execution/Application 拥有
+> Update when: 参考展示行为或当前契约入口改变时
+
+本目录不参与原生构建。以下内容仅说明 React 参考视图，不构成原生功能或验收完成的证据。
+当前入口见[根 README](../../../../README.md)、[文档索引](../../../../docs/README.md)、
+[Graph application](../../../../crates/yss-application/src/graph/README.md)和
+[GPUI host](../../../../crates/yss-desktop-gpui/README.md)。
 
 结构化报告的数组以数据引用呈现，无论数组大小。默认只展示行数，用户展开“查看数据”
 才通过现有 Results 查询协调器读取有界数据页；折叠时卸载读取组件。概览、分页与
@@ -12,7 +17,7 @@
 [public.ts](public.ts) 提供结果面板入口，报告组件位于 [internal/ui/info](internal/ui/info/)。
 读取、分页、分析和结果生命周期见 [Results application](../../features/application/results/README.md)。
 
-结果面板、独立 Inspector 和 Plot 窗口直接呈现数据、报告或图形，不附加图路径与运行编号信息栏。
+参考结果视图直接呈现数据、报告或图形，不附加图路径与运行编号信息栏。
 
 ## Inspect 与结果报告
 
@@ -27,10 +32,10 @@ renderer 绘制。前端不计算统计量、核密度、AUC 或置信区间；�
 下降的标准误 domain 使零值位于顶部。森林图复用系数区间图和既有分页。
 系数图与帕累托图保留完整计算结果，`PlotResultView` 每页显示 100 项；页码为局部展示状态，
 切换结果后回到第一页。帕累托累计比例沿用 Rust 对完整样本的计算，不按页面重新归一化。
-面板与独立窗口接收 Application 加载器一次解析后的图形或报告数据；重绘不重新校验同一载荷，
+视图接收 Application 加载器一次解析后的图形或报告数据；重绘不重新校验同一载荷，
 展开失败等局部反馈不改变图形对象身份或重置其页码。报告无效状态继续显示原字段诊断。
 
-统计节点只输出一份结构化 `result`。Result 面板与独立 Inspect 窗口共用右上角的“数值 / 报告”切换，默认查看数值。两种视图绑定同一个结果引用和租约，切换不重新执行节点；已经打开的报告保持挂载，保留分页和章节折叠状态。独立报告也使用 `/inspect`，不再注册 `/info` 或按统计方法分派专用页面。
+统计节点只输出一份结构化 `result`。参考视图提供“数值 / 报告”切换，默认查看数值。两种视图绑定同一个结果引用和租约，切换不重新执行节点；已经打开的报告保持挂载，保留分页和章节折叠状态。
 
 `ReportView` 接收 Results 加载器已解析的结果。普通结构化结果由 `StructuredResult` 直接使用通用键值表、数据表和折叠章节呈现；数组保留为结果引用，展开后每次请求至多 100 项的有界数据页，嵌套数组继续按需读取，空值、布尔值与宽整数文本保留原意。组件不推断统计方法或执行计算。
 
@@ -63,6 +68,8 @@ ACF/PACF 报告直接绘制分析结果中的置信带宽度，与 SCI 相关图
 相邻残差坐标及按全样本 leverage 排序的高亮，前端只控制查看参数。
 
 ## 剩余人工验收
+
+以下是保留的对照场景，仍未据此确认原生验收完成；原生进度见[迁移计划](../../../../docs/roadmap/GPUI_MIGRATION.md)。
 
 - 数值/报告切换、章节折叠、分页与按需加载，确认统计内容和结果引用一致。
 - 报告关闭重开、独立报告窗口、项目/结果会话切换及迟到回复隔离。

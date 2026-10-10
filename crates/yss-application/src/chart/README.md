@@ -15,7 +15,6 @@
 使用 GPUI 绘制独立直方图、散点与折线。配置草稿及绘图坐标由原生视图拥有，保存、资源版本、分布和数值投影仍由 Rust 原 owner 拥有。
 预览绑定项目、配置与数据库资源 revision；旧查询不能安装到新配置，目录重命名/删除继续校验资源版本。
 原生操作与验收范围见宿主 README，完整图结果图形仍待迁移；不能以独立图表通过替代结果租约与报告验收。
-保留的 React 参考实现中，`ChartPreview` 与 `PlotResultView` 复用 `ChartRenderer`，不参与当前原生构建。
 
 直方图列分布与散点/折线列对读取都携带前端捕获的数据库资源 revision；没有该版本时不发出查询。
 原生直方图显式传入所选列，Application/Runtime 在统计之前使用原 Engine 列投影，保留分箱、类别排序与读取 gate。
@@ -36,8 +35,8 @@ Harness 的 `inspect_chart` 返回当前类型化配置；`update_chart` 只合�
 
 前端用 operation ID 和资源路径确认保存回执，通过文档内容判断保存期间是否产生新编辑，成功才清除 dirty。干净图表的刷新依据资源索引；GUI 初次视图读取和索引刷新都必须携带捕获的 Project publication revision，由 Rust 校验快照一致性。前端在途请求也以发布版本区分，返回时保留原项目、资源修订及读取令牌检查。Application 的原生/Harness 读取仍可使用已捕获会话的可选版本入口。重命名、删除等资源操作和 Rust 内部事务继续校验资源版本。
 
-前端 Chart Service 在 IPC 边界检查当前 schema version 4，并复用资源回执的 Chart 状态 guard。
-列对响应的坐标必须是有限数值，轴格式为 number/date/datetime，两个轴标签必填且可为 null；
-显式传入点数上限时，响应不能超过该上限。模型转换只将 null 标签转为呈现层的缺省值，不重复校验。
+图表格式与字段校验由 `yss-chart-document` 和 Project 拥有，原生宿主直接消费类型化文档和查询结果。
+列对投影只交付有限坐标及 number/date/datetime 轴格式，可选轴标签由呈现层显示；
+显式传入点数上限时，Application 的有界采样遵守该上限。
 
-资源持久化见 [Project](../../../yss-project/README.md)，结果持有与读取见 [Results](../../../../react/src/features/application/results/README.md)。
+资源持久化见 [Project](../../../yss-project/README.md)，结果持有与读取见 [Graph 与 Results](../graph/README.md)，原生预览与结果呈现见 [GPUI host](../../../yss-desktop-gpui/README.md)。

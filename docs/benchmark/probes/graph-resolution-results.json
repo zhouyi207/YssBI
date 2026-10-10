@@ -2,9 +2,10 @@
   "measuredDate": "2026-09-15",
   "platform": "Windows x64",
   "profile": "release",
-  "source": "src-tauri/crates/yss-graph-runtime/src/resolution_tests.rs",
-  "command": "pnpm test:rs:package -p yss-graph-runtime --release --lib benchmark_repeated_resolution_and_projection '--' --ignored --nocapture",
+  "source": "crates/yss-graph-runtime/src/resolution_tests.rs",
+  "command": "cargo test -p yss-graph-runtime --release --lib benchmark_repeated_resolution_and_projection -- --ignored --nocapture",
   "notes": [
+    "Source and command are current workspace navigation, not the verbatim historical invocation; measured rows are unchanged and have not been rerun.",
     "Production Rust resolve and editor projection functions; synthetic documents.",
     "Both modes retain warmed type and Schema caches. The control clears only the whole-analysis snapshot.",
     "Dataframe graphs consist of ten-node source/limit chains with twelve columns; scalar graphs contain unbound logic nodes.",

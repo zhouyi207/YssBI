@@ -72,7 +72,7 @@ add or commit them unless explicitly requested.
   Assistant edit batches persist their complete current graph atomically and retain
   undo history, without requiring an editor panel.
 - Dependencies flow toward domain and application logic, never from domain code
-  toward UI, Tauri, services, or concrete business infrastructure adapters.
+  toward GPUI, desktop services, or concrete business infrastructure adapters.
   Generic filesystem primitives are an explicit foundation for Project and Application.
 - `yss-filesystem` owns generic file access, transactions, change facts and watcher
   sessions, with zero dependencies on repository crates. Project path conventions,
@@ -80,7 +80,7 @@ add or commit them unless explicitly requested.
   or its application adapters, never to FS.
 - `yss-node-kernel` owns graph-independent invocation values, kernel contracts,
   the frozen kernel registry and built-in node adapters. It does not depend on
-  Graph, Project, Application or Tauri; resource authorization, graph addresses,
+  Graph, Project, Application or desktop frameworks; resource authorization, graph addresses,
   execution plans, result storage and graph error locations stay with their owners.
   Application composes one frozen registry shared by readiness checks and execution.
 - Only `yss-node-kernel` and `yss-graph-execution`'s focused SCI benchmark consume
@@ -141,6 +141,6 @@ Use `docs/README.md` for the module index. Representative owners are:
 - Feature, fix, refactor, and behavior changes:
   `docs/development/CHANGE_PROCESS.md`
 
-Do not create generic language/framework manuals such as `ts.md`, `rust.md`, or
-`tauri.md`. Put module details in the existing owner's README, and scoped editing
-constraints in its `.rules`; keep system documentation short and link to these owners.
+Do not create generic language/framework manuals. Put module details in the
+existing owner's README, and scoped editing constraints in its `.rules`; keep
+system documentation short and link to these owners.

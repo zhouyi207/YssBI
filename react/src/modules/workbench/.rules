@@ -1,15 +1,20 @@
-# Workbench documentation and changes
+# React reference workbench changes
 
-- Read `README.md` before changing layout, panel identity or lifecycle behavior.
-- Layout defaults belong to `internal/layout/workbenchLayoutDefaults.ts`.
-  Update the code owner and its documented behavior together; do not maintain
-  another defaults table in system documentation.
+These rules apply only to this retained React subtree, not to the native GPUI workbench.
+Read [README.md](README.md) before changing reference layout, panel identity or lifecycle behavior.
+Current UI ownership is documented by [GPUI host](../../../../crates/yss-desktop-gpui/README.md);
+build and workflow entry points belong to the [root README](../../../../README.md).
+Do not restore historical platform wiring or copy FlexLayout state into native contracts.
+
+Reference layout defaults belong to `internal/layout/workbenchLayoutDefaults.ts`.
+Update the reference code owner and its scoped documentation together; do not maintain
+another defaults table in system documentation.
 
 ## Activity 侧栏列表样式与 JSON 渲染
 
-以下要求适用于 Project、Nodes、Commands、Plugins、Assistant 及后续新增的内置
-Activity 侧栏列表。具体数据契约与职责归属见
-[Activity 文档与模板](README.md#11-activity-文档与模板)。
+以下要求仅适用于保留的 React Project、Nodes、Commands、Plugins、Assistant 等
+Activity 侧栏列表。参考职责见
+[Activity 文档与模板](README.md#activity-文档与模板)，不规定原生侧栏的组件或交付格式。
 
 - 列表必须复用 `ActivityPanelDocumentView`，由其统一使用 `ActivityPanelShell`
   渲染标题栏和内容容器；不得仅套用公共外壳，仍在业务组件中维护一套独立列表。
@@ -17,9 +22,9 @@ Activity 侧栏列表。具体数据契约与职责归属见
   图标按钮尺寸与其他 Activity tab 保持一致；标题栏工具使用 `icon-sm`，列表使用
   共用的垂直 `ScrollArea`，分类行复用 `SidebarTreeCategoryRow`。修改公共样式应在
   公共组件或样式 owner 中完成，不给单个面板复制标题栏、滚动容器或另设一套尺寸。
-- 标题、工具栏、分类、条目、顺序和空状态必须由 Rust 生成的
-  `ActivityPanelDocument` JSON 驱动。前端不得自行拼装权威文档、回退为本地目录，
-  或为了样式统一而另建 JSON 协议、渲染器和列表查询接口。
+- 标题、工具栏、分类、条目、顺序和空状态继续消费接纳后的
+  `ActivityPanelDocument` 投影。参考视图不得自行拼装权威文档、回退为本地目录，
+  或为了样式统一而另建文档协议、渲染器和列表查询接口。
 - 读取、校验、快照与游标增量继续复用现有 Activity 查询链路、
   `useActivityPanelDocument` 和 `sidebarStore`。不得新增平行列表缓存，或直接用
   新建、重命名等操作回执拼接列表；提交后通过既有失效入口重读权威文档，并保留

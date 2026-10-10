@@ -183,7 +183,7 @@ Schema 依赖参数并参与既有缓存失效，维数编辑同步更新下游�
 
 命名常量由 `GraphDocument.constants` 持有，使用稳定 `ConstantId`。Event 和 Function 的 Details 面板编辑名称、类型和值；增删改通过 `SetConstant` 和同一 当前图文档 FIFO、undo/redo、Save 路径处理，没有独立的变量 Store、revision、作用域或项目资源文件。名称在所属图内唯一，重命名不会改变引用身份。
 
-前端常量、端口和协议默认值共用 `SerializedDataValue` 及严格校验器；编辑字段是临时输入状态。常量编辑不依赖 IPC 编码器，也不维护另一份已提交数据。
+常量、端口和协议默认值共用 `SerializedDataValue` 及严格校验器；宿主编辑字段是临时输入状态，不维护另一份已提交数据。
 
 表格常量保存 `tabular` 快照，`dataValue` 为 Null，不再保存由常量 ID 派生的资源句柄。编辑时提交的 JSON 文本由 Graph 原子解析、按外层 `ValueType` 校验；序列不另存元素类型、dummy 或 time-series 状态。
 
@@ -199,7 +199,7 @@ Clipboard 仅携带选中 Get 节点引用的常量。目标图已有同一身�
 
 节点参数使用文档中显式保存的值，未填写时使用 protocol 定义的默认值。Graph Analysis 计算参数有效值，Editor Projection 直接消费该语义事实，不再用文档原值二次覆盖；参数编辑从当前图文档合并改动，保留未展示参数，也不把其他参数的显示默认值写回文档。计算参数与缺失值策略由具体算法契约和输入校验拥有。
 
-节点通过 `Parameters → ParameterGroup → Parameter` 声明 Detail 参数表单。参数值按节点内唯一 key 扁平保存；分组仅组织展示。`visible_when` 可以引用同节点任意组的无条件参数，判断时使用显式值或默认值。Rust 只向编辑器和执行计划投影当前适用的参数；编辑器投影以 `parameterGroups` 交付有序分组，空组和隐藏字段不显示。React 按声明顺序将每个参数展示为默认展开的一级区块，保留分组说明，不再显示外层分组标题；每个参数独立折叠。
+节点通过 `Parameters → ParameterGroup → Parameter` 声明 Detail 参数表单。参数值按节点内唯一 key 扁平保存；分组仅组织展示。`visible_when` 可以引用同节点任意组的无条件参数，判断时使用显式值或默认值。Rust 只向编辑器和执行计划投影当前适用的参数；编辑器投影交付有序分组，空组和隐藏字段不显示。原生参数呈现、折叠与交互验收由 [GPUI host](../yss-desktop-gpui/README.md) 拥有。
 
 `SetParameters { node_id, parameters }` 在当前文档上原子合并部分字段，null 清除显式值，随后清理不适用的条件字段并验证整个候选参数集。默认值来自声明，在投影和执行时求值，不为显示或修改其他参数而写入文档。一次跨组修改仍只有一个可逆补丁，支持现有撤销、重做和 Save 路径。GUI 与 Harness 共用该行为，不自行合并参数。导入文档中的未知字段、失效条件字段或非法值产生诊断，验证不暗中改写文档。
 

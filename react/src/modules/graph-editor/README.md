@@ -1,9 +1,16 @@
-# Graph editor
+# Graph editor 参考实现
 
-> Status: Current
-> Scope: React Flow 画布呈现、输入手势与编辑器投影消费
-> Canonical owners: 本 module 的画布组件；应用操作和共享 viewport 由 features/application/editor 与 Core 提供
-> Update when: 本模块的公开入口、状态归属、生命周期或契约改变时
+> Status: Historical
+> Scope: 保留的 React Flow 画布呈现、输入手势与投影消费行为
+> Canonical owners: 本模块只拥有参考画布；当前图用例与原生 UI 由 Rust crates 拥有
+> Update when: 参考交互行为或当前契约入口改变时
+
+本目录不参与原生构建。下文的 React Flow、FlexLayout、DOM、CSS 与性能策略仅说明参考源码，
+不是当前 GPUI 画布架构，也不能证明交互已移植或验收。
+当前入口见[根 README](../../../../README.md)、[文档索引](../../../../docs/README.md)、
+[Graph application](../../../../crates/yss-application/src/graph/README.md)和
+[GPUI host](../../../../crates/yss-desktop-gpui/README.md)；
+开放验收由[迁移计划](../../../../docs/roadmap/GPUI_MIGRATION.md)维护。
 
 ## Canvas presentation and input
 
@@ -103,7 +110,7 @@ handle 测量维护，不经过面板 React state、`nodes` 属性和库的被�
 不重算该叠加层。初始化直接填充空缓存，删除连线时清理对应条目，面板卸载后释放。
 选择事实仍由原面板状态拥有，画布库继续接收受控 selected 标记。
 连接目标反馈直接由 React Flow handle 消费；节点拖拽及连线的选择、菜单和双击操作由 React Flow 画布适配器处理，展示组件不另行接管这些手势。
-每个画布实例持有自己的连线反馈 store，Context 只传稳定的 store 引用。节点外观、Pin 外观和连线分别按节点 ID、Pin ID 或连线 ID 订阅淡化、高亮、目标和替换反馈；节点正文及参数控件不订阅全局 active Pin。开始手势时查询 Rust 的连接候选投影，在 layout effect 中发布呈现反馈；鼠标移动只查当前候选结果，不推导类型、容量或被替换连接，也不发起 IPC。图编辑版本、语义身份或资源发布变化会清除旧候选并重新查询；取消手势后忽略迟到响应。等待或查询失败时反馈保持中性，快速松键仍可提交到 Rust 做最终校验。选择及拖拽预览继续归所属物理面板所有。
+每个画布实例持有自己的连线反馈 store，Context 只传稳定的 store 引用。节点外观、Pin 外观和连线分别按节点 ID、Pin ID 或连线 ID 订阅淡化、高亮、目标和替换反馈；节点正文及参数控件不订阅全局 active Pin。开始手势时查询连接候选投影，在 layout effect 中发布呈现反馈；鼠标移动只查当前候选结果，不推导类型、容量或被替换连接，也不发起新的查询。图编辑版本、语义身份或资源发布变化会清除旧候选并重新查询；取消手势后忽略迟到响应。等待或查询失败时反馈保持中性，快速松键仍可提交给业务 owner 做最终校验。选择及拖拽预览继续归所属物理面板所有。
 目标端口由无 DOM 的 `GraphFlowFeedback` 单独订阅 React Flow 的 handle ID，并在 layout effect 中
 一次发布目标与替换连线集合。跨端口移动只更新这层反馈及实际变化的订阅者，不重渲染画布适配器，
 也不重新创建画布配置和 JSX。该组件复用面板的反馈 store，节点/候选投影与连接命令仍由原入口管理；

@@ -1,20 +1,20 @@
 # GPUI 组件逐项迁移审查
 
 > Status: Planned
-> Scope: 所有 Tauri/React 参考组件的必要性、原生覆盖、架构优化与验收
-> Canonical owners: React 源码定义参考行为；GPUI 和业务模块 README 定义当前契约；本表只记录逐项审查与开放工作
+> Scope: React 参考组件的产品必要性、GPUI 原生覆盖、架构优化与验收
+> Canonical owners: GPUI 与 Rust 业务模块 README 定义当前契约；React 源码仅提供参考行为；本表记录逐项审查与开放工作
 > Update when: 每次完成组件审查、迁移、优化或人工验收时
 
 用户目标是逐个检查全部参考组件：必要的能力迁入 GPUI，已迁移部分复核效率与职责边界，每批完成后独立提交。
 不以名称相似、存在原生文件、编译通过或完成部分功能代表该组件已完整迁移。
 
-当前清单以 `react/src/**/*.tsx` 的生产文件为入口，共 265 项；85 个测试 TSX 文件作为行为证据，不迁成 UI 单元测试。
-每个文件的导出组件、内部子组件及其调用的 hooks/服务均需在实际审查时核对；非 TSX 注册、样式、平台适配也随对应组件检查。
-仓库已无 `src-tauri` 宿主源码；平台功能按 Application/GPUI 当前入口及 React 平台调用核实。
+当前清单以 `react/src/**/*.tsx` 的生产文件为参考入口，共 265 项；85 个测试 TSX 文件只说明参考行为，不是原生通过证据，也不迁成 UI 单元测试。
+每个文件的导出组件、内部子组件及其调用的 hooks/服务需在对应能力审查时核对；参考注册与样式用于识别产品需求，不作为当前实施方案。
+`react/` 不参与原生构建；平台能力以 `crates/yss-desktop-gpui`、Application 和领域 owner 为准。阻塞用例在 worker 执行，类型化事件/投影交付 UI，根 DockArea 唯一拥有布局。
 
 审查结论使用：**待查**、**迁移**、**优化**、**复用原生组件**、**无需迁移**。无需迁移必须说明当前产品行为或原生替代依据。
 实现与验收分别记录：已有源码不自动算作完整覆盖；需要人工验收的行为保持待验收，只有实际证据才更新为通过。
-框架组件优先复用 `gpui-component`，业务用例继续调用现有 Rust owner，根 DockArea 持有唯一工作台拓扑。
+框架组件通过 `gpui_kit::component` 复用，业务用例继续调用现有 Rust owner，根 DockArea 持有唯一工作台拓扑。下文历史批次的检查仅证明当时明确范围，本次文档整理未重跑；所有“待验收/待审查”保持原状态。
 
 验证按受影响模块选择契约测试、原生编译/Clippy 和局部格式检查；UI 使用人工验收，不增加 UI 单元测试。
 历史迁移和平台验收见 [GPUI 迁移](GPUI_MIGRATION.md)，当前原生契约见 [GPUI host](../../crates/yss-desktop-gpui/README.md)。
@@ -93,7 +93,7 @@
 - 已接入散点、折线、ECDF、KDE、直方图、气泡、象限、P-P/Q-Q、ROC 九类完整结果。Application 按原结果类别与会话读取，不经 JSON 往返；原结果页预算在分配前检查，不以第一页或本地抽样代替整张图。
 - 共享 `plots` 由原 `charts/plot` 移入，独立图表与结果共用轴、缓存曲线、BarChart 和悬浮格式。ECDF/KDE 复用组件 StepAfter/Area，参考线参与默认范围；概率图固定坐标、漏斗下降轴和气泡平方根半径保留原语义。
 - 原生 ActiveTheme 承接 React Context 的颜色职责；布局直接消费实际 GPUI bounds，不迁移 DOM 尺寸 Hook。普通折线的点显示开关和工具栏属于结果实体，重绘、主题/语言变化不重新读取或解析结果。
-- 使用临时 `cargo build -p yss-desktop-gpui --example review_result_plots` 窗口目视核对九类图形首帧，发现并修复组件 StepAfter 省略末端跳变的问题，复看确认 ECDF 到达最后概率值。预览只使用样例数据，源文件已移除；这不替代结果打开/关闭、悬浮、切换及窗口生命周期的完整人工验收。
+- 使用临时 已移除的原生预览入口 窗口目视核对九类图形首帧，发现并修复组件 StepAfter 省略末端跳变的问题，复看确认 ECDF 到达最后概率值。预览只使用样例数据，源文件已移除；这不替代结果打开/关闭、悬浮、切换及窗口生命周期的完整人工验收。
 - Scatter 的报告高亮/对称残差轴、KDE 的报告 xMin、其他统计图与系数分页见后续统计图批次；帕累托分页与独立图形窗口仍开放。Histogram 的 compact 分支目前无生产调用；不为无消费者参数复制另一套原生布局。
 - `cargo test -p yss-application --lib graph::results::plot::tests -- --nocapture` 两项通过，覆盖完整 5000 点/历史租约/执行会话，以及当前生产载荷与无效几何；`cargo test -p yss-node-kernel --lib builtins::visualization::tests::every_visualization_kernel_executes_its_declared_input_layout_and_plot_carrier -- --exact` 一项通过。
 - `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过，独立提交版本的 GPUI Clippy 同样通过；变更 Rust 格式、依赖图与文档链接检查通过。人工验收路径见 GPUI README，未新增 UI 单元测试。
@@ -107,7 +107,7 @@
 - 系数每页 100 项，页变化重建悬浮身份；列线图保留全部后端轴/刻度并提供滚动，布局不推算新的预测值。原数值读取继续承接帕累托/组合/词云。
 - `cargo test -p yss-application --lib graph::results::plot::tests -- --nocapture` 四项通过（其中两项为本批新增），验证旧九类及新八类生产类型、空推断、矩阵形状、完整系数行与结果身份；`cargo test -p yss-node-kernel --lib builtins::visualization::tests::every_visualization_kernel_executes_its_declared_input_layout_and_plot_carrier -- --exact` 一项通过。
 - `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 与 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过，独立提交版本的 GPUI Clippy 同样通过。16 个变更 Rust 文件格式、依赖图与变更文档的本地链接检查通过；无新增依赖和 UI 单元测试。
-- 临时 `cargo build -p yss-desktop-gpui --example review_statistical_plots` 使用生产 PlotView/plots 目视核对八类样例，修复混色参数权重方向，复看矩阵空格/端点、置信带、分布和区间正常。当前桌面未接收合成鼠标输入，因此悬浮、翻页和滚动未记为验收通过；临时源文件在提交前移除。
+- 临时 已移除的原生预览入口 使用生产 PlotView/plots 目视核对八类样例，修复混色参数权重方向，复看矩阵空格/端点、置信带、分布和区间正常。当前桌面未接收合成鼠标输入，因此悬浮、翻页和滚动未记为验收通过；临时源文件在提交前移除。
 - 真实项目的结果打开/关闭、主题/语言、重挂载与租约生命周期验收仍开放。报告消费者的接入另行审查，不把共享绘制完成等同于完整报告完成。
 
 ### 帕累托、组合图与词云
@@ -117,7 +117,7 @@
 - 词云使用 GPUI 原生字体测量，在数据、尺寸或字体变化时才排布；每个词复用同一组螺旋候选位置，主题和悬浮不触发重新排布。长词按宽度缩小，信息栏显示实际排下词数与后端总体数量。
 - `cargo test -p yss-application --lib graph::results::plot::tests -- --nocapture` 六项通过，本批两项检查完整 205 类、精确宽整数、累计比例、组合图原值及无效形状/计数；Clippy 简化表达式后单独复跑 `graph::results::plot::tests::categorical` 两项通过。
 - `cargo test -p yss-sci --lib visualization::tests::categorical_plots_count_terms_and_cumulative_shares_from_full_samples -- --exact` 一项通过；Application 与 GPUI 的聚焦严格 Clippy 通过，独立提交检出的 GPUI Clippy 同样通过。13 个 Rust 文件格式、模块索引与变更文档相对链接检查通过。未新增依赖或 UI 单元测试。
-- 临时 `cargo build -p yss-desktop-gpui --example review_categorical_plots` 复用生产 PlotView/plots，目视核对帕累托首/末页、双轴/共轴、负柱、重复标签、中文/长词/换行和拥挤词云；修正百分比刻度显示并复看。临时预览源文件在提交前移除。
+- 临时 已移除的原生预览入口 复用生产 PlotView/plots，目视核对帕累托首/末页、双轴/共轴、负柱、重复标签、中文/长词/换行和拥挤词云；修正百分比刻度显示并复看。临时预览源文件在提交前移除。
 - Fedora 预览中的 `📈` 有测量和排布位置，但字形不可见；同窗口普通 GPUI 文本也复现。该字体渲染问题、真实结果打开/关闭、悬浮、分页按钮、窗口缩放和主题/字体切换验收继续开放。报告专用呈现及独立图形窗口另行审查。
 
 ### 结构化统计报告
@@ -127,7 +127,7 @@
 - GPUI 增加数值/报告切换，报告实体保留章节与页状态。章节首次展开才加载；原方程以纯文本和复制入口呈现；标量记录共用虚拟表格，嵌套数组保留原绝对路径和 100 行页。
 - 稳定性图使用原根、等比例坐标与单位圆，悬浮只展示原模值；分页超过一页有明确提示，不据当前页推断整体稳定性。错误声明保留原值，页失败保留上次成功页和重试入口。
 - `cargo test -p yss-application --lib graph::results::report::structured::tests -- --nocapture` 两项通过，保护声明绑定/预算、宽整数/空值/完整页/无效行；`cargo test -p yss-application --lib graph::results::structured::tests -- --nocapture` 三项通过，保护真实 Poisson 无声明报告、嵌套路径、结果租约与完整数组分页。
-- 临时 `cargo build -p yss-desktop-gpui --example review_structured_reports` 使用样例页核对原生表格、方程、空值、完整整数、单位圆、范围与无效声明布局；样例页不作为真实服务或交互验收证据。当前 X11 截图在调整窗口尺寸后才显示后续帧，自动重绘及完整交互保留待验收，不加入无效的整窗刷新绕行。
+- 临时 已移除的原生预览入口 使用样例页核对原生表格、方程、空值、完整整数、单位圆、范围与无效声明布局；样例页不作为真实服务或交互验收证据。当前 X11 截图在调整窗口尺寸后才显示后续帧，自动重绘及完整交互保留待验收，不加入无效的整窗刷新绕行。
 - 独立提交内容通过 `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；12 个变更 Rust 文件格式、翻译键、模块索引、文档本地链接与 `git diff --check` 通过。
 - 本批未添加 UI 单元测试；具体交互步骤和生命周期验收见 GPUI README。线性回归专项章节、追加报告内容与独立结果窗口仍开放。
 
@@ -150,7 +150,7 @@
 - 共享绘制补齐零线、对称残差轴、高亮点和杠杆值密度的零起点；ACF/PACF 保留原置信带与滞后编号。检验卡片展示原值，假设文本保留原约束并可复制。
 - 隔离提交的 `cargo test -p yss-application --lib graph::results::report::tests::` 运行 8 项通过；本批新增一项保护范围筛选/抽样后的原观测编号、全样本高亮排名、匹配数量与空范围。
 - `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 与 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在隔离提交均通过。16 个改动 Rust 文件格式、64 个引用文案键、31 项新增中英文参数、本批三份文档的 287 条本地链接、模块索引及 `git diff --check` 通过。
-- 临时 `cargo build -p yss-desktop-gpui --example linear_analysis_review` 样例窗口目视核对高亮残差、三项序列检验、假设、ACF/PACF，以及 205 行诊断首页、空值、不可用原因与密度曲线。样例不代表真实服务或按钮交互验收；临时源文件提交前移除。
+- 临时 已移除的原生预览入口 样例窗口目视核对高亮残差、三项序列检验、假设、ACF/PACF，以及 205 行诊断首页、空值、不可用原因与密度曲线。样例不代表真实服务或按钮交互验收；临时源文件提交前移除。
 - 完整真实结果交互、自动重绘、悬浮、筛选及生命周期验收继续开放，步骤见 GPUI README；未添加 UI 单元测试或新依赖。
 
 
@@ -171,7 +171,7 @@
 - ResultPanel 的读取、容器渲染及工具栏分开组织；失败保留原页和精确的表/偏移重试目标，返回概览撤销旧分页交付资格。语言切换只刷新本地显示，不发起结果查询或清空展开状态。
 - 普通只读表格补齐固定行号、后端原始列类型、数值对齐、布尔与空值样式以及完整单元格提示；嵌套列表/记录保持单个单元格。格式化文本按页准备并共享，重绘不重复展开或复制完整字符串；紧凑报告表保持自身列定义。
 - 页范围、页码与下一页可用性采用已接纳回执；未知总数和偏移大于零的空页分别显示实际页码与 0 行。没有新增结果缓存、领域状态、依赖或 UI 单元测试。
-- L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；临时样例用 `cargo build -p yss-desktop-gpui --example results_container_review` 构建，目视检查正常、读取中、失败和未知总数空页的静态布局，样例随后移出仓库。
+- L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；临时样例用 已移除的原生预览入口 构建，目视检查正常、读取中、失败和未知总数空页的静态布局，样例随后移出仓库。
 - 7 个变更 Rust 文件的局部格式、2 份变更文档的元信息与 269 个相对链接、16 个文案键及占位符、模块索引生成器与 `git diff --check` 通过。此次只改变原生呈现及读取控制，不重复运行未改动的后端统计测试；没有把静态样例算作真实交互验收。
 - 独立 Plot/Inspector 窗口的原生创建、租约交付和会话关闭已由后续独立窗口批次接入；真实翻页、失败重试、语言、滚动、提示与关闭验收继续开放。
 
@@ -192,7 +192,7 @@
 - 通用忙碌遮罩补充原生鼠标遮挡，防止事件命中下层编辑区。完成与失败继续由现有宿主 lifecycle/回执处理，进度不判断成功，也不成为另一份忙碌或项目事实。
 - 最近弹窗读取失败重试及类型化失败展示已在后续两批补齐；不以已存在通用提示视为完整覆盖。语言设置、窗口焦点及主题完整能力由各自组件批次继续核对。
 - L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；8 个变更 Rust 文件的局部格式、工作区两份文档元信息与 275 个相对链接、8 个中英文进度文案、模块索引（59 crates / 239 条声明）及 `git diff --check` 通过。
-- 临时 `cargo build -p yss-desktop-gpui --example project_progress_review` 构建后，目视核对长路径、省略、无目标状态，以及同一实体在两个原生窗口接收 watch 阶段更新；预览不调用 Application，源码随后移出仓库。真实项目提交、失败恢复、键盘/鼠标遮挡、语言和关闭仍待人工验收；本批没有后端契约改动，不重复后端测试，也不添加 UI 单元测试。
+- 临时 已移除的原生预览入口 构建后，目视核对长路径、省略、无目标状态，以及同一实体在两个原生窗口接收 watch 阶段更新；预览不调用 Application，源码随后移出仓库。真实项目提交、失败恢复、键盘/鼠标遮挡、语言和关闭仍待人工验收；本批没有后端契约改动，不重复后端测试，也不添加 UI 单元测试。
 
 
 ### 项目表单输入与最近列表恢复
@@ -210,7 +210,7 @@
 - `projects/feedback` 直接读取 Application 的类型化生命周期错误及 Project 的稳定错误码、恢复标记；未知故障提供安全通用提示，不解析或显示内部诊断正文，也不制造事件编号。
 - 原 worker 保留失败类型到展示边界，在接纳回执时翻译文案。部分提交回执优先于泛化失败；已提交后打开失败保留写入指导，状态刷新失败明确提示核对实际结果。原表单新增真实恢复路径的完整提示和复制，打开入口和提交语义保持不变。
 - L2 验证：工作区及对齐最新 HEAD 的独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；4 个变更 Rust 文件的局部格式、两份文档元信息与 275 个相对链接、20 个中英文反馈键及占位符、`git diff --check` 通过。依赖未变，复用本轮模块索引检查；没有后端契约改动，不重复后端测试。
-- `cargo build -p yss-desktop-gpui --example project_feedback_review` 的临时样例目视核对无效项目、忙碌、恢复所需、会话刷新失败、部分登记和写入后打开失败；原错误码与字面量路径正常，内部诊断未出现在界面。样例随后移出仓库。真实失败、复制、恢复打开及关闭仍待人工验收，不把类型化样例或编译算作真实事务验收，不添加 UI 单元测试。
+- 已移除的原生预览入口 的临时样例目视核对无效项目、忙碌、恢复所需、会话刷新失败、部分登记和写入后打开失败；原错误码与字面量路径正常，内部诊断未出现在界面。样例随后移出仓库。真实失败、复制、恢复打开及关闭仍待人工验收，不把类型化样例或编译算作真实事务验收，不添加 UI 单元测试。
 
 
 ### 独立图形与结果检查窗口
@@ -220,7 +220,7 @@
 - 临时共享原自动租约保护交接，worker 取得新窗口自己的租约后释放临时持有；关闭来源、首次读取期间关闭窗口、迟到交付均沿用自动释放。窗口与标签共用幂等关闭入口。
 - 报告追加直接改变原窗口面板的引用，窗口列表只保留句柄与弱引用；不再维护一份引用到窗口的可变索引。执行会话变化、项目实际替换和主工作台退出关闭窗口，普通重跑保留原快照。
 - L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；7 个变更 Rust 文件的局部格式、两份文档元信息与 275 个相对链接、5 个中英文文案键、模块索引（59 crates / 239 条声明）及 `git diff --check` 通过。
-- 临时 `cargo build -p yss-desktop-gpui --example result_windows_review` 构建后，隔离应用目录中通过原 Application 新建临时项目、生成 235 行结果并打开真实独立窗口；目视确认首次页面、点击下一页后的 101–200 行和窗口关闭。临时样例的模块路径与回调访问修正后构建通过，仅留下两处样例未使用变量警告；样例随后移出仓库。
+- 临时 已移除的原生预览入口 构建后，隔离应用目录中通过原 Application 新建临时项目、生成 235 行结果并打开真实独立窗口；目视确认首次页面、点击下一页后的 101–200 行和窗口关闭。临时样例的模块路径与回调访问修正后构建通过，仅留下两处样例未使用变量警告；样例随后移出仓库。
 - 预览没有验证全部跨窗口操作：重复聚焦、来源关闭后的持续读取、读取中关闭、报告追加、图形、会话替换和主窗口退出仍待人工验收。截图通过调整窗口尺寸促使 X11 重绘，不能用来证明平滑刷新或其他平台表现。没有新增依赖、后端契约或 UI 单元测试，未重复运行未改动的后端统计测试。
 
 ### 日志列表控制与订阅恢复
@@ -231,7 +231,7 @@
 - 工具栏复用原生 Input/Button/PopupMenu，语言变化保留输入。固定高度行缓存单行摘要并保留全文提示；跟随沿用参考的 80px 底部阈值，浏览旧记录不会被新增记录拉回。
 - 日志详情选择与文本复制见下一批；多领域并列布局及独立窗口生命周期优化继续分别跟踪，不将列表控制完成等同于整个 Logs 模块迁移完毕。
 - L2 验证：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；6 个变更 Rust 文件格式、2 份文档元信息及独立提交的 269 条相对链接（当前工作区 275 条）、24 个中英文文案键与参数、模块索引（59 crates / 239 条依赖声明）和 `git diff --check` 通过。没有后端契约变化，不重复未改动的后端测试。
-- 临时 `cargo build -p yss-desktop-gpui --example logs_controls_review` 在隔离应用目录使用真实 LogRuntime 提交样例。Linux/X11 窗口目视核对结构化字段搜索、领域/级别组合、无匹配、清空、刷新恢复，当前工作区中英文切换保留输入；新增、裁剪和连续两批 1,200 条记录的底部跟随/手动浏览均已核对。
+- 临时 已移除的原生预览入口 在隔离应用目录使用真实 LogRuntime 提交样例。Linux/X11 窗口目视核对结构化字段搜索、领域/级别组合、无匹配、清空、刷新恢复，当前工作区中英文切换保留输入；新增、裁剪和连续两批 1,200 条记录的底部跟随/手动浏览均已核对。
 - 预览发现并修复多行消息挤出固定行高、严格底部判定在缩放后失效、前缀裁剪与尚未完成的底部滚动相互影响；同流搜索缓存与原生滚动句柄继续复用。截图需调整窗口尺寸触发 X11 重绘，不能用来证明自动重绘、性能或其他平台表现。临时样例已移出仓库；断流、存储失败、关闭订阅、真实业务日志与跨窗口验收仍开放，不添加 UI 单元测试。
 
 ### 日志选择与只读详情
@@ -242,7 +242,7 @@
 - 列表提供高亮、上下键/Home/End/Enter、右键复制；详情提供原始元信息、可选择的消息与字段、完整 JSON 复制。只为选中记录创建控件，不把日志正文当 Markdown，也不为全部虚拟行分配输入实体。
 - 多领域并列布局与独立窗口详情/生命周期仍待处理，故障和跨窗口专项验收保持开放。
 - L2 验证：当前工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；8 个 Rust 文件局部格式、两份文档元信息与 269 条相对链接（当前工作区 275 条）、8 个新增双语键及 22 个相关文案引用、模块索引（59 crates / 239 条依赖声明）和 `git diff --check` 通过。未变更后端契约，不重复后端测试；本批审查清单累计 131/265 项。
-- 临时 `cargo build -p yss-desktop-gpui --example log_details_review` 使用隔离项目、真实 LogRuntime 和原生工作台。Linux/X11 窗口目视核对点击/方向键选中、折叠后重选和当前工作区的中英文切换、筛选无匹配时保留详情、搜索焦点不触发行切换，以及 Escape/清空/回到画布恢复图属性。
+- 临时 已移除的原生预览入口 使用隔离项目、真实 LogRuntime 和原生工作台。Linux/X11 窗口目视核对点击/方向键选中、折叠后重选和当前工作区的中英文切换、筛选无匹配时保留详情、搜索焦点不触发行切换，以及 Escape/清空/回到画布恢复图属性。
 - 原消息及完整 JSON 复制通过只识别样例内容的预览检查核对，完整记录保留 `9007199254740993`；日志详情仍保留图绑定。消息里的 Markdown 符号和换行按原文显示，只读输入不能改写正文。右键菜单显示和复制已核对；X11 截图需要调整尺寸触发刷新，不代表自动重绘、真实项目完整交互或其他平台验收通过。临时样例不提交，不添加 UI 单元测试。
 
 ### Details 选择回退与文档信息
@@ -252,7 +252,7 @@
 - `documents/details` 拥有文档文件信息，从 DocumentEditor 的同一快照、输入脏状态、忙碌和错误派生展示；工作台只委派。无存活资源时复用通用未选择提示，原生读取/保存状态使用现有双语键与可访问性角色。
 - 本批只调整已打开资源的 Details 路由；首次资源读取、缺失资源的完整加载/重试体验以及各节点/图属性表单的专项迁移仍分别跟踪。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；3 个 Rust 文件格式、2 份文档元信息、269 条相对链接（工作区 275 条）、4 个文档状态双语键和通用空状态文案、模块索引（59 crates / 239 条依赖声明）、`git diff --check` 通过。后端契约未改动，不重复后端测试；累计审查 134/265 项。
-- 临时 `cargo build -p yss-desktop-gpui --example details_routing_review` 使用独立项目和两个真实数学常量节点。Linux/X11 目视核对单选节点表单、多选图属性、清空绑定的通用空状态；另用临时失效节点投影核对图属性回退。文档实际输入后显示未保存状态，切换预览保留路径和状态，注入的忙碌/错误样例按同一编辑器状态显示。
+- 临时 已移除的原生预览入口 使用独立项目和两个真实数学常量节点。Linux/X11 目视核对单选节点表单、多选图属性、清空绑定的通用空状态；另用临时失效节点投影核对图属性回退。文档实际输入后显示未保存状态，切换预览保留路径和状态，注入的忙碌/错误样例按同一编辑器状态显示。
 - 该预览不覆盖真实外部删除、保存失败、函数签名/常量草稿及多窗口完整交互；X11 截图仍依赖调整尺寸触发重绘，自动重绘与其他平台验收开放。临时样例已移出仓库，没有增加 UI 单元测试。
 
 ### Mind 属性表单与结构操作
@@ -262,7 +262,7 @@
 - `topics` 拥有结构意图与成功后的暂态选择，新增展开父主题并选择新主题、单主题删除回到父主题；原选择已改变时保留后来的选择，不触发编辑器激活或焦点抢占。
 - `buffers` 在成功回执中确认本次已提交且未再修改的输入，使删除主题及其后代不遗留脏草稿；失败与较新的输入仍保留。提交错误也显示在 Details 中。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；6 个 Rust 文件局部格式、3 个双语主题文案、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 239 条依赖声明）与 `git diff --check` 通过。后端契约未改变，不重复后端测试；累计审查 135/265 项。
-- 临时 `cargo build -p yss-desktop-gpui --example mind_details_review` 使用独立项目和真实 Mind Application 提交。Linux/X11 目视核对根保护、排序边界/上下移、父主题当前勾选与排除自身/后代、重复选择不重排，以及折叠分支内新增后的展开和选择。
+- 临时 已移除的原生预览入口 使用独立项目和真实 Mind Application 提交。Linux/X11 目视核对根保护、排序边界/上下移、父主题当前勾选与排除自身/后代、重复选择不重排，以及折叠分支内新增后的展开和选择。
 - 实际输入父子主题草稿后删除整支，回执中相应脏输入清空并选中父主题；随后编辑另一主题并通过文件菜单保存，核对磁盘中的现行 Mind 内容。临时入口在新增请求发出后改选另一主题，真实回执保持后来的选择；当前工作区英文切换也保留主题内容。
 - 预览没有登记生产快捷键，保存使用实际文件菜单，未据此声称快捷键验收通过。X11 截图依赖调整尺寸触发重绘，自动重绘、真实失败/外部变化、提交期间新输入、多窗口、长树性能与完整资源生命周期验收仍开放；临时样例不提交，不增加 UI 单元测试。
 
@@ -272,7 +272,7 @@
 - 目录默认展开并按 50 项分页，只为访问过的页创建输入实体；稳定 ConstantId 查表复用未变化草稿，替代逐项线性查找。类型菜单按打开时创建，重复选择当前类型保留草稿，常量摘要在渲染时翻译。
 - 数组/对象使用普通 JSON 编辑，RawValue 和已锁定的 bigdecimal 精确处理嵌套整数、小数及指数，不把 DataValue 的持久化标签暴露给用户；输入限制深度和指数展开预算。解析与形状错误复用现有双语键，属性面板显示失败并保留输入。
 - 结构值在原常量卡片展开，复用同一份草稿的显式应用/恢复及 Null 开关，不增设弹窗草稿 owner。函数表单补齐恢复和无输入提示；当前 FunctionSignature 只有一个可选返回类型，React 协调器同样只提交首个有效输出，不迁移无效的多输出编辑状态。
-- 临时 `cargo build -p yss-desktop-gpui --example graph_properties_review` 使用隔离项目、53 个真实常量和函数图。Linux/X11 目视核对首次 50 个输入/翻页后 53 个、分页/折叠/当前工作区语言切换保留输入、非法 JSON 不改变原值、对象形状错误的前置提示、Null 提交读回、常量与签名恢复、类型菜单当前项勾选和签名提交后的原生端口。
+- 临时 已移除的原生预览入口 使用隔离项目、53 个真实常量和函数图。Linux/X11 目视核对首次 50 个输入/翻页后 53 个、分页/折叠/当前工作区语言切换保留输入、非法 JSON 不改变原值、对象形状错误的前置提示、Null 提交读回、常量与签名恢复、类型菜单当前项勾选和签名提交后的原生端口。
 - 实际提交后从 Project 读回 `18446744073709551615`、`9007199254740993`、精确小数及指数归一值，确认未经过 f64；短超大指数在展开前拒绝。截图依赖调整尺寸触发重绘，自动重绘、多窗口、全部类型、调用者传播及完整保存/撤销/引用拖动仍开放；不添加 UI 单元测试，临时样例不提交。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过。`cargo test -p yss-graph-editor --lib tests::constant_edits_preserve_reference_identity_and_reject_duplicate_names_atomically -- --exact` 与 `cargo test -p yss-application --lib automation::resources::tests::function_signatures_and_graph_history_share_the_current_project_editing_state -- --exact` 各实际运行 1 项并通过；12 个 Rust 文件局部格式、26 个当前工作区双语键、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 239 条依赖声明）与 `git diff --check` 通过。累计审查 141/265 项。
 
@@ -282,7 +282,7 @@
 - 新增 `details/connections` 的对端名称和逐条删除；连接行按选择投影安装，超过 50 条分页，渲染不重新扫描整张图。候选复用原生虚拟 List，只在打开时调用已有 Application 查询；类型、容量和替换仍由原 planner 判定。
 - 候选标签来自查询捕获的同一投影；交付校验语义快照、图版本、投影身份、选择代次和当前控件。确认调用原 Connect，逐条删除调用 DisconnectConnections；参数、字面量与实例操作共享原提交入口，节点表单补齐失败提示。
 - 输入、输出默认折叠，展开才创建内容，更换节点重新收起；端口实例的增删与重排复用原实现，不复制 React 每个按钮的业务状态和输出空选择槽。
-- 临时 `cargo build -p yss-desktop-gpui --example port_details_review` 使用隔离项目和五个真实节点。Linux/X11 已核对首次打开即输入搜索/Enter、无匹配/Escape、输入侧选源、替换保留其他分支、逐条删除以及加法端口从 2 个增加、带连接重排和删除后恢复最小数量；连接结果从当前图投影读回。
+- 临时 已移除的原生预览入口 使用隔离项目和五个真实节点。Linux/X11 已核对首次打开即输入搜索/Enter、无匹配/Escape、输入侧选源、替换保留其他分支、逐条删除以及加法端口从 2 个增加、带连接重排和删除后恢复最小数量；连接结果从当前图投影读回。
 - 截图依赖调整尺寸触发重绘；自动重绘、旧查询/旧操作、失败重试、大列表、分组实例联动、多窗口和完整历史/保存验收仍开放。未增加 UI 单元测试，临时样例不提交。
 - 现有业务回归 `cargo test -p yss-graph-runtime --lib resolution_tests::connection_candidates_match_append_replace_and_type_rejections_without_editing -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::bounded_connection_limits_reject_overflow_and_reopen_after_disconnect -- --exact` 各实际运行 1 项并通过。本批累计审查 144/265 项。
 - 工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；5 个 Rust 文件局部格式、15 个复用文案双语键、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 239 条依赖声明）和 `git diff --check` 通过。
@@ -294,7 +294,7 @@
 - `parameters/choices` 打开时才生成菜单，复用参考选项的本地化键与当前项勾选；常量名称借用原 GraphProperties，读取期间禁用。`parameters/list` 每页 50 行，按访问页创建输入，同一行草稿随排序移动；应用时完整解析，整数不经过 f64，文本保留空白。
 - `parameters/render` 按节点和参数位置显示原诊断，直接依赖已有纯 Graph Analysis Contract 并复用 Problems 格式化，不重做分析。默认值操作先丢弃暂态输入，再提交 Null；解析失败保留输入，继续编辑清除本地错误，重复相同非 Null 值不提交。
 - 原 Graph Editor 已支持按键合并参数，删除 GraphCanvas 提交前的文档读取与整份参数复制；版本保护、默认值和历史继续由原事务负责。资源与其他结构值保留既有文本/JSON 编辑及后端校验，未复制 React 的只读回退。
-- 临时 `cargo build -p yss-desktop-gpui --example node_parameters_review` 使用隔离项目和六个真实节点。通过 GPUI Window 的鼠标/键盘事件分发目视核对 103/104 项数值/文本列表：首次各 50 个输入、数值第二页后 100 个，跨页草稿/排序、尾页新增/删除及提交后其他参数保留；NaN 的 Enter 错误、继续编辑清除提示、Escape 恢复和文本空格读回已核对。
+- 临时 已移除的原生预览入口 使用隔离项目和六个真实节点。通过 GPUI Window 的鼠标/键盘事件分发目视核对 103/104 项数值/文本列表：首次各 50 个输入、数值第二页后 100 个，跨页草稿/排序、尾页新增/删除及提交后其他参数保留；NaN 的 Enter 错误、继续编辑清除提示、Escape 恢复和文本空格读回已核对。
 - 同一预览核对单行文本 Enter/恢复、默认值与默认状态下丢弃输入、重复相同值版本不变、常量菜单名称/勾选与必填诊断消失、数值选项中英文标签及提交协议值。提交后原图投影读回 `9007199254740995`，保持完整整数。
 - 桌面的 XTest 输入未稳定送达，因此样例手动操作使用 GPUI 事件分发；截图依赖尺寸变化触发重绘。物理键鼠、IME、多行、失效菜单/迟到回执、后端失败、多窗口和完整撤销/保存仍待验收；不增加 UI 单元测试，临时入口不提交。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过。`cargo test -p yss-graph-editor --lib tests::creation_and_partial_edits_share_parameter_rules_without_requiring_complete_values -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::grouped_parameters_merge_reset_and_undo_atomically -- --exact` 各实际运行 1 项并通过；9 个 Rust 文件格式、41 个复用双语键/参数、文档元信息/相对链接、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。累计审查 145/265 项。
@@ -306,7 +306,7 @@
 - 清空必填列选择提交 Null 重置，允许为空时提交空数组；其余参数、图版本、诊断和历史仍由原参数事务负责。名称与后端列兼容规则保持原契约，视图不推导输入结构。
 - `predicate/draft` 持有类型化草稿并检查当前列下发的选择；`predicate/choices` 打开菜单时才构造选项，使用枚举而非本地化标签作为身份，选择时核验列和字段代次。重复选择当前类型保留输入，换列只调整不再可用的运算符/值类型，空值运算省略比较值。
 - 保留原生显式应用，单行 Enter 提交、Escape/按钮恢复、默认值和字段诊断复用 `parameters`；失焦和菜单选择不隐式提交。未新增依赖或 UI 单元测试。
-- 临时 `cargo build -p yss-desktop-gpui --example relational_parameters_review` 使用隔离项目、真实 Application、两份表格常量和八个节点。GPUI Window 事件分发与目视核对 53 列的分页/输出顺序、移除缺失列后诊断消失、已知空结构与未知结构、手动列名空格/排序/Enter、必填清空重置和可选清空数组；均从当前图投影读回。
+- 临时 已移除的原生预览入口 使用隔离项目、真实 Application、两份表格常量和八个节点。GPUI Window 事件分发与目视核对 53 列的分页/输出顺序、移除缺失列后诊断消失、已知空结构与未知结构、手动列名空格/排序/Enter、必填清空重置和可选清空数组；均从当前图投影读回。
 - 同一预览核对筛选重复类型选择保留未提交输入、宽整数 `9007199254740995` 与精确小数 `9007199254740995.125`、非法小数错误/继续输入清除、语言切换保留草稿、布尔提交、换至文本列重置输入、Escape 恢复及空值运算省略 value。共享数值/文本列表的 Enter 与重排提交亦已读回。
 - 预览沿用 GPUI 事件分发，截图仍依赖尺寸变化；物理键鼠/IME、未知结构筛选、过期菜单/迟到回执、后端失败、多窗口及完整撤销/保存继续开放。临时入口不提交。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；`cargo test -p yss-graph-analysis --lib schema_resolution::tests::column_parameters_preserve_intent_across_unknown_empty_and_replaced_schemas -- --exact` 和 `cargo test -p yss-graph-analysis --lib semantic_validation::tests::nominal_parameters_are_revalidated_against_changed_input_schema -- --exact` 各实际运行 1 项并通过。9 个 Rust 文件局部格式、41 个双语键/参数、文档元信息及 269 条相对链接（工作区 275 条）、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过；累计审查 146/265 项。
@@ -317,7 +317,7 @@
 - `domain/draft` 用同一有序草稿保存编码、标签和正值所在行；仅为访问页创建成对 Input，不另存已创建输入的字符串副本。列表高度限制为 256，翻页和跨页排序保留草稿；重复编码结果按编码/结构变化失效，标签编辑和普通重绘复用缓存。
 - `domain/positive` 打开时才生成菜单，显示标签、原编码或空字符串符号，选择时检查当前字段与候选编码。重命名和排序保留正值身份，删除所在行清除选择；两行映射或已有正值时显示选择器，保留当前领域契约允许的其他行数，不增加兼容转换。
 - 提交复用原参数事务和 `ConversionDomain::is_valid`，保留编码空白、空字符串、标签及顺序，遵守 65,536 项和 1 MiB 上限。Enter 应用、Escape/按钮恢复、默认值和错误反馈共用现有参数入口；重复编码立即提示并禁用应用，删除最后一个调用者后移除旧 `controls::choice` 包装。未新增依赖或 UI 单元测试。
-- 临时 `cargo build -p yss-desktop-gpui --example semantic_domain_review` 使用隔离项目、真实 Application 和六个节点。GPUI Window 事件分发与目视核对正值随编码/标签/排序更新、删除后清除、空字符串正值提交、重复编码阻止写入、继续编辑与 Escape 恢复；提交均从当前图投影读回。
+- 临时 已移除的原生预览入口 使用隔离项目、真实 Application 和六个节点。GPUI Window 事件分发与目视核对正值随编码/标签/排序更新、删除后清除、空字符串正值提交、重复编码阻止写入、继续编辑与 Escape 恢复；提交均从当前图投影读回。
 - 103 行样例首次创建 100 个输入，访问三页后分别为 200/206 个；跨页排序及未提交标签经语言切换仍保留，Enter 后读回完整顺序。65,536 行样例首次为 100 个输入、第二页后为 200 个，添加按钮禁用；空配置新增及共享数值/列表 Enter 提交亦已核对。
 - 预览沿用 GPUI 事件分发，截图依赖尺寸变化；物理键鼠/IME、滚轮、过期菜单/迟到回执、后端失败、多窗口及完整撤销/保存继续开放。临时入口不提交。
 - L2 验证：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 均通过；`cargo test -p yss-database-arrow --lib tests::semantic_domains_and_identifiers_keep_codes_and_reject_undeclared_levels -- --exact` 和 `cargo test -p yss-database-arrow --lib tests::categorical_conversion_infers_complete_exact_domains_without_replacing_values -- --exact` 各实际运行 1 项并通过，覆盖编码/顺序/正值、重复与未声明等级、域继承及数量/字节限制。5 个 Rust 文件局部格式、18 个双语键/参数、269 条文档相对链接（工作区 275 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过；累计审查 147/265 项。
@@ -328,7 +328,7 @@
 - Node Catalog 的 `node_documentation` 直接读取已有嵌入/生成帮助，完整目录也复用同一入口。Application 捕获当前会话、校验项目和已注册类型、交付前重验会话；没有内核的定义仍可读取文档。查询不生成整份目录、不捕获项目资源或载入图。
 - `details/documentation` 只保留当前目标、请求和 Markdown 视图，参数编辑与后台图刷新不重读；`documentation/render` 使用 TextView 和 Collapsible，收起时不构造正文。切换类型默认展开，语言变化/重试保留折叠，旧目标和旧语言的回执不能安装；缺少文档隐藏，失败可重试。
 - 节点目录单击在同一 Details 预览类型与帮助，可用项的“＋”调用原创建事务；行与按钮均核对原目录投影，不在视图生成创建描述。预览保留图绑定和参数草稿，显式图选择恢复属性，后台投影不抢占预览；日志检查与目录预览切换时清除旧展示归属，并恢复当前节点文档。
-- 临时 `cargo build -p yss-desktop-gpui --example node_documentation_review` 使用隔离项目与真实 Application。GPUI Window 事件分发核对默认展开、折叠/中英文切换、参数草稿及后台刷新期间请求代次和 TextView 实体不变、目录预览往返保留草稿、真实目录单击预览和“＋”创建节点。
+- 临时 已移除的原生预览入口 使用隔离项目与真实 Application。GPUI Window 事件分发核对默认展开、折叠/中英文切换、参数草稿及后台刷新期间请求代次和 TextView 实体不变、目录预览往返保留草稿、真实目录单击预览和“＋”创建节点。
 - 同一预览核对不可执行类型的生成帮助、缺失帮助隐藏、错误项目导致的读取失败与重试、回到有效节点后恢复；从目录说明打开实际日志再 Escape 恢复当前图节点，反向切换后旧日志取消不关闭目录预览。标题、段落、列表、代码和表格已目视核对；物理键鼠/IME、文字复制、宽表滚动、迟到查询、多窗口与完整项目切换仍开放，截图继续依赖尺寸变化。
 - L2 验证：`cargo test -p yss-application --lib graph::catalog::tests::documentation:: -- --nocapture` 实际运行 2 项并通过，覆盖本地化目录一致性/不可执行定义/缺失类型，以及错误项目/无活动会话；`cargo test -p yss-node-catalog --lib localization::tests::node_help_uses_the_same_locale_as_its_metadata -- --exact` 实际运行 1 项并通过。
 - `cargo clippy -p yss-application -p yss-node-catalog --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。12 个 Rust 文件局部格式、8 个双语键/参数、294 条文档相对链接（工作区 299 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。不新增依赖或 UI 单元测试，临时入口不提交；未运行全工作区验证。累计审查 149/265 项。
@@ -339,7 +339,7 @@
 - Application 的 `results/description` 校验原有界 RuntimeValue 投影，按连续 position 恢复列与分类顺序，严格区分数值与分类/顺序/二分类字段；保留原列名、空值、空字符串、标签和完整整数载体，不经 JSON 往返或重算。原查询继续负责会话和载荷预算。
 - Details 的 `description` 只绑定当前画布/输出及 ResultReference，订阅原投影与执行通知，检查语义身份、结果有效性和等待中的运行。失效、节点切换或清理取消旧交付；不获取历史租约、不另建结果缓存。默认收起，首次展开才查询，相同结果不重复读取。
 - `description/render` 与 `description/column` 负责折叠、最多 50 列/100 类的显示页，频数表仅在展开时构造，复用 Results 的虚拟表格、原字段顺序和数值格式。多页列目录有界滚动，翻页重置目录滚动位置；标题复用 Button 并左对齐。语言变化保留展开和页码，不重读统计结果；空字符串编码与空值分别呈现，编码不使用统计量舍入规则。
-- 临时 `cargo build -p yss-desktop-gpui --example description_result_review` 使用隔离项目、五组常量/描述节点和真实 Application。GPUI Window 事件分发已核对未执行提示、真实运行后的列序/均值/标准差/空值，205 类的 100/100/5 行分页与语言切换后的第三页；原请求代次在刷新和语言切换中保持不变。
+- 临时 已移除的原生预览入口 使用隔离项目、五组常量/描述节点和真实 Application。GPUI Window 事件分发已核对未执行提示、真实运行后的列序/均值/标准差/空值，205 类的 100/100/5 行分页与语言切换后的第三页；原请求代次在刷新和语言切换中保持不变。
 - 同一预览核对空字符串/前导零/宽整数文本编码、全空分类没有伪造 Null 类别、上游编辑立即隐藏旧摘要、撤销恢复当前结果，以及未展开新节点保持 Unloaded。53 列按 50/3 项分页，末页与返回第一页的顶部可见；切换普通节点后的重复清理不再发出状态通知。物理键鼠/IME、嵌套滚动传递、表格复制/拖动、迟到查询/读取失败、多窗口及完整项目切换继续开放；截图依赖尺寸变化，临时入口不提交。
 - `cargo test -p yss-application --lib description_ -- --nocapture` 在工作区与独立提交内容均运行 3 项并通过：2 项新增投影契约测试，以及扩展的真实描述节点结果测试。覆盖源顺序、Null/精确整数/标签与不完整或混合字段拒绝；不新增 UI 单元测试。
 - `cargo clippy -p yss-application --lib --tests --no-deps -- -D warnings` 在独立提交内容通过；`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 在工作区与独立提交内容均通过。11 个 Rust 文件局部格式、25 个双语键/参数、288 条文档相对链接（工作区 293 条）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。不新增依赖，未运行全工作区验证。累计审查 150/265 项。
@@ -350,7 +350,7 @@
 - 画布节点菜单增加可选“创建前配置”，默认保留快速创建；表单返回保留菜单查询。`workbench/node_creation` 捕获原节点描述符、图版本与项目，`query` 调用现有只读 Application 表单，`ports` 保存数量草稿，`render` 只负责有界滚动与操作入口。
 - Details 原参数、列表、关系及语义域编辑器移到 `workbench/parameters`；共享实体只发出键/值意图，由 Details 提交原参数事务、创建视图刷新只读表单。保留字段身份、输入事件、原诊断与显式应用；创建时收集尚未应用的输入，未改动默认值不写成显式覆盖。Application 仅重新导出既有 NodeCreationForm，不新增模型或依赖。
 - 固定/派生端口只读，可变端口按原成员组显示一项并提交全部成员；范围取自协议。创建前再次校验参数和数量，节点及可选连接仍是同一个可逆补丁。失败保留表单，版本变化禁止提交；语言切换复用在途值和草稿，并随目录更新标题。
-- 临时 `cargo build -p yss-desktop-gpui --example node_creation_review` 使用隔离项目和真实 Application。GPUI Window 事件分发核对未应用的 degree 输入随创建提交、条件字段消失后清理参数、无效值保留并可修正、语言切换保留未应用输入、既有 Details 的 Enter 提交，以及外部图编辑后禁用旧表单。
+- 临时 已移除的原生预览入口 使用隔离项目和真实 Application。GPUI Window 事件分发核对未应用的 degree 输入随创建提交、条件字段消失后清理参数、无效值保留并可修正、语言切换保留未应用输入、既有 Details 的 Enter 提交，以及外部图编辑后禁用旧表单。
 - 同一预览核对线性节点的 X 数量输入在另一参数预览后仍保留，创建得到 4 个实际 X 端口；语义域编码 `001` 与标签完整提交。选择不兼容常量后创建/连接被原后端拒绝，节点/连线及版本均不变且选择保留；改选兼容常量后成功，一次撤销同时移除节点与连线。函数资源描述符创建得到原资源绑定；返回保留搜索词及配置开关，关闭开关后恢复快速创建。预览期间未显式保存，磁盘图正文仍为空。
 - 物理键鼠/IME、多行/复合列表/关系字段的完整创建交互、成组端口界面、读取失败/迟到交付、多窗口与完整项目切换继续开放；截图依赖尺寸变化，临时入口不提交。不增加 UI 单元测试。
 - `cargo test -p yss-application --lib graph::catalog::tests::node_creation_form_is_read_only_and_preserves_protocol_defaults_and_conditions -- --exact` 与 `cargo test -p yss-graph-editor --lib tests::grouped_initial_ports_are_offered_and_created_as_complete_members -- --exact` 各实际运行 1 项并通过，复用现有只读/条件/默认值及完整成员组回归。
@@ -378,7 +378,7 @@
 - 诊断每页最多 50 条，多页正文有界滚动；选择变化重新展开，同节点刷新保留折叠及有效页码，数量减少修正页码，翻页和页码收敛重置内部滚动。旧回调由选择代次拒绝。
 - 选择安装借用 Arc 中的节点，删除整节点复制；端口草稿按地址映射查找，沿用原字段事实匹配，不再逐项扫描并移除旧数组。名称及参数输入的原提交入口保持不变。
 - DetailColumnList 唯一实际消费者为 ChartDetailPanel 的 list 变体；未调用的 table 变体无需建立原生包装。`charts/details/columns` 沿用接受的元数据与 50 列分页，补齐无元数据/空列提示、列表标题、等宽类型和完整名称 tooltip；翻页回调验证元数据身份。
-- 临时 `cargo build -p yss-desktop-gpui --example node_details_review` 使用独立项目与真实 Application。通过 GPUI Window 注入点击/键盘核对未绑定端口诊断、中英文刷新保留折叠和未提交名称、投影变化保留参数输入、节点切换重置及清空选择返回图属性。
+- 临时 已移除的原生预览入口 使用独立项目与真实 Application。通过 GPUI Window 注入点击/键盘核对未绑定端口诊断、中英文刷新保留折叠和未提交名称、投影变化保留参数输入、节点切换重置及清空选择返回图属性。
 - 同一预览注入只读样例投影，核对节点/端口/参数/连接/资源位置及三类严重程度；105 条诊断逐页访问到最后 5 条，减少为 2 条后页码回到首页。图表只读元数据样例覆盖无数据集、零列、105 列分页及最后 5 列；类型保留原文，长列名收束在面板内。测试图正文未显式保存，磁盘仍为空节点/空连线。
 - L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。修改仅限原生显示和暂态复用，不改变后端契约；未运行后端单元测试或全工作区验证，不新增 UI 单元测试。局部 Rust 格式、双语键/参数、文档元信息/链接、模块索引及 `git diff --check` 通过。
 - 物理键鼠/IME、完整名称 tooltip 的实际悬浮显示、端口草稿与复杂实例重排、多窗口、跨图同 ID 和完整项目切换仍开放；临时预览入口不提交。本批累计审查 154/265 项。
@@ -389,7 +389,7 @@
 - `activity/rows` 只在文档、展开或助手搜索变化时重建源行索引；`render` 使用原生 `uniform_list` 按可见范围构建 28px 行。展开只记录稳定分类 ID 的用户覆盖，新增分类遵循后端默认值，删除分类和项目替换清理失效覆盖。
 - `activity/nodes` 单击预览定义，可用项通过原按钮或原生拖拽创建；拖拽持有源面板弱引用、Arc 文档和行索引，落下重验源目录、项目及可用性，并将原创建描述和画布坐标交给现有图编辑事务。目标在接收时捕获原图版本，资源版本、历史及显式保存仍由 Application/Project 校验。
 - `catalog_rows` 共用分类图标、节点标题、类型提示、资源绑定图标和不可用标记；各宿主继续管理展开、菜单选择、文档预览和创建，不复制目录或新建业务状态。拖放使用普通图编辑入口，与节点菜单的配置会话解耦。
-- 临时 `cargo build -p yss-desktop-gpui --example node_sidebar_review` 使用隔离项目与真实 Application。Linux/X11 的 GPUI Window 事件注入核对普通节点/不可用节点文档、不可用项不能拖动、同类型的两个函数保持不同资源路径、目录刷新拒绝仍在进行的旧拖拽；512 行全部展开时一帧约 33 次行构建（含测量），不逐帧构建全部条目。
+- 临时 已移除的原生预览入口 使用隔离项目与真实 Application。Linux/X11 的 GPUI Window 事件注入核对普通节点/不可用节点文档、不可用项不能拖动、同类型的两个函数保持不同资源路径、目录刷新拒绝仍在进行的旧拖拽；512 行全部展开时一帧约 33 次行构建（含测量），不逐帧构建全部条目。
 - 最终命令入口在 127% 缩放和已有平移下核对落点、单次 Undo/Redo 及显式 Save：磁盘在保存前仍无节点，保存后包含真实当前文档与函数绑定。分类折叠在英文目录刷新后保留；共享列表核对真实会话的大小写搜索、无匹配与清空恢复，以及从项目目录打开 Markdown。侧栏“＋”只创建一次，节点菜单共享行的搜索与 Enter 创建保留实际函数绑定；最后核对拖拽浮层主题色与落在侧栏时不创建。
 - 物理键鼠/IME、完整 tooltip 悬浮、跨项目/关闭源面板/忙碌目标、资源并发冲突、新增/删除分类和多窗口仍需实际验收；截图沿用尺寸变化触发重绘。公共 Activity 外壳与侧栏基础组件继续独立审查，不以本批替代其完整验收。临时预览入口不提交，不增加 UI 单元测试。
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；9 个 Rust 文件局部格式、21 个工作区双语键、两份文档的元信息/相对链接（工作区 275、提交内容 270）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。后端契约未改动，不重复后端测试或全工作区验证。本批累计审查 156/265 项。
@@ -401,7 +401,7 @@
 - 节点与资源行复用 `activity/drag`：源面板弱引用、原 Activity 文档、原节点目录和行索引贯穿拖拽。资源路径索引只在目录替换时生成，不逐帧扫描节点目录或复制创建描述。不可用项不注册拖放，按下时请求原目录刷新。
 - Event 图拖入画布打开原图；Function/Database 使用原 ResourceBound 描述及接收时的目标图版本创建节点，函数自身调用直接拒绝。目录更新、跨项目、源面板失效或忙碌目标拒绝交付；Application 仍校验资源版本、历史与保存，画布按钮与拖放共用原创建入口。
 - 图诊断标记直接读取已打开画布的原投影，数据库标记读取编辑器的读取失败状态，原事件只在显示状态变化时通知侧栏更新；保存和导出错误不能设置读取失败。首次读取失败保留可重试编辑器，重复打开沿原 query 重试；首次读取交付还核验当前目录中的资源版本，变化后重读。
-- 临时 `cargo build -p yss-desktop-gpui --example resource_rows_review` 使用真实 Application、两个 Event 图、两个 Function 图、两个数据库及 Chart/Mind/Doc。Linux/X11 GPUI Window 事件注入核对资源箭头打开、高亮和标签复用、Function → Event/其他 Function 的原绑定、函数自身拒绝、Event 拖放只打开、127% 缩放与平移下数据库落点、目录刷新拒绝旧拖放，及改用共用载荷后的普通节点拖放。
+- 临时 已移除的原生预览入口 使用真实 Application、两个 Event 图、两个 Function 图、两个数据库及 Chart/Mind/Doc。Linux/X11 GPUI Window 事件注入核对资源箭头打开、高亮和标签复用、Function → Event/其他 Function 的原绑定、函数自身拒绝、Event 拖放只打开、127% 缩放与平移下数据库落点、目录刷新拒绝旧拖放，及改用共用载荷后的普通节点拖放。
 - 在隔离项目中临时破坏未打开数据库的 Parquet，首次打开显示错误面板和红点；恢复原字节后点击资源，原读取成功并清除红点。删除问题节点后图黄点消失，Undo 恢复；数据库创建的一次 Undo/Redo 只撤销/恢复该节点。显式保存前磁盘无节点，保存后有 3 个节点并保留实际函数和数据库路径。中英文切换保留资源及展开状态，原生鼠标移动核对行内箭头悬停显示。收紧刷新条件后，最终源码再次核对诊断消除/撤销恢复及首次数据库失败/恢复。
 - 完整 tooltip、物理拖放/IME、跨项目/关闭来源/忙碌目标、后台图诊断更新、资源读写并发、关闭失败面板后重开及多窗口仍需专项人工验收。临时预览不提交，不增加 UI 单元测试；公共侧栏和菜单缺口继续保持开放。
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；16 个 Rust 文件局部格式、文案键（工作区 28、提交内容 21，英文沿用工作区目录）、两份文档的元信息/相对链接（275/270）、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过。后端接口与类型未改动，不重复后端测试或全工作区检查。本批累计审查 160/265 项。
@@ -424,7 +424,7 @@
 - 助手首次打开立即呈现待加载面板并结算显示 intent，后台挂载保留原选择；查询完成只安装内容。删除旧 assistant_reveal 标记与 reveal 参数，直接更新所有调用者。初次加载有原生 spinner，后台刷新保留旧内容与布局，失败在目录内重试并保留原投影和输入。
 - `navigation` 只保存原行 ID 的焦点，复用原资源打开、分类展开与节点文档预览入口。上/下和 Home/End 滚动定位，Enter/空格激活；搜索 Input 有焦点时不截获这些键。文档替换保留仍可见的身份，清理失效焦点；展开和当前编辑资源继续归原 owner。
 - 保持 28px 按需行构建，补齐树层级、展开/选中状态与独立焦点描边。原工具改为紧凑图标与提示；空目录显示标题和说明，消息行提供完整 tooltip/无障碍描述。当前 Application 未向 Message.description 提供正文，不建立额外变高列表。项目空分类继续只显示标题及工具。
-- 临时 `cargo build -p yss-desktop-gpui --example activity_shell_review` 使用隔离项目和真实 Application。Linux/X11 GPUI Window 事件注入核对方向键不打开资源、Enter 打开第二图且原图脏状态/会话/节点保持，36 个可见目录行的 Home/End 与节点预览，语言排序变化保留原行 ID；图内容未因导航和预览修改。
+- 临时 已移除的原生预览入口 使用隔离项目和真实 Application。Linux/X11 GPUI Window 事件注入核对方向键不打开资源、Enter 打开第二图且原图脏状态/会话/节点保持，36 个可见目录行的 Home/End 与节点预览，语言排序变化保留原行 ID；图内容未因导航和预览修改。
 - 同一临时入口为助手目录查询注入 4 秒延迟和可恢复失败，核对初次加载/空目录/图标新建、切换项目目录后迟到结果不抢占、失败保留旧目录、原重试恢复并保留搜索。输入框内方向/Home/End/Enter 不激活目录行；目录刷新后旧拖放被拒绝。预览源与注入逻辑不进入提交。
 - L2：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过。只改变宿主显示与暂态交付，后端契约未变，不重复后端测试或全工作区检查，不增加 UI 单元测试。15 个 Rust 文件局部格式、双语键/参数（工作区 41、提交内容 30，英文沿用工作区目录）、两份文档元信息/相对链接（275/270）、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。
 - 物理键鼠/IME、完整 tooltip、平台读屏、跨项目/关闭来源/忙碌目标、多窗口和 Windows/macOS 仍待验收；这批不代表 Assistant 整体、其他 Activity 业务控制器或展开持久化已完成。本批累计审查 173/265 项。
@@ -436,7 +436,7 @@
 - 目录选中只投影根 DockArea 的活动会话，重复激活关闭该面板而保留缓存草稿；缓存重开也经过原 Application 授权和最近打开时间更新。项目/节点侧栏独立接收资源高亮，图选择、资源打开和上下文清理不覆盖会话选择。
 - `workbench/name_form` 从资源命名中提取，仅拥有输入、提交状态和本地化错误；resources/names 与 assistant/renaming 保留各自业务身份/生命周期和原 Application 用例。空白拒绝、输入聚焦、失败保留与编辑清错、重复提交/忙碌取消保护共用一个实现，不添加另一份会话状态或依赖。
 - 会话操作结束使操作前目录读取失效，再沿原查询刷新；窗口重新激活也使用同一合并刷新入口。迟到结果只允许更新原生命周期/读取代次，旧表单不会清除新项目操作状态。
-- 临时 `cargo build -p yss-desktop-gpui --example assistant_directory_review` 使用隔离应用目录和真实 Application。Linux/X11 的独立 Xwayland 窗口通过 GPUI Window 输入事件核对空目录不隐式创建、两次显式新建、两行时间、中英文默认标题搜索、换语言保留查询、重复点击关闭和缓存重开保留草稿；重开更新 lastOpenedAt，图选择/文档打开后会话高亮仍对应实际会话。
+- 临时 已移除的原生预览入口 使用隔离应用目录和真实 Application。Linux/X11 的独立 Xwayland 窗口通过 GPUI Window 输入事件核对空目录不隐式创建、两次显式新建、两行时间、中英文默认标题搜索、换语言保留查询、重复点击关闭和缓存重开保留草稿；重开更新 lastOpenedAt，图选择/文档打开后会话高亮仍对应实际会话。
 - 同一临时入口给重命名注入 2 秒延迟及一次 ConcurrentTurn 失败：空名称不提交，连续 Enter 只产生一次请求，忙碌 Escape 不关闭；失败保留输入，编辑清除错误，移除故障后真实重命名成功。另让真实操作前目录延迟 10 秒返回，之后目录仍显示新标题。窗口失焦/激活实际触发目录重读。注入只验证宿主适配，不能代表真实模型运行中用例已验收。
 - 共享名称表单的资源消费者通过真实 Doc 重名失败后改名成功验收；名称、路径与目录更新，编辑器实体和文件会话保持。全过程原图 session/revision、1 节点、2 常量及未保存标记保持，未添加 UI 单元测试。临时预览源与数据不进入提交。
 - L2：工作区与独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` 通过；针对此前 IPC 归并补跑 `cargo test -p yss-harness-contract --lib assistant::`，6 项通过。20 个 Rust 文件局部格式、双语键/参数（工作区 58、提交内容 41，英文沿用工作区目录）、两份文档元信息/相对链接（275/270）、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 通过；不运行全工作区验证。
@@ -447,7 +447,7 @@
 - 已逐项阅读 AssistantConversationToggle、会话开关应用编排及目录恢复契约；底栏开关迁入 `workbench/assistant/navigation`，继续从根 DockArea 读取真实面板，不增加可见状态或目录缓存。
 - 关闭全部会话保留原实体、草稿和订阅，只记录最后查看的会话 ID；重新打开先查询当前目录，优先恢复仍存在的上次会话，其次最近会话，仅空目录才新建。无项目时保留原生临时会话目录入口。
 - 重开请求使用原目录读取代次与生命周期检查；读取/打开失败显示原目录，显式新建/打开消费待恢复请求，忙碌期间不重复提交。项目操作开始使旧读取失效并清除恢复提示；操作失败保留原项目时重新启用原目录查询，避免读取标记被旧生命周期挂住。
-- 当前工作区通过临时 `cargo build -p yss-desktop-gpui --example assistant_toggle_review`，在隔离应用目录中运行真实 Application 和 Linux/X11 独立窗口，通过 GPUI Window 事件核对空目录只新建一次、关闭两会话保留各自草稿、重新打开原会话、展开保留 sidebar、侧栏收放及底部工具/编辑区对齐。既有标题栏关闭也沿同一关闭入口记住会话；Header 的完整审查仍开放。
+- 当前工作区通过临时 已移除的原生预览入口，在隔离应用目录中运行真实 Application 和 Linux/X11 独立窗口，通过 GPUI Window 事件核对空目录只新建一次、关闭两会话保留各自草稿、重新打开原会话、展开保留 sidebar、侧栏收放及底部工具/编辑区对齐。既有标题栏关闭也沿同一关闭入口记住会话；Header 的完整审查仍开放。
 - 将真实目录查询延迟 10 秒：重复点击只产生一次打开；等待期间显式新建后，旧查询不替换新会话。一次读取失败注入显示原目录和重试，未隐式新建；移除故障后重新打开成功。无效项目打开保留原项目且查询恢复；真实切换到空项目后，旧查询返回没有打开或创建会话，下一次显式点击才在新项目创建。
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`；7/6 个 Rust 文件局部格式、31/6 个双语文案键、两份文档元信息及 275/270 条相对链接、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过。后端契约未改变，不重复后端测试或全工作区验证。
 - 本批不修改后端接口、不添加依赖或 UI 单元测试；验证限定 GPUI 宿主与文档/格式。物理键鼠、IME、读屏、删除后的恢复回退、创建/打开失败、无项目窗口和 Windows/macOS 验收继续开放。Header、完整 StatusBar 组合与 Assistant 其他组件保持原待查状态；累计审查 177/265 项。
@@ -458,7 +458,7 @@
 - `assistant/header` 读取原会话标题与后续 turn 选项，锁按钮和 composer 共用 `set_mode`；变更只触发 Dock 重绘，不写布局。目录查询接纳后同步已有会话标题，保留原输入、选项、队列与订阅，不引入第二份会话状态。
 - `dock/conversation` 承接单行标题、新建、展开、更多菜单；重命名复用 NameForm 和 Application，失败反馈沿原路径。重命名、刷新及关闭拒绝旧生命周期菜单；框架标题/标签在纯会话组隐藏，混合资源仍可访问。
 - 整理现有 `dock`、`sidebar`、`layout/columns` 实现进入同一提交：根 DockArea 持有唯一拓扑、宽度和选择；展开保留 sidebar，底部工具内容/手柄/图标只占编辑区。统计移至底栏右侧，移除画布叠层；最后一个编辑器关闭由原生命周期处理并保留空编辑占位。
-- 工作区与独立提交内容均通过临时 `cargo build -p yss-desktop-gpui --example assistant_header_review`，在隔离数据目录和真实 Application 的 Linux/X11 窗口以 GPUI Window 事件验收模式双向同步、外部真实重命名后的标题刷新、新建和刷新保留输入。工作区另验收标题菜单重命名、两会话草稿/选项隔离、关闭重开及英文默认标题；图 session/revision 在会话操作中保持。
+- 工作区与独立提交内容均通过临时 已移除的原生预览入口，在隔离数据目录和真实 Application 的 Linux/X11 窗口以 GPUI Window 事件验收模式双向同步、外部真实重命名后的标题刷新、新建和刷新保留输入。工作区另验收标题菜单重命名、两会话草稿/选项隔离、关闭重开及英文默认标题；图 session/revision 在会话操作中保持。
 - 展开保留 sidebar，切换目录/会话保持展开，打开 Problems 恢复布局；调整列宽后收放 sidebar 仍保持像素宽度，工具区和底栏对齐。工作区显式保存后关闭最后一个图显示同宽水印；独立提交内容重启恢复两会话、活动会话、471px 列宽和底部工具区。模型设置入口打开既有窗口。
 - 嵌套 Xwayland 的局部重绘曾漏画部分静态文字，窗口尺寸变化后完整呈现；独立显示环境的重绘验收保持开放。物理键鼠、IME、读屏、混合拖放、跨项目迟到菜单、真实运行中的选项/队列和 Windows/macOS 仍待验收，不据此标记整个 Assistant 或工作台完成。
 - L2：工作区与独立提交内容通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings`。独立预览首次构建的 SCI 字段错误来自共享 target 中另一个工作区的产物；重建对应契约后构建成功，未修改 SCI 代码。23/22 个 Rust 文件局部格式、31 个中英文文案键/参数、两份文档元信息及 275/270 条相对链接、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过；没有后端接口、依赖或 UI 单元测试变更，不运行全仓验证。累计审查 179/265 项。
@@ -534,7 +534,7 @@
 - 活动由事件投影保留类型化事实，渲染时读取当前语言，展示重连次数、压缩比例与剩余工具；断流隐藏活动和转圈。取消/中断及失效清除活动并结算耗时，图执行警告与最终结果警告去重保留。共享失败文案补齐 Driver 错误码到现有翻译键的映射。
 - 主对话和 Worker 计划使用同一卡片，呈现研究问题、分析模式、工作流及设计，完整计划按需展开；直接借用原 StatisticalPlan，不经 JSON 反序列化或复制计划业务状态。
 - 工作区和独立提交内容使用临时 Linux/X11 窗口与合成 AssistantEvent 验收默认展开、手动收起、双重失败原因、产物保留、续跑卡片独立选择、取消、事件重新归约及图执行警告在最终结果后保留。工作区另核对断流/恢复、零总量、剩余工具活动、完成/中断、失效仅改变最近执行、完整计划详情、中英文及窄列/展开布局。
-- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`、本批 Rust 文件局部格式、29 个复用双语键及重连参数、文档元信息/相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。临时实际窗口使用 `cargo build -p yss-desktop-gpui --example assistant_tasks_review --locked` 构建，入口和隔离数据不提交；无新增依赖或 UI 单元测试，不运行全工作区验证。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`、本批 Rust 文件局部格式、29 个复用双语键及重连参数、文档元信息/相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。临时实际窗口使用 已移除的原生预览入口 构建，入口和隔离数据不提交；无新增依赖或 UI 单元测试，不运行全工作区验证。
 - 真实模型/账本交付、物理输入、读屏、Windows/macOS 和已有嵌套 Xwayland 局部重绘问题继续验收。Thread 和 Markdown 的其他职责仍独立审查；本批结束时累计完成源码审查 187/265 项。
 
 ### 工具调用（AssistantToolCalls）
@@ -544,7 +544,7 @@
 - `assistant/inspect` 从可见卡片按需读取原 Harness 账本或控制事件，父视图渲染后启动查询，工具事实/会话代次变化使旧查询失效。会话读取前后校验与回执绑定检查保留，控制工具只在展开时读取事件，账本缺项不扫描事件；没有新增持久状态或业务 owner。
 - 详情原位展开参数、失败明细、目标与资源/结果；技术详情按需序列化完整安全投影（含输出），可分别复制参数与完整详情。参数名、已知值、工具状态和分组数量复用双语键；目标只在当前目录唯一匹配时提供原工作台打开入口。
 - 临时 Linux/X11 窗口通过合成 AssistantEvent、隔离 SQLite 账本/控制事件和真实 Harness 查询核对运行分组、状态更新、目标/失败明细、复制反馈、账本缺项与重试恢复、控制工具、图执行失败在完成事件后保留、缺少开始事件、取消及重放。工作区另核对相邻分组、中英文、断流/恢复、Worker 中断结算；独立候选核对窄列详情与原工作台打开资源。
-- L2：工作区与独立提交内容的 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；工作区 9 个/候选 8 个 Rust 文件局部格式、38 个复用双语键组/参数、文档元信息与 275/270 个相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。实际窗口用 `cargo build -p yss-desktop-gpui --example assistant_tools_review --locked` 构建，样例源码和隔离数据不提交；无新增依赖或 UI 单元测试，不运行全工作区验证。
+- L2：工作区与独立提交内容的 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；工作区 9 个/候选 8 个 Rust 文件局部格式、38 个复用双语键组/参数、文档元信息与 275/270 个相对链接、`node scripts/generate-crate-dependencies.mjs --check` 与 `git diff --check` 通过。实际窗口用 已移除的原生预览入口 构建，样例源码和隔离数据不提交；无新增依赖或 UI 单元测试，不运行全工作区验证。
 - 真实模型端到端交付、延迟读取期间切换/关闭、物理输入、读屏、Windows/macOS 和已有嵌套 Xwayland 局部重绘继续验收；本批窗口证据使用合成记录。Thread 和 Markdown 的其余职责继续独立审查；累计完成源码审查 188/265 项。
 
 ### 消息有序输出与操作（AssistantThread，继续审查）
@@ -555,7 +555,7 @@
 - 回复复制复用 `gpui_component::Clipboard`，仅点击时读取当前有效正文，成功勾选由原组件管理；运行中隐藏回复复制。失败保留在对应消息中，技术码按需展开，未知码显示通用提示，重复失败更新原卡片；不再在全局状态栏重复展示历史失败。
 - 上下文整理分别保留思考、摘要和调用用量，取消/失败结算尚未完成的整理；运行中思考默认展开，长内容在 288px 内滚动。会话级输出沿用每轮 768px 的宽度；分页、阅读锚点及底部跟随仍归原 `thread` owner。
 - 临时 Linux/X11 实际窗口使用合成 `AssistantEvent` 核对正文/思考/工具顺序、Unicode 局部及全量撤回、终态备用正文、系统剪贴板与成功反馈、未知失败技术码、Manager 产物和重复失败、完成/取消的上下文整理、Worker 展开与摘要去重、重新归约、会话级输出、25 轮历史分页与加载锚点、有界思考滚动，以及中英文和窄列/展开布局。独立提交副本另验证有序输出、复制及 Manager 产物打开原文档编辑器。
-- L2：工作区与独立提交内容通过 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked`、`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；8 个 Rust 文件局部格式、43 个双语键/参数（候选英文沿用工作区目录）、文档元信息与 275/271 条相对链接、`node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 条依赖）及 `git diff --check` 通过。实际窗口使用 `cargo build -p yss-desktop-gpui --example assistant_timeline_review --locked`；临时入口和隔离数据不提交。
+- L2：工作区与独立提交内容通过 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked`、`cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；8 个 Rust 文件局部格式、43 个双语键/参数（候选英文沿用工作区目录）、文档元信息与 275/271 条相对链接、`node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 条依赖）及 `git diff --check` 通过。实际窗口使用 已移除的原生预览入口；临时入口和隔离数据不提交。
 - 本批没有后端接口、依赖或 UI 单元测试变更，不运行全工作区验证。真实模型/持久账本交付、物理输入、读屏、Windows/macOS、已有嵌套 Xwayland 局部重绘，以及 Thread 纯文本/局部选择和 Markdown 的剩余职责继续开放；累计完成源码审查仍为 188/265 项。
 
 ### 消息纯文本与局部选择（AssistantThread，继续审查）
@@ -563,7 +563,7 @@
 - 用户消息、思考和失败技术码改为 `assistant/render/plain` 的共用只读 Textarea，保留 Markdown/HTML/公式标记、原始空白和换行。选择、键盘导航、复制及编辑保护复用组件；技术码使用主题等宽字体。
 - 窗口元素状态持有可见控件，消息事实仍来自原事件投影。仅在内容变化时同步文本并恢复选区和滚动；普通重绘不重置控件，隐藏后释放状态。思考继续使用原 288px 滚动区域，回复仍由 Markdown 呈现。
 - 工作区及独立提交副本通过临时 Linux/X11 窗口核对原样呈现、系统剪贴板、键盘全选、鼠标局部选择、输入/删除/粘贴的只读保护、流式追加后选区保留，以及失败技术码的选择复制。工作区另核对局部键盘选择、中文/表情/组合字符的剪贴板内容、语言切换后选区保留、窄列换行、保留 sidebar 的展开布局及 40 行思考追加后的阅读位置；最终独立副本核对主题等宽字体。
-- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；4 个 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true`、复用双语键/参数、文档元信息与相对链接、`node scripts/generate-crate-dependencies.mjs --check` 及 `git diff --check` 通过。窗口以 `cargo build -p yss-desktop-gpui --example assistant_text_review --locked` 构建，临时入口和隔离数据不提交。
+- L2：工作区及独立提交内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；4 个 Rust 文件的局部 `rustfmt --check --edition 2024 --config skip_children=true`、复用双语键/参数、文档元信息与相对链接、`node scripts/generate-crate-dependencies.mjs --check` 及 `git diff --check` 通过。窗口以 已移除的原生预览入口 构建，临时入口和隔离数据不提交。
 - 本批无后端接口、依赖或 UI 单元测试变更，不运行全工作区验证。物理输入/IME、读屏、真实模型交付、Windows/macOS、预览中未显示的表情字形和已有嵌套 Xwayland 局部重绘仍待验收；Markdown 的代码块、链接及共享富文本职责继续审查，Thread 暂不标记整体完成，累计仍为 188/265 项。
 
 ### 共享 Markdown、代码操作与链接（继续审查）
@@ -573,7 +573,7 @@
 - 共享 `markdown` 插件统一外链与公式，Assistant 激活资源链接时读取当前共享目录并沿用原工作台路由；公式同段拆出的正文继承链接回调。外链只接受无凭据的 HTTP(S)，平台打开在后台执行，失败呈现本地化通知。
 - LaTeX 使用 RaTeX 原生字形 SVG，后台排版以 128 项 LRU 复用成功/失败；行内、同段/多行显示数学与 `math` 围栏共用渲染，失败保留源码，右键复制保留分隔符。开启组件已有的 12 类 grammar；SQL grammar 要求 `cc ~1.2`，lockfile 使用兼容的 1.2.67，未升级其他已锁定依赖。
 - 当前工作区和独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings`；迭代期间原生 `cargo check` 通过。局部 Rust 格式、双语文案、文档链接/声明、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 通过。影响限于原生宿主及共用 TextView 消费者，无后端接口变更，不运行全工作区测试，也不新增 UI 单元测试。
-- 临时 `cargo build -p yss-desktop-gpui --example assistant_markdown_review --locked` 在 Linux/X11 原生窗口核对：独立代码块复制、原始空白/Unicode/换行、局部正文选择、未闭合代码流式追加后复制、Rust/SQL/Python 高亮与未知语言回退、浅色高亮、长代码末端及固定操作、代码区纵向滚动交接、宽表格、行内/显示/围栏公式、无效公式与转义源码、宽公式末端、公式源码复制及明暗颜色。Worker 摘要和未保存文档预览共用渲染与链接也已核对。
+- 临时 已移除的原生预览入口 在 Linux/X11 原生窗口核对：独立代码块复制、原始空白/Unicode/换行、局部正文选择、未闭合代码流式追加后复制、Rust/SQL/Python 高亮与未知语言回退、浅色高亮、长代码末端及固定操作、代码区纵向滚动交接、宽表格、行内/显示/围栏公式、无效公式与转义源码、宽公式末端、公式源码复制及明暗颜色。Worker 摘要和未保存文档预览共用渲染与链接也已核对。
 - 资源链接窗口验收使用隔离项目的真实文档入口，覆盖类型 URL、带空格的相对路径、公式两侧链接及无效编码反馈。外链通过临时 PATH 中的本地打开程序核对左键/中键交付、scheme/凭据过滤和失败通知；这不作为真实浏览器或其他平台验收。临时样例随后移出仓库。
 - R/Julia 高亮、单波浪号与原始 HTML 语义、Assistant 替代公式分隔符、脚注/锚点导航、图片呈现、无效链接禁用外观，以及公式嵌套标记/引用式链接/跨块选择继续处理。真实模型和来源交付、物理输入、读屏、Windows/macOS、表情字形与既有嵌套 Xwayland 局部重绘仍开放；临时浅色主题下原编辑区背景未同步的问题保留在外观验收中。三项 Markdown 与 Thread 不标记整体完成，累计仍为 188/265 项。
 
@@ -583,7 +583,7 @@
 - 核对 React 的共用高亮配置后，使用 `tree-sitter-r` 与 `arborium-julia` 提供的 grammar/查询补齐两种语言，原生配置覆盖参考侧的 14 种语言。宿主启动时一次注册到组件原有 LanguageRegistry；`R`、`jl` 与规范名称共用配置，查询捕获名适配原主题分类，没有复制语法文件、另建解析器或缓存。
 - 工作区与独立提交副本的 Linux/X11 实际窗口核对 R 条件/循环、Julia 类型/字符、Unicode 源码、别名和明暗高亮；系统剪贴板保留原文与最终换行。独立副本核对未保存文档预览，以及未闭合 Julia 字符串追加、围栏闭合后在运行中可见并可复制全部内容。
 - 工作区一次主题切换后的流式文字未及时重绘，轮次完成后源码与高亮完整；独立副本没有复现该次停留。此项与既有嵌套 Xwayland 重绘、编辑区主题背景同步继续验收，不据此宣称流式显示整体完成。
-- L2：工作区的 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked`，两份内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过；窗口通过临时 `cargo build -p yss-desktop-gpui --example markdown_languages_review --locked` 构建。三个 Rust 文件的局部格式、文档链接/声明、模块索引及 `git diff --check` 通过；没有后端契约或文案变更，不新增 UI 单元测试，不运行全工作区验证。
+- L2：工作区的 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked`，两份内容的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过；窗口通过临时 已移除的原生预览入口 构建。三个 Rust 文件的局部格式、文档链接/声明、模块索引及 `git diff --check` 通过；没有后端契约或文案变更，不新增 UI 单元测试，不运行全工作区验证。
 - 现有锁定版本保持；新增的两个 grammar 复用现有 tree-sitter runtime，lockfile 另包含 Julia grammar 的 WASM sysroot/allocator 条件依赖，原生构建不使用它们。临时入口与数据不提交；单波浪号、HTML、替代公式分隔符、脚注/锚点、图片等继续审查，三项 Markdown 与 Thread 仍未整体完成，累计 188/265 项。
 
 
@@ -616,7 +616,7 @@
 - 工作区与独立提交副本以临时 `edges_review` 入口，在隔离 Linux/X11 窗口通过 GPUI Window 输入核对悬停、单选/多选、右键整组断开、危险删除、Delete、双击转接点和一次撤销。图编辑使用真实 Application；临时入口、事件注入及项目数据不提交。
 - 工作区另核对框选取消恢复与静态 Escape、刷新和切换标签关闭菜单、缩放至 179% 后两端均在视口外的曲线命中、中键平移、反向曲线，以及越过画布边缘的菜单点击。双击前由后端修改图导致版本拒绝时，没有留下转接点且恢复了先前节点选择。
 - 两份窗口复验刷新关闭菜单后立即 Delete，以及菜单打开时切换文档后继续输入；工作区另核对删除后的 Ctrl+Z 连续快捷键。菜单释放回调修复了程序关闭菜单后焦点停在已移除实体上的问题。
-- 聚焦验证：两份内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；临时窗口使用 `cargo build -p yss-desktop-gpui --example edges_review --locked` 构建。另检查本批 8 个 Rust 文件格式、两份文档的声明/相对链接、复用的中英文键及参数、265 项目录与 `git diff --check`；模块索引检查通过。本批未运行全工作区验证，未增加 UI 单元测试；物理输入、读屏及 Windows/macOS 仍待验收。
+- 聚焦验证：两份内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；临时窗口使用 已移除的原生预览入口 构建。另检查本批 8 个 Rust 文件格式、两份文档的声明/相对链接、复用的中英文键及参数、265 项目录与 `git diff --check`；模块索引检查通过。本批未运行全工作区验证，未增加 UI 单元测试；物理输入、读屏及 Windows/macOS 仍待验收。
 - 连线运行/缓存外观、类型配色、连接预览方向和候选反馈继续迁移；相关 Edge、GraphFlowEdge、GraphFlowConnection 和 GraphFlowCanvas 不标记整体完成。累计完成源码审查 191/265 项。
 
 ### 连线外观、执行状态与连接预览
@@ -627,7 +627,7 @@
 - `connections/drag` 让当前手势拥有候选查询、捕获版本、悬停目标及替换集合，取消即释放交付任务。端口悬停使用 GPUI 原命中；预览显示追加、替换、无效颜色与原因，并突出将替换的连线。候选失败或已知无效不提交，未返回候选时仍由原图事务校验捕获版本。
 - 工作区和独立提交副本通过临时 `styles_review` Linux/X11 窗口核对输入侧曲线、替换与撤销、无效反馈及节点菜单预览；执行使用真实 Application。独立副本核对 Ctrl 移动替换和一次撤销，以及未运行、真实执行中、成功、上游修改过期、除零失败和清除失败后的状态变化。
 - 工作区另核对英文追加/替换/查询失败、失败不写图，以及临时延迟后取消并从同一端口开始新手势：旧失败没有覆盖新判定。临时绘制计数显示运行帧没有新增曲线细分，隐藏图标签时计数保持，减少动态效果使用静态标记；这不代表目标桌面帧率已达标。
-- 聚焦验证：两份内容通过本包 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口入口使用 `cargo build -p yss-desktop-gpui --example styles_review --locked`。另检查本批 Rust 格式、文档声明与相对链接、复用中英文键及 265 项清单；模块索引与 `git diff --check` 通过。
+- 聚焦验证：两份内容通过本包 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口入口使用 已移除的原生预览入口。另检查本批 Rust 格式、文档声明与相对链接、复用中英文键及 265 项清单；模块索引与 `git diff --check` 通过。
 - 临时入口、故障/延迟、计数和隔离数据不提交，未新增 UI 单元测试或运行全工作区验证。物理输入、读屏、Windows/macOS、目标刷新率及大图验收继续开放；GraphFlowCanvas、GraphFlowNode、GraphPin 和 Reroute 的剩余职责继续逐项审查。累计完成源码审查 194/265 项。
 
 ### 节点布局与共享运行呈现
@@ -639,7 +639,7 @@
 - 隔离 Linux/X11 窗口使用真实 Application 核对双输出节点只运行一项后的 `1/2`、观察节点 `1/1`、运行中、有效、编辑后过期与真实除零失败。原生窗口事件核对紧凑转接点拖动/撤销及候选淡化；内联参数使用明确的只读展示投影核对实际数值、空值、长 Unicode 与 10,000 项 JSON 及端口对齐，内置目录尚未声明此展示方式。
 - 本批曾复现转接点插入后的后端 schema/内核阻断，后续“透明转接点的分析与执行”已修复并验证。节点菜单、端口输入/菜单及完整类型形状仍未完成；相关 Controller/View/GraphFlowNode 不计入完成数。
 - 工作区另核对英文参数/结果/失败提示、转接点端口的真实连线替换和无连接端口 Ctrl 起手拒绝；悬浮状态与缓存相同时只显示一次文案。
-- L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；迭代 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和临时窗口 `cargo build -p yss-desktop-gpui --example nodes_review --locked` 通过。检查本批 16/17 个 Rust 文件格式、25 个双语键及参数、两份文档声明/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）与 `git diff --check`。后端契约和依赖未变，不重复后端测试；没有新增 UI 单元测试或运行全工作区验证，临时入口和数据不提交。
+- L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；迭代 `cargo check -p yss-desktop-gpui --bin yss-desktop-gpui --locked` 和临时窗口 已移除的原生预览入口 通过。检查本批 16/17 个 Rust 文件格式、25 个双语键及参数、两份文档声明/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）与 `git diff --check`。后端契约和依赖未变，不重复后端测试；没有新增 UI 单元测试或运行全工作区验证，临时入口和数据不提交。
 - 物理键鼠、读屏、Windows/macOS 和大图性能验收仍开放。累计完成源码审查 196/265 项。
 
 ### 透明转接点的分析与执行
@@ -651,7 +651,7 @@
 - L2：`cargo test -p yss-node-registry -p yss-node-catalog -p yss-graph-analysis -p yss-graph-execution -p yss-graph-editor -p yss-graph-runtime --lib` 运行 149 项通过；既有人工计时探针保持 ignored。`cargo test -p yss-application --lib graph::catalog::tests::` 在独立提交副本和工作区各运行 23 项通过，包含函数私有帧和动态 Schema 反馈。
 - 受影响业务包 `cargo clippy -p yss-node-registry -p yss-node-catalog -p yss-graph-analysis -p yss-graph-execution -p yss-application --lib --tests --no-deps -- -D warnings`、工作区 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过。未运行全工作区验证。
 - 独立提交副本的 Linux/X11 窗口通过真实 Application 和 GPUI Window 事件核对工具栏运行、标量结果 `1`、转接点有效状态、上游编辑后的过期及撤销恢复；双击表格连线插入后，下游重新运行恢复 `2/2`。临时 `reroute_review` 入口、事件注入和数据不提交。
-- 工作区窗口另核对实际工具栏运行、除零错误仍定位原计算节点、撤销输入并重跑后整链恢复。两份临时入口均通过 `cargo build -p yss-desktop-gpui --example reroute_review --locked`；源码格式、文档入口/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 在交付前检查。
+- 工作区窗口另核对实际工具栏运行、除零错误仍定位原计算节点、撤销输入并重跑后整链恢复。两份临时入口均通过 已移除的原生预览入口；源码格式、文档入口/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）及 `git diff --check` 在交付前检查。
 - 本批补齐已审查组件的后端行为，完成源码审查数仍为 196/265；物理键鼠、读屏、Windows/macOS 和大图性能验收继续开放。
 
 ### 节点菜单与子图剪贴板
@@ -681,7 +681,7 @@
 - 节点、端口和连线菜单及节点选择器等待输入提交与在途刷新结束，再校验焦点、手势和版本，避免菜单刚打开就因该次编辑关闭。UI 输入计入原保存/关闭检查；指针及滚轮隔离避免编辑文字时拖动画布。
 - 独立 Linux/X11 窗口通过真实 Application 核对小数、未完成数字、u64 最大值和越界、文本提交/取消、布尔切换及撤销、输入后连线、保存与运行。工作区窗口核对中文草稿切换英文仍保留、外部并发修改拒绝旧草稿、后续粘贴失败仍保留已成功提交值，以及编辑后节点/端口右键菜单保持可用。
 - 原生窗口实际发现并修复小比例下开关和 Input 高度未缩放、连线手势被失焦提交取消，以及提交刷新关闭菜单的问题。27% 和 66% 比例已核对；物理键鼠/IME、读屏、Windows/macOS 和大图性能仍待验收。
-- L2：工作区与独立提交内容通过 cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings；临时窗口使用 cargo build -p yss-desktop-gpui --example pin_input_review --locked。cargo test -p yss-graph-editor --lib projection::tests::editor_projection_closes_resource_node_port_and_connection_facts --locked -- --exact 实际运行 1 项通过，核对控件消费的端口读投影。
+- L2：工作区与独立提交内容通过 cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings；临时窗口使用 已移除的原生预览入口。cargo test -p yss-graph-editor --lib projection::tests::editor_projection_closes_resource_node_port_and_connection_facts --locked -- --exact 实际运行 1 项通过，核对控件消费的端口读投影。
 - 本批 17 个 Rust 文件局部格式、两份文档声明/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）和 git diff --check 通过。未新增 UI 单元测试、未运行全工作区验证；临时窗口入口与隔离数据不提交。完成 PinInput，累计 201/265；GraphPinController/View 的完整类型形状与提示继续审查。
 
 ### 端口类型形状与实时提示
@@ -692,7 +692,7 @@
 - 真实 Linux/X11 窗口发现并修复“保持悬停时提示停留在执行前状态”。工作区核对输入未绑定、类型未确定、执行中、成功和真实除零失败后同时显示错误/过期缓存，以及菜单高亮；只读展示样例核对全部形状、unknown/conflict、孤立端口、中英文、Unicode 标签、多源顺序和诊断优先级，不把样例当作后端求解证据。
 - 独立提交副本在共享索引后核对数值 Enter 提交、Escape 恢复、端口菜单重置、输入控件随类型移除，以及键盘撤销后恢复原值与控件。重置后的真实缺少绑定诊断和类型提示已在窗口核对。
 - 静态路径复用现有 GPUI 绘图缓存，缺少绑定的脉冲沿用框架减少动态效果。临时计数在同一投影下记录绘制次数从 54 到 751，路径构建保持 68、静态索引构建保持 1；隐藏图标签后绘制计数保持 1115，减少动态效果使用静态帧。此证据不代表目标桌面帧率或大图验收通过。
-- L2：工作区与独立提交内容通过 cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings；临时窗口使用 cargo build -p yss-desktop-gpui --example port_presentation_review --locked。检查本批 8 个 Rust 文件格式、双语新增键、两份文档声明/相对链接、265 项清单、模块索引与 git diff --check。
+- L2：工作区与独立提交内容通过 cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings；临时窗口使用 已移除的原生预览入口。检查本批 8 个 Rust 文件格式、双语新增键、两份文档声明/相对链接、265 项清单、模块索引与 git diff --check。
 - 本批没有新增依赖、后端契约或 UI 单元测试，未运行全工作区验证；临时入口、计数与展示样例不提交。物理键鼠/IME、读屏、Windows/macOS 和大图性能继续开放。完成 GraphPinController/View，累计 203/265。
 
 
@@ -705,7 +705,7 @@
 - 连线释放先交给原端口，画布在事件分发后完成未被端口消费的手势；释放在节点正文不打开菜单，画布外释放清除预览，空白创建保留最小 5px 位移。已有端口连接通过真实连接/替换核对，图命令仍使用原捕获版本。
 - 原生 NodeLayout 同时驱动节点、端口和连线索引。真实 DataFrame 常量增加列后派生端口和节点高度同步更新；同尺寸只读重排样例中，原 alpha 端口的连接跟随到新行。后者只证明展示/索引行为，不作为后端端口排序契约证据；无需迁移 React ResizeObserver 或 updateNodeInternals。
 - 独立提交副本再次核对零位移点击不修改图、跨边界拖动一次 Undo、超范围整数输入导致提交被拒绝后清除拖动预览并保留输入，以及重叠节点菜单命中绘制顺序最上层的节点。
-- L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；临时窗口通过 `cargo build -p yss-desktop-gpui --example canvas_gestures_review --locked`。9 个改动 Rust 文件格式、两份文档声明/相对链接、组件清单、`node scripts/generate-crate-dependencies.mjs --check` 和 `git diff --check` 通过。未运行全工作区验证或新增 UI 单元测试。临时窗口、输入脚本和数据不提交；物理键鼠/IME、读屏、Windows/macOS 与目标帧率/大图验收继续开放。源码审查累计 204/265。
+- L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；临时窗口通过 已移除的原生预览入口。9 个改动 Rust 文件格式、两份文档声明/相对链接、组件清单、`node scripts/generate-crate-dependencies.mjs --check` 和 `git diff --check` 通过。未运行全工作区验证或新增 UI 单元测试。临时窗口、输入脚本和数据不提交；物理键鼠/IME、读屏、Windows/macOS 与目标帧率/大图验收继续开放。源码审查累计 204/265。
 
 
 ### 连接候选失败回退与画布视图边界
@@ -716,7 +716,7 @@
 - 隔离 Linux/X11 窗口先复现失败查询阻止合法松键。修改后验证输出侧及输入侧起手、替换、Ctrl 迁移和一次撤销；查询失败时表格接数值输入仍被真实事务拒绝，版本及连线保持不变。正常查询的替换提示/原连线高亮、无效类型红色提示及本地拒绝同样核对。
 - 注入 8 秒查询延迟后，在候选仍 Loading 时提交成功；旧读取随后失败，新手势的候选与颜色保持正常。当前工作区窗口额外注入较旧的捕获版本：真实 Connect 按该版本提交并被拒绝，未改变版本/连线；新起手重新捕获版本后可以正常连接。故障注入只在临时窗口入口，不进入生产代码。
 - 复用现有 Rust 测试：`cargo test -p yss-graph-editor --lib tests::connect_rejects_a_known_type_outside_the_input_class --locked -- --exact` 与 `cargo test -p yss-application --lib graph::catalog::tests::connection_candidates_are_read_only_and_reject_an_obsolete_graph_version --locked -- --exact` 各实际运行 1 项并通过。
-- L2：独立提交副本与当前工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 均通过；窗口通过 `cargo build -p yss-desktop-gpui --example connection_fallback_review --locked`。本批 Rust 文件格式、两份文档声明/相对链接、双语键清理、265 项清单、模块索引及 `git diff --check` 均通过。未新增 UI 单元测试、依赖或后端契约，未运行全工作区验证；临时窗口与隔离数据不提交。
+- L2：独立提交副本与当前工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 均通过；窗口通过 已移除的原生预览入口。本批 Rust 文件格式、两份文档声明/相对链接、双语键清理、265 项清单、模块索引及 `git diff --check` 均通过。未新增 UI 单元测试、依赖或后端契约，未运行全工作区验证；临时窗口与隔离数据不提交。
 - 完成 GraphCanvasView 源码审查，累计 205/265。视口持久化、参考点网格样式以及文档加载/刷新/面板生命周期的完整审查继续开放；物理输入、读屏、Windows/macOS 与大图性能仍待验收。
 
 
@@ -728,7 +728,7 @@
 - 点网格改为 40 世界单位间距和固定 1px 半径。复用一个 32×32 点块的 PathCache 平铺，平移/窗口尺寸变化不重新细分；避免最低缩放下整屏路径超过细分顶点上限。
 - 独立副本窗口实际核对默认、Home/F/空选择、输入 F、全选托管过滤、平移取消/结束、快速关闭重开、投影刷新、重启、重命名/删除和立即退出。当前工作区另核对项目隔离、无效视角通知及注入 1.5 秒旧写入延迟后保留新视角；实际存储失败提示且图保持干净，恢复后继续记录。
 - 开发构建约 910×847 画布的 CPU 绘制提交：62% 缩放约 0.3–0.4ms，10% 约 6–14ms；最低缩放已显示点网格，但该片段不代表完整帧率，release/大图/120Hz 仍开放。
-- L2：独立提交副本和当前工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 均通过；临时窗口使用 `cargo build -p yss-desktop-gpui --example canvas_viewport_review --locked`。局部 Rust 格式、文档声明/相对链接、双语新键、265 项清单、模块索引和 `git diff --check` 通过。无新增依赖、UI 单元测试或后端契约，不运行全工作区验证；临时窗口与数据不提交。
+- L2：独立提交副本和当前工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 均通过；临时窗口使用 已移除的原生预览入口。局部 Rust 格式、文档声明/相对链接、双语新键、265 项清单、模块索引和 `git diff --check` 通过。无新增依赖、UI 单元测试或后端契约，不运行全工作区验证；临时窗口与数据不提交。
 - 完成 ViewportGrid 审查，累计 206/265。GraphCanvasController/GraphFlowCanvas 的剩余生命周期和 GraphDocumentEditor 的加载/刷新/冲突继续审查；外部资源重命名、物理输入、读屏及 Windows/macOS 仍开放。
 
 ### 图投影刷新与统一保存
@@ -738,7 +738,7 @@
 - 旧窗口已复现：端口新文本后执行保存全部，磁盘仍为旧值，失焦提交随后因版本冲突失败；刷新失败也仍允许修改图。保存全部改为复用单图保存的输入准备、worker 和回执接纳，准备即锁定画布，中止准备释放锁定与提交标记；删除工作台直接绕过输入调用 Save 的路径。
 - 独立窗口核对新文本实际写入、保存期间拒绝并行修改、读取失败后输入/视角保留与重试、保存失败保留最后成功编辑并再次保存。注入 3 秒旧读取后提交保存，迟到失败不覆盖新图；读取失败取消正在进行的平移并恢复原视角。
 - 当前工作区窗口核对多图保存：后续图的无效数值中止整批准备，前一图解除锁定且两个版本均不推进；修正输入后两图保存成功。另核对英文失败提示、中文草稿保留，以及延迟读取期间切换语言后仅接纳当前语言投影；在真实关闭提示中选择保存并继续，新文本写入后窗口退出。
-- L2：独立提交副本与当前工作区均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口通过 `cargo build -p yss-desktop-gpui --example graph_loading_review --locked`。25 个 Rust 文件格式、文档声明与 271/275 个相对链接、双语键、265 项清单、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过。
+- L2：独立提交副本与当前工作区均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口通过 已移除的原生预览入口。25 个 Rust 文件格式、文档声明与 271/275 个相对链接、双语键、265 项清单、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过。
 - 本批不新增依赖、后端契约或 UI 单元测试，不运行全工作区验证；临时窗口、故障注入和隔离数据不提交。首次打开失败、外部重命名/删除、隐藏/重开等完整生命周期继续审查，三项组合组件不标记整体完成，累计仍为 206/265；物理输入、读屏及 Windows/macOS 验收保持开放。
 
 ### 图资源回执与画布绑定
@@ -748,7 +748,7 @@
 - 输入只在连续重命名和精确目标版本下、原端口绑定/类型未变时接纳新版本。独立窗口以真实 Application 连续重命名并重复发布回执，读取失败时同一实体/选择/视角/草稿保留；点击重试后原输入成功保存到最终路径。当前工作区另在重命名后改变后端端口，确认草稿原基线保留、保存报冲突，Escape 恢复后端值。
 - 首次打开由 Workbench 持有交付任务及原节点/UI intent；删除和项目替换取消旧交付，重命名将原打开转向目标。独立窗口注入 8 秒已读取结果延迟：删除后旧结果不重开，同路径重建的较新画布不受旧删除回执影响，打开中重命名不留下旧标签。关闭图的外部重命名没有创建新标签；已打开图明确删除后移除原面板。
 - 当前工作区通过实际重命名对话框确认本地提交成功后读失败仍保留原画布和视角；通过侧栏菜单重命名关闭的图，目录更新但不额外打开标签；危险删除确认后，未保存图的标签、详情及视角检查点均移除。验收用的命令、延迟/失败注入、独立项目及窗口入口均在提交外保留；不新增 UI 单元测试、依赖或后端契约。
-- L2：独立提交副本通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui -- -D warnings`，当前工作区通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`。临时窗口由 `cargo build -p yss-desktop-gpui --example graph_resources_review` 构建，工作区另加 `--locked`；11 个 Rust 文件格式、两份文档的声明与 271/275 个相对链接、265 项清单、双语键、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 均通过，未运行全工作区验证。
+- L2：独立提交副本通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui -- -D warnings`，当前工作区通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`。临时窗口由 已移除的原生预览入口 构建，工作区另加 `--locked`；11 个 Rust 文件格式、两份文档的声明与 271/275 个相对链接、265 项清单、双语键、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 均通过，未运行全工作区验证。
 - 首次加载失败面板、发布乱序/缺口后的路径恢复及隐藏/重开完整生命周期继续审查；遇到缺失的路径链目前保留原画布并显示读取失败，不能据此标记 publication 恢复已完成。GraphCanvasController、GraphDocumentEditor 和 GraphFlowCanvas 保持未完成，累计仍为 206/265；物理输入、读屏及 Windows/macOS 继续验收。
 
 ### 图首次读取与可恢复标签
@@ -758,7 +758,7 @@
 - 交付任务归标签实体，关闭、项目替换和明确删除取消交付；接纳前核对项目、生命周期、路径、实体注册及语言。后台替换不选择其他标签，收起后保留的旧焦点不能让隐藏画布重新取得焦点。重命名重绑同一加载标签；目标已有加载标签或画布时取消重复交付，复用原目标位置和实体。
 - 独立提交内容的 Linux/X11 窗口核对加载/失败、实际重试按钮、10 秒延迟完成保持另一个选中标签、实际关闭按钮取消 15 秒旧读取，以及同路径重开不被旧结果覆盖。失败标签移入分屏并放大，重试完成仍保留原组与放大；重启恢复只读取两个可见图，隐藏图在显示后才读取。侧栏收起的完成焦点问题经窗口发现、修复并重新验收。
 - 当前工作区窗口通过真实 Application 核对加载中重命名复用已有失败标签，以及已有画布重命名后合并目标的失败标签，原画布实体保持。删除取消在途读取，同路径重建安装新画布，旧结果不重开；查询期间中英文切换触发当前语言重读，最终函数节点显示英文。项目关闭后迟到读取不恢复旧标签。一次临时脚本在目录刷新前使用 unwrap 导致预览退出，改用已有的直接路径入口复验；该脚本不进入产品代码。
-- L2：独立提交内容与当前工作区均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口通过 `cargo build -p yss-desktop-gpui --example graph_opening_review --locked`。7 个 Rust 文件格式、双语键、两份文档声明与 271/275 个相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 均通过。无新增依赖、后端契约或 UI 单元测试，未运行全工作区验证；临时预览和隔离项目不提交。
+- L2：独立提交内容与当前工作区均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口通过 已移除的原生预览入口。7 个 Rust 文件格式、双语键、两份文档声明与 271/275 个相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）与 `git diff --check` 均通过。无新增依赖、后端契约或 UI 单元测试，未运行全工作区验证；临时预览和隔离项目不提交。
 - 发布乱序/缺口后的路径恢复、完整隐藏/重开及 UI intent 交付继续审查。GraphCanvasController、GraphDocumentEditor 和 GraphFlowCanvas 仍未整体完成，源码审查累计 206/265；物理键鼠/IME、读屏、Windows/macOS 和大图性能继续开放。
 
 ### 已有图的发布缺口恢复
@@ -768,7 +768,7 @@
 - 两项新增后端回归覆盖连续重命名、旧路径另建图后的身份定位与跨项目拒绝，以及干净文件外部替换清空会话后沿原路径刷新。原身份不存在时不按名称或内容猜测移动。
 - 独立提交内容的 Linux/X11 窗口通过真实 Application 重命名两次并重新创建旧路径，再触发原有有界队列实际丢失 512 条事件；原画布恢复最终路径，实体、选择、视角和草稿保持。旧路径另开为空图且身份独立；保存拒绝过期草稿，Escape 恢复后端值。已读取结果延迟 10 秒时用实际关闭按钮移除标签，迟到结果不重开。
 - 当前工作区以反向顺序交付两次真实重命名回执，原画布恢复最终路径；X11 Ctrl+S 被原版本校验拒绝，Escape 恢复输入。目标路径另开画布时，恢复不替换目标实体，原画布保留失败提示。项目关闭后的 8 秒迟到刷新不恢复图或详情。
-- L2：独立提交内容与工作区均通过 `cargo test -p yss-application --lib graph::open::tests --locked`（8 项）和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；Project 通过 `cargo test -p yss-project --lib project_state::graph_editing::tests --locked`（5 项）。临时窗口由 `cargo build -p yss-desktop-gpui --example graph_recovery_review --locked` 构建；本批 8 个 Rust 文件格式、文档声明/相对链接、265 项清单、模块索引和 `git diff --check` 已检查。无新增依赖、持久化字段或 UI 单元测试，未运行全工作区验证；临时入口、延迟注入及隔离项目不提交。
+- L2：独立提交内容与工作区均通过 `cargo test -p yss-application --lib graph::open::tests --locked`（8 项）和 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；Project 通过 `cargo test -p yss-project --lib project_state::graph_editing::tests --locked`（5 项）。临时窗口由 已移除的原生预览入口 构建；本批 8 个 Rust 文件格式、文档声明/相对链接、265 项清单、模块索引和 `git diff --check` 已检查。无新增依赖、持久化字段或 UI 单元测试，未运行全工作区验证；临时入口、延迟注入及隔离项目不提交。
 - 首次读取尚无编辑会话时的完整 publication 恢复、目标重复画布的后续处理、完整隐藏/重开与 UI intent 仍需审查。三项组合组件不计为整体完成，累计 206/265；物理键鼠/IME、读屏、Windows/macOS 和大图性能仍开放。
 
 ### 图导航、展开分组与真实显示
@@ -778,7 +778,7 @@
 - 首次读取在后台完成时仍原位替换标签，隐藏结果不抢回详情、选择或焦点；没有实际显示目标的 UI intent 结算为 failed。隐藏分组中的活动标签事件不覆盖当前图上下文。
 - 独立提交内容的 Linux/X11 窗口先复现旧实现的遮挡目标被报 applied 和隐藏读取覆盖详情，再核对修复后的跨组定位、同组保持展开、无效节点失败。12 秒函数图读取期间展开另一图，原图选择/详情保持，请求失败；随后明确打开同一实体成功。
 - 工作区窗口通过真实 Application 核对首次显示成功、同组标签切走后的 10 秒读取失败、关闭加载标签后队列继续定位，以及同路径重开不被旧读取替换。两个窗口均核对对话展开保留 sidebar；工作区另核对文档打开恢复原编辑分组，以及实际点击底栏后工具内容/图标对齐编辑区、对话保持全高。
-- L2：独立提交内容与工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；临时窗口由 `cargo build -p yss-desktop-gpui --example graph_visibility_review --locked` 构建。3 个 Rust 文件格式、文档声明/链接、265 项清单、模块索引及 `git diff --check` 按本批范围检查。无新增依赖、后端契约或 UI 单元测试，未运行全工作区测试；临时入口与项目不提交。
+- L2：独立提交内容与工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；临时窗口由 已移除的原生预览入口 构建。3 个 Rust 文件格式、文档声明/链接、265 项清单、模块索引及 `git diff --check` 按本批范围检查。无新增依赖、后端契约或 UI 单元测试，未运行全工作区测试；临时入口与项目不提交。
 - 图意图定位前的投影新鲜度、首次读取无编辑会话时的缺口恢复、重复目标画布和完整隐藏/重开继续审查。三项组合组件仍未整体完成，累计 206/265；物理输入/IME、读屏、Windows/macOS 和大图性能仍开放。
 
 ### 图意图定位前的投影读取
@@ -789,7 +789,7 @@
 - 独立窗口另核对读取失败/明确重试，以及 10 秒读取期间实际点击关闭：原请求失败，后续图请求继续成功，迟到读取不恢复标签。已保存图正文在后端未保存修改和 UI 导航前后哈希相同，导航不隐式保存。
 - 工作区窗口在原端口输入未提交文本后请求新增节点，确认新投影定位成功且草稿保留；旧基线保存报冲突，实际 Escape 恢复当前值后可显式保存。确认 8 秒读取已经开始后切换另一图，原请求 failed，当前活动图和详情保持不变。
 - 工作区另在 6 秒旧读取期间重连 binding，再请求具有 10 秒读取的新图并排队另一图；旧读取完成时新请求仍 claimed、队列仍保留一项。随后两个新请求依次 applied，旧请求 expired，不向新 binding 结算或清除其队列。
-- 默认预览构建在原生代码生成阶段被系统 OOM 终止，内核记录 rustc 约 49 GB RSS；仅临时窗口改用 `cargo rustc -p yss-desktop-gpui --example graph_intent_review --locked -- -C opt-level=0 -C debuginfo=0` 后构建成功，生产 profile 未修改。这些窗口用于行为验收，不作为性能证据。
+- 默认预览构建在原生代码生成阶段被系统 OOM 终止，内核记录 rustc 约 49 GB RSS；仅临时窗口改用 已移除的原生预览入口 后构建成功，生产 profile 未修改。这些窗口用于行为验收，不作为性能证据。
 - 原生默认配置的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 在独立提交内容与工作区均通过；本批不新增依赖、共享业务契约或 UI 单元测试，未扩大到全工作区验证。临时预览、故障注入和隔离项目不提交。
 - 两处均通过 `node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 项依赖声明）、三个改动 Rust 文件的局部格式检查、两份文档的状态/相对链接核对、265 项组件清单一致性检查及 `git diff --check`。
 - 首读无编辑会话时的通知缺口恢复、目标重复画布和完整隐藏/重开仍需继续审查。三项图组合组件仍未整体完成，累计 206/265；物理输入/IME、读屏、其他平台和大图性能保持开放。
@@ -802,7 +802,7 @@
 - 修复版独立窗口重复上述时序，旧读取完成时新请求仍 claimed，后继请求仍 pending；新读取完成后两项依次 applied，旧请求随后 expired。另以迟到文档读取核对原读取标记释放、编辑器未创建、新队列保留；重新请求文档成功，Mind、Chart、Database 和助手/项目面板请求均得到 applied。
 - 独立窗口还在 8 秒函数首读期间重连并立即重新请求同一资源，原标签重新读取后成功安装并结算新请求；旧读取结束后仍只有一份画布，未阻塞或结算新请求。
 - 工作区窗口将旧函数首读延迟 35 秒、重连后的图读取延迟 18 秒；在第 10 秒通过 X11 原生点击关闭旧标签，当前请求保持 claimed、后继请求保持 pending。两项新请求随后 applied，超过旧首读期限仍无旧标签或画布。另核对无效节点 failed 后队列继续，Doc/Mind/Chart/Database 与助手/项目面板请求成功，并检查数据库实际表格与属性显示。
-- L2：独立提交内容与工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 均通过。临时真实窗口使用 `cargo rustc -p yss-desktop-gpui --example ui_delivery_review --locked -- -C opt-level=0 -C debuginfo=0` 构建；生产 profile 未改，这些窗口不作为性能证据。没有共享业务契约或后端行为变更，未扩大到全工作区测试，不新增 UI 单元测试、依赖或持久化字段。
+- L2：独立提交内容与工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 均通过。临时真实窗口使用 已移除的原生预览入口 构建；生产 profile 未改，这些窗口不作为性能证据。没有共享业务契约或后端行为变更，未扩大到全工作区测试，不新增 UI 单元测试、依赖或持久化字段。
 - 两处均通过 `node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 项依赖声明）、九个改动 Rust 文件的局部格式检查、文档状态/相对链接、265 项清单检查及 `git diff --check`。临时窗口入口、延迟注入、辅助命令与隔离数据不提交。
 - 完整图生命周期及其余组合组件继续审查，累计仍为 206/265；本批不将局部交付修复当作完整组件迁移，物理输入/IME、无障碍、其他平台和性能验收保持开放。
 
@@ -814,7 +814,7 @@
 - 在提交候选与保留原生 WIP 的工作区副本中打开真实 Linux/X11 隔离窗口，使用真实 Application 创建与运行图。全图有阻断时没有运行请求，同图的独立布尔节点成功；完整除法图运行成功，工具栏清除后有效结果保留。新运行结束后用旧捕获身份清除，新摘要仍在。
 - 真实除零失败后，Output 显示原失败；从 Output 清除后错误装饰、失败正文和状态共同隐藏。分别对成功/失败清除前后及相同快照恢复，读回完整图版本、语义 hash、dirty、结果 revision 与结果引用一致；不清结果、不保存图。
 - 仅在临时预览中延迟已发布 RunStarted 的后续工作，核对取消按钮、清除禁用及真实取消终态。临时执行快照失败时展示英文未知提示，点击运行/清除不生效，恢复读取后恢复原摘要；没有伪造运行事件。未提交端口输入可交给原事务，提交后仍有全图阻断则不执行；Function 图不接受全图请求。
-- 两份源码均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`。预览以 `cargo rustc -p yss-desktop-gpui --example run_toolbar_review --locked -- -C opt-level=0 -C debuginfo=0` 构建，仅临时副本使用该配置，不据此作性能结论。变更文件格式、文档链接、组件清单和模块索引分别复核；不增加依赖、持久化契约或 UI 单元测试，不运行全工作区验证。
+- 两份源码均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`。预览以 已移除的原生预览入口 构建，仅临时副本使用该配置，不据此作性能结论。变更文件格式、文档链接、组件清单和模块索引分别复核；不增加依赖、持久化契约或 UI 单元测试，不运行全工作区验证。
 - 本批完成 CanvasExecutionToolbar 源码审查，累计 207/265；PinResultSearchPalette 独立迁移。隔离预览使用注入窗口输入，未确认物理悬停提示的显示；物理键鼠/IME、无障碍、Windows/macOS 与大图性能仍开放。临时窗口、隔离项目、故障注入和截图不提交。
 
 
@@ -826,7 +826,7 @@
 - 排序后的索引随目录、来源或语言变化重建，输入只作去除首尾空白、忽略大小写的子串过滤；搜索包括用户标签、协议标题、端口、原生结果窗口标题、图路径和运行号。语言切换保留查询并恢复首个匹配项，来源标题与 Results 共用，不恢复旧 IPC DTO。
 - 选择复用 `ports/inspection` 当前端口查询、项目/版本/会话校验和自动租约交接，交付时再核对当前目录的完整引用、有效性及等待状态。只有成功交接才关闭搜索；显式“上次结果”继续走原历史入口。
 - 独立提交候选与保留 WIP 的工作区副本均通过真实 Linux/X11 窗口查看三个真实计算输出；核对禁用空目录、排序、大小写筛选、无匹配提示、Enter/点击打开及实际标量值。工作区还核对图路径/运行号/来源标题搜索、语言切换保留查询、Escape/点击外部清空、读取失败原位重试保留查询、打开失败沿原画布提示、编辑后过期输出消失、原历史标签和底部目录保留。
-- 临时来源读取延迟 3.5 秒时关闭并切换图，迟到回复未重新打开搜索或安装到新图；Function 图隐藏搜索入口。预览通过 `cargo rustc -p yss-desktop-gpui --example result_search_review --locked -- -C opt-level=0 -C debuginfo=0` 构建，临时窗口、注入、项目和截图不提交，不据此作性能结论。
+- 临时来源读取延迟 3.5 秒时关闭并切换图，迟到回复未重新打开搜索或安装到新图；Function 图隐藏搜索入口。预览通过 已移除的原生预览入口 构建，临时窗口、注入、项目和截图不提交，不据此作性能结论。
 - `cargo test -p yss-application --lib graph::results::tests::catalog:: --locked` 在候选与工作区各运行一项并通过，保护图隔离、当前输出替换、原值 Arc 复用及输出与历史租约的不同所有权；未添加 UI 单元测试。Application 的 `cargo clippy -p yss-application --lib --tests --locked --no-deps -- -D warnings` 和两处原生 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过。变更文件格式、文档链接、模块索引和 `git diff --check` 按 L2 核对，未扩大到全工作区验证。
 - 本批完成 PinResultSearchPalette 与 CanvasOverlays 源码审查，累计 209/265。物理悬停、键鼠/IME、无障碍、Windows/macOS 与大图性能仍开放；本批没有新依赖或持久化格式。
 
@@ -838,7 +838,7 @@
 - 原窗口还复现 Escape 后松键仍创建节点；工作台在存在原生拖动时调用 GPUI 取消入口，保留无拖动时的原 Escape 分发。函数资源拖回自身改为复用并聚焦该图，函数模板仍拒绝创建自调用。
 - 保留 WIP 的工作区与独立提交候选均通过真实 Linux/X11 窗口的分屏创建、立即 Undo/Redo、新图目标分组、已有图原分组复用和 Escape 取消。工作区另核对 125% 缩放与偏移后的实际世界坐标、忙碌拒绝、函数自身聚焦/跨图创建、常量同图插入/跨图拒绝及拖动期间 Undo 后的版本拒绝；候选通过实际目录重新读取与替换验证旧拖动拒绝，随后新拖动正常创建。单纯重绘或仅切换视图语言不替换原目录，不作为来源失效证据。
 - 水印复用已有 `workbench/dock/watermark`：品牌、强调色、分隔线和本地化描述共用一个纯显示函数；空态读取根拓扑，仅对话时由原 EmptyEditor 保留右侧编辑区。工作区窗口已核对中英文、900px 窗口和仅保留对话的分支，候选核对关闭全部图后的水印。无需新增状态、组件包装或 CSS 装饰实现。
-- 两份源码通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings`；预览使用 `cargo rustc -p yss-desktop-gpui --example canvas_drop_review --locked -- -C opt-level=0 -C debuginfo=0`，临时入口、事件注入、数据与截图均在验收后移至仓库外，不作为 UI 单元测试或性能证据。模块索引、改动 Rust 文件格式、文档状态/链接、265 项清单与 `git diff --check` 按 L2 核对，不运行全工作区验证。
+- 两份源码通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings`；预览使用 已移除的原生预览入口，临时入口、事件注入、数据与截图均在验收后移至仓库外，不作为 UI 单元测试或性能证据。模块索引、改动 Rust 文件格式、文档状态/链接、265 项清单与 `git diff --check` 按 L2 核对，不运行全工作区验证。
 - 本批完成以上三项审查，累计 212/265；没有新依赖、IPC 协议、持久化格式或业务状态。物理键鼠/IME、无障碍、跨项目及关闭来源的完整组合、Windows/macOS 仍开放，图文档和画布组合入口继续逐项审查。
 
 ## app
@@ -1081,7 +1081,7 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/logs/internal/ui/LogDomainLayoutHost.tsx](../../react/src/modules/logs/internal/ui/LogDomainLayoutHost.tsx) | 复用根 DockArea；不迁入第二个 FlexLayout 拓扑 | 当前用原生领域选择器访问全部及六个领域；原多领域并列对照的承载仍待处理 | 领域筛选已接入；并列布局待迁移 |
+| [modules/logs/internal/ui/LogDomainLayoutHost.tsx](../../react/src/modules/logs/internal/ui/LogDomainLayoutHost.tsx) | 复用根 DockArea，不增加第二个拓扑 owner | 当前用原生领域选择器访问全部及六个领域；原多领域并列对照的承载仍待处理 | 领域筛选已接入；并列布局待迁移 |
 | [modules/logs/internal/ui/LogDomainPanel.tsx](../../react/src/modules/logs/internal/ui/LogDomainPanel.tsx) | 迁移领域过滤、选择与跟随到已有 LogsPanel | 同一有界集合和筛选索引；显式选择显示既有 Details，清空仅撤销对应日志检查 | 代码已接入；多领域并列承载另行处理 |
 | [modules/logs/internal/ui/LogItemRow.tsx](../../react/src/modules/logs/internal/ui/LogItemRow.tsx) | 复用固定高度原生行，按需检查与复制 | 列表高亮单选并支持键盘导航；右键复制消息/完整记录，部分文本选择在原 Details 只读控件完成，不为每条行创建输入实体 | 代码已接入；完整交互验收待完成 |
 | [modules/logs/internal/ui/LogPanelList.tsx](../../react/src/modules/logs/internal/ui/LogPanelList.tsx) | 复用 UniformList 与已有空状态 | 计数和列表共享筛选索引，区分加载、无记录、无匹配及失败 | 代码已接入；真实交互验收待完成 |
@@ -1155,7 +1155,7 @@
 | [modules/results/internal/ui/panel/ResultInspector.tsx](../../react/src/modules/results/internal/ui/panel/ResultInspector.tsx) | 迁移数值/报告切换并复用同一实体 | ResultPanel 保留报告实体和局部章节状态；显式追加完整替换同一引用下的数值与报告 | 代码已覆盖；切换与追加验收待完成 |
 | [modules/results/internal/ui/panel/ResultPanel.tsx](../../react/src/modules/results/internal/ui/panel/ResultPanel.tsx) | 复用原生 ResultPanel 与 DockArea | 面板只拥有显示状态和 Application 租约；移动重挂载保留同一实体，实际关闭释放租约 | 代码已覆盖；生命周期验收待完成 |
 | [modules/results/internal/ui/plot/PlotWindow.tsx](../../react/src/modules/results/internal/ui/plot/PlotWindow.tsx) | 迁移原生独立结果窗口 | 结果标签工具栏打开原生窗口，直接复用 ResultPanel/PlotView；交接保留原租约，每窗独立控件，原会话结束关闭 | 已接入，人工验收待完成 |
-| [modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx](../../react/src/modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx) | 迁移原生独立结果窗口 | 复用数值/报告、分页、失败重试和追加流程；重复打开读取窗口当前引用，来源关闭不回收窗口结果，无 Tauri URL | 已接入，人工验收待完成 |
+| [modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx](../../react/src/modules/results/internal/ui/source-inspector/SourceInspectorWindow.tsx) | 迁移原生独立结果窗口 | 复用数值/报告、分页、失败重试和追加流程；重复打开读取窗口当前引用，来源关闭不回收窗口结果，直接使用类型化原生入口 | 已接入，人工验收待完成 |
 
 ## modules/settings
 

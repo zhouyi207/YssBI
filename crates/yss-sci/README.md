@@ -32,8 +32,8 @@ row buffer. The index requires linear row storage within the admitted workspace.
 Cox baselines are centered Breslow estimates; AFT covariance includes log(scale).
 `tests/survival_category.rs` checks independently generated statsmodels/SciPy
 references and risk-set, interval, prediction and cancellation conventions.
-Regenerate production plot payloads for parser checks and manual previews with
-`cargo run -p yss-sci --example survival -- react/src/tests/fixtures/node-system-contracts/survival-payloads.json`.
+The `survival` example generates production plot payloads. Native plot rendering and
+manual acceptance belong to the [GPUI host](../yss-desktop-gpui/README.md), not this numerical crate.
 
 ## Domain organization
 

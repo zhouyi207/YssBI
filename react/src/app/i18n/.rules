@@ -1,4 +1,9 @@
-# Localization validation
+# Reference localization validation
+
+These rules apply only to localization in retained `react/src/` reference source.
+They do not define native localization ownership or build commands; use the
+[reference entry](../../README.md) and [documentation index](../../../../docs/README.md)
+to find current Rust/GPUI contracts.
 
 - Translation text, locale switching and fallback do not need standalone unit
   tests or key-inventory fixtures.

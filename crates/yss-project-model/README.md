@@ -38,7 +38,7 @@ Edges, layout results, selection, collapsed branches and renderer measurements a
 persisted. File names own resource display names; root content is the mind's topic.
 
 Doc files use `docs/<name>.md` and contain plain UTF-8 Markdown, including normal
-headings, lists, links and code fences. The typed IPC snapshot is a read contract
+headings, lists, links and code fences. The typed Application snapshot is a read contract
 and is not wrapped around the saved Markdown file. No editor-specific AST,
 renderer state, resource revision or editing session ID is written into either format.
 Doc edits check the UTF-8 byte size before replacing the current Markdown. Doc content

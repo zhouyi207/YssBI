@@ -1,5 +1,10 @@
 # Harness task measurement
 
+> Status: Current
+> Scope: Headless Harness task measurement through real Application services
+> Canonical owners: `runtime.rs` composes adapters; `measurement.rs` and `model_calls.rs` derive observations
+> Update when: Measurement configuration, execution, metrics or artifact contracts change
+
 Run `cargo run -p yss-application --example measure_harness -- <configuration.json>` from the repository root. This is an
 Application example that calls the configured model through the ordinary Harness,
 Rig, SQLite and Application owners. It does not start or control a desktop window.

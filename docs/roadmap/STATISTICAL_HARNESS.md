@@ -5,13 +5,13 @@
 > Canonical owners: 本文拥有未完成项；当前实现由 [Harness Core README](../../crates/yss-harness-core/README.md) 维护
 > Update when: roadmap item 开始、完成、取消或改变 gate/验收条件时
 
-本文件只记录未来工作，不描述当前产品能力。已实现边界见 [Statistical Harness 当前架构](../../crates/yss-harness-core/README.md)，设计依据见 [Decision 0001](../decisions/0001-statistical-harness.md)。
+本文件记录开放工作与明确范围的实施摘要，不替代当前产品契约。已实现边界见 [Harness Core](../../crates/yss-harness-core/README.md)，设计依据见 [Decision 0001](../decisions/0001-statistical-harness.md)。当前桌面为 GPUI，展示与交互状态见 [原生宿主](../../crates/yss-desktop-gpui/README.md)。
 
 模型可见工具按业务领域拆分、内部自动处理同步信息的专项设计与实施顺序见 [AI Harness 领域工具重构计划](HARNESS_TOOL_ARCHITECTURE.md)。
 
 ## Baseline
 
-当前 foundation 已提供 Rust-authoritative sessions/turns/events、typed inspections、桌面图编辑/校验/运行与显式 Save、SQLite persistence、Rig driver、Assistant projection、dataset-quality workflow、builtin Skill 和 BM25 Knowledge；会话上下文复用对话事件、工具账本与压缩检查点。
+当前 Rust runtime 已提供权威 sessions/turns/events、typed inspections、图编辑/校验/运行与显式 Save、SQLite persistence、Rig driver、Assistant 读投影、dataset-quality workflow、builtin Skill 和 Tantivy/BM25 Knowledge；会话上下文复用持久事件、工具账本与压缩检查点。GPUI 经 ApplicationServices 和类型化入口调用，阻塞业务由 worker 执行；视图不持有第二份会话或任务权威。
 
 以下能力仍 gated：外部或后台 Project write、external MCP exposure/client、unknown commit reconciliation、vector retrieval、remote Skill 和 autonomous/background execution。
 
@@ -76,6 +76,10 @@ MCP Client 可复用 Rig MCP 工具适配，Server 使用相同 rmcp SDK 并复�
 - [x] 在对话输入中按名称/路径引用项目资源（点击入口或 `@`）。
 - [x] Rust 校验资源成员与项目绑定，引用随轮次保存并重放，历史可打开资源。
 - [x] 队列、未确认输入与重开会话保留引用；引用不展开整图或数据内容。
+
+上述引用/队列记录只覆盖已记录的业务与原界面范围。GPUI 当前工作台内保留草稿和队列，
+跨重启的草稿、待确认输入与队列持久化仍开放，不能从 Harness 历史重放推断这些 UI 输入已持久化。
+
 - [x] 资源解析与模型准备纳入 Core 取消流程，迟到引用结果不能启动已停止的轮次。
 - [ ] 桌面人工验收：多选、移除、同名资源、删除后重试、重开会话和窄面板。
 - [x] 显式管理项目文档知识来源，显示索引状态、重建与移除入口。
@@ -83,6 +87,7 @@ MCP Client 可复用 Rig MCP 工具适配，Server 使用相同 rmcp SDK 并复�
 - [x] 模型按需检索/读取知识片段；共用工具账本、计时、取消与历史回放，普通消息不自动检索。
 - [x] 知识引用可打开原始项目文档。
 - [ ] 桌面人工验收：知识来源添加/重建/移除、状态反馈、引用展开及原文打开。
+- [ ] GPUI 草稿、未确认输入与待发送队列跨重启的完整生命周期；关闭面板、切换项目与订阅释放不丢失或误送输入。
 - [x] 来源内容变化、删除及项目切换后，旧索引不得继续产生当前有效引用。
 - [x] 委派/续接使用模型专用参数和任务结果投影；Core 捕获真实读取基线、自动去重，压缩和会话重开后继续校验。
 - [x] 业务工具使用模型专用参数与实时/历史统一结果投影；资源、函数签名及图语义依据由调用层捕获，冲突停止写入，压缩与续接从账本恢复。
@@ -164,3 +169,6 @@ background scheduling、pause/resume across restart 和 multi-session concurrenc
 ## Deferred decisions
 
 以下实现选择由 ports 延后：embedding model、vector index、remote Skill distribution、MCP transport 和 background scheduler。它们不得反转 Harness → ports → adapters 的依赖方向。
+
+原生人工验收从仓库根目录 `cargo run` 开始，使用项目副本；命令与平台前置条件见宿主 README。
+本次文档整理未运行检查，不新增功能或人工验收通过记录。

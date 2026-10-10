@@ -370,7 +370,7 @@ AIPW、ATE、ATT 和合成控制。原有 IV/DID 入口继续使用其方法族�
 ## 参数声明
 
 动态节点 ID 和本地化 key 使用拥有型字符串，由装配片段、协议和目录持有并随其释放。
-语义 ID 的 JSON 读取复用其构造校验，图文件与类型化 IPC 共用同一入口，合法 wire 仍为字符串。
+语义 ID 的 JSON 读取复用其构造校验，图文件与共享序列化契约共用同一入口，合法 wire 仍为字符串。
 节点 key 由 `builtin::node_key` / `node_key_text` 统一构造；静态文案仍借用常量，不要求动态 key 具有永久生命周期。
 
 `yss-node-protocol` 使用 `Parameters → ParameterGroup → Parameter` 声明节点参数。

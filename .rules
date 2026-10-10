@@ -59,7 +59,7 @@ changes or validation.
   finishing step.
 - Before validation, briefly identify affected modules, selected checks, and
   their rationale. Rust focused commands must explicitly select packages and
-  appropriate test targets; frontend focused tests should select test files.
+  appropriate test targets; GPUI interactions use manual acceptance.
 - Escalate to L3 complete validation only for an explicit user request, an
   established merge/release gate, or a high-risk change whose impact cannot be
   reliably bounded. State the trigger before running it. Touching both frontend

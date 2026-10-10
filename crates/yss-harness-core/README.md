@@ -1,7 +1,7 @@
 # Statistical Harness 当前架构
 
 > Status: Current
-> Scope: 当前 Harness、typed capability gateway、persistence、Rig、原生事件交付与保留的 Assistant 参考
+> Scope: 当前 Harness、typed capability gateway、persistence、Rig 与原生事件交付
 > Canonical owners: Harness/Application/GPUI 源码与测试拥有可执行事实；本文拥有当前跨模块 contract
 > Update when: Harness authority、已注册 capabilities、持久化、事件流或生产接入状态改变时
 
@@ -29,7 +29,7 @@ yss-harness-core
     └─ persistence ports → yss-harness-sqlite
 ```
 
-`yss-application::runtime` 接收平台中立的 ApplicationPaths 与端口组装回调；其中 `runtime/harness.rs` 构造 SQLite store、模型配置服务、时钟和 ID 实现。GPUI 宿主组装 BlockingHarnessGateway 与 HarnessEventSinkPort，再交给已有 HarnessPorts。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。原生宿主将已持久化事件投递到有界 NativeEvent 流；持久序列及重放仍归 Harness。Assistant 公开读投影由 [Harness Contract](../yss-harness-contract/README.md) 的 `assistant` 模块拥有。Harness Core 不依赖 GPUI、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。原生 Assistant 基本界面已接入上述类型化边界；布局、草稿持久化及完整验收仍在迁移中，React 实现保留在 `react/` 作为参考。
+`yss-application::runtime` 接收平台中立的 ApplicationPaths 与端口组装回调；其中 `runtime/harness.rs` 构造 SQLite store、模型配置服务、时钟和 ID 实现。GPUI 宿主组装 BlockingHarnessGateway 与 HarnessEventSinkPort，再交给已有 HarnessPorts。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。原生宿主将已持久化事件投递到有界 NativeEvent 流；持久序列及重放仍归 Harness。Assistant 公开读投影由 [Harness Contract](../yss-harness-contract/README.md) 的 `assistant` 模块拥有。Harness Core 不依赖 GPUI、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。原生 Assistant 能力、布局与未完成验收由 [GPUI host](../yss-desktop-gpui/README.md) 维护。
 
 ## Manager–Worker roles and task lifecycle
 
@@ -386,7 +386,7 @@ Gateway 将真实提交送入既有 Project 事件发布入口，使侧栏和编
 
 Application 的 `invoke_automation_capability` 是同步业务入口。`yss-application::harness` 的 `ApplicationCapabilityGateway` 使用 Tokio blocking worker 调用它，供桌面及独立测量共用，避免在 async worker 中嵌套 DataFusion 的 `Runtime::block_on`。`CapabilityControl` 携带单次调用的 monotonic deadline、turn cancellation 和查询取消标记；profile 把同一预算传入数据库/DataFusion 查询。只读任务在取消、超时或调用 future 被丢弃时通知查询停止；worker panic 转为安全的 `InternalFailure`。已开始提交的写操作等待真实 receipt，不将成功提交改写为超时或取消。
 
-工具生命周期事件由持有 ledger identity 的 Harness executor 产生：准入后发送 `ToolInvocationStarted`，结束时发送 `ToolInvocationCompleted` 或带 `failureCode` 和结构化 `failureDetails` 的 `ToolInvocationFailed`。普通工具与控制工具均保留分类所需的原因；IPC 使用完整诊断投影公开错误码。失败码区分取消与超时；事件不携带数据行、结果或异常原文。账本或事件持久化失败可能留下待恢复记录；已完成的业务提交仍返回真实结果，不被交付失败改写。Rig 只执行模型工具映射，不生成另一套工具完成状态。
+工具生命周期事件由持有 ledger identity 的 Harness executor 产生：准入后发送 `ToolInvocationStarted`，结束时发送 `ToolInvocationCompleted` 或带 `failureCode` 和结构化 `failureDetails` 的 `ToolInvocationFailed`。普通工具与控制工具均保留分类所需的原因，Assistant 类型化诊断投影公开错误码。失败码区分取消与超时；事件不携带数据行、结果或异常原文。账本或事件持久化失败可能留下待恢复记录；已完成的业务提交仍返回真实结果，不被交付失败改写。Rig 只执行模型工具映射，不生成另一套工具完成状态。
 
 图操作由 `ApplicationCapabilityGateway` 直接调用 Rust Application，读取 Project 当前编辑版本并核对 revision/hash。编辑、只读校验、执行与保存使用同一状态；校验返回就绪状态和诊断，Execute 在后端准备匹配计划。Rust 返回真实 capability result，Graph Activity 通知前端更新编辑投影与运行状态；前端不生成 tool result。
 
@@ -467,7 +467,7 @@ SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护�
 
 Host 的 `HarnessSessionAccess` 串行化绑定协调、对话选择和 session 写入；Application 持门重验其捕获的项目，门本身不保存当前绑定。普通 session 创建和首次消息的标题写回也使用同一门；submit 在门内读取 session 并核对调用方捕获的项目绑定，失效则返回既有 `SessionNotActive`。会话读取、turn 准入和标题写入后释放门，再创建 turn 和执行模型，因此项目切换仍可取消正在执行的 turn。
 
-对话及其完整事件/工具账本继续保存在应用的 SQLite 中，不跟随 Assistant 面板卸载而关闭或删除。左侧 Assistant 只查询、搜索、新建和重命名当前用户及项目的对话，显示最近打开时间；打开列表不隐式创建或订阅会话。点击条目在 sidebar 右侧、top 工作区左侧的 AI 专用分组打开对应会话面板，该组不显示顶部标签栏，选择和切换由左侧列表驱动，再次点击当前可见条目关闭对应面板。各面板拥有独立的事件投影和 runtime，重新连接始终恢复该面板的明确 `sessionId`。重命名通过 Rust Session owner 更新标题，并与运行准入互斥。执行期间可以切换查看其他会话，关闭面板或切换侧栏不取消后台任务；旧订阅和迟到回调不能混入其他对话。普通草稿、尚未确认提交的原文和待发送消息按会话保存在本地输入存储中，不充当已提交聊天历史。原生布局与面板开关由 [GPUI Workbench](../yss-desktop-gpui/README.md) 拥有；上述独立无标签分组和跨重启输入保留仍是 [React 参考](../../react/src/modules/workbench/README.md) 中待补齐的交互。
+对话及其完整事件/工具账本保存在应用的 SQLite 中，不跟随 Assistant 面板卸载而关闭或删除。对话目录按当前用户及项目查询；重命名由 Rust Session owner 更新标题，并与运行准入互斥。面板重新打开时恢复明确的 `sessionId`，旧订阅与迟到回调不能混入其他对话。关闭面板不隐式取消后台任务。原生面板开关、布局、未提交输入与待发送队列由 [GPUI host](../yss-desktop-gpui/README.md) 拥有；独立分组、跨重启草稿持久化与完整交互验收仍是开放项，不属于 Core 的已提交聊天历史。
 
 重新打开项目时，Application 通过既有 RootBinding 获取项目根目录身份，验证对话归属后重新绑定当前运行期 ProjectSessionBinding；历史 receipt 保持原始身份，不恢复旧授权或执行结果。订阅和发送均验证当前项目归属和运行绑定。无已保存项目时使用仅当前激活有效的临时归属。无持久项目归属的记录保持原状，不自动猜测或迁移到某个项目。
 
@@ -575,13 +575,13 @@ Rig 复用上述原生字段映射读取模型扩展参数中明确声明的默�
 
 Rig 将供应商公开的推理文本流投影为 `ReasoningDelta`，不制造思考过程，不公开签名等内部字段。每次完成的模型调用通过 `UsageReported` 保存 Rig 归一化后的输入、输出、缓存读写和推理 Token 数，并区分普通响应与上下文摘要。缺失值保持 null；输入已经包含缓存、输出已经包含推理，消费方不能重复相加。供应商未返回用量的调用仍记录未知用量，不从文本长度猜测。
 
-API Key 通过 `keyring` 保存到系统凭据库，配置文件仅保存随机凭据引用，IPC 目录仅返回 `hasApiKey`。更换密钥先创建新凭据、原子提交配置，再删除旧凭据；待删除引用随配置持久化，删除失败会在后续读取或提交时重试。前端只保留表单中的临时密钥输入，偏好设置不再保存 AI 凭据。已存密钥以固定星号占位显示，空的密钥输入保留已存密钥，输入新值后保存则替换；设置页不提供单独删除密钥的控件，星号占位不作为密钥提交。配置和凭据不写入项目、对话事件或日志。
+API Key 通过 `keyring` 保存到系统凭据库，配置文件仅保存随机凭据引用，公开模型目录仅返回 `hasApiKey`。更换密钥先创建新凭据、原子提交配置，再删除旧凭据；待删除引用随配置持久化，删除失败会在后续读取或提交时重试。宿主只保留表单中的临时密钥输入，不将星号占位作为密钥提交；空输入保留已存密钥，新输入替换原密钥。配置和凭据不写入项目、对话事件或日志；原生控件行为见 [GPUI settings](../yss-desktop-gpui/README.md)。
 
 OpenAI 兼容协议另支持 `none` 认证，用于无需密钥的本地服务。该模式不读取凭据、不发送 Authorization；从 API Key 切换过去会通过同一持久清理流程删除原密钥。设置页、默认模型和会话选择按认证方式判断可用性，不能仅依据 `hasApiKey` 禁用本地模型。
 
 每轮准入通过 `LanguageModelResolverPort` 解析一次配置、凭据与具体 `AgentDriverPort`，Manager 和所有 Worker 共用该轮固定驱动。会话模型选择可在运行时修改，影响后续轮次；不会更换运行中的客户端。`TurnStarted.model` 持久保存执行时的 provider/model ID 与显示名；其中 `providerName` 捕获当时的自定义名称，去除首尾空白后为空时使用供应商名称。历史模型提示直接读取该快照，不依赖当前目录，也不随配置改名或删除而变化。队列携带入队时选择，发送旧队列不会覆盖会话的新选择。配置完成不表示远端认证已通过。
 
-模型发现使用当前连接草稿，连接信息填写完整即可请求，无需先保存，也不依赖模型表单是否填写完毕。新输入的密钥仅用于本次请求；没有新输入时由 Application 按账户 ID 读取已存密钥，并复用 Contract 核对供应商名称与 adapter；归属改变后必须提供新密钥，保存也遵守同一校验。`none` 认证不读取密钥。发现操作不保存草稿或临时密钥。请求捕获已存连接与凭据基线，网络返回后由 Application 重验；其他窗口保存、删除或替换该基线后不交付旧目录。React 参考实现通过请求序号丢弃连接修改后的迟到回复；GPUI 发现和保存期间禁用表单输入，关闭设置窗口保留原草稿。
+模型发现使用当前连接草稿，连接信息填写完整即可请求，无需先保存，也不依赖模型表单是否填写完毕。新输入的密钥仅用于本次请求；没有新输入时由 Application 按账户 ID 读取已存密钥，并复用 Contract 核对供应商名称与 adapter；归属改变后必须提供新密钥，保存也遵守同一校验。`none` 认证不读取密钥。发现操作不保存草稿或临时密钥。请求捕获已存连接与凭据基线，网络返回后由 Application 重验；其他窗口保存、删除或替换该基线后不交付旧目录。原生表单暂态与迟到结果处理归 GPUI 宿主。
 
 Rig adapter 使用 `rig-core`、`rig-agent` 和 `rig-reqwest` 0.43.0，最低 Rust 版本为 1.95。Provider registry 建立原生客户端，`DynModel<Completion>` 进入统一的工具、流式与恢复流程；HTTP transport 由 `rig-reqwest` 提供，显式启用 Rustls，以支持 HTTPS、证书校验及系统代理。生产客户端禁止自动跟随 HTTP 重定向，避免将消息正文或供应商专用认证头转发到未配置的端点；3xx 返回稳定的请求拒绝错误，由用户修正 API 根地址。
 协议显式区分 OpenAI Responses、OpenAI Chat Completions、Anthropic Messages 与 Gemini Interactions。Rig 原生 provider registry 负责供应商方言和默认地址；Moonshot/Kimi、DeepSeek、GLM 等保留各自 adapter。Gemini 使用 Rig 的 Interactions wire，保留完整 JSON Schema，并显式设置 `store: false`，对话状态继续由 Harness 管理；其扩展生成参数位于 `generation_config`。认证、请求编码、模型目录和流式解析由 Rig 处理，最终进入同一 Harness 循环。
@@ -604,7 +604,7 @@ Rig streams the first text promptly and coalesces subsequent deltas at 40 ms or 
 
 `ControlToolFinished` 保存失败码与可选的诊断 details。参数错误保留 category、path 和 expected，策略拒绝保留 reason；Rig 将同一失败交给 Core 记录后再返回模型。缺少诊断的事件不推断或补造原因。
 
-控制调用耗时包含绑定、Worker 排队与执行以及结果交付，不能解释为纯模型或节点计算时间；Worker 本身继续由原 AgentRun 事件记录准入、运行和结算。IPC 将控制调用投影成普通工具生命周期，详情从原事件重建开始/结束时间；任务正文、授权、结果与统计计划沿用各自的任务卡及计划展示，不复制到工具参数摘要中。真实图运行的 admission/running/finalization 时间仍由 Execution owner 提供。
+控制调用耗时包含绑定、Worker 排队与执行以及结果交付，不能解释为纯模型或节点计算时间；Worker 本身继续由原 AgentRun 事件记录准入、运行和结算。Assistant 契约将控制调用投影成普通工具生命周期，详情从原事件重建开始/结束时间；任务正文、授权、结果与统计计划沿用各自投影，不复制到工具参数摘要中。真实图运行的 admission/running/finalization 时间仍由 Execution owner 提供。
 
 实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务请求被拒绝、revision/invocation conflict 及 approval_required 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。图校验的 ready/diagnostics 和图执行的 status/failureCode 由各自能力结果表达；执行成功由提交回执确认，运行事件补充取消和失败定位。`outcome_unknown` 保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录能力失败，不因协议层成功交付反馈而改写为成功。
 
@@ -617,7 +617,7 @@ Rig 0.43 hooks implement the delivery check at the tool-free model completion bo
 Transport recovery retries only the latest sampling boundary, at most five consecutive attempts without an accepted model call. Cancellable exponential backoff respects numeric Retry-After seconds; 402, authentication failures, output truncation and content filtering are not retried. A 300-second idle detector runs only while waiting for model traffic, not during tools. TextRetracted removes an interrupted attempt from live/replayed text before reconnecting; earlier tool receipts and model-call context are retained. No model-call quota or whole-worker deadline is imposed.
 `providerConfigured` 由当前模型目录、会话选择、认证方式与凭据存在状态派生；它不代表网络可达或认证成功。认证、限流、请求拒绝、服务不可用、连接与协议错误继续使用稳定错误码。
 
-## 9. Native host boundary and retained frontend reference
+## 9. Native host boundary and durable conversation
 
 原生宿主直接调用 Application 的 HarnessHost、LanguageModelService 和知识服务。它负责订阅已提交事件、按持久序列补齐缺口、释放订阅和本地化类型化错误；会话、轮次与工具状态继续由 Harness 持有。工具详情读取已有 ledger 或控制调用事件，引用查询匹配来源、版本、hash、chunk 与项目可见性；来源删除或版本改变后返回不可用。模型目录不包含密钥。
 
@@ -625,34 +625,14 @@ Transport recovery retries only the latest sampling boundary, at most five conse
 配置草稿、遮蔽密钥输入、模型发现、默认模型和保存全部均留在宿主边界，当前配置与凭据 owner 未变化。
 原生会话目录、消息/工具/任务/引用投影、模型目录失效交付与项目知识库设置已接入；原生能力和待验收范围以 GPUI README 为准，草稿持久化、完整卡片及其他外观偏好仍需继续迁移与人工验收。
 
-以下 Assistant 投影和样式说明记录 `react/` 中保留的参考实现，不表示原生 Assistant 已完成迁移。旧 Tauri 命令、Channel hubs 与 IPC 注册表已移除，原生界面应使用上面的类型化服务和事件边界。
-
-参考前端的 `src/services/assistant/harnessService.ts` 曾负责有序事件交付，`harnessContract.ts` 负责严格解析。
-前端 `src/features/application/assistant/assistantHarnessSession.ts` 协调会话、模型选择与重连；历史回放先归约到未发布候选，在订阅接通后通过内部
-Zustand store 一次发布完整回放投影。实时事件继续顺序接纳。`assistantHarnessProjection.ts` 归约消息、工具、引用和计划；
-消息内容是呈现事实的唯一来源，不另外保留按 turn 索引的可写工具、引用或计划副本。
-`assistantHarnessRuntime.ts` 只负责 React 生命周期与 assistant-ui ExternalStore 适配。
-自有 Context 传稳定的只读订阅接口和动作；工具栏选择状态、会话及消息是否为空，
-不因正文的每个 text delta 更新。工具分组通过 assistant-ui 的选择订阅只读取自身范围的调用数、
-运行数、异常数和首个活动工具名，浅比较复用未变摘要，不订阅整段消息内容。正文继续由 assistant-ui 的消息订阅呈现。
-
-`assistantModels.ts` 是 Rust 模型目录的共享只读投影。设置页提交完整 provider 配置，模型选择器提交会话选择；保存成功后发布服务端回执，其他窗口收到无敏感数据的失效通知后重载。聚焦时也刷新目录。没有前端配置驱动的防抖 effect，不再在组件挂载时重传 API Key。发送要求事件订阅接通且模型选择已经确认；迟到的模型选择回执受会话 generation 与请求序号保护。
-
-设置界面沿用左侧分类、右侧内容的布局，模型与供应商、项目知识库和外观共用字段行：左侧显示名称及说明，右侧显示控件，窄窗口下自动上下排列。根页面和子页面统一使用 `SettingsPage`，依次呈现面包屑与操作栏、错误提示、独立滚动的页面内容；页头在表单与滚动区之外，错误提示不会改变页头位置。页头高度、按钮尺寸、面包屑文字基线及内容边距统一，切换页面时内容滚动位置重置。面包屑以当前选中的分类为根节点（如“AI”“外观”）；供应商管理使用“AI / 供应商 / 当前草稿名称”，可分别点击“AI”返回首页、点击“供应商”返回列表，关闭编辑或删除成功也返回列表。恢复默认及供应商列表页的添加操作固定在面包屑同一行的最右端，较长的路径文字截断显示。设置页不提供常驻刷新按钮，沿用模型目录与项目知识来源的自动更新入口；只有目录或来源状态加载失败时在错误提示旁提供重试，保存、删除或重建失败不显示重新加载按钮。从服务获取模型与重建知识库仍保留为显式业务操作。页面不再显示单独的大标题与介绍，字段说明随对应控件呈现。
-
-会话初始化根据面板指定的 `sessionId` 打开并重放持久事件，不自动切换到最近会话。重连时复用该 runtime 的只读投影并从 lastSequence 继续；关闭标签后重新挂载从序号 0 重放，完整持久事件不删除。项目范围的对话目录由 Rust Application 生成 Assistant Activity JSON 文档，经 `get_activity_panel_document` 与现有 `sidebarStore` 缓存交给共用模板渲染；查询绑定项目/语言/生命周期并拒绝旧响应。`assistantConversations.ts` 只编排新建、重命名及文档失效，正文投影不复制目录。界面初次显示最近 40 条消息，更早内容按批展开并保持滚动位置，流式滚动仍由 assistant-ui 管理。
-订阅回执与事件回调都核对原会话 generation。替换订阅必须保持连续；重放期间再次缺号或解析失败使该订阅失效并进入错误状态，
-不把尚有缺口的投影标成就绪，也不无限启动重连。发送准入同时要求当前订阅仍被会话 owner 持有；显式重载继续使用原初始化入口。
-Service 清理后忽略迟到的 Channel 回调；订阅应答前若已被 HMR 释放，收到远端 ID 后完成退订并拒绝该应答，
-不向 Application 返回已关闭的句柄。HMR 与显式释放共用同一个退订入口，最多提交一次远端释放。
-
-当前请求的具体错误始终在 Assistant 状态区显示，即使会话仍可继续发送；不能因消息已经标记为中断而隐藏 provider 拒绝、认证、限流等原因。消息内的中断提示用于说明已完成操作仍然有效。
-
-输入区提供模型选择器和资源引用入口。用户可点击引用按钮或在词首输入 `@`，按名称或路径搜索项目索引中的 Database、Event/Function Graph、Chart、Mind 和 Doc；已选引用显示为可移除标签，历史中的引用可打开资源。引用草稿、未确认输入与队列属于前端暂态；提交后的引用归 Rust 有序事件。
+原生会话视图在订阅实时事件后读取持久历史，以会话身份和连续 sequence 接纳交付；
+缺口与有界缓冲溢出通过原持久序列恢复。视图投影不生成轮次、工作流或工具终态。
+具体实现见 [原生事件交付](../yss-desktop-gpui/src/assistant/stream.rs)，
+呈现、输入、工具卡片和人工验收归 [GPUI host](../yss-desktop-gpui/README.md)。
 
 `submit_harness_turn.resources` 只接收 `{kind,id}`。Core 先登记轮次准入和取消令牌，再通过 `HarnessResourceResolverPort` 调用 Application；后者在 blocking pool 复用资源工具的 Project index，检查项目绑定、真实成员和重复项，并补充权威显示名。资源与模型解析不持有会话选择锁；完成后 Core 重新读取和验证会话。解析期间取消立即结束等待，迟到的只读结果不能启动模型或发布 `TurnStarted`。Core 将 `{resource,name}` 随 `TurnStarted` 持久化，当前请求和历史回放使用同一个 user-input 投影。模型得到资源定位信息，按任务需要调用资源工具读取正文或结果；引用不携带 revision/hash/同步状态，也不提前展开完整图或数据行。没有隐式的 active graph 参数。资源在之后被修改或删除时，读取工具仍检查当前事实；历史引用不会跟随编辑器焦点改变。
 
-运行期间可把后续消息、模型、执行选项和明确选择的资源放入待发送列表，当前会话任务成功结束后顺序提交。切换模型、模式、推理档位或编辑下一条引用不会改变已排队输入和正在运行的请求。失败、停止、重开会话后暂停自动发送；这不修改已运行任务。未确认输入保留正文、引用、模型与执行选项，匹配正文和引用的 `TurnStarted` 才清除其提交草稿；未接纳输入通过 assistant-ui 的 `MessageNotSentError` 恢复，引用也保留。恢复草稿时一并恢复选项与模型；新草稿选项不被历史重放覆盖。已接纳任务失败时保留真实用户消息和回执，继续操作沿用已有任务上下文，重新连接只修复订阅。
+未提交正文、显式资源引用、下一轮模型与执行选项属于宿主输入暂态；提交后的用户输入、执行选项与资源引用由持久事件记录。排队与草稿恢复不能改写正在运行的轮次或已接纳消息，具体原生输入行为及待验收范围见 GPUI README。
 
 结构化输入参考 [Codex UserInput](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/user_input.rs) 对文本和显式 mention 的区分，选择入口参考 [Zed Adding Context](https://zed.dev/docs/ai/agent-panel#adding-context)。YssBI 的引用保持项目资源身份，不把任意本地文件路径当作可读取权限。
 
@@ -666,36 +646,16 @@ Working context is separate from the complete durable transcript and ledger. The
 
 `context/summary.rs` uses the current request byte budget, reserving space for the preceding summary, instructions and provider framing instead of issuing fixed 12,000-character requests. Capacity rejection lowers that budget through the existing recovery path. The model receives a concise checkpoint target, while ordinary execution uses only the configured model output limit. Every completed fragment emits `ContextCompactionProgress` with byte progress and a durable checkpoint of its exact source prefix. Retries and Manager/Worker history reconstruction can reuse that checkpoint only after its SHA-256 prefix identity matches; partial checkpoints never replace unread history. A completed `ContextCompacted` supersedes partial state before reopening Rig at the replacement checkpoint. Role/skill instructions are reinjected and native call/result groups are either retained together or replaced together.
 
-IPC exposes progress counts without checkpoint text or hashes; the main conversation and Worker cards show completion percentage. Compaction logs record source/completed bytes, summary size and per-fragment elapsed time, never source content. The compatible API uses model summarization and does not assume a Responses `/compact` endpoint. Failure to produce a smaller checkpoint remains a typed context error.
+Assistant 读投影只公开压缩进度计数，不公开 checkpoint 正文或 hash。压缩日志记录 source/completed bytes、summary size 与每片段耗时，不记录源内容。兼容 API 使用模型摘要，不假定存在 Responses `/compact` 端点；无法生成更小 checkpoint 时仍返回类型化上下文错误。
 
 历史不替代当前工具事实。图工具的运行事件进入原有 Execution/Results 消费者；对话只复用持久 Harness 事件与工具 receipt，不新增第二份持久聊天状态。
 
-转换为 assistant-ui 消息时，只有 assistant 角色携带 `status`；user 消息不携带该字段。运行时集成回归使用真实的 ExternalStore 消息转换器校验这一边界。
-消息投影按事件顺序维护 text/source/data/tool parts，相邻文本片段合并，工具终态更新原位置。完成事件只收尾已有流式内容；仅在没有文本片段时使用 `finalText` 恢复正文。取消、失败和按 sequence 重放不覆盖中间说明或重排工具。
+Assistant 读投影由 [Harness Contract](../yss-harness-contract/README.md) 从已持久化事件派生；
+原生视图只持有展示与输入暂态，不直接调用 Rig 或绕过 Application gateway。
+Project/session replacement 或 provider unavailable 改变投影及动作可用性，
+不能保留旧业务句柄继续提交。工具、任务、引用与用量展示仍使用对应的真实身份与事件，
+不以界面完成状态替代持久终态。
 
-Assistant 面板使用 assistant-ui 的 Thread Viewport、Composer 与 ActionBar。正文和子任务总结共用 Markdown 渲染，支持 GFM、代码和公式。连续工具调用使用 Collapsible 分组，运行时默认展开、结束后默认收起，用户手动选择优先；默认展示本地化名称、目标、状态和耗时，技术标识及摘要 JSON 放进详情。可见的工具卡片按需查询 ledger 摘要，失败原因直接显示，不因缺少原始参数而禁止展开。子任务的阶段、整理进度、重连次数及失败/阻塞原因在折叠区外可见，内部保留各工具调用的状态与时间。
-
-对话采用紧凑标题栏、平铺消息和底部通栏输入区。标题栏提供下一轮只读开关、新建、重命名、最大化/还原及关闭；底部工具栏提供显式资源引用、推理档位、Token 用量、Ask/Write、可搜索模型选择器和发送/停止。输入支持展开及 Ctrl+Enter，窄面板工具栏可换行。控件复用现有 shadcn/Base UI，事件与 runtime 继续使用 assistant-ui ExternalStore，不引入第二套聊天状态。历史回复根据 `TurnConfigured` 显示实际执行模式与档位，公开推理文本单独折叠展示。
-
-用量投影按持久事件 sequence 重放，每轮开始清空本轮累计，累计包括 Manager、Worker 和上下文摘要的已报告消耗。环形图只使用主对话最近普通请求的输入数与该次配置的上下文容量；Worker、摘要用量不会替换这个读数，整理完成后清空旧占用，等待下次真实请求。未配置容量或供应商未报告数值时明确显示未知；部分调用缺失用量时标明累计不完整。切换下一轮模型不会把上一轮用量标成新模型。
-
-整轮回复从 TurnStarted 开始计时，以持久终态事件结束；工具和子任务分别保留自己的开始/结束时间。运行期间局部计时组件每秒刷新，完成、失败或取消后耗时固定，悬浮可查看开始、结束与最近进展时间。同一轮内恢复 Worker 会新增一次执行卡片，保留前次耗时。事件连接失效时显示待同步，不伪造完成时刻或持续展示旧活动；错误、连接恢复和停止状态优先于普通工具阶段。
-
-Agent completion 的资源回执和结果引用生成可重新打开的卡片；资源打开复用原 editor owner，提示后续修改或资源不可用，结果打开复用原查询/租约 owner，已释放的结果明确提示不可用。引用 source part 保留完整身份并支持展开查询对应版本正文。这些展示查询不进入模型上下文。统计计划和输入草稿保持各自 owner，不新增会话 authority。
-
-Assistant Markdown 与文档预览共用 `src/shared/ui/markdownRendering.tsx` 的 GFM、公式布局、表格容器和延迟加载的 Shiki，使用 Typography 的紧凑字号层级及工作台主题变量。表格按内容自适应并居中，宽表格、代码和独立公式在内容区内横向滚动。`$...$` 保持行内，`$$...$$` 无论同一行或分行书写均独立居中，含公式的段落与单元格保留合适行高。Assistant 继续使用 `normalizeMathDelimiters` 处理模型的 LaTeX 替代分隔符，并保留 smooth/defer 流式显示、代码复制和外链打开处理。
-
-桌面排版验收覆盖窄面板中的表格与长公式、行内分式、流式代码块完成前后及未知代码语言；切换浅色、深色和 OLED 主题检查正文与代码颜色，并确认代码复制和外链打开行为。
-
-项目资源链接通过现有资源索引识别并复用 editor 打开入口，不根据文件扩展名猜测资源类型。外链和片段链接复用共享 `MarkdownLink` 的地址解析、片段定位和点击/中键处理，Assistant 通过现有
-`MarkdownLinkContext` 提供稳定的系统浏览器打开动作及原失败弹窗。该上下文只传链接动作，
-不承载消息；Workbench 的文档参考页打开策略仍由其自身组合入口提供。
-
-事件 `type` 使用 snake_case，envelope 和 payload 的字段使用 camelCase。Rust 序列化和 TypeScript 解析共用代表性事件夹具，避免两端各自使用不同的手工样本。
-Channel 在历史重放期间缓冲实时事件，按 sequence 合并、去重后交付。等待缺号的实时缓冲有容量限制，超限时交付缺号之后的持久事件并关闭旧订阅，让前端依据 sequence gap 重新重放；长历史按顺序排出，不占用整个实时缓冲。前端重连时封锁发送并忽略已替换订阅的迟到回调。工具卡片从携带真实 invocation ID 的 `ToolInvocationStarted` 创建，并按同一 ID 更新完成、失败、取消、超时或中断状态；不生成待替换的工具占位身份。turn 终止时未收到工具终态的卡片显示中断/取消，不假定成功。面板卸载使旧回调失效并释放订阅；已创建的对话继续持久化，供重新打开。
-订阅建立后才开放发送。已终止的模型轮次展示中断或停止说明，保留已完成操作并允许继续发送；说明与耗时根据持久化事件重放。具体错误在状态区可见，下一次发送清除；会话或订阅传输故障阻止发送并提供重新连接。提交请求尚未结束时不能再次提交，关闭后的迟到回调不能更新新会话。
-
-React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gateway，也不在 Zustand 建立 conversation authority。Project/session replacement 或 provider unavailable 只改变 projection/action availability，不能保留旧 backend handle 继续提交。
 
 ## 10. MCP status
 

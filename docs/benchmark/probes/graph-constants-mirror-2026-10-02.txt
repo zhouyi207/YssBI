@@ -63,7 +63,7 @@ Historical comparison and limits:
 - This measurement does not justify a rule exception for retained generic
   recursion. Constants/projection sharing still needs its remaining audit.
 - Empty constants do not establish costs for large/tabular constants. No claim
-  about sync/combined latency, Rust Resolve, real Tauri IPC, UI/DOM/frame rate,
+  about sync/combined latency, Rust Resolve, real desktop transport, UI/DOM/frame rate,
   peak memory or end-to-end desktop speed is made.
 
 Behavior checks before measurement:

@@ -1,119 +1,28 @@
-# Observability and feedback
+# Observability and feedback 参考
 
-> Status: Current
-> Scope: 运行信号路由、结构化观察与用户反馈
-> Canonical owners: 本 Application 模块协调日志与反馈；各业务 owner 保留业务事实
-> Update when: 本模块的公开入口、状态归属、生命周期或契约改变时
+> Status: Historical
+> Scope: React 参考实现中的信号区分与用户反馈行为
+> Canonical owners: 当前日志由 yss-logging 拥有，业务事实由对应 Rust 领域与 Application 拥有
+> Update when: 参考行为或当前信号契约入口改变时
 
-## Authority matrix
+本目录不是当前日志装配、传输或宿主反馈入口。当前入口见[根 README](../../../../../README.md)、[文档索引](../../../../../docs/README.md)、[Logging](../../../../../crates/yss-logging/README.md)、[Application](../../../../../crates/yss-application/README.md)和 [GPUI host](../../../../../crates/yss-desktop-gpui/README.md)。
 
-| 信息                  | Authority                                                  | Delivery / retention                         | UI 用途                             | Canonical detail                                                                                |
-| --------------------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Graph Problems        | Rust `GraphSemanticSnapshot` 经完整 editor projection 投影 | command response 原子替换                    | Canvas、Details、Problems、Run Gate | [Graph 与 Execution](../../../modules/problems/README.md#graph-problems)                        |
-| Results / 当前输出    | Rust `ResultStore`                                         | typed queries；event 只公告 identity         | Result、独立结果查看器、Preview     | [Graph 与 Execution](../results/README.md#results)                                              |
-| Graph 运行失败        | Rust Execution RunErrored / command rejection              | typed channel 与当前图失败摘要               | Output panel                        | [Graph 与 Execution](../../../modules/output/README.md#运行失败反馈)                            |
-| Logging               | sanitized Rust `tracing` + frontend logs                   | SQLite history + bounded recent/live channel | Logs UI、本地技术排障               | 本文                                                                                            |
-| IPC error             | Rust `yss-application::ipc` transport error                | command rejection                            | React 按 stable code 映射           | [`yss-application::ipc` README](../../../../src-tauri/crates/yss-application/src/ipc/README.md) |
-| User feedback         | React application/view                                     | UI state，按交互生命周期保留                 | Alert、Dialog、inline/status        | 本文                                                                                            |
-| Assistant text/events | Rust Statistical Harness                                   | ordered persisted event stream               | Assistant projection                | [Statistical Harness](../../../../src-tauri/crates/yss-harness-core/README.md)                  |
+## 信号边界参考
 
-直接规则：
+| 信息 | 行为边界 | 参考视图 |
+| --- | --- | --- |
+| Graph Problems | 读取语义诊断投影，不能由日志重建 | [Problems](../../../modules/problems/README.md) |
+| Results | 查询结果及其完整身份，通知不代替数据 authority | [Results](../results/README.md) |
+| 运行失败 | 来自执行事实或类型化拒绝，独立于诊断与日志 | [Output](../../../modules/output/README.md) |
+| 技术日志 | 有界、可丢失的技术观察，不驱动业务状态 | [Logs](../../../modules/logs/README.md) |
+| Assistant 会话 | 使用会话事件与持久记录，不复制到日志或运行失败面板 | [Harness](../../../../../crates/yss-harness-core/README.md) |
 
-- 运行观测统一进入 structured logging，允许 loss，且不是业务 authority；
-- Graph Problems 来自完整语义快照，独立于运行日志；
-- Result event 不是 result authority；
-- 运行失败摘要来自业务事件或命令失败，不从 log 重建；
-- command error 不是 backend user message；
-- Assistant transcript 不进入 logs、Output 或 Graph Problems。
+## 反馈与安全参考
 
-## Signal flow
+- 由类型化结果和安全错误代码决定反馈，不能从日志文本推断操作成功或失败。
+- 可继续操作的页面使用持久区块错误；输入错误就近展示；破坏性操作先确认；成功优先以新状态表达。
+- `incidentId` 只关联技术诊断。原始异常消息、cause、未知对象和自由文本不直接进入用户文案或结构化日志。
+- 日志只保留排障所需的安全身份、计数与阶段，不记录完整数据、报告或 Assistant transcript。
+- 生命周期清理只属于原安装或操作；迟到清理不能解除后继订阅，离开视图也不等于撤销已提交业务。
 
-```mermaid
-flowchart TD
-  TRACE[Rust tracing event] --> CAPTURE[plugin collector: level filter and bounded capture]
-  CAPTURE --> INGRESS[bounded non-blocking ingress]
-  INGRESS --> SANITIZE[plugin dispatcher: sanitize once]
-  SANITIZE --> CONSOLE[bounded console worker]
-  SANITIZE --> LOGPLUGIN[plugin log dispatcher]
-  FELOG[frontend logger and console: INFO and above] --> FEVALIDATE[plugin: level filter and validation]
-  FEVALIDATE --> INGRESS
-  LOGPLUGIN --> SQLITE[logs.sqlite]
-  SQLITE --> LOGCHANNEL[plugin log snapshot and channel]
-  LOGCHANNEL --> LOGS[Logs UI]
-
-  GRAPH[Graph semantic snapshot] --> PROBLEMS[Graph Problems consumers]
-  RESULT[Execution ResultStore] --> RESULTQUERY[typed result queries]
-  RUN[Execution lifecycle] --> RUNCHANNEL[RunEvent channel]
-  RUNCHANNEL --> OUTPUT[Output failure summary]
-  FAILURE[Command failure] --> WIRE[yss-ipc-contract error wire]
-  WIRE --> FEEDBACK[React localization and feedback]
-```
-
-运行观测共用日志插件的输入校验、脱敏、identity、sequence、持久存储、缓冲和订阅。Rust tracing、前端 logger 和显式结构化日志都进入同一条链；Graph Problems、Result、运行状态和错误响应由各自业务 owner 管理。
-
-编辑解析的普通语义问题使用阻断 outcome 与完整 projection；内部故障继续走 diagnosed rejection。详情见 [语义解析](../../../../src-tauri/crates/yss-graph-analysis/README.md#semantic-resolution)。
-
-桌面入口在 Application setup 前注册 `tauri-plugin-tracing`，由插件解析日志路径、打开 SQLite、安装全局 logging subscriber 并保留 guard。Application 组装业务服务；日志插件不可用时仍可完成业务初始化。日志目录或 SQLite 不可用时保留 console，插件查询/订阅返回 `logs_unavailable`。
-
-## Structured runtime observations
-
-Application、Execution、System、Graph、Data 和 Ui 是日志的领域标签，共用 `LogRecordDto` 的 level、origin、domain、target、event、source 和 fields。领域标签不产生独立的业务状态或交付通道。
-
-Rust 使用普通 tracing 宏；显式 `log_domain`、`log_event`、`log_source` 和 `log_target` 字段由插件映射为日志元数据，其余安全字段保留在 fields 中。例如数据校验的缺失值数量、运行阶段、耗时和 incidentId 都可作为结构化技术观察。
-
-前端通过已有 logger 或 `LogService.submitFrontendLogs` 提交记录，经同一有界批次链进入日志插件。显式结构化记录可包含 event 和 fields；客户端不指定 origin、timestamp 或 sequence。Logs 的订阅、历史查询和统计统一使用 `plugin:tracing|` 命令。Application 不注册另一套运行诊断命令、runtime 或 buffer。
-
-前端各层共用 [`utils/frontendLogger.ts`](../../../utils/frontendLogger.ts) 生成记录：统一执行级别过滤、
-domain/source 编码和 console 回显，回显期间抑制 console 再捕获。该模块只依赖共享日志契约、
-日志配置及 console 工具，不依赖 Application、IPC 或业务 Store；Core 和共享 Markdown 不再各自
-实现 logger 或反向引用应用层。原生 console 消息仍以 `ui / frontend.console` 进入现有捕获路径，
-带类型的 Core 日志保留自己的领域和来源，不通过解析 console 前缀重建元数据。
-
-`frontendLogTransport` 是连接这些记录与 LogService 的 Application owner。`app/main.tsx` 在渲染前
-调用 `installFrontendLogging`；同一安装同时拥有 logger 的单一发送回调、console 捕获和一个现有
-batcher 实例。重复安装复用当前清理函数；释放/HMR 解除两种入口，并释放定时器与尚未发送的记录。
-迟到的旧清理不能解除新安装，已经提交给 IPC 的请求不由前端撤回。未安装或释放后仍保留 console
-回显，不建立第二个队列。这个回调是启动期传输依赖，不是日志 Store、订阅广播或业务状态。
-
-前端批量发送的条数、队列、延迟和消息字节限制统一由 `src/utils/logConfig.ts` 定义，日志传输和测试共用这一入口；Logs 面板的 recent buffer 与行高配置由 `src/shared/config-default/log.ts` 拥有。
-
-运行观测遵循日志级别过滤、SQLite 持久化及存储故障语义。字段仅保留排障所需的 ID、计数、阶段和安全错误代码。业务校验结果、Graph Problems、模型诊断、运行状态与 Results 仍从业务接口获取；用户反馈由 typed outcome 驱动。
-
-Application 的异常日志复用 `errorReference.ts` 的 IPC 归一化与 `formatApplicationIpcError`，
-仅格式化受识别的 code 和 incidentId。原始 Error.message、cause、details、任意对象的 code 和
-字符串异常不进入日志文案；未识别异常沿已有 transport/malformed 分类记录。明确的业务 outcome
-与安全诊断继续使用其领域契约，不把 typed status 重新当作未知 IPC 异常。
-报告校验日志只取已验证的结果、运行、节点身份和报告/值种类，不序列化诊断的自由文本。
-console 捕获的 Error 只记为 `[Error]`，不读取 name、message 或 cause；原生浏览器 console 仍接收原参数。
-
-## User feedback
-
-React application/view 根据 use case 将 stable code 和安全 details 映射为本地化文案与反馈表面：
-
-| 情况                   | 反馈表面                                      |
-| ---------------------- | --------------------------------------------- |
-| 页面或区块仍可继续使用 | persistent `Alert` / page or section state    |
-| 输入字段无效           | inline error + accessible description         |
-| 必须确认后继续         | application `MessageDialog` / ordinary Dialog |
-| 破坏性操作确认         | `AlertDialog`                                 |
-| 成功                   | 优先用新状态、列表变化或持久状态表达          |
-
-用户反馈应由应用动作与 typed outcome 驱动，不使用日志触发通知，也不把 `IpcError.message`、Rust error 或 parser reason 当作用户文案。Logs panel 展示 sanitized operational record 是其自身职责；Graph diagnostic 按 Rust-owned 模板键与安全参数在 React 本地化，具体契约见 [Graph Problems](../../../modules/problems/README.md#graph-problems)。路径选择等桌面 capability dialog 不等同于应用错误反馈。
-
-Graph 运行失败由 Output panel 的失败摘要反馈：React 本地化 Rust RunErrored 的原因和阶段，保留节点定位及可用的 incidentId。该 UI 摘要不由 Logs 重建；具体生命周期和 terminal channel 排空契约见 [运行失败反馈](../../../modules/output/README.md#运行失败反馈)。
-
-## Routing decisions
-
-新增信息流时先回答：
-
-1. 它是当前业务事实、可查询结果、用户程序输出、技术观察、transport failure，还是 UI feedback？
-2. 谁是唯一 authority，consumer 丢失全部本地状态后如何恢复？
-3. delivery 是 reliable、replayable、latest-snapshot，还是允许 loss？
-4. 容量、backpressure、drop/gap/terminal semantics 在哪里由代码定义？
-5. payload 是否跨越数据、隐私或用户文案边界？
-
-具体修改检查项见 [Change Process](../../../../docs/development/CHANGE_PROCESS.md)，前端命令见 [src README](../../../README.md)，本文不复制 checklist 或容量表。
-
-## 相关模块
-
-[日志采集与存储](../../../../src-tauri/crates/tauri-plugin-tracing/README.md) · [Logs 面板](../../../modules/logs/README.md) · [IPC 错误](../../../../src-tauri/crates/yss-application/src/ipc/README.md)
+原 React logger 和反馈组件仅供源码对照。当前采集、存储、订阅、故障语义与原生反馈由上述 Rust owners 说明，不从这里的历史适配推导。

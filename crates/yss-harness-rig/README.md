@@ -9,7 +9,7 @@
 [Harness Contract](../yss-harness-contract/src/lib.rs). Application resolves model
 settings and supplies the driver to [Harness Core](../yss-harness-core/README.md).
 The adapter does not own project state or durable conversation history, and has
-no dependency on Core, Application, a desktop framework or Tauri.
+no dependency on Core, Application or a desktop framework.
 
 | Module | Responsibility |
 | --- | --- |

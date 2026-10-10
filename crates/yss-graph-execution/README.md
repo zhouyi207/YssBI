@@ -163,4 +163,4 @@ Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；A
 科学计算适配属于 Node Kernel。报告读取不经过 Execution 的临时计算入口；本 crate 的 SCI runtime/contract 依赖仅用于 `ols_bench` 示例，不进入生产依赖。
 Database Engine 仅作为数列快照回归的测试依赖，用真实关系表达式与数据验证重复引用；不进入生产依赖。
 
-[内核与数值/关系操作](../yss-node-kernel/README.md) · [Results 查询与租约](../../react/src/features/application/results/README.md) · [Application 编排](../yss-application/src/graph/README.md)
+[内核与数值/关系操作](../yss-node-kernel/README.md) · [Results 查询与租约](../yss-application/src/graph/README.md) · [原生结果呈现](../yss-desktop-gpui/README.md)

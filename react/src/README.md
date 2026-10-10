@@ -1,33 +1,20 @@
-# 前端入口
+# React 参考源码
 
-> Status: Current
-> Scope: 前端职责入口、类型检查、测试和格式化命令
-> Canonical owners: package.json 拥有脚本定义和前端版本，各模块 README 拥有对应功能契约
-> Update when: 前端入口、工具链或验证命令改变时
+> Status: Historical
+> Scope: `react/src/` 保留的 React 实现与交互行为参考，不参与原生构建
+> Canonical owners: 本目录 README 只说明参考源码；当前架构、构建与模块契约由根文档和 Rust crates 拥有
+> Update when: 参考源码范围、行为说明或当前契约入口改变时
 
-`app/` 组合窗口与路由，`modules/` 提供界面，`features/application/` 编排用例，`features/core/` 保存投影与交互状态，`features/domain/` 保存纯领域规则，`services/` 适配 IPC。
+本目录保留原 React 实现，供理解交互、比较行为和查阅历史设计；它不是当前前端、开发服务器或打包入口，也不表示这些行为已经移植或验收。
 
-Help/About 的共享元数据位于 `shared/appLinks.ts`，显示的前端版本直接读取根 `package.json`，不在呈现源码另存版本字符串。
+当前项目是 GPUI 前端的纯 Rust workspace。启动与验证入口见[根 README](../../README.md)，模块路由见[文档索引](../../docs/README.md)，原生界面契约见 [GPUI host](../../crates/yss-desktop-gpui/README.md)。业务用例见 [Application](../../crates/yss-application/README.md)；领域状态不由这里的 React stores 拥有。
 
-Rust 拥有已提交项目状态及当前 Graph 文档、历史与保存身份。查询返回数据；修改返回提交结果，事件可交付同一提交的回声，前端由发布协调器统一去重和更新投影。React 保留图的只读投影与临时交互，其他资源的配置草稿遵循各自模块契约。
+## 参考目录
 
-依赖方向和状态归属见[当前架构](../docs/architecture/ARCHITECTURE.md)，状态、校验与增量更新的开发约束见[前端规则](.rules)，验证范围见[根规则](../.rules)。
+- `app/`：原 React 组合入口。
+- `modules/`：画布、文档、结果、工作台等界面实现。
+- [features/](features/README.md)：原用例协调、读取投影和交互状态。
+- `services/`：保留的历史适配代码，不是原生宿主调用契约。
+- [局部规则](.rules)：只约束本参考目录，不适用于 GPUI/Rust 实现。
 
-## 前端验证
-
-从仓库根目录运行：[package.json](../package.json) 中的 TypeScript 检查使用 tsc，lint 使用 Oxlint，格式化使用 Oxfmt，测试使用 Vitest。
-
-```sh
-pnpm check:ts
-pnpm lint:ts
-pnpm test:ts <test-file>
-pnpm test:ts <test-file> -t "test name"
-pnpm format:check:ts <changed-files>
-pnpm format:ts <changed-files>
-```
-
-替换占位文件和用例名。`test:ts` 将参数透传给 Vitest；确认实际匹配了相关用例。
-`lint:ts` 固定扫描整个前端，追加文件名不能缩小范围。界面交互使用人工验收。
-
-文档检查使用 `pnpm test:ts src/tests/documentationContract.test.ts`，并包含模块索引的只读校验。
-Graph 诊断模板的生成归 [yss-graph-diagnostics](../src-tauri/crates/yss-graph-diagnostics/README.md)，插件投影 schema 归 [yss-plugin-protocol](../src-tauri/crates/yss-plugin-protocol/README.md)；本地化专项约束见 [i18n 规则](app/i18n/.rules)。
+本目录不提供现行安装、启动、构建或验证命令。旧脚本、平台适配和浏览器实现不构成原生能力的证据；开放项与人工验收以[迁移计划](../../docs/roadmap/GPUI_MIGRATION.md)为准。

@@ -262,11 +262,11 @@ Kernel density plot preparation uses `visualization::kde`, which passes the call
 execution control to SCI's density computation.
 
 The crate does not own project/database state, graph scheduling, result storage,
-Tauri commands, frontend state, Julia processes or Bayesian worker lifecycle.
+desktop commands, frontend state, Julia processes or Bayesian worker lifecycle.
 
 ## 宿主调用与数值所有权
 
-科学计算使用独立的中性契约。Node Kernel 负责拟合与汇总分析，Execution 仅在独立 OLS benchmark 中直接调用 runtime；IPC Command 通过 Application 读取已计算的结果：
+科学计算使用独立的中性契约。Node Kernel 负责拟合与汇总分析，Execution 仅在独立 OLS benchmark 中直接调用 runtime；GPUI 宿主通过 Application 类型化查询读取已计算的结果：
 
 ```text
 Application → yss-graph-execution → yss-node-kernel → yss-sci-runtime (stateless functions)
