@@ -1,9 +1,11 @@
+mod loading;
+mod opening;
 mod resources;
+pub(super) use opening::Opening;
 
 use gpui::AppContext;
 use gpui::{Context, Window};
 use gpui_component::dock::DockPlacement;
-use yss_application::graph::open::OpenGraphRequest;
 use yss_graph_document::GraphResourcePath;
 
 use super::Workbench;
@@ -11,13 +13,6 @@ use crate::{
     canvas::{CanvasEvent, GraphCanvas},
     project::OpenedGraph,
 };
-
-pub(super) struct Opening {
-    node: Option<String>,
-    intent: Option<String>,
-    revision: Option<yss_project_identity::ResourceRevision>,
-    _task: gpui::Task<()>,
-}
 
 impl Workbench {
     pub(super) fn open_graph(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -67,9 +62,9 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(project) = &self.project else {
+        if self.project.is_none() {
             return;
-        };
+        }
         if let Some(graph) = self.graphs.get(&path).and_then(gpui::WeakEntity::upgrade) {
             let applied = graph.update(cx, |graph, cx| {
                 graph.focus_node(node.as_deref(), window, cx)
@@ -85,14 +80,6 @@ impl Workbench {
             }
             return;
         }
-        if self.graph_openings.contains_key(&path) {
-            if let Some(id) = intent {
-                self.finish_intent(&id, false, window, cx);
-            }
-            return;
-        }
-        let identity = project.identity.clone();
-        let lifecycle = self.lifecycle;
         let graph_path = match GraphResourcePath::new(path.clone()) {
             Ok(path) => path,
             Err(_) => {
@@ -104,70 +91,35 @@ impl Workbench {
                 return;
             }
         };
-        let language = crate::text::locale();
-        let request = OpenGraphRequest::new(identity.clone(), graph_path, 0, language);
-        let task = self.services.run(move |services| {
-            Ok(OpenedGraph::from_open(
-                services.application.open_graph(request)?,
-            ))
-        });
-        let source = path.clone();
-        let revision = self.indexed_graph_revision(&path);
-        let delivery = cx.spawn_in(window, async move |view, cx| {
-            let result = task
-                .await
-                .map_err(anyhow::Error::from)
-                .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
-                if view.lifecycle != lifecycle
-                    || view
-                        .project
-                        .as_ref()
-                        .is_none_or(|project| project.identity != identity)
-                {
-                    return;
-                }
-                let Some(opening) = view.graph_openings.remove(&path) else {
-                    return;
-                };
-                let Opening { node, intent, .. } = opening;
-                if language != crate::text::locale() {
-                    view.start_graph_read(path, node, intent, window, cx);
-                    return;
-                }
-                let applied = match result {
-                    Ok(graph) => view.install_graph(graph, window, cx).is_some_and(|graph| {
-                        graph.update(cx, |graph, cx| {
-                            graph.focus_node(node.as_deref(), window, cx)
-                        })
-                    }),
-                    Err(_error) => {
-                        tracing::error!(
-                            code = "native_graph_open_failed",
-                            "Native graph open failed"
-                        );
-                        view.error = Some("无法打开图，请检查项目资源。".into());
-                        false
-                    }
-                };
-                if let Some(id) = intent {
-                    view.finish_intent(&id, applied, window, cx);
-                }
-                cx.notify();
-            });
-        });
-        self.graph_openings.insert(
-            source,
-            Opening {
-                node,
-                intent,
-                revision,
-                _task: delivery,
-            },
+        let opening = self
+            .graph_openings
+            .get(&path)
+            .and_then(gpui::WeakEntity::upgrade)
+            .filter(|opening| !opening.read(cx).removed)
+            .unwrap_or_else(|| self.create_graph_opening(graph_path, window, cx));
+        if let Some(intent) = intent {
+            if opening.read(cx).intent.is_some() {
+                self.finish_intent(&intent, false, window, cx);
+            } else {
+                opening.update(cx, |opening, _| {
+                    opening.intent = Some(intent);
+                    opening.node = node;
+                });
+            }
+        } else if node.is_some() {
+            opening.update(cx, |opening, _| opening.node = node);
+        }
+        self.present_panel(
+            gpui_component::dock::panel_handle(opening.clone()),
+            DockPlacement::Center,
+            window,
+            cx,
         );
+        window.focus(&gpui::Focusable::focus_handle(&opening, cx), cx);
+        self.read_graph_opening(opening, window, cx);
     }
 
-    pub(super) fn install_graph(
+    fn build_graph(
         &mut self,
         graph: OpenedGraph,
         window: &mut Window,
@@ -178,12 +130,6 @@ impl Workbench {
             .get(graph.projection.graph_path.as_str())
             .and_then(gpui::WeakEntity::upgrade)
         {
-            self.present_panel(
-                gpui_component::dock::panel_handle(canvas.clone()),
-                DockPlacement::Center,
-                window,
-                cx,
-            );
             return Some(canvas);
         }
         let catalog = self
@@ -331,12 +277,6 @@ impl Workbench {
         ));
         self.graphs.insert(path, canvas.downgrade());
         self.refresh_resource_rows(cx);
-        self.present_panel(
-            gpui_component::dock::panel_handle(canvas.clone()),
-            DockPlacement::Center,
-            window,
-            cx,
-        );
         Some(canvas)
     }
 }

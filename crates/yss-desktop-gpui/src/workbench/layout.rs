@@ -1,9 +1,9 @@
 //! Native DockArea persistence and resource rehydration. The DockArea owns the live topology.
 pub(super) mod columns;
 mod missing;
+mod replacement;
 
 use super::Workbench;
-use crate::project::OpenedGraph;
 use gpui::{App, AppContext, Context, WeakEntity, Window};
 use gpui_component::dock::{
     BasePanelView, DockAreaState, DockEvent, DockLayout, DockPlacement, PaneRef, Panel, PanelId,
@@ -11,7 +11,6 @@ use gpui_component::dock::{
 };
 use missing::MissingPanel;
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
-use yss_application::graph::open::OpenGraphRequest;
 use yss_graph_document::GraphResourcePath;
 
 impl Workbench {
@@ -220,28 +219,6 @@ impl Workbench {
                     "Graph view checkpoints could not be read"
                 );
             }
-            let paths = layout
-                .as_ref()
-                .map(|state| resource_paths(state, "graph-editor", "graphPath"))
-                .unwrap_or_default();
-            let mut graphs = vec![];
-            for path in paths {
-                let Ok(path) = GraphResourcePath::new(path) else {
-                    continue;
-                };
-                match services.application.open_graph(OpenGraphRequest::new(
-                    identity.clone(),
-                    path,
-                    0,
-                    "zh-CN",
-                )) {
-                    Ok(receipt) => graphs.push(OpenedGraph::from_open(receipt)),
-                    Err(_) => tracing::debug!(
-                        code = "native_layout_resource_unavailable",
-                        "Restored graph is unavailable"
-                    ),
-                }
-            }
             let mut documents = vec![];
             for path in layout
                 .as_ref()
@@ -329,7 +306,6 @@ impl Workbench {
                 root,
                 viewport_failed,
                 layout,
-                graphs,
                 documents,
                 minds,
                 databases,
@@ -358,7 +334,6 @@ impl Workbench {
                         root,
                         viewport_failed,
                         layout,
-                        graphs,
                         documents,
                         minds,
                         databases,
@@ -371,9 +346,14 @@ impl Workbench {
                             view.error =
                                 Some(crate::text::translate("native.canvas.viewportLoadFailed"));
                         }
-                        for graph in graphs {
-                            view.install_graph(graph, window, cx);
-                        }
+                        let openings = layout
+                            .as_ref()
+                            .map(|layout| resource_paths(layout, "graph-editor", "graphPath"))
+                            .unwrap_or_default()
+                            .into_iter()
+                            .filter_map(|path| GraphResourcePath::new(path).ok())
+                            .map(|path| view.create_graph_opening(path, window, cx))
+                            .collect::<Vec<_>>();
                         for document in documents {
                             view.install_document(document, window, cx);
                         }
@@ -408,6 +388,7 @@ impl Workbench {
                         view.dock
                             .update(cx, |dock, cx| columns::restore(dock, window, cx));
                         view.restoring_layout = false;
+                        drop(openings);
                         let path = initial_resource.or_else(|| {
                             if restored {
                                 None
@@ -481,12 +462,17 @@ impl Workbench {
             register_fixed(name, panel.clone(), cx);
         }
         let graphs = self.graphs.clone();
+        let openings = self.graph_openings.clone();
         register_panel(cx, "graph-editor", move |context, _, cx| {
             if let PanelInfo::Panel(info) = context.info()
                 && let Some(path) = info.get("graphPath").and_then(serde_json::Value::as_str)
-                && let Some(graph) = graphs.get(path).and_then(WeakEntity::upgrade)
             {
-                return panel_handle(graph);
+                if let Some(graph) = graphs.get(path).and_then(WeakEntity::upgrade) {
+                    return panel_handle(graph);
+                }
+                if let Some(opening) = openings.get(path).and_then(WeakEntity::upgrade) {
+                    return panel_handle(opening);
+                }
             }
             panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
         });

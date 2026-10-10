@@ -1,11 +1,12 @@
 //! Committed resource receipts rebind native panels; projections still come from Application.
-use gpui::{Context, Window};
+use gpui::{Context, Entity, Focusable, Window};
 use yss_application::events::CommittedResourceMutation;
 use yss_graph_document::GraphResourcePath;
 use yss_project_history::{ResourceDocumentPatch, ResourceKey, ResourceLifecycleKind};
 use yss_project_identity::ResourceRevision;
 
 use super::super::Workbench;
+use super::Opening;
 
 impl Workbench {
     pub(in crate::workbench) fn accept_graph_resources(
@@ -86,19 +87,53 @@ impl Workbench {
             self.graphs.remove(from);
             self.graphs
                 .insert(to.as_str().to_owned(), canvas.downgrade());
+            if let Some(opening) = self
+                .graph_openings
+                .get(to.as_str())
+                .and_then(gpui::WeakEntity::upgrade)
+            {
+                self.redirect_graph_opening(opening, to.as_str(), window, cx);
+            }
             true
         } else {
             self.indexed_graph_revision(from)
                 .is_none_or(|revision| revision <= before)
         };
-        if self
+        if let Some(opening) = self
             .graph_openings
             .get(from)
-            .is_some_and(|opening| opening.revision.is_none_or(|revision| revision <= before))
-            && let Some(opening) = self.graph_openings.remove(from)
+            .and_then(gpui::WeakEntity::upgrade)
+            && opening
+                .read(cx)
+                .revision
+                .is_none_or(|revision| revision <= before)
         {
-            let super::Opening { node, intent, .. } = opening;
-            self.start_graph_read(to.as_str().to_owned(), node, intent, window, cx);
+            let destination_open = self
+                .graphs
+                .get(to.as_str())
+                .and_then(gpui::WeakEntity::upgrade)
+                .is_some()
+                || self
+                    .graph_openings
+                    .get(to.as_str())
+                    .and_then(gpui::WeakEntity::upgrade)
+                    .is_some_and(|opening| !opening.read(cx).removed);
+            if destination_open {
+                self.redirect_graph_opening(opening, to.as_str(), window, cx);
+            } else {
+                self.graph_openings.remove(from);
+                opening.update(cx, |opening, cx| {
+                    opening.task = None;
+                    opening.path = to.clone();
+                    opening.revision = Some(after);
+                    opening.failed = false;
+                    cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+                    cx.notify();
+                });
+                self.graph_openings
+                    .insert(to.as_str().to_owned(), opening.downgrade());
+                self.read_graph_opening(opening, window, cx);
+            }
         }
         if moved {
             if let Some(root) = &self.layout_root {
@@ -107,6 +142,27 @@ impl Workbench {
                     .remap_viewport(root, from, Some(to.as_str()));
             }
             self.persist_layout(cx);
+        }
+    }
+
+    fn redirect_graph_opening(
+        &mut self,
+        opening: Entity<Opening>,
+        path: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let focused = self
+            .displayed_panel_placement(opening.entity_id().into(), cx)
+            .is_some()
+            && opening.focus_handle(cx).contains_focused(window, cx);
+        let (node, intent) = opening.update(cx, |opening, _| {
+            (opening.node.take(), opening.intent.take())
+        });
+        self.dock
+            .update(cx, |dock, cx| dock.remove_panel(opening, window, cx));
+        if focused || intent.is_some() {
+            self.start_graph_read(path.to_owned(), node, intent, window, cx);
         }
     }
 
@@ -129,14 +185,17 @@ impl Workbench {
             self.indexed_graph_revision(path)
                 .is_none_or(|revision| revision <= before)
         };
-        if self
+        if let Some(opening) = self
             .graph_openings
             .get(path)
-            .is_some_and(|opening| opening.revision.is_none_or(|revision| revision <= before))
-            && let Some(opening) = self.graph_openings.remove(path)
-            && let Some(intent) = opening.intent
+            .and_then(gpui::WeakEntity::upgrade)
+            && opening
+                .read(cx)
+                .revision
+                .is_none_or(|revision| revision <= before)
         {
-            self.finish_intent(&intent, false, window, cx);
+            self.dock
+                .update(cx, |dock, cx| dock.remove_panel(opening, window, cx));
         }
         if removed {
             if let Some(root) = &self.layout_root {

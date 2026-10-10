@@ -95,7 +95,7 @@ pub struct Workbench {
     minds: BTreeMap<String, WeakEntity<crate::minds::MindCanvas>>,
     databases: BTreeMap<String, WeakEntity<crate::databases::DatabaseEditor>>,
     opening: BTreeSet<String>,
-    graph_openings: BTreeMap<String, graphs::Opening>,
+    graph_openings: BTreeMap<String, WeakEntity<graphs::Opening>>,
     subscriptions: Vec<gpui::Subscription>,
     activities: BTreeMap<&'static str, WeakEntity<ActivityPanel>>,
     event_task: Option<gpui::Task<()>>,

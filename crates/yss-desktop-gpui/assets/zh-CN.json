@@ -2915,7 +2915,9 @@
       "viewportLoadFailed": "无法恢复画布视角，已使用默认视角。",
       "viewportSaveFailed": "画布视角保存失败，重新打开时可能无法恢复。",
       "refreshFailed": "无法刷新图状态，编辑已暂停。请重试。",
-      "loadingRenamedGraph": "正在读取重命名后的图…"
+      "loadingRenamedGraph": "正在读取重命名后的图…",
+      "opening": "正在打开图…",
+      "openFailed": "无法打开此图。请检查资源后重试。"
     },
     "assistant": {
       "alreadyRunning": "此对话已有任务运行，请等待完成或请求停止。",
