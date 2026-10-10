@@ -19,6 +19,7 @@ actions!(
         SelectAll,
         CancelGesture,
         FrameGraph,
+        FrameSelection,
         RunWholeGraph,
         CancelRun,
         RunCurrentNode,

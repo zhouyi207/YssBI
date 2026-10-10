@@ -2,7 +2,9 @@
   "native": {
     "canvas": {
       "portTypeUnknown": "Unknown type",
-      "portTypeConflict": "Type conflict"
+      "portTypeConflict": "Type conflict",
+      "viewportLoadFailed": "Could not restore canvas views. The default view is shown.",
+      "viewportSaveFailed": "Could not save the canvas view. It may not be restored when reopened."
     }
   }
 }

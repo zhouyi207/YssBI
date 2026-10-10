@@ -149,8 +149,12 @@ impl Workbench {
         let path = graph.projection.graph_path.as_str().to_owned();
         let services = self.services.clone();
         let catalog_language = crate::text::locale().to_owned();
-        let canvas =
-            cx.new(|cx| GraphCanvas::new(services, graph, catalog, catalog_language, window, cx));
+        let canvas = cx.new(|cx| {
+            let mut canvas =
+                GraphCanvas::new(services, graph, catalog, catalog_language, window, cx);
+            canvas.bind_viewport(self.layout_root.clone());
+            canvas
+        });
         self.observe_graph_status(&canvas, cx);
         let mut diagnostic_count = canvas.read(cx).graph.projection.diagnostics.len();
         self.subscriptions.push(cx.subscribe_in(

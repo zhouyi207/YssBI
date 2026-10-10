@@ -8,7 +8,7 @@ mod render;
 pub(super) use drag::ConnectionDrag;
 pub(super) use interaction::ConnectionClick;
 
-use gpui::{Bounds, PathBuilder, Pixels, Point, Window, fill, point, px, rgb, size};
+use gpui::{Bounds, Pixels, Point, Window, fill, point, px, rgb, size};
 use gpui_base::plot::{PathCache, ShapeKey};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -313,30 +313,44 @@ impl ConnectionLayer {
         zoom: f32,
         window: &mut Window,
     ) {
-        let spacing = px((32. * zoom).max(12.));
-        let phase = point(offset.x % spacing, offset.y % spacing);
-        let key = ShapeKey::new(())
-            .point(point(bounds.size.width, bounds.size.height))
-            .point(phase)
-            .f32(f32::from(spacing))
-            .finish();
-        if let Some(path) = self.grid.get(key, bounds.origin, || {
-            let mut path = PathBuilder::stroke(px(0.5));
-            let mut x = phase.x;
+        let spacing = px(40. * zoom);
+        let phase = point(
+            px(f32::from(offset.x).rem_euclid(spacing.into())),
+            px(f32::from(offset.y).rem_euclid(spacing.into())),
+        );
+        // Repeat a bounded mesh instead of tessellating the whole viewport or
+        // issuing one scene primitive per dot at low zoom.
+        const CELLS: usize = 32;
+        let key = ShapeKey::new(()).f32(spacing.into()).finish();
+        let mut y = phase.y - spacing;
+        while y < bounds.size.height {
+            let mut x = phase.x - spacing;
             while x < bounds.size.width {
-                path.move_to(point(x, px(0.)));
-                path.line_to(point(x, bounds.size.height));
-                x += spacing;
+                if let Some(path) = self.grid.get(key, bounds.origin + point(x, y), || {
+                    let mut path = gpui::PathBuilder::fill();
+                    for row in 0..CELLS {
+                        for column in 0..CELLS {
+                            let x = spacing * column as f32;
+                            let y = spacing * row as f32 + px(1.);
+                            path.move_to(point(x, y));
+                            path.arc_to(
+                                point(px(1.), px(1.)),
+                                px(0.),
+                                false,
+                                true,
+                                point(x + px(2.), y),
+                            );
+                            path.arc_to(point(px(1.), px(1.)), px(0.), false, true, point(x, y));
+                            path.close();
+                        }
+                    }
+                    path.build().ok()
+                }) {
+                    window.paint_path(path, rgb(theme::BORDER_STRONG));
+                }
+                x += spacing * CELLS as f32;
             }
-            let mut y = phase.y;
-            while y < bounds.size.height {
-                path.move_to(point(px(0.), y));
-                path.line_to(point(bounds.size.width, y));
-                y += spacing;
-            }
-            path.build().ok()
-        }) {
-            window.paint_path(path, gpui::rgba((theme::BORDER_STRONG << 8) | 0x66));
+            y += spacing * CELLS as f32;
         }
     }
 }

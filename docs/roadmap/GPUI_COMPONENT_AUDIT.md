@@ -719,6 +719,18 @@
 - L2：独立提交副本与当前工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 均通过；窗口通过 `cargo build -p yss-desktop-gpui --example connection_fallback_review --locked`。本批 Rust 文件格式、两份文档声明/相对链接、双语键清理、265 项清单、模块索引及 `git diff --check` 均通过。未新增 UI 单元测试、依赖或后端契约，未运行全工作区验证；临时窗口与隔离数据不提交。
 - 完成 GraphCanvasView 源码审查，累计 205/265。视口持久化、参考点网格样式以及文档加载/刷新/面板生命周期的完整审查继续开放；物理输入、读屏、Windows/macOS 与大图性能仍待验收。
 
+
+### 画布视角持久化、定位与点网格
+
+- 复核 ViewportGrid、useCanvasViewport、视角 session/memento、初始视角和 fitViewport。GraphCanvas 保留唯一实时坐标，既有 LayoutStore 按项目/图保存重开检查点；不搬运 React store、DOM 订阅或 localStorage 适配层。
+- 复用布局存储的文件 lease、原子事务和写入顺序；后台初始化、250ms 合并写入与退出时立即写入覆盖标签关闭/重开、重启及本地重命名/删除。视角不进入 GraphDocument、撤销或图脏状态。
+- Home/按钮适应全部节点，F 适应所选节点，实际 NodeLayout 边界保留每边 64px、缩放 10%–500%；F 不拦截输入框，全选过滤托管节点。删除旧的固定 1× 重置逻辑。
+- 点网格改为 40 世界单位间距和固定 1px 半径。复用一个 32×32 点块的 PathCache 平铺，平移/窗口尺寸变化不重新细分；避免最低缩放下整屏路径超过细分顶点上限。
+- 独立副本窗口实际核对默认、Home/F/空选择、输入 F、全选托管过滤、平移取消/结束、快速关闭重开、投影刷新、重启、重命名/删除和立即退出。当前工作区另核对项目隔离、无效视角通知及注入 1.5 秒旧写入延迟后保留新视角；实际存储失败提示且图保持干净，恢复后继续记录。
+- 开发构建约 910×847 画布的 CPU 绘制提交：62% 缩放约 0.3–0.4ms，10% 约 6–14ms；最低缩放已显示点网格，但该片段不代表完整帧率，release/大图/120Hz 仍开放。
+- L2：独立提交副本和当前工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 均通过；临时窗口使用 `cargo build -p yss-desktop-gpui --example canvas_viewport_review --locked`。局部 Rust 格式、文档声明/相对链接、双语新键、265 项清单、模块索引和 `git diff --check` 通过。无新增依赖、UI 单元测试或后端契约，不运行全工作区验证；临时窗口与数据不提交。
+- 完成 ViewportGrid 审查，累计 206/265。GraphCanvasController/GraphFlowCanvas 的剩余生命周期和 GraphDocumentEditor 的加载/刷新/冲突继续审查；外部资源重命名、物理输入、读屏及 Windows/macOS 仍开放。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -931,14 +943,14 @@
 | --- | --- | --- | --- |
 | [modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 迁移 | connections 共用曲线、命中、选择/悬停、状态虚线、类型实线与运行标记；复用原路径缓存及 GPUI Animation | Linux/X11 窗口核对；物理输入、读屏及目标平台/帧率待验收 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 已读组合入口及 useCanvasViewport/useConnectionCandidates；候选失败回退已补齐，视口持久化和加载/面板生命周期仍需完成 | 本批连接窗口验收见记录；整体未完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 已读组合入口及 useCanvasViewport/useConnectionCandidates；候选失败回退、视角持久化与定位已补齐，加载/面板生命周期继续审查 | 多批窗口验收见记录；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx) | 复用原生视图：保留画布边界与叠层 | GraphCanvas 实体提供资源身份、焦点、裁剪及网格/节点/预览/菜单组合；无需复制 DOM 标记或插槽包装 | Linux/X11 独立副本与工作区窗口核对；其内部功能按各自组件继续验收 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 已读文档就绪、冲突、保存和可见面板门控；继续核对原生打开/刷新失败和隐藏面板行为 | 待完成生命周期审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 手势与连接候选失败回退已接入；未知候选由原 Rust 事务校验，视口会话/持久化等剩余入口继续审查 | 多批 Linux 窗口验收见记录；整体未完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 手势、候选失败回退、视角会话/持久化及定位已接入；未知候选由原 Rust 事务校验，剩余文档/面板生命周期继续审查 | 多批 Linux 窗口验收见记录；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 迁移 | connections/drag、render 共用方向曲线、目标吸附、后端候选颜色/原因及替换集合；PendingFlowConnection 读取当前菜单来源 | 窗口核对输入侧、追加/替换/无效、移动与撤销、菜单及迟到失败隔离 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 迁移 | canvas/presentation 按当前投影、执行身份与缓存派生外观，ports 共用类型配色；选择、替换及状态提示保留 | 真实执行核对运行/可用/过期/失败与清除；平台和大图验收开放 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 复用原生布局与命中 | NodeLayout/连接索引随投影更新，原生端口沿后端方向、orphan 与连接能力起手；不迁入 React 测量与 handle 状态 | Linux 窗口核对真实派生端口增列及同尺寸重排展示样例；物理输入与平台验收开放 |
-| [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 待查 | 已读参考坐标订阅与 40 单位点网格；原生网格复用 Canvas 坐标和路径缓存，当前 32 单位线网格及低缩放间距仍待对齐 | 待迁移网格样式与缩放策略 |
+| [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 迁移：共用 Canvas 坐标，无需 DOM 订阅 | 40 世界单位点网格、固定屏幕半径；复用有界点块路径平铺，平移不细分 | Linux 窗口核对负平移/缩放/尺寸变化，10% 可见；release 大图和 120Hz 仍开放 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

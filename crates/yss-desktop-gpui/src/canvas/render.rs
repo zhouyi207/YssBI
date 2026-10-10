@@ -110,6 +110,7 @@ impl Render for GraphCanvas {
                     .projection
                     .nodes
                     .iter()
+                    .filter(|node| !node.capabilities.managed)
                     .map(|node| node.node_id)
                     .collect();
                 view.emit_selection(cx);
@@ -125,9 +126,11 @@ impl Render for GraphCanvas {
                 view.emit_selection(cx);
                 cx.notify();
             }))
-            .on_action(cx.listener(|view, _: &FrameGraph, _, cx| {
-                view.reset_view();
-                cx.notify();
+            .on_action(cx.listener(|view, _: &FrameGraph, window, cx| {
+                view.reveal_graph(window, cx);
+            }))
+            .on_action(cx.listener(|view, _: &FrameSelection, window, cx| {
+                view.frame_selection(window, cx);
             }))
             .on_action(cx.listener(|view, _: &RunWholeGraph, _, cx| {
                 view.run_graph(yss_application::graph::run::RunDemand::Default, cx);
@@ -266,9 +269,8 @@ impl Render for GraphCanvas {
                         .ghost()
                         .icon(IconName::Frame)
                         .tooltip("重置视图 · Home")
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.reset_view();
-                            cx.notify();
+                        .on_click(cx.listener(|view, _, window, cx| {
+                            view.reveal_graph(window, cx);
                         })),
                 ),
             )

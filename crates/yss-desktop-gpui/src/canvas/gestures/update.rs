@@ -109,6 +109,7 @@ impl GraphCanvas {
             return;
         }
         self.update_gesture_position(event.position, cx);
+        let panned = matches!(self.gesture, Some(Gesture::Pan { .. }));
         match self.gesture.take() {
             Some(Gesture::Nodes {
                 version,
@@ -162,6 +163,9 @@ impl GraphCanvas {
             }
             _ => {}
         }
+        if panned {
+            self.checkpoint_viewport(cx);
+        }
         self.commit_blurred_port_inputs(window, cx);
         cx.notify();
     }
@@ -170,10 +174,17 @@ impl GraphCanvas {
         if self.busy || self.gesture.is_some() || !factor.is_finite() || factor <= 0. {
             return;
         }
-        let zoom = (self.zoom * factor).clamp(0.1, 5.);
+        let zoom = (self.zoom * factor).clamp(
+            crate::services::Viewport::MIN_SCALE,
+            crate::services::Viewport::MAX_SCALE,
+        );
+        if zoom == self.zoom {
+            return;
+        }
         let pointer = position - self.bounds.get().origin;
         self.offset = pointer - (pointer - self.offset) * (zoom / self.zoom);
         self.zoom = zoom;
+        self.checkpoint_viewport(cx);
         cx.notify();
     }
 

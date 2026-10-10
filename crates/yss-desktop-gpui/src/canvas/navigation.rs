@@ -1,6 +1,7 @@
-//! Diagnostic navigation changes only canvas selection and viewport state.
+//! Graph and diagnostic navigation change only canvas selection and viewport state.
 use super::{GraphCanvas, geometry};
 use gpui::{Bounds, Context, Window, point, px};
+use std::collections::BTreeSet;
 use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 
 impl GraphCanvas {
@@ -25,7 +26,7 @@ impl GraphCanvas {
         self.selected_connections.clear();
         self.connection_click = None;
         self.selected = [id].into();
-        self.frame_nodes(Some(&[id]));
+        self.frame_nodes(Some(&[id].into()), cx);
         window.focus(&self.focus, cx);
         self.emit_selection(cx);
         cx.notify();
@@ -85,7 +86,7 @@ impl GraphCanvas {
         self.located_port = None;
         self.selected_connections = [id].into();
         self.connection_click = None;
-        self.frame_nodes(Some(&nodes));
+        self.frame_nodes(Some(&nodes.into()), cx);
         window.focus(&self.focus, cx);
         self.emit_selection(cx);
         cx.notify();
@@ -95,12 +96,23 @@ impl GraphCanvas {
     pub(crate) fn reveal_graph(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.cancel_gesture();
         self.palette = None;
-        self.frame_nodes(None);
+        self.frame_nodes(None, cx);
         window.focus(&self.focus, cx);
         cx.notify();
     }
 
-    fn frame_nodes(&mut self, ids: Option<&[NodeId]>) {
+    pub(super) fn frame_selection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.selected.is_empty() {
+            return;
+        }
+        self.cancel_gesture();
+        self.palette = None;
+        self.frame_nodes(Some(&self.selected.clone()), cx);
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
+    fn frame_nodes(&mut self, ids: Option<&BTreeSet<NodeId>>, cx: &mut Context<Self>) {
         let bounds = self
             .graph
             .projection
@@ -119,15 +131,19 @@ impl GraphCanvas {
         if viewport.width <= px(0.) || viewport.height <= px(0.) {
             return;
         }
-        let width = f32::from((viewport.width - px(80.)).max(px(1.)));
-        let height = f32::from((viewport.height - px(80.)).max(px(1.)));
+        let width = f32::from((viewport.width - px(128.)).max(px(1.)));
+        let height = f32::from((viewport.height - px(128.)).max(px(1.)));
         self.zoom = (width / f32::from(bounds.size.width))
             .min(height / f32::from(bounds.size.height))
-            .clamp(0.1, 1.);
+            .clamp(
+                crate::services::Viewport::MIN_SCALE,
+                crate::services::Viewport::MAX_SCALE,
+            );
         self.offset = point(
             (viewport.width - bounds.size.width * self.zoom) / 2. - bounds.origin.x * self.zoom,
             (viewport.height - bounds.size.height * self.zoom) / 2. - bounds.origin.y * self.zoom,
         );
+        self.checkpoint_viewport(cx);
     }
 
     pub(super) fn retain_located(&mut self) {

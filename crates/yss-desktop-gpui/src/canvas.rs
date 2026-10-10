@@ -16,6 +16,7 @@ mod presentation;
 mod render;
 mod selection;
 mod toolbar;
+mod viewport;
 
 use std::{
     cell::{Cell, RefCell},
@@ -78,6 +79,7 @@ pub struct GraphCanvas {
     read_task: Option<gpui::Task<()>>,
     offset: Point<Pixels>,
     zoom: f32,
+    viewport_root: Option<String>,
     gesture: Option<Gesture>,
     _activation: gpui::Subscription,
     preview: BTreeMap<NodeId, NodePosition>,
@@ -121,8 +123,9 @@ impl GraphCanvas {
             context_menu: None,
             connection_click: None,
             read_task: None,
-            offset: point(px(40.), px(40.)),
+            offset: Point::default(),
             zoom: 1.,
+            viewport_root: None,
             gesture: None,
             _activation: cx.observe_window_activation(window, |view, window, cx| {
                 if !window.is_window_active() && view.gesture.is_some() {
@@ -146,7 +149,6 @@ impl GraphCanvas {
             error: None,
             execution: Default::default(),
         };
-        view.reset_view();
         view.refresh_presentation();
         cx.defer_in(window, |view, _, cx| view.resync_execution(cx));
         view
@@ -212,14 +214,18 @@ impl GraphCanvas {
             else {
                 return false;
             };
+            let position = node.position;
+            self.cancel_gesture();
+            self.palette = None;
             self.located_port = None;
             self.selected_connections.clear();
             self.connection_click = None;
             self.selected = BTreeSet::from([id]);
             self.offset = point(
-                px(40. - node.position.x as f32 * self.zoom),
-                px(40. - node.position.y as f32 * self.zoom),
+                px(40. - position.x as f32 * self.zoom),
+                px(40. - position.y as f32 * self.zoom),
             );
+            self.checkpoint_viewport(cx);
         }
         window.focus(&self.focus, cx);
         self.emit_selection(cx);
@@ -238,25 +244,6 @@ impl GraphCanvas {
                 .trim_end_matches(".yssbi-function"),
             if self.dirty() { " •" } else { "" }
         )
-    }
-
-    fn reset_view(&mut self) {
-        self.cancel_gesture();
-        self.palette = None;
-        self.zoom = 1.;
-        let min = self
-            .graph
-            .projection
-            .nodes
-            .iter()
-            .map(|node| node.position)
-            .reduce(|a, b| NodePosition {
-                x: a.x.min(b.x),
-                y: a.y.min(b.y),
-            });
-        self.offset = min.map_or(point(px(40.), px(40.)), |p| {
-            point(px(40. - p.x as f32), px(40. - p.y as f32))
-        });
     }
 
     fn world(&self, screen: Point<Pixels>) -> NodePosition {

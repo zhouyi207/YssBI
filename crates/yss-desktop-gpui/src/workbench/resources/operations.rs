@@ -238,6 +238,20 @@ impl Workbench {
                     window,
                     cx,
                 );
+                if let (Some(root), Ok((path, _))) = (&view.layout_root, &result) {
+                    let destination = match action {
+                        ResourceAction::Rename => path.as_deref().map(Some),
+                        ResourceAction::Delete => Some(None),
+                        _ => None,
+                    };
+                    if let Some(destination) = destination {
+                        view.services.layouts.remap_viewport(
+                            root,
+                            target.path.as_str(),
+                            destination,
+                        );
+                    }
+                }
                 match result {
                     Ok((path, projection)) => match action {
                         ResourceAction::Rename => {

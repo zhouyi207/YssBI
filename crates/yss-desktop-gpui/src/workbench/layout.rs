@@ -213,6 +213,13 @@ impl Workbench {
                     None
                 }
             };
+            let viewport_failed = owner.layouts.load_viewports(&root).is_err();
+            if viewport_failed {
+                tracing::warn!(
+                    code = "native_viewport_load_failed",
+                    "Graph view checkpoints could not be read"
+                );
+            }
             let paths = layout
                 .as_ref()
                 .map(|state| resource_paths(state, "graph-editor", "graphPath"))
@@ -320,6 +327,7 @@ impl Workbench {
             services.application.query_project_path(identity)?;
             Ok((
                 root,
+                viewport_failed,
                 layout,
                 graphs,
                 documents,
@@ -348,6 +356,7 @@ impl Workbench {
                 match result {
                     Ok((
                         root,
+                        viewport_failed,
                         layout,
                         graphs,
                         documents,
@@ -358,6 +367,10 @@ impl Workbench {
                         assistant,
                     )) => {
                         view.layout_root = Some(root);
+                        if viewport_failed {
+                            view.error =
+                                Some(crate::text::translate("native.canvas.viewportLoadFailed"));
+                        }
                         for graph in graphs {
                             view.install_graph(graph, window, cx);
                         }

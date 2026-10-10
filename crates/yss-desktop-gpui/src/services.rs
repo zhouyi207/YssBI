@@ -1,5 +1,6 @@
 //! Native composition and scheduling of the existing application services.
 mod layout_store;
+pub(crate) use layout_store::Viewport;
 mod paths;
 use std::sync::Arc;
 

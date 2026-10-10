@@ -246,6 +246,7 @@ fn main() -> Result<()> {
                 KeyBinding::new("delete", canvas::DeleteSelection, Some("GraphCanvas")),
                 KeyBinding::new("escape", canvas::CancelGesture, Some("GraphCanvas")),
                 KeyBinding::new("home", canvas::FrameGraph, Some("GraphCanvas")),
+                KeyBinding::new("f", canvas::FrameSelection, Some("GraphCanvas && !Input")),
                 KeyBinding::new("f5", canvas::RunWholeGraph, Some("GraphCanvas")),
                 KeyBinding::new("shift-f5", canvas::CancelRun, Some("GraphCanvas")),
                 KeyBinding::new("cmd-s", canvas::SaveGraph, Some("GraphCanvas")),

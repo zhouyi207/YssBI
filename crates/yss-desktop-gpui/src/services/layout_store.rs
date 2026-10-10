@@ -1,4 +1,7 @@
-//! Application-local snapshots of the native DockArea; no project documents are persisted here.
+//! Application-local DockArea and graph view snapshots; never project documents.
+mod viewports;
+pub(crate) use viewports::Viewport;
+
 use anyhow::Result;
 use gpui_component::dock::DockAreaState;
 use std::path::{Path, PathBuf};
@@ -18,6 +21,7 @@ pub struct LayoutStore {
     directory: PathBuf,
     coordinator: FilesystemCoordinator,
     writes: Mutex<BTreeMap<String, Arc<AtomicU64>>>,
+    viewports: Mutex<BTreeMap<String, BTreeMap<String, Viewport>>>,
 }
 
 impl LayoutStore {
@@ -26,6 +30,7 @@ impl LayoutStore {
             directory: app_data.join("workbench-layouts"),
             coordinator: FilesystemCoordinator::default(),
             writes: Mutex::new(BTreeMap::new()),
+            viewports: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -36,12 +41,16 @@ impl LayoutStore {
     }
 
     pub fn read(&self, project_root: &str) -> Result<Option<DockAreaState>> {
+        self.read_snapshot(&Self::file_name(project_root)?)
+    }
+
+    fn read_snapshot<T: serde::de::DeserializeOwned>(&self, file_name: &str) -> Result<Option<T>> {
         if !self.directory.exists() {
             return Ok(None);
         }
         let binding = RootBinding::for_existing(&self.directory)?;
         let _lease = self.coordinator.acquire(binding.normalized().clone())?;
-        let path = self.directory.join(Self::file_name(project_root)?);
+        let path = self.directory.join(file_name);
         match std::fs::read(path) {
             Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -55,19 +64,50 @@ impl LayoutStore {
         state: DockAreaState,
         executor: &tokio::runtime::Handle,
     ) -> tokio::task::JoinHandle<Result<()>> {
+        let layout = self.queue_write(
+            Self::file_name(&project_root),
+            move || Ok(serde_json::to_vec_pretty(&state)?),
+            false,
+            executor,
+        );
+        // Closing a window must start its final write before the Tokio runtime
+        // shuts down; a pending debounce alone would be cancelled on exit.
+        let viewports = self.save_viewports(project_root, false, executor);
+        executor.spawn(async move {
+            layout.await??;
+            if let Some(viewports) = viewports {
+                viewports.await??;
+            }
+            Ok(())
+        })
+    }
+
+    fn queue_write(
+        self: &Arc<Self>,
+        file_name: Result<String>,
+        contents: impl FnOnce() -> Result<Vec<u8>> + Send + 'static,
+        debounce: bool,
+        executor: &tokio::runtime::Handle,
+    ) -> tokio::task::JoinHandle<Result<()>> {
+        let file_name = match file_name {
+            Ok(file_name) => file_name,
+            Err(error) => return executor.spawn(async move { Err(error) }),
+        };
         let stamp = self
             .writes
             .lock()
             .expect("layout queue lock")
-            .entry(project_root.clone())
+            .entry(file_name.clone())
             .or_insert_with(|| Arc::new(AtomicU64::new(0)))
             .clone();
         let sequence = stamp.fetch_add(1, Ordering::SeqCst) + 1;
         let store = self.clone();
-        executor.spawn_blocking(move || {
-            let result = store.write(&project_root, &state, || {
-                stamp.load(Ordering::SeqCst) == sequence
-            });
+        let write = move || {
+            let current = || stamp.load(Ordering::SeqCst) == sequence;
+            if !current() {
+                return Ok(());
+            }
+            let result = contents().and_then(|contents| store.write(&file_name, contents, current));
             if result.is_err() {
                 tracing::warn!(
                     code = "native_layout_save_failed",
@@ -75,13 +115,22 @@ impl LayoutStore {
                 );
             }
             result
-        })
+        };
+        if debounce {
+            let blocking = executor.clone();
+            executor.spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                blocking.spawn_blocking(write).await?
+            })
+        } else {
+            executor.spawn_blocking(write)
+        }
     }
 
     fn write(
         &self,
-        project_root: &str,
-        state: &DockAreaState,
+        file_name: &str,
+        contents: Vec<u8>,
         current: impl FnOnce() -> bool,
     ) -> Result<()> {
         std::fs::create_dir_all(&self.directory)?;
@@ -101,8 +150,8 @@ impl LayoutStore {
             },
             lease,
             vec![StagedFilesystemMutation::Write {
-                relative_path: Self::file_name(project_root)?.into(),
-                contents: serde_json::to_vec_pretty(state)?,
+                relative_path: file_name.into(),
+                contents,
             }],
         )?;
         transaction.commit()?.finalize();
