@@ -84,16 +84,7 @@ impl Workbench {
             {
                 return;
             }
-            self.graphs.remove(from);
-            self.graphs
-                .insert(to.as_str().to_owned(), canvas.downgrade());
-            if let Some(opening) = self
-                .graph_openings
-                .get(to.as_str())
-                .and_then(gpui::WeakEntity::upgrade)
-            {
-                self.redirect_graph_opening(opening, to.as_str(), window, cx);
-            }
+            self.bind_graph_resource(canvas, from, &to, window, cx);
             true
         } else {
             self.indexed_graph_revision(from)
@@ -136,13 +127,72 @@ impl Workbench {
             }
         }
         if moved {
-            if let Some(root) = &self.layout_root {
-                self.services
-                    .layouts
-                    .remap_viewport(root, from, Some(to.as_str()));
-            }
-            self.persist_layout(cx);
+            self.persist_graph_move(from, &to, cx);
         }
+    }
+
+    pub(in crate::workbench) fn recover_graph_resource(
+        &mut self,
+        canvas: Entity<crate::canvas::GraphCanvas>,
+        to: GraphResourcePath,
+        version: yss_project::GraphEditVersion,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let from = canvas.read(cx).path().to_owned();
+        if self
+            .project
+            .as_ref()
+            .is_none_or(|project| project.identity != canvas.read(cx).graph.project)
+            || self
+                .panel_placement(canvas.entity_id().into(), cx)
+                .is_none()
+            || self
+                .graphs
+                .get(&from)
+                .is_none_or(|held| held.entity_id() != canvas.entity_id())
+            || self
+                .graphs
+                .get(to.as_str())
+                .and_then(gpui::WeakEntity::upgrade)
+                .is_some()
+            || !canvas.update(cx, |canvas, cx| {
+                canvas.recover_resource(to.clone(), version, cx)
+            })
+        {
+            return;
+        }
+        self.bind_graph_resource(canvas, &from, &to, window, cx);
+        self.persist_graph_move(&from, &to, cx);
+    }
+
+    fn bind_graph_resource(
+        &mut self,
+        canvas: Entity<crate::canvas::GraphCanvas>,
+        from: &str,
+        to: &GraphResourcePath,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.graphs.remove(from);
+        self.graphs
+            .insert(to.as_str().to_owned(), canvas.downgrade());
+        if let Some(opening) = self
+            .graph_openings
+            .get(to.as_str())
+            .and_then(gpui::WeakEntity::upgrade)
+        {
+            self.redirect_graph_opening(opening, to.as_str(), window, cx);
+        }
+    }
+
+    fn persist_graph_move(&self, from: &str, to: &GraphResourcePath, cx: &mut Context<Self>) {
+        if let Some(root) = &self.layout_root {
+            self.services
+                .layouts
+                .remap_viewport(root, from, Some(to.as_str()));
+        }
+        self.persist_layout(cx);
     }
 
     fn redirect_graph_opening(

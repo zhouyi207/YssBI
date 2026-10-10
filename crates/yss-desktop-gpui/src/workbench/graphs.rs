@@ -158,6 +158,15 @@ impl Workbench {
             window,
             move |view, canvas, event, window, cx| {
                 match event {
+                    CanvasEvent::ResourceLocated { path, version } => {
+                        view.recover_graph_resource(
+                            canvas.clone(),
+                            path.clone(),
+                            *version,
+                            window,
+                            cx,
+                        );
+                    }
                     CanvasEvent::Selection { nodes, projection }
                     | CanvasEvent::Projection { nodes, projection } => {
                         if diagnostic_count != projection.diagnostics.len() {

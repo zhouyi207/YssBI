@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+mod refresh;
+
 use yss_graph_analysis::GraphAnalysis;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_runtime::GraphMaterializationError;

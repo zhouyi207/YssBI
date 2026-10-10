@@ -302,6 +302,25 @@ pub(crate) fn document_hash(document: &GraphDocument) -> Result<[u8; 32], String
 }
 
 impl ProjectState {
+    /// Locate an existing editing session without loading files or retaining a second path index.
+    pub fn graph_editing_path(
+        &self,
+        project: &ProjectInstanceId,
+        session_id: uuid::Uuid,
+    ) -> Result<Option<GraphResourcePath>, ProjectOperationError> {
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != project.as_str() {
+            return Err(editing_stale());
+        }
+        self.ensure_project_operational()?;
+        Ok(self
+            .graph_editing
+            .lock()
+            .unwrap()
+            .iter()
+            .find_map(|(path, editing)| (editing.session_id == session_id).then(|| path.clone())))
+    }
+
     pub(crate) fn prepare_graph_editing_remap(
         &self,
         registry: &yss_node_registry::NodeRegistry,

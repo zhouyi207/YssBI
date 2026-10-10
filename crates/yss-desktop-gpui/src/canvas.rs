@@ -52,6 +52,10 @@ pub enum CanvasEvent {
         nodes: Vec<NodeId>,
         projection: Arc<EditorProjectionModel>,
     },
+    ResourceLocated {
+        path: yss_graph_document::GraphResourcePath,
+        version: yss_project::GraphEditVersion,
+    },
     Execution,
     ShowResults,
     InspectResult(Arc<yss_application::graph::results::ResultLease>),

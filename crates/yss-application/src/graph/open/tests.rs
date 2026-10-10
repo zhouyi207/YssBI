@@ -158,6 +158,139 @@ fn open_request(session: &StagedSession, path: &GraphResourcePath) -> OpenGraphR
 }
 
 #[test]
+fn refresh_graph_follows_retained_session_across_moves_and_path_reuse() {
+    let original = GraphResourcePath::new("events/Original.yssbi-event").unwrap();
+    let session = staged_session(
+        TestProject::unloaded("refresh-moves", graph_project(&original)),
+        GraphRuntimeTestControl::default(),
+    );
+    let project = session.session.project_instance_id();
+    let authority = session.session.project();
+    let request =
+        |path: &GraphResourcePath| OpenGraphRequest::new(project.clone(), path.clone(), 0, "en-US");
+    assert_eq!(
+        authority
+            .graph_editing_path(project, uuid::Uuid::new_v4())
+            .unwrap(),
+        None
+    );
+    assert!(!authority.has_resident_graph(&original).unwrap());
+    let initial = session.application.open_graph(request(&original)).unwrap();
+    let identity = initial.editing().version.session_id;
+    let mut current = initial;
+    for name in ["Intermediate", "Final"] {
+        session
+            .application
+            .rename_graph_resource(
+                project.clone(),
+                current.graph_path().clone(),
+                current.editing().version.revision,
+                name.into(),
+                0,
+                yss_project_identity::OperationId::new(),
+            )
+            .unwrap();
+        let path = GraphResourcePath::new(format!("events/{name}.yssbi-event")).unwrap();
+        current = session.application.open_graph(request(&path)).unwrap();
+    }
+    session
+        .application
+        .create_event_graph(
+            project.clone(),
+            "Original".into(),
+            yss_project_identity::OperationId::new(),
+        )
+        .unwrap();
+    let replacement = session.application.open_graph(request(&original)).unwrap();
+    assert_ne!(replacement.editing().version.session_id, identity);
+
+    let recovered = session
+        .application
+        .refresh_graph(request(&original), identity)
+        .unwrap();
+    assert_eq!(recovered.graph_path(), current.graph_path());
+    assert_eq!(recovered.editing().version, current.editing().version);
+    assert_eq!(
+        authority
+            .graph_editing_path(project, identity)
+            .unwrap()
+            .as_ref(),
+        Some(current.graph_path())
+    );
+    assert_eq!(
+        authority
+            .graph_editing_path(project, replacement.editing().version.session_id)
+            .unwrap(),
+        Some(original.clone())
+    );
+
+    let foreign_project = ProjectInstanceId::from_existing(uuid::Uuid::new_v4().to_string());
+    assert!(matches!(
+        session.application.refresh_graph(
+            OpenGraphRequest::new(foreign_project, original, 1, "en-US"),
+            identity
+        ),
+        Err(OpenGraphApplicationError::Project(
+            OpenGraphProjectError::ProjectIdentityMismatch { .. }
+        ))
+    ));
+}
+
+#[test]
+fn refresh_graph_reads_same_path_after_clean_external_replacement() {
+    let path = GraphResourcePath::new("events/External.yssbi-event").unwrap();
+    let mut data = graph_project(&path);
+    let session = staged_session(
+        TestProject::unloaded("refresh-external", data.clone()),
+        GraphRuntimeTestControl::default(),
+    );
+    let initial = session
+        .application
+        .open_graph(open_request(&session, &path))
+        .unwrap();
+    let identity = initial.editing().version.session_id;
+    let node = yss_graph_document::NodeId::new();
+    Arc::make_mut(&mut data.graphs.get_mut(&path).unwrap().document)
+        .nodes
+        .insert(
+            node,
+            yss_graph_document::DocumentNode {
+                id: node,
+                node_type: "yssbi.logic.not".parse().unwrap(),
+                position: yss_graph_document::NodePosition { x: 20.0, y: 30.0 },
+                parameters: Default::default(),
+                user_label: None,
+            },
+        );
+    yss_project::fixtures::write_project(&data, session._project.root.to_str().unwrap()).unwrap();
+    let project = session.session.project_instance_id();
+    let authority = session.session.project();
+    authority
+        .reconcile_project_change(
+            project,
+            yss_filesystem::change::FilesystemChange::file(
+                yss_filesystem::RelativePath::try_new(path.as_str()).unwrap(),
+                yss_filesystem::change::FileChangeKind::Modified,
+            ),
+        )
+        .unwrap();
+    assert_eq!(
+        authority.graph_editing_path(project, identity).unwrap(),
+        None
+    );
+
+    let refreshed = session
+        .application
+        .refresh_graph(open_request(&session, &path), identity)
+        .unwrap();
+    assert_eq!(refreshed.graph_path(), &path);
+    assert_ne!(refreshed.editing().version.session_id, identity);
+    assert!(refreshed.editing().version.revision > initial.editing().version.revision);
+    assert!(refreshed.document().nodes.contains_key(&node));
+    assert!(!refreshed.editing().dirty);
+}
+
+#[test]
 fn open_graph_preserves_referenced_declared_orphans_for_repair() {
     use yss_graph_document::{
         ConnectionId, DocumentConnection, DocumentNode, InputState, NodeId, NodePosition,

@@ -41,12 +41,40 @@ impl GraphCanvas {
         } else {
             (self.graph.editing.version.revision == from).then_some(self.graph.editing.version)
         };
+        self.bind_resource(path, to, draft_base, cx);
+        true
+    }
+
+    pub(crate) fn recover_resource(
+        &mut self,
+        path: GraphResourcePath,
+        version: GraphEditVersion,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if version.session_id != self.graph.editing.version.session_id
+            || version.revision < self.resource_revision()
+            || &path == self.resource_path()
+        {
+            return false;
+        }
+        // Session identity proves location, not the missing edits between the two revisions.
+        self.bind_resource(path, version.revision, None, cx);
+        true
+    }
+
+    fn bind_resource(
+        &mut self,
+        path: GraphResourcePath,
+        revision: ResourceRevision,
+        draft_base: Option<GraphEditVersion>,
+        cx: &mut Context<Self>,
+    ) {
         self.refresh_task = None;
         self.cancel_gesture();
         self.palette = None;
         self.resource_move = Some(ResourceMove {
             path,
-            revision: to,
+            revision,
             draft_base,
         });
         self.refresh_failed = false;
@@ -57,7 +85,6 @@ impl GraphCanvas {
         });
         cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
         cx.notify();
-        true
     }
 
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
@@ -77,7 +104,9 @@ impl GraphCanvas {
         );
         let task = self.services.run(move |services| {
             Ok(crate::project::OpenedGraph::from_open(
-                services.application.open_graph(request)?,
+                services
+                    .application
+                    .refresh_graph(request, version.session_id)?,
             ))
         });
         self.refresh_task = Some(cx.spawn(async move |view, cx| {
@@ -97,6 +126,20 @@ impl GraphCanvas {
                     view.refresh_pending = true;
                 } else {
                     match result {
+                        Ok(graph)
+                            if graph.project == view.graph.project
+                                && graph.editing.version.session_id == version.session_id
+                                && &graph.projection.graph_path != view.resource_path() =>
+                        {
+                            view.refresh_failed = true;
+                            view.refresh_pending = false;
+                            view.palette = None;
+                            view.cancel_gesture();
+                            cx.emit(CanvasEvent::ResourceLocated {
+                                path: graph.projection.graph_path.clone(),
+                                version: graph.editing.version,
+                            });
+                        }
                         Ok(graph) if view.accepts_projection(&graph) => {
                             view.install_projection(graph, cx);
                         }
