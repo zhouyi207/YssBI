@@ -1,11 +1,12 @@
 //! Finite-degree noncentral t/F tails from bounded integrals and centered Poisson/beta series.
+pub(super) use super::fisher::power as f_power;
 use super::*;
 use crate::distribution::{integrate_gauss, stirling_error};
 use statrs::{
-    distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT},
+    distribution::{ContinuousCDF, Normal, StudentsT},
     function::{beta::beta_reg, gamma::ln_gamma},
 };
-const EPS: f64 = 2e-14;
+pub(super) const EPS: f64 = 2e-14;
 pub(super) fn normal() -> Normal {
     Normal::new(0., 1.).expect("normal")
 }
@@ -87,8 +88,9 @@ fn t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64> {
     let lambda = finite(delta * delta / 2.)?;
     let complement = 1. / (1. + (t / df.sqrt()).powi(2));
     series(lambda, Some(delta.signum()), control, |j, p, q| {
-        0.5 * (p * beta_reg(df / 2., j as f64 + 0.5, complement)
-            + q * beta_reg(df / 2., j as f64 + 1., complement))
+        Ok(0.5
+            * (p * beta_reg(df / 2., j as f64 + 0.5, complement)
+                + q * beta_reg(df / 2., j as f64 + 1., complement)))
     })
 }
 
@@ -135,38 +137,19 @@ fn large_df_t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64
     probability(normalization * total)
 }
 
-pub(super) fn f_power(
-    df1: f64,
-    df2: f64,
-    lambda: f64,
-    alpha: f64,
-    control: &Control,
-) -> Result<f64> {
-    let f = FisherSnedecor::new(df1, df2).map_err(|_| parameter())?;
-    let critical = 1.
-        / FisherSnedecor::new(df2, df1)
-            .map_err(|_| parameter())?
-            .inverse_cdf(alpha);
-    if lambda == 0. {
-        return probability(crate::distribution::fisher_snedecor_sf(&f, critical));
-    }
-    let root = lambda.sqrt();
-    if root > 12. && upper_bound(df2, (root - 12.).powi(2) / (df1 * critical))? < EPS {
+pub(super) fn upper_bound(df: f64, multiplier: f64) -> Result<f64> {
+    if multiplier <= 1. {
         return Ok(1.);
     }
-    let complement = 1. / (1. + df1 * critical / df2);
-    series(lambda / 2., None, control, |j, p, _| {
-        p * beta_reg(df2 / 2., df1 / 2. + j as f64, complement)
-    })
+    if multiplier == f64::INFINITY {
+        return Ok(0.);
+    }
+    // Chernoff and x - log1p(x) >= x^2/(2(1+x)). Only a bound is needed;
+    // evaluating a chi-square survival function adds work and cancellation.
+    let x = multiplier - 1.;
+    probability((-0.25 * df * x * (x / (1. + x))).exp())
 }
-fn upper_bound(df: f64, multiplier: f64) -> Result<f64> {
-    probability(
-        ChiSquared::new(df)
-            .map_err(|_| parameter())?
-            .sf(df * multiplier),
-    )
-}
-fn probability(p: f64) -> Result<f64> {
+pub(super) fn probability(p: f64) -> Result<f64> {
     if !p.is_finite() || !(-1e-10..=1. + 1e-10).contains(&p) {
         return Err(failed());
     }
@@ -196,21 +179,21 @@ fn mode_weights(lambda: f64, mode: usize, twin: Option<f64>) -> (f64, f64) {
     });
     (p, q)
 }
-fn series(
+pub(super) fn series(
     lambda: f64,
     twin: Option<f64>,
     control: &Control,
-    term: impl Fn(usize, f64, f64) -> f64,
+    term: impl Fn(usize, f64, f64) -> Result<f64>,
 ) -> Result<f64> {
     if !lambda.is_finite() || !(0. ..=design::MAX_EXACT_SIZE as f64).contains(&lambda) {
         return Err(failed());
     }
     if lambda == 0. {
-        return probability(term(0, 1., 0.));
+        return probability(term(0, 1., 0.)?);
     }
     let mode = lambda.floor() as usize;
     let (p0, q0) = mode_weights(lambda, mode, twin);
-    let mut total = finite(term(mode, p0, q0))?;
+    let mut total = finite(term(mode, p0, q0)?)?;
     let (mut j, mut p, mut q) = (mode, p0, q0);
     while j > 0 {
         control.check()?;
@@ -221,7 +204,7 @@ fn series(
         p *= rp;
         q *= rq;
         j -= 1;
-        total += finite(term(j, p, q))?;
+        total += finite(term(j, p, q)?)?;
     }
     let (mut j, mut p, mut q) = (mode, p0, q0);
     loop {
@@ -233,7 +216,7 @@ fn series(
         p *= rp;
         q *= rq;
         j = j.checked_add(1).ok_or_else(failed)?;
-        total += finite(term(j, p, q))?;
+        total += finite(term(j, p, q)?)?;
     }
     probability(total)
 }

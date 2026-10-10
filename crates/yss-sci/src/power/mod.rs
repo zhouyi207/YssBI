@@ -4,5 +4,6 @@ use yss_sci_contract::{execution::ScientificExecutionControl as Control, power::
 mod design;
 mod distributions;
 mod evaluate;
+mod fisher;
 mod solve;
 pub use solve::compute;

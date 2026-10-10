@@ -1106,8 +1106,17 @@ the density's omitted tails have an explicit bound. Fixed density panels and add
 Normal-transition splits bound work independently of sample count and noncentrality,
 with control checked at every panel. The Normal survival function retains its native
 accuracy; independent series references include that error in their tolerance.
-Smaller-degree noncentral t and noncentral F retain centered Poisson/beta series
-with tail-mass stopping bounds and bounded extreme-effect shortcuts. Scalar planning
+Smaller-degree noncentral t retains its centered Poisson/beta series.
+`power::fisher` owns F Power's finite-Beta density in a scaled log-ratio coordinate,
+its bracketed Newton critical value, and the Poisson mixture's component tails.
+The root and each integral panel check execution control and have bounded work;
+Gamma normalization avoids subtracting large log-Gamma values. Critical values
+stay logarithmic through component evaluation, preserving small noncentral shifts
+when both degrees are large. Null F Power equals the requested alpha directly.
+Both series share one controlled accumulator and propagate component errors.
+The shared chi-square shortcut uses a conservative analytic Chernoff bound;
+F's extreme-effect shortcut bounds both numerator and denominator events.
+Scalar planning
 never allocates an n-row dataset. Normal approximations are named
 for proportions, Fisher-z correlations, binary-predictor logistic, Poisson rate ratios and
 Schoenfeld survival designs. Equivalence/noninferiority use known-variance normal designs.

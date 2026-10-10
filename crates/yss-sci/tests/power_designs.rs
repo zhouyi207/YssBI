@@ -11,6 +11,62 @@ fn close(a: f64, b: f64) {
     assert!((a - b).abs() < 2e-8, "{a} != {b}");
 }
 
+fn bounded_power(model: PowerModel, options: PowerOptions) -> PowerResult {
+    let (send, receive) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let control = ScientificExecutionControl {
+            deadline: Instant::now() + Duration::from_millis(500),
+            ..control()
+        };
+        let _ = send.send(compute(model, options, &control));
+    });
+    receive
+        .recv_timeout(Duration::from_secs(2))
+        .expect("scalar Power computation did not honor its deadline")
+        .unwrap()
+}
+
+#[test]
+fn noncentral_f_power_finishes_for_large_denominator_degrees() {
+    let sample_size = 1_000_000_000_000_001;
+    let result = bounded_power(
+        PowerModel::Anova {
+            groups: 3,
+            effect_f: (2.0 / (3.0 * sample_size as f64)).sqrt(),
+        },
+        PowerOptions {
+            alpha: 0.05,
+            alternative: PowerAlternative::Greater,
+            request: PowerRequest::Power { sample_size },
+        },
+    );
+    // Independent finite-denominator integer-Beta/Poisson sum at lambda=2.
+    assert!((result.power - 0.225_544_915_769_563_56).abs() < 1e-11);
+}
+
+#[test]
+fn noncentral_f_power_retains_shift_with_large_balanced_degrees() {
+    let sample_size = 1_000_000_000_000_001;
+    let result = bounded_power(
+        PowerModel::LinearRegression {
+            predictors: 500_000_000_000_000,
+            effect_f_squared: 2.0 / sample_size as f64,
+        },
+        PowerOptions {
+            alpha: 0.05,
+            alternative: PowerAlternative::Greater,
+            request: PowerRequest::Power { sample_size },
+        },
+    );
+    // Symmetric finite-Beta expansion; omitted noncentral terms are below 2e-15.
+    let expected = 0.050_000_004_612_366_23;
+    assert!(
+        (result.power - expected).abs() < 1e-12,
+        "{} != {expected}",
+        result.power
+    );
+}
+
 #[test]
 fn noncentral_t_power_retains_large_degrees() {
     let sample_size = 1_000_000_000_000_001;

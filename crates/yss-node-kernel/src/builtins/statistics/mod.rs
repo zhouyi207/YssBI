@@ -131,6 +131,9 @@ pub(super) fn install(
                 | "yssbi.statistics.survey.linear_regression"
                 | "yssbi.statistics.survey.logistic"
                 | "yssbi.statistics.survey.poisson"
+                | "yssbi.statistics.power.cluster_randomized"
+                | "yssbi.statistics.power.mean_difference"
+                | "yssbi.statistics.power.paired"
                 | "yssbi.statistics.test.t.paired" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
                 | "yssbi.statistics.econometrics.gmm"
@@ -159,9 +162,6 @@ pub(super) fn install(
                 | "yssbi.statistics.test.t.one_sample"
                 | "yssbi.statistics.test.t.summary_input"
                 | "yssbi.statistics.timeseries.ecm"
-                | "yssbi.statistics.power.cluster_randomized"
-                | "yssbi.statistics.power.mean_difference"
-                | "yssbi.statistics.power.paired"
                 | "yssbi.statistics.workflow.moderation"
                 | "yssbi.statistics.workflow.moderation_advanced" => 8,
                 "yssbi.statistics.econometrics.panel.cointegration"
@@ -233,6 +233,8 @@ pub(super) fn install(
                 | "yssbi.statistics.meta.mean"
                 | "yssbi.statistics.meta.correlation"
                 | "yssbi.statistics.meta.or_hr"
+                | "yssbi.statistics.power.anova"
+                | "yssbi.statistics.power.linear_regression"
                 | "yssbi.plot.coefficient.view" => 6,
                 "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
@@ -240,8 +242,6 @@ pub(super) fn install(
                 | "yssbi.statistics.diagnostic.nested_comparison"
                 | "yssbi.statistics.diagnostic.reset"
                 | "yssbi.statistics.plot.nomogram"
-                | "yssbi.statistics.power.anova"
-                | "yssbi.statistics.power.linear_regression"
                 | "yssbi.statistics.quality.measurement_system"
                 | "yssbi.statistics.spatial.moran"
                 | "yssbi.statistics.test.normality"
