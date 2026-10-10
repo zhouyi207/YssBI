@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: 原生宿主依赖边界、业务验证与文档生成检查
-> Canonical owners: 当前架构与 Agent Rules 拥有跨系统约束；Cargo metadata 与文档生成器拥有可执行入口检查
+> Canonical owners: 本文拥有验证范围与文档检查；当前架构与 Agent Rules 拥有跨系统约束；Cargo metadata 与文档生成器拥有可执行入口检查
 > Update when: 架构复核范围、验证方式或文档检查入口改变时
 
 架构复核面向 Rust workspace 的原生宿主、应用层、领域层和基础设施。
@@ -22,7 +22,7 @@ Cargo 编译检查验证类型和依赖可解析性，业务测试验证行为�
 
 ## 2. 按变更选择验证
 
-依照[根验证规则](../../.rules)选择 L1/L2 范围，具体命令见[根 README](../../README.md)、[GPUI host](../../crates/yss-desktop-gpui/README.md)及受影响模块的说明：
+按变更风险选择受影响模块与消费者，不将 workspace 全量检查作为局部改动的默认收尾。具体命令见[根 README](../../README.md)、[GPUI host](../../crates/yss-desktop-gpui/README.md)及受影响模块的说明：
 
 - Rust 修改显式选择受影响 package、target 和消费者，运行编译、Clippy 与业务测试。
 - 公开契约变更检查直接与间接调用方，覆盖身份、提交、失败和恢复等真实回归风险。

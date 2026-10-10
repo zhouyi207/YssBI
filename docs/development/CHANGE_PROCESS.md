@@ -57,7 +57,7 @@
 
 ## 5. Delivery
 
-- [ ] 根据[根验证规则](../../.rules)选择受影响范围；原生入口和 workspace 以根 `Cargo.toml` 为准，通过[开发入口](../../README.md#开发与验证入口)定位对应模块 README。
+- [ ] 根据[验证范围](ARCHITECTURE_GATES.md#2-按变更选择验证)选择受影响模块与消费者；原生入口和 workspace 以根 `Cargo.toml` 为准，通过[开发入口](../../README.md#开发与验证入口)定位对应模块 README。
 - [ ] 保存并报告新鲜验证输出；未运行的相关检查说明原因。
 - [ ] 运行 `git diff --check`，复核未跟踪文件、生成文件 drift 和 unrelated user changes。
 - [ ] 确认 acceptance criteria 已满足，roadmap/TODO 只保留真正未完成的工作。

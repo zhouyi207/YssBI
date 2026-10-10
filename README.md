@@ -102,7 +102,7 @@ cargo run -p yss-application --example build_samples -- --check --stage target/r
 ## 开发与验证入口
 
 [Cargo.toml](Cargo.toml) 拥有 workspace、默认入口和共享依赖。修改库时明确选择
-package 和 target，并检查受影响的原生调用方。界面使用人工验收，不编写 UI 单元测试。
+package 和 target，并检查受影响的原生调用方。界面使用人工验收。
 
 | 任务 | 根命令 |
 | --- | --- |
@@ -112,7 +112,7 @@ package 和 target，并检查受影响的原生调用方。界面使用人工�
 | 包格式检查 | `cargo fmt -p <package> -- --check` |
 | workspace 模块索引 | `node scripts/generate-crate-dependencies.mjs --check` |
 
-日常改动按[验证规则](.rules)选择受影响范围，不将 workspace 全量检查作为局部改动的默认收尾。
+日常改动按[验证规则](docs/development/ARCHITECTURE_GATES.md#2-按变更选择验证)选择受影响范围，不将 workspace 全量检查作为局部改动的默认收尾。
 索引生成器仅维护文档；运行桌面应用不依赖 Node.js。
 
 <!-- ## 致谢

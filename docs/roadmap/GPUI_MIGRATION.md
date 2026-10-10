@@ -111,7 +111,7 @@ cargo run -p yss-application --example build_samples -- --check --stage target/d
 五个示例的 catalog 与 Parquet 随源码提供，开发启动不依赖下载；分发资源与可执行文件一起保留，
 release 使用 `target/release/resources/samples`。包级检查与平台前置条件见
 [宿主 README](../../crates/yss-desktop-gpui/README.md)及[根 README](../../README.md)。
-验收使用项目副本与隔离应用数据，不写原项目。UI 使用人工验收，不新增 UI 单元测试。
+验收使用项目副本与隔离应用数据，不写原项目。UI 使用人工验收。
 本次文档整理未运行检查，不重复计入历史测试或声称完整工作区已通过。
 
 [返回路线图](README.md)

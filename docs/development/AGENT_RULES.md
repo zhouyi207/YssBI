@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: Repository-wide coding-agent behavior and cross-system guardrails
-> Canonical owners: This file owns change discipline and cross-system guardrails; the root `.rules` owns instruction loading, scope and validation discipline
+> Canonical owners: This file owns change discipline and cross-system guardrails; the root `.rules` owns coding and rules-maintenance conventions; `ARCHITECTURE_GATES.md` owns validation scope and documentation checks
 > Update when: Repository-wide agent policy or cross-system guardrails change
 
 This policy applies throughout the repository, regardless of its location
@@ -19,7 +19,7 @@ Use repository knowledge in this order:
    dependencies, constants, and command registration.
 2. Module `README.md` files own their current responsibilities and stable contracts;
    `docs/architecture/` owns only the system overview and cross-module relationships.
-3. `.rules` owns coding-agent behavior and cross-system guardrails.
+3. `.rules` owns coding and rules-maintenance conventions.
 4. `docs/development/` owns change, validation, and delivery workflows.
 5. `docs/decisions/` explains accepted design choices.
 6. `docs/roadmap/` contains plans, remaining acceptance work, and explicitly
@@ -116,9 +116,10 @@ add or commit them unless explicitly requested.
 
 ## Testing and validation
 
-Validation levels, scope selection and delivery evidence are owned by the root
-[`.rules`](../../.rules). Concrete commands and module-specific prerequisites
-belong to the corresponding module README; root `Cargo.toml` owns the native entry and workspace.
+Validation scope and documentation checks are owned by
+[Architecture gates](ARCHITECTURE_GATES.md). Concrete commands and module-specific
+prerequisites belong to the corresponding module README; root `Cargo.toml` owns
+the native entry and workspace.
 
 ## Documentation routing
 
@@ -136,7 +137,7 @@ Use `docs/README.md` for the module index. Representative owners are:
   `crates/yss-plugin-runtime/README.md`
 - Shared Harness values and Assistant read projections: `crates/yss-harness-contract/README.md`
 - Architecture review and documentation checks: `docs/development/ARCHITECTURE_GATES.md`
-- Validation discipline: root `.rules`; command usage: root `README.md`
+- Validation scope: `docs/development/ARCHITECTURE_GATES.md`; command usage: root `README.md`
   and the affected module README.
 - Feature, fix, refactor, and behavior changes:
   `docs/development/CHANGE_PROCESS.md`

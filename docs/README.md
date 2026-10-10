@@ -52,10 +52,10 @@ GPUI 原生宿主见 [GPUI host](../crates/yss-desktop-gpui/README.md)，未完�
 
 ## 开发与交付
 
-- [根规则](../.rules)拥有验证纪律，[Agent 规则](development/AGENT_RULES.md)维护变更纪律与跨系统约束。
+- [根规则](../.rules)拥有 Rust、GPUI Kit 与规则维护约束，[Agent 规则](development/AGENT_RULES.md)维护变更纪律与跨系统约束。
 - [启动与构建](../README.md#快速开始)：Rust 工具链、Cargo 入口与分发资源。
 - [变更流程](development/CHANGE_PROCESS.md)：实现与自审要求。
-- [架构复核与文档检查](development/ARCHITECTURE_GATES.md)：人工边界复核及独立文档契约。
+- [架构复核与文档检查](development/ARCHITECTURE_GATES.md)：验证范围、人工边界复核及独立文档契约。
 
 原生启动和 Cargo 验证见[根 README](../README.md)与 [GPUI host](../crates/yss-desktop-gpui/README.md)。文档检查见[架构复核与文档检查](development/ARCHITECTURE_GATES.md)，生成索引见[实现参考](reference/README.md)，插件 schema 由 [Plugin protocol](../crates/yss-plugin-protocol/README.md) 的 Rust 入口生成。
 

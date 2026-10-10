@@ -1,109 +1,97 @@
-# YssBI Agent Rules
+# Rust coding guidelines
 
-This file owns instruction loading and scope.
-Repository-wide change discipline and cross-system invariants are defined in
-`docs/development/AGENT_RULES.md`. Validation discipline is defined below.
+* Prioritize code correctness and clarity. Speed and efficiency are secondary priorities unless otherwise specified.
+* Do not write organizational or comments that summarize the code. Comments should only be written in order to explain "why" the code is written in some way in the case there is a reason that is tricky / non-obvious.
+* Prefer implementing functionality in existing files unless it is a new logical component. Avoid creating many small files.
+* Avoid using functions that panic like `unwrap()`, instead use mechanisms like `?` to propagate errors.
+* Be careful with operations like indexing which may panic if the indexes are out of bounds.
+* Never silently discard errors with `let _ =` on fallible operations. Always handle errors appropriately:
+  - Propagate errors with `?` when the calling function should handle them
+  - Use `.log_err()` or similar when you need to ignore errors but want visibility
+  - Use explicit error handling with `match` or `if let Err(...)` when you need custom logic
+  - Example: avoid `let _ = client.request(...).await?;` - use `client.request(...).await?;` instead
+* When implementing async operations that may fail, ensure errors propagate to the UI layer so users get meaningful feedback.
+* Never create files with `mod.rs` paths - prefer `src/some_module.rs` instead of `src/some_module/mod.rs`.
+* When creating new crates, prefer specifying the library root path in `Cargo.toml` using `[lib] path = "...rs"` instead of the default `lib.rs`, to maintain consistent and descriptive naming (e.g., `gpui.rs` or `main.rs`).
+* Avoid creative additions unless explicitly requested
+* Use full words for variable names (no abbreviations like "q" for "queue")
+* Use variable shadowing to scope clones in async contexts for clarity, minimizing the lifetime of borrowed references.
+  Example:
+  ```rust
+  executor.spawn({
+      let task_ran = task_ran.clone();
+      async move {
+          *task_ran.borrow_mut() = true;
+      }
+  });
+  ```
 
-All paths in this file are relative to the repository root.
+# Project constraints
 
-## Required policy
+- This project has not been released. Do not write migration logic for old data, formats or type contracts. Use the current contracts directly when making changes; do not add compatibility conversions or migration version fields.
 
-Before repository-specific analysis, planning, edits, or validation, read and
-follow [Repository-wide agent policy](docs/development/AGENT_RULES.md).
+# Timers in tests
 
-That policy applies to the entire repository, not only to `docs/`.
-Its requirements are mandatory, not optional background documentation.
+* In GPUI tests, prefer GPUI executor timers over `smol::Timer::after(...)` when you need timeouts, delays, or to drive `run_until_parked()`:
+  - Use `cx.background_executor().timer(duration).await` (or `cx.background_executor.timer(duration).await` in `TestAppContext`) so the work is scheduled on GPUI's dispatcher.
+  - Avoid `smol::Timer::after(...)` for test timeouts when you rely on `run_until_parked()`, because it may not be tracked by GPUI's scheduler and can lead to "nothing left to run" when pumping.
 
-If the policy cannot be read, report the problem before proceeding with
-changes or validation.
+# GPUI Kit
 
-## Directory scope
+Use `gpui-kit` as the application's single direct GPUI dependency. Core APIs are
+available through `gpui_kit`; components, behavior primitives, assets and platform
+support are exposed through `gpui_kit::component`, `gpui_kit::base`,
+`gpui_kit::assets` and `gpui_kit::platform`.
 
-- Before planning or changing files in a subtree, read the existing `.rules`
-  files along the path from the repository root to the target directory.
-  Read additional applicable rules when the affected scope expands.
-- Nested rules apply only to their directory and descendants.
-- Nested rules add local requirements; do not repeat inherited rules.
-- Local defaults may specialize repository defaults, but must not weaken
-  repository-wide architecture invariants.
-- If applicable rules conflict, identify the conflict rather than silently
-  bypassing a constraint.
+## Guides and API discovery
 
-## Documentation and tool entries
+- Read the [Design Guides](https://gpui-kit.com/docs/design-guides.md) before choosing components, layout, styling or interaction states.
+- Read the relevant [Coding Guides](https://gpui-kit.com/docs/coding-guides.md) sections before changing component state, lifecycle, events, focus or async work.
+- Use the [documentation index](https://gpui-kit.com/llms.txt) to find the relevant component page, then verify signatures against the installed dependency. Do not invent APIs or translate React, CSS or older GPUI examples by analogy.
 
-- Module responsibilities, interfaces, state ownership and lifecycle contracts
-  belong in the corresponding module's `README.md`. Read that README before
-  changing the module. Use `docs/README.md` to locate its canonical owner.
-- `docs/architecture/` contains only the system overview and cross-module
-  relationships. Do not accumulate module implementation details there.
-- Put actionable module-specific development constraints in the nearest `.rules`;
-  keep interface descriptions in the README and link instead of duplicating them.
-- Read only the documents relevant to the requested work. Do not bulk-read
-  unrelated module documentation.
-- Tool-specific instruction files must reference the corresponding `.rules`
-  file instead of duplicating its contents.
+## Initialization and composition
 
+- Initialize components with `gpui_kit::init(cx)` before creating component-backed views. Use `gpui_kit::open_window` to install the window-level `Root`; do not create a separate root for every page.
+- Prefer existing `gpui_kit::component` controls over custom clickable elements. Keep reusable behavior in the framework and product-specific presentation and workflows in the application.
+- Use `RenderOnce` for value-like presentation and retain `Entity<T>` when state, focus, subscriptions or async work must survive frames. Do not recreate retained state in `render`.
+- Check each component family's constructor, state owner and event contract. Import the extension traits required by the installed API rather than assuming every component supports the same builders.
 
-## Testing and validation
+## State and lifecycle
 
-- Do not add speculative matrices, duplicate coverage, tests for unchanged
-  framework behavior, or tests that only prove a historical refactor occurred.
-- Before adding more than two tests, identify the distinct regression each
-  additional test catches and omit cases without one.
-- Use repository-root Cargo commands as stable native task entry points. `Cargo.toml`
-  owns workspace members, the default GPUI host and shared dependencies; root and
-  module READMEs explain focused commands. `react/` is reference source, not a build entry.
-- Default to L1 focused validation during iteration and L2 affected-scope
-  validation for a completed change, as defined below. Small changes
-  must not default to workspace-wide check/lint/test as a routine
-  finishing step.
-- Before validation, briefly identify affected modules, selected checks, and
-  their rationale. Rust focused commands must explicitly select packages and
-  appropriate test targets; GPUI interactions use manual acceptance.
-- Escalate to L3 complete validation only for an explicit user request, an
-  established merge/release gate, or a high-risk change whose impact cannot be
-  reliably bounded. State the trigger before running it. Touching both frontend
-  and backend is not by itself a reason to run complete CI.
-- Changes to public APIs, shared types, serialization, or cross-module behavior
-  require assessing affected consumers; passing only the edited crate's tests
-  is not sufficient evidence for those changes.
-- Confirm focused tests actually ran the relevant cases. Zero matched tests,
-  compilation-only checks, and failed environment initialization are not passing
-  tests.
-- Reuse fresh results within the same task while the relevant code, dependencies,
-  configuration, and test inputs are unchanged. Repeat or broaden checks only
-  for new changes, failures, or unresolved risks; diagnose failures before
-  expanding the suite. If validation becomes unexpectedly expensive, report its
-  stage and reassess scope before starting additional checks.
-- Run `git diff --check` before delivery. Report actual commands, scope, and
-  relevant checks not run or not completed. Do not claim a check passed without
-  fresh output or describe focused validation as complete validation.
-- Do not perform unrelated repository-wide formatting or hardcode global Cargo
-  build-job/test-thread limits.
+- Give each value one owner. Controlled callbacks request changes from that owner; do not mirror controlled values in a second hidden model or echo owner updates back as user input.
+- Use stable domain-derived `ElementId`s for repeated elements, not translated labels, mutable list indexes or fresh random IDs.
+- Keep required subscriptions and tasks alive with their owner. Use weak entity handles for work that must not retain a closed view, and handle entity or window destruction.
+- Start async work from events or lifecycle methods, not `render`. Move expensive work off the foreground thread, update entities through GPUI contexts and reject stale results.
+- Call `cx.notify()` after a coherent change affecting rendering. Use events for semantic notifications; do not mutate or notify unconditionally during rendering.
 
-### Validation levels
+## Theme, interaction and large data
 
-| Level | When | Scope |
-| --- | --- | --- |
-| L1 | During iteration | Relevant test files or Rust package/target/case; focused compile checks as needed |
-| L2 | Delivering a coherent change | Changed modules and affected consumers, relevant contract tests, lint/check and local formatting |
-| L3 | Explicit request, established gate, or impact that cannot be bounded reliably | Complete Cargo workspace validation, then risk-specific validation |
+- Use `cx.theme()` semantic tokens and component size/style APIs. Do not hardcode application UI colors or reproduce a component's interaction behavior in styling code.
+- Use `Button` for application commands and `Link` for external URLs or email addresses. Support keyboard actions and visible focus alongside pointer interaction.
+- Reuse window-level overlay facilities. Dismissing the topmost overlay should restore focus to its trigger; do not duplicate overlay or focus ownership.
+- Represent empty, loading, error, disabled and destructive states explicitly. Recoverable failures need visible feedback, not only a log entry.
+- Virtualize unbounded lists and tables. Keep row identity separate from position, avoid cloning whole collections per render and give each scrolling region an explicit owner.
 
-- Documentation-only changes use the documentation contract and changed-file
-  formatting checks; do not rebuild the desktop application for them. Reuse the
-  module-map check already included in the documentation contract.
-- Assess broad toolchain, workspace feature and test-infrastructure changes for
-  their actual consumer impact before selecting L3. Frontend/backend edits or
-  large diffs alone do not establish that impact.
-- Packaging, permission and platform changes may require an application build
-  and manual target-platform validation in addition to focused checks.
-- Do not reduce coverage, skip tests or split crates merely to make validation
-  faster. Diagnose build versus test cost before changing the test scope.
-- If affected-test selection is introduced, account explicitly for shared
-  contracts and generated files rather than relying only on static imports.
+# Rules Hygiene
 
+These `.rules` files are read by every agent session. Keep them high-signal.
 
-## Addition
+## After any agentic session
+If you discover a non-obvious pattern that would help future sessions, include a **"Suggested .rules additions"** heading in your PR description with the proposed text. Do **not** edit `.rules` inline during normal feature/fix work. Reviewers decide what gets merged.
 
-- 项目尚未发布，不要编写旧数据、旧格式或旧类型契约的迁移逻辑；变更时直接使用当前契约，不添加兼容转换或迁移版本字段。
-- 禁止给 ui 写单元测试，涉及验收请使用人工验收
+## High bar for new rules
+Editing or clarifying existing rules is always welcome. New rules must meet **all three** criteria:
+1. **Non-obvious** — someone familiar with the codebase would still get it wrong without the rule.
+2. **Repeatedly encountered** — it came up more than once (multiple hits in one session counts).
+3. **Specific enough to act on** — a concrete instruction, not a vague principle.
+
+Rules that apply to a single crate belong in that crate's own `.rules` file, not the repo root.
+
+## What NOT to put in `.rules`
+Avoid architectural descriptions of a crate (module layout, data flow, key types). These go stale fast and the agent can gather them by reading the code. Rules should be **traps to avoid**, not **maps to follow**.
+
+## No drive-by additions
+Rules emerge from validated patterns, not one-off observations. The workflow is:
+1. Agent notes a pattern during a session.
+2. Team validates the pattern in code review.
+3. A dedicated commit adds the rule with context on *why* it exists.
