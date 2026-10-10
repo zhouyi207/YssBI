@@ -106,7 +106,7 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(id.into()).unwrap(),
-                std::num::NonZeroU32::new(2).unwrap(),
+                std::num::NonZeroU32::new(if method == Discriminant { 3 } else { 2 }).unwrap(),
                 contract,
                 move |inv| execute(method, inv),
             )
@@ -121,7 +121,7 @@ fn workspace(
     k: usize,
     dense: bool,
     retained: usize,
-) -> Result<(), KernelError> {
+) -> Result<usize, KernelError> {
     let bytes = (|| {
         let matrices = n
             .checked_mul(p)?
@@ -141,7 +141,7 @@ fn workspace(
             .checked_add(retained)?
             .checked_add(256 * 1024)
     })();
-    inv.control.check_bytes(bytes).map(|_| ())
+    inv.control.check_bytes(bytes)
 }
 fn selected<'a>(inv: &'a KernelInvocation<'_>, keys: &[&str]) -> Vec<&'a RuntimeValue> {
     inv.input_keys
@@ -156,11 +156,7 @@ fn numeric(
     k: usize,
     dense: bool,
 ) -> Result<Vec<Vec<f64>>, KernelError> {
-    let inputs = inputs
-        .iter()
-        .map(|value| value.unannotated())
-        .collect::<Vec<_>>();
-    let data = columns(&inputs, inv, 0)?;
+    let data = columns(inputs, inv, 0)?;
     workspace(
         inv,
         data.first().map_or(0, Vec::len),
@@ -178,6 +174,7 @@ fn classification(
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     let input = selected(inv, &["groups", "variables"]);
     let typed = series::columns(&input, inv, true)?;
+    let column_count = typed.len();
     let mut retained = inv.control.check_bytes(
         typed[0]
             .values
@@ -198,12 +195,14 @@ fn classification(
             )?;
         }
     }
-    let (groups, labels) = super::common::categories(&typed[0], false, inv)?;
+    let mut typed = typed.into_iter();
+    let label_column = typed.next().expect("declared group column");
+    let (groups, labels) = super::common::categories(&label_column, false, inv)?;
     // Class-specific covariance factors and the confusion report have independent
     // dimensions; admitting only the observation matrix misses many-class inputs.
     let retained = inv.control.check_bytes((|| {
         let classes = labels.len();
-        let p = typed.len().checked_sub(1)?;
+        let p = column_count.checked_sub(1)?;
         let factors = classes.checked_mul(p)?.checked_mul(p)?.checked_mul(32)?;
         let report = classes
             .checked_mul(classes)?
@@ -213,15 +212,17 @@ fn classification(
             )?;
         retained.checked_add(factors)?.checked_add(report)
     })())?;
-    workspace(inv, groups.len(), typed.len(), 1, false, retained)?;
+    let mut workspace_bytes = workspace(inv, groups.len(), column_count, 1, false, retained)?;
+    let series::Column { values, metadata } = label_column;
+    drop(values);
     let mut variables = Vec::new();
-    for column in &typed[1..] {
+    for column in typed {
         let mut values = inv.control.reserve(column.values.len())?;
-        for (i, scalar) in column.values.iter().enumerate() {
+        for (i, scalar) in column.values.into_iter().enumerate() {
             if i.is_multiple_of(1024) {
                 inv.check_control()?;
             }
-            values.push(numeric_input(Some(&RuntimeValue::Scalar(scalar.clone())))?);
+            values.push(numeric_input(Some(&RuntimeValue::Scalar(scalar)))?);
         }
         variables.push(values);
     }
@@ -232,10 +233,10 @@ fn classification(
         Some(numeric(&new_inputs, inv, 1, false)?)
     };
     if let Some(data) = &new_variables {
-        workspace(
+        workspace_bytes = workspace(
             inv,
             groups.len().max(data[0].len()),
-            typed.len(),
+            column_count,
             1,
             false,
             retained,
@@ -263,19 +264,11 @@ fn classification(
         control,
     )
     .map_err(computation_error)?;
-    let mut predicted = inv.control.reserve(result.predictions.len())?;
-    for (i, index) in result.predictions.into_iter().enumerate() {
-        if i.is_multiple_of(1024) {
-            inv.check_control()?;
-        }
-        predicted.push(RuntimeValue::Scalar(labels[index].clone()));
-    }
-    let mut predicted = RuntimeValue::List(Arc::from(predicted));
-    if let Some(metadata) = &typed[0].metadata {
-        predicted = predicted
-            .with_metadata(metadata.clone())
-            .map_err(|_| KernelError::InvalidParameter)?;
-    }
+    drop(variables);
+    drop(new_variables);
+    drop(groups);
+    let predicted =
+        restore_predictions(result.predictions, &labels, metadata, workspace_bytes, inv)?;
     Ok(vec![
         value(
             result.report.map_classes(|class| labels[class].clone()),
@@ -283,6 +276,43 @@ fn classification(
         )?,
         predicted,
     ])
+}
+
+fn restore_predictions(
+    indices: Vec<usize>,
+    labels: &[TabularScalar],
+    metadata: Option<yss_data_contract::ConversionMetadata>,
+    retained: usize,
+    inv: &KernelInvocation<'_>,
+) -> Result<RuntimeValue, KernelError> {
+    let mut bytes = retained;
+    for (i, &index) in indices.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            inv.check_control()?;
+        }
+        if let TabularScalar::String(label) = &labels[index] {
+            bytes = bytes
+                .checked_add(label.len())
+                .ok_or(KernelError::BudgetExceeded)?;
+        }
+    }
+    // The existing workspace covers containers, but each repeated string label
+    // owns its bytes. Admit the expansion before cloning any prediction label.
+    inv.control.check_bytes(Some(bytes))?;
+    let mut predicted = inv.control.reserve(indices.len())?;
+    for (i, index) in indices.into_iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            inv.check_control()?;
+        }
+        predicted.push(RuntimeValue::Scalar(labels[index].clone()));
+    }
+    let predicted = RuntimeValue::List(Arc::from(predicted));
+    match metadata {
+        Some(metadata) => predicted
+            .with_metadata(metadata)
+            .map_err(|_| KernelError::InvalidParameter),
+        None => Ok(predicted),
+    }
 }
 
 fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
@@ -425,6 +455,105 @@ mod tests {
         time::{Duration, Instant},
     };
     use yss_data_contract::ValueType;
+    #[test]
+    fn discriminant_admits_expanded_prediction_labels_before_copying_them() {
+        let relations = crate::tests::relations();
+        let numeric = |values: &[f64]| {
+            RuntimeValue::List(
+                values
+                    .iter()
+                    .map(|&value| RuntimeValue::float64(value).unwrap())
+                    .collect(),
+            )
+        };
+        let labels = ["A".repeat(16 * 1024), "B".repeat(16 * 1024)];
+        let inputs = [
+            RuntimeValue::List(
+                (0..8)
+                    .map(|row| {
+                        RuntimeValue::Scalar(TabularScalar::String(
+                            labels[usize::from(row >= 4)].clone().into(),
+                        ))
+                    })
+                    .collect(),
+            ),
+            numeric(&[0., 0.8, 1.4, -0.3, 4., 4.6, 5.1, 3.7]),
+            numeric(&[1., 1.3, 0.2, -0.7, 4., 5.3, 3.8, 4.7]),
+            numeric(&[10.0; 512]),
+            numeric(&[10.0; 512]),
+        ];
+        let parameters = [
+            (
+                "discriminant_method",
+                TabularScalar::String("linear".into()).into(),
+            ),
+            (
+                "class_priors",
+                TabularScalar::String("empirical".into()).into(),
+            ),
+            ("shrinkage", RuntimeValue::float64(0.0).unwrap()),
+        ];
+        let outputs = [
+            KernelOutputSpec {
+                data_type: ValueType::Struct("statistics.report".into()),
+                fields: None,
+            },
+            KernelOutputSpec {
+                data_type: ValueType::DataSeries(Box::new(ValueType::Any)),
+                fields: None,
+            },
+        ];
+        let mut control = KernelControl {
+            cancellation: Arc::new(AtomicBool::new(false)),
+            deadline: Instant::now() + Duration::from_secs(30),
+            max_input_bytes: 4 * 1024 * 1024,
+        };
+        let registry = crate::KernelRegistry::default();
+        let id = KernelId::new("yssbi.statistics.multivariate.discriminant".into()).unwrap();
+        let invoke = |control: &KernelControl| {
+            registry.execute(
+                &id,
+                &KernelInvocation {
+                    relations: &relations,
+                    inputs: &inputs,
+                    input_keys: &[
+                        "groups",
+                        "variables",
+                        "variables",
+                        "new_variables",
+                        "new_variables",
+                    ],
+                    parameters: parameters
+                        .iter()
+                        .map(|(key, value)| {
+                            (
+                                KernelParameterKey::new((*key).into()).unwrap(),
+                                Cow::Borrowed(value),
+                            )
+                        })
+                        .collect(),
+                    outputs: &outputs,
+                    control,
+                },
+            )
+        };
+        let constrained = invoke(&control);
+        assert!(
+            matches!(constrained, Err(KernelError::BudgetExceeded)),
+            "eight MiB of prediction labels exceeded the four MiB invocation budget; error: {:?}",
+            constrained.as_ref().err()
+        );
+        control.max_input_bytes = usize::MAX;
+        let output = invoke(&control).unwrap();
+        let RuntimeValue::List(predictions) = &output[1] else {
+            panic!("materialized predictions expected")
+        };
+        assert_eq!(predictions.len(), 512);
+        assert!(predictions.iter().all(|value| matches!(value,
+            RuntimeValue::Scalar(TabularScalar::String(label)) if label.as_ref() == labels[1]
+        )));
+    }
+
     #[test]
     fn multivariate_kernels_admit_dense_workspace_before_computation_and_preserve_exact_classes() {
         let relations = crate::tests::relations();
