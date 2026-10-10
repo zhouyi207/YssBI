@@ -1,5 +1,4 @@
 use super::*;
-use statrs::distribution::{ContinuousCDF, StudentsT};
 use yss_sci_linalg::Mat;
 pub fn mean(
     y: &[f64],
@@ -28,9 +27,11 @@ pub fn mean(
     });
     let covariance = design.covariance(&scores, control)?;
     let standard_error = finite(covariance[(0, 0)].sqrt())?;
-    let t =
-        StudentsT::new(0., 1., design.summary.degrees_of_freedom as f64).map_err(|_| failed())?;
-    let width = t.inverse_cdf(0.975) * standard_error;
+    let critical = crate::inference::intervals::critical(
+        0.95,
+        Some(design.summary.degrees_of_freedom as f64),
+    )?;
+    let width = critical * standard_error;
     Ok(SurveyMean {
         kind: if proportion { "proportion" } else { "mean" }.into(),
         estimate,

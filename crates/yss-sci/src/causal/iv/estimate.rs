@@ -85,7 +85,8 @@ pub(super) fn coefficient_inference(
         .transpose()
         .map_err(|error| format!("IV: {error}"))?;
     let critical = if let Some(student) = &student {
-        student.inverse_cdf(0.975)
+        crate::inference::intervals::critical(0.95, Some(student.freedom()))
+            .map_err(|error| format!("IV t critical value: {error:?}"))?
     } else {
         Normal::new(0.0, 1.0)
             .map_err(|error| format!("IV: {error}"))?

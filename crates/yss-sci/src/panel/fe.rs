@@ -602,7 +602,7 @@ pub fn fit_panel_fe(
     let df_model = result.df_model; // F test is for slope coefficients only (excl. constant)
     let df_total = df_model + df_residual;
 
-    use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
+    use statrs::distribution::{FisherSnedecor, StudentsT};
     // Stata xtreg, fe vce(cluster): F = Wald/k with df(k, M-1). Wald = β'V^{-1}β (slope coeffs only).
     let (fvalue, f_p_value) = if use_cluster_df {
         let beta_s = &result.betas;
@@ -659,7 +659,8 @@ pub fn fit_panel_fe(
         const_t,
         yss_sci_contract::hypothesis::Alternative::TwoSided,
     );
-    let t_crit = t_dist.inverse_cdf(0.975);
+    let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+        .map_err(|error| format!("Panel FE t critical value: {error:?}"))?;
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 
@@ -920,7 +921,7 @@ pub fn fit_panel_fe_time(
     let df_model = result.df_model;
     let df_total = df_model + df_residual;
 
-    use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
+    use statrs::distribution::{FisherSnedecor, StudentsT};
     let (fvalue, f_p_value) = if use_cluster_df {
         let beta_s = &result.betas;
         let v_s = &result.cov_beta;
@@ -970,7 +971,8 @@ pub fn fit_panel_fe_time(
         const_t,
         yss_sci_contract::hypothesis::Alternative::TwoSided,
     );
-    let t_crit = t_dist.inverse_cdf(0.975);
+    let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+        .map_err(|error| format!("Panel FE t critical value: {error:?}"))?;
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 
@@ -1224,7 +1226,7 @@ pub fn fit_panel_fe_twoway(
     let df_model = result.df_model;
     let df_total = df_model + df_residual;
 
-    use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
+    use statrs::distribution::{FisherSnedecor, StudentsT};
     let (fvalue, f_p_value) = if use_cluster_df {
         let beta_s = &result.betas;
         let v_s = &result.cov_beta;
@@ -1274,7 +1276,8 @@ pub fn fit_panel_fe_twoway(
         const_t,
         yss_sci_contract::hypothesis::Alternative::TwoSided,
     );
-    let t_crit = t_dist.inverse_cdf(0.975);
+    let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+        .map_err(|error| format!("Panel FE t critical value: {error:?}"))?;
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 

@@ -1,5 +1,5 @@
 use super::*;
-use statrs::distribution::{ContinuousCDF, Normal, StudentsT};
+use statrs::distribution::{ContinuousCDF, Normal};
 use yss_sci_contract::visualization::*;
 
 pub fn xy(
@@ -317,9 +317,7 @@ pub fn coefficients(
     {
         return Err(invalid(ScientificInputViolation::ParameterOutOfRange));
     }
-    let distribution = StudentsT::new(0.0, 1.0, degrees_of_freedom)
-        .map_err(|_| invalid(ScientificInputViolation::ParameterOutOfRange))?;
-    let critical = finite(distribution.inverse_cdf((1.0 + confidence) / 2.0))?;
+    let critical = crate::inference::intervals::critical(confidence, Some(degrees_of_freedom))?;
     let data = (0..length)
         .map(|i| {
             Ok(CoefficientPoint {

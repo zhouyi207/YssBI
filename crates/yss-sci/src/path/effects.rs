@@ -1,6 +1,10 @@
 //! Linear contrasts and observed-range Johnson–Neyman regions from one fitted covariance.
 use super::*;
-use statrs::distribution::{ContinuousCDF, StudentsT};
+use statrs::distribution::StudentsT;
+
+pub(super) fn point(beta: &[f64], weights: &[f64]) -> Result<f64> {
+    finite(beta.iter().zip(weights).map(|(b, w)| b * w).sum())
+}
 
 pub(super) fn covariance(a: &[f64], b: &[f64], matrix: &[Vec<f64>]) -> Result<f64> {
     finite(
@@ -20,8 +24,9 @@ pub(super) fn estimate(
     weights: &[f64],
     covariance_matrix: &[Vec<f64>],
     t: &StudentsT,
+    critical: f64,
 ) -> Result<PathEffect> {
-    let estimate = finite(beta.iter().zip(weights).map(|(b, w)| b * w).sum())?;
+    let estimate = point(beta, weights)?;
     let variance = covariance(weights, weights, covariance_matrix)?;
     let se = if variance >= 0. {
         Some(variance.sqrt())
@@ -42,7 +47,7 @@ pub(super) fn estimate(
     });
     let confidence_interval = se
         .map(|s| -> Result<_> {
-            let width = t.inverse_cdf(0.975) * s;
+            let width = critical * s;
             Ok([finite(estimate - width)?, finite(estimate + width)?])
         })
         .transpose()?;
@@ -64,7 +69,7 @@ pub(super) struct AffineEffect {
 }
 pub(super) fn johnson_neyman(
     effect: AffineEffect,
-    t: &StudentsT,
+    critical: f64,
     center: f64,
     observed_range: [f64; 2],
     second_moderator: Option<f64>,
@@ -86,7 +91,7 @@ pub(super) fn johnson_neyman(
         covariance: finite(effect.covariance * radius)?,
         variance_slope: finite((effect.variance_slope * radius) * radius)?,
     };
-    let critical = t.inverse_cdf(0.975).powi(2);
+    let critical = critical.powi(2);
     let a = finite(effect.slope.powi(2) - critical * effect.variance_slope)?;
     let b = finite(2. * (effect.intercept * effect.slope - critical * effect.covariance))?;
     let c = finite(effect.intercept.powi(2) - critical * effect.variance_intercept)?;

@@ -32,15 +32,25 @@ pub(super) fn t_power(
     alternative: PowerAlternative,
     control: &Control,
 ) -> Result<f64> {
-    let t = StudentsT::new(0., 1., df).map_err(|_| parameter())?;
+    if !df.is_finite() || df <= 0. {
+        return Err(parameter());
+    }
+    let critical = crate::distribution::student_t::upper_quantile(
+        if alternative == PowerAlternative::TwoSided {
+            alpha / 2.
+        } else {
+            alpha
+        },
+        df,
+    )
+    .ok_or_else(failed)?;
     let power = match alternative {
         PowerAlternative::TwoSided => {
-            let critical = -t.inverse_cdf(alpha / 2.);
             t_tail(critical, df, noncentrality, control)?
                 + t_tail(critical, df, -noncentrality, control)?
         }
-        PowerAlternative::Greater => t_tail(-t.inverse_cdf(alpha), df, noncentrality, control)?,
-        PowerAlternative::Less => t_tail(-t.inverse_cdf(alpha), df, -noncentrality, control)?,
+        PowerAlternative::Greater => t_tail(critical, df, noncentrality, control)?,
+        PowerAlternative::Less => t_tail(critical, df, -noncentrality, control)?,
     };
     probability(power)
 }

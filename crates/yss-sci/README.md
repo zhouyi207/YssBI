@@ -139,7 +139,7 @@ with bounded Gauss–Legendre quadrature and bracketed Newton iteration; large-d
 coordinates, logarithmic tails and a corrected power-law inverse preserve finite
 results across scales. Confidence and upper-tail probabilities retain their own
 input precision. The density normalization reuses the shared Stirling remainder;
-Power's arithmetic is unchanged. Two public interval regressions and independent
+Power's noncentral tail series retain their arithmetic. Two public interval regressions and independent
 high-precision density/Beta references check ordinary, extreme-df and tail results,
 alongside the existing Knapp–Hartung Meta and adjusted-prediction callers.
 `regression::models::common::coefficient_table` receives the actual interval
@@ -149,6 +149,14 @@ confidence directly, without constructing and overwriting fixed 95% intervals.
 Coefficient inference prepares its distribution and critical value once when
 covariance is available; point-only results do not calculate discarded inference.
 The fixed 95% normal critical value retains its previous floating-point bits.
+OLS/WLS/GLS/Prais, fixed-effect/LSDV and small-sample IV coefficient intervals,
+ADF drift cutoffs and auxiliary tables, survey means, log-curve intervals,
+Bland–Altman intervals and coefficient plot data also use this bounded Student-t owner.
+Confidence inputs remain central probabilities; ADF and t-based Power preserve their
+explicit tail inputs. Upper-tail quantiles use symmetry for probabilities above one
+half and return zero at one half. Moderation prepares its critical value once for
+conditional effects and Johnson–Neyman regions; point-only affine coefficients
+reuse the same contrast calculation without computing discarded effect inference.
 `regression/postestimation` owns shared evaluation grids, binary-link derivatives
 and Delta variance for adjusted means and binary marginal effects. Evaluation
 retains fitted row order and applies explicit column overrides without rebuilding
@@ -270,7 +278,7 @@ also reuse it for Student references, including Knapp–Hartung Meta and
 design-based survey inference.
 [The beta integral](https://dlmf.nist.gov/8.17) and
 [Student density](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.t.html)
-define the calculation; native quantiles and noncentral algorithms retain their owners.
+define the calculation; normal/F/chi-square quantiles and noncentral tail algorithms retain their owners.
 
 `distribution::normal_two_sided_p` owns standard-normal two-sided inference.
 It evaluates `erfc(abs(z)/sqrt(2))` directly, avoiding subtraction from a rounded

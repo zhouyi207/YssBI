@@ -2,10 +2,7 @@ use super::fit::OlsSolution;
 use super::{OLS, OlsFit, OlsFitError};
 use crate::regression::covariance::compute_cov_beta;
 use num_traits::{One, Pow, Zero};
-use statrs::{
-    distribution::{ContinuousCDF, StudentsT},
-    statistics::Statistics,
-};
+use statrs::{distribution::StudentsT, statistics::Statistics};
 use yss_sci_linalg::Col;
 
 pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFitError> {
@@ -108,7 +105,8 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
         })
         .collect();
 
-    let t_critical = t_dist.inverse_cdf(0.975);
+    let t_critical = crate::inference::intervals::critical(0.95, Some(t_df))
+        .map_err(|error| OlsFitError::Inference(format!("OLS t critical value: {error:?}")))?;
     let ci_lower = betas_nd.clone() - yss_sci_linalg::Scale(t_critical) * std_err.clone();
     let ci_upper = betas_nd.clone() + yss_sci_linalg::Scale(t_critical) * std_err.clone();
 

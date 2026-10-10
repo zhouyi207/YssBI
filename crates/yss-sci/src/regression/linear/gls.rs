@@ -1,4 +1,4 @@
-use statrs::distribution::{ContinuousCDF, StudentsT};
+use statrs::distribution::StudentsT;
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
@@ -127,7 +127,8 @@ impl GLS {
             })
             .collect();
 
-        let t_crit = t_dist.inverse_cdf(0.975);
+        let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+            .map_err(|error| format!("GLS t critical value: {error:?}"))?;
         let ci_lower = &betas - yss_sci_linalg::Scale(t_crit) * &std_err;
         let ci_upper = &betas + yss_sci_linalg::Scale(t_crit) * &std_err;
 

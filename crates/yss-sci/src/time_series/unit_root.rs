@@ -5,7 +5,7 @@
 //! - drift: 仅常数
 //! - trend: 常数 + 时间趋势
 
-use statrs::distribution::{ContinuousCDF, StudentsT};
+use statrs::distribution::StudentsT;
 use yss_sci_contract::time_series::forecast::Deterministic;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
@@ -180,9 +180,14 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
 
     // drift 情形用 t 分布临界值和 p-value（Stata 第三情形）
     let (cv_1, cv_5, cv_10, p_value, use_t_dist) = if reg == AdfRegression::Drift {
-        let cv_1 = t_dist.inverse_cdf(0.01);
-        let cv_5 = t_dist.inverse_cdf(0.05);
-        let cv_10 = t_dist.inverse_cdf(0.10);
+        let critical = |tail| {
+            crate::distribution::student_t::upper_quantile(tail, t_dist.freedom())
+                .map(|q| -q)
+                .ok_or_else(|| "ADF: Student-t critical value is undefined".to_string())
+        };
+        let cv_1 = critical(0.01)?;
+        let cv_5 = critical(0.05)?;
+        let cv_10 = critical(0.10)?;
         let p_val = crate::distribution::student_t_probability(
             &t_dist,
             test_statistic,
@@ -215,7 +220,8 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     for j in 1..=lags {
         col_names.push(format!("L{}D.", j));
     }
-    let t_crit = t_dist.inverse_cdf(0.975);
+    let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+        .map_err(|error| format!("ADF t critical value: {error:?}"))?;
     for (c, name) in col_names.into_iter().enumerate() {
         let coef = betas[c];
         let se = cov_beta[(c, c)].sqrt();

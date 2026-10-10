@@ -440,11 +440,7 @@ pub fn bland_altman(
     let z = normal_quantile(coverage)?;
     let lower_limit = finite(bias - z * sd)?;
     let upper_limit = finite(bias + z * sd)?;
-    let t = finite(
-        StudentsT::new(0.0, 1.0, (n - 1) as f64)
-            .map_err(|_| Error::ComputationFailed)?
-            .inverse_cdf((1.0 + confidence) / 2.0),
-    )?;
+    let t = crate::inference::intervals::critical(confidence, Some((n - 1) as f64))?;
     let bias_margin = t * sd / (n as f64).sqrt();
     let limit_margin = t * sd * (1.0 / n as f64 + z * z / (2 * (n - 1)) as f64).sqrt();
     let take = n.min(MAX_BLAND_ALTMAN_POINTS);

@@ -1,7 +1,7 @@
 use crate::regression::covariance::compute_cov_beta;
 use yss_sci_contract::regression::OlsCovariance;
 
-use statrs::distribution::{ContinuousCDF, StudentsT};
+use statrs::distribution::StudentsT;
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
@@ -138,7 +138,8 @@ impl WLS {
             })
             .collect();
 
-        let t_crit = t_dist.inverse_cdf(0.975);
+        let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+            .map_err(|error| format!("WLS t critical value: {error:?}"))?;
         let ci_lower = betas_nd.clone() - yss_sci_linalg::Scale(t_crit) * std_err.clone();
         let ci_upper = betas_nd.clone() + yss_sci_linalg::Scale(t_crit) * std_err.clone();
 

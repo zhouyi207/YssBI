@@ -15,6 +15,51 @@ fn close(a: f64, b: f64) {
 }
 
 #[test]
+fn coefficient_plot_preserves_confidence_before_cdf_rounding() {
+    // Independent 110-digit density/Beta references, including the exact Cauchy tail.
+    for (df, confidence, expected) in [
+        (64.0, 1e-20, 1.2582192702251038e-20),
+        (
+            1.0,
+            f64::from_bits(1.0_f64.to_bits() - 1),
+            5734161139222659.0,
+        ),
+    ] {
+        let result = yss_sci::visualization::coefficients(
+            &["coefficient".into()],
+            &[0.0],
+            &[1.0],
+            df,
+            confidence,
+            &control(),
+        )
+        .unwrap();
+        let row = &result.data[0];
+        assert!(row.lower < 0.0 && row.upper > 0.0);
+        assert!((row.upper / expected - 1.0).abs() < 1e-12);
+        assert!((row.lower / expected + 1.0).abs() < 1e-12);
+        assert_eq!(result.confidence_level, confidence);
+    }
+}
+
+#[test]
+fn coefficient_plot_retains_accurate_student_width_at_large_degrees() {
+    let result = yss_sci::visualization::coefficients(
+        &["coefficient".into()],
+        &[0.0],
+        &[1.0],
+        1_000_000.0,
+        0.95,
+        &control(),
+    )
+    .unwrap();
+    // Independent 110-digit inversion of the full Student-t density series.
+    let expected = 1.9599663568141066;
+    assert!((result.data[0].upper - expected).abs() < 1e-12);
+    assert!((result.data[0].lower + expected).abs() < 1e-12);
+}
+
+#[test]
 fn confidence_intervals_match_quantiles_keep_all_rows_and_check_inputs() {
     let f = fixture();
     let data = (0..640).map(|i| i as f64 / 10.).collect::<Vec<_>>();

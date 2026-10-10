@@ -82,23 +82,25 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(match id {
-                "yssbi.statistics.iv.2sls.summary" => 22,
+                "yssbi.statistics.iv.liml.fit" => 15,
+                "yssbi.statistics.iv.liml.summary" => 20,
+                "yssbi.statistics.iv.2sls.summary" => 23,
+
                 "yssbi.statistics.diagnostic.hausman" => 8,
-                "yssbi.statistics.iv.liml.summary" => 19,
-                "yssbi.statistics.iv.2sls.fit" => 12,
-                "yssbi.statistics.iv.liml.fit" => 14,
-                "yssbi.statistics.meta.regression" => 13,
-                "yssbi.statistics.panel.fit"
-                | "yssbi.statistics.meta.inverse_variance"
+
+                "yssbi.statistics.meta.regression"
+                | "yssbi.statistics.iv.2sls.fit"
+                | "yssbi.statistics.panel.fit" => 13,
+                "yssbi.statistics.meta.inverse_variance"
                 | "yssbi.statistics.meta.fixed_effect"
                 | "yssbi.statistics.meta.random_effect"
                 | "yssbi.statistics.meta.leave_one_out"
                 | "yssbi.statistics.meta.sensitivity" => 12,
-                "yssbi.statistics.econometrics.panel.re" => 11,
-                "yssbi.statistics.econometrics.panel.fe"
+                "yssbi.statistics.econometrics.panel.re"
                 | "yssbi.statistics.econometrics.panel.fd"
-                | "yssbi.statistics.panel.compare"
-                | "yssbi.statistics.test.nonparametric.family"
+                | "yssbi.statistics.econometrics.panel.fe"
+                | "yssbi.statistics.panel.compare" => 11,
+                "yssbi.statistics.test.nonparametric.family"
                 | "yssbi.statistics.survival.aft"
                 | "yssbi.statistics.survival.exponential"
                 | "yssbi.statistics.survival.loglogistic"
@@ -106,12 +108,12 @@ pub(super) fn install(
                 | "yssbi.statistics.survival.weibull"
                 | "yssbi.statistics.meta.egger"
                 | "yssbi.statistics.plot.forest"
-                | "yssbi.statistics.plot.funnel" => 10,
-                "yssbi.statistics.adf.test"
+                | "yssbi.statistics.plot.funnel"
+                | "yssbi.statistics.adf.test"
                 | "yssbi.statistics.econometrics.panel.between"
-                | "yssbi.statistics.logit.summary"
                 | "yssbi.statistics.panel.did.twfe"
-                | "yssbi.statistics.prais.fit"
+                | "yssbi.statistics.prais.fit" => 10,
+                "yssbi.statistics.logit.summary"
                 | "yssbi.statistics.prais.summary"
                 | "yssbi.statistics.probit.summary"
                 | "yssbi.statistics.survival.cox"
@@ -201,7 +203,9 @@ pub(super) fn install(
                 | "yssbi.statistics.inference.cluster_robust"
                 | "yssbi.statistics.spatial.ols"
                 | "yssbi.statistics.spatial.slx"
-                | "yssbi.statistics.spatial.panel" => 7,
+                | "yssbi.statistics.spatial.panel"
+                | "yssbi.statistics.workflow.moderation"
+                | "yssbi.statistics.workflow.moderation_advanced" => 7,
                 "yssbi.plot.boxplot"
                 | "yssbi.plot.violin"
                 | "yssbi.statistics.diagnostic.information_matrix"
@@ -210,8 +214,6 @@ pub(super) fn install(
                 | "yssbi.statistics.sem.path"
                 | "yssbi.statistics.test.cochran_q"
                 | "yssbi.statistics.timeseries.granger"
-                | "yssbi.statistics.workflow.moderation"
-                | "yssbi.statistics.workflow.moderation_advanced"
                 | "yssbi.statistics.spatial.sac"
                 | "yssbi.statistics.spatial.sdem"
                 | "yssbi.statistics.spatial.sdm"
@@ -227,7 +229,11 @@ pub(super) fn install(
                 | "yssbi.statistics.meta.mean"
                 | "yssbi.statistics.meta.correlation"
                 | "yssbi.statistics.meta.or_hr"
-                | "yssbi.statistics.doe.dose_response" => 6,
+                | "yssbi.statistics.doe.dose_response"
+                | "yssbi.plot.coefficient.view"
+                | "yssbi.statistics.power.cluster_randomized"
+                | "yssbi.statistics.power.mean_difference"
+                | "yssbi.statistics.power.paired" => 6,
                 "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
                 | "yssbi.statistics.diagnostic.ljung_box"
@@ -235,10 +241,7 @@ pub(super) fn install(
                 | "yssbi.statistics.diagnostic.reset"
                 | "yssbi.statistics.plot.nomogram"
                 | "yssbi.statistics.power.anova"
-                | "yssbi.statistics.power.cluster_randomized"
                 | "yssbi.statistics.power.linear_regression"
-                | "yssbi.statistics.power.mean_difference"
-                | "yssbi.statistics.power.paired"
                 | "yssbi.statistics.quality.measurement_system"
                 | "yssbi.statistics.spatial.moran"
                 | "yssbi.statistics.test.normality"
@@ -250,7 +253,9 @@ pub(super) fn install(
                 | "yssbi.statistics.timeseries.arch"
                 | "yssbi.statistics.timeseries.garch"
                 | "yssbi.statistics.timeseries.egarch"
-                | "yssbi.statistics.timeseries.gjr_garch" => 5,
+                | "yssbi.statistics.timeseries.gjr_garch"
+                | "yssbi.statistics.association.bland_altman"
+                | "yssbi.statistics.survey.mean_proportion" => 5,
                 _ if id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks" =>
                 {

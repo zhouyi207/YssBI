@@ -20,6 +20,7 @@ pub(super) fn probe(
         model.statistics.df_residual.ok_or_else(parameter)? as f64,
     )
     .map_err(|_| parameter())?;
+    let critical = crate::inference::intervals::critical(0.95, Some(t.freedom()))?;
     let wsd = super::super::preparation::sample_sd(&centered[1])?;
     let wrange = range(&columns[1]);
     let zsd = if options.second_moderator {
@@ -69,11 +70,11 @@ pub(super) fn probe(
                 in_observed_ranges: moderator >= wrange[0]
                     && moderator <= wrange[1]
                     && zvalue.is_none_or(|v| v >= zrange[0] && v <= zrange[1]),
-                effect: effects::estimate(&beta, &weights, covariance, &t)?,
+                effect: effects::estimate(&beta, &weights, covariance, &t, critical)?,
             });
         }
-        let at_zero = effects::estimate(&beta, &a, covariance, &t)?.estimate;
-        let gradient = effects::estimate(&beta, &b, covariance, &t)?.estimate;
+        let at_zero = effects::point(&beta, &a)?;
+        let gradient = effects::point(&beta, &b)?;
         johnson_neyman.push(effects::johnson_neyman(
             AffineEffect {
                 intercept: at_zero,
@@ -82,7 +83,7 @@ pub(super) fn probe(
                 covariance: effects::covariance(&a, &b, covariance)?,
                 variance_slope: effects::covariance(&b, &b, covariance)?,
             },
-            &t,
+            critical,
             centers[1],
             wrange,
             zvalue,

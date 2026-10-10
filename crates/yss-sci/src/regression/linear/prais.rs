@@ -5,7 +5,7 @@
 //! - Cochrane-Orcutt (corc): drops first observation
 
 use crate::diagnostics::serial_correlation::durbin_watson;
-use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
+use statrs::distribution::{FisherSnedecor, StudentsT};
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
@@ -251,7 +251,8 @@ impl Prais {
                         )
                     })
                     .collect();
-                let t_crit = t_dist.inverse_cdf(0.975);
+                let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+                    .map_err(|error| format!("Prais t critical value: {error:?}"))?;
                 let ci_lower = &betas - &std_err.map(|&v| t_crit * v);
                 let ci_upper = &betas + &std_err.map(|&v| t_crit * v);
 

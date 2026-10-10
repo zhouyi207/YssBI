@@ -1,5 +1,4 @@
 use super::common::*;
-use statrs::distribution::{ContinuousCDF, StudentsT};
 use yss_math_expr::{BinaryOp, MathExpr, ParseOptions, UnaryOp, parse_expression};
 use yss_sci_contract::execution::ScientificExecutionControl as Control;
 use yss_sci_contract::regression::models::*;
@@ -423,9 +422,7 @@ pub fn curve(
         coefficient.statistic = None;
         coefficient.p_value = None;
         let df = fit.statistics.df_residual.ok_or_else(failed)?;
-        let critical = StudentsT::new(0.0, 1.0, df as f64)
-            .map_err(|_| failed())?
-            .inverse_cdf(0.975);
+        let critical = crate::inference::intervals::critical(0.95, Some(df as f64))?;
         coefficient.confidence_interval = coefficient
             .standard_error
             .map(|se| -> Result<[f64; 2]> {

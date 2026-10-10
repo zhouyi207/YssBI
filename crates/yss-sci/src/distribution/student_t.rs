@@ -254,5 +254,11 @@ pub(crate) fn confidence_quantile(confidence: f64, df: f64) -> Option<f64> {
     quantile(confidence, (1. - confidence) / 2., df)
 }
 pub(crate) fn upper_quantile(tail: f64, df: f64) -> Option<f64> {
-    quantile((0.5 - tail) * 2., tail, df)
+    if tail == 0.5 {
+        Some(0.)
+    } else if tail > 0.5 {
+        quantile((tail - 0.5) * 2., 1. - tail, df).map(|q| -q)
+    } else {
+        quantile((0.5 - tail) * 2., tail, df)
+    }
 }

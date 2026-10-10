@@ -129,11 +129,12 @@ pub fn fit_panel_lsdv(
     };
 
     let use_cluster_df = cov_type == "cluster";
-    use statrs::distribution::{ContinuousCDF, StudentsT};
+    use statrs::distribution::StudentsT;
     let t_df = (df_residual as f64).max(1.0);
     let t_dist =
         StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
-    let t_crit = t_dist.inverse_cdf(0.975);
+    let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+        .map_err(|error| format!("Panel LSDV t critical value: {error:?}"))?;
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
         let mut pv = Col::zeros(n_full);
@@ -367,11 +368,12 @@ pub fn fit_panel_lsdv_time(
     };
 
     let use_cluster_df = cov_type == "cluster";
-    use statrs::distribution::{ContinuousCDF, StudentsT};
+    use statrs::distribution::StudentsT;
     let t_df = (df_residual as f64).max(1.0);
     let t_dist =
         StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
-    let t_crit = t_dist.inverse_cdf(0.975);
+    let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+        .map_err(|error| format!("Panel LSDV t critical value: {error:?}"))?;
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
         let mut pv = Col::zeros(n_full);
@@ -617,11 +619,12 @@ pub fn fit_panel_lsdv_twoway(
     };
 
     let use_cluster_df = cov_type == "cluster";
-    use statrs::distribution::{ContinuousCDF, StudentsT};
+    use statrs::distribution::StudentsT;
     let t_df = (df_residual as f64).max(1.0);
     let t_dist =
         StudentsT::new(0.0, 1.0, t_df).map_err(|e| format!("Panel LSDV StudentsT: {}", e))?;
-    let t_crit = t_dist.inverse_cdf(0.975);
+    let t_crit = crate::inference::intervals::critical(0.95, Some(t_dist.freedom()))
+        .map_err(|error| format!("Panel LSDV t critical value: {error:?}"))?;
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
         let mut pv = Col::zeros(n_full);
