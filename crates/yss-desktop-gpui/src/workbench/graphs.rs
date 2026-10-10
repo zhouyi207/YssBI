@@ -66,15 +66,18 @@ impl Workbench {
             return;
         }
         if let Some(graph) = self.graphs.get(&path).and_then(gpui::WeakEntity::upgrade) {
-            let applied = graph.update(cx, |graph, cx| {
-                graph.focus_node(node.as_deref(), window, cx)
-            });
             self.present_panel(
-                gpui_component::dock::panel_handle(graph),
+                gpui_component::dock::panel_handle(graph.clone()),
                 DockPlacement::Center,
                 window,
                 cx,
             );
+            let applied = self
+                .displayed_panel_placement(graph.entity_id().into(), cx)
+                .is_some()
+                && graph.update(cx, |graph, cx| {
+                    graph.focus_node(node.as_deref(), window, cx)
+                });
             if let Some(id) = intent {
                 self.finish_intent(&id, applied, window, cx);
             }
@@ -169,6 +172,14 @@ impl Workbench {
                     }
                     CanvasEvent::Selection { nodes, projection }
                     | CanvasEvent::Projection { nodes, projection } => {
+                        // A group's active tab can still be hidden behind another zoomed group.
+                        if matches!(event, CanvasEvent::Selection { .. })
+                            && view
+                                .displayed_panel_placement(canvas.entity_id().into(), cx)
+                                .is_none()
+                        {
+                            return;
+                        }
                         if diagnostic_count != projection.diagnostics.len() {
                             diagnostic_count = projection.diagnostics.len();
                             view.refresh_resource_rows(cx);

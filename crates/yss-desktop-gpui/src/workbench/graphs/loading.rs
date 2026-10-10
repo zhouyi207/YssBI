@@ -40,8 +40,13 @@ impl Workbench {
                         }
                     }
                     OpeningEvent::Activated => {
-                        view.clear_graph_context(cx);
-                        view.mark_project_resource(Some(&path), cx);
+                        if view
+                            .displayed_panel_placement(opening.entity_id().into(), cx)
+                            .is_some()
+                        {
+                            view.clear_graph_context(cx);
+                            view.mark_project_resource(Some(&path), cx);
+                        }
                         if !opening.read(cx).failed {
                             view.read_graph_opening(opening.clone(), window, cx);
                         }
@@ -137,7 +142,7 @@ impl Workbench {
                             canvas.focus_node(node.as_deref(), window, cx)
                         })
                     } else {
-                        installed && node.is_none()
+                        installed && displayed && node.is_none()
                     }
                 } else {
                     tracing::warn!(

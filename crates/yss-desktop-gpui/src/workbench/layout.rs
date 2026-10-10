@@ -57,6 +57,13 @@ impl Workbench {
         }
         let tree = dock.layout(placement)?;
         let node = tree.find_node(tree.find_panel_node(id)?)?;
+        if dock
+            .zoomed_group()
+            .is_some_and(|zoomed| zoomed != node.id())
+            && !(placement == DockPlacement::Left && columns::conversation_zoomed(dock))
+        {
+            return None;
+        }
         match node.kind() {
             PaneRef::Tabs { panels, active_ix } if panels.get(active_ix) == Some(&id) => {
                 Some(placement)
@@ -83,7 +90,12 @@ impl Workbench {
                 window.focus(&panel.focus_handle(cx), cx);
                 return;
             }
-            if columns::conversation_zoomed(dock) && !super::sidebar::is_navigation(&panel) {
+            let group = placement.and_then(|placement| dock.layout(placement)?.find_panel_node(id));
+            let in_zoomed_group = group.is_some_and(|node| dock.zoomed_group() == Some(node));
+            let retained_sidebar = placement == Some(DockPlacement::Left)
+                && columns::conversation_zoomed(dock)
+                && super::sidebar::is_navigation(&panel);
+            if dock.is_zoomed() && !in_zoomed_group && !retained_sidebar {
                 dock.set_zoomed_out(window, cx);
             }
             if placement.is_some() {
