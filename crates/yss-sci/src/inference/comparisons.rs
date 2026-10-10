@@ -1,5 +1,5 @@
 //! Pooled-ANOVA or Welch pair contrasts, followed by one family-wise adjustment.
-use super::intervals::{critical_tail, validate_confidence};
+use super::intervals::{critical, critical_tail, validate_confidence};
 use crate::regression::models::common::{Result, finite, parameter};
 use statrs::distribution::StudentsT;
 use std::collections::BTreeMap;
@@ -8,6 +8,7 @@ use yss_sci_contract::{execution::*, inference::*};
 #[derive(Default)]
 struct Moments {
     count: usize,
+    scale: f64,
     mean: f64,
     sum_squares: f64,
 }
@@ -33,47 +34,89 @@ fn group_moments(
         }
         let m = moments.entry(group).or_default();
         m.count += 1;
+        if value.abs() > m.scale {
+            let ratio = m.scale / value.abs();
+            m.mean *= ratio;
+            m.sum_squares = (m.sum_squares * ratio) * ratio;
+            m.scale = value.abs();
+        }
+        let value = if m.scale > 0. { value / m.scale } else { 0. };
         let delta = value - m.mean;
         m.mean = finite(m.mean + delta / m.count as f64)?;
         m.sum_squares = finite(m.sum_squares + delta * (value - m.mean))?;
     }
     Ok(moments)
 }
-fn contrast(
-    a: &Moments,
-    b: &Moments,
-    pooled: Option<(f64, f64)>,
-    tail: f64,
-) -> Result<PairwiseRow> {
-    let (variance, df) = if let Some((mse, df)) = pooled {
-        (mse * (1. / a.count as f64 + 1. / b.count as f64), df)
+fn comparison_critical(confidence: f64, family_size: usize, df: f64) -> Result<f64> {
+    if family_size == 1 {
+        critical(confidence, Some(df))
     } else {
-        if a.count < 2 || b.count < 2 {
-            return Err(parameter());
+        critical_tail((1. - confidence) / 2. / family_size as f64, Some(df))
+    }
+}
+fn pooled_deviation(
+    groups: &[ComparisonGroup],
+    control: &ScientificExecutionControl,
+) -> Result<f64> {
+    let scale = groups
+        .iter()
+        .filter_map(|g| g.standard_deviation)
+        .fold(0., f64::max);
+    if scale <= 0. {
+        return Err(parameter());
+    }
+    let (mut weight, mut variance) = (0., 0.);
+    for (i, group) in groups.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            control.check()?;
         }
-        let v1 = a.sum_squares / (a.count - 1) as f64 / a.count as f64;
-        let v2 = b.sum_squares / (b.count - 1) as f64 / b.count as f64;
-        let total = v1 + v2;
-        let df =
-            total.powi(2) / (v1.powi(2) / (a.count - 1) as f64 + v2.powi(2) / (b.count - 1) as f64);
-        (total, df)
-    };
-    if variance <= 0. || !variance.is_finite() {
+        if let Some(sd) = group.standard_deviation {
+            let next = (group.observations - 1) as f64;
+            weight += next;
+            variance += ((sd / scale).powi(2) - variance) * (next / weight);
+        }
+    }
+    finite(scale * variance.sqrt())
+}
+fn welch_standard_error(a: &ComparisonGroup, b: &ComparisonGroup) -> Result<(f64, f64)> {
+    let sa = a.standard_deviation.ok_or_else(parameter)?;
+    let sb = b.standard_deviation.ok_or_else(parameter)?;
+    let scale = sa.max(sb);
+    if scale <= 0. {
+        return Err(parameter());
+    }
+    let va = (sa / scale).powi(2) / a.observations as f64;
+    let vb = (sb / scale).powi(2) / b.observations as f64;
+    let total = va + vb;
+    // Relative variance contributions keep Welch's fourth powers dimensionless.
+    let df = finite(
+        ((va / total).powi(2) / (a.observations - 1) as f64
+            + (vb / total).powi(2) / (b.observations - 1) as f64)
+            .recip(),
+    )?;
+    Ok((finite(scale * total.sqrt())?, df))
+}
+fn contrast(
+    a: &ComparisonGroup,
+    b: &ComparisonGroup,
+    se: f64,
+    df: f64,
+    q: f64,
+) -> Result<PairwiseRow> {
+    if se <= 0. || !se.is_finite() {
         return Err(parameter());
     }
     let estimate = finite(a.mean - b.mean)?;
-    let se = variance.sqrt();
     let statistic = finite(estimate / se)?;
     let distribution = StudentsT::new(0., 1., df).map_err(|_| parameter())?;
-    let q = critical_tail(tail, Some(df))?;
     let p_value = finite(crate::distribution::student_t_probability(
         &distribution,
         statistic,
         yss_sci_contract::hypothesis::Alternative::TwoSided,
     ))?;
     Ok(PairwiseRow {
-        group_a: 0,
-        group_b: 0,
+        group_a: a.group,
+        group_b: b.group,
         estimate,
         standard_error: se,
         degrees_of_freedom: df,
@@ -124,51 +167,68 @@ pub fn pairwise(
         return Err(parameter());
     }
     let count = k.checked_mul(k - 1).ok_or_else(parameter)? / 2;
-    let pooled = if options.equal_variances {
-        if y.len() <= k {
-            return Err(parameter());
-        }
-        let df = (y.len() - k) as f64;
-        Some((
-            finite(moments.values().map(|m| m.sum_squares).sum::<f64>() / df)?,
-            df,
-        ))
-    } else {
-        None
-    };
     let adjusted = options.adjustment == ComparisonAdjustment::Bonferroni;
-    let tail = (1. - options.confidence_level) / 2. / if adjusted { count as f64 } else { 1. };
-    let groups = moments.into_iter().collect::<Vec<_>>();
-    let mut rows = Vec::with_capacity(count);
-    for (i, (a, ma)) in groups.iter().enumerate() {
-        for (b, mb) in &groups[i + 1..] {
-            control.check()?;
-            let mut row = contrast(ma, mb, pooled, tail)?;
-            row.group_a = a + 1;
-            row.group_b = b + 1;
-            rows.push(row);
-        }
-    }
-    adjust(&mut rows, options.adjustment, control)?;
-    let summaries = groups
+    let family_size = if adjusted { count } else { 1 };
+    let groups = moments
         .into_iter()
-        .map(|(group, m)| {
+        .enumerate()
+        .map(|(i, (group, m))| {
+            if i.is_multiple_of(1024) {
+                control.check()?;
+            }
             Ok(ComparisonGroup {
                 group: group + 1,
                 observations: m.count,
-                mean: m.mean,
+                mean: finite(m.mean * m.scale)?,
                 standard_deviation: if m.count > 1 {
-                    Some(finite((m.sum_squares / (m.count - 1) as f64).sqrt())?)
+                    Some(finite(
+                        (m.sum_squares / (m.count - 1) as f64).sqrt() * m.scale,
+                    )?)
                 } else {
                     None
                 },
             })
         })
         .collect::<Result<Vec<_>>>()?;
+    let pooled = if options.equal_variances {
+        if y.len() <= k {
+            return Err(parameter());
+        }
+        let df = (y.len() - k) as f64;
+        Some((
+            pooled_deviation(&groups, control)?,
+            df,
+            comparison_critical(options.confidence_level, family_size, df)?,
+        ))
+    } else {
+        None
+    };
+    let mut rows = Vec::with_capacity(count);
+    for (i, a) in groups.iter().enumerate() {
+        for b in &groups[i + 1..] {
+            control.check()?;
+            let (se, df, q) = if let Some((sd, df, q)) = pooled {
+                (
+                    sd * (1. / a.observations as f64 + 1. / b.observations as f64).sqrt(),
+                    df,
+                    q,
+                )
+            } else {
+                let (se, df) = welch_standard_error(a, b)?;
+                (
+                    se,
+                    df,
+                    comparison_critical(options.confidence_level, family_size, df)?,
+                )
+            };
+            rows.push(contrast(a, b, se, df, q)?);
+        }
+    }
+    adjust(&mut rows, options.adjustment, control)?;
     Ok(PairwiseResult {
         summary: PairwiseSummary {
             observations: y.len(),
-            groups: summaries,
+            groups,
             method: if options.equal_variances {
                 "pooled_anova_t"
             } else {

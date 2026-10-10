@@ -123,7 +123,14 @@ finite upper-end intervals and positive widths at tiny positive confidence witho
 rounding a CDF to one or one-half. ARIMA validates and obtains this value before
 fitting; Meta and adjusted predictions reuse the same owner. Pairwise comparison
 admission validates confidence directly instead of computing an unused normal
-quantile; its Student-t and multiplicity tail calculations remain explicit.
+quantile. Unadjusted intervals and one-comparison Bonferroni families retain the
+original confidence; larger Bonferroni families pass their explicit upper tail.
+Group moments maintain their own observation scales and project one group-summary
+vector for both contrasts and output, preserving distinct group units. Pooled
+inference combines standard deviations as a weighted RMS and obtains its common
+critical value once; Welch uses normalized variance weights for df without raw
+fourth powers. Reported means, standard deviations, estimates and intervals remain
+in the original units.
 Student-t confidence and explicit upper-tail quantiles share
 [`distribution/student_t.rs`](src/distribution/student_t.rs). It retains the
 fifth-order central expansion within its rounding bound and uses exact Cauchy

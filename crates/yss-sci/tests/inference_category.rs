@@ -220,6 +220,100 @@ fn check_normal_confidence_edges(confidence: f64, critical: f64) {
 }
 
 #[test]
+fn pairwise_confidence_preserves_tiny_width_for_a_single_comparison() {
+    let confidence = 1e-20;
+    for equal_variances in [true, false] {
+        for adjustment in [
+            ComparisonAdjustment::None,
+            ComparisonAdjustment::Holm,
+            ComparisonAdjustment::Bonferroni,
+        ] {
+            let result = comparisons::pairwise(
+                &[-1., 1., -1., 1.],
+                &[0, 0, 1, 1],
+                PairwiseOptions {
+                    equal_variances,
+                    adjustment,
+                    confidence_level: confidence,
+                },
+                &control(),
+            )
+            .unwrap();
+            let row = &result.rows[0];
+            assert_eq!(row.estimate, 0.0);
+            assert_eq!(row.degrees_of_freedom, 2.0);
+            assert_eq!(row.p_value, 1.0);
+            assert!(row.lower < 0.0 && row.upper > 0.0);
+            // For df=2, q=sqrt(2)*confidence to rounding; SE=sqrt(2).
+            assert!((row.upper / (2.0 * confidence) - 1.0).abs() < 1e-12);
+            assert!((row.lower / (2.0 * confidence) + 1.0).abs() < 1e-12);
+            assert_eq!(
+                result.summary.intervals_adjusted,
+                adjustment == ComparisonAdjustment::Bonferroni
+            );
+        }
+    }
+}
+
+#[test]
+fn pairwise_statistics_preserve_response_units_and_distinct_group_scales() {
+    for equal_variances in [true, false] {
+        let options = PairwiseOptions {
+            equal_variances,
+            adjustment: ComparisonAdjustment::None,
+            confidence_level: 0.95,
+        };
+        let df = if equal_variances { 2.0 } else { 25.0 / 17.0 };
+        // Independent df-2 formula and 110-digit Student-density integration.
+        let critical = if equal_variances {
+            4.302652729749464
+        } else {
+            6.188114940769251
+        };
+        // +/-100 exposes Welch fourth powers; +/-200 exposes raw second moments.
+        for scale in [1e-200, 1e-100, 1e100, 1e200] {
+            let y = [-scale, scale, -2.0 * scale, 2.0 * scale];
+            let result = comparisons::pairwise(&y, &[0, 0, 1, 1], options, &control()).unwrap();
+            let row = &result.rows[0];
+            assert_eq!(row.estimate, 0.0);
+            assert_eq!(row.statistic, 0.0);
+            assert_eq!(row.p_value, 1.0);
+            assert!((row.degrees_of_freedom - df).abs() < 1e-12);
+            assert!((row.standard_error / scale - 5.0_f64.sqrt()).abs() < 1e-12);
+            let width = critical * 5.0_f64.sqrt() * scale;
+            assert!((row.upper / width - 1.0).abs() < 1e-12);
+            assert!((row.lower / width + 1.0).abs() < 1e-12);
+            for (group, factor) in result.summary.groups.iter().zip([1.0, 2.0]) {
+                assert_eq!(group.mean, 0.0);
+                assert!(
+                    (group.standard_deviation.unwrap() / scale - factor * std::f64::consts::SQRT_2)
+                        .abs()
+                        < 1e-12
+                );
+            }
+        }
+        let result = comparisons::pairwise(
+            &[-1e200, 1e200, -1e-200, 1e-200],
+            &[0, 0, 1, 1],
+            options,
+            &control(),
+        )
+        .unwrap();
+        for (group, scale) in result.summary.groups.iter().zip([1e200, 1e-200]) {
+            assert!(
+                (group.standard_deviation.unwrap() / scale - std::f64::consts::SQRT_2).abs()
+                    < 1e-12
+            );
+        }
+        assert!((result.rows[0].standard_error / 1e200 - 1.0).abs() < 1e-12);
+        assert!(
+            (result.rows[0].degrees_of_freedom - if equal_variances { 2.0 } else { 1.0 }).abs()
+                < 1e-12
+        );
+    }
+}
+
+#[test]
 fn independent_group_comparisons_match_ols_welch_and_multipletests() {
     let f = fixture();
     let y: Vec<f64> = serde_json::from_value(f["y"].clone()).unwrap();

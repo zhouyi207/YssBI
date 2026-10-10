@@ -141,7 +141,8 @@ pub(super) fn install(
                 | "yssbi.statistics.meta.begg"
                 | "yssbi.statistics.meta.cochran_q"
                 | "yssbi.statistics.meta.i_squared"
-                | "yssbi.statistics.meta.tau_squared" => 8,
+                | "yssbi.statistics.meta.tau_squared"
+                | "yssbi.statistics.posthoc.multiple_comparisons" => 8,
                 "yssbi.statistics.diagnostic.wald"
                 | "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.dynamic_gmm"
@@ -190,7 +191,6 @@ pub(super) fn install(
                 | "yssbi.statistics.mixed.poisson"
                 | "yssbi.statistics.mixed.random_intercept"
                 | "yssbi.statistics.mixed.random_slope"
-                | "yssbi.statistics.posthoc.multiple_comparisons"
                 | "yssbi.statistics.inference.confidence_interval"
                 | "yssbi.statistics.postestimation.adjusted_predictions"
                 | "yssbi.statistics.timeseries.ecm" => 7,
