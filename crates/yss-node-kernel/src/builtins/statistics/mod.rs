@@ -87,13 +87,14 @@ pub(super) fn install(
                 "yssbi.statistics.iv.liml.summary" => 19,
                 "yssbi.statistics.iv.2sls.fit" => 12,
                 "yssbi.statistics.iv.liml.fit" => 14,
-                "yssbi.statistics.panel.fit" | "yssbi.statistics.meta.regression" => 12,
-                "yssbi.statistics.econometrics.panel.re"
+                "yssbi.statistics.meta.regression" => 13,
+                "yssbi.statistics.panel.fit"
                 | "yssbi.statistics.meta.inverse_variance"
                 | "yssbi.statistics.meta.fixed_effect"
                 | "yssbi.statistics.meta.random_effect"
                 | "yssbi.statistics.meta.leave_one_out"
-                | "yssbi.statistics.meta.sensitivity" => 11,
+                | "yssbi.statistics.meta.sensitivity" => 12,
+                "yssbi.statistics.econometrics.panel.re" => 11,
                 "yssbi.statistics.econometrics.panel.fe"
                 | "yssbi.statistics.econometrics.panel.fd"
                 | "yssbi.statistics.panel.compare"
@@ -103,6 +104,8 @@ pub(super) fn install(
                 | "yssbi.statistics.survival.loglogistic"
                 | "yssbi.statistics.survival.lognormal"
                 | "yssbi.statistics.survival.weibull"
+                | "yssbi.statistics.meta.egger"
+                | "yssbi.statistics.plot.forest"
                 | "yssbi.statistics.plot.funnel" => 10,
                 "yssbi.statistics.adf.test"
                 | "yssbi.statistics.econometrics.panel.between"
@@ -118,9 +121,7 @@ pub(super) fn install(
                 | "yssbi.statistics.workflow.subgroup"
                 | "yssbi.statistics.econometrics.heckman_two_step"
                 | "yssbi.statistics.workflow.mediation"
-                | "yssbi.statistics.workflow.moderated_mediation"
-                | "yssbi.statistics.meta.egger"
-                | "yssbi.statistics.plot.forest" => 9,
+                | "yssbi.statistics.workflow.moderated_mediation" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
                 | "yssbi.statistics.econometrics.gmm"
                 | "yssbi.statistics.econometrics.sur"
@@ -189,6 +190,9 @@ pub(super) fn install(
                 | "yssbi.statistics.mixed.poisson"
                 | "yssbi.statistics.mixed.random_intercept"
                 | "yssbi.statistics.mixed.random_slope"
+                | "yssbi.statistics.posthoc.multiple_comparisons"
+                | "yssbi.statistics.inference.confidence_interval"
+                | "yssbi.statistics.postestimation.adjusted_predictions"
                 | "yssbi.statistics.timeseries.ecm" => 7,
                 "yssbi.plot.boxplot"
                 | "yssbi.plot.violin"
@@ -217,15 +221,12 @@ pub(super) fn install(
                 | "yssbi.statistics.timeseries.grey_prediction"
                 | "yssbi.statistics.timeseries.arima"
                 | "yssbi.statistics.timeseries.sarima"
-                | "yssbi.statistics.posthoc.multiple_comparisons"
                 | "yssbi.statistics.meta.continuous"
                 | "yssbi.statistics.meta.binary"
                 | "yssbi.statistics.meta.single_proportion"
                 | "yssbi.statistics.meta.mean"
                 | "yssbi.statistics.meta.correlation"
-                | "yssbi.statistics.meta.or_hr"
-                | "yssbi.statistics.inference.confidence_interval"
-                | "yssbi.statistics.postestimation.adjusted_predictions" => 6,
+                | "yssbi.statistics.meta.or_hr" => 6,
                 "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
                 | "yssbi.statistics.diagnostic.ljung_box"

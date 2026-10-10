@@ -92,6 +92,22 @@ fn student_confidence_retains_center_precision_and_nonlinear_width() {
     }
 }
 
+#[test]
+fn student_confidence_large_degrees_preserves_accuracy_and_finite_limit() {
+    // Independent 110-digit integration of the Student density.
+    check_student_width(0.95, 1e6, 1.9599663568141066);
+    check_student_width(0.95, 1e16, 1.959963984540054);
+}
+
+#[test]
+fn student_confidence_tiny_degrees_keeps_a_representable_nonlinear_width() {
+    // In hyperbolic coordinates, central probability tends to df * u.
+    // At confidence=df, t/sqrt(df) tends to sinh(1); the correction is below rounding.
+    for df in [1e-24_f64, f64::from_bits(1)] {
+        check_student_width(df, df, df.sqrt() * 1.0_f64.sinh());
+    }
+}
+
 fn check_student_confidence(confidence: f64) {
     check_student_width(
         confidence,

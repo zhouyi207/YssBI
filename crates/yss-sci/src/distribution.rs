@@ -11,36 +11,12 @@ use yss_sci_contract::execution::{
 };
 use yss_sci_contract::hypothesis::Alternative;
 
+pub(crate) mod student_t;
+
 /// Stirling log-Gamma remainder through 1/z^7, for z >= 16.
 pub(crate) fn stirling_error(z: f64) -> f64 {
     let q = 1. / (z * z);
     (1. / 12. - q * (1. / 360. - q * (1. / 1260. - q / 1680.))) / z
-}
-
-/// Central Student-t quantiles where the omitted seventh-order term is below rounding.
-pub(crate) fn student_t_center_quantile(confidence: f64, df: f64) -> Option<f64> {
-    // Student's central density is at most the normal density; this rules out
-    // ordinary confidence levels without evaluating another density normalization.
-    if confidence * confidence * std::f64::consts::FRAC_PI_2 > f64::EPSILON.cbrt() {
-        return None;
-    }
-    // 1/(2 f(0)) = sqrt(df) B(df/2, 1/2)/2. Avoid half-df underflow and
-    // cancellation between large log-Gamma values in the density normalization.
-    let inverse_slope = if df < f64::EPSILON.sqrt() {
-        df.sqrt().recip() * (1. + df * std::f64::consts::LN_2)
-    } else if df >= 64. {
-        let z = df / 2.;
-        std::f64::consts::FRAC_PI_2.sqrt()
-            * (0.5 - z * (0.5 / z).ln_1p() + stirling_error(z) - stirling_error(z + 0.5)).exp()
-    } else {
-        (0.5 * df.ln() + ln_beta(df / 2., 0.5) - std::f64::consts::LN_2).exp()
-    };
-    let leading = confidence * inverse_slope;
-    let curvature = (leading * df.sqrt().recip().hypot(1.)).powi(2);
-    if !curvature.is_finite() || curvature > f64::EPSILON.cbrt() {
-        return None;
-    }
-    Some(leading * (1. + curvature * (1. / 6. + curvature * (7. - 6. / (df + 1.)) / 120.)))
 }
 
 /// Standard-normal two-sided tails round once, including subnormal probabilities.

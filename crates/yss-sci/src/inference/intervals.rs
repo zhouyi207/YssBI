@@ -1,5 +1,5 @@
 use crate::regression::models::common::{Result, failed, finite, parameter};
-use statrs::distribution::{ContinuousCDF, Normal, StudentsT};
+use statrs::distribution::{ContinuousCDF, Normal};
 use yss_sci_contract::{execution::*, inference::*};
 
 pub(crate) fn validate_confidence(confidence: f64) -> Result<()> {
@@ -17,10 +17,8 @@ pub(crate) fn critical(confidence: f64, df: Option<f64>) -> Result<f64> {
             if !degrees.is_finite() || degrees <= 0. {
                 return Err(parameter());
             }
-            match crate::distribution::student_t_center_quantile(confidence, degrees) {
-                Some(q) => finite(q),
-                None => critical_tail((1. - confidence) / 2., df),
-            }
+            crate::distribution::student_t::confidence_quantile(confidence, degrees)
+                .ok_or_else(failed)
         }
     }
 }
@@ -30,9 +28,9 @@ pub(super) fn critical_tail(tail: f64, df: Option<f64>) -> Result<f64> {
     }
     let q = match df {
         None => -Normal::new(0., 1.).map_err(|_| failed())?.inverse_cdf(tail),
-        Some(df) if df.is_finite() && df > 0. => -StudentsT::new(0., 1., df)
-            .map_err(|_| parameter())?
-            .inverse_cdf(tail),
+        Some(df) if df.is_finite() && df > 0. => {
+            crate::distribution::student_t::upper_quantile(tail, df).ok_or_else(failed)?
+        }
         Some(_) => return Err(parameter()),
     };
     finite(q)
