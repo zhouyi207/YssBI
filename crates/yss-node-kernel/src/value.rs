@@ -22,7 +22,7 @@ pub enum RuntimeValue {
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnnotatedRuntimeValue {
     value: RuntimeValue,
-    metadata: yss_data_contract::ConversionMetadata,
+    metadata: Arc<yss_data_contract::ConversionMetadata>,
 }
 
 impl AnnotatedRuntimeValue {
@@ -199,7 +199,7 @@ impl RuntimeValue {
     /// Annotate materialized scalar values only; annotations never wrap handles or annotations.
     pub fn with_metadata(
         self,
-        metadata: yss_data_contract::ConversionMetadata,
+        metadata: impl Into<Arc<yss_data_contract::ConversionMetadata>>,
     ) -> Result<Self, RuntimeValueError> {
         let scalars = match &self {
             Self::List(values) => values.as_ref(),
@@ -211,6 +211,7 @@ impl RuntimeValue {
         {
             return Err(RuntimeValueError::Unrepresentable);
         }
+        let metadata = metadata.into();
         if metadata.dummy_base_level.is_none()
             && matches!(
                 metadata.semantic.kind,
@@ -226,6 +227,10 @@ impl RuntimeValue {
     }
 
     pub fn metadata(&self) -> Option<&yss_data_contract::ConversionMetadata> {
+        self.shared_metadata().map(Arc::as_ref)
+    }
+
+    pub(crate) fn shared_metadata(&self) -> Option<&Arc<yss_data_contract::ConversionMetadata>> {
         match self {
             Self::Annotated(value) => Some(&value.metadata),
             _ => None,

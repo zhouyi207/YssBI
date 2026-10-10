@@ -281,7 +281,7 @@ fn classification(
 fn restore_predictions(
     indices: Vec<usize>,
     labels: &[TabularScalar],
-    metadata: Option<yss_data_contract::ConversionMetadata>,
+    metadata: Option<Arc<yss_data_contract::ConversionMetadata>>,
     retained: usize,
     inv: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {

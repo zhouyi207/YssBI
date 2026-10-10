@@ -30,7 +30,7 @@ pub(crate) enum SeriesKernel {
 
 pub(super) struct Column {
     pub(super) values: Vec<TabularScalar>,
-    pub(super) metadata: Option<ConversionMetadata>,
+    pub(super) metadata: Option<std::sync::Arc<ConversionMetadata>>,
 }
 
 impl Column {
@@ -122,7 +122,7 @@ pub(super) fn load_with_retained_bytes(
         .map(|handle| {
             Ok(Column {
                 values: Vec::new(),
-                metadata: Some(metadata(handle.plan().field())?),
+                metadata: Some(std::sync::Arc::new(metadata(handle.plan().field())?)),
             })
         })
         .collect::<Result<Vec<_>, KernelError>>()?;
@@ -193,7 +193,7 @@ pub(in crate::builtins) fn column_retaining(
     }
     Ok(Column {
         values: output,
-        metadata: value.metadata().cloned(),
+        metadata: value.shared_metadata().cloned(),
     })
 }
 

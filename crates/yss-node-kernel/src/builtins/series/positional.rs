@@ -87,7 +87,7 @@ pub(in crate::builtins) fn relation(
         let (field, array) = yss_database_arrow::materialized_column(
             &format!("value_{i}"),
             &column.values,
-            column.metadata.as_ref(),
+            column.metadata.as_deref(),
         )
         .map_err(|_| KernelError::InvalidParameter)?;
         fields.push(field);
@@ -147,7 +147,7 @@ pub(in crate::builtins) fn attach(
         name.push('_');
     }
     let (field, array) =
-        yss_database_arrow::materialized_column(&name, &column.values, column.metadata.as_ref())
+        yss_database_arrow::materialized_column(&name, &column.values, column.metadata.as_deref())
             .map_err(|_| KernelError::InvalidParameter)?;
     let mut fields = schema.fields().iter().cloned().collect::<Vec<_>>();
     fields.push(Arc::new(field));
