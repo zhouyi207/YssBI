@@ -60,7 +60,7 @@ impl GraphCanvas {
                                 .bg(cx.theme().background),
                         ),
                 )
-                .disabled(self.busy)
+                .disabled(!self.can_edit())
                 .on_click(cx.listener(move |view, _, _, cx| {
                     view.submit(
                         GraphCommand::Edit(EditorGraphMutation::SetLiteral {
@@ -93,7 +93,7 @@ impl GraphCanvas {
                 } else {
                     appearance::BORDER_STRONG
                 }))
-                .disabled(self.busy)
+                .disabled(!self.can_edit())
                 .into_any_element()
         };
         let address = port.address.clone();

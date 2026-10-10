@@ -113,7 +113,7 @@ impl GraphCanvas {
         screen: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        let hovered = if self.busy || self.context_menu.is_some() {
+        let hovered = if !self.can_edit() || self.context_menu.is_some() {
             None
         } else {
             self.hit_connection(screen)

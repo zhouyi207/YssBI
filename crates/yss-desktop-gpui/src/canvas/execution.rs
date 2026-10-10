@@ -107,7 +107,7 @@ impl ExecutionView {
 impl GraphCanvas {
     pub(crate) fn can_run(&self) -> bool {
         self.graph.projection.graph_path.kind() == yss_graph_document::GraphResourceKind::EventGraph
-            && !self.busy
+            && self.can_edit()
             && !self.execution.running()
             && !self.execution.unknown
             && self.execution.recovery.is_none()

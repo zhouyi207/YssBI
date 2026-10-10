@@ -29,7 +29,7 @@ impl GraphCanvas {
                 .and_then(|result| result);
             let _ = view.update(cx, |view, cx| {
                 view.read_task = None;
-                if view.busy
+                if !view.can_edit()
                     || view.graph.editing.version != version
                     || !Arc::ptr_eq(&view.graph.projection, &projection)
                     || view.selected != selected
@@ -64,7 +64,7 @@ impl GraphCanvas {
     }
 
     pub(super) fn paste_selection(&mut self, cx: &mut Context<Self>) {
-        if self.busy {
+        if !self.can_edit() {
             return;
         }
         self.cancel_gesture();
@@ -76,7 +76,7 @@ impl GraphCanvas {
             let result = task.await;
             let _ = view.update(cx, |view, cx| {
                 view.read_task = None;
-                if view.busy
+                if !view.can_edit()
                     || view.graph.editing.version != version
                     || !Arc::ptr_eq(&view.graph.projection, &projection)
                 {

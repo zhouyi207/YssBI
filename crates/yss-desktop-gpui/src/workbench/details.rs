@@ -384,7 +384,7 @@ impl DetailsPanel {
             && epoch == self.epoch
             && self.graph().is_some_and(|graph| {
                 let graph = graph.read(cx);
-                !graph.busy()
+                graph.can_edit()
                     && self.version == Some(graph.graph.editing.version)
                     && self
                         .projection

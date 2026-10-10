@@ -6,7 +6,7 @@ use yss_graph_editor::EditorGraphMutation;
 
 impl GraphCanvas {
     pub(super) fn can_copy_selection(&self) -> bool {
-        !self.busy
+        self.can_edit()
             && !self.selected.is_empty()
             && self
                 .graph

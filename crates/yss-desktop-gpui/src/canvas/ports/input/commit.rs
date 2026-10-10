@@ -25,7 +25,7 @@ impl GraphCanvas {
             let mut ready = Some(ready);
             let observation = cx.observe(&cx.entity(), move |view, _, _| {
                 if !view.busy
-                    && !view.refreshing
+                    && view.refresh_task.is_none()
                     && !view.refresh_pending
                     && let Some(ready) = ready.take()
                 {
@@ -38,8 +38,8 @@ impl GraphCanvas {
                     && settled.await.ok() == Some(version)
                 {
                     let _ = view.update_in(cx, |view, window, cx| {
-                        if !view.busy
-                            && !view.refreshing
+                        if view.can_edit()
+                            && view.refresh_task.is_none()
                             && !view.refresh_pending
                             && view.graph.editing.version == version
                             && view.gesture.is_none()
@@ -65,7 +65,7 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.busy
+        if self.can_edit()
             && self.gesture.is_none()
             && self.has_dirty_port_inputs()
             && self
@@ -117,6 +117,12 @@ impl GraphCanvas {
             self.port_inputs.fields.get_mut(&edit.address)?.pending = Some(edit.value.clone());
         }
         Some(edits)
+    }
+
+    pub(in crate::canvas) fn cancel_port_edits(&mut self) {
+        for field in self.port_inputs.fields.values_mut() {
+            field.pending = None;
+        }
     }
 
     pub(in crate::canvas) fn accept_port_edits(&mut self, edits: &[PortEdit]) {

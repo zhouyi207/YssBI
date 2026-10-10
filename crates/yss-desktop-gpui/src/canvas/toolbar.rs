@@ -31,7 +31,7 @@ impl GraphCanvas {
                     .ghost()
                     .icon(NativeIcon::Save)
                     .tooltip("保存 · Ctrl+S")
-                    .disabled(self.busy || !self.dirty())
+                    .disabled(!self.can_edit() || !self.dirty())
                     .on_click(
                         cx.listener(|view, _, _, cx| view.submit(GraphCommand::Save, None, cx)),
                     ),
@@ -43,7 +43,7 @@ impl GraphCanvas {
                     .ghost()
                     .icon(IconName::Undo2)
                     .tooltip("撤销 · Ctrl+Z")
-                    .disabled(self.busy || !self.graph.editing.can_undo)
+                    .disabled(!self.can_edit() || !self.graph.editing.can_undo)
                     .on_click(
                         cx.listener(|view, _, _, cx| view.submit(GraphCommand::Undo, None, cx)),
                     ),
@@ -54,7 +54,7 @@ impl GraphCanvas {
                     .ghost()
                     .icon(IconName::Redo2)
                     .tooltip("重做 · Ctrl+Shift+Z")
-                    .disabled(self.busy || !self.graph.editing.can_redo)
+                    .disabled(!self.can_edit() || !self.graph.editing.can_redo)
                     .on_click(
                         cx.listener(|view, _, _, cx| view.submit(GraphCommand::Redo, None, cx)),
                     ),

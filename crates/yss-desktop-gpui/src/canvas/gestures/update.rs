@@ -171,7 +171,7 @@ impl GraphCanvas {
     }
 
     fn zoom_at(&mut self, position: Point<Pixels>, factor: f32, cx: &mut Context<Self>) {
-        if self.busy || self.gesture.is_some() || !factor.is_finite() || factor <= 0. {
+        if !self.can_edit() || self.gesture.is_some() || !factor.is_finite() || factor <= 0. {
             return;
         }
         let zoom = (self.zoom * factor).clamp(

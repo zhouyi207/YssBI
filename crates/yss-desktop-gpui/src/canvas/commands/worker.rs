@@ -9,20 +9,38 @@ use yss_graph_editor::EditorGraphMutation;
 use yss_project_identity::OperationId;
 
 #[derive(Default)]
-pub(super) struct Outcome {
-    pub applied_inputs: usize,
-    pub response: Option<GraphEditResponse>,
-    pub error: Option<anyhow::Error>,
+pub(crate) struct GraphCommandOutcome {
+    pub(super) inputs: Vec<PortEdit>,
+    pub(super) language: String,
+    pub(super) applied_inputs: usize,
+    pub(super) response: Option<GraphEditResponse>,
+    pub(super) error: Option<anyhow::Error>,
 }
 
-pub(super) fn apply(
+pub(crate) struct GraphCommandRequest {
+    pub(super) request: GraphEditRequest,
+    pub(super) inputs: Vec<PortEdit>,
+    pub(super) command: GraphCommand,
+}
+
+impl GraphCommandRequest {
+    pub(crate) fn commit(self, application: &ApplicationState) -> GraphCommandOutcome {
+        apply(application, self.request, self.inputs, self.command)
+    }
+}
+
+fn apply(
     application: &ApplicationState,
     mut request: GraphEditRequest,
-    inputs: &[PortEdit],
+    inputs: Vec<PortEdit>,
     command: GraphCommand,
-) -> Outcome {
-    let mut outcome = Outcome::default();
-    for input in inputs {
+) -> GraphCommandOutcome {
+    let mut outcome = GraphCommandOutcome {
+        inputs,
+        language: request.locale.clone(),
+        ..Default::default()
+    };
+    for input in &outcome.inputs {
         match application.edit_graph(
             request.clone(),
             EditorGraphMutation::SetLiteral {

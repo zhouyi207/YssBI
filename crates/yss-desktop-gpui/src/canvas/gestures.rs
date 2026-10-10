@@ -76,7 +76,7 @@ impl GraphCanvas {
         cx: &mut Context<Self>,
     ) {
         cx.stop_propagation();
-        if self.busy {
+        if !self.can_edit() {
             return;
         }
         if event.modifiers.alt {
@@ -133,7 +133,7 @@ impl GraphCanvas {
         cx: &mut Context<Self>,
     ) {
         cx.stop_propagation();
-        if self.busy {
+        if !self.can_edit() {
             return;
         }
         self.cancel_gesture();
@@ -156,7 +156,7 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.busy {
+        if !self.can_edit() {
             return;
         }
         if event.button == MouseButton::Middle || event.modifiers.alt {

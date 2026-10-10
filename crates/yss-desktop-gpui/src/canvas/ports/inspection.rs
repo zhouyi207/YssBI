@@ -126,7 +126,7 @@ impl GraphCanvas {
                 .and_then(|result| result);
             let _ = view.update(cx, |view, cx| {
                 view.read_task = None;
-                if view.busy
+                if !view.can_edit()
                     || view.graph.editing.version != version
                     || view.graph.results.execution_session_id != session
                     || !Arc::ptr_eq(&view.graph.projection, &projection)

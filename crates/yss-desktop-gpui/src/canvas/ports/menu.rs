@@ -15,7 +15,7 @@ impl GraphCanvas {
         cx: &mut Context<Self>,
     ) {
         cx.stop_propagation();
-        if self.busy {
+        if !self.can_edit() {
             return;
         }
         let after_address = address.clone();

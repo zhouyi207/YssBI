@@ -111,7 +111,7 @@ impl GraphProperties {
             && !self.loading
             && self.graph().is_some_and(|graph| {
                 let graph = graph.read(cx);
-                !graph.busy() && Some(graph.graph.editing.version) == self.version
+                graph.can_edit() && Some(graph.graph.editing.version) == self.version
             })
     }
 

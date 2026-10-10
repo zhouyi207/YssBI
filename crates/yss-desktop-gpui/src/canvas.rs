@@ -7,6 +7,7 @@ mod constant_drag;
 mod execution;
 mod geometry;
 mod gestures;
+mod loading;
 mod menu;
 mod navigation;
 mod nodes;
@@ -92,7 +93,8 @@ pub struct GraphCanvas {
     bounds: Rc<Cell<Bounds<Pixels>>>,
     palette: Option<Palette>,
     busy: bool,
-    refreshing: bool,
+    refresh_task: Option<gpui::Task<()>>,
+    refresh_failed: bool,
     refresh_pending: bool,
     error: Option<String>,
     execution: execution::ExecutionView,
@@ -144,7 +146,8 @@ impl GraphCanvas {
             bounds: Rc::new(Cell::new(Bounds::default())),
             palette: None,
             busy: false,
-            refreshing: false,
+            refresh_task: None,
+            refresh_failed: false,
             refresh_pending: false,
             error: None,
             execution: Default::default(),
@@ -164,6 +167,10 @@ impl GraphCanvas {
 
     pub fn dirty(&self) -> bool {
         self.graph.editing.dirty || self.has_dirty_port_inputs()
+    }
+
+    pub(crate) fn can_edit(&self) -> bool {
+        !self.busy && !self.refresh_failed
     }
 
     pub fn busy(&self) -> bool {

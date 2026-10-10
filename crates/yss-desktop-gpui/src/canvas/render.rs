@@ -3,7 +3,7 @@ use gpui::{
     prelude::*, px, rgb,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{IconName, Sizable};
+use gpui_component::{Disableable, IconName, Sizable};
 use yss_graph_editor::EditorGraphMutation;
 
 use super::{Gesture, GraphCanvas, commands::*, geometry};
@@ -154,7 +154,7 @@ impl Render for GraphCanvas {
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::begin_pane))
             .on_drop(
                 cx.listener(|view, drag: &crate::workbench::ActivityDrag, window, cx| {
-                    if view.busy() {
+                    if !view.can_edit() {
                         return;
                     }
                     match drag.resolve(&view.graph.project, view.path(), cx) {
@@ -173,7 +173,7 @@ impl Render for GraphCanvas {
                 }),
             )
             .on_drop(cx.listener(|view, drag: &super::ConstantDrag, window, cx| {
-                if view.busy
+                if !view.can_edit()
                     || view.graph.project != drag.project
                     || view.graph.projection.graph_path != drag.path
                 {
@@ -274,6 +274,39 @@ impl Render for GraphCanvas {
                         })),
                 ),
             )
+            .when(self.refresh_failed, |view| {
+                view.child(
+                    div()
+                        .absolute()
+                        .top_2()
+                        .left_2()
+                        .right_2()
+                        .p_2()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .rounded_md()
+                        .bg(rgb(appearance::SURFACE))
+                        .border_1()
+                        .border_color(rgb(appearance::RED))
+                        .text_color(rgb(appearance::RED))
+                        .text_sm()
+                        .occlude()
+                        .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+                        .child(
+                            div()
+                                .flex_1()
+                                .child(crate::text::t("native.canvas.refreshFailed")),
+                        )
+                        .child(
+                            Button::new("retry-graph-refresh")
+                                .small()
+                                .label(crate::text::t("common.retry"))
+                                .disabled(self.refresh_task.is_some() || self.busy)
+                                .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
+                        ),
+                )
+            })
             .when_some(self.error.clone(), |view, error| {
                 view.child(
                     div()

@@ -16,7 +16,7 @@ impl DetailsPanel {
         node: &EditorNodeModel,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let busy = self.graph().is_some_and(|graph| graph.read(cx).busy());
+        let disabled = self.graph().is_none_or(|graph| !graph.read(cx).can_edit());
         let node_id = node.node_id;
         let epoch = self.epoch;
         div()
@@ -73,7 +73,7 @@ impl DetailsPanel {
                                     .small()
                                     .flex_1()
                                     .min_w_0()
-                                    .disabled(busy),
+                                    .disabled(disabled),
                             )
                             .child(
                                 Button::new("node-label")
@@ -81,7 +81,7 @@ impl DetailsPanel {
                                     .ghost()
                                     .icon(IconName::Check)
                                     .tooltip(crate::text::translate("native.workbench.applyName"))
-                                    .disabled(busy)
+                                    .disabled(disabled)
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         if !view.accepts_input(epoch, cx) {
                                             return;
@@ -114,7 +114,7 @@ impl DetailsPanel {
             .child(self.parameters.clone())
             .child(self.render_diagnostics(node, cx))
             .child(self.description.clone())
-            .child(self.render_ports(busy, cx))
+            .child(self.render_ports(disabled, cx))
             .child(self.documentation.clone())
     }
 }

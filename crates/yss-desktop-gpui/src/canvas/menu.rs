@@ -36,7 +36,7 @@ impl GraphCanvas {
         version: GraphEditVersion,
         language: &str,
     ) -> bool {
-        !self.busy
+        self.can_edit()
             && self
                 .context_menu
                 .as_ref()

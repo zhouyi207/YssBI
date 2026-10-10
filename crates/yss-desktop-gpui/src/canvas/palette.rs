@@ -125,7 +125,7 @@ impl NodePalette {
                 .target
                 .graph
                 .upgrade()
-                .is_some_and(|graph| !graph.read(cx).busy())
+                .is_some_and(|graph| graph.read(cx).can_edit())
     }
 
     pub(in crate::canvas) fn connection_source(

@@ -60,12 +60,10 @@ impl GraphCanvas {
         version: GraphEditVersion,
         cx: &mut Context<Self>,
     ) {
-        if self.busy || self.graph.editing.version != version {
+        if !self.can_edit() || self.graph.editing.version != version {
             return;
         }
-        self.cancel_gesture();
-        self.busy = true;
-        self.error = None;
+        self.begin_command(cx);
         let project = self.graph.project.clone();
         let path = self.graph.projection.graph_path.clone();
         let publisher = self.services.clone();

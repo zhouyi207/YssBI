@@ -1,7 +1,7 @@
 //! Native save capture and receipt installation; each domain owner commits its own file.
 use super::Workbench;
 use crate::{
-    canvas::GraphCanvas,
+    canvas::{GraphCanvas, GraphCommandOutcome, GraphCommandRequest},
     charts::{
         ChartEditor,
         commands::{ChartSaveOutcome, ChartSaveRequest},
@@ -21,11 +21,7 @@ use crate::{
 use gpui::{App, Context, Entity, Window, WindowHandle};
 use gpui_component::Root;
 use std::sync::Arc;
-use yss_application::{
-    graph::editing::{GraphEditRequest, GraphEditResponse},
-    runtime::ApplicationServices,
-};
-use yss_project_identity::OperationId;
+use yss_application::runtime::ApplicationServices;
 
 pub(super) enum SaveTarget {
     Graph(Entity<GraphCanvas>),
@@ -36,7 +32,7 @@ pub(super) enum SaveTarget {
     Settings(Entity<SettingsPanel>, Option<WindowHandle<Root>>),
 }
 pub(super) enum SaveRequest {
-    Graph(GraphEditRequest),
+    Graph(GraphCommandRequest),
     Document(DocumentSaveRequest),
     Mind(MindSaveRequest),
     Database(DatabaseSaveRequest),
@@ -44,7 +40,7 @@ pub(super) enum SaveRequest {
     Settings(SettingsSaveRequest),
 }
 pub(super) enum SaveOutcome {
-    Graph(Option<Box<GraphEditResponse>>),
+    Graph(Box<GraphCommandOutcome>),
     Document(DocumentSaveOutcome),
     Mind(MindSaveOutcome),
     Database(DatabaseSaveOutcome),
@@ -58,13 +54,9 @@ impl SaveRequest {
         owner: &Arc<NativeServices>,
     ) -> SaveOutcome {
         match self {
-            Self::Graph(request) => SaveOutcome::Graph(
-                services
-                    .application
-                    .save_current_graph(request)
-                    .ok()
-                    .map(|saved| Box::new(saved.graph)),
-            ),
+            Self::Graph(request) => {
+                SaveOutcome::Graph(Box::new(request.commit(&services.application)))
+            }
             Self::Document(request) => SaveOutcome::Document(request.commit(services, owner)),
             Self::Mind(request) => SaveOutcome::Mind(request.commit(services, owner)),
             Self::Database(request) => SaveOutcome::Database(request.commit(services, owner)),
@@ -76,16 +68,9 @@ impl SaveRequest {
 impl SaveTarget {
     fn prepare(&self, cx: &mut Context<Workbench>) -> Option<SaveRequest> {
         match self {
-            Self::Graph(view) => {
-                let graph = &view.read(cx).graph;
-                Some(SaveRequest::Graph(GraphEditRequest {
-                    project_instance_id: graph.project.clone(),
-                    graph_path: graph.projection.graph_path.clone(),
-                    version: graph.editing.version,
-                    operation_id: OperationId::new(),
-                    locale: "zh-CN".into(),
-                }))
-            }
+            Self::Graph(view) => view
+                .update(cx, |view, cx| view.prepare_save(cx))
+                .map(SaveRequest::Graph),
             Self::Document(view) => view
                 .update(cx, |view, cx| view.prepare_save(cx))
                 .map(SaveRequest::Document),
@@ -110,11 +95,9 @@ impl SaveTarget {
         cx: &mut Context<Workbench>,
     ) -> bool {
         match (self, outcome) {
-            (Self::Graph(view), SaveOutcome::Graph(Some(response))) => {
-                view.update(cx, |view, cx| view.install_response(*response, cx));
-                false
+            (Self::Graph(view), SaveOutcome::Graph(outcome)) => {
+                !view.update(cx, |view, cx| view.finish_command(*outcome, cx))
             }
-            (Self::Graph(_), SaveOutcome::Graph(None)) => true,
             (Self::Document(view), SaveOutcome::Document(outcome)) => {
                 let failed = outcome.failed;
                 view.update(cx, |view, cx| view.finish_save(outcome, window, cx));
@@ -162,7 +145,7 @@ impl SaveTarget {
                     cx,
                 )
             }),
-            Self::Graph(_) => {}
+            Self::Graph(view) => view.update(cx, |view, cx| view.fail_prepared_save(cx)),
             Self::Document(view) => view.update(cx, |view, cx| {
                 view.finish_save(
                     DocumentSaveOutcome {
@@ -198,7 +181,7 @@ impl SaveTarget {
         match self {
             Self::Settings(view, _) => view.update(cx, |view, cx| view.cancel_prepared_save(cx)),
             Self::Chart(view) => view.update(cx, |view, cx| view.cancel_prepared_save(window, cx)),
-            Self::Graph(_) => {}
+            Self::Graph(view) => view.update(cx, |view, cx| view.cancel_prepared_save(cx)),
             Self::Document(view) => {
                 view.update(cx, |view, cx| view.cancel_prepared_save(window, cx))
             }

@@ -17,7 +17,7 @@ impl GraphCanvas {
         }) {
             return;
         }
-        if self.busy {
+        if !self.can_edit() {
             return;
         }
         let position = self.world(point);

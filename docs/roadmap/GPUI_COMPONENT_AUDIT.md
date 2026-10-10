@@ -731,6 +731,16 @@
 - L2：独立提交副本和当前工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 均通过；临时窗口使用 `cargo build -p yss-desktop-gpui --example canvas_viewport_review --locked`。局部 Rust 格式、文档声明/相对链接、双语新键、265 项清单、模块索引和 `git diff --check` 通过。无新增依赖、UI 单元测试或后端契约，不运行全工作区验证；临时窗口与数据不提交。
 - 完成 ViewportGrid 审查，累计 206/265。GraphCanvasController/GraphFlowCanvas 的剩余生命周期和 GraphDocumentEditor 的加载/刷新/冲突继续审查；外部资源重命名、物理输入、读屏及 Windows/macOS 仍开放。
 
+### 图投影刷新与统一保存
+
+- 继续对照 GraphDocumentEditor、GraphCanvasController、GraphFlowCanvas 及可见图加载入口。投影读取移入 `canvas/loading`，保留原 Application `open_graph`；画布持有读取任务，通知合并，路径、版本与语言核验继续约束交付。
+- 读取失败显示双语提示和原位重试，保留端口草稿、选择及视角，取消手势/菜单；画布、属性、保存和运行共享 `can_edit`。`busy` 仅表示在途命令，读取失败不占用关闭状态。开始命令或接纳新投影时释放旧读取交付，收尾再处理排队刷新。
+- 旧窗口已复现：端口新文本后执行保存全部，磁盘仍为旧值，失焦提交随后因版本冲突失败；刷新失败也仍允许修改图。保存全部改为复用单图保存的输入准备、worker 和回执接纳，准备即锁定画布，中止准备释放锁定与提交标记；删除工作台直接绕过输入调用 Save 的路径。
+- 独立窗口核对新文本实际写入、保存期间拒绝并行修改、读取失败后输入/视角保留与重试、保存失败保留最后成功编辑并再次保存。注入 3 秒旧读取后提交保存，迟到失败不覆盖新图；读取失败取消正在进行的平移并恢复原视角。
+- 当前工作区窗口核对多图保存：后续图的无效数值中止整批准备，前一图解除锁定且两个版本均不推进；修正输入后两图保存成功。另核对英文失败提示、中文草稿保留，以及延迟读取期间切换语言后仅接纳当前语言投影；在真实关闭提示中选择保存并继续，新文本写入后窗口退出。
+- L2：独立提交副本与当前工作区均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；窗口通过 `cargo build -p yss-desktop-gpui --example graph_loading_review --locked`。25 个 Rust 文件格式、文档声明与 271/275 个相对链接、双语键、265 项清单、模块索引（59 crates / 240 条依赖声明）和 `git diff --check` 通过。
+- 本批不新增依赖、后端契约或 UI 单元测试，不运行全工作区验证；临时窗口、故障注入和隔离数据不提交。首次打开失败、外部重命名/删除、隐藏/重开等完整生命周期继续审查，三项组合组件不标记整体完成，累计仍为 206/265；物理输入、读屏及 Windows/macOS 验收保持开放。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -943,10 +953,10 @@
 | --- | --- | --- | --- |
 | [modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 迁移 | connections 共用曲线、命中、选择/悬停、状态虚线、类型实线与运行标记；复用原路径缓存及 GPUI Animation | Linux/X11 窗口核对；物理输入、读屏及目标平台/帧率待验收 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 已读组合入口及 useCanvasViewport/useConnectionCandidates；候选失败回退、视角持久化与定位已补齐，加载/面板生命周期继续审查 | 多批窗口验收见记录；整体未完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 已读组合入口及 useCanvasViewport/useConnectionCandidates；候选回退、视角、刷新门控与共享保存已补齐，加载/面板生命周期继续审查 | 多批窗口验收见记录；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx) | 复用原生视图：保留画布边界与叠层 | GraphCanvas 实体提供资源身份、焦点、裁剪及网格/节点/预览/菜单组合；无需复制 DOM 标记或插槽包装 | Linux/X11 独立副本与工作区窗口核对；其内部功能按各自组件继续验收 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 已读文档就绪、冲突、保存和可见面板门控；继续核对原生打开/刷新失败和隐藏面板行为 | 待完成生命周期审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 手势、候选失败回退、视角会话/持久化及定位已接入；未知候选由原 Rust 事务校验，剩余文档/面板生命周期继续审查 | 多批 Linux 窗口验收见记录；整体未完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 已读文档就绪、冲突、保存和可见面板门控；刷新失败/重试与保存全部已补齐，首次打开失败及隐藏/资源生命周期继续审查 | 待完成生命周期审查 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 手势、候选失败回退、视角及定位已接入；刷新失败取消手势并保留草稿，剩余文档/面板生命周期继续审查 | 多批 Linux 窗口验收见记录；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 迁移 | connections/drag、render 共用方向曲线、目标吸附、后端候选颜色/原因及替换集合；PendingFlowConnection 读取当前菜单来源 | 窗口核对输入侧、追加/替换/无效、移动与撤销、菜单及迟到失败隔离 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 迁移 | canvas/presentation 按当前投影、执行身份与缓存派生外观，ports 共用类型配色；选择、替换及状态提示保留 | 真实执行核对运行/可用/过期/失败与清除；平台和大图验收开放 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 复用原生布局与命中 | NodeLayout/连接索引随投影更新，原生端口沿后端方向、orphan 与连接能力起手；不迁入 React 测量与 handle 状态 | Linux 窗口核对真实派生端口增列及同尺寸重排展示样例；物理输入与平台验收开放 |

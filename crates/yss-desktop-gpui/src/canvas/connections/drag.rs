@@ -106,7 +106,7 @@ impl GraphCanvas {
         cx: &mut Context<Self>,
     ) {
         cx.stop_propagation();
-        if self.busy && event.button == MouseButton::Left {
+        if !self.can_edit() && event.button == MouseButton::Left {
             return;
         }
         self.cancel_gesture();
