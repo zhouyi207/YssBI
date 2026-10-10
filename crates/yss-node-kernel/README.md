@@ -82,16 +82,16 @@ Robust、Quantile、Firth、计数/比例/Tobit/Conditional Logit 和其余 GLM 
 曲线、RCS、阈值、回归流程及 Multinomial/Ordinal Logit 使用 revision 5；
 两个非线性入口与 Deming 使用 revision 4。Ridge/Lasso/PLS 使用 revision 5，不输出系数 p 值。
 五个参数生存拟合内核（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 10，
-Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 11，
-无 moderator 的 Meta 模型、逐项排除和敏感性使用 revision 10；Egger 使用 revision 9，Begg 保持 revision 7。
+Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 12，
+无 moderator 的 Meta 模型、逐项排除和敏感性使用 revision 11；Egger 使用 revision 9，Begg 使用 revision 8。
 置信区间与调整预测使用 revision 6，多重比较使用 revision 6；六个 Meta 效应转换使用 revision 6，
-Forest 绘图使用 revision 8；Funnel 使用 revision 9，Q/I²/tau² 使用 revision 7，
+Forest 绘图使用 revision 9；Funnel 使用 revision 10，Q/I²/tau² 使用 revision 8，
 这些入口直接请求实际输出，不因丢弃的系数推断失败而拒绝有限结果。
 SCI 的共享正态临界值直接从中心置信度计算，
 保留接近 1 的有限区间和极小正置信度的可表示宽度；多重比较只校验其实际使用的置信度，
 不预先计算并丢弃正态分位数。接近零的 Student-t 临界值复用 SCI 受误差界约束的中心展开，
 保留极小置信水平与附近的区间宽度；上述区间、Meta 和绘图入口随实际调用更新能力版本。
-固定 95% 的异质性指标及 Begg 保持原版本；多重比较的显式尾概率不经过这份中心计算。
+多重比较的显式尾概率不经过这份中心计算；Meta 的上述版本也涵盖按需 moment trace 与稳定异质性尺度恢复。
 中介 bootstrap 采用 revision 9，涵盖共享参数恢复、稳定分位数二分点和 Student-t 尾概率。
 能力指纹涵盖共享输入错误契约、实际尾概率及系数/协方差坐标恢复。
 
@@ -388,6 +388,8 @@ ANOVA、推断、问卷、质量分析、DOE、路径、抽样、联合分析、
 输入预算按这些数值缓冲计算，工作区与报告准入继续合并检查；能力版本由各实际注册入口持有。
 Meta 的异质性节点直接取得异质性记录，逐项排除的 baseline 直接取得模型摘要；
 SCI 的数值拟合为这些输出和完整 study 表共用同一状态，PM 迭代不生成逐行报告缓冲。
+moment trace 只在正异质性的初始估计需要时计算，固定效应和 PM 试算保留数值 Gram 逆矩阵，
+不提前恢复未使用的分母或协方差；小 study 方差下可表示的结果继续使用原单位输出。
 Funnel 只传入估计方法与置信度，取得 pooled estimate 后生成正态参考线，不计算未输出的系数统计或预测区间。
 Association 的全局类别合并和逐行编码复用 `common/inputs::Category` 精确比较，以索引替代标签线性扫描；
 未声明的类别保留首次出现顺序，排序型类别沿用可比较性要求，已声明的 Ordinal 等级仍按原代码索引。

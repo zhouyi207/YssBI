@@ -7,9 +7,8 @@ use yss_sci_linalg::Mat;
 
 struct WeightedFit {
     beta: Vec<f64>,
-    covariance: Mat<f64>,
+    gram_inverse: Mat<f64>,
     q: f64,
-    moment_denominator: f64,
     weight_scale: f64,
     weight_total: f64,
 }
@@ -51,7 +50,6 @@ fn fit_at(
         .map(|j| finite((0..p).map(|k| inverse[(j, k)] * rhs[k]).sum()))
         .collect::<Result<Vec<_>>>()?;
     let mut q = 0.;
-    let mut projection_trace = 0.;
     for i in 0..n {
         if i.is_multiple_of(1024) {
             control.check()?;
@@ -59,24 +57,12 @@ fn fit_at(
         let prediction = finite((0..p).map(|j| design.x[(i, j)] * beta[j]).sum())?;
         let residual = finite(y[i] - prediction)?;
         q += (residual / (variances[i] + tau).sqrt()).powi(2);
-        let hat = (0..p)
-            .map(|j| {
-                design.x[(i, j)]
-                    * (0..p)
-                        .map(|k| inverse[(j, k)] * design.x[(i, k)])
-                        .sum::<f64>()
-            })
-            .sum::<f64>();
-        projection_trace += w[i] * w[i] * hat;
     }
     let total = w.iter().sum::<f64>();
-    let moment_denominator = finite(scale * (total - projection_trace))?;
-    let covariance = Mat::from_fn(p, p, |j, k| inverse[(j, k)] / scale);
     Ok(WeightedFit {
         beta,
-        covariance,
+        gram_inverse: inverse,
         q: finite(q)?,
-        moment_denominator,
         weight_scale: scale,
         weight_total: total,
     })
@@ -94,10 +80,34 @@ fn heterogeneity_variance(
     if estimator == MetaEstimator::Fixed || initial.q <= df {
         return Ok(0.);
     }
-    if initial.moment_denominator <= 0. {
+    let p = design.x.ncols();
+    let mut projection_trace = 0.;
+    for (i, &variance) in v.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            control.check()?;
+        }
+        let weight = (1. / variance) / initial.weight_scale;
+        let hat = (0..p)
+            .map(|j| {
+                design.x[(i, j)]
+                    * (0..p)
+                        .map(|k| initial.gram_inverse[(j, k)] * design.x[(i, k)])
+                        .sum::<f64>()
+            })
+            .sum::<f64>();
+        projection_trace += weight * weight * hat;
+    }
+    let normalized_denominator = finite(initial.weight_total - projection_trace)?;
+    if normalized_denominator <= 0. {
         return Err(failed());
     }
-    let dl = finite((initial.q - df) / initial.moment_denominator)?;
+    let denominator = initial.weight_scale * normalized_denominator;
+    // Keep the normalized denominator separate when restoring its scale would overflow.
+    let dl = finite(if denominator.is_finite() {
+        (initial.q - df) / denominator
+    } else {
+        (initial.q - df) / initial.weight_scale / normalized_denominator
+    })?;
     if estimator == MetaEstimator::DerSimonianLaird {
         return Ok(dl);
     }
@@ -184,7 +194,9 @@ impl PreparedMeta {
         } else {
             1.
         };
-        let covariance = Mat::from_fn(p, p, |j, k| result.covariance[(j, k)] * scale);
+        let covariance = Mat::from_fn(p, p, |j, k| {
+            (result.gram_inverse[(j, k)] / result.weight_scale) * scale
+        });
         let (beta, covariance) = design.raw(&result.beta, Some(covariance));
         let covariance = covariance.ok_or_else(failed)?;
         let t_df = (options.inference == MetaInference::KnappHartung).then_some(df);

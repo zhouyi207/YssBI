@@ -166,7 +166,12 @@ SCI does not depend on the catalog or use node IDs to select algorithms.
 sensitivity diagnostics, and plot data. Intercept-only pooling and moderator
 models share one weighted-fit implementation; Paule–Mandel estimates residual
 heterogeneity with moderators included. Its iterations retain numerical coefficients,
-covariance and weight scales; observation records are produced only for a complete
+the normalized Gram inverse and weight scales. The DL moment trace is evaluated only
+from the baseline fit when positive heterogeneity needs it; PM candidate fits and
+fixed/zero-heterogeneity paths do not calculate it. DL keeps the normalized denominator
+separate when restoring weight units would overflow, preserving representable tau².
+Covariance is scaled only for a requested model summary; observation records are
+produced only for a complete
 `model::fit`. `model::summary` and `model::heterogeneity` return their existing
 neutral records directly from that same prepared fit. Asymmetry, omissions,
 sensitivity and heterogeneity callers do not construct unused study rows.

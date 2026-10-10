@@ -287,6 +287,66 @@ fn meta_asymmetry_and_p_combination_match_reference_distributions() {
 }
 
 #[test]
+fn meta_zero_heterogeneity_does_not_require_an_unrepresentable_moment_denominator() {
+    let variance = 1e-308;
+    for estimator in [
+        MetaEstimator::Fixed,
+        MetaEstimator::DerSimonianLaird,
+        MetaEstimator::PauleMandel,
+    ] {
+        let result = model::fit(
+            &[0.0; 4],
+            &[variance; 4],
+            &[],
+            MetaOptions {
+                estimator,
+                ..Default::default()
+            },
+            &control(),
+        )
+        .unwrap();
+        assert_eq!(result.summary.heterogeneity.q, 0.0);
+        assert_eq!(result.summary.heterogeneity.tau_squared, 0.0);
+        assert_eq!(result.summary.coefficients[0].estimate, 0.0);
+        let se = result.summary.coefficients[0].standard_error.unwrap();
+        assert!(se > 0.0);
+        assert!((se / (variance / 4.0).sqrt() - 1.0).abs() < 1e-12);
+        assert!(
+            result
+                .studies
+                .iter()
+                .all(|row| row.weight == 0.25 && row.fitted == 0.0)
+        );
+    }
+}
+
+#[test]
+fn meta_positive_heterogeneity_keeps_representable_tau_when_raw_moment_overflows() {
+    let variance: f64 = 1e-308;
+    let amplitude = variance.sqrt();
+    let y = [-amplitude, amplitude, -amplitude, amplitude];
+    for estimator in [MetaEstimator::DerSimonianLaird, MetaEstimator::PauleMandel] {
+        let result = model::summary(
+            &y,
+            &[variance; 4],
+            &[],
+            MetaOptions {
+                estimator,
+                ..Default::default()
+            },
+            &control(),
+        )
+        .unwrap();
+        // Equal-variance pooling: Q=4, df=3, and DL/PM both give tau²=v/3.
+        assert_eq!(result.heterogeneity.q, 4.0);
+        let tau = result.heterogeneity.tau_squared;
+        assert!(tau > 0.0 && tau.is_finite());
+        assert!((tau / (variance / 3.0) - 1.0).abs() < 1e-9);
+        assert!((result.residual_q - 3.0).abs() < 1e-9);
+    }
+}
+
+#[test]
 fn meta_funnel_uses_its_finite_center_without_unused_coefficient_inference() {
     let y = [1e160; 4];
     let v = [1e-300; 4];

@@ -2,26 +2,28 @@ use super::*;
 
 #[test]
 fn meta_heterogeneity_nodes_do_not_require_unused_coefficient_statistics() {
-    let inputs = [
-        ("effects", series(&[1e160; 4])),
-        ("variances", series(&[1e-300; 4])),
-    ];
-    for method in ["cochran_q", "i_squared", "tau_squared"] {
-        let parameters = if method == "tau_squared" {
-            vec![("estimator", string("der_simonian_laird"))]
-        } else {
-            vec![]
-        };
-        let result = run(
-            &format!("yssbi.statistics.meta.{method}"),
-            &inputs,
-            &parameters,
-            1,
-        )
-        .unwrap();
-        assert_eq!(field(&result[0], "q").unwrap(), &number(0.0));
-        assert_eq!(field(&result[0], "p_value").unwrap(), &number(1.0));
-        assert_eq!(field(&result[0], "degrees_of_freedom").unwrap(), &int(3));
+    for (effects, variances) in [([1e160; 4], [1e-300; 4]), ([0.0; 4], [1e-308; 4])] {
+        let inputs = [
+            ("effects", series(&effects)),
+            ("variances", series(&variances)),
+        ];
+        for method in ["cochran_q", "i_squared", "tau_squared"] {
+            let parameters = if method == "tau_squared" {
+                vec![("estimator", string("der_simonian_laird"))]
+            } else {
+                vec![]
+            };
+            let result = run(
+                &format!("yssbi.statistics.meta.{method}"),
+                &inputs,
+                &parameters,
+                1,
+            )
+            .unwrap();
+            assert_eq!(field(&result[0], "q").unwrap(), &number(0.0));
+            assert_eq!(field(&result[0], "p_value").unwrap(), &number(1.0));
+            assert_eq!(field(&result[0], "degrees_of_freedom").unwrap(), &int(3));
+        }
     }
 }
 
