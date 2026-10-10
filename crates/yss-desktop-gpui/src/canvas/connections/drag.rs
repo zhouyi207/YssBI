@@ -62,12 +62,6 @@ impl ConnectionDrag {
 
     pub fn feedback(&self) -> (u32, Option<String>) {
         use crate::{appearance, text};
-        if matches!(self.candidates, Candidates::Failed) {
-            return (
-                appearance::RED,
-                Some(text::translate("native.canvas.connectionUnavailable")),
-            );
-        }
         match self
             .target
             .as_ref()
@@ -132,12 +126,9 @@ impl GraphCanvas {
         }
         let moving = event.modifiers.control || event.modifiers.platform;
         let allowed = self
-            .graph
-            .projection
-            .nodes
-            .iter()
-            .flat_map(|node| node.ports.iter())
-            .find(|port| port.address == source)
+            .port_details
+            .as_ref()
+            .and_then(|details| details.port(&source))
             .is_some_and(|port| {
                 !port.orphan
                     && if moving {
@@ -192,11 +183,9 @@ impl GraphCanvas {
             self.error = Some(crate::text::translate(&format!(
                 "canvas.connection.errors.{reason}"
             )));
-        } else if matches!(drag.candidates, Candidates::Failed) {
-            self.error = Some(crate::text::translate(
-                "native.canvas.connectionUnavailable",
-            ));
         } else {
+            // Missing preview decisions are neutral, including failed reads.
+            // The mutation still validates the captured version and connection.
             let mutation = if drag.moving {
                 EditorGraphMutation::MoveConnections {
                     source: drag.source,

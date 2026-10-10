@@ -707,6 +707,18 @@
 - 独立提交副本再次核对零位移点击不修改图、跨边界拖动一次 Undo、超范围整数输入导致提交被拒绝后清除拖动预览并保留输入，以及重叠节点菜单命中绘制顺序最上层的节点。
 - L2：工作区与独立提交内容均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`；临时窗口通过 `cargo build -p yss-desktop-gpui --example canvas_gestures_review --locked`。9 个改动 Rust 文件格式、两份文档声明/相对链接、组件清单、`node scripts/generate-crate-dependencies.mjs --check` 和 `git diff --check` 通过。未运行全工作区验证或新增 UI 单元测试。临时窗口、输入脚本和数据不提交；物理键鼠/IME、读屏、Windows/macOS 与目标帧率/大图验收继续开放。源码审查累计 204/265。
 
+
+### 连接候选失败回退与画布视图边界
+
+- 已逐项阅读 GraphCanvasController、GraphCanvasView、GraphDocumentEditor、ViewportGrid，以及候选读取、视口会话和持久化入口。GraphCanvasView 的裁剪、焦点、资源身份及内容/预览/菜单叠层由现有 GraphCanvas 承担，无需增加插槽包装或 DOM 标记适配；内部组件仍分别审查。
+- 修正 GraphFlowCanvas 对应的候选失败路径：未返回或失败的读取保持中性，松键沿捕获版本提交原 Connect/MoveConnections；明确 Invalid 仍本地拦截。候选查询不代替 Rust 事务校验，不重试写入或自动换成新版本；删除不再使用的失败提示键。
+- 起手能力检查复用 `ports/details` 的不可变端口索引，移除每次起手对全部节点/端口的扫描；orphan 与 append/replace/move 规则继续直接消费原投影。
+- 隔离 Linux/X11 窗口先复现失败查询阻止合法松键。修改后验证输出侧及输入侧起手、替换、Ctrl 迁移和一次撤销；查询失败时表格接数值输入仍被真实事务拒绝，版本及连线保持不变。正常查询的替换提示/原连线高亮、无效类型红色提示及本地拒绝同样核对。
+- 注入 8 秒查询延迟后，在候选仍 Loading 时提交成功；旧读取随后失败，新手势的候选与颜色保持正常。当前工作区窗口额外注入较旧的捕获版本：真实 Connect 按该版本提交并被拒绝，未改变版本/连线；新起手重新捕获版本后可以正常连接。故障注入只在临时窗口入口，不进入生产代码。
+- 复用现有 Rust 测试：`cargo test -p yss-graph-editor --lib tests::connect_rejects_a_known_type_outside_the_input_class --locked -- --exact` 与 `cargo test -p yss-application --lib graph::catalog::tests::connection_candidates_are_read_only_and_reject_an_obsolete_graph_version --locked -- --exact` 各实际运行 1 项并通过。
+- L2：独立提交副本与当前工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 均通过；窗口通过 `cargo build -p yss-desktop-gpui --example connection_fallback_review --locked`。本批 Rust 文件格式、两份文档声明/相对链接、双语键清理、265 项清单、模块索引及 `git diff --check` 均通过。未新增 UI 单元测试、依赖或后端契约，未运行全工作区验证；临时窗口与隔离数据不提交。
+- 完成 GraphCanvasView 源码审查，累计 205/265。视口持久化、参考点网格样式以及文档加载/刷新/面板生命周期的完整审查继续开放；物理输入、读屏、Windows/macOS 与大图性能仍待验收。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -919,14 +931,14 @@
 | --- | --- | --- | --- |
 | [modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 迁移 | connections 共用曲线、命中、选择/悬停、状态虚线、类型实线与运行标记；复用原路径缓存及 GPUI Animation | Linux/X11 窗口核对；物理输入、读屏及目标平台/帧率待验收 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 连线交互及节点/平移/框选/缩放手势已接入；窗口事件处理边界释放、取消和 Details 展开，连接候选失败及视口会话入口继续审查 | 多批 Linux 窗口验收见记录；整体未完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 已读组合入口及 useCanvasViewport/useConnectionCandidates；候选失败回退已补齐，视口持久化和加载/面板生命周期仍需完成 | 本批连接窗口验收见记录；整体未完成 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx) | 复用原生视图：保留画布边界与叠层 | GraphCanvas 实体提供资源身份、焦点、裁剪及网格/节点/预览/菜单组合；无需复制 DOM 标记或插槽包装 | Linux/X11 独立副本与工作区窗口核对；其内部功能按各自组件继续验收 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 已读文档就绪、冲突、保存和可见面板门控；继续核对原生打开/刷新失败和隐藏面板行为 | 待完成生命周期审查 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 手势与连接候选失败回退已接入；未知候选由原 Rust 事务校验，视口会话/持久化等剩余入口继续审查 | 多批 Linux 窗口验收见记录；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 迁移 | connections/drag、render 共用方向曲线、目标吸附、后端候选颜色/原因及替换集合；PendingFlowConnection 读取当前菜单来源 | 窗口核对输入侧、追加/替换/无效、移动与撤销、菜单及迟到失败隔离 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 迁移 | canvas/presentation 按当前投影、执行身份与缓存派生外观，ports 共用类型配色；选择、替换及状态提示保留 | 真实执行核对运行/可用/过期/失败与清除；平台和大图验收开放 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 复用原生布局与命中 | NodeLayout/连接索引随投影更新，原生端口沿后端方向、orphan 与连接能力起手；不迁入 React 测量与 handle 状态 | Linux 窗口核对真实派生端口增列及同尺寸重排展示样例；物理输入与平台验收开放 |
-| [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 待查 | 已读参考坐标订阅与 40 单位点网格；原生网格复用 Canvas 坐标和路径缓存，当前 32 单位线网格及低缩放间距仍待对齐 | 待迁移网格样式与缩放策略 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
