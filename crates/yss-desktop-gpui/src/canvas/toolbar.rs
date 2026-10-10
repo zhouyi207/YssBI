@@ -12,6 +12,8 @@ impl GraphCanvas {
     pub(super) fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let run_node = self.can_run() && self.selected.len() == 1;
         let running = self.is_running();
+        let run_unavailable = self.graph_run_unavailable_reason();
+        let clear_run = self.clearable_run().cloned();
         let event_graph = self.graph.projection.graph_path.kind()
             == yss_graph_document::GraphResourceKind::EventGraph;
         let focus = self.focus.clone();
@@ -60,6 +62,16 @@ impl GraphCanvas {
                     ),
             )
             .child(div().flex_1().min_w_0())
+            .when_some(self.execution_sync_status(), |view, status| {
+                view.child(
+                    div()
+                        .max_w(px(200.))
+                        .truncate()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(crate::text::t(status)),
+                )
+            })
             .child(
                 Button::new("inspect-results")
                     .small()
@@ -95,6 +107,23 @@ impl GraphCanvas {
                     }),
             )
             .child(
+                Button::new("clear-run-notice")
+                    .small()
+                    .ghost()
+                    .icon(gpui_kit_assets::IconName::ListX)
+                    .tooltip(crate::text::t(if clear_run.is_some() {
+                        "canvas.clearExecutionArtifacts"
+                    } else {
+                        "canvas.clearExecutionArtifactsDisabled"
+                    }))
+                    .disabled(clear_run.is_none())
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        if let Some(run) = &clear_run {
+                            view.clear_run_notice(run, cx);
+                        }
+                    })),
+            )
+            .child(
                 Button::new("run-graph")
                     .small()
                     .when(!running, |button| button.primary())
@@ -107,10 +136,12 @@ impl GraphCanvas {
                     .label(if running { "取消" } else { "运行" })
                     .tooltip(if running {
                         "取消运行 · Shift+F5"
+                    } else if let Some(reason) = run_unavailable {
+                        crate::text::t(reason)
                     } else {
                         "运行当前图 · F5"
                     })
-                    .disabled(!running && !self.can_run())
+                    .disabled(!running && run_unavailable.is_some())
                     .on_click(cx.listener(|view, _, _, cx| {
                         if view.is_running() {
                             view.cancel_run(cx);

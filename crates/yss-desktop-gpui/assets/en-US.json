@@ -8,7 +8,10 @@
       "refreshFailed": "Could not refresh the graph. Editing is paused. Please retry.",
       "loadingRenamedGraph": "Loading the renamed graph…",
       "opening": "Opening graph…",
-      "openFailed": "Could not open this graph. Check the resource and retry."
+      "openFailed": "Could not open this graph. Check the resource and retry.",
+      "runUnknown": "Run status unknown. Refresh status",
+      "syncingRun": "Syncing run status…",
+      "operationInProgress": "Applying graph changes. Please wait."
     }
   },
   "common": {

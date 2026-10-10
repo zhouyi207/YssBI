@@ -106,11 +106,43 @@ impl ExecutionView {
 
 impl GraphCanvas {
     pub(crate) fn can_run(&self) -> bool {
-        self.graph.projection.graph_path.kind() == yss_graph_document::GraphResourceKind::EventGraph
-            && self.can_edit()
-            && !self.execution.running()
-            && !self.execution.unknown
-            && self.execution.recovery.is_none()
+        self.execution_unavailable_reason().is_none()
+    }
+
+    fn execution_unavailable_reason(&self) -> Option<&'static str> {
+        if self.graph.projection.graph_path.kind()
+            != yss_graph_document::GraphResourceKind::EventGraph
+        {
+            Some("canvas.functionRunUnavailable")
+        } else if self.busy {
+            Some("native.canvas.operationInProgress")
+        } else if self.refresh_failed {
+            Some("native.canvas.refreshFailed")
+        } else if self.resource_move.is_some() {
+            Some("native.canvas.loadingRenamedGraph")
+        } else if self.execution.running() {
+            Some("canvas.executing")
+        } else {
+            self.execution_sync_status()
+        }
+    }
+
+    pub(super) fn execution_sync_status(&self) -> Option<&'static str> {
+        if self.execution.unknown {
+            Some("native.canvas.runUnknown")
+        } else if self.execution.recovery.is_some() {
+            Some("native.canvas.syncingRun")
+        } else {
+            None
+        }
+    }
+
+    pub(super) fn graph_run_unavailable_reason(&self) -> Option<&'static str> {
+        self.execution_unavailable_reason().or_else(|| {
+            // Pending port input may fix the problem; recheck after its transaction.
+            (self.presentation.graph_blocked && !self.has_dirty_port_inputs())
+                .then_some("canvas.problemsBlockExecution")
+        })
     }
 
     pub(super) fn run_selected(
@@ -141,17 +173,7 @@ impl GraphCanvas {
         } else if self.execution.recovery.is_some() {
             "正在同步运行状态…"
         } else {
-            match self
-                .execution
-                .runs
-                .last_key_value()
-                .map(|(_, projection)| &projection.event)
-                .filter(|event| {
-                    event.identity().semantic_input_hash()
-                        == &self.graph.projection.basis.semantic_input_hash
-                })
-                .map(RunApplicationEvent::kind)
-            {
+            match self.run_notice().map(RunApplicationEvent::kind) {
                 Some(RunApplicationEventKind::RunCompleted) => "运行完成",
                 Some(RunApplicationEventKind::RunCancelled) => "已取消",
                 Some(RunApplicationEventKind::RunErrored { .. }) => "运行失败",
@@ -165,7 +187,10 @@ impl GraphCanvas {
     }
 
     pub(crate) fn run_graph(&mut self, demand: RunDemand, cx: &mut Context<Self>) {
-        if !self.can_run() {
+        if !self.can_run()
+            || (matches!(demand, RunDemand::Default)
+                && self.graph_run_unavailable_reason().is_some())
+        {
             return;
         }
         if self.has_dirty_port_inputs() {
@@ -365,19 +390,40 @@ impl GraphCanvas {
         cx.notify();
     }
 
-    pub(crate) fn run_failure(&self) -> Option<&RunApplicationEvent> {
+    fn run_notice(&self) -> Option<&RunApplicationEvent> {
         let (_, projection) = self.execution.runs.last_key_value()?;
         let event = &projection.event;
-        (event.identity().execution_session_id() == &self.graph.results.execution_session_id
+        (event.identity().graph_path() == &self.graph.projection.graph_path
+            && event.identity().execution_session_id() == &self.graph.results.execution_session_id
             && event.identity().semantic_input_hash()
                 == &self.graph.projection.basis.semantic_input_hash
-            && self.execution.cleared.as_ref() != Some(event.identity())
-            && matches!(event.kind(), RunApplicationEventKind::RunErrored { .. }))
+            && self.execution.cleared.as_ref() != Some(event.identity()))
         .then_some(event)
     }
 
-    pub(crate) fn clear_run_failure(&mut self, run: &RunIdentity, cx: &mut Context<Self>) {
-        if self.run_failure().map(RunApplicationEvent::identity) != Some(run) {
+    pub(crate) fn run_failure(&self) -> Option<&RunApplicationEvent> {
+        self.run_notice()
+            .filter(|event| matches!(event.kind(), RunApplicationEventKind::RunErrored { .. }))
+    }
+
+    pub(crate) fn clearable_run(&self) -> Option<&RunIdentity> {
+        if self.execution.running() || self.execution_sync_status().is_some() {
+            return None;
+        }
+        self.run_notice()
+            .filter(|event| {
+                matches!(
+                    event.kind(),
+                    RunApplicationEventKind::RunCompleted
+                        | RunApplicationEventKind::RunCancelled
+                        | RunApplicationEventKind::RunErrored { .. }
+                )
+            })
+            .map(RunApplicationEvent::identity)
+    }
+
+    pub(crate) fn clear_run_notice(&mut self, run: &RunIdentity, cx: &mut Context<Self>) {
+        if self.clearable_run() != Some(run) {
             return;
         }
         self.execution.cleared = Some(run.clone());

@@ -806,6 +806,17 @@
 - 两处均通过 `node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 项依赖声明）、九个改动 Rust 文件的局部格式检查、文档状态/相对链接、265 项清单检查及 `git diff --check`。临时窗口入口、延迟注入、辅助命令与隔离数据不提交。
 - 完整图生命周期及其余组合组件继续审查，累计仍为 206/265；本批不将局部交付修复当作完整组件迁移，物理输入/IME、无障碍、其他平台和性能验收保持开放。
 
+### 画布运行工具栏与提示确认
+
+- 逐项核对 CanvasExecutionToolbar、内部按钮包装、graphHasClearableArtifacts 与 clearGraphArtifacts：必要能力是执行/取消、不可用原因、同步未知提示和确认运行摘要。原生沿用画布之外的固定工具栏及 GPUI Button/Tooltip，不迁移 Web 定位层或另一份执行 store。
+- Canvas 与 Output 共用当前运行提示及确认入口，捕获完整 RunIdentity，在点击时核对图路径、执行会话、语义和当前运行。完成、失败或取消可确认，提交/运行/未知/恢复期间禁用；确认隐藏状态与失败装饰，相同快照恢复不会重现，旧点击不能清除后续运行。
+- 全图按钮和执行动作沿同一不可用原因判断，Function、在途操作、刷新失败、路径更新、运行同步与阻断诊断均有对应文案。全图阻断随既有 presentation 更新派生；未提交端口输入先应用，再核对新投影。单节点/依赖执行仍由后端按实际范围判断，避免无关节点阻断。
+- 在提交候选与保留原生 WIP 的工作区副本中打开真实 Linux/X11 隔离窗口，使用真实 Application 创建与运行图。全图有阻断时没有运行请求，同图的独立布尔节点成功；完整除法图运行成功，工具栏清除后有效结果保留。新运行结束后用旧捕获身份清除，新摘要仍在。
+- 真实除零失败后，Output 显示原失败；从 Output 清除后错误装饰、失败正文和状态共同隐藏。分别对成功/失败清除前后及相同快照恢复，读回完整图版本、语义 hash、dirty、结果 revision 与结果引用一致；不清结果、不保存图。
+- 仅在临时预览中延迟已发布 RunStarted 的后续工作，核对取消按钮、清除禁用及真实取消终态。临时执行快照失败时展示英文未知提示，点击运行/清除不生效，恢复读取后恢复原摘要；没有伪造运行事件。未提交端口输入可交给原事务，提交后仍有全图阻断则不执行；Function 图不接受全图请求。
+- 两份源码均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`。预览以 `cargo rustc -p yss-desktop-gpui --example run_toolbar_review --locked -- -C opt-level=0 -C debuginfo=0` 构建，仅临时副本使用该配置，不据此作性能结论。变更文件格式、文档链接、组件清单和模块索引分别复核；不增加依赖、持久化契约或 UI 单元测试，不运行全工作区验证。
+- 本批完成 CanvasExecutionToolbar 源码审查，累计 207/265；PinResultSearchPalette 独立迁移。隔离预览使用注入窗口输入，未确认物理悬停提示的显示；物理键鼠/IME、无障碍、Windows/macOS 与大图性能仍开放。临时窗口、隔离项目、故障注入和截图不提交。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -1026,7 +1037,7 @@
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 迁移 | canvas/presentation 按当前投影、执行身份与缓存派生外观，ports 共用类型配色；选择、替换及状态提示保留 | 真实执行核对运行/可用/过期/失败与清除；平台和大图验收开放 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 复用原生布局与命中 | NodeLayout/连接索引随投影更新，原生端口沿后端方向、orphan 与连接能力起手；不迁入 React 测量与 handle 状态 | Linux 窗口核对真实派生端口增列及同尺寸重排展示样例；物理输入与平台验收开放 |
 | [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 迁移：共用 Canvas 坐标，无需 DOM 订阅 | 40 世界单位点网格、固定屏幕半径；复用有界点块路径平铺，平移不细分 | Linux 窗口核对负平移/缩放/尺寸变化，10% 可见；release 大图和 120Hz 仍开放 |
-| [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 迁移 | 原生固定工具栏、运行提示确认、禁用原因及同步状态；复用 Application 运行和 Output | 隔离窗口核对完成/失败清除、缓存保留、旧身份、局部执行、取消和未知状态恢复；物理悬停/键鼠及其他平台待验收 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |

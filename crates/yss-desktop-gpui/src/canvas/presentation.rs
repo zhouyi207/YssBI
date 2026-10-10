@@ -31,6 +31,7 @@ pub(super) struct PortAppearance {
 
 #[derive(Default)]
 pub(super) struct Presentation {
+    pub graph_blocked: bool,
     pub nodes: BTreeMap<NodeId, NodeAppearance>,
     pub ports: BTreeMap<PortAddress, PortAppearance>,
     connections: BTreeMap<ConnectionId, State>,
@@ -88,7 +89,13 @@ impl GraphCanvas {
                 .filter(|(node, _)| *node == id)
                 .map(|(_, code)| code)
         };
-        let mut view = Presentation::default();
+        let mut view = Presentation {
+            graph_blocked: !matches!(
+                graph.projection.outcome,
+                yss_graph_editor::projection::EditorResolutionOutcome::Complete
+            ) || graph.projection.diagnostics.iter().any(|d| d.blocking),
+            ..Default::default()
+        };
         let cache = cache::CacheStates::new(current.then_some(results), &addresses, &pending);
         let blocked_connections = graph
             .projection

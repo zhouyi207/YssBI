@@ -2917,7 +2917,10 @@
       "refreshFailed": "无法刷新图状态，编辑已暂停。请重试。",
       "loadingRenamedGraph": "正在读取重命名后的图…",
       "opening": "正在打开图…",
-      "openFailed": "无法打开此图。请检查资源后重试。"
+      "openFailed": "无法打开此图。请检查资源后重试。",
+      "runUnknown": "运行状态未知，请刷新状态",
+      "syncingRun": "正在同步运行状态…",
+      "operationInProgress": "正在提交图操作，请稍候。"
     },
     "assistant": {
       "alreadyRunning": "此对话已有任务运行，请等待完成或请求停止。",

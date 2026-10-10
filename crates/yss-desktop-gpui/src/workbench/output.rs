@@ -73,7 +73,10 @@ impl Render for OutputPanel {
             RunApplicationEventKind::RunErrored { failure } => Some((event.identity(), failure)),
             _ => None,
         });
-        let clear_run = failure.map(|(run, _)| run.clone());
+        let clear_run = graph
+            .as_ref()
+            .and_then(|graph| graph.read(cx).clearable_run())
+            .cloned();
         let body = match failure {
             Some((run, failure)) => failure::render(run, failure, cx),
             None => div()
@@ -118,18 +121,22 @@ impl Render for OutputPanel {
                         )
                     })
                     .child(
-                        Button::new("clear-run-failure")
+                        Button::new("clear-output-run-notice")
                             .small()
                             .ghost()
                             .icon(IconName::Trash)
-                            .tooltip(crate::text::t("panel.outputClear"))
+                            .tooltip(crate::text::t(if clear_run.is_some() {
+                                "canvas.clearExecutionArtifacts"
+                            } else {
+                                "canvas.clearExecutionArtifactsDisabled"
+                            }))
                             .disabled(clear_run.is_none())
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 if let Some(run) = &clear_run
                                     && let Some(graph) =
                                         view.graph.as_ref().and_then(WeakEntity::upgrade)
                                 {
-                                    graph.update(cx, |graph, cx| graph.clear_run_failure(run, cx));
+                                    graph.update(cx, |graph, cx| graph.clear_run_notice(run, cx));
                                 }
                             })),
                     ),
