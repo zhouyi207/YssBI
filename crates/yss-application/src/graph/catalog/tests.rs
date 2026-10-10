@@ -633,9 +633,12 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
     assert_eq!(saved.document.input_states, document.input_states);
     let projection = session
         .application
-        .resolve_graph_document(instance, caller, saved.document.clone(), "en-US".into())
+        .open_graph(crate::graph::open::OpenGraphRequest::new(
+            instance, caller, 300, "en-US",
+        ))
         .unwrap();
     let projected = projection
+        .projection()
         .nodes
         .iter()
         .find(|node| node.node_id == call)
@@ -1241,13 +1244,6 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
     use yss_graph_execution::result::{ConnectionCacheState, ResultCacheState};
 
     let graph = GraphResourcePath::new("events/New Event.yssbi-event").unwrap();
-    let session = staged_session(
-        compatible_project(&graph),
-        "decompose-view-results",
-        GraphRuntimeTestControl::default(),
-    );
-    let app = &session.application;
-    let instance = session.session.project_instance_id().clone();
     let source = NodeId::new();
     let decompose = NodeId::new();
     let viewers = [NodeId::new(), NodeId::new(), NodeId::new()];
@@ -1286,17 +1282,25 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
             order: None,
         },
     );
-    let resolve = |document: &GraphDocument| {
-        app.resolve_graph_document(
+    let mut project = compatible_project(&graph);
+    project.graphs.get_mut(&graph).unwrap().document = Arc::new(document.clone());
+    let session = staged_session(
+        project,
+        "decompose-view-results",
+        GraphRuntimeTestControl::default(),
+    );
+    let app = &session.application;
+    let instance = session.session.project_instance_id().clone();
+    let opened = app
+        .open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            Arc::new(document.clone()),
-            "en-US".into(),
-        )
-        .unwrap()
-    };
-    let projection = resolve(&document);
-    let columns = projection
+            0,
+            "en-US",
+        ))
+        .unwrap();
+    let columns = opened
+        .projection()
         .nodes
         .iter()
         .find(|node| node.node_id == decompose)
@@ -1505,12 +1509,6 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     use yss_graph_document::{ConnectionId, DocumentConnection};
 
     let graph = GraphResourcePath::new("events/Columns.yssbi-event").unwrap();
-    let session = staged_session(
-        compatible_project(&graph),
-        "compatible-derived",
-        GraphRuntimeTestControl::default(),
-    );
-    let instance = session.session.project_instance_id().clone();
     let source = NodeId::new();
     let decompose = NodeId::new();
     let mut document = compatible_draft(source);
@@ -1542,16 +1540,25 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
             order: None,
         },
     );
-    let projection = session
+    let mut project = compatible_project(&graph);
+    project.graphs.get_mut(&graph).unwrap().document = Arc::new(document.clone());
+    let session = staged_session(
+        project,
+        "compatible-derived",
+        GraphRuntimeTestControl::default(),
+    );
+    let instance = session.session.project_instance_id().clone();
+    let opened = session
         .application
-        .resolve_graph_document(
+        .open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            Arc::new(document.clone()),
-            "en-US".into(),
-        )
+            0,
+            "en-US",
+        ))
         .unwrap();
-    let node = projection
+    let node = opened
+        .projection()
         .nodes
         .iter()
         .find(|node| node.node_id == decompose)

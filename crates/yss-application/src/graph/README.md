@@ -253,7 +253,8 @@ GUI / Harness typed command
 项目与视图生命周期校验仍独立生效，具体原生交互属于 [GPUI host](../../../yss-desktop-gpui/README.md)。
 
 `ApplicationState::open_graph` 返回 `OpenGraphApplicationReceipt`，包含同次捕获的只读文档、
-解析结果、`EditorProjectionModel`、编辑状态、函数投影与结果摘要。`refresh_graph` 接收既有编辑会话身份，
+解析结果、`EditorProjectionModel`、编辑状态、函数投影与结果摘要。完整图投影的公开读取从 Project
+当前正文构造，打开未驻留的图时先由 Project 载入该正文。`refresh_graph` 接收既有编辑会话身份，
 先查询 Project 中的位置，再复用打开流程读取，并在返回前重验会话与位置。通知缺口后仍可读取
 已移动的原图；原身份已结束时沿请求路径正常读取，以接纳干净文件的外部替换，不推断别名。
 编辑和历史调用返回 `GraphEditResponse`，

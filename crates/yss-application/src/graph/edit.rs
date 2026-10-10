@@ -259,32 +259,6 @@ impl ApplicationState {
         Ok(candidates)
     }
 
-    pub fn resolve_graph_document(
-        &self,
-        project_instance_id: ProjectInstanceId,
-        graph_path: GraphResourcePath,
-        document: Arc<GraphDocument>,
-        locale: String,
-    ) -> Result<yss_graph_editor::projection::EditorProjectionModel, ResourceMutationApplicationError>
-    {
-        let captured = self.capture_resource_session(&project_instance_id)?;
-        validate_graph_document(&document).map_err(|error| {
-            ResourceMutationApplicationError::Mutation(MutationConflict::Document(error))
-        })?;
-        let mut context = GraphResolutionContext::capture(&captured, &document)?;
-        let (replacement, _) = build_graph_projection_replacement(
-            &captured,
-            &mut context,
-            &graph_path,
-            &document,
-            &locale,
-        )?;
-        context.revalidate(&captured)?;
-        self.revalidate_captured_session(&captured)
-            .map_err(ResourceMutationApplicationError::SessionChanged)?;
-        Ok(replacement.projection)
-    }
-
     pub fn export_graph_subgraph(
         &self,
         project_instance_id: &ProjectInstanceId,

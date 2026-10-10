@@ -407,19 +407,6 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         "schema-fresh-session",
         GraphRuntimeTestControl::default(),
     );
-    let reopened = fresh
-        .application
-        .resolve_graph_document(
-            fresh.session.project_instance_id().clone(),
-            graph.clone(),
-            updated.document().clone(),
-            "en-US".into(),
-        )
-        .unwrap();
-    assert!(
-        output_columns(&reopened).is_empty(),
-        "persisted derived-port metadata is not an evaluated result"
-    );
     let instance = fresh.session.project_instance_id().clone();
     let overwrite = fresh
         .session
@@ -435,6 +422,19 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         .project()
         .commit_graph_candidate(overwrite.into_authority(), updated.document().clone())
         .unwrap();
+    let reopened = fresh
+        .application
+        .open_graph(crate::graph::open::OpenGraphRequest::new(
+            instance.clone(),
+            graph.clone(),
+            0,
+            "en-US",
+        ))
+        .unwrap();
+    assert!(
+        output_columns(reopened.projection()).is_empty(),
+        "persisted derived-port metadata is not an evaluated result"
+    );
     let mut events = Vec::new();
     let error = crate::graph::run::run_graph_with_sink(
         &fresh.application,
@@ -442,7 +442,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
             instance,
             graph.clone(),
             updated.document().clone(),
-            reopened.basis.semantic_input_hash,
+            reopened.projection().basis.semantic_input_hash,
         ),
         |event| {
             events.push(event);
