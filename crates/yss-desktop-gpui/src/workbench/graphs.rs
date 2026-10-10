@@ -1,4 +1,5 @@
 mod loading;
+mod navigation;
 mod opening;
 mod resources;
 pub(super) use opening::Opening;
@@ -72,14 +73,15 @@ impl Workbench {
                 window,
                 cx,
             );
-            let applied = self
+            if let Some(id) = intent {
+                self.reveal_graph_intent(graph, node, id, window, cx);
+            } else if self
                 .displayed_panel_placement(graph.entity_id().into(), cx)
                 .is_some()
-                && graph.update(cx, |graph, cx| {
+            {
+                graph.update(cx, |graph, cx| {
                     graph.focus_node(node.as_deref(), window, cx)
                 });
-            if let Some(id) = intent {
-                self.finish_intent(&id, applied, window, cx);
             }
             return;
         }
@@ -105,6 +107,8 @@ impl Workbench {
                 self.finish_intent(&intent, false, window, cx);
             } else {
                 opening.update(cx, |opening, _| {
+                    // A pending first read may contain the projection from before the intent.
+                    opening.task = None;
                     opening.intent = Some(intent);
                     opening.node = node;
                 });

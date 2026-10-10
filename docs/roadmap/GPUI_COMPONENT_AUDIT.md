@@ -781,6 +781,19 @@
 - L2：独立提交内容与工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 通过；临时窗口由 `cargo build -p yss-desktop-gpui --example graph_visibility_review --locked` 构建。3 个 Rust 文件格式、文档声明/链接、265 项清单、模块索引及 `git diff --check` 按本批范围检查。无新增依赖、后端契约或 UI 单元测试，未运行全工作区测试；临时入口与项目不提交。
 - 图意图定位前的投影新鲜度、首次读取无编辑会话时的缺口恢复、重复目标画布和完整隐藏/重开继续审查。三项组合组件仍未整体完成，累计 206/265；物理输入/IME、读屏、Windows/macOS 和大图性能仍开放。
 
+### 图意图定位前的投影读取
+
+- 对照 useUiIntents 在 Harness 修改后重新取得投影的要求，已有原生画布不再用缓存直接结算图打开请求。`graphs/navigation` 先显示原面板，等待 `canvas/loading` 的现有读取队列，再核验项目、交付 binding、路径/实体、活动编辑器、版本与语言后定位。
+- 等待使用短期 GPUI 实体观察与一次性结果，不保存另一份图、不另发查询，也不轮询；已有读取可能早于请求，需等合并后的下一次读取及在途图命令结束。失败交付无结果，实体释放取消等待并释放订阅。首次加载中的标签收到意图时取消旧交付并重新读取，避免首次投影同样过期。
+- 独立 Linux/X11 窗口通过真实 Application 修改图并暂停图通知，复现旧实现拒绝新增节点、错误定位已删除节点，以及首读在途时遗漏新增节点。修复后新增节点 applied、已删除节点 failed；8 秒旧读取期间到达的请求保持 claimed，后续读取完成才按新版本定位；首读在途的函数图重读后包含并定位新节点。
+- 独立窗口另核对读取失败/明确重试，以及 10 秒读取期间实际点击关闭：原请求失败，后续图请求继续成功，迟到读取不恢复标签。已保存图正文在后端未保存修改和 UI 导航前后哈希相同，导航不隐式保存。
+- 工作区窗口在原端口输入未提交文本后请求新增节点，确认新投影定位成功且草稿保留；旧基线保存报冲突，实际 Escape 恢复当前值后可显式保存。确认 8 秒读取已经开始后切换另一图，原请求 failed，当前活动图和详情保持不变。
+- 工作区另在 6 秒旧读取期间重连 binding，再请求具有 10 秒读取的新图并排队另一图；旧读取完成时新请求仍 claimed、队列仍保留一项。随后两个新请求依次 applied，旧请求 expired，不向新 binding 结算或清除其队列。
+- 默认预览构建在原生代码生成阶段被系统 OOM 终止，内核记录 rustc 约 49 GB RSS；仅临时窗口改用 `cargo rustc -p yss-desktop-gpui --example graph_intent_review --locked -- -C opt-level=0 -C debuginfo=0` 后构建成功，生产 profile 未修改。这些窗口用于行为验收，不作为性能证据。
+- 原生默认配置的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 在独立提交内容与工作区均通过；本批不新增依赖、共享业务契约或 UI 单元测试，未扩大到全工作区验证。临时预览、故障注入和隔离项目不提交。
+- 两处均通过 `node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 项依赖声明）、三个改动 Rust 文件的局部格式检查、两份文档的状态/相对链接核对、265 项组件清单一致性检查及 `git diff --check`。
+- 首读无编辑会话时的通知缺口恢复、目标重复画布和完整隐藏/重开仍需继续审查。三项图组合组件仍未整体完成，累计 206/265；物理输入/IME、读屏、其他平台和大图性能保持开放。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -995,7 +1008,7 @@
 | [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 迁移 | connections 共用曲线、命中、选择/悬停、状态虚线、类型实线与运行标记；复用原路径缓存及 GPUI Animation | Linux/X11 窗口核对；物理输入、读屏及目标平台/帧率待验收 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 已读组合入口及 useCanvasViewport/useConnectionCandidates；候选回退、视角、刷新门控与共享保存已补齐，资源重命名/删除、首次加载与失败标签已接入，已有会话的发布缺口恢复和展开组可见性已接入，完整生命周期继续审查 | 多批窗口验收见记录；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx) | 复用原生视图：保留画布边界与叠层 | GraphCanvas 实体提供资源身份、焦点、裁剪及网格/节点/预览/菜单组合；无需复制 DOM 标记或插槽包装 | Linux/X11 独立副本与工作区窗口核对；其内部功能按各自组件继续验收 |
-| [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 已读文档就绪、冲突、保存和可见面板门控；刷新失败/重试与保存全部已补齐，重命名期间的读取/草稿和删除交付已补齐，首次打开失败/重试与标签恢复已补齐，已有会话的缺口恢复和隐藏完成回执已接入，定位前投影新鲜度与完整生命周期继续审查 | 待完成生命周期审查 |
+| [modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx) | 待查 | 已读文档就绪、冲突、保存和可见面板门控；刷新失败/重试与保存全部已补齐，重命名期间的读取/草稿和删除交付已补齐，首次打开失败/重试与标签恢复已补齐，已有会话的缺口恢复、隐藏完成回执和意图定位前重读已接入，完整生命周期继续审查 | 待完成生命周期审查 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx) | 待查 | 手势、候选失败回退、视角及定位已接入；刷新失败取消手势并保留草稿，资源重命名保留原画布，剩余文档/面板生命周期继续审查 | 多批 Linux 窗口验收见记录；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowConnection.tsx) | 迁移 | connections/drag、render 共用方向曲线、目标吸附、后端候选颜色/原因及替换集合；PendingFlowConnection 读取当前菜单来源 | 窗口核对输入侧、追加/替换/无效、移动与撤销、菜单及迟到失败隔离 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowEdge.tsx) | 迁移 | canvas/presentation 按当前投影、执行身份与缓存派生外观，ports 共用类型配色；选择、替换及状态提示保留 | 真实执行核对运行/可用/过期/失败与清除；平台和大图验收开放 |

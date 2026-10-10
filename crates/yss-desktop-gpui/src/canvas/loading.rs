@@ -12,6 +12,40 @@ pub(super) struct ResourceMove {
 }
 
 impl GraphCanvas {
+    pub(crate) fn refresh_for_navigation(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> gpui::Task<Option<(GraphEditVersion, &'static str)>> {
+        // An in-flight read may predate the edit that requested this navigation.
+        // The existing refresh queue ensures a read starts after this request.
+        self.refresh(cx);
+        let (ready, settled) = tokio::sync::oneshot::channel();
+        let mut ready = Some(ready);
+        let observation = cx.observe_self(move |view, _| {
+            if !view.busy
+                && view.refresh_task.is_none()
+                && !view.refresh_pending
+                && let Some(ready) = ready.take()
+            {
+                let _ = ready.send(view.navigation_state());
+            }
+        });
+        cx.spawn(async move |_, _| {
+            let result = settled.await.ok().flatten();
+            drop(observation);
+            result
+        })
+    }
+
+    pub(crate) fn navigation_state(&self) -> Option<(GraphEditVersion, &'static str)> {
+        (!self.busy
+            && self.refresh_task.is_none()
+            && !self.refresh_pending
+            && !self.refresh_failed
+            && self.resource_move.is_none())
+        .then_some((self.graph.editing.version, crate::text::locale()))
+    }
+
     pub(super) fn resource_path(&self) -> &GraphResourcePath {
         self.resource_move
             .as_ref()
