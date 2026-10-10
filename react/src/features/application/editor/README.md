@@ -25,4 +25,4 @@
 
 [画布](../../../modules/graph-editor/README.md) · [资源操作](../resource/README.md) · [文档编辑器](../../../modules/document-editor/README.md) · [结果](../results/README.md)
 
-这里描述的交互不能证明原生实现已完成。参数编辑、取消、撤销重做、分屏、保存关闭和项目替换仍须在原生实现中按[迁移计划](../../../../../docs/roadmap/GPUI_MIGRATION.md)验收。
+这里描述的交互不能证明原生实现已完成。参数编辑、取消、撤销重做、分屏、保存关闭和项目替换仍须在原生实现中按[图与结果验收待办](../../../../../TODO.md#graph-and-results-acceptance)验收。

@@ -10,7 +10,7 @@
 当前入口见[根 README](../../../../README.md)、[文档索引](../../../../docs/README.md)、
 [Graph application](../../../../crates/yss-application/src/graph/README.md)和
 [GPUI host](../../../../crates/yss-desktop-gpui/README.md)；
-开放验收由[迁移计划](../../../../docs/roadmap/GPUI_MIGRATION.md)维护。
+开放验收由[图与结果验收待办](../../../../TODO.md#graph-and-results-acceptance)维护。
 
 ## Canvas presentation and input
 

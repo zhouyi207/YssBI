@@ -915,7 +915,7 @@ cargo run -p yss-desktop-gpui --example check_math_docs
 
 Fedora 需要 C/C++ 工具链以及 fontconfig、libxkbcommon、Wayland/X11、OpenSSL 开发库；
 本机链接还需 `libxkbcommon-x11-devel`。需要可用图形驱动。Windows/macOS 的输入、平台路径、
-窗口和分发尚未在目标系统验收。剩余工作见[迁移路线图](../../docs/roadmap/GPUI_MIGRATION.md)。
+窗口和分发尚未在目标系统验收。剩余工作见[原生工作台待办](../../TODO.md#native-workbench)。
 
 项目进度人工验收：从欢迎页/最近项目打开，或在已打开项目中执行新建、另存为、关闭及保存后继续，
 核对正确操作标题、实际阶段、长路径提示和未知进度动画；操作期间点击遮罩下的编辑区不应产生编辑，窗口关闭沿用原保护。
@@ -1356,4 +1356,4 @@ CurrentInputs 在上游没有结果时拒绝，Dependencies 补算成功后两�
 工作区窗口在 35 秒首读期间实际关闭旧标签，新队列保持串行，迟到结果不重开；
 无效节点请求失败后，文档、Mind、图表、数据库和面板请求仍继续处理。
 默认原生 Clippy 和局部文档/格式检查通过；临时 ui_delivery_review 及隔离数据不提交。
-完整组件和平台验收仍以[组件审查](../../docs/roadmap/GPUI_COMPONENT_AUDIT.md)的开放项为准。
+完整组件和平台验收仍以[原生工作台待办](../../TODO.md#native-workbench)的开放项为准。

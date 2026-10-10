@@ -32,4 +32,4 @@
 
 [画布](../graph-editor/README.md)、[文档](../document-editor/README.md)、[资源操作](../../features/application/resource/README.md)和 [Results](../../features/application/results/README.md)保留对应行为参考。
 
-拖动、分屏、停靠、折叠、主题、面板状态保留、关闭取消、结果持有与项目切换需要在原生工作台实际验收。参考实现、历史浏览器测试或接口存在不能替代这些验收；完成状态见[迁移计划](../../../../docs/roadmap/GPUI_MIGRATION.md)。
+拖动、分屏、停靠、折叠、主题、面板状态保留、关闭取消、结果持有与项目切换需要在原生工作台实际验收。参考实现、历史浏览器测试或接口存在不能替代这些验收；完成状态见[原生工作台待办](../../../../TODO.md#native-workbench)。

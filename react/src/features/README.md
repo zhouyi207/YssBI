@@ -37,4 +37,4 @@
 | 结果查询与报告 | [Results](application/results/README.md) | [Graph application](../../../crates/yss-application/src/graph/README.md)、[Execution](../../../crates/yss-graph-execution/README.md) |
 | 日志与反馈 | [Observability](application/observability/README.md) | [Logging](../../../crates/yss-logging/README.md) |
 
-原生功能覆盖和未完成验收见[迁移计划](../../../docs/roadmap/GPUI_MIGRATION.md)，不能从参考实现存在推断完成状态。
+原生功能覆盖和未完成验收见[原生工作台待办](../../../TODO.md#native-workbench)，不能从参考实现存在推断完成状态。

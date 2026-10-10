@@ -1,0 +1,25 @@
+[book]
+authors = ["YssBI contributors"]
+language = "en"
+multilingual = false
+src = "src"
+title = "YssBI"
+description = "Use and develop the YssBI desktop data analysis application."
+
+[build]
+create-missing = false
+
+[preprocessor.katex]
+after = ["links"]
+
+[output.html]
+smart-punctuation = true
+no-section-label = true
+preferred-dark-theme = "navy"
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.print]
+enable = false

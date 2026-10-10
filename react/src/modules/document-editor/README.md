@@ -70,4 +70,4 @@ These remain comparison scenarios, not passed native checks:
 - Assistant edits alongside unfinished UI input and explicit external-reference actions.
 
 Current migration scope and outstanding native acceptance are maintained in the
-[migration plan](../../../../docs/roadmap/GPUI_MIGRATION.md).
+[native workbench backlog](../../../../TODO.md#native-workbench).

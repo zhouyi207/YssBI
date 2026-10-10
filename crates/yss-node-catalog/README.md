@@ -160,12 +160,14 @@ OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
 当前操作还包括独立统计检验使用的 `Test`；独立诊断与后估计由 `statistics/analyses.rs` 按实际输入模型或序列定义，不新增伪造的模型方法族。
 `category(spec)` 仅提供目录位置映射，不参与端口、模型类型或操作语义的判定。
 
-已执行的独立检验、诊断和后估计节点使用 `src/docs/zh/`、`src/docs/en/` 的 Markdown 正文，
-由 `src/documentation.rs` 映射并统一选择语言。`statistics/analyses.rs` 的简短本地化说明不替代完整帮助。
+已执行的独立检验、诊断和后估计节点使用仓库 `docs/src/nodes/zh/`、`docs/src/nodes/en/` 的 Markdown 正文，
+由 `src/documentation.rs` 映射并统一选择语言。这些正文同时作为 mdBook 节点章节与应用内帮助的唯一来源；
+Catalog 使用基于 `CARGO_MANIFEST_DIR` 的 `include_str!` 在编译时嵌入，不在运行时读取文件或维护副本。
+`statistics/analyses.rs` 的简短本地化说明不替代完整帮助；模块实现契约仍维护在本 README。
 `statistics/classical` 中相同的备择方向参数共用一份声明。
 正文聚焦输入与参数、逐方法的假设与核心公式、输出口径和必要的判读条件；
 符号随公式简要说明，不展开基础知识章节、完整推导或内部数值分支。
-非检验类诊断说明其统计含义，不虚构原假设或 p 值。维护要求见 [节点文档规则](src/docs/.rules)。
+非检验类诊断说明其统计含义，不虚构原假设或 p 值。维护要求见 [节点文档规则](../../docs/src/nodes/.rules)。
 
 统计目录在 `statistics` 下按以下顺序注册，分类不表示相应算法已实现。每个节点有一个主分类；跨领域检索复用节点别名，不重复注册节点。
 

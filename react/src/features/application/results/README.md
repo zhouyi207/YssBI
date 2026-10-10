@@ -34,4 +34,4 @@
 - Summary 的内容选择属于节点参数。显式补选先提交参数并执行，成功取得新结果后替换原报告；失败或迟到结果保留旧快照。
 - 读取边界校验身份和结构，视图不在重绘时重新解析相同数据。无效报告显示失败，不静默丢弃坏行。
 
-[Results views](../../../modules/results/README.md)保留展示参考与开放的人工验收。原生能力和剩余工作以[迁移计划](../../../../../docs/roadmap/GPUI_MIGRATION.md)为准。
+[Results views](../../../modules/results/README.md)保留展示参考与开放的人工验收。原生能力和剩余工作以[图与结果验收待办](../../../../../TODO.md#graph-and-results-acceptance)为准。

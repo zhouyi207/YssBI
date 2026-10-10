@@ -148,7 +148,7 @@ Application 将这些映射与常量创建映射一起写入 Project 原提交�
 | yss-node-kernel                                                           | 中立内核调用契约、运行值、冻结 KernelRegistry 与内置执行适配                     |
 | yss-desktop-gpui | 原生界面调度与类型化图投影消费 |
 
-完整清单见 [Module Map](../../../../docs/reference/MODULE_MAP.md)。
+Workspace 成员见[根 Cargo.toml](../../../../Cargo.toml)，模块导航见[开发指南](../../../../docs/src/development.md)。
 
 Node 描述一种节点的端口、参数、类型约束及执行语义，不拥有某张图的节点实例或解析结果。
 节点编辑投影的 `capabilities` 仅携带 `managed`；复制、创建副本、删除和剪切在前端统一要求存在明确的非受管理节点投影。Rust 继续按节点协议拒绝受管理节点的非法修改与子图导出。参数和内联字面量编辑直接消费各自投影，不另传节点级汇总开关。

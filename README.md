@@ -16,7 +16,7 @@
 
 ---
 
-项目架构、开发流程和路线图从 [文档索引](docs/README.md) 进入。
+项目使用说明见[文档索引](docs/src/SUMMARY.md)，文档构建见 [docs/README.md](docs/README.md)，开放工作见 [TODO](TODO.md)。
 
 ## 项目架构
 
@@ -27,7 +27,7 @@
 - **领域层**：Project、Graph、Database、Execution、SCI 和 Harness 各自拥有业务状态；领域与应用层不依赖 GPUI。
 - **基础设施**：文件系统、日志、数据库存储与插件适配按各自模块边界接入。外部计算插件不改变桌面前端的 Rust 架构。
 
-状态所有权和依赖关系见[系统架构](docs/architecture/ARCHITECTURE.md)，模块入口见[文档索引](docs/README.md)。
+状态所有权和依赖关系见[系统架构](docs/src/development/architecture.md)，模块入口见[开发指南](docs/src/development.md)。
 
 ## 功能模块
 
@@ -102,7 +102,7 @@ cargo run -p yss-application --example build_samples -- --check --stage target/r
 ## 开发与验证入口
 
 [Cargo.toml](Cargo.toml) 拥有 workspace、默认入口和共享依赖。修改库时明确选择
-package 和 target，并检查受影响的原生调用方。界面使用人工验收。
+package 和 target，并检查受影响的原生调用方。界面行为仍需人工验收。
 
 | 任务 | 根命令 |
 | --- | --- |
@@ -110,10 +110,10 @@ package 和 target，并检查受影响的原生调用方。界面使用人工�
 | 原生静态检查 | `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps -- -D warnings` |
 | 库的聚焦测试 | `cargo test -p <package> --lib <case>` |
 | 包格式检查 | `cargo fmt -p <package> -- --check` |
-| workspace 模块索引 | `node scripts/generate-crate-dependencies.mjs --check` |
+| React 参考依赖数据 | `node scripts/generate-crate-dependencies.mjs --check` |
 
-日常改动按[验证规则](docs/development/ARCHITECTURE_GATES.md#2-按变更选择验证)选择受影响范围，不将 workspace 全量检查作为局部改动的默认收尾。
-索引生成器仅维护文档；运行桌面应用不依赖 Node.js。
+日常改动按[验证规则](docs/src/development/testing.md#select-checks)选择受影响范围，不将 workspace 全量检查作为局部改动的默认收尾。
+生成器仅维护 React 参考界面的 crate 依赖 JSON；运行桌面应用不依赖 Node.js。
 
 <!-- ## 致谢
 

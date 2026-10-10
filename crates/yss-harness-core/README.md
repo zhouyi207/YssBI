@@ -5,7 +5,7 @@
 > Canonical owners: Harness/Application/GPUI 源码与测试拥有可执行事实；本文拥有当前跨模块 contract
 > Update when: Harness authority、已注册 capabilities、持久化、事件流或生产接入状态改变时
 
-Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime。会话与工具流程归 Rust，通过类型化 Application 端口调用业务 owner。设计理由见 [Decision 0001](../../docs/decisions/0001-statistical-harness.md)，未完成能力见 [Harness roadmap](../../docs/roadmap/STATISTICAL_HARNESS.md)。
+Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime。会话与工具流程归 Rust，通过类型化 Application 端口调用业务 owner。设计边界见[系统架构](../../docs/src/development/architecture.md#harness-boundary)，未完成能力见 [Assistant 与 Harness 待办](../../TODO.md#assistant-and-harness)。
 
 ## 1. Current runtime path
 
@@ -108,7 +108,7 @@ Manager/Worker 的模型循环持续到模型完成、用户取消或真实执�
 取消向所有已准入 Worker 传播并等待业务操作收尾。启动恢复将未结束的 runs 记为
 interrupted，保留已经提交的工具证据，不自动重做可能已提交的操作。前端从相同事件流恢复
 任务卡片和运行状态，统计计划继续复用现有展示。真实模型与桌面人工验收见
-[Harness roadmap](../../docs/roadmap/STATISTICAL_HARNESS.md)。
+[Assistant 与 Harness 待办](../../TODO.md#assistant-and-harness)。
 
 `followup_task(runId, instruction)` resumes the same durable run ID, including across user turns and after restart. Core rebuilds scope from the original grant and successful receipts, restores the latest context checkpoint plus subsequent history, and binds any fresh Manager observations only to resources already in that scope. It never adds resources or operations. Without a fresh Manager observation, each granted resource must match the worker's current-project read or commit receipt; older session records do not invalidate a later verified receipt. Another project rebind requires current reads again before that baseline can be reused. Dependencies and input versions are rechecked under the existing execution gate. Unknown commit outcomes block continuation until reconciled; committed graph edits retain their owner-level idempotency. Startup recovery closes unfinished resumed runs as interrupted and never automatically repeats their writes.
 
@@ -659,7 +659,7 @@ Project/session replacement 或 provider unavailable 改变投影及动作可用
 
 ## 10. MCP status
 
-当前没有 MCP server adapter 或桌面监听入口，也没有 MCP Client。内部 Assistant 直接调用 Capability Gateway。外部 transport、authentication、Tasks mapping 和 tool trust 属于 [roadmap](../../docs/roadmap/STATISTICAL_HARNESS.md)。
+当前没有 MCP server adapter 或桌面监听入口，也没有 MCP Client。内部 Assistant 直接调用 Capability Gateway。外部 transport、authentication、Tasks mapping 和 tool trust 属于 [Assistant 与 Harness 待办](../../TODO.md#assistant-and-harness)。
 
 ## 11. Error, safety, and observability
 
@@ -684,7 +684,7 @@ Project/session replacement 或 provider unavailable 改变投影及动作可用
 - remote Skill install/signing；
 - Worker 递归委派、后台自主执行或重启后自动续跑子 Agent。
 
-这些限制是当前边界，不应在 current architecture 中展开为拟议 interface。实施顺序和验收条件只在 [Harness roadmap](../../docs/roadmap/STATISTICAL_HARNESS.md) 维护。
+这些限制是当前边界，不应在 current architecture 中展开为拟议 interface。实施顺序和验收条件只在 [Assistant 与 Harness 待办](../../TODO.md#assistant-and-harness)维护。
 
 图工具直接通过 Application 操作 Project 当前驻留文档。图活动流负责 UI 通知及执行事件，编辑数据和历史不依赖客户端存活。图编辑 snapshot/delta 和保存语义见 [Graph 与 Execution](../yss-application/src/graph/README.md)。
 

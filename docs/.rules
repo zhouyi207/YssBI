@@ -1,0 +1,29 @@
+# YssBI Documentation Guidelines
+
+## Voice and tone
+
+- Be practical, direct and concise. Explain what you can do, not why the product is impressive.
+- Address the reader as "you" and use the present tense.
+- State limitations directly. Do not describe planned or unverified behavior as available.
+- Avoid marketing language, filler and claims without evidence.
+
+## Content and organization
+
+- Follow [.conventions/CONVENTIONS.md](.conventions/CONVENTIONS.md) for page structure, links and examples.
+- Put book pages in `src/` and register them in `src/SUMMARY.md`.
+- Prefer updating an existing topic over creating another index or a page for a small option.
+- Keep implementation contracts beside their modules. Link to the source instead of copying inventories into the book.
+- Keep open work in the repository's `TODO.md`. Do not put roadmaps, completed review transcripts or historical measurement dumps in the book.
+
+## Accuracy
+
+- Check commands, shortcuts and configuration against the current source.
+- Do not copy Zed-specific actions, settings, services or release claims into YssBI documentation.
+- Do not use Zed's action/keybinding templates: this book has no Zed preprocessor.
+- A documentation change does not establish that an application feature or platform has passed acceptance.
+
+## Verification
+
+- Follow `README.md` to format and build the book.
+- Check page links, anchors and navigation in the generated output.
+- Do not rebuild the desktop application for documentation-only changes.

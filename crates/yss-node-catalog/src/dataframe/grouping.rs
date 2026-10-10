@@ -147,12 +147,30 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 
 fn help(id: &str, locale: &str) -> &'static str {
     match (id, crate::documentation::is_chinese_locale(locale)) {
-        ("yssbi.dataframe.groupby.groups", true) => include_str!("../docs/zh/groupby_groups.md"),
-        ("yssbi.dataframe.groupby.groups", false) => include_str!("../docs/en/groupby_groups.md"),
-        ("yssbi.dataframe.groupby.apply", true) => include_str!("../docs/zh/groupby_apply.md"),
-        ("yssbi.dataframe.groupby.apply", false) => include_str!("../docs/en/groupby_apply.md"),
-        (_, true) => include_str!("../docs/zh/groupby_transform.md"),
-        (_, false) => include_str!("../docs/en/groupby_transform.md"),
+        ("yssbi.dataframe.groupby.groups", true) => include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/src/nodes/zh/groupby_groups.md"
+        )),
+        ("yssbi.dataframe.groupby.groups", false) => include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/src/nodes/en/groupby_groups.md"
+        )),
+        ("yssbi.dataframe.groupby.apply", true) => include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/src/nodes/zh/groupby_apply.md"
+        )),
+        ("yssbi.dataframe.groupby.apply", false) => include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/src/nodes/en/groupby_apply.md"
+        )),
+        (_, true) => include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/src/nodes/zh/groupby_transform.md"
+        )),
+        (_, false) => include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/src/nodes/en/groupby_transform.md"
+        )),
     }
 }
 

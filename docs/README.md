@@ -1,74 +1,61 @@
-# YssBI 文档索引
+# YssBI Docs
 
-> Status: Current
-> Scope: 系统文档、源码旁模块 README、开发规则与计划的导航
-> Canonical owners: 本文件只拥有路由；各模块 README、适用的 .rules 和源码拥有具体内容
-> Update when: 文档 owner、模块入口、维护规则或计划位置改变时
+YssBI's documentation is a [mdBook](https://rust-lang.github.io/mdBook/) with task-oriented pages and a single [table of contents](src/SUMMARY.md).
 
-项目采用 GPUI 原生前端与 Rust 业务层，统一通过根 Cargo workspace 构建。先读[系统总览](architecture/ARCHITECTURE.md)了解边界，再进入对应模块的 README。模块职责、接口和生命周期写在源码旁；修改模块时需要遵守适用的 `.rules`。
+The organization follows [Zed's docs](https://github.com/zed-industries/zed/tree/main/docs). The instructions describe YssBI, not Zed's editor, services or release process. YssBI has no published documentation site yet.
 
-## 按用途查找
+## Preview locally
 
-| 位置             | 内容                                           | 入口                                      |
-| ---------------- | ---------------------------------------------- | ----------------------------------------- |
-| `architecture/`  | 系统上下文、所有权与跨模块关系                 | [系统架构索引](architecture/README.md)    |
-| 模块 `README.md` | 该模块的职责、接口、数据流、生命周期与验证方式 | 下方模块入口                              |
-| 模块 `.rules`    | 作用于当前目录及后代的开发约束                 | [根规则](../.rules)                       |
-| `development/`   | 变更流程与文档检查                             | [变更流程](development/CHANGE_PROCESS.md) |
-| `decisions/`     | 仍适用的设计理由                               | [决策索引](decisions/README.md)           |
-| `roadmap/`       | 开放工作、阶段与人工验收                       | [路线图](roadmap/README.md)               |
-| `reference/`     | 生成索引与更多源码旁说明                       | [实现参考](reference/README.md)           |
-| `benchmark/`     | 测量方法、样本与结果                           | [基准索引](benchmark/README.md)           |
+Install the same mdBook version used by Zed and the math preprocessor for node help:
 
-GPUI 原生宿主见 [GPUI host](../crates/yss-desktop-gpui/README.md)，未完成能力与人工验收见 [GPUI 功能计划](roadmap/GPUI_MIGRATION.md)。`react/` 仅保留参考源码，其说明不拥有当前架构、构建或状态契约。
+```sh
+cargo install mdbook --version 0.4.40 --locked
+cargo install mdbook-katex --version 0.9.0 --locked
+```
 
-## 模块契约入口
+Building `mdbook-katex` from source also requires a C compiler and `patch` on `PATH`.
 
-| 范围                         | 对应 README                                                                                                                                                                                                                            |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Application 组装与用例       | [Application](../crates/yss-application/README.md)                                                                                                                                                                           |
-| 项目生命周期与数据用例       | [Project application](../crates/yss-application/src/project/README.md)、[Database application](../crates/yss-application/src/database/README.md)                                                                   |
-| 图编辑、保存和投影编排       | [Graph application](../crates/yss-application/src/graph/README.md)                                                                                                                                                           |
-| 图表资源、预览与保存         | [Chart application](../crates/yss-application/src/chart/README.md)                                                                                                                                                           |
-| Mind / Markdown 文件和编辑器 | [Project model](../crates/yss-project-model/README.md)、[Application](../crates/yss-application/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md) |
-| 图语义与解析缓存             | [Graph analysis](../crates/yss-graph-analysis/README.md)、[Graph runtime](../crates/yss-graph-runtime/README.md)                                                                                                   |
-| 执行、运行状态和 ResultStore | [Graph execution](../crates/yss-graph-execution/README.md)                                                                                                                                                                   |
-| 共享语义与内核适配           | [Data contracts](../crates/yss-data-contract/README.md)、[Node kernel](../crates/yss-node-kernel/README.md)                                                                                                        |
-| 科学计算入口                 | [SCI runtime](../crates/yss-sci-runtime/README.md)                                                                                                                                                                           |
-| 工作台和图画布               | [GPUI host](../crates/yss-desktop-gpui/README.md)                                                                                                                                 |
-| 结果查询与报告               | [Graph application](../crates/yss-application/src/graph/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md) |
-| 图诊断与运行失败             | [Graph analysis](../crates/yss-graph-analysis/README.md)、[Graph application](../crates/yss-application/src/graph/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md) |
-| 工作台界面意图               | [UI contract](../crates/yss-ui-contract/README.md)                                                                                                                                                                           |
-| Harness / Assistant          | [Harness Core](../crates/yss-harness-core/README.md)                                                                                                                                                                         |
-| 运行观测、日志存储与用户反馈 | [Logging runtime](../crates/yss-logging/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md) |
-| Harness 契约与 Assistant 公开读投影 | [Harness contracts](../crates/yss-harness-contract/README.md) |
-| 插件体系 | [Plugin runtime](../crates/yss-plugin-runtime/README.md)、[Plugin protocol](../crates/yss-plugin-protocol/README.md) |
+From the repository root, start the preview:
 
-更多 Project、Database、SCI 与插件内部模块见[实现参考](reference/README.md)和[生成的模块索引](reference/MODULE_MAP.md)。
+```sh
+mdbook serve docs --hostname 127.0.0.1 --port 3000
+```
 
-项目文件种类与资源定位见 [Project](../crates/yss-project/README.md)，资源用例见
-[Project application](../crates/yss-application/src/project/README.md)，菜单和侧栏入口见
-[GPUI host](../crates/yss-desktop-gpui/README.md)。
+Open `http://127.0.0.1:3000`. Changes to the source pages rebuild the book. You do not need to compile the desktop application or generate action metadata.
 
-## 开发与交付
+To build without starting a server:
 
-- [根规则](../.rules)拥有 Rust、GPUI Kit 与规则维护约束，[Agent 规则](development/AGENT_RULES.md)维护变更纪律与跨系统约束。
-- [启动与构建](../README.md#快速开始)：Rust 工具链、Cargo 入口与分发资源。
-- [变更流程](development/CHANGE_PROCESS.md)：实现与自审要求。
-- [架构复核与文档检查](development/ARCHITECTURE_GATES.md)：验证范围、人工边界复核及独立文档契约。
+```sh
+mdbook build docs
+```
 
-原生启动和 Cargo 验证见[根 README](../README.md)与 [GPUI host](../crates/yss-desktop-gpui/README.md)。文档检查见[架构复核与文档检查](development/ARCHITECTURE_GATES.md)，生成索引见[实现参考](reference/README.md)，插件 schema 由 [Plugin protocol](../crates/yss-plugin-protocol/README.md) 的 Rust 入口生成。
+Generated files go to `docs/book/`, which is ignored by Git. The book uses mdBook's standard HTML renderer and bundled theme; no Zed-specific preprocessor, analytics, redirects or deployment service is required.
 
-## 维护约定
+`mdbook-katex` renders the node help's `$...$` and `$$...$$` formulas at build time. Its default stylesheet and fonts load from a CDN, so full formula styling requires a network connection when browsing.
 
-代码、测试和 manifests 拥有可执行事实；模块 README 拥有本模块说明，系统总览只描述模块之间的关系。不要把同一契约复制到多个 README 或把大段实现说明放进 `.rules`。
+## Edit the documentation
 
-维护中的 Markdown 声明 `Status`、`Scope`、`Canonical owners` 和 `Update when`。`Current` 表示当前实现；`Accepted Decision` 加 `Contract: Target Architecture` 表示已接受目标，不表示全部落地；`Planned` 用于计划；`Historical` 用于有明确历史范围的记录。
+- Write book pages in `src/` and add them to `src/SUMMARY.md`.
+- Use lowercase, hyphen-separated filenames and relative links between pages. Existing node help retains its catalog slug filenames.
+- Follow [.rules](.rules) and the [documentation conventions](.conventions/CONVENTIONS.md).
+- Keep module implementation contracts in the module's README and open work in the repository's [TODO.md](../TODO.md).
+- Do not add historical test transcripts, benchmark output dumps or completed roadmaps to the book.
 
-跨领域开放工作见 [TODO](../TODO.md)，计划与待验收见[组件重构](roadmap/COMPONENT_REFACTOR.md)和 [motion](roadmap/motion.md)。已完成事项简记在 [v0.3](roadmap/v0_3.md)，详细历史由 Git 保留；尚未完成的验收保持开放。
+## Node help
 
-节点配置与执行机制的实施顺序、接口改动及验收见[节点独立配置与分步执行计划](roadmap/NODE_AUTHORING_AND_EXECUTION.md)。
+Maintain bilingual node help in `src/nodes/en/` and `src/nodes/zh/`, following the [node documentation rules](src/nodes/.rules). Register both language pages beneath [Node Reference](src/nodes.md) in `src/SUMMARY.md`.
 
-模型工具按项目资源、图与节点、数据库、Mind、文档和运行结果拆分的方案见 [AI Harness 领域工具重构计划](roadmap/HARNESS_TOOL_ARCHITECTURE.md)。
+These are the canonical Markdown files for both the book and the desktop application's embedded help. `yss-node-catalog` includes them at compile time; do not keep copies under the crate. A book preview rebuilds when you edit the Markdown, while the application needs to be rebuilt to embed those edits. Catalog mappings and generated help remain owned by the [catalog module](../crates/yss-node-catalog/README.md).
 
-移动文档时更新引用和章节链接，删除旧正文；新增细节先由现有模块 owner 承接。生成索引通过原生成器更新。
+## Format and check
+
+From `docs/`, run:
+
+```sh
+npx --yes prettier@3.5.0 . --check
+npx --yes prettier@3.5.0 --parser markdown .rules --check
+```
+
+Replace `--check` with `--write` to format changed documentation. Node.js is only needed for formatting and the existing React reference-data generator, not for the application or mdBook itself.
+
+From the repository root, run `mdbook build docs` and `git diff --check`. Inspect the generated navigation and links, including heading anchors. A successful book build does not validate external URLs or demonstrate that an application workflow has passed acceptance.

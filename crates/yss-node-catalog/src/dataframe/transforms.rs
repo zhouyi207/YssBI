@@ -67,8 +67,18 @@ macro_rules! entry {
             zh: $zh,
             kind: Kind::$kind,
             aliases: &[$en, $zh],
-            en_help: include_str!(concat!("../docs/en/", $help, ".md")),
-            zh_help: include_str!(concat!("../docs/zh/", $help, ".md")),
+            en_help: include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../docs/src/nodes/en/",
+                $help,
+                ".md"
+            )),
+            zh_help: include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../docs/src/nodes/zh/",
+                $help,
+                ".md"
+            )),
         }
     };
 }

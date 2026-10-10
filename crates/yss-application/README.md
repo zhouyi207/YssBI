@@ -33,7 +33,7 @@ Application 的 `runtime` 消费中立路径和 Harness 端口。普通用例模
 
 ## 依赖与模块入口
 
-直接依赖、features 与开发依赖以 [Cargo.toml](Cargo.toml) 为准；完整 crate 清单见[模块索引](../../docs/reference/MODULE_MAP.md)，不在 README 中复制计数或依赖清单。
+直接依赖、features 与开发依赖以 [Cargo.toml](Cargo.toml) 为准；workspace 成员见[根 Cargo.toml](../../Cargo.toml)，模块导航见[开发指南](../../docs/src/development.md)，不在 README 中复制计数或依赖清单。
 
 项目生命周期见 [project](src/project/README.md)，数据用例见 [database](src/database/README.md)，图用例见 [graph](src/graph/README.md)。
 

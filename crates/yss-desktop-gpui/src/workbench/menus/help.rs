@@ -1,4 +1,4 @@
-//! Product links match react/src/shared/appLinks.ts.
+//! Repository and documentation links for the native Help menu.
 use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::{App, Window, div, prelude::*, px, size};
 
@@ -16,8 +16,8 @@ pub(in crate::workbench) enum HelpPage {
 impl HelpPage {
     pub(super) fn url(self) -> String {
         let suffix = match self {
-            Self::Architecture => "/blob/main/docs/architecture/ARCHITECTURE.md",
-            Self::Documentation => "/blob/main/README.md",
+            Self::Architecture => "/blob/main/docs/src/development/architecture.md",
+            Self::Documentation => "/blob/main/docs/src/getting-started.md",
             Self::ReleaseNotes => "/releases",
             Self::Repository => "",
             Self::ReportIssue => "/issues",

@@ -9,8 +9,18 @@ struct Documentation {
 macro_rules! markdown {
     ($slug:literal) => {
         Documentation {
-            en: include_str!(concat!("docs/en/", $slug, ".md")),
-            zh: include_str!(concat!("docs/zh/", $slug, ".md")),
+            en: include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../docs/src/nodes/en/",
+                $slug,
+                ".md"
+            )),
+            zh: include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../docs/src/nodes/zh/",
+                $slug,
+                ".md"
+            )),
         }
     };
 }

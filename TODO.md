@@ -1,13 +1,8 @@
 # YssBI Open Backlog
 
-> Status: Planned
-> Scope: 尚未完成且未归入专项 roadmap 的跨领域工作
-> Canonical owners: 本文件只拥有开放任务；代码和 Current docs 定义当前行为
-> Update when: 添加、完成、取消、澄清或迁移开放任务时
+Keep only open work here. Current behavior belongs to source and module READMEs; completed history belongs in Git. Items below distinguish missing features, uncompleted acceptance and optional candidates. Documentation cleanup does not close any of them.
 
-只在这里记录仍需完成的工作。完成摘要使用 `- [x]` 记录在对应版本路线图，详细历史由 Git 保存；release/subsystem 计划放在 `docs/roadmap/`；实现细节和验证输出不追加到本文件。
-
-在这里有个很明显的问题，那就是 节点 catelog ai 获取不到，因为目前都是注册之后直接解析的，ai 不知道要创建哪些节点，这个是个大问题
+- [ ] Investigate the user-reported AI node-discovery problem: “节点 catelog ai 获取不到……ai 不知道要创建哪些节点”. Capture a concrete model/session/tool reproduction against the current `browse_nodes` and `inspect_node_type` capabilities and generated configuration schema described in [Harness Core](crates/yss-harness-core/README.md). Do not treat the report as resolved, or as proof that discovery is globally absent.
 
 ## Active tasks
 
@@ -22,11 +17,66 @@
 - [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`。数值循环/模型参数重构需结合 SCI golden tests；共享序列化值须保持现有契约，不能为消除 lint 随意改协议。
 - [ ] codex resume 01a0f185-385c-7531-b9f2-bc5013a7078b
 
-## Routed roadmaps
+## Native workbench
 
-- [Statistical Harness](docs/roadmap/STATISTICAL_HARNESS.md)
-- [GPUI 功能与人工验收](docs/roadmap/GPUI_MIGRATION.md)
-- [GPUI 组件审查](docs/roadmap/GPUI_COMPONENT_AUDIT.md)
-- [v0.3](docs/roadmap/v0_3.md)
-- [v1.0](docs/roadmap/v1_0.md)
-- [motion](docs/roadmap/motion.md)
+Detailed interactions and existing acceptance evidence remain in the [native host README](crates/yss-desktop-gpui/README.md) and the relevant module READMEs. Isolated previews and source review do not establish full native acceptance.
+
+- [ ] Finish remaining component-family coverage: shell/composition/providers, menu and status contributions; document/Mind/reference editors; graph document/canvas lifecycle; plugin views and maintenance; Assistant Markdown/thread and shared rich text. Review current implementations before labeling a whole family missing; do not repeat the historical component inventory.
+- [ ] Complete project/window acceptance: unsaved navigation, new/save-as, partial-commit recovery without duplicate writes, restart/layout restoration, resource reopen, DockArea focus/split/reset, title-bar resize/drag/buttons and close protection. Verify modal confirmation versus nonmodal settings, Escape, dropdown layering and focus return. Cancelling close must preserve the entire affected window and input.
+- [ ] Verify Logs append/filter/details/follow behavior, independent windows, disconnect/retry/storage failure and subscription release; keep Problems, Output, Results and logs separate.
+- [ ] Finish Markdown save-all/close/external-change/restart handling, external references and resource menus; Mind navigation/editing, long-text measurement and recovery; rich text, math, links, footnotes, images and reference previews.
+- [ ] Verify database range selection and actual field/semantic commits, checkpoint/save/exit/export/recovery; file/SQL/sample import, retained failure input, return-to-table-selection, duplicate submission prevention and reconnect. Complete independent chart hover/configuration/date axes, external changes and save/close lifecycle.
+- [ ] Complete native plugin forms/custom views, open/close/reopen and authorization release, installation/maintenance, real task history/diagnostics, cancellation and result handoff on each platform.
+- [ ] Verify provider/model CRUD, remote discovery and real system credential stores; theme/appearance preferences, localization/search/narrow windows and settings draft reuse. Late receipts or background refresh must not replace unsaved fields.
+- [ ] Cover Fedora, Windows and macOS physical keyboard/pointer input, IME, clipboard, drag/drop, system pickers, scaling and accessibility; independent-display repaint, resize and window lifecycle need actual platform evidence.
+- [ ] Measure heavy-compute responsiveness and the 120 Hz target using release builds with the same real graph, window size and refresh rate: record input latency, processing, layout, paint and complete frame time, not GPU or CPU-submit fragments. Compare notification-refresh and direct incremental delivery in the same scenario before changing the protocol. Reassess logging/SQLite batches, bounded delivery, refresh frequency and hidden-panel work from measurements, not historical tuning constants.
+- [ ] Investigate the unresolved Windows Application-test crash `0xc0000409 / STATUS_STACK_BUFFER_OVERRUN` using actionable events or dumps. Later passing tests do not prove the cause fixed; serial success is not evidence for default concurrency.
+
+## Graph and results acceptance
+
+Use project copies and the [Graph application](crates/yss-application/src/graph/README.md), [Execution](crates/yss-graph-execution/README.md) and native host contracts.
+
+- [ ] Verify Event/Function/empty graphs, diagnostics and localized severity, middle-button pan, selection/multiselect/drag/Escape, one commit on release, node/port menus, compatible connections/replacement/Reroute/Details and clipboard failure lifecycles.
+- [ ] Finish typed authoring and complex-value editors: disconnected configuration and first-create values; variable-pin creation as one atomic undoable batch; defaults/constraints and invalid fixed/derived/member-group pins; schema changes preserving unavailable column choices and diagnostics; Deferred versus zero columns; per-input candidate isolation; structured predicates/literal types; failed/cancelled/stale-target forms. Cover physical input, IME, multiline text, focus and cross-window save/undo.
+- [ ] Verify consecutive edits/undo followed immediately by Save, and two parameter edits followed by close with Save/Discard/Cancel: drain prior work without allowing late projections to overwrite current edits. Test function rename with unopened callers, existing edges/literals/dynamic ports and undo/redo; check signature/body saving, precise constants and reference dragging.
+- [ ] Run immediately after connecting without a separate prepare step or implicit save. For `A → B → C` and `A → D`, disconnect or modify A→B: B/C and dependents become stale while A/D stay valid. Include the no-output observer's actual consumed binding and bypass Pin; a new binding must not appear already executed.
+- [ ] Undo restores cached results, Pins, edges and nodes only while the original cache remains valid; redo invalidates them again. Data changes or reclamation must prevent fabricated results. Movement/display-name changes preserve valid results; partial demand never marks unexecuted nodes complete. Revalidate after undo and prepare the matching plan internally on the next run.
+- [ ] Check continuous execution/cancel, unknown/missing-column repair, Deferred first run, current versus last-successful results, cross-session rerun, unbound function configuration/different inputs/internal error navigation, and GroupBy → Apply/Transform pagination/error-group location.
+- [ ] Reject late execution, preview and edit projections after cancellation, newer edits/undo or project replacement. Create/save/reopen charts and switch databases; late chart preview data or errors cannot overwrite a new project. Real failures such as division by zero locate the node in Output, never show success animation, and clearing errors does not clear Results.
+- [ ] Keep already-open data results/reports bound to their original execution after editing or rerunning. Paginate only data tables/series and report observation tables; overview, plots and analysis need no whole-report pagination. Short results must not offer a next page. Each window releases only its own lease; reclaim only after current output and the last consumer release.
+- [ ] Verify report sections, analysis/explicit append, standalone results and charts with distinct identities, constant-table relationship filtering, regression pagination and unequal-column error location. Run animations need authoritative facts and distinguishable reduced-motion states; do not expose a separate prepare or execution-replay action. Harness/plugin business entrypoints, events and errors must still work.
+- [ ] Exercise UI-intent duplicate/open/locate/reconnect and panel hide/close/reopen, project/session replacement, first graph read without an edit session, notification gaps and duplicate canvases. Receipts cannot cross target lifecycles; timeout does not establish cancellation. Verify existing Project/Data/Chart writes in native failure/recovery flows.
+
+## Assistant and Harness
+
+Current capability and persistence boundaries remain in [Harness Core](crates/yss-harness-core/README.md); real-model measurements have an existing [example](crates/yss-application/examples/measure_harness/README.md).
+
+- [ ] Complete Assistant grouping/layout, task/tool/statistical-plan/usage cards, links/formulas and subscription/cache release. Persist drafts, unconfirmed input and queued messages across restart without loss or accidental sends after close/project replacement. Accept explicit-resource multiselect/removal/same-name/deleted-resource retry/reopen/narrow panels and knowledge-source add/rebuild/remove/status/citation/original-document interactions.
+- [ ] **P6 — tool names and summaries:** use real Harness calls to read a test document and create/save Doc or Mind; inspect main/Worker cards, technical details and copying. Show actual public names, resource/query/change scope, readable long arguments and matching copied text, never internal synchronization fields.
+- [ ] **P6 — live states and timing:** observe graph execution, delegation, continuation and statistical-plan calls through their terminal states. Every call, including rejected controls, gets a card; elapsed time refreshes while running and freezes at the terminal state. Distinguish tool round-trip, Worker waiting and graph execution time.
+- [ ] **P6 — atomic failure:** submit an invalid connection batch or ambiguous text replacement. Show the real tool, parameters and reason; commit no partial batch and do not label failure completed or graph execution successful.
+- [ ] **P6 — cancellation and cleanup:** stop a running task and wait for backend cleanup. Show actual cancelled/interrupted states, preserve completed calls and committed artifacts, and neither keep unconfirmed timing running nor invent success.
+- [ ] **P6 — replay and artifacts:** close/reopen the conversation and restart the app. Preserve calls, names, summaries, terminal states and recorded timings without duplicates or re-executing operations; open resources in their owner editor and clearly reject reclaimed/stale result references. Record session/call evidence for each of these five cases; backend success is not UI acceptance.
+- [ ] Accept real-model Manager–Worker behavior: simple tasks delegate only needed roles, Workers do not call one another, data/analysis/plot/review/report/final-review tasks return openable real artifacts, parallel read progress/cancellation/interruption replays correctly, and changed data/graphs make affected evidence stale so the Manager replans from fresh facts. Check narrow panels/themes. Cover Claude, OpenAI Responses, Gemini, Kimi and local/compatible services, unavailable/offline/rate-limited behavior.
+- [ ] Before external/headless/background writes, require closed typed bounded requests/results, exact principal/project/session/revision binding, one-time approval bound to a request fingerprint, durable idempotency/invocation ledger/commit receipts, one staged validation/authority commit/history publication, and a defined cancellation point of no return. UI must expose approval, receipt, failure and undo/recovery actions; existing desktop writes are not external authorization.
+- [ ] Define durable mutation receipts correlated with Project history and reconcile crash/transport-loss/late-response outcomes as not-started, committed or unknown. Retry only when authority receipts prove no commit; project replacement stales/pauses bound work. Cover restart recovery, duplicate delivery and point-of-no-return cases; retaining an unknown-outcome marker is not reconciliation.
+- [ ] Gate MCP server/listener implementation on transport/process lifecycle, authentication and project binding, capability/resource/prompt surfaces, budgets/rate limits/cancellation, Tasks mapping, packaging/permissions and explicit enablement. Neither server nor client currently exists. External client tools require an untrusted registry, explicit approval, bounded results and network/data-sharing policy; they cannot directly write Project or turn conversations into long-term memory. Remote prompts/resources are not automatically trusted Skills/indexed Knowledge. Keep internal Assistant calls on the Gateway, not loopback MCP.
+- [ ] Define prompt/transcript/tool data-sharing, retention/encryption and adapter size/depth/schema/timeout controls. Add OAuth/cloud-signed authentication only when required.
+- [ ] **Optional candidates:** semantic retrieval/FastEmbed (download, offline and Windows packaging), persistent/incremental/hybrid indexes and deterministic filters, and Rig Memory context-window evaluation. Preserve explicit document authority, citation/hash/version/license integrity, deletion invalidation, cancellation/checkpoint/receipt recovery and default exclusion of data rows; retrieval never grants execution authority.
+- [ ] **Optional candidates:** project/user and remote Skills with review/signatures/install UX, exact version/hash, permission intersection, collision/shadowing prevention and statistical evaluation fixtures; no arbitrary script/filesystem powers. Expand EDA, OLS diagnostics, panel selection, time series, DID/IV, Bayesian convergence, robustness and publication workflows only with authoritative computation, diagnostic gates and reproducible evidence. Background scheduling/restart resume/multi-session concurrency need admission, fairness, budgets, project-replacement semantics and visible user control first.
+
+## Product and distribution
+
+These are retained product observations or optional candidates, not verified current defects or promises to implement every idea. Reproduce and scope them against current owners before changing behavior.
+
+- [ ] Reassess the node taxonomy: method families versus main categories, aliases/presets and shared GUI/Harness discovery, without changing stable node identities or mistaking a declaration for executability.
+- [ ] Investigate DID parallel-trends/placebo validation; Johansen `vecrank` lags/rank/trend choices and VECM order/rank; VECM Equation Summary R-sq differences from Stata; EG-ADF; VAR IRF confidence intervals; time trends/seasonal adjustment; complete correlogram execution-to-results coverage; and time-series lag physical/semantic output types.
+- [ ] Reconcile deferred ARIMA work with the proposed series/p/d/q model node and summary node using a boolean training/test condition. Evaluate AR/ADL/ARDL, ECM equilibrium assumptions and simulation/function examples as candidates, not completed support.
+- [ ] Verify panel Entity/Time/Two-Way effects, panel IV and two-way random effects; investigate coefficient/standard-error, chibar2, log-likelihood and LR chi2 differences against reference software and explicit MLE distribution assumptions. Keep strict-collinearity/rank handling, HAC IV z-versus-t inference, confidence-interval constraints and GLS reference/report comparisons open.
+- [ ] Review p-value rounding versus truncation and F-statistic degrees-of-freedom display without biasing significance; preserve missing-row positions in regression residual/output series and warn about missing data in autocorrelation diagnostics rather than silently dropping observations.
+- [ ] **Optional statistical candidates:** multivalued choice, count/ordered outcomes, truncated/censored/sample-selection regression, a dedicated Chow node, interpolation families and a combined configurable OLS/WLS/GLS regression node. Confirm existing computation and product demand first.
+- [ ] Verify explicit user values versus defaults in configuration; lazy database/data loading; native and node DataFusion filtering plus square/log/exponential expressions; and demand-run/cache presentation without exposing plan preparation as a separate user step.
+- [ ] **Optional presentation candidates:** chart/sidebar column/type selection, Residuals-vs-Fitted progress-style values, graph/image processing, better formula rendering and shared coefficient chart/table report pages with one state owner.
+- [ ] **Optional layout candidates:** temporary overlay sidebars, pinned/grouped/colored tabs, floating/group movement, named/project presets and import/export/undo, overflow/multiline navigation, panel sizing/toolbars/aliases, side-by-side graph/result/Assistant/inspection/log views, diagnostic/report comparison presets, dockable help, plugin/import workspaces, richer controlled intents and multiple workbench windows. Confirm GPUI Kit support and real need; preserve one DockArea topology, independent view identity/input, resource leases and separate Graph history. Layout undo cannot resurrect closed leases or stale resources.
+- [ ] Plan native installation/signing/release and user-confirmed check-for-update/auto-update per target platform; do not reuse obsolete client updater APIs.
+- [ ] Investigate the reported Rust linker warning against the pinned toolchain; do not assume a future compiler fixes it. Continue addressing real Clippy warnings without suppressing the default warning level.
