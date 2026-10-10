@@ -1,9 +1,10 @@
 //! Aligned, budgeted tabular preparation shared by statistical adapters.
 use crate::builtins::series;
 use crate::{KernelError, KernelInvocation, RuntimeValue};
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
-use yss_data_contract::{SemanticType, TabularScalar};
+use yss_data_contract::{ConversionMetadata, SemanticType, SemanticValue, TabularScalar};
 
 pub(in crate::builtins::statistics) struct Category<'a>(
     pub(in crate::builtins::statistics) &'a TabularScalar,
@@ -86,15 +87,48 @@ pub(in crate::builtins::statistics) fn numeric(
         })
         .collect()
 }
-fn category_code(v: &TabularScalar) -> Result<String, KernelError> {
+pub(in crate::builtins::statistics) fn category_code(
+    v: &TabularScalar,
+) -> Result<Cow<'_, str>, KernelError> {
     Ok(match v {
         TabularScalar::Null => return Err(KernelError::InvalidNumericInput),
-        TabularScalar::Bool(v) => v.to_string(),
-        TabularScalar::Integer(v) => v.to_string(),
-        TabularScalar::Unsigned(v) => v.to_string(),
-        TabularScalar::Float64(v) => v.as_f64().to_string(),
-        TabularScalar::String(v) => v.to_string(),
+        TabularScalar::Bool(v) => Cow::Owned(v.to_string()),
+        TabularScalar::Integer(v) => Cow::Owned(v.to_string()),
+        TabularScalar::Unsigned(v) => Cow::Owned(v.to_string()),
+        TabularScalar::Float64(v) => Cow::Owned(v.as_f64().to_string()),
+        TabularScalar::String(v) => Cow::Borrowed(v),
     })
+}
+
+pub(in crate::builtins::statistics) fn ordinal_domain(
+    metadata: Option<&ConversionMetadata>,
+) -> Option<&[SemanticValue]> {
+    metadata
+        .filter(|metadata| metadata.semantic.kind == SemanticType::Ordinal)
+        .map(|metadata| metadata.semantic.values.as_slice())
+}
+
+pub(in crate::builtins::statistics) fn ordinal_index<'a>(
+    domain: &'a [SemanticValue],
+    inv: &KernelInvocation<'_>,
+    retained: usize,
+) -> Result<BTreeMap<&'a str, usize>, KernelError> {
+    // Borrow codes; charge conservative tree storage together with live preparation buffers.
+    inv.control.check_bytes(
+        domain
+            .len()
+            .checked_mul(128)
+            .and_then(|bytes| retained.checked_add(bytes)),
+    )?;
+    let mut index = BTreeMap::new();
+    for (position, value) in domain.iter().enumerate() {
+        if position.is_multiple_of(1024) {
+            inv.check_control()?;
+        }
+        index.insert(value.value.as_str(), position);
+    }
+    inv.check_control()?;
+    Ok(index)
 }
 pub(in crate::builtins::statistics) fn categories(
     column: &series::Column,
@@ -103,7 +137,7 @@ pub(in crate::builtins::statistics) fn categories(
 ) -> Result<(Vec<usize>, Vec<TabularScalar>), KernelError> {
     let mut labels: Vec<TabularScalar> = vec![];
     let mut seen = BTreeSet::new();
-    inv.control.check_bytes(
+    let working = inv.control.check_bytes(
         column
             .values
             .len()
@@ -121,26 +155,28 @@ pub(in crate::builtins::statistics) fn categories(
         }
     }
     if ordered {
-        if let Some(metadata) = column
-            .metadata
-            .as_ref()
-            .filter(|m| m.semantic.kind == SemanticType::Ordinal)
-        {
-            let order = metadata
-                .semantic
-                .values
-                .iter()
-                .enumerate()
-                .map(|(i, v)| (v.value.as_str(), i))
-                .collect::<BTreeMap<_, _>>();
-            let codes = labels
-                .iter()
-                .map(category_code)
-                .collect::<Result<Vec<_>, _>>()?;
-            if order.is_empty() || codes.iter().any(|c| !order.contains_key(c.as_str())) {
+        if let Some(domain) = ordinal_domain(column.metadata.as_deref()) {
+            let retained = inv
+                .control
+                .check_bytes(column.bytes().and_then(|bytes| bytes.checked_add(working)))?;
+            let order = ordinal_index(domain, inv, retained)?;
+            if order.is_empty() {
                 return Err(KernelError::InvalidParameter);
             }
-            labels.sort_by_key(|v| order[category_code(v).expect("validated category").as_str()]);
+            let mut ranked = inv.control.reserve(labels.len())?;
+            for (position, label) in labels.drain(..).enumerate() {
+                if position.is_multiple_of(1024) {
+                    inv.check_control()?;
+                }
+                let rank = order
+                    .get(category_code(&label)?.as_ref())
+                    .copied()
+                    .ok_or(KernelError::InvalidParameter)?;
+                ranked.push((rank, label));
+            }
+            ranked.sort_by_key(|(rank, _)| *rank);
+            inv.check_control()?;
+            labels.extend(ranked.into_iter().map(|(_, label)| label));
         } else {
             if labels.iter().any(|v| matches!(v, TabularScalar::String(_)))
                 || labels

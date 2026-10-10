@@ -175,7 +175,8 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                     | "workflow.regression.univariate_multivariable"
                     | "workflow.regression.grouped"
                     | "transform.rcs" => 7,
-                    "regression.logit.multinomial" | "regression.logit.ordinal" => 6,
+                    "regression.logit.multinomial" => 6,
+                    "regression.logit.ordinal" => 7,
                     "regression.ridge" | "regression.lasso" | "regression.pls" => 5,
                     "regression.nonlinear" | "regression.nonlinear_formula" => 6,
                     "regression.deming" => 5,

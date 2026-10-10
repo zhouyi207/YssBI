@@ -1,13 +1,16 @@
 use super::{
     Input,
-    common::{Category, boolean, columns, computation_error, integer, number, text, value},
+    common::{
+        Category, boolean, category_code, columns, computation_error, integer, number,
+        ordinal_domain, ordinal_index, text, value,
+    },
 };
 use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
     KernelRegistryBuilder, RuntimeValue,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use yss_data_contract::{SemanticType, TabularScalar};
+use yss_data_contract::TabularScalar;
 use yss_sci_contract::association::*;
 use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::Alternative;
@@ -123,10 +126,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(format!("yssbi.statistics.{id}").into()).expect("association ID"),
                 std::num::NonZeroU32::new(match method {
-                    Pearson | Partial | BlandAltman | Kappa => 6,
-                    Spearman | Kendall | Ridit => 5,
+                    Kappa => 7,
+                    Pearson | Partial | BlandAltman | Spearman | Kendall | Ridit => 6,
                     Icc => 4,
-                    KendallW | Rwg => 3,
+                    KendallW => 4,
+                    Rwg => 3,
                 })
                 .unwrap(),
                 contract,
@@ -172,16 +176,16 @@ fn numeric_columns(inv: &KernelInvocation<'_>) -> Result<Vec<Vec<f64>>, KernelEr
 fn typed_columns(
     inv: &KernelInvocation<'_>,
     aligned: bool,
-) -> Result<Vec<super::super::series::Column>, KernelError> {
+) -> Result<(Vec<super::super::series::Column>, usize), KernelError> {
     let output =
         super::super::series::columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, aligned)?;
-    check_typed_budget(inv, &output)?;
-    Ok(output)
+    let retained = check_typed_budget(inv, &output)?;
+    Ok((output, retained))
 }
 fn check_typed_budget(
     inv: &KernelInvocation<'_>,
     columns: &[super::super::series::Column],
-) -> Result<(), KernelError> {
+) -> Result<usize, KernelError> {
     let mut bytes = 0usize;
     for column in columns {
         bytes = inv.control.check_bytes(
@@ -205,44 +209,15 @@ fn check_typed_budget(
             }
         }
     }
-    Ok(())
-}
-fn scalar_text(value: &TabularScalar) -> Result<String, KernelError> {
-    Ok(match value {
-        TabularScalar::Null => return Err(KernelError::InvalidNumericInput),
-        TabularScalar::String(s) => s.to_string(),
-        TabularScalar::Bool(v) => v.to_string(),
-        TabularScalar::Integer(v) => v.to_string(),
-        TabularScalar::Unsigned(v) => v.to_string(),
-        TabularScalar::Float64(v) => v.as_f64().to_string(),
-    })
-}
-fn declared_order(column: &super::super::series::Column) -> Option<Vec<String>> {
-    column
-        .metadata
-        .as_ref()
-        .filter(|metadata| metadata.semantic.kind == SemanticType::Ordinal)
-        .map(|metadata| {
-            metadata
-                .semantic
-                .values
-                .iter()
-                .map(|value| value.value.clone())
-                .collect()
-        })
+    Ok(bytes)
 }
 fn rank_columns(inv: &KernelInvocation<'_>) -> Result<Vec<Vec<f64>>, KernelError> {
-    let input = typed_columns(inv, true)?;
+    let (input, retained) = typed_columns(inv, true)?;
     let mut output = Vec::with_capacity(input.len());
     for column in input {
-        let order = declared_order(&column);
-        let mapping = order.as_ref().map(|order| {
-            order
-                .iter()
-                .enumerate()
-                .map(|(i, value)| (value.as_str(), i))
-                .collect::<BTreeMap<_, _>>()
-        });
+        let mapping = ordinal_domain(column.metadata.as_deref())
+            .map(|domain| ordinal_index(domain, inv, retained))
+            .transpose()?;
         let mut values = inv.control.reserve(column.values.len())?;
         for (i, value) in column.values.into_iter().enumerate() {
             if i.is_multiple_of(1024) {
@@ -250,7 +225,7 @@ fn rank_columns(inv: &KernelInvocation<'_>) -> Result<Vec<Vec<f64>>, KernelError
             }
             values.push(if let Some(mapping) = &mapping {
                 *mapping
-                    .get(scalar_text(&value)?.as_str())
+                    .get(category_code(&value)?.as_ref())
                     .ok_or(KernelError::InvalidNumericInput)? as f64
             } else {
                 super::super::numeric_input(Some(&RuntimeValue::Scalar(value)))?
@@ -286,16 +261,52 @@ fn encode_categories(
     inv: &KernelInvocation<'_>,
     columns: &[super::super::series::Column],
     ordered: bool,
+    retained: usize,
 ) -> Result<(Vec<Vec<usize>>, Vec<TabularScalar>), KernelError> {
-    let orders = columns.iter().map(declared_order).collect::<Vec<_>>();
-    let declared = if ordered && orders.iter().any(Option::is_some) {
-        let Some(first) = &orders[0] else {
-            return Err(KernelError::InvalidParameter);
-        };
-        if first.is_empty() || orders.iter().any(|order| order.as_ref() != Some(first)) {
-            return Err(KernelError::InvalidParameter);
+    let declared = if ordered {
+        let first = columns
+            .first()
+            .and_then(|column| ordinal_domain(column.metadata.as_deref()));
+        for column in columns {
+            inv.check_control()?;
+            match (first, ordinal_domain(column.metadata.as_deref())) {
+                (Some(first), Some(domain)) if first.len() == domain.len() && !first.is_empty() => {
+                    for (position, (left, right)) in first.iter().zip(domain).enumerate() {
+                        if position.is_multiple_of(1024) {
+                            inv.check_control()?;
+                        }
+                        if left.value != right.value {
+                            return Err(KernelError::InvalidParameter);
+                        }
+                    }
+                }
+                (None, None) => {}
+                _ => return Err(KernelError::InvalidParameter),
+            }
         }
-        Some(first)
+        first
+    } else {
+        None
+    };
+    let mapping = if let Some(domain) = declared {
+        let mut label_bytes = 0usize;
+        for (position, value) in domain.iter().enumerate() {
+            if position.is_multiple_of(1024) {
+                inv.check_control()?;
+            }
+            label_bytes = inv
+                .control
+                .check_bytes(label_bytes.checked_add(value.value.len()))?;
+        }
+        let preparation = inv.control.check_bytes(
+            domain
+                .len()
+                .checked_mul(domain.len())
+                .and_then(|bytes| bytes.checked_mul(1024))
+                .and_then(|bytes| bytes.checked_add(label_bytes.checked_mul(4)?))
+                .and_then(|bytes| bytes.checked_add(retained)),
+        )?;
+        Some(ordinal_index(domain, inv, preparation)?)
     } else {
         None
     };
@@ -306,10 +317,13 @@ fn encode_categories(
             .iter()
             .find(|value| !matches!(value, TabularScalar::Null))
             .ok_or(KernelError::InvalidNumericInput)?;
-        labels = order
-            .iter()
-            .map(|code| parse_like(code, example))
-            .collect::<Result<_, _>>()?;
+        labels = inv.control.reserve(order.len())?;
+        for (position, value) in order.iter().enumerate() {
+            if position.is_multiple_of(1024) {
+                inv.check_control()?;
+            }
+            labels.push(parse_like(&value.value, example)?);
+        }
     } else {
         let mut seen = BTreeSet::new();
         for column in columns {
@@ -341,13 +355,6 @@ fn encode_categories(
             labels.sort_by(|a, b| a.compare(b).expect("comparable ordered categories"));
         }
     }
-    let mapping = declared.map(|order| {
-        order
-            .iter()
-            .enumerate()
-            .map(|(i, code)| (code.as_str(), i))
-            .collect::<BTreeMap<_, _>>()
-    });
     let inferred_mapping = mapping.is_none().then(|| {
         labels
             .iter()
@@ -364,7 +371,7 @@ fn encode_categories(
             }
             let index = if let Some(mapping) = &mapping {
                 *mapping
-                    .get(scalar_text(scalar)?.as_str())
+                    .get(category_code(scalar)?.as_ref())
                     .ok_or(KernelError::InvalidNumericInput)?
             } else {
                 inferred_mapping
@@ -379,14 +386,15 @@ fn encode_categories(
         output.push(codes);
     }
     let label_bytes = labels.iter().try_fold(0usize, |n, label| {
-        n.checked_add(scalar_text(label).ok()?.len())
+        n.checked_add(category_code(label).ok()?.len())
     });
     inv.control.check_bytes(
         labels
             .len()
             .checked_mul(labels.len())
             .and_then(|n| n.checked_mul(1024))
-            .and_then(|n| n.checked_add(label_bytes?.checked_mul(4)?)),
+            .and_then(|n| n.checked_add(label_bytes?.checked_mul(4)?))
+            .and_then(|n| n.checked_add(retained)),
     )?;
     Ok((output, labels))
 }
@@ -455,9 +463,9 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
                     _ => return Err(KernelError::InvalidParameter),
                 }
             };
-            let columns = typed_columns(inv, true)?;
+            let (columns, retained) = typed_columns(inv, true)?;
             let (ratings, labels) =
-                encode_categories(inv, &columns, weighting != KappaWeighting::None)?;
+                encode_categories(inv, &columns, weighting != KappaWeighting::None, retained)?;
             drop(columns);
             // Cohen's contingency table and weights grow with categories squared;
             // Fleiss keeps rater/category counts instead of a dense category table.
@@ -530,8 +538,8 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
             inv,
         )?,
         Ridit => {
-            let columns = typed_columns(inv, false)?;
-            let (codes, labels) = encode_categories(inv, &columns, true)?;
+            let (columns, retained) = typed_columns(inv, false)?;
+            let (codes, labels) = encode_categories(inv, &columns, true, retained)?;
             drop(columns);
             inv.control.check_bytes(labels.len().checked_mul(8192))?;
             value(
