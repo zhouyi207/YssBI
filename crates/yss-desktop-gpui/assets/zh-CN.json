@@ -2910,7 +2910,9 @@
     "canvas": {
       "catalogFailed": "无法读取节点目录，请重试。",
       "commandFailed": "操作未完成，图状态可能已变化。请重新打开图后重试。",
-      "connectionUnavailable": "当前端口无法创建连接，请检查图状态。"
+      "connectionUnavailable": "当前端口无法创建连接，请检查图状态。",
+      "portTypeUnknown": "类型未知",
+      "portTypeConflict": "类型冲突"
     },
     "assistant": {
       "alreadyRunning": "此对话已有任务运行，请等待完成或请求停止。",

@@ -46,15 +46,10 @@ impl GraphCanvas {
             .as_ref()
             .is_none_or(|previous| !Arc::ptr_eq(previous, projection))
         {
-            let ports = projection
-                .nodes
-                .iter()
-                .flat_map(|node| node.ports.iter())
-                .map(|port| (&port.address, port))
-                .collect::<BTreeMap<_, _>>();
+            let details = self.port_details.as_deref();
             self.port_inputs.fields.retain(|address, field| {
-                let Some(port) = ports
-                    .get(address)
+                let Some(port) = details
+                    .and_then(|details| details.port(address))
                     .filter(|port| eligible(port) == Some(field.kind))
                 else {
                     return false;
@@ -172,12 +167,9 @@ impl GraphCanvas {
     ) {
         if let Some(field) = self.port_inputs.fields.get_mut(address) {
             let has_literal = self
-                .graph
-                .projection
-                .nodes
-                .iter()
-                .flat_map(|node| node.ports.iter())
-                .find(|port| port.address == *address)
+                .port_details
+                .as_ref()
+                .and_then(|details| details.port(address))
                 .and_then(|port| port.input.as_ref())
                 .is_some_and(|input| input.literal_override.is_some());
             if !field.dirty && has_literal {
@@ -195,12 +187,9 @@ impl GraphCanvas {
         cx: &mut Context<Self>,
     ) {
         let Some(port) = self
-            .graph
-            .projection
-            .nodes
-            .iter()
-            .flat_map(|node| node.ports.iter())
-            .find(|port| port.address == *address)
+            .port_details
+            .as_ref()
+            .and_then(|details| details.port(address))
         else {
             return;
         };

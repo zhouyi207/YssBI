@@ -684,6 +684,17 @@
 - L2：工作区与独立提交内容通过 cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings；临时窗口使用 cargo build -p yss-desktop-gpui --example pin_input_review --locked。cargo test -p yss-graph-editor --lib projection::tests::editor_projection_closes_resource_node_port_and_connection_facts --locked -- --exact 实际运行 1 项通过，核对控件消费的端口读投影。
 - 本批 17 个 Rust 文件局部格式、两份文档声明/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）和 git diff --check 通过。未新增 UI 单元测试、未运行全工作区验证；临时窗口入口与隔离数据不提交。完成 PinInput，累计 201/265；GraphPinController/View 的完整类型形状与提示继续审查。
 
+### 端口类型形状与实时提示
+
+- 已逐项读完 GraphPinController/View 及 pinVisual、pinSemantics、类型配色、来源标签与诊断选择入口。其菜单、输入和结果操作沿用此前迁移的原生 owner，本批补齐类型形状、完整提示与交互装饰。
+- 精确标量、数组、数列、表格、结构体分别使用圆、圆角框、菱形、网格和六边形；联合类型为虚线。未连接为空心，已连接/起手填充并保留中心点，孤立端口淡化；菜单目标使用同一 PopupMenu 生命周期高亮。
+- 端口诊断与来源邻接只随投影替换建立索引；输入、菜单和运行展示复用该查找，删除重复索引/阻断集合；类型名称直接读取后端显示投影，保留实例标签和来源顺序。打开的提示订阅 Canvas 通知，实时显示类型、首个 blocking 优先的诊断、上游来源及运行/缓存状态，关闭释放观察。
+- 真实 Linux/X11 窗口发现并修复“保持悬停时提示停留在执行前状态”。工作区核对输入未绑定、类型未确定、执行中、成功和真实除零失败后同时显示错误/过期缓存，以及菜单高亮；只读展示样例核对全部形状、unknown/conflict、孤立端口、中英文、Unicode 标签、多源顺序和诊断优先级，不把样例当作后端求解证据。
+- 独立提交副本在共享索引后核对数值 Enter 提交、Escape 恢复、端口菜单重置、输入控件随类型移除，以及键盘撤销后恢复原值与控件。重置后的真实缺少绑定诊断和类型提示已在窗口核对。
+- 静态路径复用现有 GPUI 绘图缓存，缺少绑定的脉冲沿用框架减少动态效果。临时计数在同一投影下记录绘制次数从 54 到 751，路径构建保持 68、静态索引构建保持 1；隐藏图标签后绘制计数保持 1115，减少动态效果使用静态帧。此证据不代表目标桌面帧率或大图验收通过。
+- L2：工作区与独立提交内容通过 cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings；临时窗口使用 cargo build -p yss-desktop-gpui --example port_presentation_review --locked。检查本批 8 个 Rust 文件格式、双语新增键、两份文档声明/相对链接、265 项清单、模块索引与 git diff --check。
+- 本批没有新增依赖、后端契约或 UI 单元测试，未运行全工作区验证；临时入口、计数与展示样例不提交。物理键鼠/IME、读屏、Windows/macOS 和大图性能继续开放。完成 GraphPinController/View，累计 203/265。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -916,8 +927,8 @@
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 优化 | 原生共享节点运行/结果/诊断展示投影，布局与菜单复用画布入口；不创建逐节点状态 owner | 节点状态、结果计数及菜单已核对；Pin 子组件的输入/菜单另行追踪 |
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 迁移 | 原生节点外框、布局、状态、选择、候选淡化及目标菜单；共用画布几何与生命周期 | 隔离窗口核对选择、菜单和既有状态/淡化；物理输入及跨平台开放 |
 | [modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx) | 迁移 | 按 builtin.reroute 使用紧凑节点、中央拖动柄与隐藏标签的端口，复用原手势、图事务及透明执行 | 窗口核对选择、拖动、运行与撤销；标量/表格执行及缓存回归通过，平台验收开放 |
-| [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 已读；共享状态、起手能力、菜单与内联输入已接入，完整提示待完成 | 组件未完成 |
-| [modules/graph-editor/internal/ui/Pins/GraphPinView.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx) | 待查 | 已读；共享状态、紧凑端口和候选已接入，完整类型形状/提示待完成 | 组件未完成 |
+| [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 迁移：复用原图投影、菜单、输入与结果 owner | 静态端口/来源/主诊断索引；提示只在打开期间观察当前画布，运行和缓存同源 | Linux 窗口核对真实图提示/执行与菜单；展示样例核对多源及诊断优先级，平台验收开放 |
+| [modules/graph-editor/internal/ui/Pins/GraphPinView.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx) | 迁移：原生类型字形与端口反馈 | 五种类型形状、联合虚线、连接填充、诊断脉冲、孤立淡化和菜单高亮；路径按几何缓存 | 原生窗口核对形状、缩放与提示；脉冲期间缓存复用已测，物理输入/读屏与平台验收开放 |
 | [modules/graph-editor/internal/ui/Pins/PinInput.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/PinInput.tsx) | 迁移：复用原生 Input 与 toggle Button | 未连接标量内联输入；共享解析、提交/取消和版本校验；可见控件与缩放、草稿保护、原图事务 | Linux 窗口核对提交、取消、撤销、连线、保存、运行及并发失败；物理输入/IME 与平台验收开放 |
 
 ## modules/logs

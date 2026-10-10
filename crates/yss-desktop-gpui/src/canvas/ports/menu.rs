@@ -25,12 +25,9 @@ impl GraphCanvas {
             return;
         }
         let Some(port) = self
-            .graph
-            .projection
-            .nodes
-            .iter()
-            .find(|node| node.node_id == address.node_id)
-            .and_then(|node| node.ports.iter().find(|port| port.address == address))
+            .port_details
+            .as_ref()
+            .and_then(|details| details.port(&address))
         else {
             return;
         };
@@ -51,6 +48,7 @@ impl GraphCanvas {
         let projection = self.graph.projection.clone();
         let version = self.graph.editing.version;
         let language = crate::text::locale();
+        let menu_address = address.clone();
         self.show_context_menu(position, window, cx, move |mut menu, _, cx| {
             let id = cx.entity_id();
             for (command, enabled) in [
@@ -111,6 +109,9 @@ impl GraphCanvas {
             }
             menu
         });
+        if let Some(menu) = &mut self.context_menu {
+            menu.port = Some(menu_address);
+        }
     }
 }
 

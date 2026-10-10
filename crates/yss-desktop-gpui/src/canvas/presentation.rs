@@ -23,10 +23,16 @@ pub(super) struct NodeAppearance {
     pub failure: Option<RunFailureCode>,
 }
 
+#[derive(Clone, Copy, Default)]
+pub(super) struct PortAppearance {
+    pub state: State,
+    pub cache: State,
+}
+
 #[derive(Default)]
 pub(super) struct Presentation {
     pub nodes: BTreeMap<NodeId, NodeAppearance>,
-    pub ports: BTreeMap<PortAddress, State>,
+    pub ports: BTreeMap<PortAddress, PortAppearance>,
     connections: BTreeMap<ConnectionId, State>,
 }
 
@@ -39,6 +45,13 @@ impl Presentation {
 impl GraphCanvas {
     pub(super) fn refresh_presentation(&mut self) {
         self.node_contents.refresh(&self.graph.projection);
+        if self.port_details.as_ref().is_none_or(|details| {
+            !std::sync::Arc::ptr_eq(&details.projection, &self.graph.projection)
+        }) {
+            self.port_details = Some(Rc::new(super::ports::details::Details::new(
+                self.graph.projection.clone(),
+            )));
+        }
         let layer = self.connection_layer.borrow();
         let addresses = layer.addresses().collect::<BTreeMap<_, _>>();
         let keys = addresses
@@ -77,19 +90,16 @@ impl GraphCanvas {
         };
         let mut view = Presentation::default();
         let cache = cache::CacheStates::new(current.then_some(results), &addresses, &pending);
-        let mut blocked_ports = BTreeSet::new();
-        let mut blocked_connections = BTreeSet::new();
-        for diagnostic in graph.projection.diagnostics.iter().filter(|d| d.blocking) {
-            match &diagnostic.location {
-                DiagnosticLocation::Port(address) => {
-                    blocked_ports.insert(address);
-                }
-                DiagnosticLocation::Connection(id) => {
-                    blocked_connections.insert(*id);
-                }
-                _ => {}
-            }
-        }
+        let blocked_connections = graph
+            .projection
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.blocking)
+            .filter_map(|diagnostic| match &diagnostic.location {
+                DiagnosticLocation::Connection(id) => Some(*id),
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
         let mut orphan_ports = BTreeSet::new();
         for node in &graph.projection.nodes {
             let mut appearance = NodeAppearance {
@@ -121,11 +131,19 @@ impl GraphCanvas {
                 });
                 view.ports.insert(
                     port.address.clone(),
-                    State::resolve(
-                        state,
-                        running.contains(&node.node_id),
-                        appearance.failure.is_some() || blocked_ports.contains(&port.address),
-                    ),
+                    PortAppearance {
+                        state: State::resolve(
+                            state,
+                            running.contains(&node.node_id),
+                            appearance.failure.is_some()
+                                || self
+                                    .port_details
+                                    .as_ref()
+                                    .and_then(|details| details.diagnostic(&port.address))
+                                    .is_some_and(|diagnostic| diagnostic.blocking),
+                        ),
+                        cache: state,
+                    },
                 );
             }
             view.nodes.insert(node.node_id, appearance);

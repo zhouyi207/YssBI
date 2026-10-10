@@ -1,0 +1,8 @@
+{
+  "native": {
+    "canvas": {
+      "portTypeUnknown": "Unknown type",
+      "portTypeConflict": "Type conflict"
+    }
+  }
+}

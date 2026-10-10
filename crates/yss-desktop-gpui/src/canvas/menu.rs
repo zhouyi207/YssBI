@@ -13,6 +13,7 @@ pub(super) struct CanvasMenu {
     position: Point<Pixels>,
     menu: Entity<PopupMenu>,
     _dismiss: Subscription,
+    pub port: Option<yss_graph_document::PortAddress>,
 }
 
 impl CanvasMenu {
@@ -79,6 +80,7 @@ impl GraphCanvas {
             position,
             menu,
             _dismiss: dismiss,
+            port: None,
         });
         cx.notify();
     }
