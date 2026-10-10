@@ -200,19 +200,13 @@ impl PreparedMeta {
         let (beta, covariance) = design.raw(&result.beta, Some(covariance));
         let covariance = covariance.ok_or_else(failed)?;
         let t_df = (options.inference == MetaInference::KnappHartung).then_some(df);
-        let q = critical(options.confidence_level, t_df.map(|df| df as f64))?;
-        let mut coefficients =
-            coefficient_table(&beta, names(p - 1, true), Some(&covariance), t_df)?;
-        for c in &mut coefficients {
-            c.confidence_interval = c
-                .standard_error
-                .map(|se| [c.estimate - q * se, c.estimate + q * se]);
-            if c.confidence_interval
-                .is_some_and(|ci| ci.iter().any(|x| !x.is_finite()))
-            {
-                return Err(failed());
-            }
-        }
+        let coefficients = coefficient_table(
+            &beta,
+            names(p - 1, true),
+            Some(&covariance),
+            t_df,
+            options.confidence_level,
+        )?;
         let prediction_interval = if p == 1 && options.estimator != MetaEstimator::Fixed && n > 2 {
             let q = critical(options.confidence_level, Some((n - 2) as f64))?;
             let width = finite(q * (tau + covariance[(0, 0)]).sqrt())?;

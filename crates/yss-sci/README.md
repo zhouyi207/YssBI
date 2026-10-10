@@ -142,6 +142,13 @@ input precision. The density normalization reuses the shared Stirling remainder;
 Power's arithmetic is unchanged. Two public interval regressions and independent
 high-precision density/Beta references check ordinary, extreme-df and tail results,
 alongside the existing Knapp–Hartung Meta and adjusted-prediction callers.
+`regression::models::common::coefficient_table` receives the actual interval
+confidence and uses this same critical-value owner. Fixed 95% model and survey
+intervals retain accurate Student-t widths at large df. Meta passes its selected
+confidence directly, without constructing and overwriting fixed 95% intervals.
+Coefficient inference prepares its distribution and critical value once when
+covariance is available; point-only results do not calculate discarded inference.
+The fixed 95% normal critical value retains its previous floating-point bits.
 `regression/postestimation` owns shared evaluation grids, binary-link derivatives
 and Delta variance for adjusted means and binary marginal effects. Evaluation
 retains fitted row order and applies explicit column overrides without rebuilding

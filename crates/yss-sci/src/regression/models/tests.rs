@@ -14,6 +14,26 @@ fn control() -> ScientificExecutionControl {
 }
 
 #[test]
+fn coefficient_intervals_keep_large_degree_accuracy() {
+    let covariance = yss_sci_linalg::Mat::identity(1, 1);
+    let coefficients = common::coefficient_table(
+        &[0.0],
+        vec!["intercept".into()],
+        Some(&covariance),
+        Some(1_000_000),
+        0.95,
+    )
+    .unwrap();
+    let coefficient = &coefficients[0];
+    assert_eq!(coefficient.standard_error, Some(1.0));
+    // Independent high-precision Student density/Beta reference for df=1e6.
+    let expected = 1.9599663568141066;
+    let [lower, upper] = coefficient.confidence_interval.unwrap();
+    assert!((lower + expected).abs() < 1e-12, "{lower}");
+    assert!((upper - expected).abs() < 1e-12, "{upper}");
+}
+
+#[test]
 fn shared_design_failures_distinguish_data_calculation_and_tuning() {
     use yss_sci_contract::execution::ScientificInputViolation as Violation;
     let options = RobustOptions {

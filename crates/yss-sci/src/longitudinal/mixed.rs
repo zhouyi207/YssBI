@@ -219,6 +219,7 @@ pub fn linear_mixed(
             names(predictors.len(), options.constant),
             Some(&covariance),
             None,
+            0.95,
         )?,
         coefficient_covariance: covariance_rows(&covariance),
         inference: "approximate_wald_normal".into(),

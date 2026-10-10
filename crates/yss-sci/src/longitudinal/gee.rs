@@ -176,6 +176,7 @@ pub fn gee(
             names(predictors.len(), options.constant),
             Some(&covariance),
             None,
+            0.95,
         )?,
         coefficient_covariance: covariance_rows(&covariance),
         inference: "cluster_robust_wald_normal".into(),

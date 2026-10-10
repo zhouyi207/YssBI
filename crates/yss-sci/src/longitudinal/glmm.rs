@@ -182,6 +182,7 @@ pub fn generalized_mixed(
             names(predictors.len(), constant),
             Some(&covariance),
             None,
+            0.95,
         )?,
         coefficient_covariance: covariance_rows(&covariance),
         inference: "laplace_observed_information_wald_normal".into(),

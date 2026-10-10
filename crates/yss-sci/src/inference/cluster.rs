@@ -69,6 +69,7 @@ pub fn fit(
         names(k - usize::from(constant), constant),
         Some(&cov),
         Some(g - 1),
+        0.95,
     )?;
     Ok(ClusterInference {
         observations: n,

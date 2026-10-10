@@ -340,7 +340,7 @@ fn fit_stratified(
         .zip(&design.scales)
         .map(|(b, s)| b / s)
         .collect::<Vec<_>>();
-    let coefficients = coefficient_table(&raw, names(p, false), Some(&covariance), None)?;
+    let coefficients = coefficient_table(&raw, names(p, false), Some(&covariance), None, 0.95)?;
     let linear_predictors = fitted(&risk.x, &beta);
     let mut baselines = Vec::new();
     for (stratum, indices, times) in &risk.strata {

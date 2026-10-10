@@ -152,6 +152,7 @@ pub fn estimate(
             vec!["ATE".into(), "ATT".into()],
             Some(&covariance),
             None,
+            0.95,
         )?;
         let convert = |index: usize| {
             let c = &estimates[index];

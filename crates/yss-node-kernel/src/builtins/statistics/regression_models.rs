@@ -152,55 +152,39 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         builder
             .register(
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
-                std::num::NonZeroU32::new(
-                    1 + if method == "regression.glm" {
-                        6
-                    } else if matches!(
-                        method,
-                        "regression.stepwise"
-                            | "regression.hierarchical"
-                            | "regression.robust"
-                            | "regression.logit.firth"
-                            | "regression.poisson"
-                            | "regression.negative_binomial"
-                            | "regression.zero_inflated_poisson"
-                            | "regression.zero_inflated_negative_binomial"
-                            | "regression.tobit"
-                            | "regression.logit.conditional"
-                            | "regression.quantile"
-                            | "regression.gamma"
-                            | "regression.inverse_gaussian"
-                            | "regression.cloglog"
-                            | "regression.beta"
-                            | "regression.fractional_response"
-                    ) {
-                        5
-                    } else if matches!(
-                        method,
-                        "regression.curve"
-                            | "regression.threshold"
-                            | "workflow.regression.baseline"
-                            | "workflow.regression.univariate_multivariable"
-                            | "workflow.regression.grouped"
-                            | "transform.rcs"
-                            | "regression.logit.multinomial"
-                            | "regression.logit.ordinal"
-                            | "regression.ridge"
-                            | "regression.lasso"
-                            | "regression.pls"
-                    ) {
-                        4
-                    } else if matches!(
-                        method,
-                        "regression.nonlinear"
-                            | "regression.nonlinear_formula"
-                            | "regression.deming"
-                    ) {
-                        3
-                    } else {
-                        2
-                    },
-                )
+                std::num::NonZeroU32::new(match method {
+                    "regression.glm" => 8,
+                    "regression.hierarchical" | "regression.stepwise" => 7,
+                    "regression.robust"
+                    | "regression.logit.firth"
+                    | "regression.poisson"
+                    | "regression.negative_binomial"
+                    | "regression.zero_inflated_poisson"
+                    | "regression.zero_inflated_negative_binomial"
+                    | "regression.tobit"
+                    | "regression.logit.conditional"
+                    | "regression.quantile"
+                    | "regression.gamma"
+                    | "regression.inverse_gaussian"
+                    | "regression.cloglog"
+                    | "regression.beta"
+                    | "regression.fractional_response"
+                    | "regression.curve"
+                    | "regression.threshold"
+                    | "workflow.regression.baseline"
+                    | "workflow.regression.univariate_multivariable"
+                    | "workflow.regression.grouped"
+                    | "transform.rcs" => 6,
+                    "regression.nonlinear"
+                    | "regression.nonlinear_formula"
+                    | "regression.logit.multinomial"
+                    | "regression.logit.ordinal"
+                    | "regression.ridge"
+                    | "regression.lasso"
+                    | "regression.pls" => 5,
+                    "regression.deming" => 4,
+                    _ => unreachable!("registered regression method"),
+                })
                 .unwrap(),
                 contract,
                 move |inv| execute(method, inv),

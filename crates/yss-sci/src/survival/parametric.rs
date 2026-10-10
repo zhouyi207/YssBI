@@ -102,7 +102,8 @@ pub fn fit(
     let covariance = jacobian.as_ref() * standardized.as_ref() * jacobian.transpose();
     let (raw, _) = design.raw(&theta[..p], None);
     let coefficient_cov = Mat::from_fn(p, p, |j, k| covariance[(j, k)]);
-    let coefficients = coefficient_table(&raw, names(p - 1, true), Some(&coefficient_cov), None)?;
+    let coefficients =
+        coefficient_table(&raw, names(p - 1, true), Some(&coefficient_cov), None, 0.95)?;
     let eta = fitted(&design.x, &theta[..p]);
     let median_survival = eta
         .iter()

@@ -325,6 +325,7 @@ fn fit_blocks(
         terms,
         Some(&covariance),
         if s == 0 { Some(y.len() - p) } else { None },
+        0.95,
     )?;
     let xb = (0..y.len())
         .map(|i| {

@@ -98,6 +98,7 @@ pub fn rdd(
             .to_vec(),
             Some(&covariance),
             None,
+            0.95,
         )?,
         covariance: rows(&covariance),
         rows: indices.iter().map(|i| i + 1).collect(),
@@ -224,9 +225,10 @@ pub fn heterogeneity(
             (1..=count).map(|g| format!("group{g}")).collect(),
             Some(&effect_cov),
             None,
+            0.95,
         )?,
         equality_test: chi_square(statistic, count - 1)?,
-        coefficients: coefficient_table(&beta, terms, Some(&covariance), None)?,
+        coefficients: coefficient_table(&beta, terms, Some(&covariance), None, 0.95)?,
         covariance: rows(&covariance),
     })
 }

@@ -75,12 +75,12 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 原始观测通过共享物化路径按位置核对长度；聚类标识保留精确类型。输入、工作区和输出合并
 预算准入，不设置行数上限。调整预测按已存设计评估，不隐式重建交互项。
 聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
-不归为参数错误。`inference.cluster_robust` 使用 revision 6，并复用 SCI 的稳定 Student-t 尾概率。
+不归为参数错误。`inference.cluster_robust` 使用 revision 7，并复用 SCI 的稳定 Student-t 尾概率与临界值。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
-回归模型按实际消费者维护能力版本：层次、逐步使用 revision 6，GLM 使用 revision 7；
+回归模型按实际消费者维护能力版本：层次、逐步使用 revision 7，GLM 使用 revision 8；
 Robust、Quantile、Firth、计数/比例/Tobit/Conditional Logit 和其余 GLM 入口使用 revision 6。
-曲线、RCS、阈值、回归流程及 Multinomial/Ordinal Logit 使用 revision 5；
-两个非线性入口与 Deming 使用 revision 4。Ridge/Lasso/PLS 使用 revision 5，不输出系数 p 值。
+曲线、RCS、阈值和回归流程使用 revision 6，Multinomial/Ordinal Logit 使用 revision 5；
+两个非线性入口使用 revision 5，Deming 使用 revision 4。Ridge/Lasso/PLS 使用 revision 5，不输出系数 p 值。
 五个参数生存拟合内核（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 10，
 Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 13，
 无 moderator 的 Meta 模型、逐项排除和敏感性使用 revision 12；Egger 使用 revision 10，Begg 使用 revision 8。
@@ -97,6 +97,9 @@ Bonferroni 的原始置信度，较大的 Bonferroni 家族直接传入其显式
 组内缩放矩和组摘要由 SCI 共用，输出恢复原单位；合并方差临界值只计算一次，
 Welch 自由度以归一化方差权重计算，避免因响应单位改变而出现无效方差或自由度。
 Meta 的上述版本也涵盖按需 moment trace 与稳定异质性尺度恢复。
+共享系数表直接接收实际置信度，有协方差时才准备推断；Meta 不再先构造固定 95% 区间后覆盖。
+固定 95% 的正态临界值保留原始浮点位模式，原正态推断和无协方差输出沿用其能力版本；
+实际使用 Student-t 系数区间的入口更新版本，响应面与剂量反应分别采用 revision 7、6。
 中介 bootstrap 采用 revision 9，涵盖共享参数恢复、稳定分位数二分点和 Student-t 尾概率。
 能力指纹涵盖共享输入错误契约、实际尾概率及系数/协方差坐标恢复。
 
@@ -111,7 +114,8 @@ AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线�
 不以向量长度代替地区对应关系。计算按权重地区顺序、时期首次出现顺序组织，
 观测结果恢复输入行序；地区效应保持权重顺序。密集权重、矩阵分解、似然 Hessian、
 物化输入和结构化输出合并预算准入，并向 SCI 传递取消和期限。结果复用现有报告页面。
-八个空间回归入口（含 Panel）使用 revision 6，涵盖共享参数恢复。
+OLS、SLX 和可选择这两种模型的 Panel 入口使用 revision 7，其余五个空间回归入口使用 revision 6。
+这些版本涵盖共享参数恢复与各入口实际使用的系数推断。
 
 `builtins/statistics/time_series/forecast` 注册时间序列分类的 16 个新增入口。
 共享物化路径按位置核对列长度，保留现有行顺序；SCI 接收取消和期限，工作区、预测长度、
@@ -577,7 +581,8 @@ and inverse-inclusion-probability output preserve the source relation via existi
 series expressions. Estimator adapters account for fit, PSU score and covariance storage.
 Shared `regression_outputs` receives explicit predictor labels, excluding survey design
 columns from coefficient-axis names; complete observations remain paged relations.
-The three survey regression kernels use revision 6 for shared parameter restoration.
+The three survey regression kernels use revision 7 for shared parameter restoration
+and bounded Student-t coefficient intervals.
 
 `builtins/statistics/power` converts model-specific scalar parameters to neutral designs.
 There are no observation inputs; bounded report admission and cooperative scientific

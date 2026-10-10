@@ -72,6 +72,7 @@ pub fn regression(
         names(predictors.len(), options.constant),
         Some(&raw_cov),
         Some(df),
+        0.95,
     )?;
     model.covariance = Some(
         (0..raw_cov.nrows())

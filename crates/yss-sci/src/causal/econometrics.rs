@@ -153,6 +153,7 @@ pub fn gmm(
             names(predictors.len(), options.constant),
             Some(&covariance),
             None,
+            0.95,
         )?,
         covariance: rows(&covariance),
         fitted: predicted,
@@ -208,6 +209,7 @@ pub fn heckman(
                 .collect(),
             Some(&covariance),
             None,
+            0.95,
         )?;
         result.outcome_covariance = Some(rows(&covariance));
     }
@@ -338,7 +340,7 @@ fn heckman_point(
         observations: n,
         selected_observations: count,
         selection_coefficients: selection.coefficients,
-        outcome_coefficients: coefficient_table(&beta, terms, None, None)?,
+        outcome_coefficients: coefficient_table(&beta, terms, None, None, 0.95)?,
         outcome_covariance: None,
         selection_probabilities: selection.fitted,
         inverse_mills: mills,
@@ -473,6 +475,7 @@ pub fn frontier(
             names(predictors.len(), options.constant),
             Some(&cov),
             None,
+            0.95,
         )?,
         covariance: rows(&cov),
         sigma_u: finite(su * response_scale)?,
@@ -627,7 +630,7 @@ pub fn sur(
         }
     }
     let mut coefficients =
-        coefficient_table(&raw_beta, terms, Some(&covariance), None)?.into_iter();
+        coefficient_table(&raw_beta, terms, Some(&covariance), None, 0.95)?.into_iter();
     let mut equations = Vec::with_capacity(m);
     for i in 0..m {
         control.check()?;

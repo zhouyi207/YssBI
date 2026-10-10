@@ -303,12 +303,18 @@ pub(crate) fn coefficient_table(
     names: Vec<String>,
     covariance: Option<&Mat<f64>>,
     df: Option<usize>,
+    confidence_level: f64,
 ) -> Result<Vec<RegressionCoefficient>> {
-    let normal = Normal::new(0.0, 1.0).expect("normal");
-    let t = df.and_then(|df| StudentsT::new(0.0, 1.0, df as f64).ok());
-    let q = t
-        .as_ref()
-        .map_or_else(|| normal.inverse_cdf(0.975), |d| d.inverse_cdf(0.975));
+    let inference = covariance
+        .map(|_| -> Result<_> {
+            let q =
+                crate::inference::intervals::critical(confidence_level, df.map(|df| df as f64))?;
+            let t = df
+                .map(|df| StudentsT::new(0.0, 1.0, df as f64).map_err(|_| failed()))
+                .transpose()?;
+            Ok((t, q))
+        })
+        .transpose()?;
     beta.iter()
         .enumerate()
         .map(|(i, &estimate)| {
@@ -333,7 +339,9 @@ pub(crate) fn coefficient_table(
                     .transpose()?
             };
             let p_value = statistic.map(|v| {
-                t.as_ref()
+                inference
+                    .as_ref()
+                    .and_then(|(t, _)| t.as_ref())
                     .map_or_else(
                         || crate::distribution::normal_two_sided_p(v),
                         |d| {
@@ -347,7 +355,8 @@ pub(crate) fn coefficient_table(
                     .clamp(0.0, 1.0)
             });
             let confidence_interval = se
-                .map(|s| -> Result<[f64; 2]> {
+                .zip(inference.as_ref())
+                .map(|(s, (_, q))| -> Result<[f64; 2]> {
                     Ok([finite(estimate - q * s)?, finite(estimate + q * s)?])
                 })
                 .transpose()?;
@@ -406,7 +415,7 @@ pub(super) fn result(
     let adjusted_r_squared = df.and_then(|df| {
         r_squared.map(|r| 1.0 - (1.0 - r) * (y.len() - usize::from(constant)) as f64 / df as f64)
     });
-    let coefficients = coefficient_table(&beta, terms, covariance.as_ref(), df)?;
+    let coefficients = coefficient_table(&beta, terms, covariance.as_ref(), df, 0.95)?;
     let covariance = covariance.map(|c| super::super::design::covariance_rows(&c));
     Ok(RegressionModelResult {
         method: method.into(),
