@@ -4,6 +4,7 @@ mod clipboard;
 mod commands;
 mod connections;
 mod constant_drag;
+mod drop_target;
 mod execution;
 mod geometry;
 mod gestures;

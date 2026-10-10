@@ -91,7 +91,10 @@ impl ActivityDrag {
         } = creation
             && resource_path.as_str() == target_path
         {
-            return None;
+            return match item {
+                ActivityItem::FunctionGraph { path, .. } => Some(ActivityDrop::OpenGraph(path)),
+                _ => None,
+            };
         }
         Some(ActivityDrop::CreateNode(creation))
     }

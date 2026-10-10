@@ -4,7 +4,6 @@ use gpui::{
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::{Disableable, IconName, Sizable};
-use yss_graph_editor::EditorGraphMutation;
 
 use super::{Gesture, GraphCanvas, commands::*, geometry};
 use crate::appearance;
@@ -152,42 +151,8 @@ impl Render for GraphCanvas {
             .on_mouse_down(MouseButton::Left, cx.listener(Self::begin_pane))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::begin_pane))
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::begin_pane))
-            .on_drop(
-                cx.listener(|view, drag: &crate::workbench::ActivityDrag, window, cx| {
-                    if !view.can_edit() {
-                        return;
-                    }
-                    match drag.resolve(&view.graph.project, view.path(), cx) {
-                        Some(crate::workbench::ActivityDrop::OpenGraph(path)) => {
-                            cx.emit(super::CanvasEvent::OpenGraph(path.to_owned()));
-                        }
-                        Some(crate::workbench::ActivityDrop::CreateNode(creation)) => {
-                            view.create_node_at(
-                                creation.clone(),
-                                view.world(window.mouse_position()),
-                                cx,
-                            );
-                        }
-                        None => {}
-                    }
-                }),
-            )
-            .on_drop(cx.listener(|view, drag: &super::ConstantDrag, window, cx| {
-                if !view.can_edit()
-                    || view.graph.project != drag.project
-                    || view.graph.projection.graph_path != drag.path
-                {
-                    return;
-                }
-                view.submit(
-                    GraphCommand::Edit(EditorGraphMutation::InsertConstantReference {
-                        id: drag.id,
-                        position: view.world(window.mouse_position()),
-                    }),
-                    Some(drag.version),
-                    cx,
-                );
-            }))
+            .on_drop(cx.listener(Self::drop_activity))
+            .on_drop(cx.listener(Self::drop_constant))
             .when(self.hovered_connection.is_some(), |view| {
                 view.cursor_pointer()
             })

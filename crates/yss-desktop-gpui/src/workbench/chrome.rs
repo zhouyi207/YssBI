@@ -71,6 +71,12 @@ impl Workbench {
         div()
             .key_context("Workbench")
             .track_focus(&self.focus)
+            .capture_key_down(|event, window, cx| {
+                if event.keystroke.key == "escape" && cx.stop_active_drag(window) {
+                    cx.stop_propagation();
+                    window.prevent_default();
+                }
+            })
             .size_full()
             .flex()
             .flex_col()

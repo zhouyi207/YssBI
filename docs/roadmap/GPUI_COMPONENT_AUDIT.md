@@ -830,6 +830,17 @@
 - `cargo test -p yss-application --lib graph::results::tests::catalog:: --locked` 在候选与工作区各运行一项并通过，保护图隔离、当前输出替换、原值 Arc 复用及输出与历史租约的不同所有权；未添加 UI 单元测试。Application 的 `cargo clippy -p yss-application --lib --tests --locked --no-deps -- -D warnings` 和两处原生 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过。变更文件格式、文档链接、模块索引和 `git diff --check` 按 L2 核对，未扩大到全工作区验证。
 - 本批完成 PinResultSearchPalette 与 CanvasOverlays 源码审查，累计 209/265。物理悬停、键鼠/IME、无障碍、Windows/macOS 与大图性能仍开放；本批没有新依赖或持久化格式。
 
+### 画布拖放接收、预览与空编辑区
+
+- 已逐项阅读 CanvasDropZone、ActivityEditorDndOverlay、WatermarkView，以及拖动来源、目标解析、函数调用回退、资源复用和分组打开路径。DOM droppable、拖动标签 hook 和全局拖动 store 由 GPUI 原生命中与拖动实体承接，不复制浏览器状态。
+- 分屏原窗口复现：节点落在右图，但焦点留在侧栏、属性仍指向左图。接收处理归入 `canvas/drop_target`，通过接收校验后取消旧手势、聚焦并发布该图选择，再调用原图事务；渲染仅注册类型化回调。坐标继续由接收画布转换，常量先拒绝跨图和过期版本，不隐式保存。
+- 新事件图原先落在第一个编辑分组。现在从根 DockArea 查询接收分组，将现有首次加载标签移动到那里，原异步读取在同组替换；已打开的图及加载标签仍在原分组复用并激活，与 React 的资源复用语义一致。没有新增目标分组缓存或读取任务。
+- 原窗口还复现 Escape 后松键仍创建节点；工作台在存在原生拖动时调用 GPUI 取消入口，保留无拖动时的原 Escape 分发。函数资源拖回自身改为复用并聚焦该图，函数模板仍拒绝创建自调用。
+- 保留 WIP 的工作区与独立提交候选均通过真实 Linux/X11 窗口的分屏创建、立即 Undo/Redo、新图目标分组、已有图原分组复用和 Escape 取消。工作区另核对 125% 缩放与偏移后的实际世界坐标、忙碌拒绝、函数自身聚焦/跨图创建、常量同图插入/跨图拒绝及拖动期间 Undo 后的版本拒绝；候选通过实际目录重新读取与替换验证旧拖动拒绝，随后新拖动正常创建。单纯重绘或仅切换视图语言不替换原目录，不作为来源失效证据。
+- 水印复用已有 `workbench/dock/watermark`：品牌、强调色、分隔线和本地化描述共用一个纯显示函数；空态读取根拓扑，仅对话时由原 EmptyEditor 保留右侧编辑区。工作区窗口已核对中英文、900px 窗口和仅保留对话的分支，候选核对关闭全部图后的水印。无需新增状态、组件包装或 CSS 装饰实现。
+- 两份源码通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings`；预览使用 `cargo rustc -p yss-desktop-gpui --example canvas_drop_review --locked -- -C opt-level=0 -C debuginfo=0`，临时入口、事件注入、数据与截图均在验收后移至仓库外，不作为 UI 单元测试或性能证据。模块索引、改动 Rust 文件格式、文档状态/链接、265 项清单与 `git diff --check` 按 L2 核对，不运行全工作区验证。
+- 本批完成以上三项审查，累计 212/265；没有新依赖、IPC 协议、持久化格式或业务状态。物理键鼠/IME、无障碍、跨项目及关闭来源的完整组合、Windows/macOS 仍开放，图文档和画布组合入口继续逐项审查。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -856,7 +867,7 @@
 | --- | --- | --- | --- |
 | [app/windows/workbench/WorkbenchComposition.tsx](../../react/src/app/windows/workbench/WorkbenchComposition.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [app/windows/workbench/integrations/PluginProvider.tsx](../../react/src/app/windows/workbench/integrations/PluginProvider.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [app/windows/workbench/integrations/activityEditorDndOverlay.tsx](../../react/src/app/windows/workbench/integrations/activityEditorDndOverlay.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [app/windows/workbench/integrations/activityEditorDndOverlay.tsx](../../react/src/app/windows/workbench/integrations/activityEditorDndOverlay.tsx) | 复用原生拖动预览 | ActivityDrag 持有原目录及来源身份，原生 Render 呈现节点/资源标签；工作台 Escape 取消 GPUI 拖动，不复制全局标签状态 | Linux 窗口核对预览、松键与取消；平台物理输入仍开放 |
 | [app/windows/workbench/menuContributionRegistry.tsx](../../react/src/app/windows/workbench/menuContributionRegistry.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [app/windows/workbench/rootPanelRegistry.tsx](../../react/src/app/windows/workbench/rootPanelRegistry.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [app/windows/workbench/rootPanelTabRenderer.tsx](../../react/src/app/windows/workbench/rootPanelTabRenderer.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
@@ -1040,7 +1051,7 @@
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
 | --- | --- | --- | --- |
-| [modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/CanvasDropZone.tsx) | 优化：原生接收与目标分组 | canvas/drop_target 校验来源和版本、聚焦接收画布并调用原事务；graphs 将首次加载标签放到接收分组，已有资源复用原组 | 两份源码窗口核对分屏、焦点/撤销、分组与取消；常量和失效来源见本批 |
 | [modules/graph-editor/internal/ui/Canvas/core/Edge.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/Edge.tsx) | 迁移 | connections 共用曲线、命中、选择/悬停、状态虚线、类型实线与运行标记；复用原路径缓存及 GPUI Animation | Linux/X11 窗口核对；物理输入、读屏及目标平台/帧率待验收 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasController.tsx) | 待查 | 已读组合入口及 useCanvasViewport/useConnectionCandidates；候选回退、视角、刷新门控与共享保存已补齐，资源重命名/删除、首次加载与失败标签已接入，已有会话的发布缺口恢复和展开组可见性已接入，完整生命周期继续审查 | 多批窗口验收见记录；整体未完成 |
 | [modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx) | 复用原生视图：保留画布边界与叠层 | GraphCanvas 实体提供资源身份、焦点、裁剪及网格/节点/预览/菜单组合；无需复制 DOM 标记或插槽包装 | Linux/X11 独立副本与工作区窗口核对；其内部功能按各自组件继续验收 |
@@ -1053,7 +1064,7 @@
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 迁移 | 原生固定工具栏、运行提示确认、禁用原因及同步状态；复用 Application 运行和 Output | 隔离窗口核对完成/失败清除、缓存保留、旧身份、局部执行、取消和未知状态恢复；物理悬停/键鼠及其他平台待验收 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx) | 复用原生组件 | `canvas/toolbar` 组合运行与 Event 结果搜索，节点目录沿用原画布浮层；无 DOM Portal 模型 | 子组件逐项审查；隔离窗口核对 Event/Function 分支，平台/输入验收开放 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx) | 迁移 | `canvas/result_catalog` 与底部目录共享引用；Popover/List、批量来源索引及原端口租约交接 | 隔离窗口核对搜索、打开、失败重试、过期、关闭和语言；物理悬停/输入及其他平台待验收 |
-| [modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx) | 复用现有原生水印 | workbench/dock/watermark 共用纯显示内容，根 DockArea 与 EmptyEditor 分别承接全部为空及仅对话的编辑区；无独立状态 | Linux 窗口核对中英文、窄窗口、关闭全部图与仅对话分支 |
 | [modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx) | 迁移 | 原生 PopupMenu，单选/多选断开与危险删除；菜单/投影/版本校验，复用原图事务 | Linux 窗口核对多选、断开、Delete、转接点与历史；物理输入、读屏和跨平台待验收 |
 | [modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx) | 迁移 | 原生 PopupMenu，复用原选择、子图剪贴板、图事务和两种运行；managed/连接/运行条件及旧菜单校验 | 隔离窗口核对全部动作、撤销、托管节点与 Function 限制；物理输入及跨平台开放 |
 | [modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/PinContextMenu.tsx) | 迁移/复用：共享 PopupMenu、原编辑与结果租约 | canvas/ports 的断开、重置、当前/上次结果查看；无额外执行或结果缓存 | Linux 窗口核对禁用、隐藏、撤销、值与结果身份；多源输入及跨平台验收开放 |

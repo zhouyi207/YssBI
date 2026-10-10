@@ -6,7 +6,7 @@ pub(super) use opening::Opening;
 
 use gpui::AppContext;
 use gpui::{Context, Window};
-use gpui_component::dock::DockPlacement;
+use gpui_component::dock::{DockPlacement, InsertTarget};
 use yss_graph_document::GraphResourcePath;
 
 use super::Workbench;
@@ -18,6 +18,64 @@ use crate::{
 impl Workbench {
     pub(super) fn open_graph(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
         self.open_graph_requested(path, None, None, window, cx);
+    }
+
+    fn open_dropped_graph(
+        &mut self,
+        target_canvas: &gpui::Entity<GraphCanvas>,
+        path: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .project
+            .as_ref()
+            .is_none_or(|project| project.identity != target_canvas.read(cx).graph.project)
+        {
+            return;
+        }
+        let panel_id = target_canvas.entity_id().into();
+        let Some(placement) = self.displayed_panel_placement(panel_id, cx) else {
+            return;
+        };
+        let target = self
+            .dock
+            .read(cx)
+            .layout(placement)
+            .and_then(|tree| tree.find_panel_node(panel_id));
+        let existing = self
+            .graphs
+            .get(path)
+            .and_then(gpui::WeakEntity::upgrade)
+            .is_some()
+            || self
+                .graph_openings
+                .get(path)
+                .and_then(gpui::WeakEntity::upgrade)
+                .is_some();
+        self.open_graph(path.to_owned(), window, cx);
+        // A new loading tab already owns the asynchronous read. Move that tab
+        // now; its normal replacement installs the canvas in the same group.
+        if !existing
+            && let Some(target) = target
+            && let Some(opening) = self
+                .graph_openings
+                .get(path)
+                .and_then(gpui::WeakEntity::upgrade)
+        {
+            self.dock.update(cx, |dock, cx| {
+                dock.move_panel(
+                    opening.entity_id().into(),
+                    InsertTarget::Tabs {
+                        node: target,
+                        ix: None,
+                        activate: true,
+                    },
+                    window,
+                    cx,
+                );
+            });
+        }
     }
 
     pub(super) fn open_graph_intent(
@@ -295,7 +353,9 @@ impl Workbench {
                         }
                     }
                     CanvasEvent::Edited => cx.notify(),
-                    CanvasEvent::OpenGraph(path) => view.open_graph(path.clone(), window, cx),
+                    CanvasEvent::OpenGraph(path) => {
+                        view.open_dropped_graph(canvas, path, window, cx)
+                    }
                 }
             },
         ));
