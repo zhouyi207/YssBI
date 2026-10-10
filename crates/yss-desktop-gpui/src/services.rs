@@ -2,6 +2,7 @@
 mod layout_store;
 pub(crate) use layout_store::Viewport;
 mod paths;
+mod preferences;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -53,11 +54,28 @@ pub struct NativeServices {
     events: broadcast::Sender<NativeEvent>,
     pub logging: yss_logging::LogCollection,
     pub layouts: Arc<layout_store::LayoutStore>,
+    pub preferences: Arc<preferences::PreferencesStore>,
+    pub preference_load_failed: bool,
 }
 
 impl NativeServices {
     pub async fn initialize(executor: Handle) -> Result<Arc<Self>> {
         let paths = paths::NativePaths::resolve()?;
+        let preferences = Arc::new(preferences::PreferencesStore::new(
+            &paths.application.app_data_dir,
+        ));
+        let reader = preferences.clone();
+        let language = executor
+            .spawn_blocking(move || reader.read_language())
+            .await?;
+        let preference_load_failed = language.is_err();
+        crate::text::set_locale(language.unwrap_or(crate::text::DEFAULT_LANGUAGE));
+        if preference_load_failed {
+            tracing::warn!(
+                code = "native_preferences_read_failed",
+                "Native preferences could not be read"
+            );
+        }
         let layouts = Arc::new(layout_store::LayoutStore::new(
             &paths.application.app_data_dir,
         ));
@@ -83,6 +101,8 @@ impl NativeServices {
             events,
             logging,
             layouts,
+            preferences,
+            preference_load_failed,
         }))
     }
 

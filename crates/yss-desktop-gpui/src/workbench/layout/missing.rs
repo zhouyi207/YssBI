@@ -1,10 +1,8 @@
 //! A restored tab whose resource is unavailable, without a fabricated document or result.
 use crate::appearance;
 use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window};
-use gpui_component::{
-    IconName,
-    dock::{BasePanel, Panel, PanelEvent, PanelState},
-};
+use gpui_component::dock::{BasePanel, Panel, PanelEvent, PanelState};
+use gpui_kit_assets::IconName;
 
 pub(super) struct MissingPanel {
     state: PanelState,
@@ -25,14 +23,14 @@ impl Render for MissingPanel {
         appearance::empty_state(
             IconName::File,
             if self.state.panel_name == "result" {
-                "先前的运行结果"
+                crate::text::t("native.workbench.previousRunResults")
             } else {
-                "资源暂不可用"
+                crate::text::t("native.workbench.resourceUnavailable")
             },
             if self.state.panel_name == "result" {
-                "运行结果属于已结束的执行会话，请重新运行图后打开结果"
+                crate::text::t("native.workbench.expiredResultsHint")
             } else {
-                "资源可能已移动或删除，可从项目目录重新打开"
+                crate::text::t("native.workbench.missingResourceHint")
             },
             cx,
         )
@@ -57,16 +55,16 @@ impl BasePanel for MissingPanel {
 impl Panel for MissingPanel {
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         if self.state.panel_name == "result" {
-            "先前的结果".to_owned()
+            crate::text::t("native.workbench.previousResults").to_owned()
         } else if let gpui_component::dock::PanelInfo::Panel(info) = &self.state.info {
             info.get("graphPath")
                 .or_else(|| info.get("documentPath"))
                 .or_else(|| info.get("mindPath"))
                 .and_then(serde_json::Value::as_str)
-                .unwrap_or("资源暂不可用")
+                .unwrap_or(crate::text::t("native.workbench.resourceUnavailable"))
                 .to_owned()
         } else {
-            "资源暂不可用".into()
+            crate::text::t("native.workbench.resourceUnavailable").into()
         }
     }
 }

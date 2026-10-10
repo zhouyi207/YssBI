@@ -1,8 +1,7 @@
 //! Rename the captured session; each form owns its draft and asynchronous outcome.
 use super::{Workbench, principal};
 use crate::workbench::name_form::NameForm;
-use gpui::{Context, Entity, Focusable, ParentElement, Window, px};
-use gpui_component::WindowExt;
+use gpui::{Context, Entity, Focusable, Window, px};
 use yss_application::harness::HarnessSessionError;
 use yss_harness_contract::HarnessSessionId;
 use yss_harness_core::HarnessError;
@@ -23,47 +22,48 @@ impl Workbench {
         };
         let owner = cx.entity().downgrade();
         let lifecycle = self.lifecycle;
-        let form = NameForm::new(title, window, cx);
-        let focus = form.focus_handle(cx);
-        window.open_dialog(cx, move |dialog, _, _| {
-            let owner = owner.clone();
-            let session = session.clone();
-            let form = form.clone();
-            let cancel = form.clone();
-            dialog
-                .title(crate::text::translate("native.workbench.renameSession"))
-                .width(px(440.))
-                .close_button(false)
-                .overlay_closable(false)
-                .button_props(
-                    gpui_component::dialog::DialogButtonProps::default()
-                        .ok_text(crate::text::translate("contextMenu.dialog.renameSubmit"))
-                        .show_cancel(true)
-                        .cancel_text(crate::text::translate("common.cancel")),
-                )
-                .child(form.clone())
-                .on_cancel(move |_, _, cx| !cancel.read(cx).busy())
-                .on_ok(move |_, window, cx| {
-                    let Some(title) = form.read(cx).value(cx) else {
-                        return false;
-                    };
-                    let _ = owner.update(cx, |view, cx| {
-                        if view.lifecycle != lifecycle {
-                            NameForm::fail(Some(&form), "native.assistant.sessionChanged", cx);
-                        } else if !view.is_closing(cx) {
-                            view.commit_conversation_rename(
-                                session.clone(),
-                                title,
-                                form.clone(),
-                                window,
-                                cx,
-                            );
-                        }
-                    });
-                    false
-                })
-        });
-        window.focus(&focus, cx);
+        crate::modal_window::open(
+            crate::text::t("native.workbench.renameSession"),
+            gpui::size(px(480.), px(270.)),
+            window,
+            cx,
+            move |window, cx| {
+                let form = NameForm::new(title, window, cx);
+                let focus = form.focus_handle(cx);
+                let body = form.clone();
+                let cancel = form.clone();
+                crate::modal_window::ModalContent::new(move |_, _| body.clone())
+                    .focus(focus)
+                    .cancel(crate::text::t("common.cancel"))
+                    .on_cancel(move |_, _, cx| !cancel.read(cx).busy())
+                    .confirm(
+                        crate::text::t("contextMenu.dialog.renameSubmit"),
+                        move |_, window, cx| {
+                            let Some(title) = form.read(cx).value(cx) else {
+                                return false;
+                            };
+                            let _ = owner.update(cx, |view, cx| {
+                                if view.lifecycle != lifecycle {
+                                    NameForm::fail(
+                                        Some(&form),
+                                        "native.assistant.sessionChanged",
+                                        cx,
+                                    );
+                                } else if !view.is_closing(cx) {
+                                    view.commit_conversation_rename(
+                                        session.clone(),
+                                        title,
+                                        form.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            });
+                            false
+                        },
+                    )
+            },
+        );
     }
 
     fn commit_conversation_rename(
@@ -108,7 +108,7 @@ impl Workbench {
                             });
                         }
                         form.update(cx, |form, cx| form.finish(None, cx));
-                        window.close_dialog(cx);
+                        crate::modal_window::close_child(window, cx);
                     }
                     result => {
                         let key = match result {

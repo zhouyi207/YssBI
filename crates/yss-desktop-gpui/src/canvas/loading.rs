@@ -141,6 +141,7 @@ impl GraphCanvas {
                 services
                     .application
                     .refresh_graph(request, version.session_id)?,
+                language,
             ))
         });
         self.refresh_task = Some(cx.spawn(async move |view, cx| {
@@ -217,6 +218,9 @@ impl GraphCanvas {
         });
         let previous_ports = self.port_details.clone();
         self.graph.replace(graph);
+        if self.graph.language != crate::text::locale() {
+            self.refresh(cx);
+        }
         *self.connection_layer.borrow_mut() =
             super::connections::ConnectionLayer::new(&self.graph.projection);
         self.refresh_presentation();

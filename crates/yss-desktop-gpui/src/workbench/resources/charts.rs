@@ -2,7 +2,6 @@
 use super::super::name_form::NameForm;
 use super::{super::Workbench, ResourceAction};
 use gpui::{ClipboardItem, Context, Entity, Window};
-use gpui_component::{WindowExt, button::ButtonVariant};
 
 use yss_chart_document::ChartResourcePath;
 use yss_project_history::ResourceDocumentPatch;
@@ -55,9 +54,7 @@ impl Workbench {
             .and_then(gpui::WeakEntity::upgrade)
             .is_some_and(|chart| chart.read(cx).dirty())
         {
-            self.error = Some(crate::text::translate(
-                "native.workbench.saveChartBeforeEditing",
-            ));
+            self.error = Some(crate::text::t("native.workbench.saveChartBeforeEditing").into());
             cx.notify();
             return;
         }
@@ -83,30 +80,30 @@ impl Workbench {
             }
             ResourceAction::Delete => {
                 let owner = cx.entity().downgrade();
-                window.open_alert_dialog(cx, move |alert, _, _| {
-                    let owner = owner.clone();
-                    let target = target.clone();
-                    alert
-                        .title(format!("删除“{}”？", target.name))
-                        .description("图表文件将删除，原数据集会保留。")
-                        .confirm()
-                        .ok_text("删除")
-                        .ok_variant(ButtonVariant::Danger)
-                        .cancel_text("取消")
-                        .on_ok(move |_, window, cx| {
-                            let _ = owner.update(cx, |view, cx| {
-                                view.mutate_chart_resource(
-                                    target.clone(),
-                                    action,
-                                    None,
-                                    None,
-                                    window,
-                                    cx,
-                                )
-                            });
-                            true
-                        })
-                });
+                crate::modal_window::confirm(
+                    crate::text::format(
+                        "native.workbench.deleteResourceTitle",
+                        &[("value0", target.name.to_string())],
+                    ),
+                    crate::text::t("native.workbench.deleteChartMessage"),
+                    crate::text::t("common.delete"),
+                    crate::text::t("common.cancel"),
+                    window,
+                    cx,
+                    move |_, window, cx| {
+                        let _ = owner.update(cx, |view, cx| {
+                            view.mutate_chart_resource(
+                                target.clone(),
+                                action,
+                                None,
+                                None,
+                                window,
+                                cx,
+                            )
+                        });
+                        true
+                    },
+                );
             }
             ResourceAction::Duplicate => {
                 self.mutate_chart_resource(target, action, None, None, window, cx);

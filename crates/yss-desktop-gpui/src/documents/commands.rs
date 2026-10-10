@@ -50,7 +50,7 @@ impl DocumentEditor {
             self.draft_dirty = self.input.read(cx).text() != self.snapshot.content.0.as_str();
         }
         if outcome.failed {
-            self.error = Some("文档未保存。内容已保留，请检查外部修改或文件写入错误。".into());
+            self.error = Some(crate::text::t("native.documents.saveFailed").into());
         }
         if self.refresh_again {
             self.refresh(window, cx);
@@ -113,13 +113,9 @@ impl DocumentEditor {
                         }
                     }
                     Some(_) => {
-                        view.error = Some(
-                            "文档已在其他位置修改。当前输入已保留，保存需要重新核验版本。".into(),
-                        )
+                        view.error = Some(crate::text::t("native.documents.externalChange").into())
                     }
-                    None => {
-                        view.error = Some("文档暂不可读取。当前输入已保留，请检查项目目录。".into())
-                    }
+                    None => view.error = Some(crate::text::t("native.documents.readFailed").into()),
                 }
                 if view.refresh_again {
                     view.refresh(window, cx);

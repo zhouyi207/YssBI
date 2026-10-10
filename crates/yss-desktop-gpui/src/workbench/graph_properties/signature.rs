@@ -2,10 +2,11 @@ use super::{GraphProperties, value::type_picker};
 use crate::workbench::controls;
 use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*};
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::{Input, InputState},
 };
+use gpui_kit_assets::IconName;
 use yss_data_contract::ValueType;
 use yss_graph_document::FunctionParameterId;
 use yss_project_history::{
@@ -109,8 +110,7 @@ impl GraphProperties {
         let after = match draft.value(cx) {
             Ok(value) => value,
             Err(_) => {
-                self.error =
-                    Some("请输入有效的类型，例如 Numeric、DataSeries<Text> 或 DataFrame。".into());
+                self.error = Some(crate::text::t("native.workbench.invalidType").into());
                 cx.notify();
                 return;
             }
@@ -153,7 +153,7 @@ impl GraphProperties {
                             .flex_1()
                             .text_sm()
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("函数接口"),
+                            .child(crate::text::t("native.workbench.functionInterface")),
                     )
                     .child(
                         Button::new("restore-function-signature")
@@ -178,7 +178,7 @@ impl GraphProperties {
                     )
                     .child(
                         controls::apply("apply-function-signature", busy)
-                            .label("应用接口")
+                            .label(crate::text::t("native.workbench.applyInterface"))
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 if view.accepts_input(generation, cx) {
                                     view.apply_signature(cx);
@@ -187,7 +187,7 @@ impl GraphProperties {
                     ),
             )
             .child(controls::hint(
-                "输入参数保持身份，修改接口会更新调用节点",
+                crate::text::t("native.workbench.functionInterfaceHint"),
                 cx,
             ))
             .when(draft.parameters.is_empty(), |view| {
@@ -225,7 +225,7 @@ impl GraphProperties {
                             )
                             .child(div().w(gpui::px(62.)).flex_shrink_0().child(type_picker(
                                 ("function-parameter-type", row),
-                                crate::text::translate("detail.fields.type"),
+                                crate::text::t("detail.fields.type").into(),
                                 Some(parameter.data_type.read(cx).value().to_string()),
                                 busy,
                                 cx.listener(move |view, value: &String, window, cx| {
@@ -253,7 +253,7 @@ impl GraphProperties {
                                     .small()
                                     .ghost()
                                     .icon(IconName::ChevronUp)
-                                    .tooltip("上移参数")
+                                    .tooltip(crate::text::t("native.workbench.moveParameterUp"))
                                     .disabled(busy || row == 0)
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         if view.accepts_input(generation, cx) {
@@ -266,7 +266,7 @@ impl GraphProperties {
                                     .small()
                                     .ghost()
                                     .icon(IconName::ChevronDown)
-                                    .tooltip("下移参数")
+                                    .tooltip(crate::text::t("native.workbench.moveParameterDown"))
                                     .disabled(busy || row + 1 == draft.parameters.len())
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         if view.accepts_input(generation, cx) {
@@ -279,7 +279,7 @@ impl GraphProperties {
                                     .small()
                                     .ghost()
                                     .icon(IconName::Close)
-                                    .tooltip("移除此参数")
+                                    .tooltip(crate::text::t("native.workbench.removeParameter"))
                                     .disabled(busy)
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         if view.accepts_input(generation, cx)
@@ -299,7 +299,7 @@ impl GraphProperties {
                     .small()
                     .ghost()
                     .icon(IconName::Plus)
-                    .label("添加输入参数")
+                    .label(crate::text::t("native.workbench.addInputParameter"))
                     .disabled(busy)
                     .on_click(cx.listener(move |view, _, window, cx| {
                         if view.accepts_input(generation, cx)
@@ -311,9 +311,9 @@ impl GraphProperties {
                                     uuid::Uuid::new_v4()
                                 )),
                                 name: cx.new(|cx| {
-                                    InputState::new(window, cx).default_value(format!(
-                                        "参数{}",
-                                        draft.parameters.len() + 1
+                                    InputState::new(window, cx).default_value(crate::text::format(
+                                        "native.workbench.parameterName",
+                                        &[("value0", (draft.parameters.len() + 1).to_string())],
                                     ))
                                 }),
                                 data_type: cx
@@ -325,7 +325,7 @@ impl GraphProperties {
             )
             .child(
                 gpui_component::checkbox::Checkbox::new("signature-has-return")
-                    .label("返回值")
+                    .label(crate::text::t("native.workbench.returnValue"))
                     .checked(draft.has_return)
                     .disabled(busy)
                     .on_click(cx.listener(move |view, value: &bool, _, cx| {
@@ -352,7 +352,7 @@ impl GraphProperties {
                         )
                         .child(div().w(gpui::px(62.)).flex_shrink_0().child(type_picker(
                             "function-return-type",
-                            crate::text::translate("detail.fields.type"),
+                            crate::text::t("detail.fields.type").into(),
                             Some(draft.return_type.read(cx).value().to_string()),
                             busy,
                             cx.listener(move |view, value: &String, window, cx| {

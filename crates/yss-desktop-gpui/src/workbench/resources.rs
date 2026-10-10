@@ -42,17 +42,18 @@ impl Workbench {
         let publisher = self.services.clone();
         let task = self.services.run(move |services| {
             let operation = OperationId::new();
-            let receipt =
-                match kind {
-                    GraphResourceKind::EventGraph => services.application.create_event_graph(
-                        identity,
-                        "新事件图".into(),
-                        operation,
-                    )?,
-                    GraphResourceKind::FunctionGraph => services
-                        .application
-                        .create_function_graph(identity, "新函数图".into(), operation)?,
-                };
+            let receipt = match kind {
+                GraphResourceKind::EventGraph => services.application.create_event_graph(
+                    identity,
+                    crate::text::t("native.workbench.newEventGraph").into(),
+                    operation,
+                )?,
+                GraphResourceKind::FunctionGraph => services.application.create_function_graph(
+                    identity,
+                    crate::text::t("native.workbench.newFunctionGraph").into(),
+                    operation,
+                )?,
+            };
             let path = receipt
                 .deltas
                 .iter()
@@ -92,10 +93,13 @@ impl Workbench {
                         view.open_graph(path, window, cx);
                     }
                     Ok(None) => {
-                        view.error = Some("图已创建，请刷新项目目录后打开。".into());
+                        view.error = Some(crate::text::t("native.workbench.graphCreated").into());
                         view.refresh_project(window, cx);
                     }
-                    Err(_) => view.error = Some("无法创建图，请检查项目状态后重试。".into()),
+                    Err(_) => {
+                        view.error =
+                            Some(crate::text::t("native.workbench.graphCreateFailed").into())
+                    }
                 }
                 cx.notify();
             });

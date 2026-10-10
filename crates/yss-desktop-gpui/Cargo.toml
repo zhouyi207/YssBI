@@ -70,3 +70,6 @@ open = "5.4.1"
 percent-encoding = "2.3.2"
 tracing.workspace = true
 yss-logging = { path = "../yss-logging" }
+
+[dev-dependencies]
+markdown = "=1.0.0"

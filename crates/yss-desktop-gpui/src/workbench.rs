@@ -10,9 +10,6 @@ mod resources;
 pub(crate) use chrome::{OpenProjectDirectory, OpenRecentProject, SaveAllGraphs, ShowSettings};
 mod databases;
 mod details;
-mod node_creation;
-mod parameters;
-pub(crate) use node_creation::{CreationEvent, CreationTarget, NodeCreationView};
 mod dock;
 mod documents;
 mod events;
@@ -23,6 +20,10 @@ mod layout;
 mod lifecycle;
 mod logs;
 mod menus;
+mod node_creation;
+mod parameters;
+pub(crate) use menus::bind_keys as bind_menu_keys;
+pub(crate) use node_creation::{CreationEvent, CreationTarget, NodeCreationView};
 mod minds;
 mod name_form;
 mod output;
@@ -66,9 +67,12 @@ pub struct Workbench {
     recent_picker:
         Option<WeakEntity<gpui_component::list::ListState<crate::projects::RecentDelegate>>>,
     plugins: Entity<crate::plugins::PluginsPanel>,
+    plugins_sidebar: Entity<crate::plugins::PluginsSidebar>,
+    plugin_views: BTreeMap<(String, String), WeakEntity<crate::plugins::PluginViewPanel>>,
     plugin_subscription: Option<gpui::Subscription>,
     settings: Entity<crate::settings::SettingsPanel>,
     settings_window: Option<WindowHandle<Root>>,
+    logs_window: Option<WindowHandle<Root>>,
     settings_subscription: Option<gpui::Subscription>,
     menu_bar: Entity<gpui_component::menu::AppMenuBar>,
     menu_context: Option<menus::MenuContext>,
@@ -123,7 +127,7 @@ pub struct Workbench {
 impl Workbench {
     pub fn new(
         services: Arc<NativeServices>,
-        project: Option<DesktopProject>,
+        initial_project: Option<std::path::PathBuf>,
         initial_resource: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -136,18 +140,23 @@ impl Workbench {
         let results = cx.new(ResultsPanel::new);
         let recent = cx.new(|_| crate::projects::RecentProjects::new(services.clone()));
         let plugins = cx.new(|cx| crate::plugins::PluginsPanel::new(services.clone(), window, cx));
-        let settings = cx.new(|cx| crate::settings::SettingsPanel::new(services.clone(), cx));
+        let plugins_sidebar = cx.new(|cx| crate::plugins::PluginsSidebar::new(plugins.clone(), cx));
+        let settings =
+            cx.new(|cx| crate::settings::SettingsPanel::new(services.clone(), window, cx));
         let menu_bar = gpui_component::menu::AppMenuBar::new(cx);
         let mut view = Self {
             services,
-            project,
+            project: None,
             recent,
             recent_subscription: None,
             recent_picker: None,
             plugins,
+            plugins_sidebar,
             plugin_subscription: None,
+            plugin_views: BTreeMap::new(),
             settings,
             settings_window: None,
+            logs_window: None,
             settings_subscription: None,
             menu_bar,
             menu_context: None,
@@ -206,11 +215,15 @@ impl Workbench {
         view.subscriptions
             .push(cx.observe(&view.dock, |_, _, cx| cx.notify()));
         view.connect_recent(window, cx);
-        view.plugin_subscription = Some(cx.observe(&view.plugins, |_, _, cx| cx.notify()));
-        view.settings_subscription = Some(cx.observe(&view.settings, |_, _, cx| cx.notify()));
+        view.connect_plugins(window, cx);
+        view.connect_native_plugin_views(window, cx);
+        view.connect_settings(window, cx);
         cx.on_release(|view, cx| {
             view.close_result_windows(cx);
             if let Some(handle) = view.settings_window {
+                let _ = handle.update(cx, |_, window, _| window.remove_window());
+            }
+            if let Some(handle) = view.logs_window {
                 let _ = handle.update(cx, |_, window, _| window.remove_window());
             }
         })
@@ -220,7 +233,17 @@ impl Workbench {
             if window.focused(cx).is_none() {
                 window.focus(&view.focus, cx);
             }
-            view.restore_layout(initial_resource, window, cx)
+            if let Some(path) = initial_project {
+                let operation = projects::ProjectOperation::new(
+                    projects::ProjectCommand::Open {
+                        path,
+                        resource: initial_resource,
+                    },
+                    None,
+                    view,
+                );
+                view.request_project_operation(operation, window, cx);
+            }
         });
         cx.defer_in(window, |view, window, cx| {
             view.refresh_assistant_directory(window, cx)
@@ -326,6 +349,9 @@ impl Workbench {
                     ActivityEvent::RenameConversation(id, title) => {
                         view.rename_conversation(id.clone(), title.clone(), window, cx)
                     }
+                    ActivityEvent::DeleteConversation(id, title) => {
+                        view.delete_conversation(id.clone(), title.clone(), window, cx)
+                    }
                     ActivityEvent::Tool(id) if id == "newConversation" => {
                         view.new_conversation(window, cx)
                     }
@@ -366,7 +392,7 @@ impl Workbench {
                             graph.update(cx, |graph, cx| graph.create_node(creation.clone(), cx));
                         } else {
                             view.error =
-                                Some(crate::text::translate("native.workbench.openGraphFirst"));
+                                Some(crate::text::t("native.workbench.openGraphFirst").into());
                             cx.notify();
                         }
                     }
@@ -437,7 +463,7 @@ impl Workbench {
         self.closing
             || self.busy
             || self.plugins.read(cx).busy()
-            || self.settings.read(cx).busy()
+            || self.settings.read(cx).has_pending_operation()
             || self.assistant_busy
             || self
                 .conversations

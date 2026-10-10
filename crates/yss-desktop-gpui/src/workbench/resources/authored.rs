@@ -38,21 +38,21 @@ impl Workbench {
         let project = project.identity.clone();
         let (title, default_name) = match kind {
             AuthoredKind::Document => (
-                crate::text::translate("native.workbench.newMarkdown"),
-                crate::text::translate("documents.newDoc"),
+                crate::text::t("native.workbench.newMarkdown"),
+                crate::text::t("documents.newDoc"),
             ),
             AuthoredKind::Mind => (
-                crate::text::translate("documents.newMind"),
-                crate::text::translate("documents.newMind"),
+                crate::text::t("documents.newMind"),
+                crate::text::t("documents.newMind"),
             ),
             AuthoredKind::Chart => (
-                crate::text::translate("menubar.newChart"),
-                crate::text::translate("menubar.newChart"),
+                crate::text::t("menubar.newChart"),
+                crate::text::t("menubar.newChart"),
             ),
         };
         self.resource_name_dialog(
             title,
-            default_name,
+            default_name.into(),
             crate::text::translate("contextMenu.dialog.createSubmit"),
             window,
             cx,

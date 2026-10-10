@@ -7,11 +7,9 @@ use crate::projects::{
     form::{ProjectForm, ProjectFormKind},
     progress::{ProjectProgress, ProjectStage},
 };
-use gpui::{
-    AppContext, Context, PathPromptOptions, PromptLevel, WeakEntity, Window, prelude::*, px,
-};
+use gpui::{AppContext, Context, Focusable, PathPromptOptions, WeakEntity, Window, prelude::*, px};
 use gpui_component::{
-    IndexPath, WindowExt,
+    IndexPath,
     list::{List, ListDelegate, ListState},
 };
 use std::path::PathBuf;
@@ -19,8 +17,14 @@ use yss_project_identity::ProjectInstanceId;
 use yss_project_registry_contract::ProjectRecord;
 
 pub(crate) enum ProjectCommand {
-    Open(PathBuf),
-    Create { name: String, destination: PathBuf },
+    Open {
+        path: PathBuf,
+        resource: Option<String>,
+    },
+    Create {
+        name: String,
+        destination: PathBuf,
+    },
     SaveAs(PathBuf),
     Close,
     Exit,
@@ -71,7 +75,7 @@ impl ProjectCommand {
         tokio::sync::watch::Sender<ProjectStage>,
     ) {
         let (stage, target) = match self {
-            Self::Open(path) => (ProjectStage::Opening, Some(path)),
+            Self::Open { path, .. } => (ProjectStage::Opening, Some(path)),
             Self::Create { destination, .. } => (ProjectStage::Creating, Some(destination)),
             Self::SaveAs(path) => (ProjectStage::Copying, Some(path)),
             Self::Close => (ProjectStage::Closing, None),
@@ -94,10 +98,12 @@ impl Workbench {
                             .as_ref()
                             .and_then(gpui::WeakEntity::upgrade)
                         {
-                            picker.update(cx, |picker, cx| {
-                                let selected = picker.delegate_mut().install(snapshot);
-                                picker.set_selected_index(selected, window, cx);
-                                cx.notify();
+                            crate::modal_window::update_child(window, cx, move |window, cx| {
+                                picker.update(cx, |picker, cx| {
+                                    let selected = picker.delegate_mut().install(snapshot);
+                                    picker.set_selected_index(selected, window, cx);
+                                    cx.notify();
+                                });
                             });
                         }
                         cx.notify();
@@ -115,7 +121,7 @@ impl Workbench {
                             && view.recent.read(cx).can_open(record, *generation)
                         {
                             view.recent_picker = None;
-                            window.close_dialog(cx);
+                            crate::modal_window::close_child(window, cx);
                             view.open_recent_record(record.clone(), *generation, window, cx);
                         }
                     }
@@ -126,7 +132,7 @@ impl Workbench {
                             .is_some_and(|current| current.entity_id() == *picker)
                         {
                             view.recent_picker = None;
-                            window.close_dialog(cx);
+                            crate::modal_window::close_child(window, cx);
                         }
                     }
                 }
@@ -143,35 +149,40 @@ impl Workbench {
             .as_ref()
             .and_then(gpui::WeakEntity::upgrade)
         {
-            picker.update(cx, |picker, cx| picker.focus(window, cx));
+            crate::modal_window::update_child(window, cx, move |window, cx| {
+                window.activate_window();
+                picker.update(cx, |picker, cx| picker.focus(window, cx));
+            });
             return;
         }
         self.recent.update(cx, |recent, cx| recent.reload(cx));
-        let delegate = RecentDelegate::new(self.recent.clone(), self.recent.read(cx).snapshot());
-        let picker = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
-        picker.update(cx, |picker, cx| {
-            if picker.delegate().items_count(0, cx) > 0 {
-                picker.set_selected_index(Some(IndexPath::default()), window, cx);
-            }
-        });
-        self.recent_picker = Some(picker.downgrade());
-        let picker_id = picker.entity_id();
+        let recent = self.recent.clone();
         let owner = cx.entity().downgrade();
-        let dialog_picker = picker.clone();
-        window.open_dialog(cx, move |dialog, _, _| {
-            let owner = owner.clone();
-            dialog
-                .title("打开最近项目")
-                .width(px(640.))
-                .overlay_closable(true)
-                .footer(gpui::div())
-                .child(
-                    gpui::div()
-                        .h(px(400.))
-                        .child(List::new(&dialog_picker).search_placeholder("搜索项目名称或路径…")),
-                )
-                .on_close(move |_, _, cx| {
-                    let owner = owner.clone();
+        crate::modal_window::open(
+            crate::text::t("native.workbench.openRecentProject"),
+            gpui::size(px(680.), px(510.)),
+            window,
+            cx,
+            move |window, cx| {
+                let delegate = RecentDelegate::new(recent.clone(), recent.read(cx).snapshot());
+                let picker = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
+                picker.update(cx, |picker, cx| {
+                    if picker.delegate().items_count(0, cx) > 0 {
+                        picker.set_selected_index(Some(IndexPath::default()), window, cx);
+                    }
+                });
+                let picker_id = picker.entity_id();
+                let _ = owner.update(cx, |view, _| view.recent_picker = Some(picker.downgrade()));
+                let focus = picker.read(cx).focus_handle(cx);
+                crate::modal_window::ModalContent::new(move |_, _| {
+                    gpui::div().h(px(400.)).child(
+                        List::new(&picker)
+                            .search_placeholder(crate::text::t("native.workbench.searchProjects")),
+                    )
+                })
+                .without_buttons()
+                .focus(focus)
+                .on_closed(move |cx| {
                     cx.defer(move |cx| {
                         let _ = owner.update(cx, |view, _| {
                             if view
@@ -184,10 +195,8 @@ impl Workbench {
                         });
                     });
                 })
-        });
-        cx.defer_in(window, move |_, window, cx| {
-            picker.update(cx, |picker, cx| picker.focus(window, cx))
-        });
+            },
+        );
     }
 
     pub(super) fn open_recent_record(
@@ -200,7 +209,14 @@ impl Workbench {
         if self.is_closing(cx) || !self.recent.read(cx).can_open(&record, generation) {
             return;
         }
-        let operation = ProjectOperation::new(ProjectCommand::Open(record.path.into()), None, self);
+        let operation = ProjectOperation::new(
+            ProjectCommand::Open {
+                path: record.path.into(),
+                resource: None,
+            },
+            None,
+            self,
+        );
         self.request_project_operation(operation, window, cx);
     }
     pub(super) fn project_form(
@@ -213,37 +229,41 @@ impl Workbench {
             return;
         }
         let name = match kind {
-            ProjectFormKind::Create => "新建项目".into(),
-            ProjectFormKind::SaveAs => {
-                format!("{} 副本", self.project.as_ref().unwrap().index.project_name)
-            }
+            ProjectFormKind::Create => crate::text::t("projectPicker.newProjectModal.title").into(),
+            ProjectFormKind::SaveAs => crate::text::format(
+                "native.workbench.copyName",
+                &[(
+                    "value0",
+                    self.project
+                        .as_ref()
+                        .unwrap()
+                        .index
+                        .project_name
+                        .to_string(),
+                )],
+            ),
         };
         let owner = cx.entity().downgrade();
-        let editor = cx.new(|cx| {
-            ProjectForm::new(
-                self.services.clone(),
-                owner,
-                self.lifecycle,
-                kind,
-                name,
-                window,
-                cx,
-            )
-        });
-        window.open_dialog(cx, move |dialog, _, _| {
-            let cancel = editor.clone();
-            dialog
-                .title(kind.title())
-                .width(px(620.))
-                .close_button(false)
-                .overlay_closable(false)
-                .footer(gpui::div())
-                .child(editor.clone())
-                .on_cancel(move |_, window, cx| {
-                    cancel.update(cx, |view, cx| view.cancel(window, cx))
-                })
-        });
+        let services = self.services.clone();
+        let lifecycle = self.lifecycle;
+        crate::modal_window::open(
+            kind.title(),
+            gpui::size(px(660.), px(420.)),
+            window,
+            cx,
+            move |window, cx| {
+                let editor = cx
+                    .new(|cx| ProjectForm::new(services, owner, lifecycle, kind, name, window, cx));
+                let cancel = editor.clone();
+                crate::modal_window::ModalContent::new(move |_, _| editor.clone())
+                    .without_buttons()
+                    .on_cancel(move |_, window, cx| {
+                        cancel.update(cx, |view, cx| view.cancel(window, cx))
+                    })
+            },
+        );
     }
+
     pub(super) fn choose_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.is_closing(cx) {
             return;
@@ -255,7 +275,7 @@ impl Workbench {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("选择 YssBI 项目目录".into()),
+            prompt: Some(crate::text::t("native.workbench.chooseProjectDirectory").into()),
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = prompt.await;
@@ -267,13 +287,22 @@ impl Workbench {
                 match result {
                     Ok(Ok(Some(paths))) => {
                         if let Some(path) = paths.into_iter().next() {
-                            let operation =
-                                ProjectOperation::new(ProjectCommand::Open(path), None, view);
+                            let operation = ProjectOperation::new(
+                                ProjectCommand::Open {
+                                    path,
+                                    resource: None,
+                                },
+                                None,
+                                view,
+                            );
                             view.request_project_operation(operation, window, cx);
                         }
                     }
                     Ok(Ok(None)) => {}
-                    _ => view.error = Some("项目目录选择器未打开，请重试。".into()),
+                    _ => {
+                        view.error =
+                            Some(crate::text::t("native.workbench.projectPickerFailed").into())
+                    }
                 }
                 cx.notify();
             });
@@ -291,7 +320,11 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         if self.is_closing(cx) {
-            operation.fail(self.lifecycle, "请等待当前任务结束。", cx);
+            operation.fail(
+                self.lifecycle,
+                crate::text::t("native.workbench.waitForTask"),
+                cx,
+            );
             return;
         }
         let changes = self.has_unsaved(cx);
@@ -303,20 +336,27 @@ impl Workbench {
         let lifecycle = self.lifecycle;
         let save_as = matches!(operation.command, ProjectCommand::SaveAs(_));
         let message = if save_as {
-            "先保存当前更改，再创建项目副本。"
+            crate::text::t("native.workbench.saveBeforeCopy")
         } else {
-            "保存后继续，或直接继续并放弃未保存的文件和设置输入。已应用的数据库设置会保留。"
+            crate::text::t("native.workbench.continueConfirmation")
         };
         let buttons: &[&str] = if save_as {
-            &["保存并继续", "取消"]
+            &[
+                crate::text::t("native.workbench.saveAndContinue"),
+                crate::text::t("common.cancel"),
+            ]
         } else {
-            &["保存并继续", "直接继续", "取消"]
+            &[
+                crate::text::t("native.workbench.saveAndContinue"),
+                crate::text::t("native.workbench.continueWithoutSaving"),
+                crate::text::t("common.cancel"),
+            ]
         };
-        let prompt = window.prompt(
-            PromptLevel::Warning,
-            "有待保存的更改",
+        let prompt = crate::modal_window::prompt(
+            crate::text::t("native.workbench.unsavedChangesTitle"),
             Some(message),
             buttons,
+            window,
             cx,
         );
         cx.spawn_in(window, async move |view, cx| {
@@ -333,7 +373,11 @@ impl Workbench {
                             .update(cx, |settings, cx| settings.discard(cx));
                         view.perform_project_operation(operation, window, cx);
                     }
-                    _ => operation.fail(view.lifecycle, "操作已取消，输入已保留。", cx),
+                    _ => operation.fail(
+                        view.lifecycle,
+                        crate::text::t("native.workbench.cancelledInputPreserved"),
+                        cx,
+                    ),
                 }
                 cx.notify();
             });

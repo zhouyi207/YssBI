@@ -6,17 +6,17 @@ use gpui::{
     div, prelude::*, uniform_list,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable,
+    ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, DockPlacement, Panel, PanelEvent},
 };
+use gpui_kit_assets::IconName;
 use std::rc::Rc;
 use yss_graph_execution::result::ResultReference;
 
 use super::Workbench;
 use crate::{
     appearance,
-    assets::NativeIcon,
     canvas::{GraphCanvas, ResultEntry},
     results::{ResultEvent, ResultPanel},
 };
@@ -52,8 +52,8 @@ impl Render for ResultsPanel {
             .when(self.entries.is_empty(), |view| {
                 view.child(appearance::empty_state(
                     IconName::Inbox,
-                    "查看结果",
-                    "运行图后，在这里选择要查看的数据",
+                    crate::text::t("panel.assistantToolNames.inspect_result"),
+                    crate::text::t("native.workbench.resultsHint"),
                     cx,
                 ))
             })
@@ -77,7 +77,7 @@ impl Render for ResultsPanel {
                                             Button::new(("open-result", index))
                                                 .small()
                                                 .ghost()
-                                                .icon(NativeIcon::Table)
+                                                .icon(IconName::Table)
                                                 .label(entry.title.clone())
                                                 .disabled(entry.waiting)
                                                 .on_click(cx.listener(move |_, _, _, cx| {
@@ -89,10 +89,16 @@ impl Render for ResultsPanel {
                                                 div()
                                                     .text_xs()
                                                     .text_color(cx.theme().muted_foreground)
-                                                    .child("上次结果 · 已过期"),
+                                                    .child(crate::text::t(
+                                                        "native.workbench.staleResults",
+                                                    )),
                                             )
                                         })
-                                        .when(entry.waiting, |view| view.child("正在同步结果…"))
+                                        .when(entry.waiting, |view| {
+                                            view.child(crate::text::t(
+                                                "native.workbench.syncingResults",
+                                            ))
+                                        })
                                 })
                                 .collect()
                         }),
@@ -124,8 +130,8 @@ impl Panel for ResultsPanel {
             .flex()
             .items_center()
             .gap_2()
-            .child(Icon::new(NativeIcon::Table).size_3())
-            .child("结果")
+            .child(Icon::new(IconName::Table).size_3())
+            .child(crate::text::t("detail.description.result"))
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

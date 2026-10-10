@@ -8,11 +8,11 @@ use crate::{
     },
 };
 use gpui::{
-    AppContext, Context, Entity, IntoElement, PathPromptOptions, PromptLevel, Render, Subscription,
-    WeakEntity, Window, div, prelude::*,
+    AppContext, Context, Entity, IntoElement, PathPromptOptions, Render, Subscription, WeakEntity,
+    Window, div, prelude::*,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, WindowExt,
+    ActiveTheme, Disableable,
     button::{Button, ButtonVariants},
     input::{Input, InputEvent, InputState},
 };
@@ -29,9 +29,9 @@ pub(crate) enum ProjectFormKind {
 impl ProjectFormKind {
     pub(crate) fn title(self) -> &'static str {
         if self == Self::Create {
-            "新建项目"
+            crate::text::t("projectPicker.newProjectModal.title")
         } else {
-            "项目另存为"
+            crate::text::t("native.projects.saveAs")
         }
     }
 }
@@ -63,8 +63,10 @@ impl ProjectForm {
         cx: &mut Context<Self>,
     ) -> Self {
         let name = cx.new(|cx| InputState::new(window, cx).default_value(default_name.clone()));
-        let parent =
-            cx.new(|cx| InputState::new(window, cx).placeholder("选择父目录，或输入绝对路径"));
+        let parent = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(crate::text::t("native.projects.parentPlaceholder"))
+        });
         let mut subscriptions: Vec<_> = [&name, &parent]
             .into_iter()
             .map(|input| cx.observe(input, |_, _, cx| cx.notify()))
@@ -126,11 +128,11 @@ impl ProjectForm {
         if name.is_empty()
             || !matches!(parts.as_slice(), [Component::Normal(part)] if *part == std::ffi::OsStr::new(name))
         {
-            return Err("请输入单个项目或副本目录名称，不能包含路径分隔符。");
+            return Err(crate::text::t("native.projects.invalidName"));
         }
         let parent = PathBuf::from(self.parent.read(cx).value().as_str());
         if !parent.is_absolute() {
-            return Err("请选择父目录，或输入绝对路径。");
+            return Err(crate::text::t("native.projects.parentRequired"));
         }
         Ok((name.to_owned(), parent.join(name)))
     }
@@ -143,7 +145,7 @@ impl ProjectForm {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("选择新项目的父目录".into()),
+            prompt: Some(crate::text::t("native.projects.chooseParent").into()),
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = prompt.await;
@@ -157,11 +159,12 @@ impl ProjectForm {
                                 input.set_value(path.to_owned(), window, cx)
                             });
                         } else {
-                            view.error = Some("目录路径无法识别。".into());
+                            view.error =
+                                Some(crate::text::t("native.projects.invalidDirectory").into());
                         }
                     }
                     Ok(Ok(None)) => {}
-                    _ => view.error = Some("目录选择器未打开，请重试。".into()),
+                    _ => view.error = Some(crate::text::t("native.projects.pickerFailed").into()),
                 }
                 cx.notify();
             });
@@ -177,7 +180,10 @@ impl ProjectForm {
             let Some(path) = &self.recovery else {
                 return;
             };
-            ProjectCommand::Open(path.clone())
+            ProjectCommand::Open {
+                path: path.clone(),
+                resource: None,
+            }
         } else {
             let (name, destination) = match self.destination(cx) {
                 Ok(value) => value,
@@ -194,25 +200,37 @@ impl ProjectForm {
         };
         let lifecycle = self.lifecycle;
         let dialog = cx.entity().downgrade();
-        let accepted = self
-            .owner
-            .update(cx, |view, cx| {
-                if view.lifecycle != lifecycle || view.is_closing(cx) {
-                    return false;
-                }
-                let operation = ProjectOperation::new(command, Some(dialog), view);
-                view.request_project_operation(operation, window, cx);
-                true
-            })
-            .unwrap_or(false);
-        if accepted {
-            self.busy = true;
-            self.error = None;
-        } else {
-            self.error = Some("项目正在处理其他操作，输入已保留，请稍后重试。".into());
-        }
+        let failure = dialog.clone();
+        let owner = self.owner.clone();
+        let parent = crate::modal_window::owner_window(window, cx);
+        self.busy = true;
+        self.error = None;
+        cx.defer(move |cx| {
+            let accepted = parent
+                .update(cx, |_, window, cx| {
+                    owner
+                        .update(cx, |view, cx| {
+                            if view.lifecycle != lifecycle || view.is_closing(cx) {
+                                return false;
+                            }
+                            let operation = ProjectOperation::new(command, Some(dialog), view);
+                            view.request_project_operation(operation, window, cx);
+                            true
+                        })
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false);
+            if !accepted {
+                let _ = failure.update(cx, |form, cx| {
+                    form.busy = false;
+                    form.error = Some(crate::text::t("native.projects.busy").into());
+                    cx.notify();
+                });
+            }
+        });
         cx.notify();
     }
+
     pub(crate) fn finish(
         &mut self,
         lifecycle: u64,
@@ -250,11 +268,14 @@ impl ProjectForm {
             return true;
         }
         self.confirming = true;
-        let prompt = window.prompt(
-            PromptLevel::Warning,
-            "放弃项目配置？",
-            Some("当前填写的名称和目录尚未提交。"),
-            &["放弃输入", "继续填写"],
+        let prompt = crate::modal_window::prompt(
+            crate::text::t("native.projects.discardTitle"),
+            Some(crate::text::t("native.projects.discardMessage")),
+            &[
+                crate::text::t("native.projects.discardInput"),
+                crate::text::t("native.projects.keepEditing"),
+            ],
+            window,
             cx,
         );
         cx.spawn_in(window, async move |view, cx| {
@@ -262,7 +283,7 @@ impl ProjectForm {
             let _ = view.update_in(cx, |view, window, cx| {
                 view.confirming = false;
                 if discard {
-                    window.close_dialog(cx);
+                    crate::modal_window::close(window, cx);
                 }
             });
         })
@@ -290,22 +311,26 @@ impl Render for ProjectForm {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
                     .child(if self.kind == ProjectFormKind::Create {
-                        "在所选父目录内创建独立项目，成功后打开。"
+                        crate::text::t("native.projects.createHint")
                     } else {
-                        "创建并打开独立副本；当前未保存的更改会先确认保存。"
+                        crate::text::t("native.projects.copyHint")
                     }),
             )
             .child(
                 div()
                     .text_sm()
                     .child(if self.kind == ProjectFormKind::Create {
-                        "项目名称"
+                        crate::text::t("native.projects.projectName")
                     } else {
-                        "副本目录名称"
+                        crate::text::t("native.projects.copyDirectoryName")
                     }),
             )
             .child(Input::new(&self.name).disabled(self.busy || self.recovery.is_some()))
-            .child(div().text_sm().child("父目录"))
+            .child(
+                div()
+                    .text_sm()
+                    .child(crate::text::t("native.projects.parentDirectory")),
+            )
             .child(
                 div()
                     .flex()
@@ -315,7 +340,7 @@ impl Render for ProjectForm {
                     ))
                     .child(
                         Button::new("project-parent")
-                            .label("选择…")
+                            .label(crate::text::t("native.projects.choose"))
                             .disabled(self.busy || self.recovery.is_some())
                             .on_click(
                                 cx.listener(|view, _, window, cx| view.choose_parent(window, cx)),
@@ -329,7 +354,9 @@ impl Render for ProjectForm {
                     .child(
                         self.destination(cx)
                             .map(|(_, path)| path.display().to_string())
-                            .unwrap_or_else(|_| "请选择项目存放位置".into()),
+                            .unwrap_or_else(|_| {
+                                crate::text::t("native.projects.chooseLocation").into()
+                            }),
                     ),
             )
             .when_some(self.error.clone(), |view, error| {
@@ -345,11 +372,11 @@ impl Render for ProjectForm {
                     .gap_2()
                     .child(
                         Button::new("project-form-cancel")
-                            .label("取消")
+                            .label(crate::text::t("common.cancel"))
                             .disabled(self.busy)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 if view.cancel(window, cx) {
-                                    window.close_dialog(cx);
+                                    crate::modal_window::close(window, cx);
                                 }
                             })),
                     )
@@ -357,13 +384,13 @@ impl Render for ProjectForm {
                         Button::new("project-form-submit")
                             .primary()
                             .label(if self.busy {
-                                "正在处理…"
+                                crate::text::t("native.assistant.processing")
                             } else if self.recovery.is_some() {
-                                "打开已写入项目"
+                                crate::text::t("native.projects.openWritten")
                             } else if self.kind == ProjectFormKind::Create {
-                                "创建并打开"
+                                crate::text::t("native.projects.createAndOpen")
                             } else {
-                                "另存为并打开"
+                                crate::text::t("native.projects.saveAsAndOpen")
                             })
                             .disabled(self.busy)
                             .on_click(cx.listener(|view, _, window, cx| {

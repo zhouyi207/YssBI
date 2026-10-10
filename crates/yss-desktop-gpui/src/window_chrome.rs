@@ -64,6 +64,25 @@ pub fn title_bar(
     window: &Window,
     cx: &App,
 ) -> Stateful<Div> {
+    title_bar_with_controls(on_close, content, false, window, cx)
+}
+
+pub fn modal_title_bar(
+    on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    content: impl IntoElement,
+    window: &Window,
+    cx: &App,
+) -> Stateful<Div> {
+    title_bar_with_controls(on_close, content, true, window, cx)
+}
+
+fn title_bar_with_controls(
+    on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    content: impl IntoElement,
+    modal: bool,
+    window: &Window,
+    cx: &App,
+) -> Stateful<Div> {
     let state = Root::read(window, cx)
         .plugin::<WindowChrome>()
         .expect("window chrome is registered");
@@ -120,7 +139,7 @@ pub fn title_bar(
                     },
                 ))
                 .when(
-                    cfg!(target_os = "linux") || cfg!(target_os = "macos"),
+                    !modal && (cfg!(target_os = "linux") || cfg!(target_os = "macos")),
                     |bar| {
                         bar.on_double_click(|_, window, _| {
                             if cfg!(target_os = "macos") {
@@ -138,7 +157,7 @@ pub fn title_bar(
                 })
                 .child(content),
         )
-        .child(controls::render(on_close, window, cx))
+        .child(controls::render(on_close, modal, window, cx))
 }
 
 fn resize_edge(position: Point<Pixels>, window: &Window) -> Option<ResizeEdge> {

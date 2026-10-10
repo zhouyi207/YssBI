@@ -19,13 +19,13 @@ use gpui_component::{
     dock::{BasePanel, Panel, PanelEvent},
     table::TableState,
 };
+use gpui_kit_assets::IconName;
 use std::{collections::BTreeSet, sync::Arc};
 use yss_application::graph::results::report::ResultTablePart;
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
 
 use crate::services::NativeServices;
-use gpui_kit_assets::IconName;
 use query::{ResultContent, ResultLease};
 pub(crate) use report::format_number;
 pub(crate) use table::ResultGrid;
@@ -179,7 +179,7 @@ impl Panel for ResultPanel {
                 })
                 .size_3(),
             )
-            .child("结果")
+            .child(crate::text::t("detail.description.result"))
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

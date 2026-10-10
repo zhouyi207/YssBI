@@ -14,6 +14,9 @@
 `series::positional::prepare` 为算术、比较、布尔和数列组装准备输入；同一行域保留惰性表达式作为优化，独立来源或混合内存输入先物化再计算。`series::columns` 服务带语义的统计与绘图输入；`series::numeric` 保留紧凑 f64 读取路径，供回归和数值统计使用。Mann–Whitney、Kruskal–Wallis、Mood、方差齐性等独立组入口使用独立样本模式。
 物化值的语义元数据由 `RuntimeValue` 共享持有；类型化列准备和保持同一语义的输出复用该不可变对象，
 不再次复制分类标签域。Arrow 元数据在解码后同样共享；已有语义内容、数值和输出载体保持原契约。
+Arrow 字段元数据在解析和投影前按其编码尺寸预估解码、校验及字段副本的工作区，并与已有准备缓冲
+共同准入。该预估保留在类型化列的预算中，联合投影、独立来源和后续数列准备继续累计；关系读取使用
+扣除元数据预估后的剩余预算。解析前后检查取消与期限，已有物化注解只共享引用，不重复计入解码开销。
 统计输入的序数索引在 `statistics::common` 中借用声明代码，构造前合并常驻准备缓冲的预算，
 遍历声明域时采样取消与期限。排序先取得每个观测等级的索引；关联分析按代码核对声明顺序，
 显示标签可不同，未观测等级保留原位置。无序分类准备只读取实际观测，不复制序数声明域。
@@ -80,7 +83,7 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 原始观测通过共享物化路径按位置核对长度；聚类标识保留精确类型。输入、工作区和输出合并
 预算准入，不设置行数上限。调整预测按已存设计评估，不隐式重建交互项。
 聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
-不归为参数错误。`inference.cluster_robust` 使用 revision 8，并复用 SCI 的稳定 Student-t 尾概率与临界值。
+不归为参数错误。`inference.cluster_robust` 复用 SCI 的稳定 Student-t 尾概率与临界值。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
 能力版本由实际 Rust 注册入口拥有：[中央 install](src/builtins/statistics/mod.rs)、
 [模型注册](src/builtins/statistics/regression_models.rs) 和
@@ -113,7 +116,7 @@ FE/LSDV/FD/Between 和 TWFE 报告、small IV 系数及第一阶段表、ADF、�
 大自由度 Student-t 概率与临界值复用 SCI 的同一密度准备和有界积分，
 避免不完全 Beta 参数舍入及大 log-Gamma 相减导致的 p 值错误。双侧与单侧
 在 log 空间投影后只舍入一次；零效应 t 型 Power 保持请求的 α。
-实际返回 Student-t 概率的入口按真实注册路径维护能力版本，Spearman 使用 revision 5。
+实际返回 Student-t 概率的入口按真实注册路径维护能力版本。
 仅返回区间、采样及未使用改变后计算的读取入口保留其能力版本。
 能力指纹涵盖共享输入错误契约、实际尾概率及系数/协方差坐标恢复。
 
@@ -136,18 +139,18 @@ OLS/SLX 使用 Student 推断，其余空间回归模型使用共享 Normal 推�
 Markov 状态平方矩阵与结构化结果均在计算前按预算准入，不设置固定行数上限。
 Markov 恢复原始状态标签，时序图可省略时间列并使用从 1 开始的横坐标；
 显式时间须严格递增。时序图与相关图复用现有 SCI 绘图数据，其他入口返回结构化报告。
-ECM 使用 revision 7，均衡误差统一位于 `long_run.residuals`，短期方程复用这份序列。
+ECM 的均衡误差统一位于 `long_run.residuals`，短期方程复用这份序列。
 Markov 保持原能力版本，SCI 借用上一期预测分布并将下一期缓冲移入结果历史；
 Kernel 在已生成的记录上补充状态标签，保留原顺序和既有工作区预算。
 Grey Prediction 与 KPSS 保持其算法；Phillips–Perron 复用共享 MacKinnon/Normal 校准。
 两个平稳性检验在 SCI 的规范化响应坐标中拟合和计算矩，仅恢复报告的长期方差单位；
 PP 复用 Design 的尺度直接计算滞后系数推断，不恢复整份逆矩阵。
 借用列和拟合缓冲复用保留现有观测工作区预算，报告字段、校准和执行中断沿用当前边界。
-ARIMA/SARIMA 使用 revision 6，并在拟合前复用 SCI 的共享正态临界值；三个平滑入口使用 revision 5。
+ARIMA/SARIMA 在拟合前复用 SCI 的共享正态临界值。
 这些预测入口复用 SCI 的受控残差尺度和报告路径：
 方差与似然避免原单位中间溢出，ARIMA 区间按标准差组合，参数标签只在最终拟合后生成；
 平滑优化使用规范化序列和共享初始残差 RMS，保留现有行对齐、报告单位和工作区预算。
-ARCH/GARCH/EGARCH/GJR-GARCH 使用 revision 5，SCI 在规范化坐标中拟合和预测，
+ARCH/GARCH/EGARCH/GJR-GARCH 由 SCI 在规范化坐标中拟合和预测，
 方差报告分两次应用响应尺度，EGARCH 截距使用对数尺度恢复，避免先平方的下溢和舍入。
 预测只保留所需观测滞后尾段；EGARCH 在模拟之间复用历史缓冲，保持种子和随机抽样顺序。
 最终残差和方差缓冲原位恢复单位，现有预算、有限值转换与执行中断仍由原边界处理。
@@ -316,8 +319,7 @@ Binary codes, including inverted Boolean meanings. Coefficient plots consume
 native OLS/WLS/GLS models. Adapters share controlled materialization, budgets and
 finite-result encoding, then call `yss-sci-runtime::visualization`.
 Each result is one `plot.data` record; rendering does not run inside a kernel.
-Boxplot and violin use revision 6 for stable shared quantile midpoints; Delphi
-uses revision 5, and both mediation bootstrap kernels use revision 10.
+Boxplot and violin use stable shared quantile midpoints.
 
 `KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明有序输入键及数量范围、实际参数键集合和输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
 
@@ -326,15 +328,15 @@ uses revision 5, and both mediation bootstrap kernels use revision 10.
 可选性，运行时拒绝未知参数及缺少必需参数。Graph 在准备计划时解析默认值并排除不适用的条件参数；
 内核按所选算法检查适用字段。可选参数集合进入能力指纹，分布、比较、整数范围和线性 Fit 的实现 revision 已随调用契约更新。
 
-`with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖排序后的 ID、revision、输入布局、参数键和输出数量。具体已安装能力以 [builtins](src/builtins/mod.rs) 的注册表为准；未安装的节点仍返回缺少执行能力的诊断。
+`with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖共享输入准备的实现版本以及排序后的 ID、revision、输入布局、参数键和输出数量。共享版本由 [series](src/builtins/series.rs) 拥有，叶实现版本仍由各注册入口拥有。具体已安装能力以 [builtins](src/builtins/mod.rs) 的注册表为准；未安装的节点仍返回缺少执行能力的诊断。
 
 新增节点时在对应方法族模块实现适配，再加入内置装配或由应用 provider 注册；实际算法放回 SCI 或相应数据所有者。执行函数只使用已经解析的类型和资源，不重新求解图类型，也不自行读取项目资源。
 
-实现行为变化需要递增 revision。输入布局、参数或输出形状变化需要同步节点声明和消费者，并复核解析与计划缓存的能力身份。透明重路由不产生执行操作，也不注册无效的同名内核。
+叶实现行为变化需要递增其注册 revision，共享输入准备行为变化需要递增其 owner 的实现版本。输入布局、参数或输出形状变化需要同步节点声明和消费者，并复核解析与计划缓存的能力身份。透明重路由不产生执行操作，也不注册无效的同名内核。
 
-OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。统一线性 Fit（OLS/WLS/GLS）使用 revision 18，保留 WLS 权重和 GLS 协方差数据的形状、非有限及定义域错误分类，以及 SCI 的稳定 F/Student-t 尾概率；Prais Fit 使用 revision 11。Summary/Predict 不重新拟合。
-DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 7。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，稳定 F/Student-t 尾概率的实现使用 revision 11。
-IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；两个 Fit 的能力版本由实际注册入口拥有。SCI 的两种估计器共用 `IvModel` 与同一份工具变量/投影设计；LIML 的稳健协方差保留 κ 类交叉乘积逆矩阵和结构残差，并使用工具变量投影后的得分自变量，HC2/HC3 的杠杆值也采用该投影。标签仍由当前适配器和 Runtime 恢复，不进入数值输入。系数概率及 95% 区间默认采用正态参考分布，`small=true` 采用结构模型剩余自由度的 Student-t；整体检验在当前 `statistics.modelTest` 中明确记录 χ² 或 F、统计量、自由度及 p 值，F 为 Wald 统计量除以非截距系数数目。负或非有限系数方差、未定义或非有限统计量及区间在 SCI 返回计算失败，适配器映射为 `ScientificFailure`，不再使用零统计量掩盖错误；其他非有限模型仍在 JSON 编码前返回 `NonFiniteResult`。Fit 和 Summary 复用现有准入入口，按实际的线性观测工作区计算预算。Summary 从已存运行值解码当前模型并按所选内容计算报告，系数与可选约束检验使用一致的参考分布。独立 Hausman 读取同一模型契约，按 OLS 的线性观测工作区准入，使用 revision 8。
+OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。统一线性 Fit（OLS/WLS/GLS）保留 WLS 权重和 GLS 协方差数据的形状、非有限及定义域错误分类，以及 SCI 的稳定 F/Student-t 尾概率。Summary/Predict 不重新拟合。
+DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，复用稳定 F/Student-t 尾概率。
+IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；两个 Fit 的能力版本由实际注册入口拥有。SCI 的两种估计器共用 `IvModel` 与同一份工具变量/投影设计；LIML 的稳健协方差保留 κ 类交叉乘积逆矩阵和结构残差，并使用工具变量投影后的得分自变量，HC2/HC3 的杠杆值也采用该投影。标签仍由当前适配器和 Runtime 恢复，不进入数值输入。系数概率及 95% 区间默认采用正态参考分布，`small=true` 采用结构模型剩余自由度的 Student-t；整体检验在当前 `statistics.modelTest` 中明确记录 χ² 或 F、统计量、自由度及 p 值，F 为 Wald 统计量除以非截距系数数目。负或非有限系数方差、未定义或非有限统计量及区间在 SCI 返回计算失败，适配器映射为 `ScientificFailure`，不再使用零统计量掩盖错误；其他非有限模型仍在 JSON 编码前返回 `NonFiniteResult`。Fit 和 Summary 复用现有准入入口，按实际的线性观测工作区计算预算。Summary 从已存运行值解码当前模型并按所选内容计算报告，系数与可选约束检验使用一致的参考分布。独立 Hausman 读取同一模型契约，按 OLS 的线性观测工作区准入。
 IV 2SLS/LIML Summary 保留 SCI 第一阶段、内生性、过度识别及 Wald 检验的稳定 F 尾概率。第一阶段要求正的剩余自由度及可定义的推断，饱和工具变量回归或零残差方差返回 `ScientificFailure`；未选择该分析时，结构模型仍可汇总。方程使用当前 `inference` 记录保存所选协方差和系数推断，另有实际 `df_residual`；系数表和排除工具变量的 F 检验复用同一协方差，分别采用第一阶段 OLS 剩余自由度的 t 及 F 参考分布，不受结构模型 `small` 控制。无常数模型采用未中心化 R²，正的微小方差保留原量纲。系数、拟合值及工具变量分解复用同一次设计准备，残差计算不构造观测数平方大小的投影矩阵。多内生变量的最小特征值通过 Cholesky 白化后交给对称特征值算法，保留列顺序和单位变换下的结果一致性。多内生变量矩阵保持观测行与变量列的对应关系，Shea 指标与报告展示继续使用共享类型字段，不从已编码的 JSON 重读系数。诊断不可用原因与 SCI 共用模型保存的 `OlsCovariance::is_robust` 判断，不使用协方差显示名推断；固定尺度协方差保留非稳健分支的原因。
 结构模型与第一阶段的 R²/调整 R² 复用 SCI 同一个借用输入计算入口，以共同尺度计算残差与总变异的比值，微小响应量纲不再被固定方差下限改成零。截距模型中心化，无截距模型不中心化；采用实际剩余自由度，保留合法的负 IV R²。零或未定义总变异及非有限结果映射为 `ScientificFailure`，Summary 直接保留拟合模型指标。
 
@@ -348,10 +350,8 @@ ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原
 HC2/HC3 复用 SCI 的系数影响量累计，不截断可分辨的杠杆修正；单位或无效杠杆值映射为 `ScientificFailure`。受影响的 FE/FD 与 RE 复用同一杠杆修正；Between、动态 GMM 和 Prais 不消费这条 HC2/HC3 路径。
 Panel Fit 与 Compare 双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Fit 保留 SCI 的稳定整体 F 和系数 Student-t 尾概率；Summary/Predict 沿用已拟合模型。
 系数约束的负或 NaN 对比方差在原 SCI 校验边界返回计算失败，不再把开方后的 NaN 交给参考分布。线性、Logit/Probit/Prais、IV Summary 和实际复用 Summary 检验的 diagnostic.wald 同步更新实现 revision。普通样本均值 t 检验使用另一算法入口。
-稳定 F 尾概率由 SCI 分布模块统一计算。线性 Summary 使用 revision 15，Prais Summary 使用
-revision 10，独立 Wald 使用 revision 8；RESET、嵌套模型比较、测量系统、ANOVA 与线性回归
-效能规划使用 revision 5；七个 ANOVA 入口使用 revision 5；ICC 使用 revision 4；
-独立 FE/FD 使用 revision 12，Between 使用 revision 11，RE 使用 revision 11。参数、控制和报告形状保持各适配器的原契约。
+稳定 F 尾概率由 SCI 分布模块统一计算。线性/Prais Summary、Wald、RESET、嵌套模型比较、
+测量系统、ANOVA、线性回归效能规划、ICC 和独立面板估计保留各适配器的参数、控制及报告契约。
 共享 Student-t 尾概率也用于样本均值/等效检验、Pearson/Partial/Spearman、多重比较、路径效果、
 响应面/剂量反应、ECM、OLS/SLX 空间回归、调查回归以及均值/配对/整群效能规划。
 注册实现拥有各入口的能力版本；返回这些推断结果的内核随计算行为更新指纹。
@@ -384,10 +384,10 @@ UDF 的相等性和哈希包含源/输出字段元数据与实际转换操作，
 
 ## 关系运算与统计适配
 
-频数、数据描述节点 `yssbi.statistics.describe` 和分组聚合由 `builtins::aggregation` 注册。数据描述从同一个 `source` 输入接收数据帧或数据序列；节点无参数，数据帧自动统计全部受支持的列，数据序列直接统计自身。内存数列复用既有 Arrow 物化入口，再与关系数列共用 `RelationHandle::frequency/describe/aggregate`；数据序列常量保留已声明的分类含义，Binary 元数据也保留，避免按整数编码误判 Numeric。关系计算由 DataFusion 原生聚合、排序、连接和分位数计划承担。频数和分组聚合保留关系输出，扫描在消费时执行；数据描述使用 revision 5，由 `builtins::aggregation::description` 在节点执行中受控读取内部摘要批次并生成 `{ columns: { 列名: { position, semantic, ...统计指标 } } }` Record。列名保持原值，`position` 从 1 开始记录受支持列的输入顺序；各列只包含对应语义的指标，不适用字段不添加。分类、顺序及二元列复用 `frequency(column, false)` 获取全部非空类别的原值、频数及占比，按原字段的语义编码匹配标签；`categories` 以从 1 开始的编号组织明细 Record，保持 Ordinal 的声明顺序。列摘要与类别明细直接随 JSON 返回，最终结果不保留关系句柄或数组引用。统计失败随节点执行交付，读取和构造结果都检查取消、deadline 及内存预算；数值输入无损提升，非有限结果通过类型化错误传播。完整口径见 [Catalog](../yss-node-catalog/README.md)。
+频数、数据描述节点 `yssbi.statistics.describe` 和分组聚合由 `builtins::aggregation` 注册。数据描述从同一个 `source` 输入接收数据帧或数据序列；节点无参数，数据帧自动统计全部受支持的列，数据序列直接统计自身。内存数列复用既有 Arrow 物化入口，再与关系数列共用 `RelationHandle::frequency/describe/aggregate`；数据序列常量保留已声明的分类含义，Binary 元数据也保留，避免按整数编码误判 Numeric。关系计算由 DataFusion 原生聚合、排序、连接和分位数计划承担。频数和分组聚合保留关系输出，扫描在消费时执行；数据描述由 `builtins::aggregation::description` 在节点执行中受控读取内部摘要批次并生成 `{ columns: { 列名: { position, semantic, ...统计指标 } } }` Record。列名保持原值，`position` 从 1 开始记录受支持列的输入顺序；各列只包含对应语义的指标，不适用字段不添加。分类、顺序及二元列复用 `frequency(column, false)` 获取全部非空类别的原值、频数及占比，按原字段的语义编码匹配标签；`categories` 以从 1 开始的编号组织明细 Record，保持 Ordinal 的声明顺序。列摘要与类别明细直接随 JSON 返回，最终结果不保留关系句柄或数组引用。统计失败随节点执行交付，读取和构造结果都检查取消、deadline 及内存预算；数值输入无损提升，非有限结果通过类型化错误传播。完整口径见 [Catalog](../yss-node-catalog/README.md)。
 
 聚合列名复用 Data Contract 的 `TabularColumnName` 校验，保留含首尾空格的原始名称，不做 trim；
-空白名称和重复选择仍被拒绝。分组聚合内核使用 revision 2。
+空白名称和重复选择仍被拒绝。
 
 仅在类型契约要求时提升为 Float64；数列的元素提升和标量广播由计算 kernel 处理，调度器不制造数列长度。
 文档数列常量一次性导入 Arrow 字面量表达式，和范围生成节点共用显式位置坐标；等长常量数列可逐元素运算，不同长度返回 ShapeMismatch。带关系身份的数列保留固定行域和文件租约，
@@ -406,7 +406,7 @@ DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命�
 
 线性回归 Fit 从节点参数构造 `OlsOptions` 和 `LinearRegressionMethod`，由 Node Kernel 调用 `yss_sci_runtime::regression::linear::linear_regression`，传入本次执行的取消标记和 deadline。OLS/WLS 支持截距、Nonrobust、HC0–HC3、HAC、Newey-West、Fixed Scale 和 Cluster；Cluster 的单个 `clusters` 输入与响应、自变量及权重共同对齐。GLS 接收相对误差协方差矩阵并估计尺度，标准误仅支持 Nonrobust。HAC 的 Bartlett/Parzen 核使用小于带宽的滞后项，Quadratic Spectral 使用全部可用样本滞后，带宽仅控制尺度。节点 Fit 配置显式带宽；共享模型中的自动 HAC 选项由 SCI 同一协方差入口计算并由 IV Summary 保留。Summary 读取上游原生模型，不调用拟合；Predict 复用训练系数和截距。
 Cluster 标签独立读取为精确标量，复用 `common/inputs::categories` 编码，不提升为 f64；宽整数和文本标识保持分组身份。
-响应、自变量和权重继续使用紧凑数值读取，标签读取计入这些已驻留缓冲，编码前核对长度和合计预算。Fit 使用 revision 16。
+响应、自变量和权重继续使用紧凑数值读取，标签读取计入这些已驻留缓冲，编码前核对长度和合计预算。
 
 Dagum Gini 复用统计适配的受控物化、数值读取与精确标签编码，标签按首次出现编号，不再逐行线性扫描已有分组。原标签用于分组与组对报告；组对输出预算仍按分组数平方检查，输入缓冲在调用 SCI 前释放。
 ANOVA 的响应和协变量也通过共享数值读取入口校验；重复测量的受试者可比较性与排序编码由 ANOVA 自身约束。
@@ -436,9 +436,9 @@ IV Summary 保留 SCI 明确返回的不可用诊断。2SLS 内生性分析从�
 
 `LinearRegressionValue` 共享不可变拟合模型；Summary 另持有本次 `LinearSummaryOptions` 和选中检验的不可变结果。ACF/PACF、序列相关和假设检验在 Summary 执行时按选项计算，未选项不调用 SCI。模型拥有有界 memo，每类分析只缓存最近一组参数；补选复用相同模型和参数的结果，参数变化重新计算，新 Fit 使用独立缓存。计算不持有 memo 锁，遵守调用预算并在分析间检查取消；旧 Summary 继续持有原分析快照。
 
-Breusch–Pagan / Koenker 与 VIF 等诊断共用上述执行控制，BP 不再单独绕过预算入口，使用 revision 7。
+Breusch–Pagan / Koenker 与 VIF 等诊断共用上述执行控制，BP 不再单独绕过预算入口。
 Logit/Probit 的边际效应和 VAR 稳定性计算已移除固定计算量门槛，继续使用原 SCI 算法及取消/期限检查；
-三个 Summary 内核使用 revision 8。统计输入和数值合法性检查保持原契约。
+统计输入和数值合法性检查保持原契约。
 
 Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Summary 的 ACF/PACF、序列检验和假设检验统一由本 crate 的 `linear_summary` 从同一模型构造输入并调用 runtime。Application 只读取选中项的已存结果，保留请求范围、会话与结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 

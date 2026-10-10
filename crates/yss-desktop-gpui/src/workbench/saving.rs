@@ -269,7 +269,7 @@ impl Workbench {
                 for prepared in &targets[..requests.len()] {
                     prepared.abort(window, cx);
                 }
-                self.error = Some("保存尚未开始。请先处理文件中的版本冲突或待提交操作。".into());
+                self.error = Some(crate::text::t("native.workbench.saveBlocked").into());
                 cx.notify();
                 return None;
             };

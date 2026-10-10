@@ -213,7 +213,9 @@ fn classification(
         retained.checked_add(factors)?.checked_add(report)
     })())?;
     let mut workspace_bytes = workspace(inv, groups.len(), column_count, 1, false, retained)?;
-    let series::Column { values, metadata } = label_column;
+    let series::Column {
+        values, metadata, ..
+    } = label_column;
     drop(values);
     let mut variables = Vec::new();
     for column in typed {

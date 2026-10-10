@@ -8,15 +8,15 @@ use gpui_component::{
 use gpui_kit_assets::IconName;
 use yss_plugin_runtime::{InstalledPlugin, TaskSnapshot, TaskState, ViewScope};
 
-fn task_state(state: TaskState) -> &'static str {
+pub(super) fn task_state(state: TaskState) -> &'static str {
     match state {
-        TaskState::Admitted => "已接纳",
-        TaskState::Running => "运行中",
-        TaskState::CancelRequested => "取消中",
-        TaskState::Succeeded => "已完成",
-        TaskState::Failed => "失败",
-        TaskState::Cancelled => "已取消",
-        TaskState::OutcomeUnknown => "结果未确认",
+        TaskState::Admitted => crate::text::t("native.plugins.accepted"),
+        TaskState::Running => crate::text::t("common.running"),
+        TaskState::CancelRequested => crate::text::t("native.plugins.cancelling"),
+        TaskState::Succeeded => crate::text::t("common.completed"),
+        TaskState::Failed => crate::text::t("panel.assistantToolFailed"),
+        TaskState::Cancelled => crate::text::t("plugins.taskStates.cancelled"),
+        TaskState::OutcomeUnknown => crate::text::t("native.plugins.outcomeUnknown"),
     }
 }
 fn mib(bytes: u64) -> String {
@@ -27,8 +27,8 @@ impl PluginsPanel {
         let Some(plugin) = self.selected_plugin() else {
             return appearance::empty_state(
                 IconName::Puzzle,
-                "选择一个插件",
-                "查看插件信息、运行状态、存储和诊断",
+                crate::text::t("native.plugins.choosePlugin"),
+                crate::text::t("native.plugins.detailsHint"),
                 cx,
             )
             .into_any_element();
@@ -68,10 +68,11 @@ impl PluginsPanel {
                                         plugin.manifest.version,
                                         plugin.manifest.publisher,
                                         match plugin.process_state.as_str() {
-                                            "running" => "正在运行",
-                                            "crashed" => "进程已退出",
-                                            "stopped" => "尚未运行",
-                                            _ => "状态待确认",
+                                            "running" => crate::text::t("native.plugins.running"),
+                                            "crashed" => crate::text::t("native.plugins.exited"),
+                                            "stopped" =>
+                                                crate::text::t("canvas.graphState.unexecuted"),
+                                            _ => crate::text::t("panel.assistantToolUnknown"),
                                         }
                                     )),
                             ),
@@ -79,7 +80,11 @@ impl PluginsPanel {
                     .child(
                         Button::new("plugin-enable")
                             .small()
-                            .label(if enabled { "停用" } else { "启用" })
+                            .label(if enabled {
+                                crate::text::t("native.plugins.disable")
+                            } else {
+                                crate::text::t("plugins.enable")
+                            })
                             .disabled(self.busy())
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.request_action(
@@ -94,7 +99,7 @@ impl PluginsPanel {
                         Button::new("plugin-uninstall")
                             .small()
                             .ghost()
-                            .label("卸载…")
+                            .label(crate::text::t("native.plugins.uninstall"))
                             .disabled(self.busy())
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.request_action(
@@ -123,9 +128,21 @@ impl PluginsPanel {
             .border_b_1()
             .border_color(cx.theme().border);
         for (id, label, tab) in [
-            ("plugin-overview", "概览", DetailTab::Overview),
-            ("plugin-tasks", "任务历史", DetailTab::Tasks),
-            ("plugin-diagnostics", "诊断", DetailTab::Diagnostics),
+            (
+                "plugin-overview",
+                crate::text::t("panel.assistantToolValues.overview"),
+                DetailTab::Overview,
+            ),
+            (
+                "plugin-tasks",
+                crate::text::t("native.plugins.taskHistory"),
+                DetailTab::Tasks,
+            ),
+            (
+                "plugin-diagnostics",
+                crate::text::t("panel.assistantToolValues.diagnostics"),
+                DetailTab::Diagnostics,
+            ),
         ] {
             tabs = tabs.child(
                 Button::new(id)
@@ -155,24 +172,31 @@ impl PluginsPanel {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!(
-                        "插件 ID：{}\n目标平台：{}\n签名指纹：{}",
-                        plugin.manifest.id, plugin.manifest.target, plugin.signer_key
+                    .child(crate::text::format(
+                        "native.plugins.identityDetails",
+                        &[
+                            ("value0", plugin.manifest.id.to_string()),
+                            ("value1", plugin.manifest.target.to_string()),
+                            ("value2", plugin.signer_key.to_string()),
+                        ],
                     )),
             )
             .child(
                 div()
                     .text_sm()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child("声明权限"),
+                    .child(crate::text::t("native.plugins.permissions")),
             )
             .child(
                 div()
                     .text_xs()
                     .child(if plugin.manifest.permissions.is_empty() {
-                        "无声明权限".into()
+                        crate::text::t("native.plugins.noPermissions").into()
                     } else {
-                        plugin.manifest.permissions.join("、")
+                        plugin
+                            .manifest
+                            .permissions
+                            .join(crate::text::t("common.listSeparator"))
                     }),
             );
         if let Some(detail) = &self.detail {
@@ -182,32 +206,43 @@ impl PluginsPanel {
                     div()
                         .text_sm()
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .child("插件存储"),
+                        .child(crate::text::t("native.plugins.storage")),
                 )
-                .child(div().text_sm().child(format!(
-                    "已用 {} / 预算 {} · 缓存 {}",
-                    mib(detail.storage.used_bytes),
-                    mib(detail.storage.budget_bytes),
-                    mib(detail.storage.cache_bytes)
+                .child(div().text_sm().child(crate::text::format(
+                    "native.plugins.storageUsage",
+                    &[
+                        ("value0", mib(detail.storage.used_bytes).to_string()),
+                        ("value1", mib(detail.storage.budget_bytes).to_string()),
+                        ("value2", mib(detail.storage.cache_bytes).to_string()),
+                    ],
                 )))
                 .child(
                     div()
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child("这是应用预算限制，原生程序的系统文件访问不受该预算隔离。"),
+                        .child(crate::text::t("native.plugins.storageWarning")),
                 )
-                .child(div().text_xs().child(format!(
-                    "缓存目录：{}",
-                    if plugin.manifest.cache_directories.is_empty() {
-                        "未声明".into()
-                    } else {
-                        plugin.manifest.cache_directories.join("、")
-                    }
-                )))
+                .child(
+                    div().text_xs().child(crate::text::format(
+                        "native.plugins.cacheDirectory",
+                        &[(
+                            "value0",
+                            (if plugin.manifest.cache_directories.is_empty() {
+                                crate::text::t("native.plugins.undeclared").into()
+                            } else {
+                                plugin
+                                    .manifest
+                                    .cache_directories
+                                    .join(crate::text::t("common.listSeparator"))
+                            })
+                            .to_string(),
+                        )],
+                    )),
+                )
                 .child(
                     Button::new("plugin-clear-cache")
                         .small()
-                        .label("清理缓存…")
+                        .label(crate::text::t("native.plugins.clearCache"))
                         .disabled(self.busy() || plugin.manifest.cache_directories.is_empty())
                         .on_click(cx.listener(move |view, _, window, cx| {
                             view.request_action(
@@ -224,9 +259,9 @@ impl PluginsPanel {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(if self.busy() {
-                        "正在读取存储信息…"
+                        crate::text::t("native.plugins.loadingStorage")
                     } else {
-                        "存储信息暂不可用，请刷新。"
+                        crate::text::t("native.plugins.storageUnavailable")
                     }),
             );
         }
@@ -234,39 +269,66 @@ impl PluginsPanel {
             div()
                 .text_sm()
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .child("贡献能力"),
+                .child(crate::text::t("native.plugins.contributions")),
         );
-        for contribution in &plugin.manifest.contributes.views {
-            view = view.child(div().text_xs().child(format!(
-                "视图：{} · {}",
-                contribution.title,
-                if contribution.scope == ViewScope::Project {
-                    "项目"
-                } else {
-                    "应用"
-                }
-            )));
-        }
-        if !plugin.manifest.contributes.views.is_empty() {
+        for (index, contribution) in plugin.manifest.contributes.views.iter().enumerate() {
+            let key = super::PluginKey::from_plugin(plugin);
+            let declaration = contribution.clone();
             view = view.child(
                 div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
                     .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child("当前原生版本尚不能打开此插件提供的自定义界面。"),
+                    .child(crate::text::format(
+                        "native.plugins.viewContribution",
+                        &[
+                            ("value0", contribution.title.to_string()),
+                            (
+                                "value1",
+                                (if contribution.scope == ViewScope::Project {
+                                    crate::text::t("activityBar.project")
+                                } else {
+                                    crate::text::t("log.domains.application")
+                                })
+                                .to_string(),
+                            ),
+                        ],
+                    ))
+                    .child(
+                        Button::new(("plugin-open-view", index))
+                            .small()
+                            .label(crate::text::t("native.plugins.openView"))
+                            .disabled(self.busy() || !plugin.enabled)
+                            .on_click(cx.listener(move |_, _, _, cx| {
+                                cx.emit(super::OpenNativeView {
+                                    key: key.clone(),
+                                    view: declaration.clone(),
+                                });
+                            })),
+                    ),
             );
         }
         for command in &plugin.manifest.contributes.commands {
-            view = view.child(div().text_xs().child(format!("命令：{}", command.title)));
+            view = view.child(div().text_xs().child(crate::text::format(
+                "native.plugins.commandContribution",
+                &[("value0", command.title.to_string())],
+            )));
         }
         view.child(
             div()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
-                .child(format!(
-                    "授权预算：{} 个并发任务 · {} 个视图 · 数据交换 {}",
-                    plugin.granted_budget.active_tasks,
-                    plugin.granted_budget.views,
-                    mib(plugin.granted_budget.snapshot_bytes)
+                .child(crate::text::format(
+                    "native.plugins.authorizedBudget",
+                    &[
+                        ("value0", plugin.granted_budget.active_tasks.to_string()),
+                        ("value1", plugin.granted_budget.views.to_string()),
+                        (
+                            "value2",
+                            mib(plugin.granted_budget.snapshot_bytes).to_string(),
+                        ),
+                    ],
                 )),
         )
         .into_any_element()
@@ -276,7 +338,7 @@ impl PluginsPanel {
             return div()
                 .p_4()
                 .text_sm()
-                .child("任务信息暂不可用，请刷新。")
+                .child(crate::text::t("native.plugins.tasksUnavailable"))
                 .into_any_element();
         };
         let key = detail.key.clone();
@@ -298,13 +360,13 @@ impl PluginsPanel {
                             .flex_1()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child("最近 30 天。清理只移除结果缓存，任务状态与项目结果会保留。"),
+                            .child(crate::text::t("native.plugins.historyHint")),
                     )
                     .child(
                         Button::new("plugin-history-clear")
                             .small()
                             .ghost()
-                            .label("清理结果缓存…")
+                            .label(crate::text::t("native.plugins.clearResultCache"))
                             .disabled(self.busy())
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 view.request_action(
@@ -319,8 +381,8 @@ impl PluginsPanel {
             .child(if count == 0 {
                 appearance::empty_state(
                     IconName::List,
-                    "暂无任务记录",
-                    "插件任务的运行与终态由插件服务记录",
+                    crate::text::t("native.plugins.noTasks"),
+                    crate::text::t("native.plugins.tasksHint"),
                     cx,
                 )
                 .into_any_element()
@@ -357,22 +419,21 @@ impl PluginsPanel {
                         Button::new("plugin-history-previous")
                             .small()
                             .ghost()
-                            .label("上一页")
+                            .label(crate::text::t("sourceInspector.previous"))
                             .disabled(self.busy() || self.cursor_stack.len() <= 1)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.history_page(false, window, cx)
                             })),
                     )
-                    .child(
-                        div()
-                            .text_xs()
-                            .child(format!("第 {} 页", self.cursor_stack.len().max(1))),
-                    )
+                    .child(div().text_xs().child(crate::text::format(
+                        "native.plugins.page",
+                        &[("value0", self.cursor_stack.len().max(1).to_string())],
+                    )))
                     .child(
                         Button::new("plugin-history-next")
                             .small()
                             .ghost()
-                            .label("下一页")
+                            .label(crate::text::t("sourceInspector.next"))
                             .disabled(self.busy() || detail.history.next_cursor.is_none())
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.history_page(true, window, cx)
@@ -406,7 +467,7 @@ impl PluginsPanel {
                         Button::new(gpui::SharedString::from(format!("task-copy-{id}")))
                             .small()
                             .ghost()
-                            .label("复制 ID")
+                            .label(crate::text::t("native.plugins.copyId"))
                             .on_click(move |_, _, cx| {
                                 cx.write_to_clipboard(ClipboardItem::new_string(id.clone()))
                             }),
@@ -427,7 +488,7 @@ impl PluginsPanel {
             return div()
                 .p_4()
                 .text_sm()
-                .child("诊断暂不可用，请刷新。")
+                .child(crate::text::t("native.plugins.diagnosticsUnavailable"))
                 .into_any_element();
         };
         let truncated = detail.diagnostics.iter().any(|entry| entry.truncated);
@@ -449,16 +510,16 @@ impl PluginsPanel {
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
                             .child(if truncated {
-                                "进程诊断保存在本机；较早内容已超出缓冲容量。"
+                                crate::text::t("native.plugins.diagnosticsTruncated")
                             } else {
-                                "进程诊断仅在本机显示。"
+                                crate::text::t("native.plugins.diagnosticsLocal")
                             }),
                     )
                     .child(
                         Button::new("plugin-diagnostics-copy")
                             .small()
                             .ghost()
-                            .label("复制诊断")
+                            .label(crate::text::t("native.plugins.copyDiagnostics"))
                             .disabled(count == 0)
                             .on_click(move |_, _, cx| {
                                 let text = diagnostics
@@ -480,8 +541,8 @@ impl PluginsPanel {
             .child(if count == 0 {
                 appearance::empty_state(
                     IconName::File,
-                    "暂无诊断",
-                    "进程启动后会保留有界的标准错误输出",
+                    crate::text::t("native.plugins.noDiagnostics"),
+                    crate::text::t("native.plugins.diagnosticsHint"),
                     cx,
                 )
                 .into_any_element()

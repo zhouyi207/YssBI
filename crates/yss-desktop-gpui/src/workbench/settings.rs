@@ -14,20 +14,32 @@ use gpui_component::{ActiveTheme, Icon, Root, TitleBar};
 use gpui_kit_assets::IconName;
 
 impl Workbench {
-    pub(super) fn show_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(handle) = self.settings_window
-            && handle
-                .update(cx, |_, window, cx| {
-                    window.activate_window();
-                    window.focus(&self.settings.read(cx).focus_handle(cx), cx);
-                })
-                .is_ok()
-        {
-            return;
-        }
-        if self.is_closing(cx) {
-            return;
-        }
+    pub(super) fn connect_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let panel = self.settings.read(cx);
+        let mut state = (panel.dirty(), panel.has_pending_operation());
+        let mut language = crate::text::locale();
+        self.settings_subscription =
+            Some(
+                cx.observe_in(&self.settings, window, move |view, panel, window, cx| {
+                    let panel = panel.read(cx);
+                    let next = (panel.dirty(), panel.has_pending_operation());
+                    if language != crate::text::locale() {
+                        language = crate::text::locale();
+                        view.menu_context = None;
+                        view.refresh_project(window, cx);
+                        view.refresh_graphs(cx);
+                        cx.notify();
+                    }
+                    // Settings content and catalog loading do not change workbench chrome or menus.
+                    if next != state {
+                        state = next;
+                        cx.notify();
+                    }
+                }),
+            );
+    }
+
+    pub(super) fn show_settings(&self, window: &mut Window, cx: &mut Context<Self>) {
         let panel = self.settings.clone();
         let owner = cx.weak_entity();
         let owner_window = window.window_handle();
@@ -36,33 +48,59 @@ impl Workbench {
             size(px(1000.), px(720.)),
             cx,
         );
-        match cx.open_window(
-            WindowOptions {
-                titlebar: Some(gpui::TitlebarOptions {
-                    title: Some("设置 — YssBI".into()),
-                    ..TitleBar::title_bar_options()
-                }),
-                window_decorations: Some(WindowDecorations::Client),
-                app_id: Some("com.zjy.yssbi".into()),
-                window_min_size: Some(size(px(760.), px(560.))),
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..TitleBar::window_options()
-            },
-            move |window, cx| {
-                let close_panel = panel.downgrade();
-                window.on_window_should_close(cx, move |_, cx| {
-                    close_panel
-                        .upgrade()
-                        .is_none_or(|panel| !panel.read(cx).busy())
-                });
-                let view = cx.new(|cx| SettingsWindow::new(panel, owner, owner_window, window, cx));
-                cx.new(|cx| Root::new(view, window, cx))
-            },
-        ) {
-            Ok(handle) => self.settings_window = Some(handle),
-            Err(_) => self.error = Some("设置窗口未能打开，请重试。".into()),
-        }
-        cx.notify();
+        // Return the workbench to GPUI before creating or activating another window.
+        cx.defer(move |cx| {
+            let Some(workbench) = owner.upgrade() else {
+                return;
+            };
+            // Read the handle here so queued requests also reuse a newly opened window.
+            let existing_window = workbench.read(cx).settings_window;
+            if let Some(handle) = existing_window
+                && handle
+                    .update(cx, |_, window, cx| {
+                        window.activate_window();
+                        window.focus(&panel.read(cx).focus_handle(cx), cx);
+                    })
+                    .is_ok()
+            {
+                return;
+            }
+            if workbench.read(cx).is_closing(cx) {
+                return;
+            }
+            let result = cx.open_window(
+                WindowOptions {
+                    titlebar: Some(gpui::TitlebarOptions {
+                        title: Some(crate::text::t("native.workbench.settingsWindowTitle").into()),
+                        ..TitleBar::title_bar_options()
+                    }),
+                    window_decorations: Some(WindowDecorations::Client),
+                    app_id: Some("com.zjy.yssbi".into()),
+                    window_min_size: Some(size(px(600.), px(480.))),
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    ..TitleBar::window_options()
+                },
+                move |window, cx| {
+                    let close_panel = panel.downgrade();
+                    window.on_window_should_close(cx, move |_, cx| {
+                        close_panel
+                            .upgrade()
+                            .is_none_or(|panel| !panel.read(cx).has_pending_operation())
+                    });
+                    let view =
+                        cx.new(|cx| SettingsWindow::new(panel, owner, owner_window, window, cx));
+                    cx.new(|cx| Root::new(view, window, cx))
+                },
+            );
+            workbench.update(cx, |view, cx| match result {
+                Ok(handle) => view.settings_window = Some(handle),
+                Err(_) => {
+                    view.error =
+                        Some(crate::text::t("native.workbench.settingsWindowFailed").into());
+                    cx.notify();
+                }
+            });
+        });
     }
 }
 
@@ -100,10 +138,10 @@ impl SettingsWindow {
         if let Some(owner) = owner.upgrade() {
             subscriptions.push(cx.observe(&owner, |view, _, cx| view.sync_project(cx)));
         }
+        panel.update(cx, |panel, cx| panel.ensure_loaded(cx));
         cx.defer_in(window, |view, window, cx| {
             view.sync_project(cx);
             window.focus(&view.panel.read(cx).focus_handle(cx), cx);
-            view.panel.update(cx, |panel, cx| panel.reload(window, cx));
         });
         Self {
             panel,
@@ -147,9 +185,9 @@ impl SettingsWindow {
 impl Render for SettingsWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let title = if self.panel.read(cx).dirty() {
-            "设置 • — YssBI"
+            crate::text::t("native.workbench.settingsWindowDirtyTitle")
         } else {
-            "设置 — YssBI"
+            crate::text::t("native.workbench.settingsWindowTitle")
         };
         window.set_window_title(title);
         div()
@@ -170,7 +208,11 @@ impl Render for SettingsWindow {
                     view.save_all(super::lifecycle::AfterSave::Stay, window, cx);
                 });
             }))
-            .on_action(cx.listener(|view, command: &MenuCommand, _, cx| {
+            .on_action(cx.listener(|view, command: &MenuCommand, window, cx| {
+                if let MenuCommand::Edit(edit) = command {
+                    window.dispatch_action(edit.text_action(), cx);
+                    return;
+                }
                 let command = command.clone();
                 view.in_workbench(cx, move |view, window, cx| {
                     view.dispatch_menu(&command, window, cx);
@@ -178,7 +220,7 @@ impl Render for SettingsWindow {
             }))
             .child(window_chrome::title_bar(
                 cx.listener(|view, _, window, cx| {
-                    if !view.panel.read(cx).busy() {
+                    if !view.panel.read(cx).has_pending_operation() {
                         window.remove_window();
                     }
                 }),

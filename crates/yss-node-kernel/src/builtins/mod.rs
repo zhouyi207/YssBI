@@ -8,6 +8,7 @@ mod distribution;
 mod numeric;
 mod relational;
 mod series;
+pub(crate) use series::INPUT_PREPARATION_REVISION;
 mod statistics;
 mod transforms;
 mod visualization;

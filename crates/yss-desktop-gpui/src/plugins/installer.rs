@@ -6,7 +6,7 @@ use gpui::{
     prelude::*, px,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, WindowExt,
+    ActiveTheme, Disableable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
 };
@@ -60,7 +60,10 @@ impl PackageInstaller {
                     match result {
                         Some(Ok(inspection)) => view.inspection = Some(inspection),
                         Some(Err(error)) => view.error = Some(failure(&error)),
-                        None => view.error = Some("安装包未读取，请关闭后重新选择。".into()),
+                        None => {
+                            view.error =
+                                Some(crate::text::t("native.plugins.packageReadFailed").into())
+                        }
                     }
                     cx.notify();
                 });
@@ -95,7 +98,7 @@ impl PackageInstaller {
             return;
         };
         let Some(operation) = self.operation.clone() else {
-            self.error = Some("无法创建安装确认，请检查系统时间后重新选择安装包。".into());
+            self.error = Some(crate::text::t("native.plugins.confirmationFailed").into());
             cx.notify();
             return;
         };
@@ -105,28 +108,39 @@ impl PackageInstaller {
             .flatten();
         let path = self.path.clone();
         let wizard = cx.entity().downgrade();
-        let accepted = self
-            .owner
-            .update(cx, |view, cx| {
-                view.install_package(
-                    ApprovedPackage {
-                        path,
-                        inspection,
-                        operation,
-                        previous_signer: approved_signer,
-                    },
-                    wizard,
-                    window,
-                    cx,
-                )
-            })
-            .unwrap_or(false);
-        if accepted {
-            self.busy = true;
-            self.error = None;
-        } else {
-            self.error = Some("插件正在处理其他操作，安装确认已保留。".into());
-        }
+        let failure = wizard.clone();
+        let owner = self.owner.clone();
+        let parent = crate::modal_window::owner_window(window, cx);
+        self.busy = true;
+        self.error = None;
+        cx.defer(move |cx| {
+            let accepted = parent
+                .update(cx, |_, window, cx| {
+                    owner
+                        .update(cx, |view, cx| {
+                            view.install_package(
+                                ApprovedPackage {
+                                    path,
+                                    inspection,
+                                    operation,
+                                    previous_signer: approved_signer,
+                                },
+                                wizard,
+                                window,
+                                cx,
+                            )
+                        })
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false);
+            if !accepted {
+                let _ = failure.update(cx, |wizard, cx| {
+                    wizard.busy = false;
+                    wizard.error = Some(crate::text::t("native.plugins.installationBusy").into());
+                    cx.notify();
+                });
+            }
+        });
         cx.notify();
     }
 }
@@ -158,38 +172,57 @@ impl Render for PackageInstaller {
                     div()
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child(format!(
-                            "发布者：{} · 目标：{}",
-                            manifest.publisher, manifest.target
+                        .child(crate::text::format(
+                            "native.plugins.publisherAndTarget",
+                            &[
+                                ("value0", manifest.publisher.to_string()),
+                                ("value1", manifest.target.to_string()),
+                            ],
                         )),
                 )
-                .child(
-                    div()
-                        .text_xs()
-                        .child(format!("签名指纹：{}", inspection.signer_key)),
-                )
-                .child(div().text_xs().child(format!(
-                    "所需权限：{}",
-                    if manifest.permissions.is_empty() {
-                        "无声明权限".into()
-                    } else {
-                        manifest.permissions.join("、")
-                    }
+                .child(div().text_xs().child(crate::text::format(
+                    "native.plugins.signatureFingerprint",
+                    &[("value0", inspection.signer_key.to_string())],
                 )))
+                .child(
+                    div().text_xs().child(crate::text::format(
+                        "native.plugins.requiredPermissions",
+                        &[(
+                            "value0",
+                            (if manifest.permissions.is_empty() {
+                                crate::text::t("native.plugins.noPermissions").into()
+                            } else {
+                                manifest
+                                    .permissions
+                                    .join(crate::text::t("common.listSeparator"))
+                            })
+                            .to_string(),
+                        )],
+                    )),
+                )
                 .child(
                     div()
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child(format!(
-                            "私有存储预算 {:.1} MiB · {} 个并发任务 · {} 个视图",
-                            manifest.resource_budget.private_storage_bytes as f64 / 1048576.,
-                            manifest.resource_budget.active_tasks,
-                            manifest.resource_budget.views
+                        .child(crate::text::format(
+                            "native.plugins.budgetSummary",
+                            &[
+                                (
+                                    "value0",
+                                    format!(
+                                        "{:.1}",
+                                        manifest.resource_budget.private_storage_bytes as f64
+                                            / 1048576.
+                                    ),
+                                ),
+                                ("value1", manifest.resource_budget.active_tasks.to_string()),
+                                ("value2", manifest.resource_budget.views.to_string()),
+                            ],
                         )),
                 )
                 .child(
                     Checkbox::new("plugin-native-consent")
-                        .label("我信任此发布者，并允许插件作为当前用户的原生程序运行")
+                        .label(crate::text::t("native.plugins.trustPublisher"))
                         .checked(self.approved)
                         .disabled(self.busy)
                         .on_click(cx.listener(|view, checked: &bool, _, cx| {
@@ -201,20 +234,29 @@ impl Render for PackageInstaller {
                     div()
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child("应用预算限制不能隔离原生程序的系统文件访问。"),
+                        .child(crate::text::t("native.plugins.budgetWarning")),
                 );
             if self.signer_changed() {
                 content = content
-                    .child(div().text_xs().text_color(cx.theme().danger).child(format!(
-                            "签名者已变化。此前指纹：{}",
-                            inspection
-                                .previous_signer_key
-                                .as_deref()
-                                .unwrap_or_default()
-                        )))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().danger)
+                            .child(crate::text::format(
+                                "native.plugins.previousSigner",
+                                &[(
+                                    "value0",
+                                    inspection
+                                        .previous_signer_key
+                                        .as_deref()
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                )],
+                            )),
+                    )
                     .child(
                         Checkbox::new("plugin-signer-consent")
-                            .label("确认使用上述新签名者更新此插件")
+                            .label(crate::text::t("native.plugins.confirmNewSigner"))
                             .checked(self.signer_approved)
                             .disabled(self.busy)
                             .on_click(cx.listener(|view, checked: &bool, _, cx| {
@@ -224,7 +266,7 @@ impl Render for PackageInstaller {
                     );
             }
         } else if self.busy {
-            content = content.child("正在检查签名和内容…");
+            content = content.child(crate::text::t("native.plugins.verifying"));
         }
         div()
             .flex()
@@ -246,17 +288,17 @@ impl Render for PackageInstaller {
                     .gap_2()
                     .child(
                         Button::new("plugin-install-cancel")
-                            .label("取消")
+                            .label(crate::text::t("common.cancel"))
                             .disabled(self.busy)
-                            .on_click(|_, window, cx| window.close_dialog(cx)),
+                            .on_click(|_, window, cx| crate::modal_window::close(window, cx)),
                     )
                     .child(
                         Button::new("plugin-install-confirm")
                             .primary()
                             .label(if self.busy {
-                                "正在处理…"
+                                crate::text::t("native.assistant.processing")
                             } else {
-                                "确认安装"
+                                crate::text::t("native.plugins.confirmInstall")
                             })
                             .disabled(!ready)
                             .on_click(cx.listener(|view, _, window, cx| view.submit(window, cx))),
@@ -269,14 +311,14 @@ impl PluginsPanel {
         if self.busy() {
             return;
         }
-        self.task = Some("正在选择安装包…");
+        self.task = Some(crate::text::t("native.plugins.choosingPackage"));
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
         let prompt = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some("选择签名插件包".into()),
+            prompt: Some(crate::text::t("native.plugins.chooseSignedPackage").into()),
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = prompt.await;
@@ -289,30 +331,31 @@ impl PluginsPanel {
                     Ok(Ok(Some(paths))) => {
                         if let Some(path) = paths.into_iter().next() {
                             let owner = cx.entity().downgrade();
-                            let wizard = cx.new(|cx| {
-                                PackageInstaller::new(
-                                    view.services.clone(),
-                                    owner,
-                                    path,
-                                    window,
-                                    cx,
-                                )
-                            });
-                            window.open_dialog(cx, move |dialog, _, _| {
-                                let cancel = wizard.clone();
-                                dialog
-                                    .title("检查插件安装包")
-                                    .width(px(760.))
-                                    .close_button(false)
-                                    .overlay_closable(false)
-                                    .footer(div())
-                                    .child(wizard.clone())
+                            let services = view.services.clone();
+                            crate::modal_window::open(
+                                crate::text::t("native.plugins.inspectPackage"),
+                                gpui::size(px(800.), px(740.)),
+                                window,
+                                cx,
+                                move |window, cx| {
+                                    let wizard = cx.new(|cx| {
+                                        PackageInstaller::new(services, owner, path, window, cx)
+                                    });
+                                    let cancel = wizard.clone();
+                                    crate::modal_window::ModalContent::new(move |_, _| {
+                                        wizard.clone()
+                                    })
+                                    .without_buttons()
                                     .on_cancel(move |_, _, cx| !cancel.read(cx).busy)
-                            });
+                                },
+                            );
                         }
                     }
                     Ok(Ok(None)) => {}
-                    _ => view.error = Some("安装包选择器未打开，请重试。".into()),
+                    _ => {
+                        view.error =
+                            Some(crate::text::t("native.plugins.packagePickerFailed").into())
+                    }
                 }
                 view.changed(cx);
             });
@@ -332,7 +375,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some("正在安装插件…");
+        self.task = Some(crate::text::t("native.plugins.installing"));
         self.error = None;
         self.feedback = None;
         let job = self.services.run(move |services| {
@@ -367,12 +410,12 @@ impl PluginsPanel {
                 } else {
                     (
                         false,
-                        Some("安装结果未确认，请在此窗口重试；已检查的安装包会保留。".into()),
+                        Some(crate::text::t("native.plugins.installationUnconfirmed").into()),
                     )
                 };
                 if installed {
-                    view.feedback = Some("插件已安装。".into());
-                    window.close_dialog(cx);
+                    view.feedback = Some(crate::text::t("native.plugins.installed").into());
+                    crate::modal_window::close_child(window, cx);
                 } else if let Some(error) = error {
                     view.error = Some(error.clone());
                     let _ = wizard.update(cx, |wizard, cx| {

@@ -146,7 +146,7 @@ impl Workbench {
         let graph_path = match GraphResourcePath::new(path.clone()) {
             Ok(path) => path,
             Err(_) => {
-                self.error = Some("图路径无效".into());
+                self.error = Some(crate::text::t("native.workbench.invalidGraphPath").into());
                 cx.notify();
                 if let Some(id) = intent {
                     self.finish_intent(&id, false, window, cx);
@@ -209,7 +209,7 @@ impl Workbench {
             .cloned()?;
         let path = graph.projection.graph_path.as_str().to_owned();
         let services = self.services.clone();
-        let catalog_language = crate::text::locale().to_owned();
+        let catalog_language = self.project.as_ref()?.language.clone();
         let canvas = cx.new(|cx| {
             let mut canvas =
                 GraphCanvas::new(services, graph, catalog, catalog_language, window, cx);
@@ -317,8 +317,10 @@ impl Workbench {
                     }
                     CanvasEvent::ShowOutput => {
                         if view
-                            .active_editor_panel(cx)
-                            .is_some_and(|panel| panel.view().entity_id() == canvas.entity_id())
+                            .details
+                            .read(cx)
+                            .graph()
+                            .is_some_and(|graph| graph.entity_id() == canvas.entity_id())
                         {
                             view.present_panel(
                                 gpui_component::dock::panel_handle(view.output.clone()),

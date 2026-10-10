@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod appearance;
-mod assets;
 mod assistant;
 mod canvas;
 mod catalog_rows;
@@ -13,6 +12,7 @@ mod file_commands;
 mod imports;
 mod markdown;
 mod minds;
+mod modal_window;
 mod plots;
 mod plugins;
 mod project;
@@ -20,6 +20,7 @@ mod projects;
 mod results;
 mod services;
 mod settings;
+mod startup;
 mod text;
 mod window_chrome;
 mod workbench;
@@ -29,77 +30,43 @@ use gpui::{
     App, AppContext, Bounds, KeyBinding, WindowBounds, WindowDecorations, WindowOptions, px, size,
 };
 use gpui_component::{Root, TitleBar};
-use project::DesktopProject;
-use services::NativeServices;
-use workbench::Workbench;
+use startup::Startup;
 
 fn main() -> Result<()> {
+    text::set_locale(text::DEFAULT_LANGUAGE);
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
     if args.len() > 2 {
-        bail!("用法: cargo run -- [项目目录] [资源相对路径或数据库 ID]");
+        bail!(crate::text::t("native.main.usage"));
     }
     if args
         .first()
         .is_some_and(|arg| arg == "--help" || arg == "-h")
     {
-        println!("用法: cargo run -- [项目目录] [资源相对路径或数据库 ID]");
+        println!("{}", crate::text::t("native.main.usage"));
         return Ok(());
     }
     // The runtime outlives the GPUI event loop; no blocking work runs in pointer handlers.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    let services = runtime.block_on(NativeServices::initialize(runtime.handle().clone()))?;
-    let project = args
-        .first()
-        .map(|root| {
-            let activation = services
-                .application
-                .application
-                .load_project_for_application(&root.to_string_lossy())?;
-            let snapshot = services.application.application.query_project_index(
-                activation.project_instance_id.clone(),
-                "zh-CN",
-                true,
-            )?;
-            if runtime
-                .block_on(
-                    services
-                        .application
-                        .projects
-                        .register_project(&snapshot.index.project_name, &activation.path),
-                )
-                .is_err()
-            {
-                tracing::warn!(
-                    code = "native_project_registration_failed",
-                    "Project opened without a registry update"
-                );
-            }
-            services.watch_project(&activation.project_instance_id)?;
-            Ok::<_, anyhow::Error>(DesktopProject::new(
-                activation.project_instance_id,
-                snapshot,
-            ))
-        })
-        .transpose()?;
+    let executor = runtime.handle().clone();
+    let initial_project = args.first().map(std::path::PathBuf::from);
     let initial_resource = args
         .get(1)
         .map(|value| value.to_string_lossy().into_owned());
     gpui_platform::application()
-        .with_assets(assets::Assets)
+        .with_assets(gpui_kit_assets::AllAssets)
         .run(move |cx: &mut App| {
             gpui_component::init(cx);
             markdown::init();
             window_chrome::init(cx);
+            modal_window::init(cx);
             cx.bind_keys([
                 KeyBinding::new(
                     "escape",
                     assistant::CancelResponse,
                     Some("AssistantConversation"),
                 ),
-                KeyBinding::new("ctrl-,", workbench::ShowSettings, Some("Workbench")),
-                KeyBinding::new("cmd-,", workbench::ShowSettings, Some("Workbench")),
                 KeyBinding::new(
                     if cfg!(target_os = "macos") {
                         "ctrl-o"
@@ -253,13 +220,10 @@ fn main() -> Result<()> {
                 KeyBinding::new("cmd-z", canvas::UndoGraph, Some("GraphCanvas")),
                 KeyBinding::new("cmd-shift-z", canvas::RedoGraph, Some("GraphCanvas")),
                 KeyBinding::new("cmd-a", canvas::SelectAll, Some("GraphCanvas")),
-                KeyBinding::new("ctrl-s", canvas::SaveGraph, Some("Workbench")),
-                KeyBinding::new("cmd-s", canvas::SaveGraph, Some("Workbench")),
-                KeyBinding::new("ctrl-shift-s", workbench::SaveAllGraphs, Some("Workbench")),
-                KeyBinding::new("cmd-shift-s", workbench::SaveAllGraphs, Some("Workbench")),
                 KeyBinding::new("f5", canvas::RunWholeGraph, Some("Workbench")),
                 KeyBinding::new("shift-f5", canvas::CancelRun, Some("Workbench")),
             ]);
+            workbench::bind_menu_keys(cx);
             let bounds = Bounds::centered(None, size(px(1480.), px(940.)), cx);
             cx.open_window(
                 WindowOptions {
@@ -276,19 +240,20 @@ fn main() -> Result<()> {
                 move |window, cx| {
                     appearance::install(window, cx);
                     window.set_window_title("YssBI");
-                    let workbench = cx
-                        .new(|cx| Workbench::new(services, project, initial_resource, window, cx));
-                    let weak = workbench.downgrade();
+                    let startup = cx.new(|cx| {
+                        Startup::new(executor, initial_project, initial_resource, window, cx)
+                    });
+                    let weak = startup.downgrade();
                     window.on_window_should_close(cx, move |window, cx| {
                         let Some(view) = weak.upgrade() else {
                             return true;
                         };
                         view.update(cx, |view, cx| view.close_requested(window, cx))
                     });
-                    cx.new(|cx| Root::new(workbench, window, cx))
+                    cx.new(|cx| Root::new(startup, window, cx))
                 },
             )
-            .expect("无法创建 GPUI 窗口");
+            .unwrap_or_else(|_| panic!("{}", crate::text::t("native.main.windowFailed")));
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {
                     cx.quit();

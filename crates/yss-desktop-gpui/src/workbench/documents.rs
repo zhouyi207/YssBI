@@ -74,7 +74,7 @@ impl Workbench {
                         .update(cx, |document, cx| document.focus_editor(window, cx));
                     true
                 } else {
-                    view.error = Some("无法打开 Markdown 文档，请检查当前项目资源。".into());
+                    view.error = Some(crate::text::t("native.workbench.documentOpenFailed").into());
                     false
                 };
                 if let Some(intent) = intent {

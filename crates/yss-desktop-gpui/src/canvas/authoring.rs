@@ -85,7 +85,7 @@ impl GraphCanvas {
             let _ = view.update(cx, |view, cx| {
                 view.busy = false;
                 if result.is_err() {
-                    view.error = Some("函数签名未能修改，请刷新属性后重试。".into());
+                    view.error = Some(crate::text::t("native.canvas.signatureFailed").into());
                     tracing::warn!(
                         code = "native_signature_update_failed",
                         "Native signature command failed"

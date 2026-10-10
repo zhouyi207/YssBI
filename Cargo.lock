@@ -12866,6 +12866,7 @@ dependencies = [
  "gpui-pre-platform",
  "hex",
  "lru 0.18.5",
+ "markdown",
  "open",
  "percent-encoding",
  "ratex-layout",
@@ -13058,6 +13059,7 @@ dependencies = [
 name = "yss-graph-runtime"
 version = "0.1.0"
 dependencies = [
+ "lru 0.18.5",
  "serde_json",
  "thiserror 2.0.20",
  "yss-canonical-hash",

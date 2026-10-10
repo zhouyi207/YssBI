@@ -22,12 +22,17 @@ impl SettingsPanel {
                     .gap_2()
                     .pt_5()
                     .pb_3()
-                    .child(div().text_sm().flex_1().child("模型"))
+                    .child(
+                        div()
+                            .text_sm()
+                            .flex_1()
+                            .child(crate::text::t("bayes.tabs.model")),
+                    )
                     .child(
                         Button::new("models-discover")
                             .small()
                             .ghost()
-                            .label(crate::text::translate("settings.models.discover"))
+                            .label(crate::text::t("native.settings.fetchModels"))
                             .disabled(busy || !self.connection_ready(cx))
                             .on_click(cx.listener(|view, _, window, cx| view.discover(window, cx))),
                     )
@@ -35,7 +40,7 @@ impl SettingsPanel {
                         Button::new("models-add")
                             .small()
                             .ghost()
-                            .label("添加模型")
+                            .label(crate::text::t("native.settings.addModel"))
                             .disabled(busy || self.model.is_some())
                             .on_click(
                                 cx.listener(|view, _, window, cx| {
@@ -73,7 +78,7 @@ impl SettingsPanel {
                 div()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("尚未添加模型。"),
+                    .child(crate::text::t("native.settings.noModels")),
             );
         }
         for (index, model) in draft.models.iter().enumerate() {
@@ -109,7 +114,7 @@ impl SettingsPanel {
                         Button::new(("model-edit", index))
                             .small()
                             .ghost()
-                            .label("编辑")
+                            .label(crate::text::t("detail.constantValue.edit"))
                             .disabled(self.busy())
                             .on_click(cx.listener(move |view, _, window, cx| {
                                 if view.model_row_current(epoch, index, &edit_id) {
@@ -121,7 +126,7 @@ impl SettingsPanel {
                         Button::new(("model-remove", index))
                             .small()
                             .ghost()
-                            .label("移除")
+                            .label(crate::text::t("native.workbench.remove"))
                             .disabled(self.busy() || self.model.is_some())
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 if !view.model_row_current(epoch, index, &remove_id)
@@ -150,38 +155,38 @@ impl SettingsPanel {
             .rounded_lg()
             .bg(cx.theme().muted)
             .child(self.render_field(
-                "模型 ID",
-                "服务端使用的精确模型标识。",
+                crate::text::t("settings.models.modelId"),
+                crate::text::t("native.settings.modelIdHint"),
                 Input::new(&model.id).disabled(busy),
                 cx,
             ))
             .child(self.render_field(
-                "显示名称",
-                "模型选择器中的名称。",
+                crate::text::t("settings.models.displayName"),
+                crate::text::t("native.settings.modelNameHint"),
                 Input::new(&model.name).disabled(busy),
                 cx,
             ))
             .child(self.render_field(
-                "上下文容量",
-                "可选；Token 数。",
+                crate::text::t("native.settings.contextCapacity"),
+                crate::text::t("native.settings.contextWindowHint"),
                 Input::new(&model.context).disabled(busy),
                 cx,
             ))
             .child(self.render_field(
-                "最大输出",
-                "可选；Anthropic 协议必填。",
+                crate::text::t("native.settings.maxOutput"),
+                crate::text::t("native.settings.maxOutputHint"),
                 Input::new(&model.output).disabled(busy),
                 cx,
             ))
             .child(self.render_field(
                 "Temperature",
-                "留空继承服务默认值。",
+                crate::text::t("native.settings.serviceDefaultHint"),
                 Input::new(&model.temperature).disabled(busy),
                 cx,
             ))
             .child(self.render_field(
                 "Top P",
-                "留空继承服务默认值。",
+                crate::text::t("native.settings.serviceDefaultHint"),
                 Input::new(&model.top_p).disabled(busy),
                 cx,
             ));
@@ -219,14 +224,14 @@ impl SettingsPanel {
         }
         form = form
             .child(self.render_field(
-                "推理档位限制",
-                "全部留空时由服务验证所选档位。",
+                crate::text::t("native.settings.reasoningLevels"),
+                crate::text::t("native.settings.reasoningHint"),
                 efforts,
                 cx,
             ))
             .child(self.render_field(
-                "扩展参数",
-                "JSON 生成参数；不能替换消息、工具和认证。",
+                crate::text::t("native.settings.additionalParameters"),
+                crate::text::t("native.settings.parametersHint"),
                 Textarea::new(&model.parameters).disabled(busy),
                 cx,
             ))
@@ -240,7 +245,7 @@ impl SettingsPanel {
                         Button::new("model-cancel")
                             .small()
                             .ghost()
-                            .label("取消模型编辑")
+                            .label(crate::text::t("native.settings.cancelModelEdit"))
                             .disabled(busy)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 if view.busy() {
@@ -256,7 +261,7 @@ impl SettingsPanel {
                         Button::new("model-apply")
                             .small()
                             .primary()
-                            .label("应用到草稿")
+                            .label(crate::text::t("native.settings.applyToDraft"))
                             .disabled(busy)
                             .on_click(cx.listener(|view, _, _, cx| view.apply_model(cx))),
                     ),

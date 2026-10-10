@@ -5,15 +5,15 @@ use super::{
 };
 use crate::{
     appearance,
-    assets::NativeIcon,
     canvas::{CancelRun, RunWholeGraph, SaveGraph},
     window_chrome,
 };
 use gpui::{Context, IntoElement, MouseButton, Window, actions, div, prelude::*, px, rgb};
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable,
+    ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
 };
+use gpui_kit_assets::IconName;
 
 actions!(
     native_workbench,
@@ -31,43 +31,6 @@ impl Workbench {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let dirty_files = self
-            .graphs
-            .values()
-            .filter_map(gpui::WeakEntity::upgrade)
-            .filter(|graph| graph.read(cx).dirty())
-            .count()
-            + self
-                .documents
-                .values()
-                .filter_map(gpui::WeakEntity::upgrade)
-                .filter(|document| document.read(cx).dirty())
-                .count()
-            + self
-                .minds
-                .values()
-                .filter_map(gpui::WeakEntity::upgrade)
-                .filter(|mind| mind.read(cx).dirty())
-                .count();
-        let pending_databases = self
-            .databases
-            .values()
-            .filter_map(gpui::WeakEntity::upgrade)
-            .filter(|view| view.read(cx).dirty())
-            .count();
-        let dirty_files = dirty_files
-            + self
-                .charts
-                .values()
-                .filter_map(gpui::WeakEntity::upgrade)
-                .filter(|view| view.read(cx).dirty())
-                .count();
-        let dirty = dirty_files + pending_databases + usize::from(self.settings.read(cx).dirty());
-        let name = self
-            .project
-            .as_ref()
-            .map(|project| project.index.project_name.clone())
-            .unwrap_or_else(|| "工作台".into());
         div()
             .key_context("Workbench")
             .track_focus(&self.focus)
@@ -139,7 +102,7 @@ impl Workbench {
                             .items_center()
                             .gap_2()
                             .child(
-                                Icon::new(NativeIcon::Graph)
+                                Icon::new(IconName::Workflow)
                                     .size_4()
                                     .text_color(rgb(appearance::BLUE)),
                             )
@@ -153,21 +116,13 @@ impl Workbench {
                     .when(!cfg!(target_os = "macos"), |view| {
                         view.child(
                             div()
-                                .w(px(120.))
+                                .w(px(350.))
                                 .h_full()
                                 .flex_shrink_0()
                                 .child(self.menu_bar.clone()),
                         )
                     })
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_size(px(12.))
-                            .text_color(cx.theme().muted_foreground)
-                            .truncate()
-                            .child(name),
-                    )
+                    .child(div().flex_1().min_w_0())
                     .child(
                         div()
                             .flex()
@@ -180,22 +135,11 @@ impl Workbench {
                                 cx.stop_propagation();
                             })
                             .child(
-                                Button::new("save-all")
-                                    .small()
-                                    .ghost()
-                                    .icon(NativeIcon::Save)
-                                    .tooltip("保存所有更改 · Ctrl+Shift+S")
-                                    .disabled(self.is_closing(cx) || dirty == 0)
-                                    .on_click(cx.listener(|view, _, window, cx| {
-                                        view.save_all(super::lifecycle::AfterSave::Stay, window, cx)
-                                    })),
-                            )
-                            .child(
                                 Button::new("title-settings")
                                     .small()
                                     .ghost()
                                     .icon(IconName::Settings)
-                                    .tooltip("设置 · Ctrl+,")
+                                    .tooltip(crate::text::t("native.workbench.settingsShortcut"))
                                     .disabled(self.is_closing(cx))
                                     .on_click(cx.listener(|view, _, window, cx| {
                                         view.show_settings(window, cx)
@@ -254,7 +198,7 @@ impl Workbench {
                                                     .size_4()
                                                     .text_color(cx.theme().muted_foreground),
                                             )
-                                            .child("正在处理…")
+                                            .child(crate::text::t("native.assistant.processing"))
                                     }
                                 }),
                         )

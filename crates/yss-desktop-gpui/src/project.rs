@@ -1,6 +1,7 @@
 //! Native project and editor read models; mutation authority stays in Application/Project.
-use std::sync::Arc;
 pub(crate) mod resources;
+
+use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
 use yss_application::{
@@ -16,13 +17,18 @@ use yss_project_identity::ProjectInstanceId;
 
 pub struct DesktopProject {
     pub identity: ProjectInstanceId,
-    pub index: Arc<yss_project::ProjectIndex>,
     pub resources: Arc<resources::ResourceCatalog>,
+    pub index: Arc<yss_project::ProjectIndex>,
     pub panels: Vec<Arc<ActivityPanelDocument>>,
+    pub language: String,
 }
 
 impl DesktopProject {
-    pub fn new(identity: ProjectInstanceId, snapshot: ProjectIndexSnapshot) -> Self {
+    pub fn new(
+        identity: ProjectInstanceId,
+        snapshot: ProjectIndexSnapshot,
+        language: &str,
+    ) -> Self {
         let resources = Arc::new(resources::ResourceCatalog::new(
             identity.clone(),
             &snapshot.index,
@@ -30,6 +36,7 @@ impl DesktopProject {
         Self {
             resources,
             identity,
+            language: language.to_owned(),
             index: Arc::new(snapshot.index),
             panels: snapshot.activity_panels.into_iter().map(Arc::new).collect(),
         }
@@ -53,24 +60,27 @@ pub struct OpenedGraph {
     pub projection: Arc<EditorProjectionModel>,
     pub editing: GraphEditingState,
     pub results: GraphResultState,
+    pub language: String,
 }
 
 impl OpenedGraph {
-    pub fn from_open(receipt: OpenGraphApplicationReceipt) -> Self {
+    pub fn from_open(receipt: OpenGraphApplicationReceipt, language: &str) -> Self {
         Self {
             project: receipt.project_instance_id().clone(),
+            language: language.to_owned(),
             projection: Arc::new(receipt.projection().clone()),
             editing: receipt.editing().clone(),
             results: receipt.result_state().clone(),
         }
     }
 
-    pub fn install_edit(&mut self, response: GraphEditResponse) -> Result<()> {
+    pub fn install_edit(&mut self, response: GraphEditResponse, language: &str) -> Result<()> {
         if response.update.projection_replacement.projection.graph_path
             != self.projection.graph_path
         {
-            return Err(anyhow!("图编辑回执属于另一个资源"));
+            return Err(anyhow!(crate::text::t("native.project.wrongResource")));
         }
+        self.language = language.to_owned();
         self.projection = Arc::new(response.update.projection_replacement.projection);
         self.editing = response.editing;
         self.install_results(response.result_state);

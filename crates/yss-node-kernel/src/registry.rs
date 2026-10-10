@@ -185,7 +185,8 @@ impl KernelRegistryBuilder {
         builder
     }
 
-    /// Bump revision whenever implementation behavior changes, even if its ABI does not.
+    /// Bump revision for leaf implementation changes, even when its ABI is unchanged.
+    /// Shared input preparation has its own implementation revision in the fingerprint.
     pub fn register(
         &mut self,
         id: KernelId,
@@ -253,8 +254,11 @@ impl KernelRegistryBuilder {
                 )
             })
             .collect::<Vec<_>>();
-        let fingerprint = yss_canonical_hash::hash_canonical("yssbi.kernel-registry.v1", &manifest)
-            .expect("kernel manifest contains only strings and integers");
+        let fingerprint = yss_canonical_hash::hash_canonical(
+            "yssbi.kernel-registry.v1",
+            &(crate::builtins::INPUT_PREPARATION_REVISION, manifest),
+        )
+        .expect("kernel manifest contains only strings and integers");
         KernelRegistry {
             kernels: self.kernels,
             fingerprint: KernelFingerprint::from_bytes(fingerprint),

@@ -185,7 +185,7 @@ impl DatabaseEditor {
         self.edit = None;
         self.read_failed = true;
         self.busy = false;
-        self.error = Some("数据已移除或暂不可用，请从项目目录重新打开。".into());
+        self.error = Some(crate::text::t("native.databases.unavailable").into());
         self.changed(cx);
     }
 }

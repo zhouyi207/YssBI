@@ -9,8 +9,8 @@ mod selection;
 pub(crate) use feedback::{IMPORT_FAILED, sample_import_failure};
 
 use crate::{services::NativeServices, workbench::Workbench};
-use gpui::{AppContext, Context, Entity, PromptLevel, WeakEntity, Window};
-use gpui_component::{WindowExt, input::InputState};
+use gpui::{AppContext, Context, Entity, WeakEntity, Window};
+use gpui_component::input::InputState;
 use std::sync::Arc;
 use yss_application::database::samples::SampleDataset;
 use yss_database_contract::{DatabaseEngineSql, DatabaseImportSource};
@@ -46,13 +46,13 @@ enum ImportKind {
 impl ImportKind {
     fn label(self) -> &'static str {
         match self {
-            Self::Csv => "CSV",
+            Self::Csv => crate::text::t("importModal.types.csv.label"),
             Self::Parquet => "Parquet",
-            Self::Excel => "Excel",
-            Self::Sqlite => "SQLite",
-            Self::Postgres => "PostgreSQL",
-            Self::Mysql => "MySQL",
-            Self::Mariadb => "MariaDB",
+            Self::Excel => crate::text::t("importModal.types.xlsx.label"),
+            Self::Sqlite => crate::text::t("importModal.types.sqlite.label"),
+            Self::Postgres => crate::text::t("importModal.types.postgres.label"),
+            Self::Mysql => crate::text::t("importModal.types.mysql.label"),
+            Self::Mariadb => crate::text::t("importModal.types.mariadb.label"),
         }
     }
     fn remote(self) -> bool {
@@ -147,7 +147,10 @@ impl ImportDialog {
             category: 0,
             task: None,
             generation: 0,
-            name: cx.new(|cx| InputState::new(window, cx).placeholder("留空以使用来源名称")),
+            name: cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder(crate::text::t("native.imports.namePlaceholder"))
+            }),
             delimiter: cx.new(|cx| InputState::new(window, cx).default_value(",")),
             infer_rows: cx.new(|cx| InputState::new(window, cx).default_value("1000")),
             has_header: true,
@@ -268,19 +271,30 @@ impl ImportDialog {
             return;
         };
         let dialog = cx.entity().downgrade();
-        let task = match &request {
+        let failure = dialog.clone();
+        let scope = self.scope.clone();
+        let parent = crate::modal_window::owner_window(window, cx);
+        self.task = Some(match &request {
             ImportRequest::Sample { id, .. } => ImportTask::ImportSample(id.clone()),
             ImportRequest::Source { .. } => ImportTask::Import,
-        };
-        let started = owner.update(cx, |view, cx| {
-            view.start_database_import(self.scope.clone(), request, dialog, window, cx)
         });
-        if started {
-            self.task = Some(task);
-            self.error = None;
-        } else {
-            self.error = Some("项目仍在读取或提交，请稍后重试。".into());
-        }
+        self.error = None;
+        cx.defer(move |cx| {
+            let started = parent
+                .update(cx, |_, window, cx| {
+                    owner.update(cx, |view, cx| {
+                        view.start_database_import(scope, request, dialog, window, cx)
+                    })
+                })
+                .unwrap_or(false);
+            if !started {
+                let _ = failure.update(cx, |view, cx| {
+                    view.task = None;
+                    view.error = Some(crate::text::t("native.imports.busy").into());
+                    cx.notify();
+                });
+            }
+        });
         cx.notify();
     }
 
@@ -293,7 +307,7 @@ impl ImportDialog {
         self.task = None;
         match outcome {
             Err(key) => self.error = Some(crate::text::translate(key)),
-            Ok(()) => window.close_dialog(cx),
+            Ok(()) => crate::modal_window::close_child(window, cx),
         }
         cx.notify();
     }
@@ -310,11 +324,14 @@ impl ImportDialog {
             return true;
         }
         self.confirming_close = true;
-        let prompt = window.prompt(
-            PromptLevel::Warning,
-            "关闭导入窗口？",
-            Some("尚未导入的配置与连接输入将被放弃。"),
-            &["关闭", "继续编辑"],
+        let prompt = crate::modal_window::prompt(
+            crate::text::t("native.imports.closeTitle"),
+            Some(crate::text::t("native.imports.closeMessage")),
+            &[
+                crate::text::t("common.close"),
+                crate::text::t("native.imports.keepEditing"),
+            ],
+            window,
             cx,
         );
         cx.spawn_in(window, async move |view, cx| {
@@ -322,7 +339,7 @@ impl ImportDialog {
             let _ = view.update_in(cx, |view, window, cx| {
                 view.confirming_close = false;
                 if matches!(choice, Ok(0)) {
-                    window.close_dialog(cx);
+                    crate::modal_window::close(window, cx);
                 }
                 cx.notify();
             });

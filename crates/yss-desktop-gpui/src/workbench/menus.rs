@@ -1,17 +1,17 @@
 //! Native workbench menus invoke existing resource and DockArea operations.
+mod catalog;
 mod commands;
+mod editing;
+mod help;
+mod layout;
 pub(super) use commands::MenuCommand;
+pub(crate) use commands::bind_keys;
 
 use super::Workbench;
 use crate::canvas::GraphCommand;
-use crate::{
-    canvas::SaveGraph,
-    workbench::{OpenProjectDirectory, OpenRecentProject, SaveAllGraphs, ShowSettings},
-};
-use gpui::{App, Context, Menu, MenuItem, Window};
-use gpui_component::dock::{BasePanelView, DockPlacement, panel_handle};
+use gpui::{App, Context, Menu, Window};
+use gpui_component::dock::{BasePanelView, DockPlacement, PanelId, panel_handle};
 use std::sync::Arc;
-use yss_graph_document::GraphResourceKind;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum WorkbenchPanel {
@@ -29,7 +29,7 @@ pub(super) enum WorkbenchPanel {
 
 impl Workbench {
     pub(super) fn save_current(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.busy || self.closing {
+        if self.is_closing(cx) || self.editor_command_panel(window, cx).is_none() {
             return;
         }
         if let Some(document) = self.details.read(cx).document() {
@@ -97,7 +97,11 @@ impl Workbench {
             WorkbenchPanel::Output => (panel_handle(self.output.clone()), DockPlacement::Bottom),
             WorkbenchPanel::Results => (panel_handle(self.results.clone()), DockPlacement::Bottom),
             WorkbenchPanel::Logs => (panel_handle(self.logs.clone()), DockPlacement::Bottom),
-            WorkbenchPanel::Plugins | WorkbenchPanel::Settings => {
+            WorkbenchPanel::Plugins => (
+                panel_handle(self.plugins_sidebar.clone()),
+                DockPlacement::Left,
+            ),
+            WorkbenchPanel::Settings => {
                 return None;
             }
         })
@@ -140,96 +144,36 @@ impl Workbench {
         let context = MenuContext {
             busy: self.is_closing(cx),
             project: self.project.is_some(),
+            editor: self.active_editor_panel(cx).map(|panel| panel.panel_id(cx)),
+            edits: self.edit_menu_availability(cx),
+            can_split: self.editor_split_target(cx).is_some(),
+            sidebar_open: self.dock.read(cx).is_dock_open(DockPlacement::Left)
+                && (!self.dock.read(cx).is_zoomed()
+                    || super::layout::columns::conversation_zoomed(self.dock.read(cx))),
+            assistant_open: self
+                .dock_panel(WorkbenchPanel::Assistant)
+                .is_some_and(|(panel, _)| self.panel_placement(panel.panel_id(cx), cx).is_some()),
         };
         if self.menu_context == Some(context) {
             return;
         }
         self.menu_context = Some(context);
-        let menus = application_menus(context);
-        cx.set_menus(application_menus(context));
+        let menus = catalog::application_menus(context);
+        cx.set_menus(catalog::application_menus(context));
         gpui_base::GlobalState::global_mut(cx)
             .set_app_menus(menus.into_iter().map(Menu::owned).collect());
         self.menu_bar.update(cx, |bar, cx| bar.reload(cx));
     }
 }
 
-// Only caches menu availability, never the DockArea's placement or selected panels.
+// A disposable menu projection; DockArea remains the authority for live layout state.
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct MenuContext {
     busy: bool,
     project: bool,
-}
-
-fn application_menus(context: MenuContext) -> Vec<Menu> {
-    let disabled = context.busy || !context.project;
-    let resources = Menu::new("新建资源").items([
-        MenuItem::action(
-            "事件图",
-            MenuCommand::NewGraph(GraphResourceKind::EventGraph),
-        )
-        .disabled(disabled),
-        MenuItem::action(
-            "函数图",
-            MenuCommand::NewGraph(GraphResourceKind::FunctionGraph),
-        )
-        .disabled(disabled),
-        MenuItem::separator(),
-        MenuItem::action("Markdown 文档…", MenuCommand::NewDocument).disabled(disabled),
-        MenuItem::action("思维导图…", MenuCommand::NewMind).disabled(disabled),
-        MenuItem::action("图表…", MenuCommand::NewChart).disabled(disabled),
-    ]);
-    let file = Menu::new("文件").items([
-        MenuItem::action("打开最近项目…", OpenRecentProject).disabled(context.busy),
-        MenuItem::action("新建项目…", MenuCommand::NewProject).disabled(context.busy),
-        MenuItem::action("打开项目目录…", OpenProjectDirectory).disabled(context.busy),
-        MenuItem::action("项目另存为…", MenuCommand::SaveProjectAs).disabled(disabled),
-        MenuItem::action("关闭项目", MenuCommand::CloseProject).disabled(disabled),
-        MenuItem::separator(),
-        MenuItem::submenu(resources).disabled(disabled),
-        MenuItem::action("导入数据…", MenuCommand::ImportData).disabled(disabled),
-        MenuItem::separator(),
-        MenuItem::action("保存当前文件", SaveGraph).disabled(disabled),
-        MenuItem::action("保存所有更改", SaveAllGraphs).disabled(context.busy),
-        MenuItem::separator(),
-        MenuItem::action("退出", MenuCommand::Exit).disabled(context.busy),
-    ]);
-    let mut panels = vec![];
-    for (title, panel) in [
-        ("项目", WorkbenchPanel::Project),
-        ("节点目录", WorkbenchPanel::Nodes),
-        ("属性", WorkbenchPanel::Details),
-        ("问题", WorkbenchPanel::Problems),
-        ("输出", WorkbenchPanel::Output),
-        ("运行结果", WorkbenchPanel::Results),
-        ("日志", WorkbenchPanel::Logs),
-        ("插件", WorkbenchPanel::Plugins),
-        ("助手", WorkbenchPanel::Assistant),
-    ] {
-        let requires_project =
-            !matches!(panel, WorkbenchPanel::Plugins | WorkbenchPanel::Assistant);
-        panels.push(
-            MenuItem::action(title, MenuCommand::ShowPanel(panel))
-                .disabled(context.busy || (requires_project && !context.project)),
-        );
-    }
-    panels.push(MenuItem::action("设置…", ShowSettings).disabled(context.busy));
-    panels.push(MenuItem::separator());
-    for (title, placement) in [
-        ("切换左侧栏", DockPlacement::Left),
-        ("切换右侧栏", DockPlacement::Right),
-        ("切换底部面板", DockPlacement::Bottom),
-    ] {
-        panels.push(MenuItem::action(title, MenuCommand::ToggleDock(placement)).disabled(disabled));
-    }
-    let view = Menu::new("视图").items(panels);
-    let mut menus = vec![];
-    if cfg!(target_os = "macos") {
-        menus.push(Menu::new("YssBI").items([
-            MenuItem::action("设置…", ShowSettings).disabled(context.busy),
-            MenuItem::separator(),
-            MenuItem::action("退出 YssBI", MenuCommand::Exit).disabled(context.busy),
-        ]));
-    }
-    menus.extend([file, view]);
-    menus
+    editor: Option<PanelId>,
+    edits: [bool; 6],
+    can_split: bool,
+    sidebar_open: bool,
+    assistant_open: bool,
 }

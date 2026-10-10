@@ -130,6 +130,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     let combined = super::super::series::Column {
         values: w.units.iter().chain(&columns[0].values).cloned().collect(),
         metadata: None,
+        metadata_bytes: 0,
     };
     let (codes, labels) = categories(&combined, false, inv)?;
     if labels.len() != w.units.len()

@@ -72,7 +72,7 @@ impl ChartEditor {
             cx.defer_in(window, |view, window, cx| view.refresh(window, cx));
         }
         if outcome.failed {
-            self.error = Some("图表保存未完成，配置已保留，请检查当前项目后重试。".into());
+            self.error = Some(crate::text::t("native.charts.saveFailed").into());
         }
         cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
         self.changed(cx);

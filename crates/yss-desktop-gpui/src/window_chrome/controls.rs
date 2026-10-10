@@ -3,10 +3,12 @@ use gpui::{
     App, ClickEvent, Decorations, Div, MouseButton, Stateful, Window, WindowControlArea, div,
     prelude::*,
 };
-use gpui_component::{ActiveTheme, Icon, IconName, Sizable, TITLE_BAR_HEIGHT};
+use gpui_component::{ActiveTheme, Icon, Sizable, TITLE_BAR_HEIGHT};
+use gpui_kit_assets::IconName;
 
 pub(super) fn render(
     on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    modal: bool,
     window: &Window,
     cx: &App,
 ) -> Stateful<Div> {
@@ -23,7 +25,7 @@ pub(super) fn render(
     }
     let supported = window.window_controls();
     controls
-        .when(supported.minimize, |controls| {
+        .when(!modal && supported.minimize, |controls| {
             controls.child(control(
                 "window-minimize",
                 IconName::WindowMinimize,
@@ -32,7 +34,7 @@ pub(super) fn render(
                 cx,
             ))
         })
-        .when(supported.maximize, |controls| {
+        .when(!modal && supported.maximize, |controls| {
             controls.child(control(
                 "window-maximize",
                 if window.is_maximized() {

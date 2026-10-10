@@ -69,7 +69,7 @@ impl DatabaseEditor {
         }
         self.ready = false;
         if outcome.failed {
-            self.error = Some("数据保存未完成，请刷新后检查当前数据。".into());
+            self.error = Some(crate::text::t("native.databases.saveFailed").into());
         }
         // Checkpoint/import can replace the Application session; the host must reattach its bindings.
         cx.emit(DatabaseEvent::SessionChanged);
@@ -132,7 +132,8 @@ impl DatabaseEditor {
                         view.ready = false;
                     }
                     None => {
-                        view.error = Some("列设置未提交，请检查类型、映射或资源版本。".into());
+                        view.error =
+                            Some(crate::text::t("native.databases.columnUpdateFailed").into());
                     }
                 }
                 if view.refresh_again {
@@ -206,7 +207,7 @@ impl DatabaseEditor {
             let _ = view.update_in(cx, |view, window, cx| {
                 view.busy = false;
                 if result.is_none() {
-                    view.error = Some("导出未完成，请检查目标路径与当前数据版本。".into());
+                    view.error = Some(crate::text::t("native.databases.exportFailed").into());
                 }
                 if view.refresh_again {
                     view.reload(true, window, cx);

@@ -186,8 +186,14 @@ impl Workbench {
         self.refreshing_index = false;
         for conversation in self.conversations.values() {
             conversation.update(cx, |view, cx| {
-                view.set_resource_catalog(Some(project.resources.clone()), cx);
+                view.set_resource_catalog(Some(project.resources.clone()), cx)
             });
+        }
+        if project.language != crate::text::locale() {
+            // Keep committed resource facts, but do not replace translated panels with an old locale.
+            self.project = Some(project);
+            self.refresh_project(window, cx);
+            return;
         }
         for document in &project.panels {
             if let Some(panel) = self
@@ -210,7 +216,7 @@ impl Workbench {
             if document.panel_id == "nodes" {
                 for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {
                     graph.update(cx, |graph, cx| {
-                        graph.set_catalog(document.clone(), crate::text::locale(), cx)
+                        graph.set_catalog(document.clone(), &project.language, cx)
                     });
                 }
             }
@@ -236,12 +242,14 @@ impl Workbench {
         let identity = project.identity.clone();
         let lifecycle = self.lifecycle;
         let query = identity.clone();
+        let language = crate::text::locale();
         let task = self.services.run(move |services| {
             Ok(DesktopProject::new(
                 query.clone(),
                 services
                     .application
-                    .query_project_index(query, "zh-CN", true)?,
+                    .query_project_index(query, language, true)?,
+                language,
             ))
         });
         cx.spawn_in(window, async move |view, cx| {
@@ -260,6 +268,10 @@ impl Workbench {
                     return;
                 }
                 view.refreshing_index = false;
+                if language != crate::text::locale() {
+                    view.refresh_project(window, cx);
+                    return;
+                }
                 match result {
                     Ok(project) => view.install_project_index(project, window, cx),
                     Err(_error) => {

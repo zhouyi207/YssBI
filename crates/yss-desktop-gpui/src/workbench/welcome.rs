@@ -3,13 +3,14 @@ use super::{
     Workbench,
     chrome::{OpenProjectDirectory, OpenRecentProject},
 };
-use crate::{assets::NativeIcon, projects::form::ProjectFormKind};
+use crate::projects::form::ProjectFormKind;
 use gpui::{App, Context, IntoElement, SharedString, Window, div, prelude::*, px, relative};
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable,
+    ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     kbd::Kbd,
 };
+use gpui_kit_assets::IconName;
 
 impl Workbench {
     pub(super) fn render_welcome(
@@ -42,7 +43,7 @@ impl Workbench {
                             .justify_center()
                             .gap_2()
                             .child(
-                                Icon::new(NativeIcon::Graph)
+                                Icon::new(IconName::Workflow)
                                     .size(px(24.))
                                     .text_color(cx.theme().muted_foreground),
                             )
@@ -68,11 +69,14 @@ impl Workbench {
             .flex()
             .flex_col()
             .flex_shrink_0()
-            .child(section_header("开始", cx))
+            .child(section_header(
+                crate::text::t("native.workbench.getStarted"),
+                cx,
+            ))
             .child(
                 quick_action(
                     "welcome-open",
-                    "打开项目目录…",
+                    crate::text::t("native.workbench.openProjectDirectory"),
                     IconName::FolderOpen,
                     Kbd::binding_for_action(&OpenProjectDirectory, Some("Workbench"), window),
                     cx,
@@ -81,16 +85,22 @@ impl Workbench {
                 .on_click(cx.listener(|view, _, window, cx| view.choose_project(window, cx))),
             )
             .child(
-                quick_action("welcome-new", "新建项目…", IconName::Plus, None, cx)
-                    .disabled(disabled)
-                    .on_click(cx.listener(|view, _, window, cx| {
-                        view.project_form(ProjectFormKind::Create, window, cx)
-                    })),
+                quick_action(
+                    "welcome-new",
+                    crate::text::t("native.workbench.newProject"),
+                    IconName::Plus,
+                    None,
+                    cx,
+                )
+                .disabled(disabled)
+                .on_click(cx.listener(|view, _, window, cx| {
+                    view.project_form(ProjectFormKind::Create, window, cx)
+                })),
             )
             .child(
                 quick_action(
                     "welcome-recent",
-                    "打开最近项目…",
+                    crate::text::t("native.workbench.openRecentProjects"),
                     IconName::Search,
                     Kbd::binding_for_action(&OpenRecentProject, Some("Workbench"), window),
                     cx,
@@ -107,7 +117,10 @@ impl Workbench {
             .flex()
             .flex_col()
             .flex_shrink_0()
-            .child(section_header("最近项目", cx));
+            .child(section_header(
+                crate::text::t("native.workbench.recentProjects"),
+                cx,
+            ));
         if snapshot.loading {
             recent = recent.child(
                 div()
@@ -115,7 +128,7 @@ impl Workbench {
                     .py_3()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("正在读取最近项目…"),
+                    .child(crate::text::t("native.workbench.loadingRecentProjects")),
             );
         } else if let Some(error) = snapshot.error {
             recent = recent
@@ -131,7 +144,7 @@ impl Workbench {
                     Button::new("welcome-retry")
                         .small()
                         .ghost()
-                        .label("重试")
+                        .label(crate::text::t("common.retry"))
                         .on_click(cx.listener(|view, _, _, cx| {
                             view.recent.update(cx, |recent, cx| recent.reload(cx))
                         })),
@@ -143,7 +156,7 @@ impl Workbench {
                     .py_3()
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child("打开过的项目会显示在这里。"),
+                    .child(crate::text::t("native.workbench.recentProjectsEmpty")),
             );
         } else {
             for record in snapshot.records.iter().take(6) {
@@ -160,7 +173,13 @@ impl Workbench {
                     .h(px(30.))
                     .px_2()
                     .disabled(disabled)
-                    .accessibility_label(format!("打开 {} {}", record.name, record.path))
+                    .accessibility_label(crate::text::format(
+                        "native.workbench.openRecentProjectHint",
+                        &[
+                            ("value0", record.name.to_string()),
+                            ("value1", record.path.to_string()),
+                        ],
+                    ))
                     .tooltip(record.path.clone())
                     .child(
                         div()

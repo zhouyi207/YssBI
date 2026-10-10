@@ -1428,7 +1428,16 @@ fn resolution_cache_evicts_old_graphs_without_changing_their_results() {
     let runtime = runtime();
     let (document, node, _) = constant_document();
     let initial = resolve(&runtime, &document, &resources());
-    for index in 0..20 {
+    for index in 0..40 {
+        if index < 20 {
+            // Resolving this graph refreshes its residency while other graphs are evicted.
+            assert_reused(
+                &initial,
+                &resolve(&runtime, &document, &resources()),
+                node,
+                true,
+            );
+        }
         runtime.resolve_graph_document(
             &GraphResourcePath::new(format!("events/Other{index}.yssbi-event")).unwrap(),
             &Arc::new(document.clone()),

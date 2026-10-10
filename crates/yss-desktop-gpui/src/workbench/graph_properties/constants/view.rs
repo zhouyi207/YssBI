@@ -3,11 +3,12 @@ use super::*;
 use crate::workbench::controls;
 use gpui::{AnyElement, IntoElement, div, prelude::*};
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::Input,
 };
+use gpui_kit_assets::IconName;
 
 impl GraphProperties {
     pub(super) fn render_constant(
@@ -66,7 +67,7 @@ impl GraphProperties {
             ))
             .child(
                 Checkbox::new(("constant-null", row))
-                    .label("空值")
+                    .label(crate::text::t("native.workbench.nullValue"))
                     .checked(field.is_null)
                     .disabled(disabled)
                     .on_click(cx.listener(move |view, value: &bool, _, cx| {
@@ -86,7 +87,7 @@ impl GraphProperties {
             if field.data_type == ValueType::Scalar(SemanticType::Binary) {
                 content = content.child(
                     Checkbox::new(("constant-bool", row))
-                        .label("真")
+                        .label(crate::text::t("native.workbench.trueValue"))
                         .checked(input.value(cx) == "true")
                         .disabled(disabled || field.is_null)
                         .on_click(cx.listener(move |view, value: &bool, window, cx| {
@@ -157,7 +158,7 @@ impl GraphProperties {
                     })
                     .child(
                         controls::apply(("apply-constant", row), disabled)
-                            .tooltip("应用常量修改")
+                            .tooltip(crate::text::t("native.workbench.applyConstant"))
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 if view.accepts_input(generation, cx) {
                                     view.apply_constant(id, cx);
@@ -187,7 +188,7 @@ impl GraphProperties {
                             .small()
                             .ghost()
                             .icon(IconName::Plus)
-                            .tooltip("在画布中心插入引用节点")
+                            .tooltip(crate::text::t("native.workbench.insertConstantReference"))
                             .disabled(disabled)
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 if view.accepts_input(generation, cx)
@@ -205,7 +206,7 @@ impl GraphProperties {
                             .small()
                             .ghost()
                             .icon(IconName::Close)
-                            .tooltip("删除常量，引用节点保留")
+                            .tooltip(crate::text::t("native.workbench.deleteConstant"))
                             .disabled(disabled)
                             .on_click(cx.listener(move |view, _, _, cx| {
                                 if view.accepts_input(generation, cx)

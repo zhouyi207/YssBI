@@ -3,8 +3,8 @@ use super::{DatabaseEditor, DatabaseEvent};
 mod fields;
 mod inputs;
 
-use gpui::{AppContext, Context, Entity, WeakEntity, Window, prelude::*};
-use gpui_component::{WindowExt, dialog::DialogButtonProps, input::InputState};
+use gpui::{AppContext, Context, Entity, WeakEntity, Window};
+use gpui_component::input::InputState;
 use inputs::MappingInputs;
 use std::collections::{BTreeMap, HashSet};
 use yss_application::database::DatabaseMutation;
@@ -53,51 +53,55 @@ impl DatabaseEditor {
         let revision = self.revision;
         let name = column.name().as_str().to_owned();
         let numeric = draft.numeric.clone().unwrap_or_default();
-        let editor = cx.new(|cx| SemanticDialog {
-            owner,
-            revision,
-            column: name,
-            draft,
-            inputs: BTreeMap::new(),
-            page: 0,
-            minimum: cx.new(|cx| {
-                InputState::new(window, cx).default_value(numeric.minimum.unwrap_or_default())
-            }),
-            maximum: cx.new(|cx| {
-                InputState::new(window, cx).default_value(numeric.maximum.unwrap_or_default())
-            }),
-            loading: false,
-            values_ready: !matches!(
-                kind,
-                SemanticType::Categorical | SemanticType::Ordinal | SemanticType::Binary
-            ),
-            saving: false,
-            error: None,
-        });
-        if matches!(
-            kind,
-            SemanticType::Categorical | SemanticType::Ordinal | SemanticType::Binary
-        ) {
-            editor.update(cx, |editor, cx| editor.read_values(window, cx));
-        }
-        window.open_dialog(cx, move |dialog, _, _| {
-            let save = editor.clone();
-            let cancel = editor.clone();
-            dialog
-                .title(crate::text::translate("detail.data.confirmSemanticTitle"))
-                .child(editor.clone())
-                .button_props(
-                    DialogButtonProps::default()
-                        .ok_text(crate::text::translate("common.confirm"))
-                        .cancel_text(crate::text::translate("common.cancel"))
-                        .show_cancel(true),
-                )
-                .on_ok(move |_, window, cx| {
-                    save.update(cx, |editor, cx| editor.confirm(window, cx));
-                    false
-                })
-                .on_cancel(move |_, _, cx| !cancel.read(cx).saving)
-        });
+        crate::modal_window::open(
+            crate::text::translate("detail.data.confirmSemanticTitle"),
+            gpui::size(gpui::px(560.), gpui::px(600.)),
+            window,
+            cx,
+            move |window, cx| {
+                let editor = cx.new(|cx| SemanticDialog {
+                    owner,
+                    revision,
+                    column: name,
+                    draft,
+                    inputs: BTreeMap::new(),
+                    page: 0,
+                    minimum: cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .default_value(numeric.minimum.unwrap_or_default())
+                    }),
+                    maximum: cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .default_value(numeric.maximum.unwrap_or_default())
+                    }),
+                    loading: false,
+                    values_ready: !matches!(
+                        kind,
+                        SemanticType::Categorical | SemanticType::Ordinal | SemanticType::Binary
+                    ),
+                    saving: false,
+                    error: None,
+                });
+                if matches!(
+                    kind,
+                    SemanticType::Categorical | SemanticType::Ordinal | SemanticType::Binary
+                ) {
+                    editor.update(cx, |editor, cx| editor.read_values(window, cx));
+                }
+                let save = editor.clone();
+                let cancel = editor.clone();
+                crate::modal_window::ModalContent::new(move |_, _| editor.clone())
+                    .confirm(
+                        crate::text::translate("common.confirm"),
+                        move |_, window, cx| {
+                            save.update(cx, |editor, cx| editor.confirm(window, cx));
+                            false
+                        },
+                    )
+                    .cancel(crate::text::translate("common.cancel"))
+                    .on_cancel(move |_, _, cx| !cancel.read(cx).saving)
+            },
+        );
     }
 }
 impl SemanticDialog {
@@ -217,7 +221,7 @@ impl SemanticDialog {
             .and_then(|column| column.semantic())
             == Some(&self.draft)
         {
-            window.close_dialog(cx);
+            crate::modal_window::close_child(window, cx);
             return;
         }
         let semantic = self.draft.clone();
@@ -268,7 +272,7 @@ impl SemanticDialog {
                         "detail.data.settingsStale"
                     });
                 } else {
-                    window.close_dialog(cx);
+                    crate::modal_window::close_child(window, cx);
                 }
                 cx.notify();
             });

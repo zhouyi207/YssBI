@@ -1,12 +1,13 @@
 //! Compact graph controls live outside the pointer-interaction surface.
 use super::{GraphCanvas, commands::*};
-use crate::{appearance, assets::NativeIcon};
+use crate::appearance;
 use gpui::{Context, IntoElement, Window, div, prelude::*, px, rgb};
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::DropdownMenu,
 };
+use gpui_kit_assets::IconName;
 
 impl GraphCanvas {
     pub(super) fn render_toolbar(
@@ -35,8 +36,8 @@ impl GraphCanvas {
                 Button::new("save-graph")
                     .small()
                     .ghost()
-                    .icon(NativeIcon::Save)
-                    .tooltip("保存 · Ctrl+S")
+                    .icon(IconName::Save)
+                    .tooltip(crate::text::t("native.canvas.saveShortcut"))
                     .disabled(!self.can_edit() || !self.dirty())
                     .on_click(
                         cx.listener(|view, _, _, cx| view.submit(GraphCommand::Save, None, cx)),
@@ -48,7 +49,7 @@ impl GraphCanvas {
                     .small()
                     .ghost()
                     .icon(IconName::Undo2)
-                    .tooltip("撤销 · Ctrl+Z")
+                    .tooltip(crate::text::t("native.canvas.undoShortcut"))
                     .disabled(!self.can_edit() || !self.graph.editing.can_undo)
                     .on_click(
                         cx.listener(|view, _, _, cx| view.submit(GraphCommand::Undo, None, cx)),
@@ -59,7 +60,7 @@ impl GraphCanvas {
                     .small()
                     .ghost()
                     .icon(IconName::Redo2)
-                    .tooltip("重做 · Ctrl+Shift+Z")
+                    .tooltip(crate::text::t("native.canvas.redoShortcut"))
                     .disabled(!self.can_edit() || !self.graph.editing.can_redo)
                     .on_click(
                         cx.listener(|view, _, _, cx| view.submit(GraphCommand::Redo, None, cx)),
@@ -81,8 +82,8 @@ impl GraphCanvas {
                 Button::new("inspect-results")
                     .small()
                     .ghost()
-                    .icon(NativeIcon::Table)
-                    .tooltip("查看结果")
+                    .icon(IconName::Table)
+                    .tooltip(crate::text::t("panel.assistantToolNames.inspect_result"))
                     .disabled(self.graph.results.outputs.is_empty())
                     .on_click(cx.listener(|view, _, _, cx| view.inspect_results(cx))),
             )
@@ -91,7 +92,7 @@ impl GraphCanvas {
                     .small()
                     .ghost()
                     .icon(IconName::Ellipsis)
-                    .tooltip("更多图操作")
+                    .tooltip(crate::text::t("native.canvas.moreActions"))
                     .dropdown_menu(move |menu, _, _| {
                         menu.action_context(focus.clone())
                             .when(event_graph, |menu| {
@@ -107,8 +108,14 @@ impl GraphCanvas {
                                 )
                                 .separator()
                             })
-                            .menu("刷新运行状态", Box::new(RefreshRunState))
-                            .menu("重置视图", Box::new(FrameGraph))
+                            .menu(
+                                crate::text::t("native.canvas.refreshRun"),
+                                Box::new(RefreshRunState),
+                            )
+                            .menu(
+                                crate::text::t("native.canvas.resetView"),
+                                Box::new(FrameGraph),
+                            )
                     }),
             )
             .child(
@@ -134,17 +141,21 @@ impl GraphCanvas {
                     .when(!running, |button| button.primary())
                     .when(running, |button| button.ghost())
                     .icon(if running {
-                        NativeIcon::Stop
+                        IconName::Square
                     } else {
-                        NativeIcon::Play
+                        IconName::Play
                     })
-                    .label(if running { "取消" } else { "运行" })
+                    .label(if running {
+                        crate::text::t("common.cancel")
+                    } else {
+                        crate::text::t("bayes.actions.run")
+                    })
                     .tooltip(if running {
-                        "取消运行 · Shift+F5"
+                        crate::text::t("native.canvas.cancelShortcut")
                     } else if let Some(reason) = run_unavailable {
                         crate::text::t(reason)
                     } else {
-                        "运行当前图 · F5"
+                        crate::text::t("native.canvas.runShortcut")
                     })
                     .disabled(!running && run_unavailable.is_some())
                     .on_click(cx.listener(|view, _, _, cx| {

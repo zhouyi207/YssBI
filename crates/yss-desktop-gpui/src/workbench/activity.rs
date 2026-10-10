@@ -46,6 +46,7 @@ pub enum ActivityEvent {
     DatabaseResource(String, super::resources::ResourceAction),
     ActivateConversation(String),
     RenameConversation(String, String),
+    DeleteConversation(String, String),
     Tool(String),
     RefreshResources,
 }
@@ -142,9 +143,8 @@ impl ActivityPanel {
         let mut panel = Self::pending("assistant", cx);
         panel.conversation_owner = Some(owner);
         let search = cx.new(|cx| {
-            InputState::new(window, cx).placeholder(crate::text::translate(
-                "native.workbench.searchConversations",
-            ))
+            InputState::new(window, cx)
+                .placeholder(crate::text::t("native.workbench.searchConversations"))
         });
         panel.search_subscription = Some(cx.subscribe(&search, |view, _, event, cx| {
             if matches!(event, InputEvent::Change) {
@@ -186,6 +186,9 @@ impl BasePanel for ActivityPanel {
         self.panel_id
     }
     fn closable(&self, _: &App) -> bool {
+        false
+    }
+    fn zoomable(&self, _: &App) -> bool {
         false
     }
 }

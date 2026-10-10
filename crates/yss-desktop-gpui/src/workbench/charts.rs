@@ -68,7 +68,7 @@ impl Workbench {
                         .update(cx, |view, cx| view.focus_chart(window, cx));
                     true
                 } else {
-                    view.error = Some("无法打开图表，请刷新项目后重试。".into());
+                    view.error = Some(crate::text::t("native.workbench.chartOpenFailed").into());
                     false
                 };
                 if let Some(intent) = intent {

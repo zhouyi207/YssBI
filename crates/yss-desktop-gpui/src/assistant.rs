@@ -104,7 +104,7 @@ impl ConversationPanel {
             TextareaState::new(window, cx)
                 .auto_grow(3, 10)
                 .submit_on_enter(true)
-                .placeholder("向 YssBI 提问，或描述要完成的分析…")
+                .placeholder(crate::text::t("native.assistant.prompt"))
         });
         let subscription = cx.subscribe(&input, |_, _, event, cx| {
             if matches!(event, InputEvent::Change) {
@@ -189,8 +189,8 @@ pub(crate) fn principal() -> PrincipalId {
 impl EventEmitter<PanelEvent> for ConversationPanel {}
 impl EventEmitter<ConversationEvent> for ConversationPanel {}
 impl Focusable for ConversationPanel {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus.clone()
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.input.focus_handle(cx)
     }
 }
 impl BasePanel for ConversationPanel {

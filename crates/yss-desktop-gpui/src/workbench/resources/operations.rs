@@ -3,7 +3,6 @@ use super::super::Workbench;
 use super::super::name_form::NameForm;
 use super::ResourceAction;
 use gpui::{ClipboardItem, Context, Entity, Window};
-use gpui_component::{WindowExt, button::ButtonVariant};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
@@ -52,9 +51,7 @@ impl Workbench {
             if graph.is_running()
                 && matches!(action, ResourceAction::Rename | ResourceAction::Delete)
             {
-                self.error = Some(crate::text::translate(
-                    "native.workbench.stopGraphBeforeEditing",
-                ));
+                self.error = Some(crate::text::t("native.workbench.stopGraphBeforeEditing").into());
                 cx.notify();
                 return;
             }
@@ -80,32 +77,30 @@ impl Workbench {
             }
             ResourceAction::Delete => {
                 let owner = cx.entity().downgrade();
-                window.open_alert_dialog(cx, move |alert, _, _| {
-                    let owner = owner.clone();
-                    let target = target.clone();
-                    alert
-                        .title(format!("删除“{}”？", target.name))
-                        .description(
-                            "图文件和未保存的更改将被删除，调用或引用该图的节点需要重新配置。",
-                        )
-                        .confirm()
-                        .ok_text("删除")
-                        .ok_variant(ButtonVariant::Danger)
-                        .cancel_text("取消")
-                        .on_ok(move |_, window, cx| {
-                            let _ = owner.update(cx, |view, cx| {
-                                view.mutate_graph_resource(
-                                    target.clone(),
-                                    action,
-                                    None,
-                                    None,
-                                    window,
-                                    cx,
-                                )
-                            });
-                            true
-                        })
-                });
+                crate::modal_window::confirm(
+                    crate::text::format(
+                        "native.workbench.deleteResourceTitle",
+                        &[("value0", target.name.to_string())],
+                    ),
+                    crate::text::t("native.workbench.deleteGraphMessage"),
+                    crate::text::t("common.delete"),
+                    crate::text::t("common.cancel"),
+                    window,
+                    cx,
+                    move |_, window, cx| {
+                        let _ = owner.update(cx, |view, cx| {
+                            view.mutate_graph_resource(
+                                target.clone(),
+                                action,
+                                None,
+                                None,
+                                window,
+                                cx,
+                            )
+                        });
+                        true
+                    },
+                );
             }
         }
     }
@@ -135,9 +130,7 @@ impl Workbench {
             && graph.read(cx).is_running()
             && matches!(action, ResourceAction::Rename | ResourceAction::Delete)
         {
-            self.error = Some(crate::text::translate(
-                "native.workbench.stopGraphBeforeEditing",
-            ));
+            self.error = Some(crate::text::t("native.workbench.stopGraphBeforeEditing").into());
             cx.notify();
             return;
         }

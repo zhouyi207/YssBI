@@ -33,16 +33,24 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         if self.is_closing(cx) {
-            self.error = Some("文件仍在读取或提交，请稍后再试。".into());
+            self.error = Some(crate::text::t("native.workbench.filesBusy").into());
             if let AfterSave::Project(operation) = &after {
-                operation.fail(self.lifecycle, "文件仍在读取或提交，请稍后再试。", cx);
+                operation.fail(
+                    self.lifecycle,
+                    crate::text::t("native.workbench.filesBusy"),
+                    cx,
+                );
             }
             cx.notify();
             return;
         }
         let Some((targets, requests)) = self.capture_saves(window, cx) else {
             if let AfterSave::Project(operation) = &after {
-                operation.fail(self.lifecycle, "保存未准备完成，输入已保留。", cx);
+                operation.fail(
+                    self.lifecycle,
+                    crate::text::t("native.workbench.saveNotPrepared"),
+                    cx,
+                );
             }
             return;
         };
@@ -86,7 +94,7 @@ impl Workbench {
                     true
                 };
                 if failed {
-                    view.error = Some("部分文件未保存，请逐一检查。".into());
+                    view.error = Some(crate::text::t("native.workbench.partialSave").into());
                 }
                 if let AfterSave::Project(operation) = after {
                     if !failed && !view.has_unsaved(cx) {
@@ -94,7 +102,7 @@ impl Workbench {
                     } else {
                         operation.fail(
                             view.lifecycle,
-                            "保存未完成，项目操作已停止，输入已保留。",
+                            crate::text::t("native.workbench.saveFailed"),
                             cx,
                         );
                     }

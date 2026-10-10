@@ -10,9 +10,10 @@ use gpui::{
     Context, Entity, IntoElement, Render, Subscription, WeakEntity, Window, div, prelude::*,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
 };
+use gpui_kit_assets::IconName;
 use signature::SignatureDraft;
 use std::sync::Arc;
 use yss_project::GraphEditVersion;
@@ -178,7 +179,7 @@ impl Render for GraphProperties {
                             .small()
                             .ghost()
                             .icon(IconName::Redo2)
-                            .tooltip("刷新图属性")
+                            .tooltip(crate::text::t("native.workbench.refreshGraphProperties"))
                             .disabled(self.loading)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 if let Some(graph) = view.graph() {
@@ -199,7 +200,7 @@ impl Render for GraphProperties {
                     div()
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child("正在读取图属性…"),
+                        .child(crate::text::t("native.workbench.loadingGraphProperties")),
                 )
             })
             .children(error.as_ref().map(|error| {

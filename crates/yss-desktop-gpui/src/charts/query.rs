@@ -23,7 +23,7 @@ pub(crate) fn read(
 ) -> anyhow::Result<ChartRead> {
     let catalog = services
         .application
-        .query_project_index(project.clone(), "zh-CN", true)?
+        .query_project_index(project.clone(), crate::text::locale(), true)?
         .index;
     let revision = catalog
         .charts
@@ -141,7 +141,7 @@ impl ChartEditor {
                         view.schedule_preview(window, cx);
                     }
                 } else {
-                    view.error = Some("图表未读取，本地配置已保留，请刷新项目后重试。".into());
+                    view.error = Some(crate::text::t("native.charts.readFailed").into());
                 }
                 if view.refresh_again {
                     view.refresh_again = false;
@@ -185,7 +185,7 @@ impl ChartEditor {
             self.preview_task = None;
             self.preview_loading = false;
             self.preview = None;
-            self.error = Some("图表已移除，本地未保存的配置仍保留。".into());
+            self.error = Some(crate::text::t("native.charts.removed").into());
             self.changed(cx);
             return;
         };

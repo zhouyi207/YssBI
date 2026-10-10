@@ -1,5 +1,6 @@
 //! Centered header navigation projects the root DockArea's current panels.
 use super::{Workbench, activity::ActivityPanel, layout::columns, menus::WorkbenchPanel};
+use crate::plugins::PluginsSidebar;
 use gpui::{AnyElement, App, Context, Empty, IntoElement, WeakEntity, Window, div, prelude::*, px};
 use gpui_component::{
     ActiveTheme, Disableable, Icon, Selectable, Sizable,
@@ -37,7 +38,7 @@ impl Workbench {
 
 pub(super) fn is_navigation(panel: &Arc<dyn BasePanelView>) -> bool {
     let kind = panel.view().entity_type();
-    kind == TypeId::of::<ActivityPanel>()
+    kind == TypeId::of::<ActivityPanel>() || kind == TypeId::of::<PluginsSidebar>()
 }
 
 pub(super) fn render_header(
@@ -97,6 +98,12 @@ pub(super) fn render_header(
             IconName::MessageSquareText,
             crate::text::t("panel.assistant"),
             WorkbenchPanel::Assistant,
+        ),
+        (
+            "sidebar-plugins",
+            IconName::Puzzle,
+            crate::text::t("activityBar.plugins"),
+            WorkbenchPanel::Plugins,
         ),
     ]
     .map(|(id, icon, title, panel)| {

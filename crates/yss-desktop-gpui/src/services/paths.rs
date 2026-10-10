@@ -12,10 +12,14 @@ pub(super) struct NativePaths {
 
 impl NativePaths {
     pub fn resolve() -> Result<Self> {
-        let base = BaseDirs::new().context("无法确定应用目录")?;
+        let base =
+            BaseDirs::new().context(crate::text::t("native.services.dataDirectoryUnavailable"))?;
         let (data, logs) = if let Some(path) = std::env::var_os("YSSBI_APP_DATA_DIR") {
             let data = PathBuf::from(path);
-            anyhow::ensure!(data.is_absolute(), "YSSBI_APP_DATA_DIR 必须为绝对路径");
+            anyhow::ensure!(
+                data.is_absolute(),
+                crate::text::t("native.services.absolutePathRequired")
+            );
             let logs = data.join("logs");
             (data, logs)
         } else {
@@ -29,7 +33,7 @@ impl NativePaths {
         };
         let packaged = std::env::current_exe()?
             .parent()
-            .context("可执行文件无父目录")?
+            .context(crate::text::t("native.services.executableParentMissing"))?
             .join("resources/samples");
         let samples = if packaged.is_dir() {
             packaged

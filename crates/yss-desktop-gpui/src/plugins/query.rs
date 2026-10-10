@@ -1,5 +1,5 @@
 //! Each selected-plugin read checks the original installation identity before and after I/O.
-use super::{PluginKey, PluginsPanel, failure};
+use super::{PluginKey, PluginsEvent, PluginsPanel, failure};
 use gpui::{Context, Window};
 use yss_plugin_runtime::{
     PluginDiagnostic, PluginFailure, PluginManager, PluginStorageUsage, TaskHistoryPage,
@@ -57,7 +57,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some("正在读取插件目录…");
+        self.task = Some(crate::text::t("native.plugins.loadingCatalog"));
         self.error = None;
         let job = self.services.run(|services| Ok(services.plugins.list()));
         cx.spawn_in(window, async move |view, cx| {
@@ -70,7 +70,9 @@ impl PluginsPanel {
                 match result {
                     Some(Ok(entries)) => view.install_entries(entries),
                     Some(Err(error)) => view.error = Some(failure(&error)),
-                    None => view.error = Some("插件目录未读取，请重试。".into()),
+                    None => {
+                        view.error = Some(crate::text::t("native.plugins.catalogFailed").into())
+                    }
                 }
                 if view.reload_again {
                     view.reload_again = false;
@@ -99,6 +101,7 @@ impl PluginsPanel {
         self.error = None;
         self.feedback = None;
         self.read_details(key, None, window, cx);
+        cx.emit(PluginsEvent::OpenDetails);
     }
     pub(super) fn read_details(
         &mut self,
@@ -112,7 +115,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some("正在读取插件详情…");
+        self.task = Some(crate::text::t("native.plugins.loadingDetails"));
         let expected = key.clone();
         let job = self
             .services
@@ -132,7 +135,7 @@ impl PluginsPanel {
                     }
                     None => {
                         view.detail = None;
-                        view.error = Some("插件详情未读取，请重试。".into());
+                        view.error = Some(crate::text::t("native.plugins.detailsFailed").into());
                     }
                 }
                 if view.reload_again {

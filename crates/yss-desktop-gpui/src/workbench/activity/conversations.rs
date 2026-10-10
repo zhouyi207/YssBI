@@ -105,6 +105,8 @@ impl ActivityPanel {
                     .is_none_or(|owner| owner.read(cx).conversation_busy(cx));
                 let rename = owner.clone();
                 let rename_document = expected_menu.clone();
+                let delete = owner.clone();
+                let delete_document = expected_menu.clone();
                 menu.item(
                     PopupMenuItem::new(crate::text::translate("panel.assistantRenameConversation"))
                         .icon(IconName::Pencil)
@@ -114,6 +116,30 @@ impl ActivityPanel {
                                 view.rename_row(&rename_document, index, cx)
                             });
                         }),
+                )
+                .separator()
+                .item(
+                    PopupMenuItem::new(crate::text::translate(
+                        "native.workbench.deleteConversation",
+                    ))
+                    .icon(IconName::Trash)
+                    .disabled(busy)
+                    .on_click(move |_, _, cx| {
+                        let _ = delete.update(cx, |view, cx| {
+                            if view.accepts(&delete_document)
+                                && let ActivityRowContent::Item(ActivityItem::Conversation {
+                                    session_id,
+                                    title,
+                                    ..
+                                }) = &delete_document.rows[index].content
+                            {
+                                cx.emit(ActivityEvent::DeleteConversation(
+                                    session_id.clone(),
+                                    title.clone(),
+                                ));
+                            }
+                        });
+                    }),
                 )
             })
             .into_any_element()

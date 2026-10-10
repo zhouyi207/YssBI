@@ -1,14 +1,24 @@
 use super::{ImportDialog, ImportKind, ImportStage, ImportTask};
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Selectable, Sizable, WindowExt,
+    ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::{Enter, Input},
 };
+use gpui_kit_assets::IconName;
 
 impl Render for ImportDialog {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::text::input_placeholder(&self.name, "native.imports.namePlaceholder", window, cx);
+        crate::text::input_placeholder(&self.connection.user, "importModal.username", window, cx);
+        crate::text::input_placeholder(
+            &self.connection.database,
+            "native.imports.databaseName",
+            window,
+            cx,
+        );
+
         let busy = self.busy();
         let compact = f32::from(window.viewport_size().width) <= 720.;
         let mut content = match &self.stage {
@@ -33,7 +43,7 @@ impl Render for ImportDialog {
                         .small()
                         .ghost()
                         .icon(IconName::ChevronLeft)
-                        .label("返回")
+                        .label(crate::text::t("native.imports.back"))
                         .disabled(busy)
                         .on_click(cx.listener(|view, _, _, cx| view.back(cx))),
                 )
@@ -53,7 +63,7 @@ impl Render for ImportDialog {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("导入后，数据作为独立资源保存在当前项目中。"),
+                    .child(crate::text::t("native.imports.importHint")),
             )
             .child(
                 div()
@@ -77,24 +87,30 @@ impl Render for ImportDialog {
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
                             .child(match self.task.as_ref() {
-                                Some(ImportTask::Picker) => "正在选择文件…".to_owned(),
-                                Some(ImportTask::Discovery) => "正在读取来源…".to_owned(),
-                                Some(ImportTask::Import) => "正在导入数据…".to_owned(),
-                                Some(ImportTask::ImportSample(_)) => {
-                                    crate::text::translate("importModal.samples.importing")
+                                Some(ImportTask::Picker) => {
+                                    crate::text::t("native.imports.choosingFile")
                                 }
-                                None => String::new(),
+                                Some(ImportTask::Discovery) => {
+                                    crate::text::t("native.imports.readingSource")
+                                }
+                                Some(ImportTask::ImportSample(_)) => {
+                                    crate::text::t("importModal.samples.importing")
+                                }
+                                Some(ImportTask::Import) => {
+                                    crate::text::t("dataOperation.importing")
+                                }
+                                None => "",
                             }),
                     )
                     .child(
                         Button::new("import-cancel")
                             .small()
                             .ghost()
-                            .label("取消")
+                            .label(crate::text::t("common.cancel"))
                             .disabled(busy)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 if view.cancel(window, cx) {
-                                    window.close_dialog(cx);
+                                    crate::modal_window::close(window, cx);
                                 }
                             })),
                     ),
@@ -114,9 +130,13 @@ impl ImportDialog {
                 view.w(px(150.)).flex_col().pr_3().border_r_1()
             })
             .border_color(cx.theme().border);
-        for (index, label) in ["本地文件", "数据库连接", "示例数据"]
-            .into_iter()
-            .enumerate()
+        for (index, label) in [
+            crate::text::t("native.imports.localFile"),
+            crate::text::t("native.imports.databaseConnection"),
+            crate::text::t("importModal.categories.samples"),
+        ]
+        .into_iter()
+        .enumerate()
         {
             navigation = navigation.child(
                 Button::new(("import-category", index))
@@ -156,11 +176,11 @@ impl ImportDialog {
         for kind in kinds {
             let kind = *kind;
             let description = match kind {
-                ImportKind::Csv => "文本表格，可设置分隔符、表头和类型推断行数。",
-                ImportKind::Parquet => "导入 Parquet 文件，保留来源的字段类型。",
-                ImportKind::Excel => "读取工作簿并选择需要导入的工作表。",
-                ImportKind::Sqlite => "选择本地 SQLite 文件，再选择数据表。",
-                _ => "填写连接配置或连接字符串，再选择数据表。",
+                ImportKind::Csv => crate::text::t("native.imports.csvDescription"),
+                ImportKind::Parquet => crate::text::t("native.imports.parquetDescription"),
+                ImportKind::Excel => crate::text::t("native.imports.excelDescription"),
+                ImportKind::Sqlite => crate::text::t("native.imports.sqliteDescription"),
+                _ => crate::text::t("native.imports.sqlDescription"),
             };
             view = view.child(
                 div()
@@ -198,7 +218,7 @@ impl ImportDialog {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("项目中的名称"),
+                    .child(crate::text::t("native.imports.projectName")),
             )
             .child(Input::new(&self.name).disabled(self.busy()))
             .into_any_element()
@@ -226,7 +246,7 @@ impl ImportDialog {
                 Button::new("import-change-file")
                     .small()
                     .ghost()
-                    .label("选择其他文件…")
+                    .label(crate::text::t("native.imports.chooseAnotherFile"))
                     .disabled(self.busy())
                     .on_click(
                         cx.listener(move |view, _, window, cx| view.choose_file(kind, window, cx)),
@@ -242,19 +262,27 @@ impl ImportDialog {
                         .child(
                             div()
                                 .flex_1()
-                                .child(div().text_xs().child("分隔符"))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .child(crate::text::t("native.imports.delimiter")),
+                                )
                                 .child(Input::new(&self.delimiter).disabled(self.busy())),
                         )
                         .child(
                             div()
                                 .flex_1()
-                                .child(div().text_xs().child("类型推断行数"))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .child(crate::text::t("native.imports.inferenceRows")),
+                                )
                                 .child(Input::new(&self.infer_rows).disabled(self.busy())),
                         ),
                 )
                 .child(
                     Checkbox::new("csv-header")
-                        .label("首行包含列名")
+                        .label(crate::text::t("native.imports.firstRowHeader"))
                         .checked(self.has_header)
                         .disabled(self.busy())
                         .on_click(cx.listener(|view, checked: &bool, _, cx| {
@@ -266,9 +294,9 @@ impl ImportDialog {
         view.child(
             Button::new("import-file")
                 .label(if matches!(kind, ImportKind::Csv | ImportKind::Parquet) {
-                    "导入"
+                    crate::text::t("native.imports.import")
                 } else {
-                    "读取来源"
+                    crate::text::t("native.imports.readSource")
                 })
                 .disabled(self.busy())
                 .on_click(cx.listener(|view, _, window, cx| view.submit_file(cx, window))),
@@ -283,7 +311,7 @@ impl ImportDialog {
             .child(div().text_sm().child(kind.label()))
             .child(
                 Checkbox::new("sql-raw")
-                    .label("使用连接字符串")
+                    .label(crate::text::t("native.imports.useConnectionString"))
                     .checked(self.connection.raw)
                     .disabled(self.busy())
                     .on_click(cx.listener(|view, checked: &bool, _, cx| {
@@ -299,11 +327,20 @@ impl ImportDialog {
             );
         } else {
             for (label, input) in [
-                ("主机", &self.connection.host),
-                ("端口", &self.connection.port),
-                ("用户名", &self.connection.user),
-                ("密码", &self.connection.password),
-                ("数据库", &self.connection.database),
+                (crate::text::t("importModal.host"), &self.connection.host),
+                (crate::text::t("importModal.port"), &self.connection.port),
+                (
+                    crate::text::t("importModal.username"),
+                    &self.connection.user,
+                ),
+                (
+                    crate::text::t("importModal.password"),
+                    &self.connection.password,
+                ),
+                (
+                    crate::text::t("importModal.database"),
+                    &self.connection.database,
+                ),
             ] {
                 view = view.child(
                     div()
@@ -318,7 +355,7 @@ impl ImportDialog {
         view.child(self.name_field(cx))
             .child(
                 Button::new("sql-connect")
-                    .label("连接并读取数据表")
+                    .label(crate::text::t("native.imports.connectAndRead"))
                     .disabled(self.busy())
                     .on_click(cx.listener(|view, _, window, cx| view.connect(window, cx))),
             )

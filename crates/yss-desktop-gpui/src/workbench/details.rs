@@ -11,12 +11,12 @@ use gpui::{
     Window, div, prelude::*,
 };
 use gpui_component::Icon;
-use gpui_component::IconName;
 use gpui_component::{
     ActiveTheme,
     dock::{BasePanel, Panel, PanelEvent},
     input::InputState,
 };
+use gpui_kit_assets::IconName;
 use std::{collections::BTreeMap, sync::Arc};
 use yss_graph_document::NodeId;
 use yss_graph_editor::projection::{EditorNodeModel, EditorProjectionModel};
@@ -123,7 +123,10 @@ impl DetailsPanel {
             projection: None,
             selected: vec![],
             version: None,
-            label: cx.new(|cx| InputState::new(window, cx).placeholder("节点显示名称")),
+            label: cx.new(|cx| {
+                InputState::new(window, cx)
+                    .placeholder(crate::text::t("native.workbench.nodeDisplayName"))
+            }),
             parameters,
             _parameter_subscription: parameter_subscription,
             ports: vec![],
@@ -345,7 +348,7 @@ impl DetailsPanel {
             .map(|port| {
                 if let Some(mut field) = ports
                     .remove(&port.address)
-                    .filter(|field| field.model == *port)
+                    .filter(|field| field.accepts_projection(port))
                 {
                     field.model = port.clone();
                     field
@@ -402,6 +405,7 @@ impl DetailsPanel {
 
 impl Render for DetailsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::text::input_placeholder(&self.label, "native.workbench.nodeDisplayName", window, cx);
         let panel = div()
             .id("details")
             .track_focus(&self.focus)
@@ -478,7 +482,7 @@ impl Panel for DetailsPanel {
             .items_center()
             .gap_2()
             .child(Icon::new(IconName::Inspector).size_3())
-            .child("属性")
+            .child(crate::text::t("native.workbench.properties"))
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

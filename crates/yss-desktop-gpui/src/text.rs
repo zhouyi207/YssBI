@@ -1,7 +1,9 @@
+//! Desktop localization uses the component library's process locale as its single runtime owner.
 use std::sync::OnceLock;
 use yss_application::activity_panel::ActivityText;
 use yss_graph_editor::projection::EditorDiagnosticModel;
 
+pub const LANGUAGES: [&str; 2] = ["zh-CN", "en-US"];
 pub const DEFAULT_LANGUAGE: &str = "zh-CN";
 
 pub fn locale() -> &'static str {
@@ -12,19 +14,37 @@ pub fn locale() -> &'static str {
     }
 }
 
-pub fn t(key: &str) -> &str {
-    static LOCALE: OnceLock<serde_json::Value> = OnceLock::new();
-    let mut value = LOCALE.get_or_init(|| {
-        serde_json::from_str(include_str!("../assets/zh-CN.json"))
-            .expect("bundled locale is valid JSON")
+pub fn set_locale(language: &str) {
+    gpui_component::set_locale(if language == "en-US" {
+        "en"
+    } else {
+        DEFAULT_LANGUAGE
     });
+}
+
+fn catalog(language: &str) -> &'static serde_json::Value {
+    static ZH: OnceLock<serde_json::Value> = OnceLock::new();
+    static EN: OnceLock<serde_json::Value> = OnceLock::new();
+    let (slot, contents) = if language == "en-US" {
+        (&EN, include_str!("../assets/en-US.json"))
+    } else {
+        (&ZH, include_str!("../assets/zh-CN.json"))
+    };
+    slot.get_or_init(|| serde_json::from_str(contents).expect("bundled locale is valid JSON"))
+}
+
+fn lookup(language: &str, key: &str) -> Option<&'static str> {
+    let mut value = catalog(language);
     for part in key.split('.') {
-        let Some(next) = value.get(part) else {
-            return key;
-        };
-        value = next;
+        value = value.get(part)?;
     }
-    value.as_str().unwrap_or(key)
+    value.as_str()
+}
+
+pub fn t(key: &str) -> &str {
+    lookup(locale(), key)
+        .or_else(|| lookup(DEFAULT_LANGUAGE, key))
+        .unwrap_or(key)
 }
 
 pub fn translate(key: &str) -> String {
@@ -37,8 +57,8 @@ pub fn input_placeholder(
     window: &mut gpui::Window,
     cx: &mut gpui::App,
 ) {
-    let placeholder = translate(key);
-    if input.read(cx).presentation().placeholder().as_ref() != placeholder.as_str() {
+    let placeholder = t(key);
+    if input.read(cx).presentation().placeholder().as_ref() != placeholder {
         let placeholder = placeholder.to_owned();
         input.update(cx, |input, cx| {
             input.set_placeholder(placeholder, window, cx)
@@ -48,8 +68,7 @@ pub fn input_placeholder(
 
 /// Interpolate once: resource names and user input containing {{braces}} remain literal.
 pub fn format(key: &str, arguments: &[(&str, String)]) -> String {
-    let template = translate(key);
-    let mut rest = template.as_str();
+    let mut rest = t(key);
     let mut result = String::with_capacity(rest.len());
     while let Some(open) = rest.find("{{") {
         result.push_str(&rest[..open]);
@@ -86,9 +105,9 @@ pub fn graph_diagnostic(diagnostic: &EditorDiagnosticModel) -> String {
                 byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_.".contains(&byte)
             })
         {
-            format!("图问题（{code}）。")
+            format("native.text.diagnosticCode", &[("code", code.to_owned())])
         } else {
-            "图中存在需要检查的问题。".into()
+            translate("native.text.diagnosticFallback")
         }
     };
     let Some(definition) = yss_graph_diagnostics::GRAPH_DIAGNOSTIC_DEFINITIONS
@@ -110,7 +129,13 @@ pub fn graph_diagnostic(diagnostic: &EditorDiagnosticModel) -> String {
     let Some(template) = definition
         .templates
         .iter()
-        .find(|template| template.locale == "zh-CN")
+        .find(|template| template.locale == locale())
+        .or_else(|| {
+            definition
+                .templates
+                .iter()
+                .find(|template| template.locale == DEFAULT_LANGUAGE)
+        })
     else {
         return fallback();
     };

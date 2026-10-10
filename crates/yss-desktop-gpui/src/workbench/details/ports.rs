@@ -4,17 +4,18 @@ use super::{DetailsPanel, controls};
 use crate::{appearance, canvas::GraphCommand};
 use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::{Input, InputState},
 };
+use gpui_kit_assets::IconName;
 use serde_json::Value;
 use yss_data_contract::SemanticType;
 use yss_graph_document::PortRef;
 use yss_graph_editor::{
     EditorGraphMutation, PortPlacement,
-    projection::{EditorEffectiveInputBinding, EditorPortModel},
+    projection::{EditorEffectiveInputBinding, EditorPortModel, EditorPortTypeState},
 };
 use yss_node_protocol::PortDirection;
 
@@ -27,6 +28,28 @@ pub(super) struct PortField {
 }
 
 impl PortField {
+    pub(super) fn accepts_projection(&self, next: &EditorPortModel) -> bool {
+        if self.model.address != next.address {
+            return false;
+        }
+        let mut current = self.model.clone();
+        current.display = next.display.clone();
+        match (&mut current.type_state, &next.type_state) {
+            (
+                EditorPortTypeState::Exact { display, .. },
+                EditorPortTypeState::Exact { display: next, .. },
+            )
+            | (
+                EditorPortTypeState::Constrained { display, .. },
+                EditorPortTypeState::Constrained { display: next, .. },
+            ) => {
+                *display = next.clone();
+            }
+            _ => {}
+        }
+        current == *next
+    }
+
     pub fn new(
         model: EditorPortModel,
         window: &mut Window,
@@ -141,21 +164,28 @@ impl DetailsPanel {
                             )
                             .child(controls::hint(port.accepted_type.to_string(), cx)),
                     )
-                    .child(controls::hint(if input { "输入" } else { "输出" }, cx)),
+                    .child(controls::hint(
+                        if input {
+                            crate::text::t("detail.nodeDoc.inputs")
+                        } else {
+                            crate::text::t("detail.nodeDoc.outputs")
+                        },
+                        cx,
+                    )),
             );
         if port.orphan {
             content = content.child(
                 div()
                     .text_xs()
                     .text_color(cx.theme().danger)
-                    .child("来源已失效，可移除此端口并重新连接"),
+                    .child(crate::text::t("native.workbench.portSourceExpired")),
             );
         }
         if let Some((kind, state)) = &field.input {
             let disabled = busy || port.connections.current > 0;
             let editor = if *kind == SemanticType::Binary {
                 Checkbox::new(("literal-toggle", index))
-                    .label("真")
+                    .label(crate::text::t("native.workbench.trueValue"))
                     .checked(state.read(cx).value() == "true")
                     .disabled(disabled)
                     .on_click(cx.listener(move |view, value: &bool, window, cx| {
@@ -196,11 +226,15 @@ impl DetailsPanel {
             content = content.child(editor).child(controls::hint(
                 match port.input.as_ref().map(|input| input.effective) {
                     Some(EditorEffectiveInputBinding::Connections) => {
-                        "使用连接值；字面量覆盖保留但暂不生效"
+                        crate::text::t("native.workbench.connectedValueHint")
                     }
-                    Some(EditorEffectiveInputBinding::Literal) => "使用字面量覆盖",
-                    Some(EditorEffectiveInputBinding::ProtocolDefault) => "使用节点默认值",
-                    _ => "未绑定输入，可填写字面量",
+                    Some(EditorEffectiveInputBinding::Literal) => {
+                        crate::text::t("native.workbench.literalOverrideHint")
+                    }
+                    Some(EditorEffectiveInputBinding::ProtocolDefault) => {
+                        crate::text::t("native.workbench.nodeDefaultHint")
+                    }
+                    _ => crate::text::t("native.workbench.unboundInputHint"),
                 },
                 cx,
             ));
@@ -217,7 +251,7 @@ impl DetailsPanel {
                     .small()
                     .ghost()
                     .icon(IconName::Undo2)
-                    .tooltip("清除覆盖，恢复默认值")
+                    .tooltip(crate::text::t("native.workbench.clearOverride"))
                     .disabled(busy || port.orphan)
                     .on_click(cx.listener(move |view, _, _, cx| {
                         if view.accepts_input(epoch, cx) {
@@ -238,7 +272,10 @@ impl DetailsPanel {
                     .small()
                     .ghost()
                     .icon(IconName::Minus)
-                    .label(format!("断开 {} 条连接", port.connections.current))
+                    .label(crate::text::format(
+                        "native.workbench.disconnectCount",
+                        &[("value0", port.connections.current.to_string())],
+                    ))
                     .disabled(busy)
                     .on_click(cx.listener(move |view, _, _, cx| {
                         if view.accepts_input(epoch, cx) {
@@ -258,7 +295,7 @@ impl DetailsPanel {
                     .small()
                     .ghost()
                     .icon(IconName::Close)
-                    .tooltip("移除此端口及相关连接")
+                    .tooltip(crate::text::t("native.workbench.removePort"))
                     .disabled(busy)
                     .on_click(cx.listener(move |view, _, _, cx| {
                         if view.accepts_input(epoch, cx) {
@@ -312,9 +349,9 @@ impl DetailsPanel {
                                 IconName::ChevronDown
                             })
                             .tooltip(if direction < 0 {
-                                "上移端口"
+                                crate::text::t("native.workbench.movePortUp")
                             } else {
-                                "下移端口"
+                                crate::text::t("native.workbench.movePortDown")
                             })
                             .disabled(busy)
                             .on_click(cx.listener(

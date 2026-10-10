@@ -1,4 +1,5 @@
-use std::collections::VecDeque;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::sync::Weak;
 use yss_graph_analysis::{GraphAnalysis, GraphSemanticCache};
 use yss_graph_document::{GraphDocument, GraphResourcePath};
@@ -22,19 +23,21 @@ pub(super) struct GraphResolutionCache {
     pub analysis: Option<CachedGraphAnalysis>,
 }
 
-#[derive(Default)]
 pub(super) struct GraphResolutionCaches {
-    entries: VecDeque<(GraphResourcePath, GraphResolutionCache)>,
+    entries: LruCache<GraphResourcePath, GraphResolutionCache>,
+}
+
+impl Default for GraphResolutionCaches {
+    fn default() -> Self {
+        Self {
+            entries: LruCache::new(NonZeroUsize::new(MAX_CACHED_GRAPHS).unwrap()),
+        }
+    }
 }
 
 impl GraphResolutionCaches {
     pub fn take(&mut self, graph: &GraphResourcePath) -> GraphResolutionCache {
-        self.entries
-            .iter()
-            .position(|(path, _)| path == graph)
-            .and_then(|index| self.entries.remove(index))
-            .map(|(_, cache)| cache)
-            .unwrap_or_default()
+        self.entries.pop(graph).unwrap_or_default()
     }
 
     pub fn put(
@@ -42,17 +45,7 @@ impl GraphResolutionCaches {
         graph: GraphResourcePath,
         cache: GraphResolutionCache,
     ) -> Option<GraphResolutionCache> {
-        let retired = self
-            .entries
-            .iter()
-            .position(|(path, _)| path == &graph)
-            .and_then(|index| self.entries.remove(index))
-            .or_else(|| {
-                (self.entries.len() >= MAX_CACHED_GRAPHS)
-                    .then(|| self.entries.pop_front())
-                    .flatten()
-            });
-        self.entries.push_back((graph, cache));
-        retired.map(|(_, cache)| cache)
+        // Return both replaced and evicted snapshots so the caller drops them off-lock.
+        self.entries.push(graph, cache).map(|(_, cache)| cache)
     }
 }

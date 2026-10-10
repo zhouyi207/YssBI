@@ -4,8 +4,7 @@ use crate::{
     imports::{IMPORT_FAILED, ImportDialog, ImportRequest, ImportScope, sample_import_failure},
     project::DesktopProject,
 };
-use gpui::{AppContext, Context, WeakEntity, Window, prelude::*, px};
-use gpui_component::WindowExt;
+use gpui::{AppContext, Context, WeakEntity, Window, px};
 use yss_project_identity::OperationId;
 
 impl Workbench {
@@ -22,21 +21,23 @@ impl Workbench {
         };
         let services = self.services.clone();
         let owner = cx.entity().downgrade();
-        let editor = cx.new(|cx| ImportDialog::new(services, owner, scope, window, cx));
-        window.open_dialog(cx, move |dialog, _, _| {
-            let cancel = editor.clone();
-            dialog
-                .title("导入数据")
-                .width(px(740.))
-                .close_button(false)
-                .overlay_closable(false)
-                .footer(gpui::div())
-                .child(editor.clone())
-                .on_cancel(move |_, window, cx| {
-                    cancel.update(cx, |view, cx| view.cancel(window, cx))
-                })
-        });
+        crate::modal_window::open(
+            crate::text::t("importModal.title"),
+            gpui::size(px(780.), px(660.)),
+            window,
+            cx,
+            move |window, cx| {
+                let editor = cx.new(|cx| ImportDialog::new(services, owner, scope, window, cx));
+                let cancel = editor.clone();
+                crate::modal_window::ModalContent::new(move |_, _| editor.clone())
+                    .without_buttons()
+                    .on_cancel(move |_, window, cx| {
+                        cancel.update(cx, |view, cx| view.cancel(window, cx))
+                    })
+            },
+        );
     }
+
     pub(crate) fn start_database_import(
         &mut self,
         scope: ImportScope,
@@ -84,11 +85,12 @@ impl Workbench {
                 publisher.publish_resource(receipt.mutation);
                 receipt.data.id
             });
+            let language = crate::text::locale();
             let project = services
                 .application
-                .query_project_index(scope.project.clone(), "zh-CN", true)
+                .query_project_index(scope.project.clone(), language, true)
                 .ok()
-                .map(|snapshot| DesktopProject::new(scope.project, snapshot));
+                .map(|snapshot| DesktopProject::new(scope.project, snapshot, language));
             Ok((imported, project))
         });
         cx.spawn_in(window, async move |view, cx| {

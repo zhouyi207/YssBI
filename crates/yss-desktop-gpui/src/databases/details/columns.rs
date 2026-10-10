@@ -328,11 +328,11 @@ impl DatabaseEditor {
                 ("to", dtype.clone()),
             ],
         );
-        let prompt = window.prompt(
-            gpui::PromptLevel::Warning,
+        let prompt = crate::modal_window::prompt(
             &t("detail.data.confirmPhysicalTitle"),
             Some(&message),
-            &[t("common.confirm").as_str(), t("common.cancel").as_str()],
+            &[&t("common.confirm"), &t("common.cancel")],
+            window,
             cx,
         );
         self.busy = true;

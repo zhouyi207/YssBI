@@ -1,13 +1,13 @@
 //! Menu actions route to existing workbench commands after checking current availability.
-use super::{super::Workbench, WorkbenchPanel};
-use gpui::{Context, Window};
-use gpui_component::dock::DockPlacement;
+use super::{super::Workbench, WorkbenchPanel, editing::EditCommand, help::HelpPage};
+use crate::{canvas::SaveGraph, workbench::ShowSettings};
+use gpui::{App, Context, KeyBinding, Window};
+use gpui_component::{Placement, dock::DockPlacement};
 use yss_graph_document::GraphResourceKind;
 
 #[derive(Clone, PartialEq, gpui::Action)]
 #[action(namespace = native_workbench, no_json)]
 pub(in crate::workbench) enum MenuCommand {
-    NewProject,
     SaveProjectAs,
     CloseProject,
     ImportData,
@@ -16,8 +16,47 @@ pub(in crate::workbench) enum MenuCommand {
     NewMind,
     NewChart,
     ShowPanel(WorkbenchPanel),
-    ToggleDock(DockPlacement),
+    ToggleSidebar,
+    Edit(EditCommand),
+    ResetLayout,
+    SplitEditor(Placement),
+    OpenLogsWindow,
+    Help(HelpPage),
+    About,
     Exit,
+}
+
+pub(crate) fn bind_keys(cx: &mut App) {
+    for modifier in if cfg!(target_os = "macos") {
+        ["ctrl", "cmd"]
+    } else {
+        ["cmd", "ctrl"]
+    } {
+        cx.bind_keys([
+            KeyBinding::new(&format!("{modifier}-s"), SaveGraph, Some("Workbench")),
+            KeyBinding::new(&format!("{modifier}-,"), ShowSettings, Some("Workbench")),
+        ]);
+        for (key, command) in [
+            ("n", MenuCommand::NewGraph(GraphResourceKind::EventGraph)),
+            ("shift-s", MenuCommand::SaveProjectAs),
+            ("z", MenuCommand::Edit(EditCommand::Undo)),
+            ("y", MenuCommand::Edit(EditCommand::Redo)),
+            ("x", MenuCommand::Edit(EditCommand::Cut)),
+            ("c", MenuCommand::Edit(EditCommand::Copy)),
+            ("v", MenuCommand::Edit(EditCommand::Paste)),
+        ] {
+            cx.bind_keys([KeyBinding::new(
+                &format!("{modifier}-{key}"),
+                command,
+                Some("Workbench"),
+            )]);
+        }
+    }
+    cx.bind_keys([KeyBinding::new(
+        "delete",
+        MenuCommand::Edit(EditCommand::Delete),
+        Some("Workbench"),
+    )]);
 }
 
 impl Workbench {
@@ -32,9 +71,6 @@ impl Workbench {
             return;
         }
         match command {
-            MenuCommand::NewProject => {
-                self.project_form(crate::projects::form::ProjectFormKind::Create, window, cx)
-            }
             MenuCommand::SaveProjectAs => {
                 self.project_form(crate::projects::form::ProjectFormKind::SaveAs, window, cx)
             }
@@ -51,12 +87,26 @@ impl Workbench {
                 self.create_file_dialog(super::super::resources::AuthoredKind::Chart, window, cx)
             }
             MenuCommand::ShowPanel(panel) => {
+                let keep_conversation =
+                    super::super::layout::columns::conversation_zoomed(self.dock.read(cx))
+                        && self
+                            .dock_panel(*panel)
+                            .is_some_and(|(panel, _)| super::super::sidebar::is_navigation(&panel));
+                if !keep_conversation {
+                    self.dock
+                        .update(cx, |dock, cx| dock.set_zoomed_out(window, cx));
+                }
                 self.show_panel(*panel, window, cx);
             }
-            MenuCommand::ToggleDock(placement) => {
-                self.dock
-                    .update(cx, |dock, cx| dock.toggle_dock(*placement, window, cx));
+            MenuCommand::ToggleSidebar => {
+                self.toggle_dock_region(DockPlacement::Left, window, cx);
             }
+            MenuCommand::Edit(command) => self.edit_current(*command, window, cx),
+            MenuCommand::ResetLayout => self.reset_workbench_layout(window, cx),
+            MenuCommand::SplitEditor(placement) => self.split_editor(*placement, window, cx),
+            MenuCommand::OpenLogsWindow => self.show_logs_window(window, cx),
+            MenuCommand::Help(page) => cx.open_url(&page.url()),
+            MenuCommand::About => super::help::show_about(window, cx),
             MenuCommand::Exit => self.request_close(window, cx),
         }
     }

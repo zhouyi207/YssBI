@@ -17,7 +17,13 @@ impl ImportDialog {
             files: true,
             directories: false,
             multiple: false,
-            prompt: Some(format!("选择 {} 文件", kind.label()).into()),
+            prompt: Some(
+                crate::text::format(
+                    "native.imports.chooseFile",
+                    &[("value0", kind.label().to_string())],
+                )
+                .into(),
+            ),
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = prompt.await;
@@ -30,7 +36,7 @@ impl ImportDialog {
             let _ = view.update_in(cx, |view, window, cx| {
                 view.task = None;
                 if failed {
-                    view.error = Some("文件选择器未打开，请重试或检查桌面文件选择服务。".into());
+                    view.error = Some(crate::text::t("native.imports.pickerFailed").into());
                 }
                 if let Some(path) = path {
                     if let Some(path) = path.to_str() {
@@ -40,7 +46,7 @@ impl ImportDialog {
                             view.discover_file(window, cx);
                         }
                     } else {
-                        view.error = Some("文件路径无法识别，请使用有效的文字路径。".into());
+                        view.error = Some(crate::text::t("native.imports.invalidFilePath").into());
                     }
                 }
                 cx.notify();
@@ -118,11 +124,8 @@ impl ImportDialog {
                     Some(choices) if !choices.is_empty() => {
                         view.stage = ImportStage::Selection { source, choices };
                     }
-                    Some(_) => view.error = Some("没有发现可导入的表或工作表。请检查来源。".into()),
-                    None => {
-                        view.error =
-                            Some("来源未读取，输入已保留。请检查文件、连接配置或访问权限。".into())
-                    }
+                    Some(_) => view.error = Some(crate::text::t("native.imports.noTables").into()),
+                    None => view.error = Some(crate::text::t("native.imports.readFailed").into()),
                 }
                 cx.notify();
             });

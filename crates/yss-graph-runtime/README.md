@@ -33,6 +33,9 @@ Document Edit 按需为这份候选建立端点关联连接与未引用派生绑
 
 Graph Runtime 为最近使用的图保留一个不含本地化文本的完整 `GraphAnalysis` 缓存，容量由 [semantic_cache.rs](src/semantic_cache.rs) 定义。复用前校验解析文档指纹、registry/kernel 指纹和之前实际读取的资源，包括传递函数正文和 absent lookup。解析缓存的身份与执行身份分开：常量名称、函数参数名称、诊断所用 connection ID 和 orphan metadata 会影响解析快照，不能仅凭 `semanticInputHash` 复用。无关资源变化不使该缓存失效。
 
+缓存容器使用 `lru::LruCache`：解析前取出该图的条目，解析后放回并刷新使用顺序。
+替换或容量淘汰的条目返回调用方，在缓存锁释放后销毁。
+
 `ResourceCatalogSnapshot` 只保存捕获的函数和数据库 Schema 事实；缓存与执行身份使用实际依赖的读取记录，不计算或保存未被消费者使用的全目录指纹。项目会话和资源提交身份仍由 Application 在捕获与交付边界重验。
 
 Runtime 将实际读取记录直接交给 `GraphSemanticSnapshot.dependencies()`，包括资源指纹和 absent lookup。

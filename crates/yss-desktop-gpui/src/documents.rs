@@ -94,6 +94,10 @@ impl DocumentEditor {
         self.busy || self.refreshing
     }
 
+    pub fn is_editing(&self) -> bool {
+        !self.preview_visible
+    }
+
     pub fn focus_editor(&self, window: &mut Window, cx: &mut Context<Self>) {
         let handle = if self.preview_visible {
             self.preview.read(cx).focus_handle().clone()

@@ -48,7 +48,7 @@ impl MindCanvas {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("思维导图"),
+                    .child(crate::text::t("documents.minds")),
             )
             .child(
                 div()
@@ -73,9 +73,12 @@ impl MindCanvas {
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
                         .child(if self.selected.is_empty() {
-                            "选择主题以编辑内容与分支".into()
+                            crate::text::t("native.minds.selectTopicHint").into()
                         } else {
-                            format!("已选择 {} 个主题", self.selected.len())
+                            crate::text::format(
+                                "native.minds.selectedTopics",
+                                &[("value0", self.selected.len().to_string())],
+                            )
                         }),
                 )
                 .into_any_element();
@@ -97,7 +100,7 @@ impl MindCanvas {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("主题内容"),
+                    .child(crate::text::t("native.minds.topicContent")),
             )
             .child(Textarea::new(&input).small().disabled(busy))
             .child(
@@ -106,14 +109,14 @@ impl MindCanvas {
                     .gap_2()
                     .child(self.topic_button(
                         "apply-topic-content",
-                        "应用内容",
+                        crate::text::t("native.minds.applyContent"),
                         TopicAction::Apply,
                         &target,
                         cx,
                     ))
                     .child(self.topic_button(
                         "discard-topic-input",
-                        "恢复内容",
+                        crate::text::t("native.minds.restoreContent"),
                         TopicAction::DiscardInput,
                         &target,
                         cx,
@@ -125,7 +128,7 @@ impl MindCanvas {
                     .gap_2()
                     .child(self.topic_button(
                         "add-child-topic",
-                        "添加子主题",
+                        crate::text::t("documents.addChild"),
                         TopicAction::AddChild,
                         &target,
                         cx,
@@ -133,7 +136,7 @@ impl MindCanvas {
                     .child(
                         self.topic_button(
                             "add-sibling-topic",
-                            "添加同级",
+                            crate::text::t("native.minds.addSibling"),
                             TopicAction::AddSibling,
                             &target,
                             cx,
@@ -149,19 +152,31 @@ impl MindCanvas {
                         .flex()
                         .gap_2()
                         .child(
-                            self.topic_button("topic-up", "上移", TopicAction::Up, &target, cx)
-                                .disabled(busy || self.sibling_edit(false).is_none()),
+                            self.topic_button(
+                                "topic-up",
+                                crate::text::t("conversion.moveUp"),
+                                TopicAction::Up,
+                                &target,
+                                cx,
+                            )
+                            .disabled(busy || self.sibling_edit(false).is_none()),
                         )
                         .child(
-                            self.topic_button("topic-down", "下移", TopicAction::Down, &target, cx)
-                                .disabled(busy || self.sibling_edit(true).is_none()),
+                            self.topic_button(
+                                "topic-down",
+                                crate::text::t("conversion.moveDown"),
+                                TopicAction::Down,
+                                &target,
+                                cx,
+                            )
+                            .disabled(busy || self.sibling_edit(true).is_none()),
                         ),
                 );
         }
         let collapse_label = if self.collapsed.contains(&topic.id) {
-            "展开分支"
+            crate::text::t("documents.expand")
         } else {
-            "折叠分支"
+            crate::text::t("documents.collapse")
         };
         view.child(
             div()
@@ -175,8 +190,14 @@ impl MindCanvas {
                     cx,
                 ))
                 .child(
-                    self.topic_button("delete-topic", "删除分支", TopicAction::Delete, &target, cx)
-                        .disabled(busy || root),
+                    self.topic_button(
+                        "delete-topic",
+                        crate::text::t("documents.deleteBranch"),
+                        TopicAction::Delete,
+                        &target,
+                        cx,
+                    )
+                    .disabled(busy || root),
                 ),
         )
         .when_some(topic.reference.as_ref(), |view, reference| {
@@ -184,7 +205,10 @@ impl MindCanvas {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child(format!("引用：{}", reference_label(reference))),
+                    .child(crate::text::format(
+                        "native.minds.reference",
+                        &[("value0", reference_label(reference))],
+                    )),
             )
         })
         .into_any_element()

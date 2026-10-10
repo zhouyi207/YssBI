@@ -239,9 +239,9 @@ impl MindCanvas {
                                     "−".into()
                                 })
                                 .tooltip(if collapsed {
-                                    "展开分支"
+                                    crate::text::t("documents.expand")
                                 } else {
-                                    "折叠分支"
+                                    crate::text::t("documents.collapse")
                                 })
                                 .on_click(cx.listener(move |view, _, window, cx| {
                                     view.focus_canvas(window, cx);

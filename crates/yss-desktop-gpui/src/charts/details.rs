@@ -15,9 +15,9 @@ use yss_database_schema::DatabaseColumnFact;
 
 pub(super) fn chart_type_label(kind: ChartType) -> &'static str {
     match kind {
-        ChartType::Histogram => "直方图",
-        ChartType::Scatter => "散点图",
-        ChartType::Line => "折线图",
+        ChartType::Histogram => crate::text::t("chartsSidebar.chartTypes.histogram"),
+        ChartType::Scatter => crate::text::t("chartsSidebar.chartTypes.scatter"),
+        ChartType::Line => crate::text::t("chartsSidebar.chartTypes.line"),
     }
 }
 fn numeric(column: &DatabaseColumnFact) -> bool {
@@ -33,7 +33,7 @@ impl ChartEditor {
         let owner = cx.entity().downgrade();
         let datasets = self.catalog.clone();
         let current_name = if self.draft.database_id.is_empty() {
-            "选择数据集".into()
+            crate::text::t("native.charts.chooseDataset").into()
         } else {
             datasets
                 .databases
@@ -45,7 +45,7 @@ impl ChartEditor {
                         .clone()
                         .unwrap_or_else(|| crate::text::translate("native.charts.unnamedDataset"))
                 })
-                .unwrap_or_else(|| crate::text::translate("native.charts.removedDataset"))
+                .unwrap_or_else(|| crate::text::t("native.charts.removedDataset").into())
         };
         let type_owner = owner.clone();
         let mut view = div()
@@ -63,9 +63,13 @@ impl ChartEditor {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("图表配置"),
+                    .child(crate::text::t("native.charts.configuration")),
             )
-            .child(div().text_xs().child("数据集"))
+            .child(
+                div()
+                    .text_xs()
+                    .child(crate::text::t("detail.itemTypes.data")),
+            )
             .child(
                 Button::new("chart-dataset")
                     .small()
@@ -73,16 +77,18 @@ impl ChartEditor {
                     .label(current_name)
                     .disabled(self.busy() || !self.available)
                     .dropdown_menu(move |mut menu, _, _| {
-                        for (id, name) in std::iter::once((String::new(), "不选择数据集".into()))
-                            .chain(datasets.databases.iter().map(|entry| {
-                                (
-                                    entry.id.clone(),
-                                    entry.name.clone().unwrap_or_else(|| {
-                                        crate::text::translate("native.charts.unnamedDataset")
-                                    }),
-                                )
-                            }))
-                        {
+                        for (id, name) in std::iter::once((
+                            String::new(),
+                            crate::text::t("native.charts.noDataset").into(),
+                        ))
+                        .chain(datasets.databases.iter().map(|entry| {
+                            (
+                                entry.id.clone(),
+                                entry.name.clone().unwrap_or_else(|| {
+                                    crate::text::translate("native.charts.unnamedDataset")
+                                }),
+                            )
+                        })) {
                             let owner = owner.clone();
                             menu = menu.item(PopupMenuItem::new(name).on_click(
                                 move |_, window, cx| {
@@ -107,7 +113,11 @@ impl ChartEditor {
                         menu
                     }),
             )
-            .child(div().text_xs().child("图表类型"))
+            .child(
+                div()
+                    .text_xs()
+                    .child(crate::text::t("chartsSidebar.chartType")),
+            )
             .child(
                 Button::new("chart-kind")
                     .small()
@@ -153,11 +163,11 @@ impl ChartEditor {
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(if self.external_change {
-                    "文件已变化，本地配置已保留。保存会写入当前配置。"
+                    crate::text::t("native.charts.externalChange")
                 } else if self.dirty() {
-                    "配置有未保存的更改。Ctrl/Cmd+S 保存。"
+                    crate::text::t("native.charts.unsavedConfiguration")
                 } else {
-                    "已保存"
+                    crate::text::t("native.workbench.saved")
                 }),
         );
         view.into_any_element()
@@ -186,20 +196,23 @@ impl ChartEditor {
                 }) {
                     name.to_owned()
                 } else {
-                    format!("{name}（当前不可用）")
+                    crate::text::format(
+                        "native.charts.unavailableName",
+                        &[("name", name.to_string())],
+                    )
                 }
             })
-            .unwrap_or_else(|| "选择列".into());
+            .unwrap_or_else(|| crate::text::t("panel.assistantToolFacts.columns").into());
         div()
             .flex()
             .flex_col()
             .gap_2()
             .child(div().text_xs().child(if histogram {
-                "分布列"
+                crate::text::t("native.charts.distributionColumn")
             } else if x_axis {
-                "X 轴"
+                crate::text::t("chartsSidebar.encodingX")
             } else {
-                "Y 轴"
+                crate::text::t("native.charts.yAxis")
             }))
             .child(
                 Button::new(if x_axis { "chart-x" } else { "chart-y" })
@@ -216,29 +229,31 @@ impl ChartEditor {
                         for column in std::iter::once(None).chain(columns) {
                             let owner = owner.clone();
                             menu = menu.item(
-                                PopupMenuItem::new(
-                                    column.clone().unwrap_or_else(|| "清除选择".into()),
-                                )
-                                .on_click(move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        view.update_draft(
-                                            epoch,
-                                            publication,
-                                            |document| {
-                                                if x_axis {
-                                                    document.encodings.x = column.clone();
-                                                } else {
-                                                    document.encodings.y = column.clone();
-                                                    if histogram {
-                                                        document.encodings.x = None;
+                                PopupMenuItem::new(column.clone().unwrap_or_else(|| {
+                                    crate::text::t("native.charts.clearSelection").into()
+                                }))
+                                .on_click(
+                                    move |_, window, cx| {
+                                        let _ = owner.update(cx, |view, cx| {
+                                            view.update_draft(
+                                                epoch,
+                                                publication,
+                                                |document| {
+                                                    if x_axis {
+                                                        document.encodings.x = column.clone();
+                                                    } else {
+                                                        document.encodings.y = column.clone();
+                                                        if histogram {
+                                                            document.encodings.x = None;
+                                                        }
                                                     }
-                                                }
-                                            },
-                                            window,
-                                            cx,
-                                        )
-                                    });
-                                }),
+                                                },
+                                                window,
+                                                cx,
+                                            )
+                                        });
+                                    },
+                                ),
                             );
                         }
                         menu

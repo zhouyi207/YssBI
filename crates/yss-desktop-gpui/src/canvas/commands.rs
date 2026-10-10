@@ -242,7 +242,7 @@ impl GraphCanvas {
         self.refresh_pending |= outcome.language != crate::text::locale();
         let mut completed = outcome.error.is_none();
         if let Some(response) = outcome.response {
-            completed &= self.install_response(response, cx);
+            completed &= self.install_response(response, &outcome.language, cx);
         }
         if let Some(error) = outcome.error {
             tracing::error!(
@@ -285,15 +285,21 @@ impl GraphCanvas {
         );
     }
 
-    fn install_response(&mut self, response: GraphEditResponse, cx: &mut Context<Self>) -> bool {
+    fn install_response(
+        &mut self,
+        response: GraphEditResponse,
+        language: &str,
+        cx: &mut Context<Self>,
+    ) -> bool {
         if self.resource_move.is_some() {
             self.refresh_pending = true;
             return false;
         }
-        if let Err(_error) = self.graph.install_edit(response) {
-            self.error = Some("无法更新图状态，请重新打开图。".into());
+        if let Err(_error) = self.graph.install_edit(response, language) {
+            self.error = Some(crate::text::t("native.canvas.updateFailed").into());
             return false;
         }
+        self.refresh_pending |= self.graph.language != crate::text::locale();
         self.refresh_task = None;
         self.refresh_failed = false;
         *self.connection_layer.borrow_mut() =

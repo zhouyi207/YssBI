@@ -2,10 +2,11 @@
 use super::{RecentProjectEvent, RecentProjects, RecentSnapshot};
 use gpui::{App, Context, Entity, IntoElement, Task, Window, div, prelude::*, px};
 use gpui_component::{
-    ActiveTheme, Icon, IconName, IndexPath, Sizable,
+    ActiveTheme, Icon, IndexPath, Sizable,
     button::{Button, ButtonVariants},
     list::{ListDelegate, ListItem, ListState},
 };
+use gpui_kit_assets::IconName;
 
 pub(crate) struct RecentDelegate {
     owner: Entity<RecentProjects>,

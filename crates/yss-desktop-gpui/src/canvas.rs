@@ -163,7 +163,12 @@ impl GraphCanvas {
             execution: Default::default(),
         };
         view.refresh_presentation();
-        cx.defer_in(window, |view, _, cx| view.resync_execution(cx));
+        cx.defer_in(window, |view, _, cx| {
+            view.resync_execution(cx);
+            if view.graph.language != crate::text::locale() {
+                view.refresh(cx);
+            }
+        });
         view
     }
 

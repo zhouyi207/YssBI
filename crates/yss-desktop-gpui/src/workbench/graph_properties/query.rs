@@ -31,7 +31,11 @@ impl GraphProperties {
                 .map(ConstantOverview::from_constant)
                 .collect::<anyhow::Result<Vec<_>>>()?;
             let function = if path.kind() == GraphResourceKind::FunctionGraph {
-                let snapshot = application.query_project_index(project.clone(), "zh-CN", false)?;
+                let snapshot = application.query_project_index(
+                    project.clone(),
+                    crate::text::locale(),
+                    false,
+                )?;
                 let function = snapshot
                     .index
                     .function_graphs
@@ -75,7 +79,10 @@ impl GraphProperties {
                         }
                         view.ready = true;
                     }
-                    Err(_) => view.error = Some("无法读取图属性，请刷新后重试。".into()),
+                    Err(_) => {
+                        view.error =
+                            Some(crate::text::t("native.workbench.graphPropertiesFailed").into())
+                    }
                 }
                 cx.notify();
             });

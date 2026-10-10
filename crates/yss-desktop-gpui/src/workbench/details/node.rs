@@ -61,7 +61,7 @@ impl DetailsPanel {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(crate::text::translate("settings.models.displayName")),
+                            .child(crate::text::t("settings.models.displayName")),
                     )
                     .child(
                         div()
@@ -80,7 +80,7 @@ impl DetailsPanel {
                                     .small()
                                     .ghost()
                                     .icon(IconName::Check)
-                                    .tooltip(crate::text::translate("native.workbench.applyName"))
+                                    .tooltip(crate::text::t("native.workbench.applyName"))
                                     .disabled(disabled)
                                     .on_click(cx.listener(move |view, _, _, cx| {
                                         if !view.accepts_input(epoch, cx) {

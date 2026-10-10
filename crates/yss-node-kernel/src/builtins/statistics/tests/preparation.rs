@@ -1,7 +1,7 @@
 use super::*;
 use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, UInt64Array};
 use arrow_schema::{DataType, Field, Schema};
-use yss_data_contract::{ColumnSemantic, SemanticType};
+use yss_data_contract::{ColumnSemantic, SemanticType, SemanticValue};
 use yss_database_engine::DataFusionRuntime;
 use yss_relational_contract::{RelationControl, RelationFactory};
 
@@ -34,6 +34,122 @@ fn outputs(names: &[&str]) -> [KernelOutputSpec; 2] {
             ),
         },
     ]
+}
+
+fn ordinal_factor(
+    factory: &Arc<dyn RelationFactory>,
+    control: &KernelControl,
+    name: &str,
+    label_bytes: usize,
+    malformed: bool,
+) -> RuntimeValue {
+    let semantic = ColumnSemantic {
+        values: ["0", "1"]
+            .into_iter()
+            .map(|value| SemanticValue {
+                value: value.into(),
+                label: "L".repeat(label_bytes),
+            })
+            .collect(),
+        ..ColumnSemantic::new(SemanticType::Ordinal)
+    };
+    let mut field = yss_database_arrow::with_column_semantic(
+        Field::new(name, DataType::Int64, false),
+        &semantic,
+    )
+    .unwrap();
+    if malformed {
+        field
+            .metadata_mut()
+            .get_mut("yssbi.semantic")
+            .unwrap()
+            .push_str(" invalid");
+    }
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![field])),
+        vec![Arc::new(Int64Array::from(vec![0, 1, 0, 1]))],
+    )
+    .unwrap();
+    let source = factory
+        .clone()
+        .materialize(
+            batch,
+            &RelationControl {
+                cancellation: control.cancellation.clone(),
+                deadline: control.deadline,
+                max_input_bytes: usize::MAX,
+            },
+        )
+        .unwrap();
+    RuntimeValue::Series(source.select_series(name).unwrap())
+}
+
+fn range_with_control(
+    factory: &Arc<dyn RelationFactory>,
+    control: &KernelControl,
+    factors: &[RuntimeValue],
+) -> Result<Vec<RuntimeValue>, KernelError> {
+    let mut inputs = vec![series(&[2., 4., 6., 8.])];
+    inputs.extend_from_slice(factors);
+    let keys = std::iter::once("y")
+        .chain(std::iter::repeat_n("factors", factors.len()))
+        .collect::<Vec<_>>();
+    KernelRegistry::default().execute(
+        &KernelId::new("yssbi.statistics.doe.range_analysis".into()).unwrap(),
+        &KernelInvocation {
+            relations: factory,
+            inputs: &inputs,
+            input_keys: &keys,
+            parameters: [(
+                KernelParameterKey::new("maximize".into()).unwrap(),
+                Cow::Owned(flag(true)),
+            )]
+            .into(),
+            outputs: &outputs(&["factor", "level", "observations", "total", "mean"]),
+            control,
+        },
+    )
+}
+
+#[test]
+fn typed_series_admits_semantic_metadata_before_decoding() {
+    let (factory, mut control) = fixture();
+    let factor = ordinal_factor(&factory, &control, "factor", 128 * 1024, true);
+    control.max_input_bytes = 64 * 1024;
+    let error = range_with_control(&factory, &control, std::slice::from_ref(&factor)).err();
+    assert!(
+        matches!(error, Some(KernelError::BudgetExceeded)),
+        "{error:?}"
+    );
+    control.max_input_bytes = usize::MAX;
+    assert!(matches!(
+        range_with_control(&factory, &control, &[factor]),
+        Err(KernelError::InvalidParameter)
+    ));
+}
+
+#[test]
+fn typed_series_carries_metadata_admission_between_independent_sources() {
+    let (factory, mut control) = fixture();
+    let factors = [
+        ordinal_factor(&factory, &control, "factor_a", 4096, false),
+        ordinal_factor(&factory, &control, "factor_b", 4096, false),
+    ];
+    control.max_input_bytes = 384 * 1024;
+    for factor in &factors {
+        range_with_control(&factory, &control, std::slice::from_ref(factor)).unwrap();
+    }
+    let error = range_with_control(&factory, &control, &factors).err();
+    assert!(
+        matches!(error, Some(KernelError::BudgetExceeded)),
+        "{error:?}"
+    );
+    control.max_input_bytes = usize::MAX;
+    let result = range_with_control(&factory, &control, &factors).unwrap();
+    assert_eq!(
+        field(&result[0], "factor_names").unwrap(),
+        &RuntimeValue::List(vec![string("factor_a"), string("factor_b")].into()),
+    );
 }
 
 #[test]

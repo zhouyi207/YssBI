@@ -2,7 +2,6 @@
 use super::{SettingsPanel, models::provider_name};
 use crate::services::NativeServices;
 use gpui::{Context, Window};
-use gpui_component::{WindowExt, button::ButtonVariant};
 use std::sync::Arc;
 use yss_application::{
     harness::models::{CredentialChange, ModelSettingsError},
@@ -35,26 +34,28 @@ impl SettingsSaveRequest {
 }
 
 impl SettingsPanel {
-    pub(crate) fn reload(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.busy() {
+    pub(crate) fn ensure_loaded(&mut self, cx: &mut Context<Self>) {
+        if self.catalog.is_some() || self.busy() {
             return;
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some("读取模型配置…");
+        self.loading = true;
+        self.error = None;
         self.load_failed = false;
         let service = self.services.application.harness.models.clone();
         let job = self
             .services
             .executor
             .spawn(async move { service.catalog().await });
-        cx.spawn_in(window, async move |view, cx| {
+        // The retained panel owns the read, so closing its window cannot strand loading state.
+        cx.spawn(async move |view, cx| {
             let outcome = job.await.unwrap_or(Err(ModelSettingsError::Unavailable));
-            let _ = view.update_in(cx, |view, _, cx| {
+            let _ = view.update(cx, |view, cx| {
                 if view.generation != generation {
                     return;
                 }
-                view.task = None;
+                view.loading = false;
                 match outcome {
                     Ok(catalog) => {
                         view.install_catalog(catalog);
@@ -95,13 +96,13 @@ impl SettingsPanel {
                 CredentialChange::Keep
             } else {
                 let Ok(secret) = SecretCredential::new(key.to_string()) else {
-                    self.error = Some("API Key 不能为空白。".into());
+                    self.error = Some(crate::text::t("native.settings.emptyApiKey").into());
                     cx.notify();
                     return None;
                 };
                 CredentialChange::Replace(secret)
             };
-        self.task = Some("保存模型配置…");
+        self.task = Some(crate::text::t("native.settings.savingModels"));
         self.error = None;
         self.load_failed = false;
         self.feedback = None;
@@ -135,7 +136,7 @@ impl SettingsPanel {
                 if let Some(saved) = saved {
                     self.edit_provider(Some(saved), None, window, cx);
                 }
-                self.feedback = Some("模型配置已保存。".into());
+                self.feedback = Some(crate::text::t("native.settings.modelsSaved").into());
             }
             Err(error) => self.error = Some(failure(&error)),
         }
@@ -182,13 +183,13 @@ impl SettingsPanel {
                 match SecretCredential::new(key.to_string()) {
                     Ok(key) => Some(key),
                     Err(_) => {
-                        self.error = Some("API Key 不能为空白。".into());
+                        self.error = Some(crate::text::t("native.settings.emptyApiKey").into());
                         cx.notify();
                         return;
                     }
                 }
             };
-        self.task = Some("获取服务端模型…");
+        self.task = Some(crate::text::t("native.settings.discoveringModels"));
         self.error = None;
         self.load_failed = false;
         let epoch = self.epoch;
@@ -248,7 +249,7 @@ impl SettingsPanel {
         if self.busy() {
             return;
         }
-        self.task = Some("设置默认模型…");
+        self.task = Some(crate::text::t("native.settings.settingDefault"));
         self.error = None;
         self.load_failed = false;
         let service = self.services.application.harness.models.clone();
@@ -264,7 +265,8 @@ impl SettingsPanel {
                     Ok(catalog) => {
                         view.services.models_changed();
                         view.install_catalog(catalog);
-                        view.feedback = Some("默认模型已更新。".into());
+                        view.feedback =
+                            Some(crate::text::t("native.settings.defaultUpdated").into());
                     }
                     Err(error) => view.error = Some(failure(&error)),
                 }
@@ -289,24 +291,24 @@ impl SettingsPanel {
         let title = provider_name(&draft.configuration(cx));
         let epoch = self.epoch;
         let owner = cx.entity().downgrade();
-        window.open_alert_dialog(cx, move |alert, _, _| {
-            let owner = owner.clone();
-            let id = id.clone();
-            alert
-                .title("删除供应商？")
-                .description(format!("将删除“{title}”的配置和保存的凭据；历史对话保留。"))
-                .confirm()
-                .ok_text("删除")
-                .ok_variant(ButtonVariant::Danger)
-                .cancel_text("取消")
-                .on_ok(move |_, window, cx| {
-                    owner
-                        .update(cx, |view, cx| {
-                            view.remove_provider(id.clone(), epoch, window, cx)
-                        })
-                        .unwrap_or(true)
-                })
-        });
+        crate::modal_window::confirm(
+            crate::text::t("native.settings.deleteProviderTitle"),
+            crate::text::format(
+                "native.settings.deleteProviderMessage",
+                &[("title", title.to_string())],
+            ),
+            crate::text::t("common.delete"),
+            crate::text::t("common.cancel"),
+            window,
+            cx,
+            move |_, window, cx| {
+                owner
+                    .update(cx, |view, cx| {
+                        view.remove_provider(id.clone(), epoch, window, cx)
+                    })
+                    .unwrap_or(true)
+            },
+        );
     }
 
     fn remove_provider(
@@ -322,7 +324,7 @@ impl SettingsPanel {
         if self.busy() {
             return false;
         }
-        self.task = Some("删除供应商…");
+        self.task = Some(crate::text::t("native.settings.deletingProvider"));
         self.error = None;
         self.load_failed = false;
         let service = self.services.application.harness.models.clone();
@@ -342,7 +344,8 @@ impl SettingsPanel {
                         view.services.models_changed();
                         view.install_catalog(catalog);
                         view.discard(cx);
-                        view.feedback = Some("供应商已删除。".into());
+                        view.feedback =
+                            Some(crate::text::t("native.settings.providerDeleted").into());
                     }
                     Err(error) => view.error = Some(failure(&error)),
                 }
@@ -357,30 +360,30 @@ impl SettingsPanel {
 
 fn failure(error: &ModelSettingsError) -> String {
     match error {
-        ModelSettingsError::Invalid => "配置无效，请检查连接地址、协议和模型参数。",
-        ModelSettingsError::Unavailable => "模型配置暂不可用，请检查应用数据目录。",
-        ModelSettingsError::Credentials => "系统凭据库不可用，请检查系统密钥环后重试。",
-        ModelSettingsError::ModelUnavailable => "模型或保存的连接已变化，请重新选择并检查凭据。",
+        ModelSettingsError::Invalid => crate::text::t("native.settings.invalidConfiguration"),
+        ModelSettingsError::Unavailable => crate::text::t("native.settings.settingsUnavailable"),
+        ModelSettingsError::Credentials => crate::text::t("native.settings.credentialsUnavailable"),
+        ModelSettingsError::ModelUnavailable => crate::text::t("native.settings.modelChanged"),
         ModelSettingsError::Provider(code) => match code {
             yss_harness_contract::AgentDriverFailureCode::ProviderAuthenticationFailed => {
-                "服务端拒绝认证，请检查 API Key 和认证方式。"
+                crate::text::t("native.settings.authenticationFailed")
             }
             yss_harness_contract::AgentDriverFailureCode::ProviderRateLimited => {
-                "服务端请求达到限额，请稍后再试。"
+                crate::text::t("native.settings.rateLimited")
             }
             yss_harness_contract::AgentDriverFailureCode::ProviderPaymentRequired => {
-                "服务端账户额度不足，请检查账户余额。"
+                crate::text::t("native.settings.paymentRequired")
             }
             yss_harness_contract::AgentDriverFailureCode::ProviderRequestRejected => {
-                "服务端拒绝请求，请检查协议和 API 根地址。"
+                crate::text::t("native.settings.requestRejected")
             }
             yss_harness_contract::AgentDriverFailureCode::ProviderTransportFailed => {
-                "未能连接服务端，请检查网络和连接地址。"
+                crate::text::t("native.settings.connectionFailed")
             }
             yss_harness_contract::AgentDriverFailureCode::DeadlineElapsed => {
-                "服务端请求超时，请稍后再试。"
+                crate::text::t("native.settings.timedOut")
             }
-            _ => "服务端请求未完成，请检查连接和服务端状态。",
+            _ => crate::text::t("native.settings.serviceFailed"),
         },
     }
     .to_owned()

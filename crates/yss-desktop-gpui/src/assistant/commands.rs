@@ -85,7 +85,7 @@ impl ConversationPanel {
         cx.spawn_in(window, async move |view, cx| {
             let (result, accepted) = job.await.unwrap_or_else(|_| {
                 (
-                    Err("提交结果未确认，请刷新会话并检查历史；原文已保留。".into()),
+                    Err(crate::text::t("native.assistant.submitUnconfirmed").into()),
                     false,
                 )
             });
@@ -151,9 +151,9 @@ impl ConversationPanel {
                 .map_err(session_failure)
         });
         cx.spawn_in(window, async move |view, cx| {
-            let result = job
-                .await
-                .unwrap_or_else(|_| Err("模型选择未确认，请刷新会话。".into()));
+            let result = job.await.unwrap_or_else(|_| {
+                Err(crate::text::t("native.assistant.modelUnconfirmed").into())
+            });
             let _ = view.update_in(cx, |view, _, cx| {
                 if view.selection_generation != generation {
                     return;
@@ -176,19 +176,23 @@ impl ConversationPanel {
 pub(super) fn session_failure(error: HarnessSessionError) -> String {
     match error {
         HarnessSessionError::Host(error) => harness_failure(error),
-        _ => "项目会话已变化，请重新打开对话。".into(),
+        _ => crate::text::t("native.assistant.sessionChanged").into(),
     }
 }
 pub(super) fn harness_failure(error: HarnessError) -> String {
     let code = match error {
         HarnessError::Agent(code) => code.to_string(),
-        HarnessError::ConcurrentTurn => return "此对话已有任务运行，请等待完成或请求停止。".into(),
-        HarnessError::InvalidMessage => return "消息或资源引用无效，请检查后重新发送。".into(),
+        HarnessError::ConcurrentTurn => {
+            return crate::text::t("native.assistant.alreadyRunning").into();
+        }
+        HarnessError::InvalidMessage => {
+            return crate::text::t("native.assistant.invalidMessage").into();
+        }
         HarnessError::SessionNotActive | HarnessError::SessionNotFound => {
-            return "对话已失效，请重新打开。".into();
+            return crate::text::t("native.assistant.conversationExpired").into();
         }
         HarnessError::Cancelled => "cancelled".into(),
-        _ => return "会话操作未完成，请刷新并检查已保存的历史。".into(),
+        _ => return crate::text::t("native.assistant.operationFailed").into(),
     };
     failure_text(&code)
 }

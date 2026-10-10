@@ -1,6 +1,6 @@
 //! Mutations capture the selected installation; completion rereads manager-owned facts.
 use super::{PluginKey, PluginsPanel, failure};
-use gpui::{Context, PromptLevel, Window};
+use gpui::{Context, Window};
 #[derive(Clone, Copy)]
 pub(super) enum PluginAction {
     Enable(bool),
@@ -13,20 +13,20 @@ impl PluginAction {
     fn confirmation(self) -> Option<(&'static str, &'static str)> {
         match self {
             Self::Uninstall => Some((
-                "卸载插件？",
-                "插件包登记将移除；私有数据、签名信任记录和项目结果会保留。",
+                crate::text::t("native.plugins.uninstallTitle"),
+                crate::text::t("native.plugins.uninstallMessage"),
             )),
             Self::ClearCache => Some((
-                "清理插件缓存？",
-                "停止空闲插件并清理其声明的缓存目录；项目结果和缓存外设置会保留。",
+                crate::text::t("native.plugins.clearCacheTitle"),
+                crate::text::t("native.plugins.clearCacheMessage"),
             )),
             Self::ClearHistory => Some((
-                "清理历史结果缓存？",
-                "历史中的结果缓存将清除；任务状态与项目结果会保留。",
+                crate::text::t("native.plugins.clearResultsTitle"),
+                crate::text::t("native.plugins.clearResultsMessage"),
             )),
             Self::CollectPackages => Some((
-                "回收未使用插件包？",
-                "移除未被已安装插件或有效回执引用的包；项目资源和已安装插件会保留。",
+                crate::text::t("native.plugins.collectPackagesTitle"),
+                crate::text::t("native.plugins.collectPackagesMessage"),
             )),
             Self::Enable(_) => None,
         }
@@ -45,11 +45,14 @@ impl PluginsPanel {
         }
         if let Some((title, message)) = action.confirmation() {
             let generation = self.generation;
-            let prompt = window.prompt(
-                PromptLevel::Warning,
+            let prompt = crate::modal_window::prompt(
                 title,
                 Some(message),
-                &["确认", "取消"],
+                &[
+                    crate::text::t("native.plugins.confirm"),
+                    crate::text::t("common.cancel"),
+                ],
+                window,
                 cx,
             );
             cx.spawn_in(window, async move |view, cx| {
@@ -78,7 +81,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some("正在更新插件…");
+        self.task = Some(crate::text::t("native.plugins.updating"));
         self.error = None;
         self.feedback = None;
         let job = self.services.run(move |services| {
@@ -88,9 +91,12 @@ impl PluginsPanel {
                     key.validate(manager)?;
                 }
                 if matches!(action, PluginAction::CollectPackages) {
-                    return manager
-                        .collect_garbage()
-                        .map(|count| format!("已回收 {count} 个未使用插件包。"));
+                    return manager.collect_garbage().map(|count| {
+                        crate::text::format(
+                            "native.plugins.packagesCollected",
+                            &[("count", count.to_string())],
+                        )
+                    });
                 }
                 let key = key.ok_or_else(|| {
                     yss_plugin_runtime::PluginFailure::new("plugin_stale_context")
@@ -99,22 +105,22 @@ impl PluginsPanel {
                     PluginAction::Enable(enabled) => {
                         manager.set_enabled(&key.id, enabled).map(|_| {
                             if enabled {
-                                "插件已启用。"
+                                crate::text::t("native.plugins.enabledFeedback")
                             } else {
-                                "插件已停用。"
+                                crate::text::t("native.plugins.disabledFeedback")
                             }
                             .into()
                         })
                     }
                     PluginAction::Uninstall => manager
                         .uninstall(&key.id)
-                        .map(|_| "插件已卸载，私有数据与项目结果保留。".into()),
+                        .map(|_| crate::text::t("native.plugins.uninstalled").into()),
                     PluginAction::ClearCache => manager
                         .clear_private_cache(&key.id)
-                        .map(|_| "插件缓存已清理。".into()),
+                        .map(|_| crate::text::t("native.plugins.cacheCleared").into()),
                     PluginAction::ClearHistory => manager
                         .clear_task_history(&key.id)
-                        .map(|_| "历史结果缓存已清理。".into()),
+                        .map(|_| crate::text::t("native.plugins.resultsCleared").into()),
                     PluginAction::CollectPackages => unreachable!(),
                 }
             })();
@@ -137,7 +143,7 @@ impl PluginsPanel {
                         Err(error) => view.error = Some(failure(&error)),
                     }
                 } else {
-                    view.error = Some("插件任务未完成，请刷新并检查实际状态。".into());
+                    view.error = Some(crate::text::t("native.plugins.taskFailed").into());
                 }
                 view.cursor_stack = vec![None];
                 if view.reload_again {

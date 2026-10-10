@@ -44,11 +44,11 @@ impl Render for DocumentEditor {
                         .small()
                         .ghost()
                         .label(if self.preview_visible {
-                            "编辑"
+                            crate::text::t("detail.constantValue.edit")
                         } else {
-                            "预览"
+                            crate::text::t("documents.preview")
                         })
-                        .tooltip("编辑 / 预览 · Ctrl+Shift+V")
+                        .tooltip(crate::text::t("native.documents.togglePreview"))
                         .on_click(
                             cx.listener(|view, _, window, cx| view.toggle_preview(window, cx)),
                         ),

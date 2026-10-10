@@ -1,6 +1,7 @@
 //! A drag is a graph-scoped intent; its preview has no document or mutation authority.
 use gpui::{Context, IntoElement, Render, Window, div, prelude::*};
-use gpui_component::{ActiveTheme, Icon, IconName};
+use gpui_component::{ActiveTheme, Icon};
+use gpui_kit_assets::IconName;
 use yss_graph_document::{ConstantId, GraphResourcePath};
 use yss_project::GraphEditVersion;
 use yss_project_identity::ProjectInstanceId;

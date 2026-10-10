@@ -70,7 +70,7 @@ impl Workbench {
                         .update(cx, |mind, cx| mind.focus_canvas(window, cx));
                     true
                 } else {
-                    view.error = Some("无法打开 思维导图，请检查当前项目资源。".into());
+                    view.error = Some(crate::text::t("native.workbench.mindOpenFailed").into());
                     false
                 };
                 if let Some(intent) = intent {

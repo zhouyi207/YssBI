@@ -172,7 +172,12 @@ impl GraphProperties {
         };
         let names = self.names();
         let name = (1..)
-            .map(|number| format!("常量{number}"))
+            .map(|number| {
+                crate::text::format(
+                    "native.workbench.constantName",
+                    &[("number", number.to_string())],
+                )
+            })
             .find(|name| names.clone().all(|(_, existing)| existing != name))
             .expect("finite constants list");
         let id = ConstantId::new();
@@ -276,7 +281,10 @@ impl GraphProperties {
                         field.original_input = Some(source.clone());
                         field.input = Some(input_state(source, &field.data_type, window, cx));
                     }
-                    Err(_) => view.error = Some("无法读取常量值，请刷新后重试。".into()),
+                    Err(_) => {
+                        view.error =
+                            Some(crate::text::t("native.workbench.constantReadFailed").into())
+                    }
                 }
                 cx.notify();
             });

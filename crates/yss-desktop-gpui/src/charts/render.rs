@@ -3,7 +3,6 @@ use super::{
     details::chart_type_label,
     query::{PreviewData, PreviewFailure},
 };
-use crate::assets::NativeIcon;
 use crate::{
     appearance,
     plots::{cartesian::CartesianPlot, histogram},
@@ -37,7 +36,7 @@ impl Render for ChartEditor {
                     .p_3()
                     .border_b_1()
                     .border_color(cx.theme().border)
-                    .child(Icon::new(NativeIcon::Chart).size_4())
+                    .child(Icon::new(IconName::ChartLine).size_4())
                     .child(
                         div()
                             .flex_1()
@@ -49,7 +48,7 @@ impl Render for ChartEditor {
                         Button::new("chart-refresh")
                             .small()
                             .ghost()
-                            .label("刷新")
+                            .label(crate::text::t("common.refresh"))
                             .disabled(self.busy())
                             .on_click(cx.listener(|view, _, window, cx| view.refresh(window, cx))),
                     )
@@ -57,7 +56,7 @@ impl Render for ChartEditor {
                         Button::new("chart-save")
                             .small()
                             .primary()
-                            .label("保存")
+                            .label(crate::text::t("common.save"))
                             .disabled(self.busy() || !self.available || !self.dirty())
                             .on_click(cx.listener(|view, _, window, cx| view.save(window, cx))),
                     ),
@@ -131,25 +130,25 @@ impl ChartEditor {
     fn render_preview(&self, cx: &mut Context<Self>) -> AnyElement {
         if self.preview_loading || self.reading {
             return appearance::empty_state(
-                NativeIcon::Chart,
-                "正在读取图表",
-                "数据准备在后台执行",
+                IconName::ChartLine,
+                crate::text::t("native.charts.loading"),
+                crate::text::t("native.charts.preparingData"),
                 cx,
             )
             .into_any_element();
         }
         let Some(preview) = &self.preview else {
             return appearance::empty_state(
-                NativeIcon::Chart,
-                "预览暂不可用",
-                "检查属性设置后刷新图表",
+                IconName::ChartLine,
+                crate::text::t("native.charts.previewUnavailable"),
+                crate::text::t("native.charts.refreshHint"),
                 cx,
             )
             .into_any_element();
         };
         match preview.as_ref() {
             PreviewData::Empty(message) => appearance::empty_state(
-                NativeIcon::Chart,
+                IconName::ChartLine,
                 crate::text::translate("chart.previewEmpty"),
                 crate::text::translate(message),
                 cx,
@@ -163,9 +162,9 @@ impl ChartEditor {
             } => {
                 if bins.is_empty() {
                     return appearance::empty_state(
-                        NativeIcon::Chart,
-                        "暂无分布数据",
-                        "选择有有效值的列后重试",
+                        IconName::ChartLine,
+                        crate::text::t("native.charts.noDistribution"),
+                        crate::text::t("native.charts.chooseValidColumn"),
                         cx,
                     )
                     .into_any_element();
@@ -179,7 +178,10 @@ impl ChartEditor {
                         div()
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
-                            .child(format!("{column} · 频数")),
+                            .child(crate::text::format(
+                                "native.charts.frequency",
+                                &[("column", column.to_string())],
+                            )),
                     )
                     .child(div().flex_1().min_h_0().child(histogram::render(
                         format!("chart-bars-{}", cx.entity_id()),
@@ -191,7 +193,10 @@ impl ChartEditor {
                             div()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
-                                .child(format!("另有 {other_count} 个值归入其他类别")),
+                                .child(crate::text::format(
+                                    "native.charts.otherValues",
+                                    &[("other_count", other_count.to_string())],
+                                )),
                         )
                     })
                     .into_any_element()
@@ -206,11 +211,19 @@ impl ChartEditor {
                         .py_2()
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child(format!(
-                            "X：{} · Y：{} · {} 个绘图点",
-                            data.result.x_label.as_deref().unwrap_or("X"),
-                            data.result.y_label.as_deref().unwrap_or("Y"),
-                            data.result.data.len()
+                        .child(crate::text::format(
+                            "native.charts.plotSummary",
+                            &[
+                                (
+                                    "value0",
+                                    data.result.x_label.as_deref().unwrap_or("X").to_string(),
+                                ),
+                                (
+                                    "value1",
+                                    data.result.y_label.as_deref().unwrap_or("Y").to_string(),
+                                ),
+                                ("value2", data.result.data.len().to_string()),
+                            ],
                         )),
                 )
                 .child(div().flex_1().min_h_0().child(CartesianPlot {

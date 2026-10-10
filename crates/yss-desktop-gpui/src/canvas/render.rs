@@ -3,7 +3,8 @@ use gpui::{
     prelude::*, px, rgb,
 };
 use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{Disableable, IconName, Sizable};
+use gpui_component::{Disableable, Sizable};
+use gpui_kit_assets::IconName;
 
 use super::{Gesture, GraphCanvas, commands::*, geometry};
 use crate::appearance;
@@ -233,7 +234,7 @@ impl Render for GraphCanvas {
                         .small()
                         .ghost()
                         .icon(IconName::Frame)
-                        .tooltip("重置视图 · Home")
+                        .tooltip(crate::text::t("native.canvas.resetViewShortcut"))
                         .on_click(cx.listener(|view, _, window, cx| {
                             view.reveal_graph(window, cx);
                         })),

@@ -1,12 +1,17 @@
 //! Native settings keep read projections and unsubmitted forms over Application services.
+mod appearance;
 pub(crate) mod commands;
 mod fields;
 mod knowledge;
 mod models;
+mod navigation;
 mod render;
 
 use crate::services::NativeServices;
-use gpui::{App, Context, FocusHandle, Focusable, Subscription, actions};
+use gpui::{
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Subscription, Window, actions,
+};
+use gpui_component::input::{InputEvent, InputState};
 use std::sync::Arc;
 use yss_harness_contract::LanguageModelCatalog;
 
@@ -18,6 +23,7 @@ enum Page {
     Providers,
     Provider,
     Knowledge,
+    Appearance,
 }
 
 pub(crate) enum SettingsEvent {
@@ -33,44 +39,80 @@ pub(crate) struct SettingsPanel {
     services: Arc<NativeServices>,
     focus: FocusHandle,
     catalog: Option<Arc<LanguageModelCatalog>>,
+    knowledge: knowledge::KnowledgeSettings,
     page: Page,
     render_width: f32,
-    knowledge: knowledge::KnowledgeSettings,
     editor: Option<models::ProviderDraft>,
     model: Option<models::ModelDraft>,
     provider_subscriptions: Vec<Subscription>,
     model_subscriptions: Vec<Subscription>,
     epoch: u64,
     generation: u64,
+    loading: bool,
     task: Option<&'static str>,
     error: Option<String>,
+    preference_error: Option<&'static str>,
     load_failed: bool,
     feedback: Option<String>,
+    search: Entity<InputState>,
+    _search_subscription: Subscription,
 }
 
 impl SettingsPanel {
-    pub(crate) fn new(services: Arc<NativeServices>, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(
+        services: Arc<NativeServices>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let search = cx.new(|cx| InputState::new(window, cx));
+        let search_subscription = cx.subscribe_in(&search, window, |view, _, event, window, cx| {
+            if matches!(event, InputEvent::Change) {
+                let categories = view.visible_categories(cx);
+                let current_visible = categories
+                    .iter()
+                    .any(|(page, _, _)| page.category() == view.page.category());
+                if !current_visible
+                    && !view.dirty()
+                    && !view.busy()
+                    && let Some((page, _, _)) = categories.first()
+                {
+                    view.navigate(*page, window, cx);
+                }
+                cx.notify();
+            }
+        });
+        let preference_error = services
+            .preference_load_failed
+            .then_some("native.settings.preferencesReadFailed");
         Self {
             services,
             focus: cx.focus_handle(),
             catalog: None,
+            knowledge: knowledge::KnowledgeSettings::default(),
             page: Page::Overview,
             render_width: 1000.,
-            knowledge: knowledge::KnowledgeSettings::default(),
             editor: None,
             model: None,
             provider_subscriptions: vec![],
             model_subscriptions: vec![],
             epoch: 0,
             generation: 0,
+            loading: false,
             task: None,
             error: None,
+            preference_error,
             load_failed: false,
             feedback: None,
+            search,
+            _search_subscription: search_subscription,
         }
     }
 
     pub(crate) fn busy(&self) -> bool {
+        self.loading || self.has_pending_operation()
+    }
+
+    pub(crate) fn has_pending_operation(&self) -> bool {
         self.task.is_some() || self.knowledge.pending
     }
 

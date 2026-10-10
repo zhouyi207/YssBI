@@ -49,7 +49,7 @@ impl DatabaseEditor {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("数据"),
+                    .child(crate::text::t("log.domains.data")),
             );
         if let Some(error) = &self.error {
             view = view
@@ -70,7 +70,11 @@ impl DatabaseEditor {
         }
         let Some(meta) = self.meta.clone() else {
             return view
-                .child(div().text_xs().child("正在读取元数据…"))
+                .child(
+                    div()
+                        .text_xs()
+                        .child(crate::text::t("native.databases.loadingMetadata")),
+                )
                 .into_any_element();
         };
         view = view.child(
@@ -122,7 +126,7 @@ impl DatabaseEditor {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child("列设置已写入项目。保存会建立检查点，关闭不会还原已应用的设置。"),
+                    .child(crate::text::t("native.databases.checkpointHint")),
             );
         }
         let table = self.grid.read(cx);

@@ -6,8 +6,8 @@ use gpui::{App, AppContext, Axis, Context, Focusable, Window};
 use gpui_component::{
     Placement,
     dock::{
-        BasePanelView, DockArea, DockPlacement, InsertTarget, NodeId, PaneNode, PaneRef, PanelId,
-        panel_handle,
+        BasePanelView, DockArea, DockLayout, DockPlacement, InsertTarget, NodeId, PaneNode,
+        PaneRef, PanelId, panel_handle,
     },
 };
 use sizing::default_width;
@@ -282,4 +282,39 @@ pub(super) fn restore(dock: &mut DockArea, window: &mut Window, cx: &mut Context
     for active in active {
         dock.select_panel(active, window, cx);
     }
+}
+
+pub(in crate::workbench) fn reset(
+    dock: &mut DockArea,
+    window: &mut Window,
+    cx: &mut Context<DockArea>,
+) {
+    let active = selected(dock);
+    let (conversations, mut editors): (Vec<_>, Vec<_>) = panels(dock)
+        .into_iter()
+        .filter(|panel| !is_empty_editor(panel))
+        .partition(is_conversation);
+    if conversations.is_empty() {
+        maintain_editor_space(dock, window, cx);
+        return;
+    }
+    if editors.is_empty() {
+        editors.push(panel_handle(cx.new(EmptyEditor::new)));
+    }
+    let tabs = |panels: Vec<Arc<dyn BasePanelView>>| {
+        let index = panels
+            .iter()
+            .position(|panel| active.contains(&panel.panel_id(cx)))
+            .unwrap_or(0);
+        panels
+            .into_iter()
+            .fold(DockLayout::tabs(), |layout, panel| {
+                layout.panel_view(panel, cx)
+            })
+            .active_index(index)
+    };
+    let layout = DockLayout::h_split()
+        .child(tabs(conversations), Some(default_width(dock, window)))
+        .child(tabs(editors), None);
+    dock.set_center(layout, window, cx);
 }

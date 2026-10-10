@@ -1,4 +1,5 @@
 //! Project-scoped conversation directory and native panels; DockArea owns placement and visibility.
+mod deletion;
 mod navigation;
 mod renaming;
 
@@ -8,10 +9,7 @@ use super::{
 };
 use crate::assistant::{ConversationEvent, ConversationPanel, principal};
 use gpui::{AppContext, Context, Window, div, prelude::*, px};
-use gpui_component::{
-    WindowExt,
-    dock::{DockPlacement, PaneRef, panel_handle},
-};
+use gpui_component::dock::{DockPlacement, PaneRef, panel_handle};
 use std::sync::Arc;
 use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, ActivityRowContent};
 use yss_harness_contract::{HarnessSessionId, HarnessSessionRecord};
@@ -156,6 +154,9 @@ impl Workbench {
                 ActivityEvent::RenameConversation(id, title) => {
                     view.rename_conversation(id.clone(), title.clone(), window, cx)
                 }
+                ActivityEvent::DeleteConversation(id, title) => {
+                    view.delete_conversation(id.clone(), title.clone(), window, cx)
+                }
                 ActivityEvent::Tool(id) if id == "newConversation" => {
                     view.new_conversation(window, cx)
                 }
@@ -203,18 +204,22 @@ impl Workbench {
                 }
             });
             let dock = self.dock.clone();
-            window.open_dialog(cx, move |dialog, _, _| {
-                dialog
-                    .title("助手")
-                    .width(px(1120.))
-                    .overlay_closable(false)
-                    .footer(div())
-                    .child(div().h(px(620.)).child(dock.clone()))
-            });
+            crate::modal_window::open(
+                crate::text::t("panel.assistant"),
+                gpui::size(px(1160.), px(740.)),
+                window,
+                cx,
+                move |_, _| {
+                    crate::modal_window::ModalContent::new(move |_, _| {
+                        div().h(px(620.)).child(dock.clone())
+                    })
+                    .without_buttons()
+                },
+            );
         }
     }
     pub(super) fn new_conversation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.is_closing(cx) {
+        if self.is_closing(cx) || self.assistant_busy {
             return;
         }
         let reveal_directory_on_failure = std::mem::take(&mut self.assistant_reopen);
@@ -238,7 +243,8 @@ impl Workbench {
                 if let Some(session) = result {
                     view.install_conversation(session, window, cx);
                 } else {
-                    view.error = Some("新对话未确认，请检查会话目录后重试。".into());
+                    view.error =
+                        Some(crate::text::t("native.workbench.newConversationUnconfirmed").into());
                     if reveal_directory_on_failure {
                         view.present_assistant(window, cx);
                     }
@@ -287,7 +293,8 @@ impl Workbench {
                 if let Some(session) = result {
                     view.install_conversation(session, window, cx);
                 } else {
-                    view.error = Some("此对话不可用，请刷新会话目录。".into());
+                    view.error =
+                        Some(crate::text::t("native.workbench.conversationUnavailable").into());
                     if reveal_directory_on_failure {
                         view.present_assistant(window, cx);
                     }

@@ -183,7 +183,8 @@ impl Workbench {
             if failed {
                 let _ = view.update(cx, |view, cx| {
                     if view.layout_root.as_ref() == Some(&root) {
-                        view.error = Some("工作台布局未能保存，请检查应用数据目录。".into());
+                        view.error =
+                            Some(crate::text::t("native.workbench.layoutSaveFailed").into());
                         cx.notify();
                     }
                 });
@@ -440,7 +441,8 @@ impl Workbench {
                     }
                     Err(_) => {
                         view.restoring_layout = false;
-                        view.error = Some("工作台恢复失败，可以从项目目录打开资源。".into());
+                        view.error =
+                            Some(crate::text::t("native.workbench.layoutRestoreFailed").into());
                     }
                 }
                 cx.notify();
@@ -460,6 +462,41 @@ impl Workbench {
         register_fixed("results", self.results.downgrade(), cx);
         register_fixed("logs", self.logs.downgrade(), cx);
         register_fixed("plugins", self.plugins.downgrade(), cx);
+        register_fixed("plugins-directory", self.plugins_sidebar.downgrade(), cx);
+        let services = self.services.clone();
+        let plugins = self.plugins.clone();
+        register_panel(cx, "plugin-view", move |context, window, cx| {
+            if let PanelInfo::Panel(info) = context.info()
+                && let Some(plugin_id) = info.get("pluginId").and_then(serde_json::Value::as_str)
+                && let Some(view_id) = info.get("viewId").and_then(serde_json::Value::as_str)
+            {
+                let panel = cx.new(|cx| {
+                    crate::plugins::PluginViewPanel::new(
+                        services.clone(),
+                        plugin_id.into(),
+                        view_id.into(),
+                        None,
+                        window,
+                        cx,
+                    )
+                });
+                let plugins = plugins.clone();
+                cx.subscribe(
+                    &panel,
+                    move |_, event: &crate::plugins::OpenNativeView, cx| {
+                        plugins.update(cx, |_, cx| {
+                            cx.emit(crate::plugins::OpenNativeView {
+                                key: event.key.clone(),
+                                view: event.view.clone(),
+                            })
+                        });
+                    },
+                )
+                .detach();
+                return panel_handle(panel);
+            }
+            panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
+        });
         let conversations = self.conversations.clone();
         register_panel(cx, "assistant-conversation", move |context, _, cx| {
             if let PanelInfo::Panel(info) = context.info()

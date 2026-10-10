@@ -1,6 +1,5 @@
 //! Authored-file management captures the original version and uses Project's file commands.
 use super::super::name_form::NameForm;
-use gpui_component::{WindowExt, button::ButtonVariant};
 mod panels;
 use super::{super::Workbench, AuthoredKind, ResourceAction};
 use crate::file_commands::NativeFile;
@@ -97,26 +96,23 @@ impl Workbench {
             ),
             ResourceAction::Delete => {
                 let owner = cx.entity().downgrade();
-                window.open_alert_dialog(cx, move |alert, _, _| {
-                    let owner = owner.clone();
-                    let target = target.clone();
-                    alert
-                        .title(crate::text::translate("documents.delete"))
-                        .description(crate::text::format(
-                            "documents.deleteMessage",
-                            &[("name", target.name.clone())],
-                        ))
-                        .confirm()
-                        .ok_text(crate::text::translate("common.delete"))
-                        .ok_variant(ButtonVariant::Danger)
-                        .cancel_text(crate::text::translate("common.cancel"))
-                        .on_ok(move |_, window, cx| {
-                            let _ = owner.update(cx, |view, cx| {
-                                view.mutate_file(target.clone(), action, None, None, window, cx)
-                            });
-                            true
-                        })
-                });
+                crate::modal_window::confirm(
+                    crate::text::translate("documents.delete"),
+                    crate::text::format(
+                        "documents.deleteMessage",
+                        &[("name", target.name.clone())],
+                    ),
+                    crate::text::t("common.delete"),
+                    crate::text::t("common.cancel"),
+                    window,
+                    cx,
+                    move |_, window, cx| {
+                        let _ = owner.update(cx, |view, cx| {
+                            view.mutate_file(target.clone(), action, None, None, window, cx)
+                        });
+                        true
+                    },
+                );
             }
             ResourceAction::Duplicate => self.mutate_file(target, action, None, None, window, cx),
             ResourceAction::CopyPath => {}

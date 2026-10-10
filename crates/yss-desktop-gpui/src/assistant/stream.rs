@@ -4,8 +4,7 @@ use crate::services::NativeEvent;
 use gpui::{Context, Window};
 use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
-use yss_harness_contract::AssistantEvent;
-use yss_harness_contract::{HarnessEvent, HarnessEventEnvelope};
+use yss_harness_contract::{AssistantEvent, HarnessEvent, HarnessEventEnvelope};
 
 impl ConversationPanel {
     pub(super) fn connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -76,7 +75,7 @@ impl ConversationPanel {
         }
         if self.recovering {
             self.ready = false;
-            self.stream_error = Some("会话事件仍不连续，请刷新后重试。".into());
+            self.stream_error = Some(crate::text::t("native.assistant.eventsDiscontinuous").into());
             cx.notify();
         } else {
             self.recovering = true;
@@ -118,7 +117,7 @@ impl ConversationPanel {
                 .models
                 .catalog()
                 .await
-                .map_err(|_| "模型目录不可用，请检查模型设置。".to_owned())?;
+                .map_err(|_| crate::text::t("native.assistant.catalogUnavailable").to_owned())?;
             services
                 .application
                 .application
@@ -130,7 +129,7 @@ impl ConversationPanel {
         cx.spawn_in(window, async move |view, cx| {
             let result = job
                 .await
-                .unwrap_or_else(|_| Err("会话读取未完成，请刷新后重试。".into()));
+                .unwrap_or_else(|_| Err(crate::text::t("native.assistant.readFailed").into()));
             let _ = view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
@@ -165,7 +164,8 @@ impl ConversationPanel {
                             view.stopping = false;
                             cx.emit(ConversationEvent::DirectoryChanged);
                         } else {
-                            view.stream_error = Some("会话历史存在缺口，请刷新后重试。".into());
+                            view.stream_error =
+                                Some(crate::text::t("native.assistant.historyGap").into());
                         }
                     }
                     Err(error) => view.stream_error = Some(error),
@@ -197,7 +197,7 @@ impl ConversationPanel {
                     view.catalog = Some(Arc::new(catalog));
                 } else {
                     view.catalog = None;
-                    view.error = Some("模型目录读取失败，请检查设置后刷新。".into());
+                    view.error = Some(crate::text::t("native.assistant.catalogFailed").into());
                 }
                 view.reconcile_effort();
                 cx.notify();

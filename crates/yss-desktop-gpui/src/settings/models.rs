@@ -4,11 +4,7 @@ mod render;
 
 use super::{Page, SettingsPanel};
 use gpui::{App, Context, Entity, Window};
-use gpui_component::{
-    WindowExt,
-    button::ButtonVariant,
-    input::{InputEvent, InputState, TextareaState},
-};
+use gpui_component::input::{InputEvent, InputState, TextareaState};
 use yss_harness_contract::{
     LanguageModelAuthentication, LanguageModelConfig, LanguageModelProtocol,
     LanguageModelProviderConfig, LanguageModelProviderPreset, LanguageModelProviderStatus,
@@ -72,16 +68,25 @@ impl ModelDraft {
         let additional_parameters = if parameters.trim().is_empty() {
             Default::default()
         } else {
-            serde_json::from_str(parameters.as_ref())
-                .map_err(|_| "扩展参数应为 JSON 对象。".to_owned())?
+            serde_json::from_str(parameters.as_ref()).map_err(|_| {
+                crate::text::t("native.settings.parametersObjectRequired").to_owned()
+            })?
         };
         let id = self.id.read(cx).value().trim().to_owned();
         let name = self.name.read(cx).value().trim().to_owned();
         Ok(LanguageModelConfig {
             name: if name.is_empty() { id.clone() } else { name },
             id,
-            context_window: optional(&self.context, "上下文容量", cx)?,
-            max_output_tokens: optional(&self.output, "最大输出", cx)?,
+            context_window: optional(
+                &self.context,
+                crate::text::t("native.settings.contextCapacity"),
+                cx,
+            )?,
+            max_output_tokens: optional(
+                &self.output,
+                crate::text::t("native.settings.maxOutput"),
+                cx,
+            )?,
             temperature: optional(&self.temperature, "Temperature", cx)?,
             top_p: optional(&self.top_p, "Top P", cx)?,
             additional_parameters,
@@ -99,11 +104,12 @@ fn optional<T: std::str::FromStr>(
     if value.trim().is_empty() {
         Ok(None)
     } else {
-        value
-            .trim()
-            .parse()
-            .map(Some)
-            .map_err(|_| format!("{name}格式不正确。"))
+        value.trim().parse().map(Some).map_err(|_| {
+            crate::text::format(
+                "native.settings.invalidField",
+                &[("name", name.to_string())],
+            )
+        })
     }
 }
 
@@ -116,7 +122,7 @@ impl SettingsPanel {
         cx: &mut Context<Self>,
     ) {
         if self.busy() || self.dirty() {
-            self.error = Some("请先保存或放弃当前设置。".into());
+            self.error = Some(crate::text::t("native.settings.saveOrDiscard").into());
             cx.notify();
             return;
         }
@@ -148,7 +154,7 @@ impl SettingsPanel {
                 Some(if has_api_key {
                     "********"
                 } else {
-                    "输入 API Key"
+                    crate::text::t("settings.models.enterKey")
                 }),
                 window,
                 cx,
@@ -199,7 +205,7 @@ impl SettingsPanel {
             return;
         }
         if self.model.as_ref().is_some_and(|draft| draft.changed) {
-            self.error = Some("请先应用或取消当前模型编辑。".into());
+            self.error = Some(crate::text::t("native.settings.applyOrCancelModel").into());
             cx.notify();
             return;
         }
@@ -308,7 +314,7 @@ impl SettingsPanel {
         let provider = self
             .editor
             .as_ref()
-            .ok_or_else(|| "请选择供应商。".to_owned())?;
+            .ok_or_else(|| crate::text::t("native.settings.chooseProvider").to_owned())?;
         let mut config = provider.configuration(cx);
         if let Some(model) = &self.model {
             let value = model.configuration(cx)?;
@@ -319,7 +325,7 @@ impl SettingsPanel {
             }
         }
         if !config.validate() {
-            return Err("请检查供应商名称、模型 ID、容量和生成参数；模型 ID 不能重复，Anthropic 模型需填写最大输出。".into());
+            return Err(crate::text::t("native.settings.invalidProvider").into());
         }
         Ok(config)
     }
@@ -341,7 +347,7 @@ impl SettingsPanel {
                     .enumerate()
                     .any(|(other, existing)| Some(other) != index && existing.id == config.id)
             {
-                return Err("请检查模型 ID、名称、容量和生成参数；模型 ID 不能重复。".into());
+                return Err(crate::text::t("native.settings.invalidModel").into());
             }
             Ok(config)
         });
@@ -375,28 +381,26 @@ impl SettingsPanel {
         }
         let epoch = self.epoch;
         let owner = cx.entity().downgrade();
-        window.open_alert_dialog(cx, move |alert, _, _| {
-            let owner = owner.clone();
-            alert
-                .title("放弃未保存的设置？")
-                .description("当前供应商和模型输入尚未保存。")
-                .confirm()
-                .ok_text("放弃更改")
-                .ok_variant(ButtonVariant::Danger)
-                .cancel_text("继续编辑")
-                .on_ok(move |_, _, cx| {
-                    owner
-                        .update(cx, |view, cx| {
-                            if view.epoch == epoch && !view.busy() {
-                                view.discard(cx);
-                                view.page = page;
-                                view.load_knowledge(cx);
-                                cx.notify();
-                            }
-                        })
-                        .is_ok()
-                })
-        });
+        crate::modal_window::confirm(
+            crate::text::t("native.settings.discardTitle"),
+            crate::text::t("native.settings.discardMessage"),
+            crate::text::t("editor.close.discard"),
+            crate::text::t("native.imports.keepEditing"),
+            window,
+            cx,
+            move |_, _, cx| {
+                owner
+                    .update(cx, |view, cx| {
+                        if view.epoch == epoch && !view.busy() {
+                            view.discard(cx);
+                            view.page = page;
+                            view.load_knowledge(cx);
+                            cx.notify();
+                        }
+                    })
+                    .is_ok()
+            },
+        );
     }
 
     fn model_row_current(&self, epoch: u64, index: usize, id: &str) -> bool {

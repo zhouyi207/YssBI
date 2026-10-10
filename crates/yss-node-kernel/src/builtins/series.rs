@@ -11,6 +11,12 @@ pub(super) use numeric::{
     columns as numeric_columns, independent_columns as independent_numeric_columns,
 };
 
+pub(crate) const INPUT_PREPARATION_REVISION: u32 = 1;
+
+// Covers decoded vectors/strings, validation indexes and temporary Arrow field copies.
+// This is conservative workspace admission, not a process RSS measurement.
+const METADATA_STORAGE_MULTIPLIER: usize = 32;
+
 #[derive(Clone, Copy)]
 pub(crate) enum SeriesKernel {
     Range,
@@ -31,6 +37,7 @@ pub(crate) enum SeriesKernel {
 pub(super) struct Column {
     pub(super) values: Vec<TabularScalar>,
     pub(super) metadata: Option<std::sync::Arc<ConversionMetadata>>,
+    pub(super) metadata_bytes: usize,
 }
 
 impl Column {
@@ -38,7 +45,8 @@ impl Column {
         self.values.iter().try_fold(
             self.values
                 .len()
-                .checked_mul(size_of::<RuntimeValue>() * 4)?,
+                .checked_mul(size_of::<RuntimeValue>() * 4)?
+                .checked_add(self.metadata_bytes)?,
             |bytes, value| match value {
                 TabularScalar::String(value) => bytes.checked_add(value.len().checked_mul(4)?),
                 _ => Some(bytes),
@@ -64,13 +72,35 @@ impl Column {
     }
 }
 
-fn metadata(field: &arrow_schema::Field) -> Result<ConversionMetadata, KernelError> {
-    Ok(ConversionMetadata {
+fn metadata(
+    field: &arrow_schema::Field,
+    invocation: &KernelInvocation<'_>,
+    retained: usize,
+) -> Result<(ConversionMetadata, usize), KernelError> {
+    let mut bytes = size_of::<ConversionMetadata>() * 4;
+    for (position, (key, value)) in field.metadata().iter().enumerate() {
+        if position.is_multiple_of(1024) {
+            invocation.check_control()?;
+        }
+        bytes = invocation.control.check_bytes(
+            key.len()
+                .checked_add(value.len())
+                .and_then(|n| n.checked_add(size_of::<(String, String)>()))
+                .and_then(|n| n.checked_mul(METADATA_STORAGE_MULTIPLIER))
+                .and_then(|n| bytes.checked_add(n)),
+        )?;
+    }
+    invocation
+        .control
+        .check_bytes(retained.checked_add(bytes))?;
+    let metadata = ConversionMetadata {
         semantic: yss_database_arrow::column_semantic(field)
             .map_err(|_| KernelError::InvalidParameter)?,
         temporal: yss_database_arrow::temporal_metadata(field.data_type()),
         dummy_base_level: field.metadata().get("yssbi.dummy_base_level").cloned(),
-    })
+    };
+    invocation.check_control()?;
+    Ok((metadata, bytes))
 }
 
 pub(super) fn load(
@@ -86,8 +116,6 @@ pub(super) fn load_with_retained_bytes(
     retained_bytes: usize,
 ) -> Result<Vec<Column>, KernelError> {
     invocation.control.check_bytes(Some(retained_bytes))?;
-    let mut control = invocation.relation_control();
-    control.max_input_bytes -= retained_bytes;
     let first = handles.first().ok_or(KernelError::InvalidParameter)?;
     if handles
         .iter()
@@ -112,21 +140,26 @@ pub(super) fn load_with_retained_bytes(
         }
         return Ok(columns);
     }
+    let mut retained = retained_bytes;
+    let mut columns = invocation.control.reserve(handles.len())?;
+    for handle in handles {
+        let (metadata, metadata_bytes) = metadata(handle.plan().field(), invocation, retained)?;
+        retained = invocation
+            .control
+            .check_bytes(retained.checked_add(metadata_bytes))?;
+        columns.push(Column {
+            values: Vec::new(),
+            metadata: Some(std::sync::Arc::new(metadata)),
+            metadata_bytes,
+        });
+    }
     // Shared domains can be read in one projection; other inputs pair by current position.
     let relation = first
         .relation()
         .project_series(handles)
         .map_err(kernel_error)?;
-    let mut columns = handles
-        .iter()
-        .map(|handle| {
-            Ok(Column {
-                values: Vec::new(),
-                metadata: Some(std::sync::Arc::new(metadata(handle.plan().field())?)),
-            })
-        })
-        .collect::<Result<Vec<_>, KernelError>>()?;
-    let mut retained = retained_bytes;
+    let mut control = invocation.relation_control();
+    control.max_input_bytes -= retained;
     relation
         .visit_batches(&control, &mut |batch| {
             control.check()?;
@@ -194,6 +227,8 @@ pub(in crate::builtins) fn column_retaining(
     Ok(Column {
         values: output,
         metadata: value.shared_metadata().cloned(),
+        // Caller-owned annotations are shared; this path performs no metadata decoding.
+        metadata_bytes: 0,
     })
 }
 

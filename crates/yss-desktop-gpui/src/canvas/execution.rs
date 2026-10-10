@@ -165,18 +165,24 @@ impl GraphCanvas {
                 .as_ref()
                 .is_some_and(|cancellation| cancellation.load(Ordering::Acquire))
         {
-            "正在取消…"
+            crate::text::t("native.canvas.cancelling")
         } else if self.execution.running() {
-            "正在运行…"
+            crate::text::t("native.canvas.running")
         } else if self.execution.unknown {
-            "运行状态未知，请刷新状态"
+            crate::text::t("native.canvas.runUnknown")
         } else if self.execution.recovery.is_some() {
-            "正在同步运行状态…"
+            crate::text::t("native.canvas.syncingRun")
         } else {
             match self.run_notice().map(RunApplicationEvent::kind) {
-                Some(RunApplicationEventKind::RunCompleted) => "运行完成",
-                Some(RunApplicationEventKind::RunCancelled) => "已取消",
-                Some(RunApplicationEventKind::RunErrored { .. }) => "运行失败",
+                Some(RunApplicationEventKind::RunCompleted) => {
+                    crate::text::t("native.canvas.runCompleted")
+                }
+                Some(RunApplicationEventKind::RunCancelled) => {
+                    crate::text::t("plugins.taskStates.cancelled")
+                }
+                Some(RunApplicationEventKind::RunErrored { .. }) => {
+                    crate::text::t("native.canvas.runFailed")
+                }
                 _ => "",
             }
         }
@@ -302,7 +308,7 @@ impl GraphCanvas {
             let _ = view.update(cx, |view, cx| {
                 view.execution.cancelling = false;
                 if result.is_err() {
-                    view.error = Some("取消请求未完成，请刷新运行状态。".into());
+                    view.error = Some(crate::text::t("native.canvas.cancelFailed").into());
                 }
                 view.resync_execution(cx);
                 cx.emit(CanvasEvent::Execution);
@@ -485,9 +491,11 @@ fn run_rejection(error: &anyhow::Error) -> String {
             ExecutionApplicationError::SessionCapture(_)
             | ExecutionApplicationError::StaleSession(_),
         ) => "stale_project_lifecycle",
-        Some(ExecutionApplicationError::Cancelled) => return "运行已取消".into(),
+        Some(ExecutionApplicationError::Cancelled) => {
+            return crate::text::t("native.canvas.runCancelled").into();
+        }
         Some(ExecutionApplicationError::DeadlineExceeded) => "deadlineExceeded",
-        _ => return "运行请求未完成，请检查图状态和日志。".into(),
+        _ => return crate::text::t("native.canvas.runRequestFailed").into(),
     };
     crate::text::translate(&format!("runFailure.causes.{cause}"))
 }

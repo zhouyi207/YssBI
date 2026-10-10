@@ -42,7 +42,7 @@ impl MindCanvas {
             self.install_snapshot(snapshot, window, cx);
         }
         if outcome.failed {
-            self.error = Some("思维导图未保存。当前内容已保留，请检查外部修改或写入错误。".into());
+            self.error = Some(crate::text::t("native.minds.saveFailed").into());
         }
         if self.refresh_again {
             self.refresh(window, cx);
@@ -115,7 +115,7 @@ impl MindCanvas {
                     view.follow_selection(selection);
                     view.install_snapshot(snapshot, window, cx);
                 } else {
-                    view.error = Some("主题修改未提交。输入已保留，请检查当前文件。".into());
+                    view.error = Some(crate::text::t("native.minds.topicSubmitFailed").into());
                 }
                 if view.refresh_again {
                     view.refresh(window, cx);
@@ -145,7 +145,7 @@ impl MindCanvas {
                 match snapshot {
                     Some(snapshot) if snapshot.version == view.snapshot.version => {}
                     Some(snapshot) => view.install_snapshot(snapshot, window, cx),
-                    None => view.error = Some("思维导图暂不可读取。当前内容已保留。".into()),
+                    None => view.error = Some(crate::text::t("native.minds.readFailed").into()),
                 }
                 if view.refresh_again {
                     view.refresh(window, cx);

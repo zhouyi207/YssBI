@@ -105,8 +105,7 @@ impl MindCanvas {
             .values()
             .any(|buffer| buffer.dirty && buffer.version != self.snapshot.version)
         {
-            self.error =
-                Some("主题已在其他位置修改。当前输入已保留，请核对后重新打开或放弃输入。".into());
+            self.error = Some(crate::text::t("native.minds.topicChanged").into());
             self.changed(cx);
             return None;
         }

@@ -49,7 +49,7 @@ impl GraphProperties {
                                     .ghost()
                                     .icon(IconName::Plus)
                                     .label(crate::text::translate("detail.constants.add"))
-                                    .tooltip(crate::text::translate(
+                                    .tooltip(crate::text::t(
                                         "panel.assistantToolNames.create_constants",
                                     ))
                                     .disabled(busy)
@@ -62,7 +62,7 @@ impl GraphProperties {
                         )
                         .when(self.constants.is_empty(), |view| {
                             view.child(controls::hint(
-                                crate::text::translate("native.workbench.constantsHint"),
+                                crate::text::t("native.workbench.constantsHint"),
                                 cx,
                             ))
                         })

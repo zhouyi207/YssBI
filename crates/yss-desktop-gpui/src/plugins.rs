@@ -2,8 +2,12 @@
 mod commands;
 mod details;
 mod installer;
+mod native;
 mod query;
 mod render;
+mod sidebar;
+pub(crate) use native::{OpenNativeView, PluginViewPanel};
+pub(crate) use sidebar::PluginsSidebar;
 
 use crate::services::NativeServices;
 use gpui::{
@@ -17,10 +21,13 @@ use std::sync::Arc;
 use yss_plugin_runtime::{InstalledPlugin, PluginFailure, PluginManager};
 
 #[derive(Clone, PartialEq, Eq)]
-struct PluginKey {
+pub(crate) struct PluginKey {
     id: String,
     digest: String,
     generation: String,
+}
+pub(crate) enum PluginsEvent {
+    OpenDetails,
 }
 #[derive(Clone, Copy, PartialEq)]
 enum DetailTab {
@@ -29,6 +36,9 @@ enum DetailTab {
     Diagnostics,
 }
 impl PluginKey {
+    pub(crate) fn id(&self) -> &str {
+        &self.id
+    }
     fn from_plugin(plugin: &InstalledPlugin) -> Self {
         Self {
             id: plugin.manifest.id.clone(),
@@ -70,7 +80,9 @@ impl PluginsPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let search = cx.new(|cx| InputState::new(window, cx).placeholder("搜索插件名称或发布者"));
+        let search = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(crate::text::t("native.plugins.search"))
+        });
         let subscription = cx.subscribe(&search, |_, _, event, cx| {
             if matches!(event, InputEvent::Change) {
                 cx.notify();
@@ -123,21 +135,25 @@ impl PluginsPanel {
 }
 fn failure(error: &PluginFailure) -> String {
     let message = match error.code.as_str() {
-        "plugin_busy" => "插件正在执行任务或被其他视图使用，请完成后重试。",
-        "plugin_stale_context" => "插件已更新或移除，请重新选择。",
-        "plugin_package_changed" => "安装包已变化，请重新检查后确认。",
-        "plugin_signer_change_requires_approval" => "签名者已变化，请重新检查并确认签名变更。",
-        "plugin_version_content_conflict" => "相同发布版本的内容不同，请使用新的插件版本。",
-        "plugin_trust_required" => "安装前请确认允许运行此原生插件。",
-        "plugin_operation_expired" => "此次安装确认已过期，请重新检查安装包。",
-        "plugin_signature_invalid" | "plugin_hash_mismatch" => "安装包签名或内容校验未通过。",
-        "plugin_not_installed" => "插件已移除，请刷新列表。",
-        "plugin_platform_incompatible" => "安装包不适用于当前平台，请选择当前系统和架构的安装包。",
-        _ => "插件操作未完成，请检查安装包或插件存储后重试。",
+        "plugin_busy" => crate::text::t("native.plugins.busy"),
+        "plugin_stale_context" => crate::text::t("native.plugins.changed"),
+        "plugin_package_changed" => crate::text::t("native.plugins.packageChanged"),
+        "plugin_signer_change_requires_approval" => crate::text::t("native.plugins.signerChanged"),
+        "plugin_version_content_conflict" => crate::text::t("native.plugins.versionConflict"),
+        "plugin_trust_required" => crate::text::t("native.plugins.trustRequired"),
+        "plugin_operation_expired" => crate::text::t("native.plugins.confirmationExpired"),
+        "plugin_signature_invalid" | "plugin_hash_mismatch" => {
+            crate::text::t("native.plugins.verificationFailed")
+        }
+        "plugin_not_installed" => crate::text::t("native.plugins.removed"),
+        "plugin_platform_incompatible" => crate::text::t("native.plugins.wrongPlatform"),
+        _ => crate::text::t("native.plugins.operationFailed"),
     };
     format!("{message} ({})", error.code)
 }
 impl EventEmitter<PanelEvent> for PluginsPanel {}
+impl EventEmitter<OpenNativeView> for PluginsPanel {}
+impl EventEmitter<PluginsEvent> for PluginsPanel {}
 impl Focusable for PluginsPanel {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()
@@ -156,7 +172,9 @@ impl BasePanel for PluginsPanel {
 }
 impl Panel for PluginsPanel {
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
-        "插件"
+        self.selected_plugin()
+            .map(|plugin| plugin.manifest.name.clone())
+            .unwrap_or_else(|| crate::text::t("activityBar.plugins").into())
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

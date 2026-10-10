@@ -86,6 +86,7 @@ impl Workbench {
         let task = self.services.run(move |services| {
             Ok(OpenedGraph::from_open(
                 services.application.open_graph(request)?,
+                language,
             ))
         });
         let target = opening.downgrade();

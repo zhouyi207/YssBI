@@ -23,20 +23,36 @@ pub fn display(value: &RuntimeValue) -> String {
             TabularScalar::Float64(value) => value.as_f64().to_string(),
             TabularScalar::String(value) => serde_json::to_string(value).unwrap_or_default(),
         },
-        RuntimeValue::List(values) => format!("{} 项", values.len()),
-        RuntimeValue::Record(values) => format!("{} 个字段", values.len()),
+        RuntimeValue::List(values) => crate::text::format(
+            "native.results.itemCount",
+            &[("value0", values.len().to_string())],
+        ),
+        RuntimeValue::Record(values) => crate::text::format(
+            "native.results.fieldCount",
+            &[("value0", values.len().to_string())],
+        ),
         RuntimeValue::Resource(value) => value.to_string(),
-        RuntimeValue::Relation(_) => "数据表".into(),
-        RuntimeValue::Series(_) => "序列".into(),
-        RuntimeValue::Grouped(_) => "分组数据".into(),
-        RuntimeValue::LinearRegression(_) => "回归模型".into(),
+        RuntimeValue::Relation(_) => crate::text::t("native.results.dataTable").into(),
+        RuntimeValue::Series(_) => crate::text::t("native.results.series").into(),
+        RuntimeValue::Grouped(_) => crate::text::t("native.results.groupedData").into(),
+        RuntimeValue::LinearRegression(_) => {
+            crate::text::t("native.results.regressionModel").into()
+        }
         RuntimeValue::Annotated(_) => unreachable!("unannotated value"),
     }
 }
 
 pub fn rows(value: &RuntimeValue, expanded: &BTreeSet<String>, tables: bool) -> Vec<ValueRow> {
     let mut rows = Vec::new();
-    walk(value, "", "结果", 0, expanded, tables, &mut rows);
+    walk(
+        value,
+        "",
+        crate::text::t("detail.description.result"),
+        0,
+        expanded,
+        tables,
+        &mut rows,
+    );
     rows
 }
 

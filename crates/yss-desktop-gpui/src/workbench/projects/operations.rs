@@ -2,7 +2,6 @@
 use super::{ProjectCommand, ProjectOperation, ProjectStage};
 use crate::{project::DesktopProject, projects::feedback::ProjectFeedback, workbench::Workbench};
 use gpui::{Context, Window};
-use gpui_component::WindowExt;
 use std::path::PathBuf;
 use yss_application::{
     events::{ProjectLifecycleApplicationEvent, ProjectLifecycleOutcome},
@@ -30,10 +29,11 @@ fn read_project(
     match services.application.query_current_project_activation() {
         Ok(activation) => {
             let identity = activation.project_instance_id;
+            let language = crate::text::locale();
             let project = services
                 .application
-                .query_project_index(identity.clone(), "zh-CN", true)
-                .map(|index| Some(DesktopProject::new(identity.clone(), index)))
+                .query_project_index(identity.clone(), language, true)
+                .map(|index| Some(DesktopProject::new(identity.clone(), index, language)))
                 .map_err(anyhow::Error::from);
             (Some(identity), project)
         }
@@ -56,7 +56,7 @@ fn commit(
     progress: &tokio::sync::watch::Sender<ProjectStage>,
 ) -> ProjectObservation {
     let mut receipt = None;
-    let register = matches!(&command, ProjectCommand::Open(_));
+    let register = matches!(&command, ProjectCommand::Open { .. });
     let result = (|| -> anyhow::Result<()> {
         if let Some(expected) = &expected
             && services
@@ -71,7 +71,7 @@ fn commit(
             .into());
         }
         match command {
-            ProjectCommand::Open(path) => {
+            ProjectCommand::Open { path, .. } => {
                 services
                     .application
                     .load_project_for_application(path.to_str().ok_or(
@@ -185,7 +185,11 @@ impl Workbench {
     ) {
         // Submission excluded active writes. Save receipts can start harmless rereads.
         if self.busy || self.closing {
-            operation.fail(self.lifecycle, "请等待当前任务结束。", cx);
+            operation.fail(
+                self.lifecycle,
+                crate::text::t("native.workbench.waitForTask"),
+                cx,
+            );
             return;
         }
         if matches!(operation.command, ProjectCommand::Exit) {
@@ -219,6 +223,10 @@ impl Workbench {
         let executor = self.services.executor.clone();
         let watcher = self.services.clone();
         let dialog = operation.dialog;
+        let initial_resource = match &operation.command {
+            ProjectCommand::Open { resource, .. } => resource.clone(),
+            _ => None,
+        };
         let job = self.services.run(move |services| {
             let observation = commit(
                 operation.command,
@@ -243,7 +251,7 @@ impl Workbench {
                 view.project_progress = None;
                 let (mut error, recovery) = if let Some(observation) = result {
                     match observation.project {
-                        Ok(project) => view.install_project(project, window, cx),
+                        Ok(project) => view.install_project(project, initial_resource, window, cx),
                         Err(_) => {
                             if observation.active.as_ref().is_some_and(|active| {
                                 view.project
@@ -251,14 +259,17 @@ impl Workbench {
                                     .is_none_or(|current| &current.identity != active)
                             }) {
                                 // Activation is proven, even when its resource read failed.
-                                view.install_project(None, window, cx);
-                                view.error =
-                                    Some("项目已切换，但内容未读取；请重新打开项目目录。".into());
+                                view.install_project(None, None, window, cx);
+                                view.error = Some(
+                                    crate::text::t("native.workbench.projectContentFailed").into(),
+                                );
                             } else {
                                 view.connect_events(window, cx);
                                 view.refresh_assistant_directory(window, cx);
-                                view.error =
-                                    Some("项目状态未确认，输入已保留；请重新打开项目。".into());
+                                view.error = Some(
+                                    crate::text::t("native.workbench.projectStateUnconfirmed")
+                                        .into(),
+                                );
                             }
                         }
                     }
@@ -273,13 +284,13 @@ impl Workbench {
                     view.connect_events(window, cx);
                     view.refresh_assistant_directory(window, cx);
                     (
-                        Some("项目任务未完成，输入已保留；请检查当前目录。".into()),
+                        Some(crate::text::t("native.workbench.projectTaskFailed").into()),
                         None,
                     )
                 };
                 if let Some(dialog) = &dialog {
                     if error.is_none() {
-                        window.close_dialog(cx);
+                        crate::modal_window::close_child(window, cx);
                     } else {
                         let _ = dialog.update(cx, |form, cx| {
                             form.finish(lifecycle, error.clone(), recovery, cx)
@@ -297,6 +308,7 @@ impl Workbench {
     fn install_project(
         &mut self,
         project: Option<DesktopProject>,
+        initial_resource: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -333,7 +345,14 @@ impl Workbench {
         self.connect_panels(window, cx);
         self.install_activity(window, cx);
         self.connect_events(window, cx);
-        self.restore_layout(None, window, cx);
+        self.restore_layout(initial_resource, window, cx);
         self.refresh_assistant_directory(window, cx);
+        if self
+            .project
+            .as_ref()
+            .is_some_and(|project| project.language != crate::text::locale())
+        {
+            self.refresh_project(window, cx);
+        }
     }
 }

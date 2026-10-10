@@ -49,9 +49,9 @@ impl Render for DatabaseEditor {
                                 .justify_center()
                                 .text_sm()
                                 .child(if busy {
-                                    "正在读取数据…"
+                                    crate::text::t("native.databases.loading")
                                 } else {
-                                    "数据暂不可用"
+                                    crate::text::t("native.databases.unavailableTitle")
                                 }),
                         )
                     }),
