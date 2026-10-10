@@ -81,6 +81,12 @@ impl Workbench {
                         return;
                     }
                     view.opening.remove(&key);
+                    if intent
+                        .as_deref()
+                        .is_some_and(|id| !view.is_current_intent(id))
+                    {
+                        return;
+                    }
                     if view.project.as_ref().is_none_or(|project| {
                         !project.index.databases.iter().any(|current| {
                             current.id == entry.id && current.revision == entry.revision

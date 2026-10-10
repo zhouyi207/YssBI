@@ -59,6 +59,12 @@ impl Workbench {
                     return;
                 }
                 view.opening.remove(&path);
+                if intent
+                    .as_deref()
+                    .is_some_and(|id| !view.is_current_intent(id))
+                {
+                    return;
+                }
                 let applied = if let Some(snapshot) = result {
                     view.install_mind(snapshot, window, cx)
                         .update(cx, |mind, cx| mind.focus_canvas(window, cx));

@@ -12,8 +12,16 @@ impl Workbench {
         self.ui_binding = None;
         self.ui_delivery = None;
         self.intent_queue.clear();
-        self.intent_busy = false;
+        self.active_intent = None;
         self.intent_resync = false;
+        self.assistant_intent = None;
+        for opening in self
+            .graph_openings
+            .values()
+            .filter_map(gpui::WeakEntity::upgrade)
+        {
+            opening.update(cx, |opening, _| opening.clear_intent());
+        }
         let Some(project) = &self.project else {
             return;
         };

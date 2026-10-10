@@ -30,6 +30,12 @@ pub(in crate::workbench) struct Opening {
 }
 
 impl Opening {
+    pub(in crate::workbench) fn clear_intent(&mut self) {
+        if self.intent.take().is_some() {
+            self.node = None;
+        }
+    }
+
     pub(super) fn new(
         path: GraphResourcePath,
         revision: Option<ResourceRevision>,

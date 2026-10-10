@@ -794,6 +794,18 @@
 - 两处均通过 `node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 项依赖声明）、三个改动 Rust 文件的局部格式检查、两份文档的状态/相对链接核对、265 项组件清单一致性检查及 `git diff --check`。
 - 首读无编辑会话时的通知缺口恢复、目标重复画布和完整隐藏/重开仍需继续审查。三项图组合组件仍未整体完成，累计 206/265；物理输入/IME、读屏、其他平台和大图性能保持开放。
 
+### 工作台请求身份与重连
+
+- 对照 GraphDocumentEditor、useVisibleGraphPanel 与 useUiIntents 的生命周期，发现首次图读取回调只按通用忙碌标记推进 UI 队列。独立 Linux/X11 窗口复现：旧 binding 的 8 秒首读完成后，14 秒新读取尚在 claimed，后继请求却提前 applied，队列已被错误清空。
+- `workbench/intents` 用当前请求 ID 替代独立的忙碌布尔值，仅当前请求可以结算并推进队列。项目切换与重连清除该身份；图、文件、数据库、图表、结果和助手入口共用这一完成入口，不增加另一份回执或同步模型。
+- 重连清除图加载标签上的旧请求与节点目标，保留原实体和读取；Doc/Mind/Chart/Database 异步打开在释放原读取标记后核验当前请求，过期回调不安装编辑器、抢焦点或反馈旧错误。正常本地打开继续沿原入口处理。
+- 修复版独立窗口重复上述时序，旧读取完成时新请求仍 claimed，后继请求仍 pending；新读取完成后两项依次 applied，旧请求随后 expired。另以迟到文档读取核对原读取标记释放、编辑器未创建、新队列保留；重新请求文档成功，Mind、Chart、Database 和助手/项目面板请求均得到 applied。
+- 独立窗口还在 8 秒函数首读期间重连并立即重新请求同一资源，原标签重新读取后成功安装并结算新请求；旧读取结束后仍只有一份画布，未阻塞或结算新请求。
+- 工作区窗口将旧函数首读延迟 35 秒、重连后的图读取延迟 18 秒；在第 10 秒通过 X11 原生点击关闭旧标签，当前请求保持 claimed、后继请求保持 pending。两项新请求随后 applied，超过旧首读期限仍无旧标签或画布。另核对无效节点 failed 后队列继续，Doc/Mind/Chart/Database 与助手/项目面板请求成功，并检查数据库实际表格与属性显示。
+- L2：独立提交内容与工作区的 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings` 均通过。临时真实窗口使用 `cargo rustc -p yss-desktop-gpui --example ui_delivery_review --locked -- -C opt-level=0 -C debuginfo=0` 构建；生产 profile 未改，这些窗口不作为性能证据。没有共享业务契约或后端行为变更，未扩大到全工作区测试，不新增 UI 单元测试、依赖或持久化字段。
+- 两处均通过 `node scripts/generate-crate-dependencies.mjs --check`（59 crates / 240 项依赖声明）、九个改动 Rust 文件的局部格式检查、文档状态/相对链接、265 项清单检查及 `git diff --check`。临时窗口入口、延迟注入、辅助命令与隔离数据不提交。
+- 完整图生命周期及其余组合组件继续审查，累计仍为 206/265；本批不将局部交付修复当作完整组件迁移，物理输入/IME、无障碍、其他平台和性能验收保持开放。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |

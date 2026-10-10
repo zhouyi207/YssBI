@@ -63,6 +63,12 @@ impl Workbench {
                     return;
                 }
                 view.opening.remove(&path);
+                if intent
+                    .as_deref()
+                    .is_some_and(|id| !view.is_current_intent(id))
+                {
+                    return;
+                }
                 let applied = if let Some(snapshot) = result {
                     view.install_document(snapshot, window, cx)
                         .update(cx, |document, cx| document.focus_editor(window, cx));

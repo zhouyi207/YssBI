@@ -46,7 +46,7 @@ impl Workbench {
     }
 
     fn apply_next_intent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.intent_busy || self.busy || self.closing {
+        if self.active_intent.is_some() || self.busy || self.closing {
             return;
         }
         let Some(receipt) = self.intent_queue.pop_front() else {
@@ -64,7 +64,7 @@ impl Workbench {
             self.apply_next_intent(window, cx);
             return;
         }
-        self.intent_busy = true;
+        self.active_intent = Some(receipt.id.clone());
         match receipt.intent {
             UiIntent::OpenResource { resource, node_id }
                 if matches!(
@@ -140,6 +140,10 @@ impl Workbench {
         }
     }
 
+    pub(super) fn is_current_intent(&self, id: &str) -> bool {
+        self.active_intent.as_deref() == Some(id)
+    }
+
     pub(super) fn finish_intent(
         &mut self,
         id: &str,
@@ -147,6 +151,10 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // A callback from an old binding must not settle or advance its successor's queue.
+        if !self.is_current_intent(id) {
+            return;
+        }
         if let Some(binding) = &self.ui_binding
             && let Err(_error) = binding.settle(
                 id,
@@ -162,7 +170,7 @@ impl Workbench {
                 "Native UI intent settlement rejected"
             );
         }
-        self.intent_busy = false;
+        self.active_intent = None;
         // Defer the next claim so a recovered batch cannot recurse through the whole queue.
         cx.defer_in(window, |view, window, cx| {
             view.apply_next_intent(window, cx)

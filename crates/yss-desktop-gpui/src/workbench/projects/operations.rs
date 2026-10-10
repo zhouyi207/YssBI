@@ -212,7 +212,7 @@ impl Workbench {
         self.ui_binding = None;
         self.ui_delivery = None;
         self.intent_queue.clear();
-        self.intent_busy = false;
+        self.active_intent = None;
         self.index_generation = self.index_generation.wrapping_add(1);
         self.refreshing_index = false;
         self.index_again = false;
