@@ -1,6 +1,57 @@
 use super::*;
 
 #[test]
+fn summary_t_node_rejects_sample_counts_outside_usize_without_saturation() {
+    let upper_exclusive = (usize::MAX as u128 + 1) as f64;
+    for (design, values) in [
+        ("one_sample", vec![upper_exclusive, 0.0, 1.0]),
+        (
+            "independent",
+            vec![2.0, 0.0, 1.0, upper_exclusive, 0.0, 1.0],
+        ),
+    ] {
+        let result = run(
+            "yssbi.statistics.test.t.summary_input",
+            &[("series", series(&values))],
+            &[
+                ("design", string(design)),
+                ("null_value", number(0.0)),
+                ("alternative", string("two_sided")),
+                ("equal_variance", flag(false)),
+            ],
+            1,
+        );
+        assert!(
+            matches!(result, Err(KernelError::InvalidParameter)),
+            "{design}: out-of-range count crossed the kernel boundary: {result:?}"
+        );
+    }
+
+    let largest_float_count = upper_exclusive.next_down().floor();
+    let result = run(
+        "yssbi.statistics.test.t.summary_input",
+        &[("series", series(&[largest_float_count, 0.0, 1.0]))],
+        &[
+            ("design", string("one_sample")),
+            ("null_value", number(0.0)),
+            ("alternative", string("two_sided")),
+            ("equal_variance", flag(false)),
+        ],
+        1,
+    )
+    .unwrap();
+    let RuntimeValue::List(counts) = field(&result[0], "sample_sizes").unwrap() else {
+        panic!("sample sizes must be an integer list");
+    };
+    let count = match &counts[0] {
+        RuntimeValue::Scalar(TabularScalar::Integer(value)) => usize::try_from(*value).unwrap(),
+        RuntimeValue::Scalar(TabularScalar::Unsigned(value)) => usize::try_from(*value).unwrap(),
+        value => panic!("sample size must retain its integer value: {value:?}"),
+    };
+    assert_eq!(count, largest_float_count as usize);
+}
+
+#[test]
 fn student_t_node_preserves_extreme_directed_tails() {
     for (null_mean, alternative, multiplier) in [
         (1e308, "two_sided", 2.0),

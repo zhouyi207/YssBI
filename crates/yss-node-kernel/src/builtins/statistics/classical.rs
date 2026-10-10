@@ -99,8 +99,10 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             }
             let count = |index: usize| -> Result<usize, KernelError> {
                 let value = values[index];
-                if value >= 2.0 && value.fract() == 0.0 && value <= usize::MAX as f64 {
-                    Ok(value as usize)
+                if value >= 2.0 && value.fract() == 0.0 {
+                    // usize::MAX rounds upward in f64 on 64-bit platforms.
+                    // Check the integral value before a cast could saturate it.
+                    usize::try_from(value as u128).map_err(|_| KernelError::InvalidParameter)
                 } else {
                     Err(KernelError::InvalidParameter)
                 }

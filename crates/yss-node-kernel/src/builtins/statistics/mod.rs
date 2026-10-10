@@ -133,7 +133,8 @@ pub(super) fn install(
                 | "yssbi.statistics.survey.linear_regression"
                 | "yssbi.statistics.survey.logistic"
                 | "yssbi.statistics.survey.poisson"
-                | "yssbi.statistics.test.t.paired" => 9,
+                | "yssbi.statistics.test.t.paired"
+                | "yssbi.statistics.test.t.summary_input" => 9,
                 "yssbi.statistics.diagnostic.breusch_pagan"
                 | "yssbi.statistics.test.binomial"
                 | "yssbi.statistics.test.fisher_exact"
@@ -151,7 +152,6 @@ pub(super) fn install(
                 | "yssbi.statistics.test.equivalence"
                 | "yssbi.statistics.test.t.independent"
                 | "yssbi.statistics.test.t.one_sample"
-                | "yssbi.statistics.test.t.summary_input"
                 | "yssbi.statistics.timeseries.ecm"
                 | "yssbi.statistics.workflow.moderation"
                 | "yssbi.statistics.workflow.moderation_advanced" => 8,

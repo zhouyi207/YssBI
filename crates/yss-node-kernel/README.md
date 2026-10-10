@@ -504,6 +504,10 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 
 The built-in classical hypothesis-test adapters live in `builtins/statistics/classical.rs`. They translate node inputs into neutral `yss-sci-contract::hypothesis` requests, invoke stateless SCI runtime functions, and expose one structured `result` output. The catalog owns localized node definitions and help; kernels do not duplicate formulas.
 
+Summary t-test sample counts require integral values of at least two that fit
+`usize`. The adapter checks the integer range before conversion, so a floating
+count above that range cannot saturate into a valid sample size.
+
 Classical adapters forward the invocation's cancellation/deadline control into all
 four SCI families and use the common computation-error conversion to retain
 observation, option, numerical-failure and interruption classifications.
@@ -542,8 +546,8 @@ Paired t and McNemar tests use the shared numeric-column reader to pair equal-le
 measurements by their current positions. Database series from independent sources and
 materialized lists may be mixed. Shared row domains retain the joint-projection fast
 path; independent inputs are read under a cumulative memory budget. Independent-sample
-tests read groups separately and allow different sample sizes. Both paired kernels use
-revision 7.
+tests read groups separately and allow different sample sizes. Kernel revisions
+come from the [statistical registration owner](src/builtins/statistics/mod.rs).
 
 `builtins/statistics/meta/` owns study-input alignment, numeric conversion,
 workspace admission and output relations. Registrations, effect preparation,
