@@ -120,7 +120,10 @@ impl GraphCanvas {
         self.read_task = None;
         self.context_menu = None;
         self.hovered_connection = None;
-        self.gesture = None;
+        if self.gesture.is_some() {
+            self.cancel_gesture();
+            self.emit_selection(cx);
+        }
         if creation.is_none() {
             self.palette = None;
         }

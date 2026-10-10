@@ -1,5 +1,5 @@
 //! Node actions reuse the same selection, clipboard, edit and execution entry points.
-use crate::canvas::{Gesture, GraphCanvas, GraphCommand, commands::*};
+use crate::canvas::{GraphCanvas, GraphCommand, commands::*};
 use gpui::{Action, Context, MouseDownEvent, Pixels, Point, Window, div, prelude::*};
 use gpui_component::{ActiveTheme, Icon, input, menu::PopupMenuItem};
 use gpui_kit_assets::IconName;
@@ -14,21 +14,7 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        cx.stop_propagation();
-        if self.busy {
-            return;
-        }
-        self.cancel_gesture();
-        self.palette = None;
-        self.connection_click = None;
-        window.focus(&self.focus, cx);
-        self.gesture = Some(Gesture::Pan {
-            press: event.position,
-            previous: event.position,
-            moved: false,
-            node: Some(id),
-        });
-        cx.notify();
+        self.begin_pan(Some(id), event, window, cx);
     }
 
     pub(in crate::canvas) fn show_node_menu(

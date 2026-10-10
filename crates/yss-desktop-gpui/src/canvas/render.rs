@@ -11,6 +11,7 @@ use crate::appearance;
 
 impl Render for GraphCanvas {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let owner = cx.entity().downgrade();
         let zoom = self.zoom;
         let offset = self.offset;
         let bounds_cell = self.bounds.clone();
@@ -192,10 +193,12 @@ impl Render for GraphCanvas {
                     cx.notify();
                 }
             }))
-            .on_mouse_move(cx.listener(Self::pointer_move))
-            .on_mouse_up(MouseButton::Left, cx.listener(Self::pointer_up))
-            .on_mouse_up(MouseButton::Right, cx.listener(Self::pointer_up))
-            .on_mouse_up(MouseButton::Middle, cx.listener(Self::pointer_up))
+            .on_mouse_move(cx.listener(|view, event: &gpui::MouseMoveEvent, _, cx| {
+                if view.gesture.is_none() {
+                    view.hover_connection(event.position, cx);
+                }
+            }))
+            .on_pinch(cx.listener(Self::pinch))
             .on_scroll_wheel(cx.listener(Self::zoom_at_pointer))
             .child(
                 canvas(
@@ -203,6 +206,7 @@ impl Render for GraphCanvas {
                         bounds_cell.set(bounds);
                     },
                     move |bounds, _, window, _| {
+                        Self::register_gesture_events(owner, window);
                         let mut layer = connection_layer.borrow_mut();
                         layer.paint(
                             bounds,

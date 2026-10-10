@@ -203,6 +203,22 @@ impl Workbench {
                             cx.notify();
                         });
                     }
+                    CanvasEvent::RevealNodeDetails => {
+                        if view
+                            .details
+                            .read(cx)
+                            .graph()
+                            .is_some_and(|graph| graph.entity_id() == canvas.entity_id())
+                        {
+                            view.present_panel(
+                                gpui_component::dock::panel_handle(view.details.clone()),
+                                gpui_component::dock::DockPlacement::Right,
+                                window,
+                                cx,
+                            );
+                            window.focus(&gpui::Focusable::focus_handle(canvas.read(cx), cx), cx);
+                        }
+                    }
                     CanvasEvent::Execution => {
                         if view
                             .details

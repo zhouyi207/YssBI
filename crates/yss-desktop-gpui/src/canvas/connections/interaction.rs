@@ -1,5 +1,5 @@
 //! Connection selection and commands belong to the same canvas as node gestures.
-use crate::canvas::{GraphCanvas, GraphCommand, geometry};
+use crate::canvas::{GraphCanvas, GraphCommand};
 use gpui::{Context, MouseButton, MouseDownEvent, Pixels, Point, Window};
 use std::{collections::BTreeSet, sync::Arc};
 use yss_graph_document::{ConnectionId, NodeId};
@@ -20,11 +20,8 @@ impl GraphCanvas {
             return None;
         }
         let local = screen - bounds.origin - self.offset;
-        let world = local / self.zoom;
         // Nodes cover the line layer, including right presses that bubble from their body.
-        if self.graph.projection.nodes.iter().any(|node| {
-            geometry::node_bounds(node, geometry::position(node, &self.preview)).contains(&world)
-        }) {
+        if self.node_at(screen).is_some() {
             return None;
         }
         self.connection_layer
