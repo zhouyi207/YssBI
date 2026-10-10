@@ -31,7 +31,8 @@
 - [系统总览](../architecture/ARCHITECTURE.md)
 - [Graph / Execution / Results / Run failures](../../crates/yss-application/src/graph/README.md)
 - [Workbench layout](../../crates/yss-desktop-gpui/README.md)
-- [Runtime signals / feedback](../../react/src/features/application/observability/README.md)
+- [运行观测与日志](../../crates/yss-logging/README.md)
+- [原生交付与用户反馈](../../crates/yss-desktop-gpui/README.md)
 - [Statistical Harness](../../crates/yss-harness-core/README.md)
 - [Native application services](../../crates/yss-application/README.md)
 

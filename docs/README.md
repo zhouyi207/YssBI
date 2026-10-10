@@ -30,24 +30,25 @@ GPUI 原生宿主见 [GPUI host](../crates/yss-desktop-gpui/README.md)，开放�
 | 项目生命周期与数据用例       | [Project application](../crates/yss-application/src/project/README.md)、[Database application](../crates/yss-application/src/database/README.md)                                                                   |
 | 图编辑、保存和投影编排       | [Graph application](../crates/yss-application/src/graph/README.md)                                                                                                                                                           |
 | 图表资源、预览与保存         | [Chart application](../crates/yss-application/src/chart/README.md)                                                                                                                                                           |
-| Mind / Markdown 文件和编辑器 | [Project model](../crates/yss-project-model/README.md)、[Document editors](../react/src/modules/document-editor/README.md)                                                                                                         |
+| Mind / Markdown 文件和编辑器 | [Project model](../crates/yss-project-model/README.md)、[Application](../crates/yss-application/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md) |
 | 图语义与解析缓存             | [Graph analysis](../crates/yss-graph-analysis/README.md)、[Graph runtime](../crates/yss-graph-runtime/README.md)                                                                                                   |
 | 执行、运行状态和 ResultStore | [Graph execution](../crates/yss-graph-execution/README.md)                                                                                                                                                                   |
 | 共享语义与内核适配           | [Data contracts](../crates/yss-data-contract/README.md)、[Node kernel](../crates/yss-node-kernel/README.md)                                                                                                        |
 | 科学计算入口                 | [SCI runtime](../crates/yss-sci-runtime/README.md)                                                                                                                                                                           |
 | 工作台和图画布               | [GPUI host](../crates/yss-desktop-gpui/README.md)                                                                                                                                 |
-| 结果查询与报告               | [Results application](../react/src/features/application/results/README.md)、[Results views](../react/src/modules/results/README.md)                                                                                                                |
-| 图诊断与运行失败             | [Problems](../react/src/modules/problems/README.md)、[Output](../react/src/modules/output/README.md)                                                                                                                                               |
+| 结果查询与报告               | [Graph application](../crates/yss-application/src/graph/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md) |
+| 图诊断与运行失败             | [Graph analysis](../crates/yss-graph-analysis/README.md)、[Graph application](../crates/yss-application/src/graph/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md) |
 | 工作台界面意图               | [UI contract](../crates/yss-ui-contract/README.md)                                                                                                                                                                           |
 | Harness / Assistant          | [Harness Core](../crates/yss-harness-core/README.md)                                                                                                                                                                         |
-| 运行观测和用户反馈           | [Observability](../react/src/features/application/observability/README.md)                                                                                                                                                                   |
-| 日志存储与呈现               | [Logging runtime](../crates/yss-logging/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md)                                                                                                                            |
+| 运行观测、日志存储与用户反馈 | [Logging runtime](../crates/yss-logging/README.md)、[GPUI host](../crates/yss-desktop-gpui/README.md) |
 | Harness 契约与 Assistant 公开读投影 | [Harness contracts](../crates/yss-harness-contract/README.md) |
 | 插件体系 | [Plugin runtime](../crates/yss-plugin-runtime/README.md)、[Plugin protocol](../crates/yss-plugin-protocol/README.md) |
 
 更多 Project、Database、SCI 与插件内部模块见[实现参考](reference/README.md)和[生成的模块索引](reference/MODULE_MAP.md)。
 
-项目文件类型、各类型处理器与菜单/侧栏的共同入口见 [File operations](../react/src/features/application/resource/README.md)。
+项目文件种类与资源定位见 [Project](../crates/yss-project/README.md)，资源用例见
+[Project application](../crates/yss-application/src/project/README.md)，菜单和侧栏入口见
+[GPUI host](../crates/yss-desktop-gpui/README.md)。
 
 ## 开发与交付
 
