@@ -817,6 +817,19 @@
 - 两份源码均通过 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings`。预览以 `cargo rustc -p yss-desktop-gpui --example run_toolbar_review --locked -- -C opt-level=0 -C debuginfo=0` 构建，仅临时副本使用该配置，不据此作性能结论。变更文件格式、文档链接、组件清单和模块索引分别复核；不增加依赖、持久化契约或 UI 单元测试，不运行全工作区验证。
 - 本批完成 CanvasExecutionToolbar 源码审查，累计 207/265；PinResultSearchPalette 独立迁移。隔离预览使用注入窗口输入，未确认物理悬停提示的显示；物理键鼠/IME、无障碍、Windows/macOS 与大图性能仍开放。临时窗口、隔离项目、故障注入和截图不提交。
 
+
+### 当前端口结果搜索与画布浮层组合
+
+- 逐项核对 PinResultSearchPalette、usePinResultSearch、目录投影、结果有效性判断和 openInspectableResult；同时核对 CanvasOverlays 的 Event/Function 分支及其 NodePalette、执行工具栏组合。必要的是当前输出搜索与原结果打开路径，DOM Portal、CSS 展开动画和浏览器全局监听由原生组件承接。
+- `canvas/result_catalog` 随 presentation 派生节点/端口标签及完整引用，搜索和底部 Results 共享不可变目录，内容相同复用 `Rc`。Results 保留显式历史项，搜索只列出有效且已同步的当前输出；不从运行状态或日志重建结果。
+- 原生 Popover/List 负责焦点、键盘与虚拟行。来源读取仅在打开或目录更新后批量调用 Application，复用 Harness 已有结果快照查询及资源/会话校验，只交付轻量来源；搜索不读取数据页、取得历史租约或触发执行。
+- 排序后的索引随目录、来源或语言变化重建，输入只作去除首尾空白、忽略大小写的子串过滤；搜索包括用户标签、协议标题、端口、原生结果窗口标题、图路径和运行号。语言切换保留查询并恢复首个匹配项，来源标题与 Results 共用，不恢复旧 IPC DTO。
+- 选择复用 `ports/inspection` 当前端口查询、项目/版本/会话校验和自动租约交接，交付时再核对当前目录的完整引用、有效性及等待状态。只有成功交接才关闭搜索；显式“上次结果”继续走原历史入口。
+- 独立提交候选与保留 WIP 的工作区副本均通过真实 Linux/X11 窗口查看三个真实计算输出；核对禁用空目录、排序、大小写筛选、无匹配提示、Enter/点击打开及实际标量值。工作区还核对图路径/运行号/来源标题搜索、语言切换保留查询、Escape/点击外部清空、读取失败原位重试保留查询、打开失败沿原画布提示、编辑后过期输出消失、原历史标签和底部目录保留。
+- 临时来源读取延迟 3.5 秒时关闭并切换图，迟到回复未重新打开搜索或安装到新图；Function 图隐藏搜索入口。预览通过 `cargo rustc -p yss-desktop-gpui --example result_search_review --locked -- -C opt-level=0 -C debuginfo=0` 构建，临时窗口、注入、项目和截图不提交，不据此作性能结论。
+- `cargo test -p yss-application --lib graph::results::tests::catalog:: --locked` 在候选与工作区各运行一项并通过，保护图隔离、当前输出替换、原值 Arc 复用及输出与历史租约的不同所有权；未添加 UI 单元测试。Application 的 `cargo clippy -p yss-application --lib --tests --locked --no-deps -- -D warnings` 和两处原生 `cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --locked --no-deps -- -D warnings` 通过。变更文件格式、文档链接、模块索引和 `git diff --check` 按 L2 核对，未扩大到全工作区验证。
+- 本批完成 PinResultSearchPalette 与 CanvasOverlays 源码审查，累计 209/265。物理悬停、键鼠/IME、无障碍、Windows/macOS 与大图性能仍开放；本批没有新依赖或持久化格式。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -1038,8 +1051,8 @@
 | [modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowNode.tsx) | 复用原生布局与命中 | NodeLayout/连接索引随投影更新，原生端口沿后端方向、orphan 与连接能力起手；不迁入 React 测量与 handle 状态 | Linux 窗口核对真实派生端口增列及同尺寸重排展示样例；物理输入与平台验收开放 |
 | [modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/core/ViewportGrid.tsx) | 迁移：共用 Canvas 坐标，无需 DOM 订阅 | 40 世界单位点网格、固定屏幕半径；复用有界点块路径平铺，平移不细分 | Linux 窗口核对负平移/缩放/尺寸变化，10% 可见；release 大图和 120Hz 仍开放 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasExecutionToolbar.tsx) | 迁移 | 原生固定工具栏、运行提示确认、禁用原因及同步状态；复用 Application 运行和 Output | 隔离窗口核对完成/失败清除、缓存保留、旧身份、局部执行、取消和未知状态恢复；物理悬停/键鼠及其他平台待验收 |
-| [modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
-| [modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
+| [modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/CanvasOverlays.tsx) | 复用原生组件 | `canvas/toolbar` 组合运行与 Event 结果搜索，节点目录沿用原画布浮层；无 DOM Portal 模型 | 子组件逐项审查；隔离窗口核对 Event/Function 分支，平台/输入验收开放 |
+| [modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/PinResultSearchPalette.tsx) | 迁移 | `canvas/result_catalog` 与底部目录共享引用；Popover/List、批量来源索引及原端口租约交接 | 隔离窗口核对搜索、打开、失败重试、过期、关闭和语言；物理悬停/输入及其他平台待验收 |
 | [modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx](../../react/src/modules/graph-editor/internal/ui/Canvas/overlays/WatermarkView.tsx) | 待查 | 待逐项阅读源码 | 待审查 |
 | [modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/ConnectionContextMenu.tsx) | 迁移 | 原生 PopupMenu，单选/多选断开与危险删除；菜单/投影/版本校验，复用原图事务 | Linux 窗口核对多选、断开、Delete、转接点与历史；物理输入、读屏和跨平台待验收 |
 | [modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx](../../react/src/modules/graph-editor/internal/ui/ContextMenu/NodeContextMenu.tsx) | 迁移 | 原生 PopupMenu，复用原选择、子图剪贴板、图事务和两种运行；managed/连接/运行条件及旧菜单校验 | 隔离窗口核对全部动作、撤销、托管节点与 Function 限制；物理输入及跨平台开放 |

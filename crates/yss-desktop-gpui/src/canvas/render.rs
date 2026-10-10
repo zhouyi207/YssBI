@@ -346,7 +346,7 @@ impl Render for GraphCanvas {
             .size_full()
             .flex()
             .flex_col()
-            .child(self.render_toolbar(cx))
+            .child(self.render_toolbar(window, cx))
             .child(surface)
     }
 }

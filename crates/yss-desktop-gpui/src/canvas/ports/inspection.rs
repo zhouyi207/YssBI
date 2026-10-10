@@ -52,7 +52,7 @@ impl GraphCanvas {
         )
     }
 
-    pub(super) fn inspect_port_result(
+    pub(in crate::canvas) fn inspect_port_result(
         &mut self,
         address: &PortAddress,
         previous: bool,
@@ -92,15 +92,18 @@ impl GraphCanvas {
             let app = &services.application;
             app.current_graph_document(&project, &path, version)?;
             for target in targets {
-                let reference = match target {
-                    Target::Previous(reference) => reference,
+                let (reference, output) = match target {
+                    Target::Previous(reference) => (reference, None),
                     Target::Current(output) => {
                         let Some(result) =
                             app.query_pin_result(ResultPinQuery::new(path.clone(), output))?
                         else {
                             continue;
                         };
-                        result.provenance().reference()
+                        (
+                            result.provenance().reference(),
+                            Some(result.output().clone()),
+                        )
                     }
                 };
                 if reference.execution_session_id != session {
@@ -109,7 +112,7 @@ impl GraphCanvas {
                 match app.retain_owned_result(reference) {
                     Ok((lease, _)) => {
                         app.current_graph_document(&project, &path, version)?;
-                        return Ok(Some(Arc::new(lease)));
+                        return Ok(Some((Arc::new(lease), output)));
                     }
                     Err(ResultQueryApplicationError::Retention(
                         ResultRetentionError::Unavailable,
@@ -134,7 +137,20 @@ impl GraphCanvas {
                     return;
                 }
                 match result {
-                    Ok(Some(lease)) => cx.emit(CanvasEvent::InspectResult(lease)),
+                    Ok(Some((lease, output))) => {
+                        let current = output.as_ref().is_none_or(|output| {
+                            view.result_entries().iter().any(|entry| {
+                                entry.current()
+                                    && entry.output == *output
+                                    && entry.reference == lease.reference()
+                            })
+                        });
+                        if current {
+                            cx.emit(CanvasEvent::InspectResult(lease));
+                        } else {
+                            view.error = Some(crate::text::translate("native.results.unavailable"));
+                        }
+                    }
                     Ok(None) | Err(_) => {
                         view.error = Some(crate::text::translate("native.results.unavailable"))
                     }

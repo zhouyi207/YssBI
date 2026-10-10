@@ -10,26 +10,20 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     dock::{BasePanel, DockPlacement, Panel, PanelEvent},
 };
-use yss_graph_execution::result::{ResultCacheState, ResultReference};
+use std::rc::Rc;
+use yss_graph_execution::result::ResultReference;
 
 use super::Workbench;
 use crate::{
     appearance,
     assets::NativeIcon,
-    canvas::GraphCanvas,
+    canvas::{GraphCanvas, ResultEntry},
     results::{ResultEvent, ResultPanel},
 };
 
-struct ResultEntry {
-    title: String,
-    reference: ResultReference,
-    stale: bool,
-    waiting: bool,
-}
-
 pub struct ResultsPanel {
     focus: FocusHandle,
-    entries: Vec<ResultEntry>,
+    entries: Rc<[ResultEntry]>,
 }
 pub enum ResultsEvent {
     Open(ResultReference),
@@ -39,58 +33,12 @@ impl ResultsPanel {
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus: cx.focus_handle(),
-            entries: vec![],
+            entries: Rc::default(),
         }
     }
     pub fn set_graph(&mut self, canvas: Option<&GraphCanvas>) {
         self.entries = canvas
-            .map(|canvas| {
-                let graph = &canvas.graph;
-                let labels: std::collections::BTreeMap<String, String> = graph
-                    .projection
-                    .nodes
-                    .iter()
-                    .flat_map(|node| {
-                        node.ports.iter().map(move |port| {
-                            (
-                                port.address.to_string(),
-                                format!(
-                                    "{} · {}",
-                                    node.display
-                                        .user_label
-                                        .as_ref()
-                                        .unwrap_or(&node.display.title),
-                                    port.display.label
-                                ),
-                            )
-                        })
-                    })
-                    .collect();
-                graph
-                    .results
-                    .outputs
-                    .iter()
-                    .filter_map(|(output, state)| {
-                        let (result_id, stale) = match state {
-                            ResultCacheState::Valid { result_id } => (*result_id, false),
-                            ResultCacheState::Stale { result_id } => (*result_id, true),
-                            ResultCacheState::Missing => return None,
-                        };
-                        Some(ResultEntry {
-                            title: labels
-                                .get(output.port().as_str())
-                                .cloned()
-                                .unwrap_or_else(|| output.port().to_string()),
-                            reference: ResultReference {
-                                execution_session_id: graph.results.execution_session_id,
-                                result_id,
-                            },
-                            stale,
-                            waiting: canvas.result_waiting(output),
-                        })
-                    })
-                    .collect()
-            })
+            .map(|canvas| canvas.result_entries().clone())
             .unwrap_or_default();
     }
 }

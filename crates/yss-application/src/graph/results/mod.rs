@@ -8,7 +8,7 @@ use yss_data_contract::TabularScalar;
 use yss_graph_document::{GraphResourcePath, PortAddress};
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_graph_execution::result::{
-    ResultReference, ResultRetentionError, StoredResult, StoredResultSnapshot,
+    ResultReadSnapshot, ResultReference, ResultRetentionError, StoredResult, StoredResultSnapshot,
 };
 use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
@@ -322,6 +322,17 @@ impl ApplicationState {
         result
     }
 
+    pub fn query_graph_results(
+        &self,
+        graph: &GraphResourcePath,
+    ) -> Result<Vec<ResultReadSnapshot>, ResultQueryApplicationError> {
+        let captured = self.capture_session()?;
+        let results = query_graph_result_entries(&captured, graph, None)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
+        Ok(results)
+    }
+
     pub fn query_graph_result_state(
         &self,
         graph: GraphResourcePath,
@@ -579,6 +590,7 @@ pub(crate) fn column_indices(
 #[cfg(test)]
 mod tests {
     mod anova;
+    mod catalog;
     mod multivariate;
     mod paging;
     use super::*;

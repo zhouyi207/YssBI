@@ -32,6 +32,7 @@ pub(super) struct PortAppearance {
 #[derive(Default)]
 pub(super) struct Presentation {
     pub graph_blocked: bool,
+    pub results: Rc<[super::result_catalog::ResultEntry]>,
     pub nodes: BTreeMap<NodeId, NodeAppearance>,
     pub ports: BTreeMap<PortAddress, PortAppearance>,
     connections: BTreeMap<ConnectionId, State>,
@@ -90,6 +91,7 @@ impl GraphCanvas {
                 .map(|(_, code)| code)
         };
         let mut view = Presentation {
+            results: self.project_result_entries(&pending),
             graph_blocked: !matches!(
                 graph.projection.outcome,
                 yss_graph_editor::projection::EditorResolutionOutcome::Complete

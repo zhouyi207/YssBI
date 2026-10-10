@@ -15,6 +15,8 @@ mod palette;
 mod ports;
 mod presentation;
 mod render;
+mod result_catalog;
+mod result_search;
 mod selection;
 mod toolbar;
 mod viewport;
@@ -40,6 +42,7 @@ pub use authoring::ConstantValueInput;
 pub use commands::*;
 pub(crate) use constant_drag::ConstantDrag;
 pub(crate) use ports::scalar_input_type;
+pub(crate) use result_catalog::ResultEntry;
 
 pub enum CanvasEvent {
     Selection {

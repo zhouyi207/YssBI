@@ -90,6 +90,11 @@ JSON pointer 和原表引用必须有效，公式保留后端纯文本。声明�
 `results/retention::ResultLease` 为进程内消费者提供原会话的自动释放；异步交付被丢弃时同样释放，
 弱引用不延长已结束的项目会话。跨边界的显式 lease API 继续共用原 Execution ResultStore。
 
+`ApplicationState::query_graph_results` 为进程内当前输出目录复用 Harness 的批量结果查询，
+按图读取现有 `ResultReadSnapshot`，统一观察资源有效性并在交付前重验捕获会话。
+快照借用原不可变结果的 `Arc`，不复制或编码载荷；只由显式历史租约保留、已不属于输出的结果不进入该目录。
+显示名称、搜索索引和当前项选择属于原生宿主；打开时仍重新查询当前端口并取得原 `ResultLease`。
+
 `results/plot` 为原生消费者读取完整 PlotData 结果，按执行输出的 `PlotDataKind` 选择投影；
 当前支持散点、折线、ECDF、KDE、直方图、气泡、象限、P-P/Q-Q、ROC，以及相关矩阵、
 ACF/PACF、箱线/小提琴、误差线/系数、热力、列线图、帕累托、组合与词云，覆盖全部二十类。读取捕获原执行会话，

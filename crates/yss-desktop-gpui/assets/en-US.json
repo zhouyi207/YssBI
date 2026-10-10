@@ -12,9 +12,29 @@
       "runUnknown": "Run status unknown. Refresh status",
       "syncingRun": "Syncing run status…",
       "operationInProgress": "Applying graph changes. Please wait."
+    },
+    "results": {
+      "unavailable": "Result unavailable or could not be read. Check the current project and logs."
     }
   },
   "common": {
     "retry": "Retry"
+  },
+  "canvas": {
+    "pinResultSearch": {
+      "open": "Search pin results",
+      "close": "Close pin result search",
+      "empty": "No pin results yet — run the graph first",
+      "searchPlaceholder": "Filter by node, pin, or result title…",
+      "noMatches": "No matching pin results",
+      "unknownNode": "Unknown node",
+      "unknownPin": "Unknown pin"
+    }
+  },
+  "sourceInspector": {
+    "title": "Source Inspector"
+  },
+  "plot": {
+    "title": "Plot"
   }
 }

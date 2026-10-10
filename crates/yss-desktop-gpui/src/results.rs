@@ -110,11 +110,7 @@ impl ResultPanel {
         self.lease.clone()
     }
     pub fn window_title(&self) -> String {
-        crate::text::translate(if self.plot.is_some() {
-            "plot.title"
-        } else {
-            "sourceInspector.title"
-        })
+        window_title(self.plot.is_some())
     }
     pub fn close(&mut self, cx: &mut Context<Self>) {
         if self.closed {
@@ -188,4 +184,12 @@ impl Panel for ResultPanel {
     fn inner_padding(&self, _: &App) -> bool {
         false
     }
+}
+
+pub(crate) fn window_title(plot: bool) -> String {
+    crate::text::translate(if plot {
+        "plot.title"
+    } else {
+        "sourceInspector.title"
+    })
 }

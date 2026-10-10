@@ -1,7 +1,7 @@
 //! Compact graph controls live outside the pointer-interaction surface.
 use super::{GraphCanvas, commands::*};
 use crate::{appearance, assets::NativeIcon};
-use gpui::{Context, IntoElement, div, prelude::*, px, rgb};
+use gpui::{Context, IntoElement, Window, div, prelude::*, px, rgb};
 use gpui_component::{
     ActiveTheme, Disableable, IconName, Sizable,
     button::{Button, ButtonVariants},
@@ -9,7 +9,11 @@ use gpui_component::{
 };
 
 impl GraphCanvas {
-    pub(super) fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn render_toolbar(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
         let run_node = self.can_run() && self.selected.len() == 1;
         let running = self.is_running();
         let run_unavailable = self.graph_run_unavailable_reason();
@@ -61,6 +65,7 @@ impl GraphCanvas {
                         cx.listener(|view, _, _, cx| view.submit(GraphCommand::Redo, None, cx)),
                     ),
             )
+            .when(event_graph, |bar| bar.child(self.result_search(window, cx)))
             .child(div().flex_1().min_w_0())
             .when_some(self.execution_sync_status(), |view, status| {
                 view.child(
