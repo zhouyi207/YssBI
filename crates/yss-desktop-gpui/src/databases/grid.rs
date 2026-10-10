@@ -1,14 +1,14 @@
 //! The virtual grid borrows schema metadata and holds only one bounded page with stable row IDs.
-use gpui::{
-    App, Context, Div, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, Stateful, Window,
-    div, prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon,
     table::{Column, TableDelegate, TableSelection, TableState},
     tooltip::Tooltip,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, Context, Div, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, Stateful, Window,
+    div, prelude::*, px,
+};
 use std::{sync::Arc, time::Duration};
 use yss_application::database::{DatabaseMetaResult, DatabaseRowsResult};
 use yss_data_contract::{TabularScalar, TabularSnapshot};
@@ -73,11 +73,11 @@ impl DatabaseGrid {
         &self,
         row: usize,
         cx: &mut Context<TableState<Self>>,
-    ) -> gpui::AnyElement {
+    ) -> gpui_kit::AnyElement {
         let selected = self.selection.row_selected(row);
         div()
             .id(("database-row-number", row))
-            .role(gpui::Role::RowHeader)
+            .role(gpui_kit::Role::RowHeader)
             .aria_selected(selected)
             .size_full()
             .flex()
@@ -151,7 +151,7 @@ impl TableDelegate for DatabaseGrid {
         let tooltip = format!("{name} ({dtype})");
         div()
             .id(("database-column", column))
-            .role(gpui::Role::ColumnHeader)
+            .role(gpui_kit::Role::ColumnHeader)
             .aria_selected(self.selection.column_selected(column))
             .size_full()
             .flex()

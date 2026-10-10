@@ -1,7 +1,7 @@
 //! A series owns one draft per row; input entities are created on visited pages.
 use super::super::{ParameterForm, display, subscribe_input};
-use gpui::{App, AppContext, Context, Entity, EntityId, Subscription, Window};
-use gpui_component::input::InputState;
+use gpui_kit::component::input::InputState;
+use gpui_kit::{App, AppContext, Context, Entity, EntityId, Subscription, Window};
 use serde_json::Value;
 use yss_data_contract::{SemanticType, ValueType};
 use yss_graph_editor::projection::EditorParameterModel;

@@ -1,14 +1,14 @@
 //! Tool details use localized facts and the shared resource cards, with raw JSON on demand.
 use super::{CopyTarget, Inspection, Loading};
-use gpui::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     spinner::Spinner,
     text::TextView,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px};
 use serde_json::Value;
 
 impl Render for Inspection {
@@ -285,7 +285,7 @@ impl Inspection {
     }
 }
 
-fn fact(key: &str, value: &Value, translate_value: bool, cx: &gpui::App) -> impl IntoElement {
+fn fact(key: &str, value: &Value, translate_value: bool, cx: &gpui_kit::App) -> impl IntoElement {
     let label = translated("panel.assistantToolFacts", key);
     let value = match value.as_str() {
         Some(value) if translate_value => translated("panel.assistantToolValues", value),

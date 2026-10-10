@@ -1,6 +1,6 @@
 //! Explicit row inspection, keyboard navigation and the existing workbench Details target.
 use super::*;
-use gpui::{ClipboardItem, KeyDownEvent, ScrollStrategy};
+use gpui_kit::{ClipboardItem, KeyDownEvent, ScrollStrategy};
 
 impl LogsPanel {
     pub(super) fn inspect(
@@ -41,7 +41,8 @@ impl LogsPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.focus.is_focused(window) || event.keystroke.modifiers != gpui::Modifiers::default()
+        if !self.focus.is_focused(window)
+            || event.keystroke.modifiers != gpui_kit::Modifiers::default()
         {
             return;
         }

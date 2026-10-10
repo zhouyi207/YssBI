@@ -1,7 +1,7 @@
 //! Async settings commands and captured save requests, shared with Save All.
 use super::{SettingsPanel, models::provider_name};
 use crate::services::NativeServices;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use std::sync::Arc;
 use yss_application::{
     harness::models::{CredentialChange, ModelSettingsError},

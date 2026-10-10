@@ -10,16 +10,16 @@ mod rows;
 pub(crate) use drag::{ActivityDrag, ActivityDrop};
 pub(super) use feedback::ReadState;
 
-use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
-    Window, div, prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Icon,
     dock::{BasePanel, Panel, PanelEvent},
     input::{InputEvent, InputState},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
+    Window, div, prelude::*, px,
+};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -59,14 +59,14 @@ pub struct ActivityPanel {
     resources: Option<resources::ResourceRows>,
     expanded: BTreeMap<String, bool>,
     rows: Vec<usize>,
-    scroll: gpui::UniformListScrollHandle,
+    scroll: gpui_kit::UniformListScrollHandle,
     focus: FocusHandle,
     active_resource: Option<String>,
     search: Option<Entity<InputState>>,
     search_default_title: &'static str,
-    conversation_owner: Option<gpui::WeakEntity<super::Workbench>>,
-    search_subscription: Option<gpui::Subscription>,
-    activation_subscription: Option<gpui::Subscription>,
+    conversation_owner: Option<gpui_kit::WeakEntity<super::Workbench>>,
+    search_subscription: Option<gpui_kit::Subscription>,
+    activation_subscription: Option<gpui_kit::Subscription>,
 }
 
 impl ActivityPanel {
@@ -88,7 +88,7 @@ impl ActivityPanel {
             self.expanded.clear();
             self.active_resource = None;
             self.focused_row = None;
-            self.scroll.scroll_to_item(0, gpui::ScrollStrategy::Top);
+            self.scroll.scroll_to_item(0, gpui_kit::ScrollStrategy::Top);
         } else {
             let categories: BTreeSet<_> = document
                 .rows
@@ -118,7 +118,7 @@ impl ActivityPanel {
             resources: None,
             expanded: BTreeMap::new(),
             rows: Vec::new(),
-            scroll: gpui::UniformListScrollHandle::new(),
+            scroll: gpui_kit::UniformListScrollHandle::new(),
             focus: cx.focus_handle(),
             active_resource: None,
             search: None,
@@ -136,7 +136,7 @@ impl ActivityPanel {
     }
 
     pub fn pending_conversations(
-        owner: gpui::WeakEntity<super::Workbench>,
+        owner: gpui_kit::WeakEntity<super::Workbench>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -149,7 +149,7 @@ impl ActivityPanel {
         panel.search_subscription = Some(cx.subscribe(&search, |view, _, event, cx| {
             if matches!(event, InputEvent::Change) {
                 view.rebuild_rows(cx);
-                view.scroll.scroll_to_item(0, gpui::ScrollStrategy::Top);
+                view.scroll.scroll_to_item(0, gpui_kit::ScrollStrategy::Top);
                 cx.notify();
             }
         }));

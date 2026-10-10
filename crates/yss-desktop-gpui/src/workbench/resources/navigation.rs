@@ -1,6 +1,6 @@
 //! Resource links share the normal workbench open and lifecycle paths.
 use super::super::Workbench;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_project_identity::{ProjectResourceKind, ProjectResourceRef};
 
 impl Workbench {

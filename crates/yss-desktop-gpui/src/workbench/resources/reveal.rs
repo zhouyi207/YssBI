@@ -1,6 +1,6 @@
 //! Resolve paths with the captured project before handing them to the native platform.
 use super::super::Workbench;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_project::RevealProjectResourceRequest;
 
 impl Workbench {

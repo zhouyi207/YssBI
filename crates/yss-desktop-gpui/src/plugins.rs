@@ -10,12 +10,12 @@ pub(crate) use native::{OpenNativeView, PluginViewPanel};
 pub(crate) use sidebar::PluginsSidebar;
 
 use crate::services::NativeServices;
-use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
-};
-use gpui_component::{
+use gpui_kit::component::{
     dock::{BasePanel, Panel, PanelEvent, PanelState},
     input::{InputEvent, InputState},
+};
+use gpui_kit::{
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
 };
 use std::sync::Arc;
 use yss_plugin_runtime::{InstalledPlugin, PluginFailure, PluginManager};
@@ -171,7 +171,7 @@ impl BasePanel for PluginsPanel {
     }
 }
 impl Panel for PluginsPanel {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         self.selected_plugin()
             .map(|plugin| plugin.manifest.name.clone())
             .unwrap_or_else(|| crate::text::t("activityBar.plugins").into())

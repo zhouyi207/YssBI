@@ -1,6 +1,6 @@
 //! Shared label, description and control layout for every settings category.
-use gpui::{AnyElement, App, IntoElement, div, prelude::*, px};
-use gpui_component::ActiveTheme;
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{AnyElement, App, IntoElement, div, prelude::*, px};
 
 impl crate::settings::SettingsPanel {
     pub(in crate::settings) fn render_field(

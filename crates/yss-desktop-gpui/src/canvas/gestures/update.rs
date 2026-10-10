@@ -1,6 +1,6 @@
 use super::{Gesture, GraphCanvas};
 use crate::canvas::{CanvasEvent, GraphCommand, geometry};
-use gpui::{
+use gpui_kit::{
     Context, MouseButton, MouseMoveEvent, MouseUpEvent, PinchEvent, Pixels, Point,
     ScrollWheelEvent, Window, px,
 };

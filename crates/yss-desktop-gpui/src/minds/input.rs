@@ -1,5 +1,5 @@
 use super::{Gesture, MindCanvas, MindEvent};
-use gpui::{
+use gpui_kit::{
     Bounds, Context, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
     ScrollWheelEvent, Window, point, px, size,
 };

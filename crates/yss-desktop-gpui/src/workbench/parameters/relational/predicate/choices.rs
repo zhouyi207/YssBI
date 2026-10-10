@@ -4,13 +4,13 @@ use crate::{
     text::translate,
     workbench::parameters::{ParameterForm, field::ParameterDraft, relational::RelationalDraft},
 };
-use gpui::{AnyElement, Context, IntoElement, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Disableable, Sizable,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, prelude::*};
 use yss_graph_editor::projection::{EditorFilterLiteralType, EditorParameterConfiguration};
 use yss_node_protocol::dataframe::FilterOperator;
 
@@ -28,7 +28,7 @@ enum Choice {
 }
 
 impl Choice {
-    fn presentation(&self, draft: &FilterDraft, cx: &gpui::App) -> (String, bool) {
+    fn presentation(&self, draft: &FilterDraft, cx: &gpui_kit::App) -> (String, bool) {
         match self {
             Self::Column(name) => (name.clone(), draft.column.read(cx).value() == name.as_str()),
             Self::Operator(value) => (operator_label(*value), draft.operator == Some(*value)),

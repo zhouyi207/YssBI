@@ -3,8 +3,8 @@ use super::{
     ConversationPanel,
     projection::{Timing, Turn, TurnState},
 };
-use gpui::{AnyElement, App, Context, SharedString, Window, div, prelude::*, px};
-use gpui_component::{ActiveTheme, tooltip::Tooltip};
+use gpui_kit::component::{ActiveTheme, tooltip::Tooltip};
+use gpui_kit::{AnyElement, App, Context, SharedString, Window, div, prelude::*, px};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use yss_harness_contract::{HarnessMode, ReasoningEffort};
 
@@ -92,7 +92,7 @@ impl ConversationPanel {
 
 pub(super) fn elapsed(id: String, timing: Option<Timing>, active: bool, cx: &App) -> AnyElement {
     let Some(timing) = timing else {
-        return gpui::Empty.into_any_element();
+        return gpui_kit::Empty.into_any_element();
     };
     let value = if let Some(finished) = timing.finished_at {
         crate::text::format(

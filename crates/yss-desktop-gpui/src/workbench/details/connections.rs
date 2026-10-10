@@ -3,15 +3,15 @@ mod picker;
 
 use super::{DetailsPanel, ports::PortField};
 use crate::{canvas::GraphCommand, text::translate};
-use gpui::{AnyElement, Context, Focusable, IntoElement, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Disableable, IndexPath, Sizable,
     button::{Button, ButtonVariants},
     list::{List, ListState},
     popover::Popover,
     tooltip::Tooltip,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, Focusable, IntoElement, Window, div, prelude::*, px};
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_document::{ConnectionId, PortAddress};
 use yss_graph_editor::{
@@ -250,7 +250,9 @@ impl DetailsPanel {
                             .gap_1()
                             .child(
                                 div()
-                                    .id(gpui::SharedString::from(format!("connection-peer-{id}")))
+                                    .id(gpui_kit::SharedString::from(format!(
+                                        "connection-peer-{id}"
+                                    )))
                                     .flex_1()
                                     .min_w_0()
                                     .text_sm()
@@ -261,7 +263,7 @@ impl DetailsPanel {
                                     }),
                             )
                             .child(
-                                Button::new(gpui::SharedString::from(format!(
+                                Button::new(gpui_kit::SharedString::from(format!(
                                     "remove-connection-{id}"
                                 )))
                                 .small()

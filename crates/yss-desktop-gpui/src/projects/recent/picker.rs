@@ -1,12 +1,12 @@
 //! List owns input, navigation and focus; the delegate holds read projections and row indices.
 use super::{RecentProjectEvent, RecentProjects, RecentSnapshot};
-use gpui::{App, Context, Entity, IntoElement, Task, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon, IndexPath, Sizable,
     button::{Button, ButtonVariants},
     list::{ListDelegate, ListItem, ListState},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{App, Context, Entity, IntoElement, Task, Window, div, prelude::*, px};
 
 pub(crate) struct RecentDelegate {
     owner: Entity<RecentProjects>,
@@ -87,7 +87,7 @@ impl ListDelegate for RecentDelegate {
     ) -> Option<Self::Item> {
         let record = self.snapshot.records.get(*self.matches.get(index.row)?)?;
         Some(
-            ListItem::new(gpui::SharedString::from(record.id.as_str().to_owned()))
+            ListItem::new(gpui_kit::SharedString::from(record.id.as_str().to_owned()))
                 .h(px(56.))
                 .px_3()
                 .accessibility_label(format!("{} {}", record.name, record.path))

@@ -1,7 +1,7 @@
 //! Lock and update the original editor entity without replacing DockArea placement.
 use super::*;
 use crate::{documents::DocumentEditor, file_commands::FileSaveOutcome, minds::MindCanvas};
-use gpui::App;
+use gpui_kit::App;
 
 pub(super) enum FilePanel {
     Document(Entity<DocumentEditor>),
@@ -45,12 +45,12 @@ impl Workbench {
             AuthoredKind::Document => self
                 .documents
                 .get(path)
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
                 .map(FilePanel::Document),
             AuthoredKind::Mind => self
                 .minds
                 .get(path)
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
                 .map(FilePanel::Mind),
             AuthoredKind::Chart => None,
         }

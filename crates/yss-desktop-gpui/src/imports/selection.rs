@@ -1,12 +1,12 @@
 //! The same virtual selector serves Excel sheets and local or remote SQL tables.
 use super::{ImportDialog, ImportKind, ImportStage, SourceLocation};
 use crate::text::translate as t;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px, uniform_list};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable,
     button::{Button, ButtonVariants},
     tooltip::Tooltip,
 };
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*, px, uniform_list};
 
 impl ImportDialog {
     pub(super) fn render_selection(

@@ -1,10 +1,10 @@
 use super::*;
-use gpui::{App, Div, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::component::{
     Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Input,
 };
+use gpui_kit::{App, Div, div, prelude::*, px};
 
 fn finite(input: &Entity<InputState>, cx: &App) -> Option<f64> {
     input

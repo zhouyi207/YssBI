@@ -1,5 +1,5 @@
 use chrono::DateTime;
-use gpui::{Bounds, Pixels, Size, point, px, size};
+use gpui_kit::{Bounds, Pixels, Size, point, px, size};
 use yss_application::chart::PlotAxisFormat;
 
 #[derive(Clone, Copy)]

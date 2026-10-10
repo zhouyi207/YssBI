@@ -1,13 +1,13 @@
 //! The composer reads turn usage without scanning or cloning its output history.
 use super::{ConversationPanel, projection::usage::TurnUsage};
-use gpui::{Anchor, AnyElement, App, Context, Empty, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     popover::Popover,
     progress::ProgressCircle,
     tooltip::Tooltip,
 };
+use gpui_kit::{Anchor, AnyElement, App, Context, Empty, div, prelude::*, px};
 
 const FIELDS: [&str; 5] = [
     "panel.assistantUsageFields.inputTokens",
@@ -93,7 +93,7 @@ impl ConversationPanel {
             .text_xs()
             .child(
                 div()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .child(crate::text::t("panel.assistantTokens")),
             )
             .when_some(turn, |content, turn| {
@@ -117,7 +117,7 @@ impl ConversationPanel {
                     .border_t_1()
                     .border_color(cx.theme().border)
                     .pt_2()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .child(crate::text::format(
                         "panel.assistantTurnUsage",
                         &[("count", count(Some(u128::from(usage.calls))))],

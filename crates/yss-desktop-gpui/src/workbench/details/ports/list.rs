@@ -1,8 +1,8 @@
 //! Input and output groups mirror the reference panel's initially collapsed sections.
 use super::*;
 use crate::text::translate;
-use gpui_component::collapsible::Collapsible;
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::collapsible::Collapsible;
 use yss_graph_editor::projection::EditorNodeModel;
 
 impl DetailsPanel {

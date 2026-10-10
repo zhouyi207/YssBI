@@ -1,13 +1,13 @@
 //! Compact graph controls live outside the pointer-interaction surface.
 use super::{GraphCanvas, commands::*};
 use crate::appearance;
-use gpui::{Context, IntoElement, Window, div, prelude::*, px, rgb};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::DropdownMenu,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, Window, div, prelude::*, px, rgb};
 
 impl GraphCanvas {
     pub(super) fn render_toolbar(
@@ -122,7 +122,7 @@ impl GraphCanvas {
                 Button::new("clear-run-notice")
                     .small()
                     .ghost()
-                    .icon(gpui_kit_assets::IconName::ListX)
+                    .icon(gpui_kit::assets::IconName::ListX)
                     .tooltip(crate::text::t(if clear_run.is_some() {
                         "canvas.clearExecutionArtifacts"
                     } else {

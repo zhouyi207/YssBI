@@ -1,10 +1,10 @@
 use super::SettingsPanel;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::{Input, Textarea},
 };
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use yss_harness_contract::ReasoningEffort;
 
 impl SettingsPanel {

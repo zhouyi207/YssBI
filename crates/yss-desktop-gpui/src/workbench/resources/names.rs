@@ -4,7 +4,7 @@ use super::{
     ResourceAction,
     operations::GraphTarget,
 };
-use gpui::{Context, Entity, Focusable, SharedString, Window};
+use gpui_kit::{Context, Entity, Focusable, SharedString, Window};
 
 impl Workbench {
     pub(super) fn resource_name_dialog(
@@ -31,7 +31,7 @@ impl Workbench {
         let submit_label = submit_label.into();
         crate::modal_window::open(
             title,
-            gpui::size(gpui::px(480.), gpui::px(270.)),
+            gpui_kit::size(gpui_kit::px(480.), gpui_kit::px(270.)),
             window,
             cx,
             move |window, cx| {

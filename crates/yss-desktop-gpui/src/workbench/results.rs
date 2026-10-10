@@ -1,16 +1,16 @@
 //! Current output catalogue and result-panel composition, without owning result payloads.
 pub(super) mod window;
 
-use gpui::{
-    App, AppContext, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
-    div, prelude::*, uniform_list,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, DockPlacement, Panel, PanelEvent},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, AppContext, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window,
+    div, prelude::*, uniform_list,
+};
 use std::rc::Rc;
 use yss_graph_execution::result::ResultReference;
 
@@ -154,11 +154,11 @@ impl Workbench {
         if let Some(panel) = self
             .result_panels
             .get(&key)
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
             && panel.read(cx).available()
         {
             self.present_panel(
-                gpui_component::dock::panel_handle(panel.clone()),
+                gpui_kit::component::dock::panel_handle(panel.clone()),
                 DockPlacement::Center,
                 window,
                 cx,
@@ -204,7 +204,7 @@ impl Workbench {
                         if view
                             .result_panels
                             .get(&previous)
-                            .and_then(gpui::WeakEntity::upgrade)
+                            .and_then(gpui_kit::WeakEntity::upgrade)
                             .is_some_and(|held| held == *panel)
                         {
                             view.result_panels.remove(&previous);
@@ -223,7 +223,7 @@ impl Workbench {
         ));
         self.result_panels.insert(key, panel.downgrade());
         self.present_panel(
-            gpui_component::dock::panel_handle(panel.clone()),
+            gpui_kit::component::dock::panel_handle(panel.clone()),
             DockPlacement::Center,
             window,
             cx,
@@ -236,7 +236,7 @@ impl Workbench {
 
     fn observe_result_intent(
         &mut self,
-        panel: &gpui::Entity<ResultPanel>,
+        panel: &gpui_kit::Entity<ResultPanel>,
         id: String,
         window: &mut Window,
         cx: &mut Context<Self>,

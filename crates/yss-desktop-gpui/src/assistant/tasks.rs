@@ -1,14 +1,14 @@
 //! Task and plan cards borrow the transcript; only disclosure choices belong to the view.
 use super::{ConversationPanel, projection::Task};
-use gpui::{AnyElement, Context, Empty, IntoElement, SharedString, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     spinner::Spinner,
     text::TextView,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, Empty, IntoElement, SharedString, div, prelude::*};
 use yss_harness_contract::{AgentRole, AgentRunState, AnalysisMode, StatisticalPlan};
 
 impl ConversationPanel {
@@ -187,7 +187,7 @@ impl ConversationPanel {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .child(plan.research_question.clone()),
             )
             .child(plan_field("panel.assistantPlanMode", mode.to_owned(), cx))
@@ -227,7 +227,7 @@ impl ConversationPanel {
     }
 }
 
-fn plan_field(label: &'static str, value: String, cx: &gpui::App) -> impl IntoElement {
+fn plan_field(label: &'static str, value: String, cx: &gpui_kit::App) -> impl IntoElement {
     div()
         .min_w_0()
         .flex()

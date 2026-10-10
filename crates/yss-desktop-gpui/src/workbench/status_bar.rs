@@ -1,14 +1,14 @@
 //! Panel shortcuts and graph statistics follow the root DockArea's visible editor regions.
 use super::{Workbench, layout::columns, menus::WorkbenchPanel};
 use crate::canvas::GraphCanvas;
-use gpui::{Context, Entity, IntoElement, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Selectable, Sizable,
     button::{Button, ButtonVariants},
     dock::DockPlacement,
     tooltip::Tooltip,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, Entity, IntoElement, Window, div, prelude::*, px};
 
 impl Workbench {
     pub(super) fn observe_graph_status(
@@ -225,7 +225,7 @@ impl Workbench {
             .xsmall()
             .compact()
             .ghost()
-            .icon(Icon::new(gpui_kit_assets::IconName::MessageSquareText).size_3())
+            .icon(Icon::new(gpui_kit::assets::IconName::MessageSquareText).size_3())
             .tooltip(crate::text::translate(label))
             .selected(open)
             .disabled(

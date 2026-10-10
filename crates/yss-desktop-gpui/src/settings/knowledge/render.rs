@@ -1,12 +1,12 @@
 use super::{Failure, commands::Mutation};
 use crate::{settings::SettingsPanel, text::translate as t};
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use yss_harness_contract::{ProjectKnowledgeSourceSummary, ProjectKnowledgeStatus};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_model::doc::DocPath;

@@ -1,11 +1,11 @@
 use super::SettingsPanel;
 use crate::text::{self, t};
-use gpui::{AnyElement, Context, IntoElement};
-use gpui_component::{
+use gpui_kit::component::{
     Disableable,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
 };
+use gpui_kit::{AnyElement, Context, IntoElement};
 
 impl SettingsPanel {
     pub(super) fn appearance(&self, cx: &mut Context<Self>) -> AnyElement {

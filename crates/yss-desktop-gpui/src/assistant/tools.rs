@@ -4,14 +4,14 @@ use super::{
     inspect::ToolCard,
     projection::{Tool, ToolState},
 };
-use gpui::{AnyElement, Context, Empty, IntoElement, SharedString, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     spinner::Spinner,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, Empty, IntoElement, SharedString, div, prelude::*};
 
 impl ConversationPanel {
     pub(super) fn tool_group<'a>(

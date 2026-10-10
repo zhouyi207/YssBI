@@ -1,15 +1,15 @@
 mod layout;
-use gpui::{
-    AnyElement, App, Bounds, ElementId, Entity, IntoElement, Pixels, Point, SharedString,
-    TextAlign, Window, point, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{
         IntoPlot, Plot, PlotLabel, TooltipState,
         label::{Text, truncate_text_to_width},
         tooltip::Tooltip,
     },
+};
+use gpui_kit::{
+    AnyElement, App, Bounds, ElementId, Entity, IntoElement, Pixels, Point, SharedString,
+    TextAlign, Window, point, px,
 };
 use layout::{Layout, Word};
 use std::sync::Arc;
@@ -73,7 +73,7 @@ impl Plot for WordCloud {
         let id: SharedString = format!("{}-layout", self.id).into();
         let state = window.use_keyed_state(id, cx, |_, _| None::<Arc<Layout>>);
         let mut font = window.text_style().font();
-        font.weight = gpui::FontWeight::SEMIBOLD;
+        font.weight = gpui_kit::FontWeight::SEMIBOLD;
         state.update(cx, |cached, _| {
             if cached.as_ref().is_none_or(|layout| {
                 layout.size != bounds.size
@@ -106,7 +106,7 @@ impl Plot for WordCloud {
             cx.theme().magenta,
             cx.theme().cyan,
         ];
-        window.with_content_mask(Some(gpui::ContentMask { bounds }), |window| {
+        window.with_content_mask(Some(gpui_kit::ContentMask { bounds }), |window| {
             for (i, placed) in layout.placed.iter().enumerate() {
                 let word = &self.data.words[placed.index];
                 let line = layout::shape(

@@ -1,12 +1,12 @@
 use super::{GraphProperties, value::type_picker};
 use crate::workbench::controls;
-use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::{Input, InputState},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*};
 use yss_data_contract::ValueType;
 use yss_graph_document::FunctionParameterId;
 use yss_project_history::{
@@ -65,7 +65,7 @@ impl SignatureDraft {
         }
     }
 
-    fn value(&self, cx: &gpui::App) -> anyhow::Result<FunctionSignature> {
+    fn value(&self, cx: &gpui_kit::App) -> anyhow::Result<FunctionSignature> {
         let parameters = self
             .parameters
             .iter()
@@ -152,7 +152,7 @@ impl GraphProperties {
                         div()
                             .flex_1()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                             .child(crate::text::t("native.workbench.functionInterface")),
                     )
                     .child(
@@ -223,25 +223,30 @@ impl GraphProperties {
                                     .min_w_0()
                                     .disabled(busy),
                             )
-                            .child(div().w(gpui::px(62.)).flex_shrink_0().child(type_picker(
-                                ("function-parameter-type", row),
-                                crate::text::t("detail.fields.type").into(),
-                                Some(parameter.data_type.read(cx).value().to_string()),
-                                busy,
-                                cx.listener(move |view, value: &String, window, cx| {
-                                    if view.accepts_input(generation, cx)
-                                        && let Some(draft) = &mut view.signature
-                                        && let Some(parameter) = draft
-                                            .parameters
-                                            .iter()
-                                            .find(|parameter| parameter.id == choose_id)
-                                    {
-                                        parameter.data_type.update(cx, |input, cx| {
-                                            input.set_value(value.clone(), window, cx)
-                                        });
-                                    }
-                                }),
-                            ))),
+                            .child(
+                                div()
+                                    .w(gpui_kit::px(62.))
+                                    .flex_shrink_0()
+                                    .child(type_picker(
+                                        ("function-parameter-type", row),
+                                        crate::text::t("detail.fields.type").into(),
+                                        Some(parameter.data_type.read(cx).value().to_string()),
+                                        busy,
+                                        cx.listener(move |view, value: &String, window, cx| {
+                                            if view.accepts_input(generation, cx)
+                                                && let Some(draft) = &mut view.signature
+                                                && let Some(parameter) = draft
+                                                    .parameters
+                                                    .iter()
+                                                    .find(|parameter| parameter.id == choose_id)
+                                            {
+                                                parameter.data_type.update(cx, |input, cx| {
+                                                    input.set_value(value.clone(), window, cx)
+                                                });
+                                            }
+                                        }),
+                                    )),
+                            ),
                     )
                     .child(
                         div()
@@ -324,7 +329,7 @@ impl GraphProperties {
                     })),
             )
             .child(
-                gpui_component::checkbox::Checkbox::new("signature-has-return")
+                gpui_kit::component::checkbox::Checkbox::new("signature-has-return")
                     .label(crate::text::t("native.workbench.returnValue"))
                     .checked(draft.has_return)
                     .disabled(busy)
@@ -350,21 +355,26 @@ impl GraphProperties {
                                 .min_w_0()
                                 .disabled(busy),
                         )
-                        .child(div().w(gpui::px(62.)).flex_shrink_0().child(type_picker(
-                            "function-return-type",
-                            crate::text::t("detail.fields.type").into(),
-                            Some(draft.return_type.read(cx).value().to_string()),
-                            busy,
-                            cx.listener(move |view, value: &String, window, cx| {
-                                if view.accepts_input(generation, cx)
-                                    && let Some(draft) = &view.signature
-                                {
-                                    draft.return_type.update(cx, |input, cx| {
-                                        input.set_value(value.clone(), window, cx)
-                                    });
-                                }
-                            }),
-                        ))),
+                        .child(
+                            div()
+                                .w(gpui_kit::px(62.))
+                                .flex_shrink_0()
+                                .child(type_picker(
+                                    "function-return-type",
+                                    crate::text::t("detail.fields.type").into(),
+                                    Some(draft.return_type.read(cx).value().to_string()),
+                                    busy,
+                                    cx.listener(move |view, value: &String, window, cx| {
+                                        if view.accepts_input(generation, cx)
+                                            && let Some(draft) = &view.signature
+                                        {
+                                            draft.return_type.update(cx, |input, cx| {
+                                                input.set_value(value.clone(), window, cx)
+                                            });
+                                        }
+                                    }),
+                                )),
+                        ),
                 )
             })
             .into_any_element()

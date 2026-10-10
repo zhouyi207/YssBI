@@ -1,6 +1,6 @@
 use super::{Workbench, activity::ReadState};
 use crate::{project::DesktopProject, services::NativeEvent};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use tokio::sync::broadcast::error::RecvError;
 use yss_application::graph::editing::GraphActivity;
 
@@ -18,7 +18,7 @@ impl Workbench {
         for opening in self
             .graph_openings
             .values()
-            .filter_map(gpui::WeakEntity::upgrade)
+            .filter_map(gpui_kit::WeakEntity::upgrade)
         {
             opening.update(cx, |opening, _| opening.clear_intent());
         }
@@ -63,8 +63,10 @@ impl Workbench {
                                 view.refresh_graphs(cx);
                                 view.refresh_documents(window, cx);
                                 view.refresh_minds(window, cx);
-                                for graph in
-                                    view.graphs.values().filter_map(gpui::WeakEntity::upgrade)
+                                for graph in view
+                                    .graphs
+                                    .values()
+                                    .filter_map(gpui_kit::WeakEntity::upgrade)
                                 {
                                     graph.update(cx, |graph, cx| graph.resync_execution(cx));
                                 }
@@ -92,7 +94,7 @@ impl Workbench {
                     self.open_result(yss_graph_execution::result::ResultReference {
                         execution_session_id: *event.identity().execution_session_id(), result_id: *result_id,
                     }, None, None, window, cx);
-                } else if let Some(graph) = self.graphs.get(event.identity().graph_path().as_str()).and_then(gpui::WeakEntity::upgrade) {
+                } else if let Some(graph) = self.graphs.get(event.identity().graph_path().as_str()).and_then(gpui_kit::WeakEntity::upgrade) {
                     graph.update(cx, |graph, cx| graph.accept_execution(event, cx));
                 }
             }
@@ -102,7 +104,7 @@ impl Workbench {
                 if let Some(graph) = self
                     .graphs
                     .get(&graph_path)
-                    .and_then(gpui::WeakEntity::upgrade)
+                    .and_then(gpui_kit::WeakEntity::upgrade)
                 {
                     graph.update(cx, |graph, cx| graph.refresh(cx));
                 }
@@ -121,11 +123,11 @@ impl Workbench {
                 self.refresh_graphs(cx);
                 for delta in &mutation.deltas {
                     if let yss_project_history::ResourceKey::Doc(path) = &delta.resource
-                        && let Some(document) = self.documents.get(path.0.as_ref()).and_then(gpui::WeakEntity::upgrade) {
+                        && let Some(document) = self.documents.get(path.0.as_ref()).and_then(gpui_kit::WeakEntity::upgrade) {
                         document.update(cx, |document, cx| document.refresh(window, cx));
                     }
                     if let yss_project_history::ResourceKey::Mind(path) = &delta.resource
-                        && let Some(mind) = self.minds.get(path.0.as_ref()).and_then(gpui::WeakEntity::upgrade) {
+                        && let Some(mind) = self.minds.get(path.0.as_ref()).and_then(gpui_kit::WeakEntity::upgrade) {
                         mind.update(cx, |mind, cx| mind.refresh(window, cx));
                     }
                 }
@@ -148,7 +150,11 @@ impl Workbench {
     }
 
     pub(super) fn refresh_graphs(&self, cx: &mut Context<Self>) {
-        for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {
+        for graph in self
+            .graphs
+            .values()
+            .filter_map(gpui_kit::WeakEntity::upgrade)
+        {
             graph.update(cx, |graph, cx| graph.refresh(cx));
         }
     }
@@ -161,17 +167,25 @@ impl Workbench {
         self.connect_events(window, cx);
         self.refresh_project(window, cx);
         self.refresh_graphs(cx);
-        for chart in self.charts.values().filter_map(gpui::WeakEntity::upgrade) {
+        for chart in self
+            .charts
+            .values()
+            .filter_map(gpui_kit::WeakEntity::upgrade)
+        {
             chart.update(cx, |chart, cx| chart.refresh(window, cx));
         }
         for editor in self
             .databases
             .values()
-            .filter_map(gpui::WeakEntity::upgrade)
+            .filter_map(gpui_kit::WeakEntity::upgrade)
         {
             editor.update(cx, |editor, cx| editor.reload(false, window, cx));
         }
-        for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {
+        for graph in self
+            .graphs
+            .values()
+            .filter_map(gpui_kit::WeakEntity::upgrade)
+        {
             graph.update(cx, |graph, cx| graph.resync_execution(cx));
         }
     }
@@ -199,7 +213,7 @@ impl Workbench {
             if let Some(panel) = self
                 .activities
                 .get(document.panel_id)
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
             {
                 let owner = cx.entity().downgrade();
                 panel.update(cx, |panel, cx| {
@@ -214,7 +228,11 @@ impl Workbench {
                 });
             }
             if document.panel_id == "nodes" {
-                for graph in self.graphs.values().filter_map(gpui::WeakEntity::upgrade) {
+                for graph in self
+                    .graphs
+                    .values()
+                    .filter_map(gpui_kit::WeakEntity::upgrade)
+                {
                     graph.update(cx, |graph, cx| {
                         graph.set_catalog(document.clone(), &project.language, cx)
                     });

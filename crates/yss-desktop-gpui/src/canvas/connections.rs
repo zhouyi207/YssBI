@@ -8,8 +8,8 @@ mod render;
 pub(super) use drag::ConnectionDrag;
 pub(super) use interaction::ConnectionClick;
 
-use gpui::{Bounds, Pixels, Point, Window, fill, point, px, rgb, size};
-use gpui_base::plot::{PathCache, ShapeKey};
+use gpui_kit::base::plot::{PathCache, ShapeKey};
+use gpui_kit::{Bounds, Pixels, Point, Window, fill, point, px, rgb, size};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -327,7 +327,7 @@ impl ConnectionLayer {
             let mut x = phase.x - spacing;
             while x < bounds.size.width {
                 if let Some(path) = self.grid.get(key, bounds.origin + point(x, y), || {
-                    let mut path = gpui::PathBuilder::fill();
+                    let mut path = gpui_kit::PathBuilder::fill();
                     for row in 0..CELLS {
                         for column in 0..CELLS {
                             let x = spacing * column as f32;
@@ -366,7 +366,7 @@ fn paint_connection(
     origin: Point<Pixels>,
     curve: Curve,
     (width, state): (Pixels, State),
-    color: gpui::Rgba,
+    color: gpui_kit::Rgba,
     window: &mut Window,
 ) {
     let key = ShapeKey::new((curve.from_input, state))

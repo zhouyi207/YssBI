@@ -1,11 +1,11 @@
 //! Header presentation borrows the conversation's existing metadata and next-turn options.
 use super::{ConversationEvent, ConversationPanel};
-use gpui::Context;
-use gpui_component::{
+use gpui_kit::Context;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Selectable, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
 use yss_harness_contract::HarnessMode;
 
 impl ConversationPanel {

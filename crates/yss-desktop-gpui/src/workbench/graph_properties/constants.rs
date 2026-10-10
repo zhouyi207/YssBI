@@ -4,8 +4,8 @@ mod view;
 pub(super) const PAGE_CONSTANTS: usize = 50;
 use super::{GraphProperties, value};
 use crate::canvas::{ConstantValueInput, GraphCommand};
-use gpui::{AppContext, Context, Entity, Window};
-use gpui_component::input::InputState;
+use gpui_kit::component::input::InputState;
+use gpui_kit::{AppContext, Context, Entity, Window};
 use yss_data_contract::{DataValue, SemanticType, ValueType};
 use yss_graph_document::{ConstantId, GraphConstant};
 use yss_graph_editor::EditorGraphMutation;
@@ -139,7 +139,7 @@ impl ConstantDraft {
         self.original_input = self.model.scalar.clone();
     }
 
-    fn value_input(&self, cx: &gpui::App) -> Option<ConstantValueInput> {
+    fn value_input(&self, cx: &gpui_kit::App) -> Option<ConstantValueInput> {
         if self.is_null {
             return (!self.model.is_null || self.value_changed_type)
                 .then_some(ConstantValueInput::Null);

@@ -1,5 +1,5 @@
 //! Format bounded, already-read values once while retaining their presentation kind.
-use gpui::SharedString;
+use gpui_kit::SharedString;
 use yss_data_contract::TabularScalar;
 use yss_node_kernel::RuntimeValue;
 

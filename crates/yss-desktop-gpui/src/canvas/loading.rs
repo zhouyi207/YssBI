@@ -1,6 +1,6 @@
 //! Projection reads retain the last view and drafts; only successful reads restore editing.
 use super::{CanvasEvent, GraphCanvas};
-use gpui::Context;
+use gpui_kit::Context;
 use yss_graph_document::GraphResourcePath;
 use yss_project::GraphEditVersion;
 use yss_project_identity::ResourceRevision;
@@ -15,7 +15,7 @@ impl GraphCanvas {
     pub(crate) fn refresh_for_navigation(
         &mut self,
         cx: &mut Context<Self>,
-    ) -> gpui::Task<Option<(GraphEditVersion, &'static str)>> {
+    ) -> gpui_kit::Task<Option<(GraphEditVersion, &'static str)>> {
         // An in-flight read may predate the edit that requested this navigation.
         // The existing refresh queue ensures a read starts after this request.
         self.refresh(cx);
@@ -117,7 +117,7 @@ impl GraphCanvas {
             nodes: self.selected.iter().copied().collect(),
             projection: self.graph.projection.clone(),
         });
-        cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+        cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
         cx.notify();
     }
 
@@ -241,7 +241,7 @@ impl GraphCanvas {
             nodes: self.selected.iter().copied().collect(),
             projection: self.graph.projection.clone(),
         });
-        cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+        cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
         cx.notify();
     }
 }

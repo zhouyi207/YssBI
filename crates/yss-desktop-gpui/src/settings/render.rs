@@ -1,12 +1,12 @@
 use super::{Page, SaveSettings, SettingsPanel, models::provider_name};
 use crate::text::t;
-use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
 use yss_harness_contract::{LanguageModelAuthentication, LanguageModelSelection};
 
 impl Render for SettingsPanel {
@@ -384,7 +384,7 @@ impl SettingsPanel {
                             ),
                     )
                     .child(
-                        Button::new(gpui::SharedString::from(format!(
+                        Button::new(gpui_kit::SharedString::from(format!(
                             "provider-edit-{}",
                             provider.config.id
                         )))

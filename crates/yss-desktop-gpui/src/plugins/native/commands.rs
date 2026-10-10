@@ -1,5 +1,5 @@
 use super::{OpenNativeView, PluginViewPanel};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use serde_json::{Value, json};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use yss_plugin_runtime::{

@@ -1,5 +1,5 @@
 use super::{GraphProperties, constants::ConstantOverview, signature::SignatureDraft};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_graph_document::GraphResourceKind;
 use yss_project_history::FunctionDocument;
 

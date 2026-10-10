@@ -54,7 +54,7 @@ impl LogsPanel {
         // Keep the same rows under the pointer when a bounded prefix is evicted.
         let state = self.scroll.0.borrow();
         let offset = state.base_handle.offset();
-        state.base_handle.set_offset(gpui::point(
+        state.base_handle.set_offset(gpui_kit::point(
             offset.x,
             (offset.y + px(ROW_HEIGHT * removed_visible as f32)).min(px(0.)),
         ));
@@ -69,7 +69,7 @@ impl LogsPanel {
             .0
             .borrow()
             .base_handle
-            .set_offset(gpui::point(px(0.), px(0.)));
+            .set_offset(gpui_kit::point(px(0.), px(0.)));
         cx.notify();
     }
 }

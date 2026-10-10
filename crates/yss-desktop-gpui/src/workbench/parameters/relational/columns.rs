@@ -7,13 +7,13 @@ use crate::{
         field::{ParameterDraft, list::ListDraft},
     },
 };
-use gpui::{AnyElement, Context, IntoElement, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, Window, div, prelude::*};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_editor::projection::EditorParameterConfiguration;
@@ -45,7 +45,7 @@ impl ColumnsDraft {
         }
     }
 
-    pub(super) fn value(&self, allow_empty: bool, cx: &gpui::App) -> Result<Value, String> {
+    pub(super) fn value(&self, allow_empty: bool, cx: &gpui_kit::App) -> Result<Value, String> {
         let value = match self {
             Self::Known { selected, .. } => serde_json::json!(selected),
             Self::Manual(draft) => draft.value(cx)?,
@@ -119,7 +119,7 @@ impl ParameterForm {
             .child(
                 div()
                     .id(("column-options", index))
-                    .max_h(gpui::px(256.))
+                    .max_h(gpui_kit::px(256.))
                     .overflow_y_scroll()
                     .flex()
                     .flex_col()
@@ -134,7 +134,7 @@ impl ParameterForm {
                                 .items_center()
                                 .gap_1()
                                 .child(
-                                    Checkbox::new(gpui::SharedString::from(format!(
+                                    Checkbox::new(gpui_kit::SharedString::from(format!(
                                         "column-{index}-{row}"
                                     )))
                                     .label(name.clone())
@@ -185,7 +185,7 @@ impl ParameterForm {
                                         }),
                                 )
                                 .child(
-                                    div().w(gpui::px(24.)).text_xs().text_right().child(
+                                    div().w(gpui_kit::px(24.)).text_xs().text_right().child(
                                         position
                                             .map(|row| (row + 1).to_string())
                                             .unwrap_or_default(),
@@ -200,7 +200,7 @@ impl ParameterForm {
                                     .map(
                                         |(direction, icon, label)| {
                                             let name = name.clone();
-                                            Button::new(gpui::SharedString::from(format!(
+                                            Button::new(gpui_kit::SharedString::from(format!(
                                                 "column-move-{index}-{row}-{direction}"
                                             )))
                                             .small()
@@ -271,7 +271,7 @@ impl ParameterForm {
                             ]
                             .into_iter()
                             .map(|(direction, icon, label)| {
-                                Button::new(gpui::SharedString::from(format!(
+                                Button::new(gpui_kit::SharedString::from(format!(
                                     "column-page-{index}-{direction}"
                                 )))
                                 .small()

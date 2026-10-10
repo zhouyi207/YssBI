@@ -5,7 +5,7 @@ use super::{
     projection::{Timing, Tool},
 };
 use crate::project::resources::ResourceCatalog;
-use gpui::{App, Context, IntoElement, RenderOnce, SharedString, Task, WeakEntity, Window};
+use gpui_kit::{App, Context, IntoElement, RenderOnce, SharedString, Task, WeakEntity, Window};
 use std::sync::Arc;
 use yss_harness_contract::{
     AssistantToolIdentity, AssistantToolInspection, ProjectResourceRef, ToolInvocationId,
@@ -244,7 +244,7 @@ impl Inspection {
             CopyTarget::Details => serde_json::to_string_pretty(detail),
         }
         .expect("tool inspection contains JSON values");
-        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(text));
         self.copied = Some(target);
         cx.notify();
     }

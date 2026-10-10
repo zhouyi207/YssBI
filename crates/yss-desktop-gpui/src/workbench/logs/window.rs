@@ -1,11 +1,11 @@
 //! A singleton log window with its own view subscription to the existing LogRuntime.
 use super::{super::Workbench, LogsPanel};
 use crate::window_chrome;
-use gpui::{
+use gpui_kit::component::{ActiveTheme, Root, TitleBar};
+use gpui_kit::{
     AppContext, Bounds, Context, Entity, Focusable, IntoElement, Render, Window, WindowBounds,
     WindowDecorations, WindowOptions, div, prelude::*, px, size,
 };
-use gpui_component::{ActiveTheme, Root, TitleBar};
 
 impl Workbench {
     pub(in crate::workbench) fn show_logs_window(
@@ -28,7 +28,7 @@ impl Workbench {
         );
         match cx.open_window(
             WindowOptions {
-                titlebar: Some(gpui::TitlebarOptions {
+                titlebar: Some(gpui_kit::TitlebarOptions {
                     title: Some(crate::text::t("native.workbench.logsWindowTitle").into()),
                     ..TitleBar::title_bar_options()
                 }),

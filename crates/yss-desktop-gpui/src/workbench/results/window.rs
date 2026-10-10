@@ -1,12 +1,12 @@
 //! Native result windows reuse ResultPanel, with separate controls and Application leases.
 use super::super::Workbench;
 use crate::{results::ResultPanel, window_chrome};
-use gpui::{
+use gpui_kit::component::{ActiveTheme, Root, TitleBar, dock::Panel};
+use gpui_kit::{
     App, AppContext, Bounds, Context, Entity, Focusable, IntoElement, Render, Subscription,
     WeakEntity, Window, WindowBounds, WindowDecorations, WindowHandle, WindowOptions, div,
     prelude::*, px, size,
 };
-use gpui_component::{ActiveTheme, Root, TitleBar, dock::Panel};
 
 pub(in crate::workbench) struct ResultWindowHandle {
     window: WindowHandle<Root>,
@@ -86,7 +86,7 @@ impl Workbench {
             let weak = panel.downgrade();
             let opened = cx.open_window(
                 WindowOptions {
-                    titlebar: Some(gpui::TitlebarOptions {
+                    titlebar: Some(gpui_kit::TitlebarOptions {
                         title: Some(panel.read(cx).window_title().into()),
                         ..TitleBar::title_bar_options()
                     }),

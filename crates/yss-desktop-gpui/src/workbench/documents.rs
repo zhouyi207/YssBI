@@ -1,8 +1,8 @@
 //! Document routing and view-context installation; no parallel workbench topology.
 use super::Workbench;
 use crate::documents::{DocumentEditor, DocumentEvent};
-use gpui::{AppContext, Context, Window};
-use gpui_component::dock::{DockPlacement, panel_handle};
+use gpui_kit::component::dock::{DockPlacement, panel_handle};
+use gpui_kit::{AppContext, Context, Window};
 use yss_project::docs::DocSnapshot;
 use yss_project_model::doc::DocPath;
 
@@ -23,7 +23,7 @@ impl Workbench {
         if let Some(document) = self
             .documents
             .get(&path)
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
         {
             self.present_panel(
                 panel_handle(document.clone()),
@@ -91,7 +91,7 @@ impl Workbench {
         snapshot: DocSnapshot,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui::Entity<DocumentEditor> {
+    ) -> gpui_kit::Entity<DocumentEditor> {
         let path = snapshot.path.as_str().to_owned();
         let services = self.services.clone();
         let document = cx.new(|cx| DocumentEditor::new(services, snapshot, window, cx));
@@ -120,7 +120,7 @@ impl Workbench {
         for document in self
             .documents
             .values()
-            .filter_map(gpui::WeakEntity::upgrade)
+            .filter_map(gpui_kit::WeakEntity::upgrade)
         {
             document.update(cx, |document, cx| document.refresh(window, cx));
         }

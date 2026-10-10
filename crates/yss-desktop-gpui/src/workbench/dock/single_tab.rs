@@ -1,7 +1,7 @@
 //! The editor region may close its last tab while DockArea retains lifecycle ownership.
 use super::super::layout::columns;
-use gpui::{AnyElement, App, Focusable, IntoElement, WeakEntity, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Selectable, Sizable,
     button::{Button, ButtonCustomVariant, ButtonVariants},
     dock::{
@@ -11,7 +11,7 @@ use gpui_component::{
     menu::DropdownMenu,
     tab::{Tab, TabBar},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, App, Focusable, IntoElement, WeakEntity, Window, div, prelude::*, px};
 use std::sync::Arc;
 
 pub(super) fn panel(
@@ -232,7 +232,7 @@ pub(super) fn render(
                                     .menu(crate::text::t("common.close"), Box::new(ClosePanel))
                             })
                         })
-                        .anchor(gpui::Anchor::TopRight),
+                        .anchor(gpui_kit::Anchor::TopRight),
                 ),
         )
         .into_any_element()

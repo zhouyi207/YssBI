@@ -1,6 +1,6 @@
 use super::{DatabaseEditor, DatabaseEvent};
 use crate::services::NativeServices;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use std::sync::Arc;
 use yss_application::{database::DatabaseMutation, runtime::ApplicationServices};
 use yss_database_contract::EditState;

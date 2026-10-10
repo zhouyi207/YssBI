@@ -7,12 +7,12 @@ use crate::{
     appearance,
     plots::{cartesian::CartesianPlot, histogram},
 };
-use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
 
 impl Render for ChartEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -25,7 +25,7 @@ impl Render for ChartEditor {
             .flex_col()
             .on_action(cx.listener(|view, _: &SaveChart, window, cx| view.save(window, cx)))
             .on_mouse_down(
-                gpui::MouseButton::Left,
+                gpui_kit::MouseButton::Left,
                 cx.listener(|view, _, window, cx| view.focus_chart(window, cx)),
             )
             .child(
@@ -41,7 +41,7 @@ impl Render for ChartEditor {
                         div()
                             .flex_1()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                             .child(chart_type_label(self.draft.chart_type)),
                     )
                     .child(
@@ -96,7 +96,7 @@ impl ChartEditor {
             .justify_center()
             .gap_3()
             .p_4()
-            .role(gpui::Role::Alert)
+            .role(gpui_kit::Role::Alert)
             .child(
                 Icon::new(IconName::TriangleAlert)
                     .size_6()

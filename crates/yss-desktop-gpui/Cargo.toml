@@ -9,12 +9,10 @@ publish = false
 hex.workspace = true
 anyhow = "1"
 bigdecimal = "0.4.10"
-gpui = { package = "gpui-pre", version = "=0.3.8" }
-gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "wayland", "x11"] }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-project = { path = "../yss-project" }
 yss-project-model = { path = "../yss-project-model" }
-gpui-component = { version = "=0.7.1", features = [
+gpui-kit = { version = "=0.7.1", features = [
     "tree-sitter-bash",
     "tree-sitter-css",
     "tree-sitter-html",
@@ -27,8 +25,6 @@ gpui-component = { version = "=0.7.1", features = [
     "tree-sitter-typescript",
     "tree-sitter-yaml",
 ] }
-gpui-base = "=0.7.1"
-gpui-kit-assets = "=0.7.1"
 lru.workspace = true
 ratex-parser = "=0.1.14"
 ratex-layout = "=0.1.14"

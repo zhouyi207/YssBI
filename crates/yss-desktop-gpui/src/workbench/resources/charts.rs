@@ -1,7 +1,7 @@
 //! Chart file menus capture the original typed resource path and Project revision.
 use super::super::name_form::NameForm;
 use super::{super::Workbench, ResourceAction};
-use gpui::{ClipboardItem, Context, Entity, Window};
+use gpui_kit::{ClipboardItem, Context, Entity, Window};
 
 use yss_chart_document::ChartResourcePath;
 use yss_project_history::ResourceDocumentPatch;
@@ -51,7 +51,7 @@ impl Workbench {
         if self
             .charts
             .get(&path)
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
             .is_some_and(|chart| chart.read(cx).dirty())
         {
             self.error = Some(crate::text::t("native.workbench.saveChartBeforeEditing").into());
@@ -131,7 +131,7 @@ impl Workbench {
             || self
                 .charts
                 .get(target.path.as_str())
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
                 .is_some_and(|chart| chart.read(cx).dirty())
         {
             return false;

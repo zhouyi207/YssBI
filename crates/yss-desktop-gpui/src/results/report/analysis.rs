@@ -13,11 +13,11 @@ use crate::{
     },
     services::NativeServices,
 };
-use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
 };
+use gpui_kit::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
 use query::AnalysisData;
 pub(super) use query::series;
 use std::sync::Arc;
@@ -51,7 +51,7 @@ pub(super) struct AnalysisView {
     diagnostics: Vec<Entity<Section>>,
     loading: bool,
     error: bool,
-    task: Option<gpui::Task<()>>,
+    task: Option<gpui_kit::Task<()>>,
 }
 
 impl AnalysisView {

@@ -1,14 +1,14 @@
 //! Searchable category navigation; provider pages belong to the AI category.
 use super::{Page, SettingsPanel};
 use crate::text::t;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Selectable, Sizable,
     button::{Button, ButtonVariants},
     input::Input,
     sidebar::{Sidebar, SidebarHeader, SidebarMenu, SidebarMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*, px};
 
 impl Page {
     pub(super) fn category(self) -> Self {
@@ -20,7 +20,10 @@ impl Page {
 }
 
 impl SettingsPanel {
-    pub(super) fn visible_categories(&self, cx: &gpui::App) -> Vec<(Page, &'static str, IconName)> {
+    pub(super) fn visible_categories(
+        &self,
+        cx: &gpui_kit::App,
+    ) -> Vec<(Page, &'static str, IconName)> {
         let query = self.search.read(cx).value().trim().to_lowercase();
         [
             (Page::Overview, "settings.sections.ai", IconName::Bot),
@@ -117,7 +120,12 @@ impl SettingsPanel {
             .into_any_element()
     }
 
-    fn navigate_category(&mut self, page: Page, window: &mut gpui::Window, cx: &mut Context<Self>) {
+    fn navigate_category(
+        &mut self,
+        page: Page,
+        window: &mut gpui_kit::Window,
+        cx: &mut Context<Self>,
+    ) {
         // Selecting the current category keeps its nested page and unsubmitted input.
         if self.page.category() != page {
             self.navigate(page, window, cx);

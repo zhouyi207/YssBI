@@ -8,12 +8,12 @@ use crate::{
     canvas::{CancelRun, RunWholeGraph, SaveGraph},
     window_chrome,
 };
-use gpui::{Context, IntoElement, MouseButton, Window, actions, div, prelude::*, px, rgb};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, MouseButton, Window, actions, div, prelude::*, px, rgb};
 
 actions!(
     native_workbench,
@@ -109,7 +109,7 @@ impl Workbench {
                             .child(
                                 div()
                                     .text_size(px(13.))
-                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .child("YssBI"),
                             ),
                     )

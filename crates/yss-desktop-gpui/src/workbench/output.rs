@@ -1,16 +1,16 @@
 //! Output presents Execution failures for the active graph, independently of Logs and Problems.
 mod failure;
 
-use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, WeakEntity, Window,
-    div, prelude::*,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, WeakEntity, Window,
+    div, prelude::*,
+};
 use yss_application::graph::run::RunApplicationEventKind;
 use yss_graph_execution::plan::PlanSourceIdentity;
 
@@ -23,7 +23,7 @@ pub enum OutputEvent {
 pub struct OutputPanel {
     focus: FocusHandle,
     graph: Option<WeakEntity<GraphCanvas>>,
-    observation: Option<gpui::Subscription>,
+    observation: Option<gpui_kit::Subscription>,
 }
 
 impl OutputPanel {

@@ -1,6 +1,6 @@
 //! A virtual list filters current outputs; selecting resolves the port again.
 use super::*;
-use gpui_component::{
+use gpui_kit::component::{
     IndexPath,
     list::{ListDelegate, ListItem},
 };
@@ -118,7 +118,8 @@ impl ListDelegate for Results {
                         .text_xs()
                         .truncate()
                         .tooltip(move |window, cx| {
-                            gpui_component::tooltip::Tooltip::new(title.clone()).build(window, cx)
+                            gpui_kit::component::tooltip::Tooltip::new(title.clone())
+                                .build(window, cx)
                         })
                         .child(entry.title.clone()),
                 )

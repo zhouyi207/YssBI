@@ -1,11 +1,11 @@
 //! Category controls dispatch the tools from the same immutable directory row.
 use super::*;
-use gpui::{AnyElement, Div, Stateful};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     menu::{ContextMenuExt, PopupMenuItem},
 };
+use gpui_kit::{AnyElement, Div, Stateful};
 
 impl ActivityPanel {
     pub(super) fn render_category(
@@ -34,7 +34,7 @@ impl ActivityPanel {
         let owner = cx.entity().downgrade();
         let item = item
             .aria_expanded(expanded)
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .cursor_pointer()
             .text_color(cx.theme().muted_foreground)
             .hover(|style| style.bg(cx.theme().muted))
@@ -49,7 +49,7 @@ impl ActivityPanel {
             .children(tools.iter().map(|tool| {
                 let tool_id = tool.id.to_owned();
                 let expected = document.clone();
-                Button::new(gpui::SharedString::from(format!(
+                Button::new(gpui_kit::SharedString::from(format!(
                     "category-tool-{}-{tool_id}",
                     row.id
                 )))
@@ -58,7 +58,9 @@ impl ActivityPanel {
                 .size_5()
                 .icon(feedback::tool_icon(tool.icon))
                 .tooltip(activity_text(&tool.label))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
+                    cx.stop_propagation()
+                })
                 .on_click(cx.listener(move |view, _, _, cx| {
                     cx.stop_propagation();
                     if view.accepts(&expected) {
@@ -109,7 +111,7 @@ impl super::super::Workbench {
         if let Some(panel) = self
             .activities
             .get("project")
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
         {
             panel.update(cx, |panel, cx| {
                 panel.expanded.insert(id.into(), true);

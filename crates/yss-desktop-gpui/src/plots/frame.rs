@@ -1,10 +1,10 @@
 //! Axes and axis-aligned marks shared by statistical plots.
 use super::axes::{AxisDomain, axis_value};
-use gpui::{App, Bounds, Hsla, Pixels, Point, TextAlign, Window, fill, point, px, size};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{AxisLabelSide, AxisText, Grid, PlotAxis, label::truncate_text_to_width},
 };
+use gpui_kit::{App, Bounds, Hsla, Pixels, Point, TextAlign, Window, fill, point, px, size};
 use yss_application::chart::PlotAxisFormat;
 
 #[derive(Clone, Copy)]

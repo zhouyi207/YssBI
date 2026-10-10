@@ -6,8 +6,8 @@ mod typesetting;
 
 use std::sync::Arc;
 
-use gpui::{App, ClickEvent, MouseButton, Overflow, SharedString, StyleRefinement, Window};
-use gpui_component::text::{SelectionFormat, TextView, TextViewPlugin, TextViewStyle};
+use gpui_kit::component::text::{SelectionFormat, TextView, TextViewPlugin, TextViewStyle};
+use gpui_kit::{App, ClickEvent, MouseButton, Overflow, SharedString, StyleRefinement, Window};
 
 pub(crate) use highlight::init;
 

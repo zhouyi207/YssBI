@@ -1,5 +1,5 @@
 use super::*;
-use gpui_component::input::{InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
 use yss_node_catalog::PortCountPolicy;
 use yss_node_protocol::PortKey;
 

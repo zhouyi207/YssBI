@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use gpui::{Bounds, Pixels, Point, point, px, size};
+use gpui_kit::{Bounds, Pixels, Point, point, px, size};
 use yss_graph_document::{NodeId, NodePosition, PortAddress};
 use yss_graph_editor::projection::{EditorNodeModel, EditorParameterModel};
 use yss_node_protocol::{ParameterPresentation, PortDirection};

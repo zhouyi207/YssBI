@@ -1,12 +1,12 @@
 use super::super::display;
 use super::*;
-use gpui::{Div, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Selectable, Sizable,
     button::{Button, ButtonVariants},
     table::DataTable,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Div, div, prelude::*, px};
 use yss_application::graph::results::report::coefficients::RegressionCoefficient;
 
 pub(super) struct EquationData {
@@ -129,7 +129,7 @@ impl LinearReport {
                             .icon(IconName::Copy)
                             .tooltip(crate::text::translate("menubar.copy"))
                             .on_click(move |_, _, cx| {
-                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
                                     copied.clone(),
                                 ))
                             }),

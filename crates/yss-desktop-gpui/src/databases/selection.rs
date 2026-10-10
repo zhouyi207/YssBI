@@ -3,8 +3,8 @@ mod ranges;
 pub(super) use ranges::PageSelection;
 
 use super::{DatabaseEditor, grid::DatabaseGrid};
-use gpui::{ClipboardItem, Context, Focusable, Modifiers, Window};
-use gpui_component::table::{TableEvent, TableSelection, TableState};
+use gpui_kit::component::table::{TableEvent, TableSelection, TableState};
+use gpui_kit::{ClipboardItem, Context, Focusable, Modifiers, Window};
 use yss_data_contract::TabularScalar;
 
 impl DatabaseEditor {

@@ -1,7 +1,7 @@
 use super::super::display;
 use super::*;
-use gpui::{IntoElement, Render, Window, div, prelude::*, px};
-use gpui_component::{ActiveTheme, Sizable, StyledExt, table::DataTable};
+use gpui_kit::component::{ActiveTheme, Sizable, StyledExt, table::DataTable};
+use gpui_kit::{IntoElement, Render, Window, div, prelude::*, px};
 
 impl Render for LinearReport {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -11,7 +11,7 @@ impl Render for LinearReport {
             if self.has_coefficients() {
                 self.load(0, window, cx);
             }
-        } else if self.locale.as_str() != &*gpui_component::locale() {
+        } else if self.locale.as_str() != &*gpui_kit::component::locale() {
             // Rebuild localized table headings from accepted data, without another query.
             self.refresh_tables(window, cx);
         }

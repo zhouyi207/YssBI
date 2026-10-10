@@ -1,8 +1,8 @@
 //! Resolve intents against the active canvas's exact displayed projection.
 use super::LocateProblem;
 use crate::{canvas::GraphCanvas, workbench::Workbench};
-use gpui::{App, Context, Entity, FocusHandle, Window};
-use gpui_component::dock::{DockPlacement, panel_handle};
+use gpui_kit::component::dock::{DockPlacement, panel_handle};
+use gpui_kit::{App, Context, Entity, FocusHandle, Window};
 use std::sync::Arc;
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_project_identity::ProjectResourceKind;

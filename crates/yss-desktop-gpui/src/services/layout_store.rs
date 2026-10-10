@@ -3,7 +3,7 @@ mod viewports;
 pub(crate) use viewports::Viewport;
 
 use anyhow::Result;
-use gpui_component::dock::DockAreaState;
+use gpui_kit::component::dock::DockAreaState;
 use std::path::{Path, PathBuf};
 use std::{
     collections::BTreeMap,

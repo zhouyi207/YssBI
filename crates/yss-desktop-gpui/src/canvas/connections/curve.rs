@@ -1,5 +1,5 @@
 //! One curve supplies drawing, picking, bounds and the direction of running markers.
-use gpui::{Bounds, Path, PathBuilder, Pixels, Point, point, px};
+use gpui_kit::{Bounds, Path, PathBuilder, Pixels, Point, point, px};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Curve {

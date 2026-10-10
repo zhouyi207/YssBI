@@ -5,8 +5,8 @@ mod render;
 
 use crate::canvas::{GraphCanvas, GraphCommand};
 use field::{Field, InputError};
-use gpui::{Context, EntityId, Window, prelude::*};
-use gpui_component::input::{InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::{Context, EntityId, Window, prelude::*};
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -95,7 +95,7 @@ impl GraphCanvas {
                 dirty: false,
                 pending: None,
                 skip_blur: false,
-                width: gpui::px(28.),
+                width: gpui_kit::px(28.),
                 error: None,
                 _subscription: subscription,
             };
@@ -141,7 +141,7 @@ impl GraphCanvas {
                 field.error = None;
                 field.measure(window, cx);
                 if !was_dirty {
-                    cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+                    cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
                 }
             }
             InputEvent::PressEnter { .. } => {
@@ -198,7 +198,7 @@ impl GraphCanvas {
             field.skip_blur = true;
         }
         window.focus(&self.focus, cx);
-        cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+        cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
         cx.notify();
     }
 }

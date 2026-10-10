@@ -1,7 +1,7 @@
 //! Replace a loading tab using the current DockArea position and selections.
 use super::super::Workbench;
-use gpui::{Context, Entity, Window};
-use gpui_component::dock::{BasePanelView, InsertTarget, PaneRef, Panel, PanelId};
+use gpui_kit::component::dock::{BasePanelView, InsertTarget, PaneRef, Panel, PanelId};
+use gpui_kit::{Context, Entity, Window};
 use std::sync::Arc;
 
 impl Workbench {

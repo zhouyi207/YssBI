@@ -1,5 +1,5 @@
 //! Bounded parameter text is formatted on projection replacement, not during pan/run repaint.
-use gpui::SharedString;
+use gpui_kit::SharedString;
 use std::{
     collections::BTreeMap,
     io::{self, Write},

@@ -1,11 +1,11 @@
 use super::*;
 use crate::text::translate;
-use gpui::{IntoElement, Render, div, prelude::*};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Input,
 };
+use gpui_kit::{IntoElement, Render, div, prelude::*};
 use yss_node_catalog::PortCountPolicy;
 
 impl Render for NodeCreationView {
@@ -21,7 +21,7 @@ impl Render for NodeCreationView {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child(self.target.title.clone()),
             )
             .child(
@@ -96,7 +96,7 @@ impl Render for NodeCreationView {
 }
 
 impl NodeCreationView {
-    fn render_counts(&self, busy: bool, cx: &gpui::App) -> gpui::Div {
+    fn render_counts(&self, busy: bool, cx: &gpui_kit::App) -> gpui_kit::Div {
         div()
             .flex()
             .flex_col()
@@ -105,7 +105,7 @@ impl NodeCreationView {
             .child(
                 div()
                     .text_xs()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child(translate("canvas.nodePalette.pinCounts")),
             )
             .children(self.ports.iter().map(|port| {
@@ -121,7 +121,12 @@ impl NodeCreationView {
                             .gap_2()
                             .child(div().flex_1().min_w_0().child(port.title.clone()))
                             .when_some(port.input.as_ref(), |row, input| {
-                                row.child(Input::new(input).small().w(gpui::px(84.)).disabled(busy))
+                                row.child(
+                                    Input::new(input)
+                                        .small()
+                                        .w(gpui_kit::px(84.))
+                                        .disabled(busy),
+                                )
                             })
                             .when(port.input.is_none(), |row| {
                                 let value = match port.policy {

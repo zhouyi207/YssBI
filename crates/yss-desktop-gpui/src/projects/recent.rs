@@ -3,7 +3,7 @@ mod picker;
 pub(crate) use picker::RecentDelegate;
 
 use crate::services::NativeServices;
-use gpui::{Context, EntityId, EventEmitter};
+use gpui_kit::{Context, EntityId, EventEmitter};
 use std::sync::Arc;
 use yss_project_registry_contract::ProjectRecord;
 

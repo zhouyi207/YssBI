@@ -8,7 +8,7 @@ use super::{
     parameters::{ParameterChange, ParameterForm},
 };
 use crate::{canvas::GraphCanvas, services::NativeServices};
-use gpui::{
+use gpui_kit::{
     App, AppContext, Context, Entity, EventEmitter, Subscription, Task, WeakEntity, Window,
 };
 use query::Preparation;

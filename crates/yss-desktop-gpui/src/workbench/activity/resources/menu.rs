@@ -1,7 +1,7 @@
 //! Resource menus borrow the original directory and reject actions after it changes.
 use super::*;
 use crate::workbench::resources::ResourceAction;
-use gpui_component::menu::{PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use yss_project::RevealProjectResourceRequest;
 
 pub(super) fn resource_menu(

@@ -1,8 +1,8 @@
 //! Data routing consumes the current index and revision-bound Application queries.
 use super::Workbench;
 use crate::databases::{DatabaseEditor, DatabaseEvent, query};
-use gpui::{AppContext, Context, Window};
-use gpui_component::dock::{DockPlacement, panel_handle};
+use gpui_kit::component::dock::{DockPlacement, panel_handle};
+use gpui_kit::{AppContext, Context, Window};
 impl Workbench {
     pub(super) fn open_database(
         &mut self,
@@ -17,7 +17,11 @@ impl Workbench {
         if self.busy || self.closing {
             return;
         }
-        if let Some(editor) = self.databases.get(&id).and_then(gpui::WeakEntity::upgrade) {
+        if let Some(editor) = self
+            .databases
+            .get(&id)
+            .and_then(gpui_kit::WeakEntity::upgrade)
+        {
             self.present_panel(
                 panel_handle(editor.clone()),
                 DockPlacement::Center,
@@ -112,7 +116,7 @@ impl Workbench {
         read: Option<query::DatabaseRead>,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui::Entity<DatabaseEditor> {
+    ) -> gpui_kit::Entity<DatabaseEditor> {
         let project = self
             .project
             .as_ref()

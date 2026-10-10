@@ -1,7 +1,7 @@
 //! Conversation visibility comes from DockArea; the closed ID is only a reopening hint.
 use super::{ConversationPanel, Workbench};
-use gpui::{App, Context, Entity, Focusable, Window};
-use gpui_component::dock::DockPlacement;
+use gpui_kit::component::dock::DockPlacement;
+use gpui_kit::{App, Context, Entity, Focusable, Window};
 use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, ActivityRowContent};
 
 impl Workbench {

@@ -1,9 +1,9 @@
 mod menu;
 pub(super) mod summary;
 
-use gpui::{Context, IntoElement, MouseButton, div, point, prelude::*, px, rgb};
-use gpui_component::{Icon, tooltip::Tooltip};
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{Icon, tooltip::Tooltip};
+use gpui_kit::{Context, IntoElement, MouseButton, div, point, prelude::*, px, rgb};
 use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorNodeModel};
 use yss_node_protocol::PortDirection;
 
@@ -57,7 +57,7 @@ impl GraphCanvas {
             .connection_drag()
             .is_some_and(|drag| drag.dimmed_nodes.contains(&id));
         div()
-            .id(gpui::SharedString::from(format!("node-{id}")))
+            .id(gpui_kit::SharedString::from(format!("node-{id}")))
             .absolute()
             .left(origin.x)
             .top(origin.y)
@@ -195,7 +195,7 @@ impl GraphCanvas {
             .border_b_1()
             .border_color(rgb(appearance::BORDER))
             .text_size(px(13. * self.zoom))
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .child(
                 div()
                     .min_w_0()

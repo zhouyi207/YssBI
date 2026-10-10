@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     table::{DataTable, TableState},
 };
+use gpui_kit::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
 use yss_application::graph::results::{
     ResultPageKind, ResultPageProjection,
     report::{ResultTablePart, structured::ReportTable},
@@ -46,7 +46,7 @@ pub(super) struct ReportPage {
     requested_offset: usize,
     loading: bool,
     error: bool,
-    task: Option<gpui::Task<()>>,
+    task: Option<gpui_kit::Task<()>>,
 }
 
 impl ReportPage {

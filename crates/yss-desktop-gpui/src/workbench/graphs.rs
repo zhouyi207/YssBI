@@ -4,9 +4,9 @@ mod opening;
 mod resources;
 pub(super) use opening::Opening;
 
-use gpui::AppContext;
-use gpui::{Context, Window};
-use gpui_component::dock::{DockPlacement, InsertTarget};
+use gpui_kit::AppContext;
+use gpui_kit::component::dock::{DockPlacement, InsertTarget};
+use gpui_kit::{Context, Window};
 use yss_graph_document::GraphResourcePath;
 
 use super::Workbench;
@@ -22,7 +22,7 @@ impl Workbench {
 
     fn open_dropped_graph(
         &mut self,
-        target_canvas: &gpui::Entity<GraphCanvas>,
+        target_canvas: &gpui_kit::Entity<GraphCanvas>,
         path: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -46,12 +46,12 @@ impl Workbench {
         let existing = self
             .graphs
             .get(path)
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
             .is_some()
             || self
                 .graph_openings
                 .get(path)
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
                 .is_some();
         self.open_graph(path.to_owned(), window, cx);
         // A new loading tab already owns the asynchronous read. Move that tab
@@ -61,7 +61,7 @@ impl Workbench {
             && let Some(opening) = self
                 .graph_openings
                 .get(path)
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
         {
             self.dock.update(cx, |dock, cx| {
                 dock.move_panel(
@@ -124,9 +124,13 @@ impl Workbench {
         if self.project.is_none() {
             return;
         }
-        if let Some(graph) = self.graphs.get(&path).and_then(gpui::WeakEntity::upgrade) {
+        if let Some(graph) = self
+            .graphs
+            .get(&path)
+            .and_then(gpui_kit::WeakEntity::upgrade)
+        {
             self.present_panel(
-                gpui_component::dock::panel_handle(graph.clone()),
+                gpui_kit::component::dock::panel_handle(graph.clone()),
                 DockPlacement::Center,
                 window,
                 cx,
@@ -157,7 +161,7 @@ impl Workbench {
         let opening = self
             .graph_openings
             .get(&path)
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
             .filter(|opening| !opening.read(cx).removed)
             .unwrap_or_else(|| self.create_graph_opening(graph_path, window, cx));
         if let Some(intent) = intent {
@@ -175,12 +179,12 @@ impl Workbench {
             opening.update(cx, |opening, _| opening.node = node);
         }
         self.present_panel(
-            gpui_component::dock::panel_handle(opening.clone()),
+            gpui_kit::component::dock::panel_handle(opening.clone()),
             DockPlacement::Center,
             window,
             cx,
         );
-        window.focus(&gpui::Focusable::focus_handle(&opening, cx), cx);
+        window.focus(&gpui_kit::Focusable::focus_handle(&opening, cx), cx);
         self.read_graph_opening(opening, window, cx);
     }
 
@@ -189,11 +193,11 @@ impl Workbench {
         graph: OpenedGraph,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<gpui::Entity<GraphCanvas>> {
+    ) -> Option<gpui_kit::Entity<GraphCanvas>> {
         if let Some(canvas) = self
             .graphs
             .get(graph.projection.graph_path.as_str())
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
         {
             return Some(canvas);
         }
@@ -293,12 +297,13 @@ impl Workbench {
                             .is_some_and(|graph| graph.entity_id() == canvas.entity_id())
                         {
                             view.present_panel(
-                                gpui_component::dock::panel_handle(view.details.clone()),
-                                gpui_component::dock::DockPlacement::Right,
+                                gpui_kit::component::dock::panel_handle(view.details.clone()),
+                                gpui_kit::component::dock::DockPlacement::Right,
                                 window,
                                 cx,
                             );
-                            window.focus(&gpui::Focusable::focus_handle(canvas.read(cx), cx), cx);
+                            window
+                                .focus(&gpui_kit::Focusable::focus_handle(canvas.read(cx), cx), cx);
                         }
                     }
                     CanvasEvent::Execution => {
@@ -323,7 +328,7 @@ impl Workbench {
                             .is_some_and(|graph| graph.entity_id() == canvas.entity_id())
                         {
                             view.present_panel(
-                                gpui_component::dock::panel_handle(view.output.clone()),
+                                gpui_kit::component::dock::panel_handle(view.output.clone()),
                                 DockPlacement::Bottom,
                                 window,
                                 cx,
@@ -332,7 +337,7 @@ impl Workbench {
                     }
                     CanvasEvent::ShowResults => {
                         view.present_panel(
-                            gpui_component::dock::panel_handle(view.results.clone()),
+                            gpui_kit::component::dock::panel_handle(view.results.clone()),
                             DockPlacement::Bottom,
                             window,
                             cx,

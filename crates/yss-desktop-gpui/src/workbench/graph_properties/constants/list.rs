@@ -1,13 +1,13 @@
 //! Bounded constant directory; row controls are created only for visited pages.
 use super::*;
 use crate::workbench::controls;
-use gpui::{AnyElement, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Disableable, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, IntoElement, div, prelude::*};
 
 impl GraphProperties {
     pub(in crate::workbench::graph_properties) fn render_constants(

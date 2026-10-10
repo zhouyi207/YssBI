@@ -1,15 +1,15 @@
 use super::*;
 use crate::text::{activity_text, translate};
-use gpui::{
-    AnyElement, IntoElement, MouseButton, Render, SharedString, div, prelude::*, px, uniform_list,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::Input,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    AnyElement, IntoElement, MouseButton, Render, SharedString, div, prelude::*, px, uniform_list,
+};
 
 impl Render for NodePalette {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -74,7 +74,7 @@ impl NodePalette {
                         Input::new(&self.search)
                             .small()
                             .w_full()
-                            .prefix(gpui_component::Icon::new(IconName::Search).size_3()),
+                            .prefix(gpui_kit::component::Icon::new(IconName::Search).size_3()),
                     )
                     .child(
                         Button::new("palette-toggle-all")

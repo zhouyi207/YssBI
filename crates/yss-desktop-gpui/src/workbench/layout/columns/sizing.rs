@@ -1,8 +1,8 @@
 //! Keep the root DockArea's conversation widths while editor slots absorb available space.
 use super::conversation_node;
-use gpui::{App, Axis, Pixels, WeakEntity, Window, px};
-use gpui_base::PANEL_MIN_SIZE;
-use gpui_component::dock::{DockArea, DockPlacement, NodeId, PaneRef};
+use gpui_kit::base::PANEL_MIN_SIZE;
+use gpui_kit::component::dock::{DockArea, DockPlacement, NodeId, PaneRef};
+use gpui_kit::{App, Axis, Pixels, WeakEntity, Window, px};
 
 pub(super) fn default_width(dock: &DockArea, window: &Window) -> Pixels {
     let width = if dock.bounds().size.width > px(0.) {

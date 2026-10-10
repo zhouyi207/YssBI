@@ -1,14 +1,14 @@
 //! A bounded, lazy column directory; callbacks resolve their captured name and revision on use.
 use super::{DatabaseEditor, DetailsState};
 use crate::text::translate as t;
-use gpui::{Context, IntoElement, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, Window, div, prelude::*};
 use yss_application::database::{DatabaseMetaResult, DatabaseMutation};
 use yss_data_contract::SemanticType;
 use yss_database_schema::DatabaseColumnFact;

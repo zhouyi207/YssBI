@@ -2,13 +2,13 @@ use super::{
     axes::AxisDomain,
     frame::{self, Axis, Frame},
 };
-use gpui::{
-    AnyElement, App, Bounds, ElementId, Hsla, IntoElement, Pixels, Point, SharedString, TextAlign,
-    Window, point, px, size,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Colorize,
     plot::{IntoPlot, Plot, PlotLabel, TooltipState, label::Text, tooltip::Tooltip},
+};
+use gpui_kit::{
+    AnyElement, App, Bounds, ElementId, Hsla, IntoElement, Pixels, Point, SharedString, TextAlign,
+    Window, point, px, size,
 };
 use std::sync::Arc;
 use yss_application::graph::results::plot::{CorrelationPlot, HeatmapPlot};

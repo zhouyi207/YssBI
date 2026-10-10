@@ -7,14 +7,14 @@ use crate::{
         projects::{ProjectCommand, ProjectOperation},
     },
 };
-use gpui::{
-    AppContext, Context, Entity, IntoElement, PathPromptOptions, Render, Subscription, WeakEntity,
-    Window, div, prelude::*,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable,
     button::{Button, ButtonVariants},
     input::{Input, InputEvent, InputState},
+};
+use gpui_kit::{
+    AppContext, Context, Entity, IntoElement, PathPromptOptions, Render, Subscription, WeakEntity,
+    Window, div, prelude::*,
 };
 use std::{
     path::{Component, Path, PathBuf},
@@ -121,7 +121,7 @@ impl ProjectForm {
             _subscriptions: subscriptions,
         }
     }
-    fn destination(&self, cx: &gpui::App) -> Result<(String, PathBuf), &'static str> {
+    fn destination(&self, cx: &gpui_kit::App) -> Result<(String, PathBuf), &'static str> {
         let name = self.name.read(cx).value().to_string();
         let name = name.trim();
         let parts = Path::new(name).components().collect::<Vec<_>>();
@@ -296,7 +296,7 @@ impl Render for ProjectForm {
         if let Some(progress) = &self.progress {
             return div()
                 .w_full()
-                .min_h(gpui::px(230.))
+                .min_h(gpui_kit::px(230.))
                 .flex()
                 .items_center()
                 .child(progress.clone())

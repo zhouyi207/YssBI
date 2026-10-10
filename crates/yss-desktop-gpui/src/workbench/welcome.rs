@@ -4,13 +4,13 @@ use super::{
     chrome::{OpenProjectDirectory, OpenRecentProject},
 };
 use crate::projects::form::ProjectFormKind;
-use gpui::{App, Context, IntoElement, SharedString, Window, div, prelude::*, px, relative};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     kbd::Kbd,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{App, Context, IntoElement, SharedString, Window, div, prelude::*, px, relative};
 
 impl Workbench {
     pub(super) fn render_welcome(
@@ -50,7 +50,7 @@ impl Workbench {
                             .child(
                                 div()
                                     .text_lg()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .child("YssBI"),
                             ),
                     )

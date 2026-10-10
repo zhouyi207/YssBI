@@ -1,7 +1,7 @@
 //! Only the visible mapping page owns input entities; the dialog owns the unsaved semantic draft.
 use super::SemanticDialog;
-use gpui::{App, AppContext, Context, Entity, Subscription, Window};
-use gpui_component::input::{InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::{App, AppContext, Context, Entity, Subscription, Window};
 use std::ops::Range;
 use yss_data_contract::{ConversionDomain, NumericConstraints, SemanticType, SemanticValue};
 

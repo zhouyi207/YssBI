@@ -1,6 +1,6 @@
 //! Presentation of the Application's existing statistical display contract.
-use gpui::{App, Div, IntoElement, div, prelude::*};
-use gpui_component::{ActiveTheme, StyledExt};
+use gpui_kit::component::{ActiveTheme, StyledExt};
+use gpui_kit::{App, Div, IntoElement, div, prelude::*};
 use yss_application::graph::results::report::presentation::{
     DisplayData, DisplayFormat, DisplayValue,
 };
@@ -71,7 +71,7 @@ pub(super) fn metrics(data: &DisplayData, cx: &App) -> Div {
         .gap_3()
         .children(items.iter().map(|metric| {
             div()
-                .min_w(gpui::px(150.))
+                .min_w(gpui_kit::px(150.))
                 .flex_1()
                 .p_2()
                 .rounded_md()

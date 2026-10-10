@@ -1,9 +1,9 @@
 //! Failure presentation borrows the current execution fact; callbacks retain only its identity.
-use gpui::{AnyElement, Context, FontWeight, IntoElement, WeakEntity, div, prelude::*};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
 };
+use gpui_kit::{AnyElement, Context, FontWeight, IntoElement, WeakEntity, div, prelude::*};
 use yss_application::graph::run::{RunApplicationEvent, RunIdentity};
 use yss_graph_execution::error::{RunFailure, RunPhase};
 

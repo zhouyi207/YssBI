@@ -2,7 +2,7 @@
 use super::super::name_form::NameForm;
 use super::{super::Workbench, ResourceAction};
 use crate::project::DesktopProject;
-use gpui::{ClipboardItem, Context, Entity, Window};
+use gpui_kit::{ClipboardItem, Context, Entity, Window};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
 #[derive(Clone)]

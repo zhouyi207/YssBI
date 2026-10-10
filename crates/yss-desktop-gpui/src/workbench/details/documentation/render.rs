@@ -1,14 +1,14 @@
 //! Native documentation presentation; queries and selection stay with the owner.
 use super::{DocumentationState, NodeDocumentation};
 use crate::text::translate;
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px, rems};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     text::{TextView, TextViewStyle},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*, px, rems};
 use yss_node_protocol::NodeTypeId;
 
 impl Render for NodeDocumentation {
@@ -40,7 +40,7 @@ impl Render for NodeDocumentation {
                     .gap_1p5()
                     .bg(cx.theme().muted.opacity(0.6))
                     .text_xs()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .on_click(cx.listener(|view, _, _, cx| {
                         view.expanded = !view.expanded;
                         cx.notify();
@@ -71,7 +71,7 @@ impl Render for NodeDocumentation {
 }
 
 impl NodeDocumentation {
-    fn render_body(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn render_body(&self, cx: &mut Context<Self>) -> gpui_kit::AnyElement {
         match &self.state {
             DocumentationState::Missing => div().into_any_element(),
             DocumentationState::Loading => div()
@@ -80,8 +80,8 @@ impl NodeDocumentation {
                 .child(translate("native.workbench.loadingNodeDocumentation"))
                 .into_any_element(),
             DocumentationState::Ready(markdown) => {
-                let mut table = gpui::StyleRefinement::default();
-                table.overflow.x = Some(gpui::Overflow::Scroll);
+                let mut table = gpui_kit::StyleRefinement::default();
+                table.overflow.x = Some(gpui_kit::Overflow::Scroll);
                 TextView::new(markdown)
                     .plugin(crate::markdown::Markdown::default())
                     .scrollable(false)
@@ -126,7 +126,7 @@ impl crate::workbench::details::DetailsPanel {
     pub(in crate::workbench::details) fn render_node_definition(
         &self,
         node_type: &NodeTypeId,
-        cx: &gpui::App,
+        cx: &gpui_kit::App,
     ) -> impl IntoElement + use<> {
         div()
             .min_w_0()
@@ -143,7 +143,7 @@ impl crate::workbench::details::DetailsPanel {
                     .text_xs()
                     .child(
                         div()
-                            .w(gpui::relative(0.4))
+                            .w(gpui_kit::relative(0.4))
                             .child(translate("detail.fields.type")),
                     )
                     .child(

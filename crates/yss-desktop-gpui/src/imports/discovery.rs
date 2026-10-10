@@ -1,6 +1,6 @@
 //! Read-only file and SQL discovery runs outside the window event loop.
 use super::{ImportDialog, ImportKind, ImportStage, ImportTask, SourceLocation};
-use gpui::{Context, PathPromptOptions, Window};
+use gpui_kit::{Context, PathPromptOptions, Window};
 
 impl ImportDialog {
     pub(super) fn choose_file(

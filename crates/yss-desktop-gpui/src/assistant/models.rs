@@ -1,16 +1,16 @@
 //! Searchable model choices project the catalog; session receipts own the selection.
 use super::{ConversationEvent, ConversationPanel};
-use gpui::{
-    AnyElement, App, Context, Entity, Focusable, SharedString, Subscription, WeakEntity, Window,
-    div, prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Selectable, Sizable,
     button::{Button, ButtonVariants},
     combobox::{Combobox, ComboboxEvent, ComboboxState},
     searchable_list::{SearchableListItem, SearchableVec},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    AnyElement, App, Context, Entity, Focusable, SharedString, Subscription, WeakEntity, Window,
+    div, prelude::*, px,
+};
 use std::sync::Arc;
 use yss_harness_contract::{
     LanguageModelAuthentication, LanguageModelCatalog, LanguageModelConfig,

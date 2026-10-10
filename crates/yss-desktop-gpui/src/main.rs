@@ -26,10 +26,10 @@ mod window_chrome;
 mod workbench;
 
 use anyhow::{Result, bail};
-use gpui::{
+use gpui_kit::component::{Root, TitleBar};
+use gpui_kit::{
     App, AppContext, Bounds, KeyBinding, WindowBounds, WindowDecorations, WindowOptions, px, size,
 };
-use gpui_component::{Root, TitleBar};
 use startup::Startup;
 
 fn main() -> Result<()> {
@@ -54,10 +54,10 @@ fn main() -> Result<()> {
     let initial_resource = args
         .get(1)
         .map(|value| value.to_string_lossy().into_owned());
-    gpui_platform::application()
-        .with_assets(gpui_kit_assets::AllAssets)
+    gpui_kit::application()
+        .with_assets(gpui_kit::assets::AllAssets)
         .run(move |cx: &mut App| {
-            gpui_component::init(cx);
+            gpui_kit::init(cx);
             markdown::init();
             window_chrome::init(cx);
             modal_window::init(cx);
@@ -113,42 +113,42 @@ fn main() -> Result<()> {
                 KeyBinding::new("cmd-s", charts::SaveChart, Some("ChartEditor")),
                 KeyBinding::new(
                     "shift-up",
-                    gpui_base::actions::SelectUp,
+                    gpui_kit::base::actions::SelectUp,
                     Some("DatabaseEditor > DataTable"),
                 ),
                 KeyBinding::new(
                     "shift-down",
-                    gpui_base::actions::SelectDown,
+                    gpui_kit::base::actions::SelectDown,
                     Some("DatabaseEditor > DataTable"),
                 ),
                 KeyBinding::new(
                     "shift-left",
-                    gpui_base::actions::SelectPrevColumn,
+                    gpui_kit::base::actions::SelectPrevColumn,
                     Some("DatabaseEditor > DataTable"),
                 ),
                 KeyBinding::new(
                     "shift-right",
-                    gpui_base::actions::SelectNextColumn,
+                    gpui_kit::base::actions::SelectNextColumn,
                     Some("DatabaseEditor > DataTable"),
                 ),
                 KeyBinding::new(
                     "shift-home",
-                    gpui_base::actions::SelectFirst,
+                    gpui_kit::base::actions::SelectFirst,
                     Some("DatabaseEditor > DataTable"),
                 ),
                 KeyBinding::new(
                     "shift-end",
-                    gpui_base::actions::SelectLast,
+                    gpui_kit::base::actions::SelectLast,
                     Some("DatabaseEditor > DataTable"),
                 ),
                 KeyBinding::new(
                     "shift-pageup",
-                    gpui_base::actions::SelectPageUp,
+                    gpui_kit::base::actions::SelectPageUp,
                     Some("DatabaseEditor > DataTable"),
                 ),
                 KeyBinding::new(
                     "shift-pagedown",
-                    gpui_base::actions::SelectPageDown,
+                    gpui_kit::base::actions::SelectPageDown,
                     Some("DatabaseEditor > DataTable"),
                 ),
                 KeyBinding::new(
@@ -202,13 +202,37 @@ fn main() -> Result<()> {
                 KeyBinding::new("ctrl-shift-z", canvas::RedoGraph, Some("GraphCanvas")),
                 KeyBinding::new("ctrl-y", canvas::RedoGraph, Some("GraphCanvas")),
                 KeyBinding::new("ctrl-a", canvas::SelectAll, Some("GraphCanvas")),
-                KeyBinding::new("ctrl-c", gpui_component::input::Copy, Some("GraphCanvas")),
-                KeyBinding::new("ctrl-x", gpui_component::input::Cut, Some("GraphCanvas")),
-                KeyBinding::new("ctrl-v", gpui_component::input::Paste, Some("GraphCanvas")),
+                KeyBinding::new(
+                    "ctrl-c",
+                    gpui_kit::component::input::Copy,
+                    Some("GraphCanvas"),
+                ),
+                KeyBinding::new(
+                    "ctrl-x",
+                    gpui_kit::component::input::Cut,
+                    Some("GraphCanvas"),
+                ),
+                KeyBinding::new(
+                    "ctrl-v",
+                    gpui_kit::component::input::Paste,
+                    Some("GraphCanvas"),
+                ),
                 KeyBinding::new("ctrl-d", canvas::DuplicateSelection, Some("GraphCanvas")),
-                KeyBinding::new("cmd-c", gpui_component::input::Copy, Some("GraphCanvas")),
-                KeyBinding::new("cmd-x", gpui_component::input::Cut, Some("GraphCanvas")),
-                KeyBinding::new("cmd-v", gpui_component::input::Paste, Some("GraphCanvas")),
+                KeyBinding::new(
+                    "cmd-c",
+                    gpui_kit::component::input::Copy,
+                    Some("GraphCanvas"),
+                ),
+                KeyBinding::new(
+                    "cmd-x",
+                    gpui_kit::component::input::Cut,
+                    Some("GraphCanvas"),
+                ),
+                KeyBinding::new(
+                    "cmd-v",
+                    gpui_kit::component::input::Paste,
+                    Some("GraphCanvas"),
+                ),
                 KeyBinding::new("cmd-d", canvas::DuplicateSelection, Some("GraphCanvas")),
                 KeyBinding::new("delete", canvas::DeleteSelection, Some("GraphCanvas")),
                 KeyBinding::new("escape", canvas::CancelGesture, Some("GraphCanvas")),
@@ -227,7 +251,7 @@ fn main() -> Result<()> {
             let bounds = Bounds::centered(None, size(px(1480.), px(940.)), cx);
             cx.open_window(
                 WindowOptions {
-                    titlebar: Some(gpui::TitlebarOptions {
+                    titlebar: Some(gpui_kit::TitlebarOptions {
                         title: Some("YssBI".into()),
                         ..TitleBar::title_bar_options()
                     }),

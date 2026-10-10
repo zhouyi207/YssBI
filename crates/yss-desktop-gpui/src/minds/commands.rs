@@ -1,6 +1,6 @@
 use super::MindCanvas;
 use crate::file_commands::{FileSaveOutcome, FileSaveRequest};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_project::minds::MindCommand;
 use yss_project_identity::OperationId;
 use yss_project_model::mind::{MindDocument, MindEdit};

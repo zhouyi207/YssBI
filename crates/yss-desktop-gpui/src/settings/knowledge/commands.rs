@@ -1,6 +1,6 @@
 use super::{Failure, KnowledgeSettings, ProjectScope};
 use crate::settings::{Page, SettingsEvent, SettingsPanel};
-use gpui::Context;
+use gpui_kit::Context;
 use std::sync::Arc;
 use yss_harness_contract::{KnowledgeSourceId, ProjectKnowledgeStatus};
 use yss_project::ProjectIndex;

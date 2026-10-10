@@ -1,10 +1,10 @@
-use gpui::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::{Disableable, Sizable};
+use gpui_kit::{
     Bounds, Context, IntoElement, MouseButton, Pixels, Render, Window, canvas, div, point,
     prelude::*, px, rgb,
 };
-use gpui_component::button::{Button, ButtonVariants};
-use gpui_component::{Disableable, Sizable};
-use gpui_kit_assets::IconName;
 
 use super::{Gesture, GraphCanvas, commands::*, geometry};
 use crate::appearance;
@@ -89,14 +89,18 @@ impl Render for GraphCanvas {
             .on_action(
                 cx.listener(|view, _: &DuplicateSelection, _, cx| view.duplicate_selection(cx)),
             )
-            .on_action(cx.listener(|view, _: &gpui_component::input::Copy, _, cx| {
-                view.copy_selection(false, cx)
-            }))
-            .on_action(cx.listener(|view, _: &gpui_component::input::Cut, _, cx| {
-                view.copy_selection(true, cx)
-            }))
             .on_action(
-                cx.listener(|view, _: &gpui_component::input::Paste, _, cx| {
+                cx.listener(|view, _: &gpui_kit::component::input::Copy, _, cx| {
+                    view.copy_selection(false, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|view, _: &gpui_kit::component::input::Cut, _, cx| {
+                    view.copy_selection(true, cx)
+                }),
+            )
+            .on_action(
+                cx.listener(|view, _: &gpui_kit::component::input::Paste, _, cx| {
                     view.paste_selection(cx)
                 }),
             )
@@ -162,11 +166,13 @@ impl Render for GraphCanvas {
                     cx.notify();
                 }
             }))
-            .on_mouse_move(cx.listener(|view, event: &gpui::MouseMoveEvent, _, cx| {
-                if view.gesture.is_none() {
-                    view.hover_connection(event.position, cx);
-                }
-            }))
+            .on_mouse_move(
+                cx.listener(|view, event: &gpui_kit::MouseMoveEvent, _, cx| {
+                    if view.gesture.is_none() {
+                        view.hover_connection(event.position, cx);
+                    }
+                }),
+            )
             .on_pinch(cx.listener(Self::pinch))
             .on_scroll_wheel(cx.listener(Self::zoom_at_pointer))
             .child(
@@ -209,7 +215,7 @@ impl Render for GraphCanvas {
             .children(feedback)
             .when_some(label, |view, label| {
                 view.tooltip(move |window, cx| {
-                    gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+                    gpui_kit::component::tooltip::Tooltip::new(label).build(window, cx)
                 })
             })
             .when_some(self.context_menu.as_ref(), |view, menu| {
@@ -225,7 +231,7 @@ impl Render for GraphCanvas {
                         .h(rect.size.height)
                         .border_1()
                         .border_color(rgb(appearance::BLUE))
-                        .bg(gpui::rgba((appearance::BLUE << 8) | 0x18)),
+                        .bg(gpui_kit::rgba((appearance::BLUE << 8) | 0x18)),
                 )
             })
             .child(
@@ -299,7 +305,7 @@ impl Render for GraphCanvas {
                         .right_2()
                         .p_2()
                         .rounded_md()
-                        .bg(gpui::rgba((appearance::RED << 8) | 0x26))
+                        .bg(gpui_kit::rgba((appearance::RED << 8) | 0x26))
                         .text_color(rgb(appearance::RED))
                         .text_sm()
                         .child(error),
@@ -352,8 +358,8 @@ impl GraphCanvas {
         let view = palette.view.clone();
         // A backdrop handles outside presses in the bubble phase, so child
         // dropdowns can consume their own presses beyond the form's bounds.
-        gpui::deferred(
-            gpui::anchored().position(point(px(0.), px(0.))).child(
+        gpui_kit::deferred(
+            gpui_kit::anchored().position(point(px(0.), px(0.))).child(
                 div()
                     .id("node-palette-backdrop")
                     .relative()

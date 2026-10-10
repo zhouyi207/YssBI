@@ -1,12 +1,12 @@
 //! Shared empty editor presentation, including the editor space beside conversations.
 use crate::{appearance, text};
-use gpui::{
-    App, Context, Empty, EventEmitter, FocusHandle, Focusable, FontWeight, IntoElement, Render,
-    RenderOnce, WeakEntity, Window, div, prelude::*, px, rgb,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     dock::{BasePanel, DockArea, DockPlacement, NodeId, Panel, PanelEvent},
+};
+use gpui_kit::{
+    App, Context, Empty, EventEmitter, FocusHandle, Focusable, FontWeight, IntoElement, Render,
+    RenderOnce, WeakEntity, Window, div, prelude::*, px, rgb,
 };
 
 #[derive(IntoElement)]

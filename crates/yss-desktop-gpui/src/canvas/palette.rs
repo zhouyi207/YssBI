@@ -8,11 +8,11 @@ use crate::{
     services::NativeServices,
     workbench::{CreationEvent, CreationTarget, NodeCreationView},
 };
-use gpui::{
+use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::{
     App, AppContext, Context, Entity, EntityInputHandler, EventEmitter, Focusable, KeyDownEvent,
     ScrollStrategy, Subscription, Task, UniformListScrollHandle, WeakEntity, Window,
 };
-use gpui_component::input::{InputEvent, InputState};
 use std::sync::Arc;
 use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, ActivityRowContent};
 use yss_graph_document::{GraphResourcePath, PortAddress};
@@ -44,7 +44,7 @@ pub(super) struct NodePalette {
     target: PaletteTarget,
     browser: browser::Browser,
     search: Entity<InputState>,
-    focus: gpui::FocusHandle,
+    focus: gpui_kit::FocusHandle,
     scroll: UniformListScrollHandle,
     configure_first: bool,
     configuration: Option<Entity<NodeCreationView>>,
@@ -171,7 +171,7 @@ impl NodePalette {
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         if self.configuration.is_some()
             || !self.search.focus_handle(cx).is_focused(window)
-            || event.keystroke.modifiers != gpui::Modifiers::default()
+            || event.keystroke.modifiers != gpui_kit::Modifiers::default()
             || !matches!(
                 event.keystroke.key.as_str(),
                 "up" | "down" | "enter" | "escape"

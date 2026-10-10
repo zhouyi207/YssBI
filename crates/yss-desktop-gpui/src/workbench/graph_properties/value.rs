@@ -1,11 +1,11 @@
 //! Read presentation only; the original graph editor normalizes and validates writes.
-use gpui::{App, ElementId, IntoElement, Window, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Disableable, Sizable,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{App, ElementId, IntoElement, Window, prelude::*};
 use yss_data_contract::{DataValue, SemanticType, ValueType};
 use yss_graph_document::GraphConstant;
 
@@ -15,7 +15,7 @@ pub(super) fn type_picker(
     current: Option<String>,
     disabled: bool,
     on_choose: impl Fn(&String, &mut Window, &mut App) + 'static,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     let on_choose = std::rc::Rc::new(on_choose);
     Button::new(id)
         .small()

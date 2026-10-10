@@ -7,7 +7,7 @@ pub const LANGUAGES: [&str; 2] = ["zh-CN", "en-US"];
 pub const DEFAULT_LANGUAGE: &str = "zh-CN";
 
 pub fn locale() -> &'static str {
-    if gpui_component::locale().starts_with("en") {
+    if gpui_kit::component::locale().starts_with("en") {
         "en-US"
     } else {
         DEFAULT_LANGUAGE
@@ -15,7 +15,7 @@ pub fn locale() -> &'static str {
 }
 
 pub fn set_locale(language: &str) {
-    gpui_component::set_locale(if language == "en-US" {
+    gpui_kit::component::set_locale(if language == "en-US" {
         "en"
     } else {
         DEFAULT_LANGUAGE
@@ -52,10 +52,10 @@ pub fn translate(key: &str) -> String {
 }
 
 pub fn input_placeholder(
-    input: &gpui::Entity<gpui_component::input::InputState>,
+    input: &gpui_kit::Entity<gpui_kit::component::input::InputState>,
     key: &str,
-    window: &mut gpui::Window,
-    cx: &mut gpui::App,
+    window: &mut gpui_kit::Window,
+    cx: &mut gpui_kit::App,
 ) {
     let placeholder = t(key);
     if input.read(cx).presentation().placeholder().as_ref() != placeholder {

@@ -1,12 +1,12 @@
 use super::*;
 use crate::appearance;
-use gpui::{AnyElement, IntoElement, MouseButton, div, px, rgb};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::{Escape, Input},
     tooltip::Tooltip,
 };
+use gpui_kit::{AnyElement, IntoElement, MouseButton, div, px, rgb};
 
 impl GraphCanvas {
     pub(in crate::canvas::ports) fn render_port_input(
@@ -28,50 +28,52 @@ impl GraphCanvas {
             let checked = field::text(port, kind) == "true";
             // The regular Switch has fixed pixel geometry; a toggle button keeps
             // its keyboard/accessibility behavior while this canvas track scales.
-            Button::new(gpui::SharedString::from(format!("port-value-{address}")))
-                .small()
-                .ghost()
-                .accessibility_label(label)
-                .toggled(checked)
-                .w(px(28. * self.zoom))
-                .h(px(16. * self.zoom))
-                .min_w_0()
-                .min_h_0()
-                .p_0()
-                .rounded_full()
-                .child(
-                    div()
-                        .relative()
-                        .w(px(28. * self.zoom))
-                        .h(px(16. * self.zoom))
-                        .rounded_full()
-                        .bg(if checked {
-                            cx.theme().primary
-                        } else {
-                            cx.theme().input
-                        })
-                        .child(
-                            div()
-                                .absolute()
-                                .top(px(2. * self.zoom))
-                                .left(px(if checked { 14. } else { 2. } * self.zoom))
-                                .size(px(12. * self.zoom))
-                                .rounded_full()
-                                .bg(cx.theme().background),
-                        ),
-                )
-                .disabled(!self.can_edit())
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    view.submit(
-                        GraphCommand::Edit(EditorGraphMutation::SetLiteral {
-                            address: address.clone(),
-                            literal: Some(Value::Bool(!checked)),
-                        }),
-                        Some(version),
-                        cx,
-                    );
-                }))
-                .into_any_element()
+            Button::new(gpui_kit::SharedString::from(format!(
+                "port-value-{address}"
+            )))
+            .small()
+            .ghost()
+            .accessibility_label(label)
+            .toggled(checked)
+            .w(px(28. * self.zoom))
+            .h(px(16. * self.zoom))
+            .min_w_0()
+            .min_h_0()
+            .p_0()
+            .rounded_full()
+            .child(
+                div()
+                    .relative()
+                    .w(px(28. * self.zoom))
+                    .h(px(16. * self.zoom))
+                    .rounded_full()
+                    .bg(if checked {
+                        cx.theme().primary
+                    } else {
+                        cx.theme().input
+                    })
+                    .child(
+                        div()
+                            .absolute()
+                            .top(px(2. * self.zoom))
+                            .left(px(if checked { 14. } else { 2. } * self.zoom))
+                            .size(px(12. * self.zoom))
+                            .rounded_full()
+                            .bg(cx.theme().background),
+                    ),
+            )
+            .disabled(!self.can_edit())
+            .on_click(cx.listener(move |view, _, _, cx| {
+                view.submit(
+                    GraphCommand::Edit(EditorGraphMutation::SetLiteral {
+                        address: address.clone(),
+                        literal: Some(Value::Bool(!checked)),
+                    }),
+                    Some(version),
+                    cx,
+                );
+            }))
+            .into_any_element()
         } else {
             let field = field?;
             Input::new(&field.input)
@@ -79,7 +81,7 @@ impl GraphCanvas {
                 .aria_label(label)
                 .w(field.width * self.zoom)
                 // Input::h configures multiline content; the single-line frame uses Styled.
-                .map(|input| gpui::Styled::h(input, px(18. * self.zoom)))
+                .map(|input| gpui_kit::Styled::h(input, px(18. * self.zoom)))
                 .min_h_0()
                 .text_size(px(10. * self.zoom))
                 .line_height(px(18. * self.zoom))
@@ -105,7 +107,9 @@ impl GraphCanvas {
         });
         Some(
             div()
-                .id(gpui::SharedString::from(format!("port-input-{address}")))
+                .id(gpui_kit::SharedString::from(format!(
+                    "port-input-{address}"
+                )))
                 .flex_shrink_0()
                 .flex()
                 .h(px(18. * self.zoom))

@@ -1,7 +1,7 @@
 //! The gesture owns its candidate query, so cancellation also cancels late delivery.
 use std::collections::{BTreeMap, BTreeSet};
 
-use gpui::{Context, MouseButton, MouseDownEvent, Pixels, Point, Task, Window};
+use gpui_kit::{Context, MouseButton, MouseDownEvent, Pixels, Point, Task, Window};
 use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 use yss_graph_editor::{
     EditorGraphMutation,

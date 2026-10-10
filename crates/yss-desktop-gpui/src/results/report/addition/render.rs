@@ -1,13 +1,13 @@
 use super::*;
-use gpui::{Div, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     collapsible::Collapsible,
     input::Input,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Div, div, prelude::*, px};
 
 impl AdditionForm {
     pub fn render(&self, cx: &mut Context<ReportView>) -> Div {

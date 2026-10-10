@@ -2,10 +2,10 @@ use super::{
     CancelResponse, ConversationPanel,
     projection::{Turn, TurnState},
 };
-use gpui::{
+use gpui_kit::component::{ActiveTheme, Sizable, clipboard::Clipboard};
+use gpui_kit::{
     AnyElement, Context, Empty, IntoElement, Render, SharedString, Window, div, prelude::*,
 };
-use gpui_component::{ActiveTheme, Sizable, clipboard::Clipboard};
 mod failure;
 mod output;
 mod plain;

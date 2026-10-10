@@ -1,12 +1,12 @@
 use super::{Content, NodeDescription};
 use crate::text::translate;
-use gpui::{App, Context, IntoElement, Render, SharedString, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{App, Context, IntoElement, Render, SharedString, Window, div, prelude::*};
 
 const PAGE_COLUMNS: usize = 50;
 
@@ -34,7 +34,7 @@ pub(super) fn heading(
                 .items_center()
                 .gap_1p5()
                 .text_xs()
-                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                 .child(
                     Icon::new(if open {
                         IconName::ChevronDown
@@ -80,7 +80,7 @@ impl Render for NodeDescription {
 }
 
 impl NodeDescription {
-    fn render_body(&self, cx: &mut Context<Self>) -> gpui::Div {
+    fn render_body(&self, cx: &mut Context<Self>) -> gpui_kit::Div {
         let body = div().min_w_0().py_1p5().pl_2().text_xs();
         match &self.content {
             Content::Ready(columns) => {
@@ -91,7 +91,7 @@ impl NodeDescription {
                         .id("description-columns")
                         .min_w_0()
                         .when(columns.len() > PAGE_COLUMNS, |list| {
-                            list.max_h(gpui::px(480.))
+                            list.max_h(gpui_kit::px(480.))
                                 .overflow_y_scroll()
                                 .track_scroll(&self.columns_scroll)
                         })
@@ -114,7 +114,7 @@ impl NodeDescription {
                                     .disabled(self.page == 0)
                                     .on_click(cx.listener(|view, _, _, cx| {
                                         view.page = view.page.saturating_sub(1);
-                                        view.columns_scroll.set_offset(gpui::Point::default());
+                                        view.columns_scroll.set_offset(gpui_kit::Point::default());
                                         cx.notify();
                                     })),
                             )
@@ -129,7 +129,8 @@ impl NodeDescription {
                                             && (view.page + 1) * PAGE_COLUMNS < columns.len()
                                         {
                                             view.page += 1;
-                                            view.columns_scroll.set_offset(gpui::Point::default());
+                                            view.columns_scroll
+                                                .set_offset(gpui_kit::Point::default());
                                             cx.notify();
                                         }
                                     })),

@@ -1,5 +1,5 @@
 //! Immutable display and lazy search text for one already-sanitized log record.
-use gpui::SharedString;
+use gpui_kit::SharedString;
 use std::cell::OnceCell;
 use yss_logging::{LogDomain, LogLevel, LogOrigin, LogRecordDto};
 

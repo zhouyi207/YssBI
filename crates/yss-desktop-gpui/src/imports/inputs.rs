@@ -1,7 +1,7 @@
 //! Native form values become the existing typed import request only on explicit confirmation.
 use super::{ImportDialog, ImportKind, ImportStage};
-use gpui::{App, AppContext, Context, Entity, EntityInputHandler, Focusable, Window};
-use gpui_component::input::{Enter, InputState};
+use gpui_kit::component::input::{Enter, InputState};
+use gpui_kit::{App, AppContext, Context, Entity, EntityInputHandler, Focusable, Window};
 use yss_database_contract::DatabaseImportSource;
 
 pub(super) struct ConnectionInputs {

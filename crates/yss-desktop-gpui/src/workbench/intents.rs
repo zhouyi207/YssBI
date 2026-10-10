@@ -1,5 +1,5 @@
 use super::Workbench;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_project_identity::ProjectResourceKind;
 use yss_ui_contract::{UiIntent, UiIntentReceipt, UiIntentStatus, UiPanel};
 

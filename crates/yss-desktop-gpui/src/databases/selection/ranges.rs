@@ -1,5 +1,5 @@
 //! Page-local highlights extend the component cursor without storing another active cell.
-use gpui_component::table::TableSelection;
+use gpui_kit::component::table::TableSelection;
 use std::{collections::BTreeSet, ops::Range};
 
 #[derive(Clone, PartialEq, Eq)]

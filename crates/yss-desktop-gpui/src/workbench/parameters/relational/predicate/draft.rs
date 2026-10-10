@@ -3,8 +3,8 @@ use crate::{
     text::translate,
     workbench::parameters::{ParameterForm, field::subscribe_input},
 };
-use gpui::{App, AppContext, Context, Entity, EntityId, Subscription, Window};
-use gpui_component::input::InputState;
+use gpui_kit::component::input::InputState;
+use gpui_kit::{App, AppContext, Context, Entity, EntityId, Subscription, Window};
 use serde_json::Value;
 use yss_data_contract::{DecimalLiteral, FilterLiteral, TabularColumnName};
 use yss_graph_editor::projection::{

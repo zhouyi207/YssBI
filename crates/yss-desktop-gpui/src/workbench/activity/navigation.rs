@@ -1,6 +1,6 @@
 //! Keyboard focus is a row identity in the original document, independent of the open resource.
 use super::*;
-use gpui::{KeyDownEvent, ScrollStrategy};
+use gpui_kit::{KeyDownEvent, ScrollStrategy};
 
 impl ActivityPanel {
     pub(super) fn focused_index(&self) -> Option<usize> {
@@ -30,7 +30,8 @@ impl ActivityPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.focus.is_focused(window) || event.keystroke.modifiers != gpui::Modifiers::default()
+        if !self.focus.is_focused(window)
+            || event.keystroke.modifiers != gpui_kit::Modifiers::default()
         {
             return;
         }

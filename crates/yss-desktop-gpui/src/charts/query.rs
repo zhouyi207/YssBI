@@ -1,7 +1,7 @@
 //! All chart reads use the original project publication and database resource identities.
 mod preview;
 use super::ChartEditor;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 pub(super) use preview::{PreviewData, PreviewFailure};
 use std::{sync::Arc, time::Duration};
 use yss_application::runtime::ApplicationServices;

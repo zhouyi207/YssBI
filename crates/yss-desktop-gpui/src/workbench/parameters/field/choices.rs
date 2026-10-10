@@ -1,13 +1,13 @@
 //! Choice values stay in the projection; localized menu entries are built only on open.
 use super::{EditorParameterConfiguration, ParameterDraft, ParameterForm, controls};
 use crate::text::translate;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Disableable, Sizable,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 
 fn option_label(key: &str, option: &str) -> String {
     let namespace = match (key, option) {

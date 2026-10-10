@@ -4,14 +4,14 @@ mod details;
 mod render;
 
 use crate::services::NativeServices;
-use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
-    actions,
-};
-use gpui_component::{
+use gpui_kit::component::{
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
     input::{EditorState, InputEvent},
     text::TextViewState,
+};
+use gpui_kit::{
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
+    actions,
 };
 use std::sync::Arc;
 use yss_project::docs::DocSnapshot;
@@ -30,7 +30,7 @@ pub struct DocumentEditor {
     preview: Entity<TextViewState>,
     _input_subscription: Subscription,
     preview_visible: bool,
-    preview_task: Option<gpui::Task<()>>,
+    preview_task: Option<gpui_kit::Task<()>>,
     draft_dirty: bool,
     busy: bool,
     refreshing: bool,
@@ -154,7 +154,7 @@ impl BasePanel for DocumentEditor {
     }
 }
 impl Panel for DocumentEditor {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         format!(
             "{}{}",
             self.snapshot.path.name(),

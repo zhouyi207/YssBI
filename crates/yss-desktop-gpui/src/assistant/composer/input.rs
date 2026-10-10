@@ -1,7 +1,7 @@
 use super::*;
 use crate::assistant::references::Picker;
-use gpui::{Entity, EntityInputHandler, Focusable, KeyDownEvent};
-use gpui_component::input::Textarea;
+use gpui_kit::component::input::Textarea;
+use gpui_kit::{Entity, EntityInputHandler, Focusable, KeyDownEvent};
 
 impl ConversationPanel {
     pub(in crate::assistant) fn sync_input(&self, window: &mut Window, cx: &mut Context<Self>) {

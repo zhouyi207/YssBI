@@ -1,6 +1,6 @@
 use super::palette::{NodePalette, PaletteEvent, PaletteTarget};
 use super::{GraphCanvas, Palette};
-use gpui::{AppContext, Context, Pixels, Point, Window};
+use gpui_kit::{AppContext, Context, Pixels, Point, Window};
 use yss_graph_document::PortAddress;
 
 impl GraphCanvas {

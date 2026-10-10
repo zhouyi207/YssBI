@@ -1,6 +1,6 @@
 //! Picking uses GPUI's tessellation of the same curve at a 12px interaction width.
 use super::curve::Curve;
-use gpui::{Path, Pixels, Point, px};
+use gpui_kit::{Path, Pixels, Point, px};
 
 #[derive(Default)]
 pub(super) struct HitPath {

@@ -1,12 +1,12 @@
 use super::{ImportDialog, ImportKind, ImportStage, ImportTask};
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::{Enter, Input},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*, px};
 
 impl Render for ImportDialog {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -118,7 +118,7 @@ impl Render for ImportDialog {
     }
 }
 impl ImportDialog {
-    fn render_navigation(&self, compact: bool, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn render_navigation(&self, compact: bool, cx: &mut Context<Self>) -> gpui_kit::AnyElement {
         let mut navigation = div()
             .flex_shrink_0()
             .flex()
@@ -161,7 +161,7 @@ impl ImportDialog {
         }
         navigation.into_any_element()
     }
-    fn render_sources(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn render_sources(&self, cx: &mut Context<Self>) -> gpui_kit::AnyElement {
         let kinds: &[ImportKind] = if self.category == 1 {
             &[
                 ImportKind::Sqlite,
@@ -209,7 +209,7 @@ impl ImportDialog {
         }
         view.into_any_element()
     }
-    pub(super) fn name_field(&self, cx: &Context<Self>) -> gpui::AnyElement {
+    pub(super) fn name_field(&self, cx: &Context<Self>) -> gpui_kit::AnyElement {
         div()
             .flex()
             .flex_col()
@@ -228,7 +228,7 @@ impl ImportDialog {
         kind: ImportKind,
         path: String,
         cx: &mut Context<Self>,
-    ) -> gpui::AnyElement {
+    ) -> gpui_kit::AnyElement {
         let mut view = div()
             .flex()
             .flex_col()
@@ -303,7 +303,7 @@ impl ImportDialog {
         )
         .into_any_element()
     }
-    fn render_connection(&self, kind: ImportKind, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn render_connection(&self, kind: ImportKind, cx: &mut Context<Self>) -> gpui_kit::AnyElement {
         let mut view = div()
             .flex()
             .flex_col()

@@ -8,10 +8,10 @@ mod navigation;
 mod render;
 
 use crate::services::NativeServices;
-use gpui::{
+use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, Subscription, Window, actions,
 };
-use gpui_component::input::{InputEvent, InputState};
 use std::sync::Arc;
 use yss_harness_contract::LanguageModelCatalog;
 
@@ -33,7 +33,7 @@ pub(crate) enum SettingsEvent {
     },
 }
 
-impl gpui::EventEmitter<SettingsEvent> for SettingsPanel {}
+impl gpui_kit::EventEmitter<SettingsEvent> for SettingsPanel {}
 
 pub(crate) struct SettingsPanel {
     services: Arc<NativeServices>,

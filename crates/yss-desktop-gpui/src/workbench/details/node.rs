@@ -1,13 +1,13 @@
 //! Selected-node presentation; binding and drafts remain with DetailsPanel.
 use super::DetailsPanel;
 use crate::{appearance, canvas::GraphCommand};
-use gpui::{Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     input::Input,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, div, prelude::*};
 use yss_graph_editor::{EditorGraphMutation, projection::EditorNodeModel};
 
 impl DetailsPanel {
@@ -39,14 +39,14 @@ impl DetailsPanel {
                             .child(
                                 Icon::new(IconName::Workflow)
                                     .size_4()
-                                    .text_color(gpui::rgb(appearance::BLUE)),
+                                    .text_color(gpui_kit::rgb(appearance::BLUE)),
                             )
                             .child(
                                 div()
                                     .flex_1()
                                     .min_w_0()
                                     .text_sm()
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                     .truncate()
                                     .child(
                                         node.display
@@ -104,7 +104,7 @@ impl DetailsPanel {
                     .map(|error| {
                         div()
                             .id("node-command-error")
-                            .role(gpui::accesskit::Role::Alert)
+                            .role(gpui_kit::accesskit::Role::Alert)
                             .px_4()
                             .text_xs()
                             .text_color(cx.theme().danger)

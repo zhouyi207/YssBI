@@ -1,5 +1,5 @@
 use super::DatabaseEditor;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use std::time::{Duration, Instant};
 pub(super) const PAGE_ROWS: usize = 100;
 pub(crate) struct DatabaseRead {

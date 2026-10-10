@@ -3,8 +3,7 @@ use super::{Markdown, typesetting};
 
 use std::sync::{Arc, LazyLock};
 
-use gpui::{App, Hsla, IntoElement, Pixels, SharedString, Window, div, prelude::*, svg};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     menu::{ContextMenu, ContextMenuExt, PopupMenuItem},
     text::{
@@ -12,6 +11,7 @@ use gpui_component::{
         MarkdownPlugin, TextView, markdown_ast,
     },
 };
+use gpui_kit::{App, Hsla, IntoElement, Pixels, SharedString, Window, div, prelude::*, svg};
 
 pub(super) fn extensions() -> MarkdownExtensions {
     static EXTENSIONS: LazyLock<MarkdownExtensions> = LazyLock::new(|| {
@@ -121,7 +121,7 @@ pub(super) fn render(
     prose: &Markdown,
     window: &mut Window,
     cx: &mut App,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     if let Some(parts) = node.data::<Vec<DisplayPart>>() {
         return div()
             .w_full()
@@ -193,7 +193,7 @@ fn split_display_paragraph(
     )
 }
 
-fn render_display(node: &MarkdownNode, window: &mut Window, cx: &mut App) -> gpui::AnyElement {
+fn render_display(node: &MarkdownNode, window: &mut Window, cx: &mut App) -> gpui_kit::AnyElement {
     let font_size = window.text_style().font_size.to_pixels(window.rem_size()) * 1.05;
     if let Some(math) = node.data::<MathNode>()
         && let Some(formula) = &math.formula
@@ -207,7 +207,7 @@ fn render_display(node: &MarkdownNode, window: &mut Window, cx: &mut App) -> gpu
         .into_any_element()
 }
 
-fn formula_image(formula: &typesetting::Formula, font_size: Pixels, color: Hsla) -> gpui::Svg {
+fn formula_image(formula: &typesetting::Formula, font_size: Pixels, color: Hsla) -> gpui_kit::Svg {
     svg()
         .data(&formula.svg)
         .w(font_size * formula.width)
@@ -216,7 +216,7 @@ fn formula_image(formula: &typesetting::Formula, font_size: Pixels, color: Hsla)
         .text_color(color)
 }
 
-fn formula_container(node: &MarkdownNode) -> ContextMenu<gpui::Stateful<gpui::Div>> {
+fn formula_container(node: &MarkdownNode) -> ContextMenu<gpui_kit::Stateful<gpui_kit::Div>> {
     let math = node.data::<MathNode>();
     let offset = math.map_or(0, |math| math.offset);
     let source = node.as_markdown().to_owned();
@@ -230,7 +230,7 @@ fn formula_container(node: &MarkdownNode) -> ContextMenu<gpui::Stateful<gpui::Di
             menu.item(
                 PopupMenuItem::new(crate::text::t("native.markdown.copyFormula")).on_click(
                     move |_, _, cx| {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(source.clone()));
+                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(source.clone()));
                     },
                 ),
             )

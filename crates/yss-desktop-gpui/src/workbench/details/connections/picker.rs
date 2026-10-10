@@ -1,10 +1,10 @@
 //! The native List owns search, keyboard selection and virtualization.
 use super::*;
-use gpui::{App, Task, WeakEntity};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     list::{ListDelegate, ListItem},
 };
+use gpui_kit::{App, Task, WeakEntity};
 use yss_graph_editor::projection::{ConnectionCandidates, ConnectionDecision};
 
 pub(super) struct ConnectionOption {

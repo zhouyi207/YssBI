@@ -1,4 +1,4 @@
-use gpui_component::highlighter::{GrammarConfig, LanguageRegistry};
+use gpui_kit::component::highlighter::{GrammarConfig, LanguageRegistry};
 
 pub(crate) fn init() {
     let registry = LanguageRegistry::singleton();

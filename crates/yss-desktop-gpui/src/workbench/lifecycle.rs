@@ -4,7 +4,7 @@ use super::{
     projects::{ProjectCommand, ProjectOperation},
 };
 use crate::projects::progress::{ProjectProgress, ProjectStage};
-use gpui::{AppContext, Context, Window};
+use gpui_kit::{AppContext, Context, Window};
 
 pub(super) enum AfterSave {
     Stay,

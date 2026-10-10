@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 mod render;
 
-use gpui::{AppContext, Context, Entity, Task};
-use gpui_component::text::TextViewState;
+use gpui_kit::component::text::TextViewState;
+use gpui_kit::{AppContext, Context, Entity, Task};
 use yss_node_protocol::NodeTypeId;
 use yss_project_identity::ProjectInstanceId;
 

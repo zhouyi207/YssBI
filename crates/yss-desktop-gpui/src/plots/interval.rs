@@ -2,12 +2,12 @@ use super::{
     axes::AxisDomain,
     frame::{self, Axis, Frame},
 };
-use gpui::{
-    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, Window, point, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{IntoPlot, Plot, TooltipState, tooltip::Tooltip},
+};
+use gpui_kit::{
+    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, Window, point, px,
 };
 use std::{ops::Range, sync::Arc};
 use yss_application::graph::results::plot::{CoefficientPoint, IntervalPoint};
@@ -107,7 +107,7 @@ impl Plot for Interval {
         frame.axes(window, cx);
         let color = cx.theme().primary;
         window.with_content_mask(
-            Some(gpui::ContentMask {
+            Some(gpui_kit::ContentMask {
                 bounds: frame.bounds,
             }),
             |window| {

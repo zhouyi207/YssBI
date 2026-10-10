@@ -2,16 +2,16 @@ use super::{
     axes::AxisDomain,
     frame::{self, Axis, Frame},
 };
-use gpui::{
-    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, Window, point,
-    px, size,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{
         Curve, IntoPlot, PathCaches, Plot, PlotLabel, TooltipState, label::Text, shape::Line,
         tooltip::Tooltip,
     },
+};
+use gpui_kit::{
+    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, Window, point,
+    px, size,
 };
 use std::{ops::Range, sync::Arc};
 use yss_application::graph::results::plot::{CombinationPlot, ParetoCategory};
@@ -188,7 +188,7 @@ impl Plot for Composite {
         let baseline = frame.point(0., 0.).y;
         let caches = PathCaches::for_paint(self.id.clone(), window, cx);
         window.with_content_mask(
-            Some(gpui::ContentMask {
+            Some(gpui_kit::ContentMask {
                 bounds: frame.bounds,
             }),
             |window| {

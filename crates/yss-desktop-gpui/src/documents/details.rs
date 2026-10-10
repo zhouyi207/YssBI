@@ -1,7 +1,7 @@
 //! File information uses the editor's current snapshot and draft status.
 use super::DocumentEditor;
-use gpui::{App, IntoElement, div, prelude::*};
-use gpui_component::ActiveTheme;
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{App, IntoElement, div, prelude::*};
 
 impl DocumentEditor {
     pub(crate) fn render_details(&self, cx: &App) -> impl IntoElement + use<> {
@@ -13,7 +13,7 @@ impl DocumentEditor {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child(self.snapshot.path.name().to_owned()),
             )
             .child(
@@ -26,7 +26,7 @@ impl DocumentEditor {
             .child(
                 div()
                     .id("document-status")
-                    .role(gpui::accesskit::Role::Status)
+                    .role(gpui_kit::accesskit::Role::Status)
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .child(crate::text::translate(if self.busy() {
@@ -41,7 +41,7 @@ impl DocumentEditor {
                 view.child(
                     div()
                         .id("document-error")
-                        .role(gpui::accesskit::Role::Alert)
+                        .role(gpui_kit::accesskit::Role::Alert)
                         .text_sm()
                         .text_color(cx.theme().danger)
                         .child(error),

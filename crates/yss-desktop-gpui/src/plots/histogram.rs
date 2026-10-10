@@ -1,5 +1,5 @@
-use gpui::{App, IntoElement, SharedString};
-use gpui_component::{ActiveTheme, chart::BarChart};
+use gpui_kit::component::{ActiveTheme, chart::BarChart};
+use gpui_kit::{App, IntoElement, SharedString};
 
 #[derive(Clone)]
 pub(crate) struct HistogramDatum {

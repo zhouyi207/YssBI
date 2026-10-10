@@ -2,9 +2,9 @@ mod columns;
 pub(super) use columns::PAGE_COLUMNS;
 
 use super::ChartEditor;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::{DropdownMenu, PopupMenuItem},
@@ -56,7 +56,7 @@ impl ChartEditor {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child(self.path.display_name().as_str().to_owned()),
             )
             .child(

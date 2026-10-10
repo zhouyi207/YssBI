@@ -1,6 +1,6 @@
 //! Mutations capture the selected installation; completion rereads manager-owned facts.
 use super::{PluginKey, PluginsPanel, failure};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 #[derive(Clone, Copy)]
 pub(super) enum PluginAction {
     Enable(bool),

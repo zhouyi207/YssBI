@@ -1,6 +1,6 @@
 use super::{ClearDatabaseSelection, CopyDatabaseSelection, DatabaseEditor, SelectDatabasePage};
-use gpui::{Context, IntoElement, MouseButton, Render, Window, div, prelude::*};
-use gpui_component::{ActiveTheme, Sizable, table::DataTable};
+use gpui_kit::component::{ActiveTheme, Sizable, table::DataTable};
+use gpui_kit::{Context, IntoElement, MouseButton, Render, Window, div, prelude::*};
 impl Render for DatabaseEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let busy = self.busy();

@@ -1,6 +1,6 @@
 //! Expanded worker output borrows the same timeline as the main conversation.
 use super::super::{ConversationPanel, projection::Task};
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 
 impl ConversationPanel {
     pub(in crate::assistant) fn task_content(

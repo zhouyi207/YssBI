@@ -5,16 +5,16 @@ mod view;
 
 pub(crate) use content::ModalContent;
 pub(crate) use forms::confirm;
-use gpui::{
+use gpui_kit::base::{
+    RootPlugin,
+    actions::{Cancel, Confirm},
+};
+use gpui_kit::component::{Root, TitleBar, WindowExt};
+use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, Context, Entity, IntoElement, KeyBinding, Pixels,
     Render, SharedString, Size, Subscription, WeakEntity, Window, WindowBounds, WindowDecorations,
     WindowKind, WindowOptions, div, px, size,
 };
-use gpui_base::{
-    RootPlugin,
-    actions::{Cancel, Confirm},
-};
-use gpui_component::{Root, TitleBar, WindowExt};
 use view::ModalWindow;
 
 type Build = Box<dyn FnOnce(&mut Window, &mut App) -> ModalContent>;
@@ -172,7 +172,7 @@ fn open_pending(
     let result = cx.open_window(
         WindowOptions {
             kind: WindowKind::Dialog,
-            titlebar: Some(gpui::TitlebarOptions {
+            titlebar: Some(gpui_kit::TitlebarOptions {
                 title: Some(title.clone()),
                 ..TitleBar::title_bar_options()
             }),

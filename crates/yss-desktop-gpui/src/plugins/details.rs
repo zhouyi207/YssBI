@@ -1,11 +1,13 @@
 use super::{DetailTab, PluginsPanel, commands::PluginAction};
 use crate::appearance;
-use gpui::{AnyElement, ClipboardItem, Context, IntoElement, div, prelude::*, px, uniform_list};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    AnyElement, ClipboardItem, Context, IntoElement, div, prelude::*, px, uniform_list,
+};
 use yss_plugin_runtime::{InstalledPlugin, TaskSnapshot, TaskState, ViewScope};
 
 pub(super) fn task_state(state: TaskState) -> &'static str {
@@ -55,7 +57,7 @@ impl PluginsPanel {
                             .child(
                                 div()
                                     .text_lg()
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                     .truncate()
                                     .child(plugin.manifest.name.clone()),
                             )
@@ -184,7 +186,7 @@ impl PluginsPanel {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child(crate::text::t("native.plugins.permissions")),
             )
             .child(
@@ -205,7 +207,7 @@ impl PluginsPanel {
                 .child(
                     div()
                         .text_sm()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .child(crate::text::t("native.plugins.storage")),
                 )
                 .child(div().text_sm().child(crate::text::format(
@@ -268,7 +270,7 @@ impl PluginsPanel {
         view = view.child(
             div()
                 .text_sm()
-                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                 .child(crate::text::t("native.plugins.contributions")),
         );
         for (index, contribution) in plugin.manifest.contributes.views.iter().enumerate() {
@@ -464,7 +466,7 @@ impl PluginsPanel {
                     )
                     .child(div().text_xs().child(task_state(task.state)))
                     .child(
-                        Button::new(gpui::SharedString::from(format!("task-copy-{id}")))
+                        Button::new(gpui_kit::SharedString::from(format!("task-copy-{id}")))
                             .small()
                             .ghost()
                             .label(crate::text::t("native.plugins.copyId"))

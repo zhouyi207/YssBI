@@ -3,14 +3,14 @@ use super::{
     CancelMindGesture, DeleteTopics, FitMind, FitTopics, MindCanvas, SaveMind, SelectTopics,
 };
 use crate::appearance;
-use gpui::{
-    AppContext, Context, IntoElement, MouseButton, PathBuilder, Render, Window, canvas, div, point,
-    prelude::*, px, rgb,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     text::{TextView, TextViewState},
+};
+use gpui_kit::{
+    AppContext, Context, IntoElement, MouseButton, PathBuilder, Render, Window, canvas, div, point,
+    prelude::*, px, rgb,
 };
 use std::collections::HashMap;
 
@@ -139,7 +139,7 @@ impl Render for MindCanvas {
                         .h(rect.size.height)
                         .border_1()
                         .border_color(cx.theme().primary)
-                        .bg(gpui::rgba((appearance::BLUE << 8) | 0x18)),
+                        .bg(gpui_kit::rgba((appearance::BLUE << 8) | 0x18)),
                 )
             })
             .when_some(self.error.clone(), |view, error| {
@@ -165,7 +165,7 @@ impl MindCanvas {
         &mut self,
         placement: TopicPlacement,
         cx: &mut Context<Self>,
-    ) -> gpui::AnyElement {
+    ) -> gpui_kit::AnyElement {
         let topic = &self.snapshot.content.nodes[placement.index];
         let id = topic.id.clone();
         let content = &topic.content;
@@ -193,7 +193,7 @@ impl MindCanvas {
             0xb477cf,
         ][placement.depth % 5];
         div()
-            .id(gpui::SharedString::from(format!("mind-topic-{id}")))
+            .id(gpui_kit::SharedString::from(format!("mind-topic-{id}")))
             .absolute()
             .left(origin.x)
             .top(origin.y)
@@ -230,23 +230,27 @@ impl MindCanvas {
                         .right_1()
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .child(
-                            Button::new(gpui::SharedString::from(format!("collapse-topic-{id}")))
-                                .xsmall()
-                                .ghost()
-                                .label(if collapsed {
-                                    format!("+{}", placement.children)
-                                } else {
-                                    "−".into()
-                                })
-                                .tooltip(if collapsed {
-                                    crate::text::t("documents.expand")
-                                } else {
-                                    crate::text::t("documents.collapse")
-                                })
-                                .on_click(cx.listener(move |view, _, window, cx| {
+                            Button::new(gpui_kit::SharedString::from(format!(
+                                "collapse-topic-{id}"
+                            )))
+                            .xsmall()
+                            .ghost()
+                            .label(if collapsed {
+                                format!("+{}", placement.children)
+                            } else {
+                                "−".into()
+                            })
+                            .tooltip(if collapsed {
+                                crate::text::t("documents.expand")
+                            } else {
+                                crate::text::t("documents.collapse")
+                            })
+                            .on_click(cx.listener(
+                                move |view, _, window, cx| {
                                     view.focus_canvas(window, cx);
                                     view.toggle_branch(id.clone(), cx)
-                                })),
+                                },
+                            )),
                         ),
                 )
             })

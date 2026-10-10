@@ -1,7 +1,7 @@
 use super::Workbench;
 use crate::plugins::{OpenNativeView, PluginKey, PluginViewPanel, PluginsEvent};
-use gpui::{AppContext, Context, Window, div, prelude::*, px};
-use gpui_component::dock::{DockPlacement, panel_handle};
+use gpui_kit::component::dock::{DockPlacement, panel_handle};
+use gpui_kit::{AppContext, Context, Window, div, prelude::*, px};
 
 impl Workbench {
     pub(super) fn connect_plugins(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -51,7 +51,7 @@ impl Workbench {
         let existing = self
             .plugin_views
             .get(&identity)
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
             .filter(|panel| panel.read(cx).matches(&key))
             .or_else(|| {
                 let dock = self.dock.read(cx);
@@ -92,7 +92,7 @@ impl Workbench {
         } else {
             crate::modal_window::open(
                 declaration.title,
-                gpui::size(px(720.), px(640.)),
+                gpui_kit::size(px(720.), px(640.)),
                 window,
                 cx,
                 move |_, _| {
@@ -107,7 +107,7 @@ impl Workbench {
 
     pub(super) fn subscribe_plugin_view(
         &mut self,
-        panel: &gpui::Entity<PluginViewPanel>,
+        panel: &gpui_kit::Entity<PluginViewPanel>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -137,7 +137,7 @@ impl Workbench {
             let sidebar = self.plugins_sidebar.clone();
             crate::modal_window::open(
                 crate::text::t("activityBar.plugins"),
-                gpui::size(px(1020.), px(700.)),
+                gpui_kit::size(px(1020.), px(700.)),
                 window,
                 cx,
                 move |_, _| {

@@ -1,12 +1,12 @@
 //! Next-turn options stay with the draft; model restrictions come from the catalog.
 use super::ConversationPanel;
-use gpui::{AnyElement, Context, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, div, prelude::*, px};
 use yss_harness_contract::{HarnessMode, ReasoningEffort};
 
 impl ConversationPanel {

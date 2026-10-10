@@ -3,7 +3,7 @@ mod update;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use gpui::{
+use gpui_kit::{
     Context, DispatchPhase, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
     Point, WeakEntity, Window,
 };

@@ -1,5 +1,5 @@
 use super::WordCloudData;
-use gpui::{
+use gpui_kit::{
     Bounds, Font, Hsla, Pixels, Point, ShapedLine, SharedString, Size, TextRun, Window, point, px,
     size,
 };

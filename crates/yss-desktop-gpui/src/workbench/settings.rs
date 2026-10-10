@@ -5,13 +5,13 @@ use crate::{
     settings::{SettingsEvent, SettingsPanel},
     window_chrome,
 };
-use gpui::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, Root, TitleBar};
+use gpui_kit::{
     AnyWindowHandle, AppContext, Bounds, Context, Entity, Focusable, IntoElement, Render,
     Subscription, WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, div,
     prelude::*, px, size,
 };
-use gpui_component::{ActiveTheme, Icon, Root, TitleBar};
-use gpui_kit_assets::IconName;
 
 impl Workbench {
     pub(super) fn connect_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -70,7 +70,7 @@ impl Workbench {
             }
             let result = cx.open_window(
                 WindowOptions {
-                    titlebar: Some(gpui::TitlebarOptions {
+                    titlebar: Some(gpui_kit::TitlebarOptions {
                         title: Some(crate::text::t("native.workbench.settingsWindowTitle").into()),
                         ..TitleBar::title_bar_options()
                     }),

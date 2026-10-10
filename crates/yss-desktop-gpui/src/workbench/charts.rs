@@ -1,8 +1,8 @@
 //! Charts are routed through the root DockArea and existing project index.
 use super::Workbench;
 use crate::charts::{ChartEditor, ChartEvent, query::ChartRead};
-use gpui::{AppContext, Context, Window};
-use gpui_component::dock::{DockPlacement, panel_handle};
+use gpui_kit::component::dock::{DockPlacement, panel_handle};
+use gpui_kit::{AppContext, Context, Window};
 use yss_chart_document::ChartResourcePath;
 
 impl Workbench {
@@ -19,7 +19,11 @@ impl Workbench {
         if self.busy || self.closing {
             return;
         }
-        if let Some(chart) = self.charts.get(&path).and_then(gpui::WeakEntity::upgrade) {
+        if let Some(chart) = self
+            .charts
+            .get(&path)
+            .and_then(gpui_kit::WeakEntity::upgrade)
+        {
             self.present_panel(
                 panel_handle(chart.clone()),
                 DockPlacement::Center,
@@ -84,7 +88,7 @@ impl Workbench {
         read: ChartRead,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui::Entity<ChartEditor> {
+    ) -> gpui_kit::Entity<ChartEditor> {
         let path = read.path.as_str().to_owned();
         let services = self.services.clone();
         let catalog = self
@@ -120,7 +124,11 @@ impl Workbench {
         let Some(project) = &self.project else {
             return;
         };
-        for chart in self.charts.values().filter_map(gpui::WeakEntity::upgrade) {
+        for chart in self
+            .charts
+            .values()
+            .filter_map(gpui_kit::WeakEntity::upgrade)
+        {
             chart.update(cx, |chart, cx| {
                 chart.replace_catalog(project.index.clone(), window, cx)
             });

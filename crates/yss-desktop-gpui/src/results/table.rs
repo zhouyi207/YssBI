@@ -3,8 +3,8 @@ mod cell;
 mod render;
 
 use cell::Cell;
-use gpui::{SharedString, px};
-use gpui_component::table::Column;
+use gpui_kit::component::table::Column;
+use gpui_kit::{SharedString, px};
 use yss_application::graph::results::ResultPageProjection;
 use yss_node_kernel::RuntimeValue;
 

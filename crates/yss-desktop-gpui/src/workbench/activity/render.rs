@@ -1,9 +1,9 @@
 //! Render only requested visible rows; documents and actions remain with ActivityPanel.
 use super::*;
 use crate::text::activity_text;
-use gpui::{AnyElement, uniform_list};
-use gpui_component::{ActiveTheme, Icon, Sizable, input::Input, tooltip::Tooltip};
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, Sizable, input::Input, tooltip::Tooltip};
+use gpui_kit::{AnyElement, uniform_list};
 
 impl Render for ActivityPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -22,7 +22,7 @@ impl Render for ActivityPanel {
         div()
             .id("activity-document")
             .track_focus(&self.focus)
-            .role(gpui::accesskit::Role::Tree)
+            .role(gpui_kit::accesskit::Role::Tree)
             .aria_label(self.title_text())
             .on_key_down(cx.listener(Self::key_down))
             .size_full()
@@ -78,8 +78,8 @@ impl ActivityPanel {
             .map_or(self.rows.first() == Some(&index), |id| id == &row.id);
         let id = row.id.clone();
         let item = div()
-            .id(gpui::SharedString::from(id.clone()))
-            .role(gpui::accesskit::Role::TreeItem)
+            .id(gpui_kit::SharedString::from(id.clone()))
+            .role(gpui_kit::accesskit::Role::TreeItem)
             .aria_label(row_label(&row.content))
             .aria_level(row.depth + 1)
             .when(focused, |row| row.aria_active_descendant())
@@ -87,10 +87,10 @@ impl ActivityPanel {
             .border_color(if focused && self.focus.is_focused(window) {
                 cx.theme().ring
             } else {
-                gpui::hsla(0., 0., 0., 0.)
+                gpui_kit::hsla(0., 0., 0., 0.)
             })
             .on_mouse_down(
-                gpui::MouseButton::Left,
+                gpui_kit::MouseButton::Left,
                 cx.listener(move |view, _, window, cx| {
                     if view.accepts(&expected_focus) {
                         view.focus_row(index, window, cx);

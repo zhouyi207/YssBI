@@ -1,8 +1,8 @@
 //! A restored tab whose resource is unavailable, without a fabricated document or result.
 use crate::appearance;
-use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window};
-use gpui_component::dock::{BasePanel, Panel, PanelEvent, PanelState};
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent, PanelState};
+use gpui_kit::{App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window};
 
 pub(super) struct MissingPanel {
     state: PanelState,
@@ -56,7 +56,7 @@ impl Panel for MissingPanel {
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         if self.state.panel_name == "result" {
             crate::text::t("native.workbench.previousResults").to_owned()
-        } else if let gpui_component::dock::PanelInfo::Panel(info) = &self.state.info {
+        } else if let gpui_kit::component::dock::PanelInfo::Panel(info) = &self.state.info {
             info.get("graphPath")
                 .or_else(|| info.get("documentPath"))
                 .or_else(|| info.get("mindPath"))

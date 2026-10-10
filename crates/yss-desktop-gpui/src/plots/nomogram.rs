@@ -1,15 +1,15 @@
 use super::frame;
-use gpui::{
-    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, TextAlign,
-    Window, point, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{
         IntoPlot, Plot, PlotLabel, TooltipState,
         label::{Text, truncate_text_to_width},
         tooltip::Tooltip,
     },
+};
+use gpui_kit::{
+    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, TextAlign,
+    Window, point, px,
 };
 use std::sync::Arc;
 use yss_application::graph::results::plot::NomogramAxis;

@@ -1,6 +1,6 @@
 //! Platform clipboard transport uses the editor's bounded subgraph contract directly.
 use super::{GraphCanvas, GraphCommand};
-use gpui::{ClipboardItem, Context};
+use gpui_kit::{ClipboardItem, Context};
 use std::sync::Arc;
 use yss_graph_editor::EditorGraphMutation;
 

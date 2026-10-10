@@ -2,7 +2,7 @@
 use super::super::Workbench;
 use super::super::name_form::NameForm;
 use super::ResourceAction;
-use gpui::{ClipboardItem, Context, Entity, Window};
+use gpui_kit::{ClipboardItem, Context, Entity, Window};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
@@ -46,7 +46,11 @@ impl Workbench {
         let Some((name, mut revision)) = record else {
             return;
         };
-        if let Some(graph) = self.graphs.get(&path).and_then(gpui::WeakEntity::upgrade) {
+        if let Some(graph) = self
+            .graphs
+            .get(&path)
+            .and_then(gpui_kit::WeakEntity::upgrade)
+        {
             let graph = graph.read(cx);
             if graph.is_running()
                 && matches!(action, ResourceAction::Rename | ResourceAction::Delete)
@@ -126,7 +130,7 @@ impl Workbench {
         if let Some(graph) = self
             .graphs
             .get(target.path.as_str())
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
             && graph.read(cx).is_running()
             && matches!(action, ResourceAction::Rename | ResourceAction::Delete)
         {

@@ -11,8 +11,8 @@ pub(crate) use display::number as format_number;
 
 use std::sync::Arc;
 
-use gpui::{Context, Entity, EventEmitter, IntoElement, Render, Window, div, prelude::*};
-use gpui_component::ActiveTheme;
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{Context, Entity, EventEmitter, IntoElement, Render, Window, div, prelude::*};
 use yss_data_contract::TabularScalar;
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
@@ -114,7 +114,7 @@ impl Render for ReportView {
             .child(
                 div()
                     .w_full()
-                    .max_w(gpui::px(1100.))
+                    .max_w(gpui_kit::px(1100.))
                     .mx_auto()
                     .p_6()
                     .flex()

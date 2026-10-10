@@ -1,5 +1,5 @@
 //! Disposable horizontal tree geometry; source ordering and parent links stay untouched.
-use gpui::{Bounds, Pixels, point, px, size};
+use gpui_kit::{Bounds, Pixels, point, px, size};
 use std::collections::{BTreeSet, HashMap};
 use yss_project_model::mind::MindDocument;
 

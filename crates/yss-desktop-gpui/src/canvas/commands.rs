@@ -1,7 +1,7 @@
 mod worker;
 pub(crate) use worker::{GraphCommandOutcome, GraphCommandRequest};
 
-use gpui::{Context, actions};
+use gpui_kit::{Context, actions};
 use yss_application::graph::editing::{GraphEditRequest, GraphEditResponse};
 use yss_graph_editor::EditorGraphMutation;
 use yss_project::GraphEditVersion;
@@ -89,9 +89,9 @@ impl GraphCanvas {
         &mut self,
         command: GraphCommand,
         version: Option<GraphEditVersion>,
-        creation: Option<gpui::Entity<super::palette::NodePalette>>,
+        creation: Option<gpui_kit::Entity<super::palette::NodePalette>>,
         cx: &mut Context<Self>,
-    ) -> Option<gpui::Task<Option<GraphEditVersion>>> {
+    ) -> Option<gpui_kit::Task<Option<GraphEditVersion>>> {
         let Some(request) = self.capture_command(command, version, cx) else {
             if let Some(creation) = creation {
                 creation.update(cx, |creation, cx| creation.creation_failed(cx));
@@ -319,7 +319,7 @@ impl GraphCanvas {
             projection: self.graph.projection.clone(),
         });
         cx.emit(CanvasEvent::Edited);
-        cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+        cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
         true
     }
 

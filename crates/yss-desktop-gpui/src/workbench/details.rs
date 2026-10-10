@@ -6,17 +6,17 @@ mod documentation;
 mod node;
 mod ports;
 
-use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, WeakEntity,
-    Window, div, prelude::*,
-};
-use gpui_component::Icon;
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
+use gpui_kit::component::{
     ActiveTheme,
     dock::{BasePanel, Panel, PanelEvent},
     input::InputState,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, WeakEntity,
+    Window, div, prelude::*,
+};
 use std::{collections::BTreeMap, sync::Arc};
 use yss_graph_document::NodeId;
 use yss_graph_editor::projection::{EditorNodeModel, EditorProjectionModel};
@@ -32,18 +32,18 @@ pub struct DetailsPanel {
     services: Arc<NativeServices>,
     connection_picker: Option<(
         yss_graph_document::PortAddress,
-        Entity<gpui_component::list::ListState<connections::ConnectionPicker>>,
+        Entity<gpui_kit::component::list::ListState<connections::ConnectionPicker>>,
     )>,
     ports_open: [bool; 2],
     diagnostics_open: bool,
     diagnostics_page: usize,
-    diagnostics_scroll: gpui::ScrollHandle,
-    scroll: gpui::ScrollHandle,
+    diagnostics_scroll: gpui_kit::ScrollHandle,
+    scroll: gpui_kit::ScrollHandle,
     properties: Entity<super::graph_properties::GraphProperties>,
     documentation: Entity<documentation::NodeDocumentation>,
     description: Entity<description::NodeDescription>,
     node_definition: Option<NodeTypeId>,
-    _properties_observer: gpui::Subscription,
+    _properties_observer: gpui_kit::Subscription,
     focus: FocusHandle,
     graph: Option<WeakEntity<GraphCanvas>>,
     document: Option<WeakEntity<crate::documents::DocumentEditor>>,
@@ -56,7 +56,7 @@ pub struct DetailsPanel {
     version: Option<GraphEditVersion>,
     label: Entity<InputState>,
     parameters: Entity<ParameterForm>,
-    _parameter_subscription: gpui::Subscription,
+    _parameter_subscription: gpui_kit::Subscription,
     ports: Vec<PortField>,
     epoch: u64,
     error: Option<String>,
@@ -106,8 +106,8 @@ impl DetailsPanel {
             ports_open: [false; 2],
             diagnostics_open: true,
             diagnostics_page: 0,
-            diagnostics_scroll: gpui::ScrollHandle::new(),
-            scroll: gpui::ScrollHandle::new(),
+            diagnostics_scroll: gpui_kit::ScrollHandle::new(),
+            scroll: gpui_kit::ScrollHandle::new(),
             properties,
             documentation,
             description,
@@ -163,7 +163,8 @@ impl DetailsPanel {
         self.ports_open = [false; 2];
         self.diagnostics_open = true;
         self.diagnostics_page = 0;
-        self.diagnostics_scroll.set_offset(gpui::Point::default());
+        self.diagnostics_scroll
+            .set_offset(gpui_kit::Point::default());
         self.graph = None;
         self.document = None;
         self.mind = None;
@@ -207,7 +208,7 @@ impl DetailsPanel {
         }
     }
 
-    pub(super) fn clear_log_if(&mut self, id: gpui::EntityId, cx: &mut Context<Self>) {
+    pub(super) fn clear_log_if(&mut self, id: gpui_kit::EntityId, cx: &mut Context<Self>) {
         if self.log.as_ref().is_some_and(|log| log.entity_id() == id) {
             self.clear_log(cx);
         }
@@ -292,7 +293,8 @@ impl DetailsPanel {
             self.ports_open = [false; 2];
             self.diagnostics_open = true;
             self.diagnostics_page = 0;
-            self.diagnostics_scroll.set_offset(gpui::Point::default());
+            self.diagnostics_scroll
+                .set_offset(gpui_kit::Point::default());
         }
         let old_label = self.node().map(|node| node.display.user_label.clone());
         self.graph = Some(graph.clone());
@@ -306,7 +308,8 @@ impl DetailsPanel {
             node.diagnostics.len().saturating_sub(1) / diagnostics::PAGE_DIAGNOSTICS
         }));
         if diagnostics_page != self.diagnostics_page {
-            self.diagnostics_scroll.set_offset(gpui::Point::default());
+            self.diagnostics_scroll
+                .set_offset(gpui_kit::Point::default());
         }
         self.diagnostics_page = diagnostics_page;
         if !same_node || old_label != node.as_ref().map(|node| node.display.user_label.clone()) {

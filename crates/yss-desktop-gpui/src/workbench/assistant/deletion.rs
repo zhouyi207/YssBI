@@ -1,6 +1,6 @@
 //! Confirm deletion of a captured conversation, then discard its native views after commit.
 use super::{Workbench, principal};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_application::harness::HarnessSessionError;
 use yss_harness_contract::HarnessSessionId;
 use yss_harness_core::HarnessError;

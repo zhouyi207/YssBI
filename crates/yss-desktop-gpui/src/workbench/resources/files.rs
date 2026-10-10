@@ -3,7 +3,7 @@ use super::super::name_form::NameForm;
 mod panels;
 use super::{super::Workbench, AuthoredKind, ResourceAction};
 use crate::file_commands::NativeFile;
-use gpui::{ClipboardItem, Context, Entity, Window};
+use gpui_kit::{ClipboardItem, Context, Entity, Window};
 use yss_project::file_resources::{FileCommand, FileSnapshot};
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::{

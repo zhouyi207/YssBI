@@ -1,7 +1,7 @@
 //! Shared catalog row presentation; each host owns its interactions.
-use gpui::{App, Div, Stateful, div, prelude::*};
-use gpui_component::{ActiveTheme, Icon, tooltip::Tooltip};
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, tooltip::Tooltip};
+use gpui_kit::{App, Div, Stateful, div, prelude::*};
 use yss_node_catalog::NodeCreation;
 use yss_node_protocol::NodeTypeId;
 

@@ -1,7 +1,7 @@
 //! UI intents await the canvas's current read before locating a node or reporting success.
 use super::super::Workbench;
 use crate::canvas::GraphCanvas;
-use gpui::{Context, Entity, Window};
+use gpui_kit::{Context, Entity, Window};
 
 impl Workbench {
     pub(super) fn reveal_graph_intent(

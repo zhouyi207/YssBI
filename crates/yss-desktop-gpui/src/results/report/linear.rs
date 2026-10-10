@@ -3,8 +3,8 @@ mod coefficients;
 mod equation;
 mod render;
 
-use gpui::{AppContext, Context, Entity};
-use gpui_component::table::TableState;
+use gpui_kit::component::table::TableState;
+use gpui_kit::{AppContext, Context, Entity};
 use std::{collections::BTreeMap, sync::Arc};
 use yss_application::graph::results::report::{
     LinearRegressionReportProjection,
@@ -37,7 +37,7 @@ pub(super) struct LinearReport {
     requested_offset: usize,
     loading: bool,
     error: bool,
-    task: Option<gpui::Task<()>>,
+    task: Option<gpui_kit::Task<()>>,
 }
 
 impl LinearReport {

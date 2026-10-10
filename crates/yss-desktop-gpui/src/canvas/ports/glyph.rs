@@ -1,11 +1,11 @@
 //! Type glyphs use native paths; cached tessellation is independent of hover and animation.
 use std::time::Duration;
 
-use gpui::{
+use gpui_kit::base::plot::{PathCaches, ShapeKey};
+use gpui_kit::{
     Animation, AnimationExt, AnyElement, Bounds, IntoElement, Path, PathBuilder, Pixels, canvas,
     div, fill, point, prelude::*, px, rgb, size,
 };
-use gpui_base::plot::{PathCaches, ShapeKey};
 use yss_data_contract::ValueType;
 use yss_graph_editor::projection::EditorPortTypeState;
 

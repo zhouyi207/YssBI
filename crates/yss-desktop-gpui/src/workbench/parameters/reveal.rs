@@ -1,6 +1,6 @@
 //! One-shot field navigation uses the existing form controls and the Details scroll owner.
 use super::ParameterForm;
-use gpui::{
+use gpui_kit::{
     AnyElement, Context, FocusHandle, IntoElement, ScrollHandle, Window, div, point, prelude::*,
 };
 use std::{cell::Cell, rc::Rc};
@@ -87,7 +87,7 @@ impl ParameterForm {
                         } else if bounds.bottom() > viewport.bottom() {
                             viewport.bottom() - bounds.bottom()
                         } else {
-                            gpui::px(0.)
+                            gpui_kit::px(0.)
                         };
                         let offset = target.scroll.offset();
                         window.on_next_frame(move |window, cx| {

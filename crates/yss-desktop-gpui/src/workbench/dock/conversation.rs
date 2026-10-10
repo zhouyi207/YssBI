@@ -1,15 +1,17 @@
 //! A conversation group has one toolbar; the sidebar selects its active session.
 use super::super::{Workbench, layout::columns};
 use crate::assistant::ConversationPanel;
-use gpui::{AnyElement, App, Empty, Entity, IntoElement, WeakEntity, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Selectable, Sizable,
     button::{Button, ButtonVariants},
     dock::{ClosePanel, DockArea, TabGroupContext},
     menu::{DropdownMenu, PopupMenuItem},
     tooltip::Tooltip,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    AnyElement, App, Empty, Entity, IntoElement, WeakEntity, Window, div, prelude::*, px,
+};
 
 pub(super) fn matches(group: &TabGroupContext) -> bool {
     !group.panels().is_empty() && group.panels().iter().all(columns::is_conversation)
@@ -188,9 +190,9 @@ fn options(
 }
 
 pub(super) fn capture_close(
-    frame: gpui::Stateful<gpui::Div>,
+    frame: gpui_kit::Stateful<gpui_kit::Div>,
     workbench: &WeakEntity<Workbench>,
-) -> gpui::Stateful<gpui::Div> {
+) -> gpui_kit::Stateful<gpui_kit::Div> {
     let workbench = workbench.clone();
     frame.capture_action(move |_: &ClosePanel, window, cx| {
         cx.stop_propagation();

@@ -1,9 +1,9 @@
 # Native desktop icons
 
-- 导航、菜单、工具栏、窗口控制和空状态等 UI 图标统一使用 `gpui_kit_assets::IconName`。
-  不再使用 `gpui_component::IconName`、自建图标枚举、手写 SVG 或字符串图标路径。
-- 应用入口统一注册 `gpui_kit_assets::AllAssets`，不另建图标资源加载器或逐个补充资源注册。
-- 渲染复用 `gpui_component::Icon` 和组件的图标接口；项目内接收图标的展示函数使用具体的 `IconName` 参数。
+- 导航、菜单、工具栏、窗口控制和空状态等 UI 图标统一使用 `gpui_kit::assets::IconName`。
+  不再使用 `gpui_kit::component::IconName`、自建图标枚举、手写 SVG 或字符串图标路径。
+- 应用入口统一注册 `gpui_kit::assets::AllAssets`，不另建图标资源加载器或逐个补充资源注册。
+- 渲染复用 `gpui_kit::component::Icon` 和组件的图标接口；项目内接收图标的展示函数使用具体的 `IconName` 参数。
 - 模块职责与资源注册契约见 [README.md](README.md)。此约束针对 UI 图标，不限制图画布和数据可视化的绘制。
 
 # Native desktop localization

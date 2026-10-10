@@ -2,14 +2,14 @@
 mod list;
 use super::{DetailsPanel, controls};
 use crate::{appearance, canvas::GraphCommand};
-use gpui::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::{Input, InputState},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*, px};
 use serde_json::Value;
 use yss_data_contract::SemanticType;
 use yss_graph_document::PortRef;
@@ -140,7 +140,7 @@ impl DetailsPanel {
                             .size(px(6.))
                             .flex_shrink_0()
                             .rounded_full()
-                            .bg(gpui::rgb(if input {
+                            .bg(gpui_kit::rgb(if input {
                                 appearance::BLUE
                             } else {
                                 appearance::GREEN

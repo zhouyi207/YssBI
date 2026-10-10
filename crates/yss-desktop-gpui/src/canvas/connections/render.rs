@@ -1,6 +1,6 @@
 use std::{rc::Rc, time::Duration};
 
-use gpui::{
+use gpui_kit::{
     Animation, AnimationExt, App, IntoElement, Pixels, Point, canvas, div, prelude::*, px, rgb,
 };
 use yss_node_protocol::PortDirection;
@@ -16,7 +16,7 @@ pub(in crate::canvas) struct PendingConnection {
 }
 
 impl PendingConnection {
-    pub fn feedback(&self, size: gpui::Size<Pixels>) -> Option<impl IntoElement + use<>> {
+    pub fn feedback(&self, size: gpui_kit::Size<Pixels>) -> Option<impl IntoElement + use<>> {
         let text = self.feedback.clone()?;
         Some(
             div()

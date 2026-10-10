@@ -1,10 +1,10 @@
 //! Measured rendering bounds; DockArea remains the owner of all layout state.
 use super::super::{Workbench, layout::columns};
-use gpui::{
+use gpui_kit::component::dock::{DockArea, NodeId};
+use gpui_kit::{
     AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId,
     InspectorElementId, IntoElement, LayoutId, Pixels, WeakEntity, Window, div, prelude::*, px,
 };
-use gpui_component::dock::{DockArea, NodeId};
 use std::{cell::Cell, rc::Rc};
 
 #[derive(Default)]

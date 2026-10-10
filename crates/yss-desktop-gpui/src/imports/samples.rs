@@ -1,12 +1,12 @@
 //! Sample metadata is a read projection; only identity and version enter the import request.
 use super::{ImportDialog, ImportRequest, ImportStage, ImportTask};
 use crate::text::translate as t;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use yss_application::database::samples::SampleDataset;
 
 impl ImportDialog {
@@ -110,7 +110,7 @@ impl ImportDialog {
                             )
                             .child(
                                 div().child(
-                                    Button::new(gpui::SharedString::from(id.clone()))
+                                    Button::new(gpui_kit::SharedString::from(id.clone()))
                                         .small()
                                         .label(t(if pending {
                                             "importModal.samples.importing"

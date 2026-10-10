@@ -3,13 +3,13 @@ mod drafts;
 mod input;
 
 use super::ConversationPanel;
-use gpui::{AnyElement, Context, IntoElement, Window, div, prelude::*, relative};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Enter,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, Window, div, prelude::*, relative};
 
 impl ConversationPanel {
     pub(super) fn render_composer(

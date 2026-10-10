@@ -5,8 +5,8 @@ mod render;
 
 use super::PluginKey;
 use crate::services::NativeServices;
-use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Window};
-use gpui_component::dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState};
+use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState};
+use gpui_kit::{App, Context, EventEmitter, FocusHandle, Focusable, Window};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use yss_plugin_runtime::{NativeView, PluginFailure, PluginManifest, TaskSnapshot};
@@ -51,7 +51,7 @@ pub(crate) struct PluginViewPanel {
     lease: Option<ViewLease>,
     model: Option<NativeView>,
     fields: Vec<fields::Field>,
-    subscriptions: Vec<gpui::Subscription>,
+    subscriptions: Vec<gpui_kit::Subscription>,
     form_generation: u64,
     busy: bool,
     closed: bool,
@@ -232,7 +232,7 @@ impl BasePanel for PluginViewPanel {
     }
 }
 impl Panel for PluginViewPanel {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         self.title.clone()
     }
     fn inner_padding(&self, _: &App) -> bool {

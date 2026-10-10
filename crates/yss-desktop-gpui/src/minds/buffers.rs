@@ -1,7 +1,7 @@
 //! Topic composition is transient and remains tied to its captured file version.
 use super::MindCanvas;
-use gpui::{AppContext, Context, Entity, Subscription, Window};
-use gpui_component::input::{InputEvent, TextareaState};
+use gpui_kit::component::input::{InputEvent, TextareaState};
+use gpui_kit::{AppContext, Context, Entity, Subscription, Window};
 use yss_project_model::{file::FileVersion, mind::MindEdit};
 
 pub(super) struct TopicBuffer {

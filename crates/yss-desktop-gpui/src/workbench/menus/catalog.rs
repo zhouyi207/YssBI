@@ -5,8 +5,8 @@ use crate::{
     text::translate,
     workbench::{OpenProjectDirectory, ShowSettings},
 };
-use gpui::{Action, Menu, MenuItem};
-use gpui_component::Placement;
+use gpui_kit::component::Placement;
+use gpui_kit::{Action, Menu, MenuItem};
 use yss_graph_document::GraphResourceKind;
 
 fn item(key: &str, action: impl Action, disabled: bool) -> MenuItem {
@@ -37,7 +37,7 @@ pub(super) fn application_menus(context: MenuContext) -> Vec<Menu> {
                 context.busy || !context.project,
             ),
             MenuItem::separator(),
-            item("menubar.schemaViewer", gpui::NoAction, true),
+            item("menubar.schemaViewer", gpui_kit::NoAction, true),
         ]),
         Menu::new(translate("menubar.view")).items([
             item(
@@ -78,8 +78,8 @@ pub(super) fn application_menus(context: MenuContext) -> Vec<Menu> {
             ),
         ]),
         Menu::new(translate("menubar.tools")).items([
-            item("menubar.debugger", gpui::NoAction, true),
-            item("menubar.profiler", gpui::NoAction, true),
+            item("menubar.debugger", gpui_kit::NoAction, true),
+            item("menubar.profiler", gpui_kit::NoAction, true),
             MenuItem::separator(),
             item("menubar.settings", ShowSettings, context.busy),
         ]),

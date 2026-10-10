@@ -1,6 +1,6 @@
 //! Literal message text uses the existing read-only selection and clipboard engine.
-use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window, prelude::*};
-use gpui_component::input::{Textarea, TextareaState};
+use gpui_kit::component::input::{Textarea, TextareaState};
+use gpui_kit::{App, ElementId, IntoElement, RenderOnce, SharedString, Window, prelude::*};
 
 #[derive(IntoElement)]
 pub(super) struct PlainText {

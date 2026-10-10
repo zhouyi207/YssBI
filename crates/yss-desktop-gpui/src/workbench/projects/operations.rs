@@ -1,7 +1,7 @@
 //! Commit project commands off-thread, then observe and install the actual authority.
 use super::{ProjectCommand, ProjectOperation, ProjectStage};
 use crate::{project::DesktopProject, projects::feedback::ProjectFeedback, workbench::Workbench};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use std::path::PathBuf;
 use yss_application::{
     events::{ProjectLifecycleApplicationEvent, ProjectLifecycleOutcome},

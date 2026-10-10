@@ -1,12 +1,12 @@
 //! Native result content shares one toolbar and keeps report entities across mode changes.
 use super::*;
-use gpui::{Render, px, uniform_list};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     table::DataTable,
     tooltip::Tooltip,
 };
+use gpui_kit::{Render, px, uniform_list};
 
 impl Render for ResultPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -66,7 +66,7 @@ impl ResultPanel {
         let row = &self.rows[index];
         let path = row.path.clone();
         let part = row.table.clone();
-        let text: gpui::SharedString = if part.is_some() {
+        let text: gpui_kit::SharedString = if part.is_some() {
             crate::text::translate("native.results.viewData").into()
         } else {
             row.value.clone().into()

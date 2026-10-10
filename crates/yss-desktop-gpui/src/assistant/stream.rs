@@ -1,7 +1,7 @@
 //! Subscribe before replay, merge only continuous sequences, and reject stale query delivery.
 use super::{ConversationEvent, ConversationPanel, projection::Transcript};
 use crate::services::NativeEvent;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
 use yss_harness_contract::{AssistantEvent, HarnessEvent, HarnessEventEnvelope};

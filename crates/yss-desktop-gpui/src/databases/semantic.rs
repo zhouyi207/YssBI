@@ -3,8 +3,8 @@ use super::{DatabaseEditor, DatabaseEvent};
 mod fields;
 mod inputs;
 
-use gpui::{AppContext, Context, Entity, WeakEntity, Window};
-use gpui_component::input::InputState;
+use gpui_kit::component::input::InputState;
+use gpui_kit::{AppContext, Context, Entity, WeakEntity, Window};
 use inputs::MappingInputs;
 use std::collections::{BTreeMap, HashSet};
 use yss_application::database::DatabaseMutation;
@@ -55,7 +55,7 @@ impl DatabaseEditor {
         let numeric = draft.numeric.clone().unwrap_or_default();
         crate::modal_window::open(
             crate::text::translate("detail.data.confirmSemanticTitle"),
-            gpui::size(gpui::px(560.), gpui::px(600.)),
+            gpui_kit::size(gpui_kit::px(560.), gpui_kit::px(600.)),
             window,
             cx,
             move |window, cx| {
@@ -167,7 +167,7 @@ impl SemanticDialog {
         .detach();
         cx.notify();
     }
-    fn current(&self, cx: &gpui::App) -> bool {
+    fn current(&self, cx: &gpui_kit::App) -> bool {
         self.owner.upgrade().is_some_and(|owner| {
             let owner = owner.read(cx);
             owner.revision == self.revision && owner.ready && !owner.busy()

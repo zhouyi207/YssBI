@@ -21,13 +21,13 @@ mod tools;
 mod usage;
 
 use crate::services::NativeServices;
-use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
-    actions,
-};
-use gpui_component::{
+use gpui_kit::component::{
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
     input::{InputEvent, TextareaState},
+};
+use gpui_kit::{
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
+    actions,
 };
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -88,7 +88,7 @@ pub(crate) struct ConversationPanel {
     recovering: bool,
     buffered: Vec<HarnessEventEnvelope>,
     overflow: bool,
-    event_task: Option<gpui::Task<()>>,
+    event_task: Option<gpui_kit::Task<()>>,
     expanded: BTreeMap<String, bool>,
     error: Option<String>,
     stream_error: Option<String>,
@@ -204,7 +204,7 @@ impl BasePanel for ConversationPanel {
     }
 }
 impl Panel for ConversationPanel {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         self.display_title()
     }
     fn inner_padding(&self, _: &App) -> bool {

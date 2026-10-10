@@ -1,7 +1,7 @@
 //! Native drops use the receiving canvas for coordinates, focus and graph commands.
 use super::{CanvasEvent, ConstantDrag, GraphCanvas, GraphCommand};
 use crate::workbench::{ActivityDrag, ActivityDrop};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_graph_editor::EditorGraphMutation;
 
 impl GraphCanvas {

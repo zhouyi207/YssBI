@@ -9,8 +9,8 @@ pub(crate) use commands::bind_keys;
 
 use super::Workbench;
 use crate::canvas::GraphCommand;
-use gpui::{App, Context, Menu, Window};
-use gpui_component::dock::{BasePanelView, DockPlacement, PanelId, panel_handle};
+use gpui_kit::component::dock::{BasePanelView, DockPlacement, PanelId, panel_handle};
+use gpui_kit::{App, Context, Menu, Window};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -87,7 +87,7 @@ impl Workbench {
                 let panel = self
                     .activities
                     .get(key)
-                    .and_then(gpui::WeakEntity::upgrade)?;
+                    .and_then(gpui_kit::WeakEntity::upgrade)?;
                 (panel_handle(panel), DockPlacement::Left)
             }
             WorkbenchPanel::Details => (panel_handle(self.details.clone()), DockPlacement::Right),
@@ -160,7 +160,7 @@ impl Workbench {
         self.menu_context = Some(context);
         let menus = catalog::application_menus(context);
         cx.set_menus(catalog::application_menus(context));
-        gpui_base::GlobalState::global_mut(cx)
+        gpui_kit::base::GlobalState::global_mut(cx)
             .set_app_menus(menus.into_iter().map(Menu::owned).collect());
         self.menu_bar.update(cx, |bar, cx| bar.reload(cx));
     }

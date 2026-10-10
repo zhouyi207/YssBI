@@ -1,13 +1,15 @@
 //! Shared native window chrome and gestures, composed with the component frame, icons and theme.
 mod controls;
 
-use gpui::{
+use gpui_kit::base::RootPlugin;
+use gpui_kit::component::{
+    ActiveTheme, InteractiveElementExt, Root, TITLE_BAR_HEIGHT, window_paddings,
+};
+use gpui_kit::{
     AnyElement, App, Bounds, ClickEvent, Context, Decorations, Div, IntoElement, MouseButton,
     MouseDownEvent, MouseMoveEvent, Pixels, Point, Render, ResizeEdge, Stateful, Window,
     WindowControlArea, div, point, prelude::*, px, size,
 };
-use gpui_base::RootPlugin;
-use gpui_component::{ActiveTheme, InteractiveElementExt, Root, TITLE_BAR_HEIGHT, window_paddings};
 
 // Match the component frame's default resize band, measured from its public window paddings.
 const RESIZE_HIT_SIZE: Pixels = px(4.);

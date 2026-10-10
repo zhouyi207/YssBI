@@ -9,17 +9,17 @@ mod table;
 mod toolbar;
 mod value;
 
-use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Window,
-    div, prelude::*,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
     table::TableState,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Window,
+    div, prelude::*,
+};
 use std::{collections::BTreeSet, sync::Arc};
 use yss_application::graph::results::report::ResultTablePart;
 use yss_graph_execution::result::ResultReference;
@@ -59,10 +59,10 @@ pub struct ResultPanel {
     error: Option<reading::ReadFailure>,
     view_locale: &'static str,
     generation: u64,
-    task: Option<gpui::Task<()>>,
+    task: Option<gpui_kit::Task<()>>,
     closed: bool,
-    report_subscription: Option<gpui::Subscription>,
-    addition_task: Option<gpui::Task<()>>,
+    report_subscription: Option<gpui_kit::Subscription>,
+    addition_task: Option<gpui_kit::Task<()>>,
     addition_cancel: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 

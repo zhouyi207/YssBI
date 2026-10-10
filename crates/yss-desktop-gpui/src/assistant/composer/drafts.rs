@@ -1,6 +1,6 @@
 use super::*;
 use crate::assistant::ConversationEvent;
-use gpui::{Empty, SharedString, px};
+use gpui_kit::{Empty, SharedString, px};
 
 impl ConversationPanel {
     pub(super) fn render_drafts(&self, cx: &mut Context<Self>) -> AnyElement {

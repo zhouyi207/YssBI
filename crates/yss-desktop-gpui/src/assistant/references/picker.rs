@@ -1,11 +1,11 @@
 //! A virtual list owns search and keyboard position; the conversation owns attached identities.
 use super::*;
-use gpui::{Anchor, App, Entity, Focusable, Task, WeakEntity, Window};
-use gpui_component::{
+use gpui_kit::component::{
     IndexPath,
     list::{List, ListDelegate, ListItem, ListState},
     popover::Popover,
 };
+use gpui_kit::{Anchor, App, Entity, Focusable, Task, WeakEntity, Window};
 
 pub(in crate::assistant) struct Picker {
     open: bool,

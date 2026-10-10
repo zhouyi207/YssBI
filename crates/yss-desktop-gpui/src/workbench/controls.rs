@@ -1,12 +1,12 @@
 //! Stateless controls shared by native graph property and node editors.
-use gpui::{App, ElementId, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{App, ElementId, div, prelude::*};
 
-pub(super) fn hint(text: impl Into<String>, cx: &App) -> gpui::Div {
+pub(super) fn hint(text: impl Into<String>, cx: &App) -> gpui_kit::Div {
     div()
         .text_xs()
         .text_color(cx.theme().muted_foreground)

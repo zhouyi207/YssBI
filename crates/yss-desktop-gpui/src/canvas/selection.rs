@@ -1,6 +1,6 @@
 //! Selection commands share the canvas projection and the normal edit transaction.
 use super::{GraphCanvas, GraphCommand};
-use gpui::Context;
+use gpui_kit::Context;
 use yss_graph_document::{NodeId, NodePosition};
 use yss_graph_editor::EditorGraphMutation;
 

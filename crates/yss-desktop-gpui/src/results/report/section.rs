@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use gpui::{Context, Entity, IntoElement, Render, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, Entity, IntoElement, Render, Window, div, prelude::*};
 use yss_application::graph::results::report::structured::{ReportSectionContent, table_reference};
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
@@ -214,7 +214,7 @@ impl Render for Section {
                             .icon(IconName::Copy)
                             .label(crate::text::translate("menubar.copy"))
                             .on_click(move |_, _, cx| {
-                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(
+                                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
                                     source.clone(),
                                 ))
                             }),
@@ -243,7 +243,7 @@ impl Render for Section {
                         .border_color(cx.theme().border)
                         .child(
                             div()
-                                .w(gpui::relative(0.35))
+                                .w(gpui_kit::relative(0.35))
                                 .min_w_0()
                                 .text_color(cx.theme().muted_foreground)
                                 .child(key.clone()),

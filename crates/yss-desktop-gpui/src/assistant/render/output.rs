@@ -3,12 +3,12 @@ use super::super::{
     ConversationPanel,
     projection::{Compaction, Content, Output, Part, Task, Usage},
 };
-use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, SharedString, div, prelude::*, px};
 use yss_harness_contract::ModelCallPurpose;
 
 impl ConversationPanel {

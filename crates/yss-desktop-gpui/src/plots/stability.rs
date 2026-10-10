@@ -1,13 +1,13 @@
 //! Equal-scale complex roots with a unit-circle reference; no stability inference.
 use std::sync::Arc;
 
-use gpui::{
-    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, Window, point,
-    px, size,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{IntoPlot, Plot, TooltipState, tooltip::Tooltip},
+};
+use gpui_kit::{
+    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, Window, point,
+    px, size,
 };
 use yss_application::graph::results::report::structured::StabilityPoint;
 
@@ -73,13 +73,13 @@ impl Plot for StabilityPlot {
         let origin = frame.point(0., 0.);
         let radius = (frame.point(1., 0.).x - origin.x).abs();
         window.paint_quad(
-            gpui::outline(
+            gpui_kit::outline(
                 Bounds::new(
                     origin - point(radius, radius),
                     size(radius * 2., radius * 2.),
                 ),
                 cx.theme().primary,
-                gpui::BorderStyle::default(),
+                gpui_kit::BorderStyle::default(),
             )
             .corner_radii(radius),
         );

@@ -1,10 +1,10 @@
 //! One popup lifecycle for graph element menus; commands retain their original owners.
 use super::GraphCanvas;
-use gpui::{
+use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::{
     Context, DismissEvent, Entity, EntityId, Focusable, IntoElement, Pixels, Point, Subscription,
     Window, anchored, deferred, prelude::*, px,
 };
-use gpui_component::menu::PopupMenu;
 use std::sync::Arc;
 use yss_graph_editor::projection::EditorProjectionModel;
 use yss_project::GraphEditVersion;

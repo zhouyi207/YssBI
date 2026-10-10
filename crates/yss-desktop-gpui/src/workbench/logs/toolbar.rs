@@ -1,7 +1,7 @@
 //! Native search, domain/level menus and live-view controls.
 use super::*;
-use gpui::Div;
-use gpui_component::{
+use gpui_kit::Div;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
     input::Input,

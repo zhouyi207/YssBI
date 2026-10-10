@@ -1,12 +1,12 @@
 use super::{CartesianKind, CartesianPlot};
-use gpui::{App, Bounds, Pixels, Window, fill, point, px, size};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{
         Curve, PathCaches,
         shape::{Area, Line},
     },
 };
+use gpui_kit::{App, Bounds, Pixels, Window, fill, point, px, size};
 use yss_application::chart::PlotPoint;
 
 impl CartesianPlot {

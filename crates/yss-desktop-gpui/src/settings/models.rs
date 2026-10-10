@@ -3,8 +3,8 @@ mod provider;
 mod render;
 
 use super::{Page, SettingsPanel};
-use gpui::{App, Context, Entity, Window};
-use gpui_component::input::{InputEvent, InputState, TextareaState};
+use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
+use gpui_kit::{App, Context, Entity, Window};
 use yss_harness_contract::{
     LanguageModelAuthentication, LanguageModelConfig, LanguageModelProtocol,
     LanguageModelProviderConfig, LanguageModelProviderPreset, LanguageModelProviderStatus,
@@ -177,7 +177,7 @@ impl SettingsPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Entity<InputState> {
-        use gpui::AppContext;
+        use gpui_kit::AppContext;
         let input = cx.new(|cx| {
             InputState::new(window, cx)
                 .default_value(value)
@@ -200,7 +200,7 @@ impl SettingsPanel {
     }
 
     fn edit_model(&mut self, index: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
-        use gpui::AppContext;
+        use gpui_kit::AppContext;
         if self.busy() {
             return;
         }
@@ -294,7 +294,7 @@ impl SettingsPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Entity<InputState> {
-        use gpui::AppContext;
+        use gpui_kit::AppContext;
         let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
         let epoch = self.epoch;
         self.model_subscriptions

@@ -2,7 +2,7 @@
 use super::super::name_form::NameForm;
 
 use crate::workbench::Workbench;
-use gpui::{Context, Entity, Window};
+use gpui_kit::{Context, Entity, Window};
 
 use yss_project::{
     docs::{DocCommand, DocSnapshot},

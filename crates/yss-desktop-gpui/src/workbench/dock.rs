@@ -7,15 +7,15 @@ mod zoom_sidebar;
 pub(super) use watermark::EmptyEditor;
 
 use super::{LogsPanel, OutputPanel, ProblemsPanel, ResultsPanel, Workbench, sidebar};
-use gpui::{
-    AnyElement, AnyView, App, AppContext, Axis, Div, Empty, Entity, IntoElement, Pixels, Stateful,
-    Styled, WeakEntity, Window, div, prelude::*, px,
-};
-use gpui_base::ResizeHandleContext;
-use gpui_component::ElementExt;
-use gpui_component::dock::{
+use gpui_kit::base::ResizeHandleContext;
+use gpui_kit::component::ElementExt;
+use gpui_kit::component::dock::{
     BasePanelView, ClosePanel, DockArea, DockAreaRenderer, DockContext, DockPlacement, DockSkin,
     DropIndicator, NodeId, PanelState, PanelStyle, TabGroupContext, TabGroupRenderer,
+};
+use gpui_kit::{
+    AnyElement, AnyView, App, AppContext, Axis, Div, Empty, Entity, IntoElement, Pixels, Stateful,
+    Styled, WeakEntity, Window, div, prelude::*, px,
 };
 use std::{any::TypeId, cell::Cell, rc::Rc, sync::Arc};
 

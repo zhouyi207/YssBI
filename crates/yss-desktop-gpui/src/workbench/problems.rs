@@ -3,16 +3,16 @@ pub(super) mod location;
 mod navigation;
 mod row;
 
-use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, ListAlignment, ListState,
-    Pixels, Render, Window, div, list, prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon,
     dock::{BasePanel, Panel, PanelEvent},
     scroll::Scrollbar,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, ListAlignment, ListState,
+    Pixels, Render, Window, div, list, prelude::*, px,
+};
 use std::{cell::Cell, rc::Rc, sync::Arc};
 use yss_graph_editor::projection::EditorProjectionModel;
 

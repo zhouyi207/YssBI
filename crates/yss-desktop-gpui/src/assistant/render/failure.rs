@@ -1,7 +1,7 @@
 //! A localized failure stays in its message; the original code is available on demand.
 use super::super::ConversationPanel;
-use gpui::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
-use gpui_component::ActiveTheme;
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 
 impl ConversationPanel {
     pub(super) fn failure_card(&self, id: u64, code: &str, cx: &mut Context<Self>) -> AnyElement {

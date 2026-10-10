@@ -1,7 +1,7 @@
 //! Shared desktop colours and presentation primitives; no business or layout state.
-use gpui::{App, IntoElement, Window, div, prelude::*, px, rgb, rgba};
-use gpui_component::{ActiveTheme, Icon, Theme, ThemeMode};
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, Theme, ThemeMode};
+use gpui_kit::{App, IntoElement, Window, div, prelude::*, px, rgb, rgba};
 
 // Zed One Dark's editor, panel and window-chrome roles share one palette.
 pub const CANVAS: u32 = 0x282c33;
@@ -150,7 +150,7 @@ pub fn empty_state(
     title: impl Into<String>,
     detail: impl Into<String>,
     cx: &App,
-) -> gpui::AnyElement {
+) -> gpui_kit::AnyElement {
     div()
         .size_full()
         .min_h_0()
@@ -170,7 +170,7 @@ pub fn empty_state(
         .child(
             div()
                 .text_sm()
-                .font_weight(gpui::FontWeight::MEDIUM)
+                .font_weight(gpui_kit::FontWeight::MEDIUM)
                 .child(title.into()),
         )
         .child(

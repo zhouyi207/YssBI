@@ -1,10 +1,10 @@
 use super::*;
 use crate::plots::cartesian::CartesianPlot;
-use gpui::{IntoElement, Render, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
 };
+use gpui_kit::{IntoElement, Render, div, prelude::*, px};
 
 impl Render for ResidualView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

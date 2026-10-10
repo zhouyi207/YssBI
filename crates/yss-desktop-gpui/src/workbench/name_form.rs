@@ -1,18 +1,18 @@
 //! Shared name input owns only its draft, submission state and localized error.
-use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, Render, Window, div,
-    prelude::*,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     input::{Input, InputEvent, InputState},
+};
+use gpui_kit::{
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, Render, Window, div,
+    prelude::*,
 };
 
 pub(super) struct NameForm {
     input: Entity<InputState>,
     busy: bool,
     error: Option<&'static str>,
-    _subscription: gpui::Subscription,
+    _subscription: gpui_kit::Subscription,
 }
 
 impl NameForm {
@@ -82,7 +82,7 @@ impl Render for NameForm {
                 body.child(
                     div()
                         .id("name-form-error")
-                        .role(gpui::accesskit::Role::Alert)
+                        .role(gpui_kit::accesskit::Role::Alert)
                         .text_xs()
                         .text_color(cx.theme().danger)
                         .child(crate::text::translate(error)),

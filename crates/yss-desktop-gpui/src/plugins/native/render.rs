@@ -1,13 +1,13 @@
 use super::{PluginViewPanel, fields::Draft};
-use gpui::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::Button,
     checkbox::Checkbox,
     input::{Input, Textarea},
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*};
 use yss_plugin_runtime::{NativeInput, NativeOperation};
 
 impl Render for PluginViewPanel {

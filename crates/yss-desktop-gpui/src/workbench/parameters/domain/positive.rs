@@ -1,13 +1,13 @@
 //! Positive selection follows the authored row; menu labels are built on open.
 use super::{DomainDraft, ParameterDraft, ParameterForm};
 use crate::text::translate;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Disableable, Sizable,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 
 impl ParameterForm {
     pub(super) fn domain_positive(

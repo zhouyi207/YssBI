@@ -1,7 +1,7 @@
 //! GUI save submits the full captured draft to the existing chart writer.
 use super::ChartEditor;
 use crate::services::NativeServices;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use std::sync::Arc;
 use yss_application::runtime::ApplicationServices;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
@@ -74,7 +74,7 @@ impl ChartEditor {
         if outcome.failed {
             self.error = Some(crate::text::t("native.charts.saveFailed").into());
         }
-        cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+        cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
         self.changed(cx);
     }
     pub(crate) fn cancel_prepared_save(&mut self, window: &mut Window, cx: &mut Context<Self>) {

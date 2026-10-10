@@ -1,12 +1,12 @@
 //! One selected immutable record, rendered with native read-only fields and text selection.
 use super::*;
-use gpui::{ClipboardItem, Render, SharedString};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     input::{Input, Textarea, TextareaState},
 };
+use gpui_kit::{ClipboardItem, Render, SharedString};
 use yss_logging::LogOrigin;
 
 struct LogSection {
@@ -180,7 +180,7 @@ impl Render for LogDetails {
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                             .child(crate::text::translate("log.title")),
                     )
                     .child(
@@ -209,7 +209,7 @@ impl Render for LogDetails {
                             .text_xs()
                             .child(
                                 div()
-                                    .w(gpui::relative(0.35))
+                                    .w(gpui_kit::relative(0.35))
                                     .min_w_0()
                                     .truncate()
                                     .text_color(cx.theme().muted_foreground)

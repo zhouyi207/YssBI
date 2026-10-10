@@ -1,11 +1,11 @@
 //! Derive eligible parents only when the picker opens, then validate its captured target.
 use super::{MindCanvas, TopicTarget};
-use gpui::{Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::{DropdownMenu, PopupMenuItem},
 };
+use gpui_kit::{Context, IntoElement, div, prelude::*};
 use yss_project_model::mind::{MindEdit, MindNode};
 
 impl MindCanvas {
@@ -14,7 +14,7 @@ impl MindCanvas {
         topic: &MindNode,
         target: TopicTarget,
         cx: &mut Context<Self>,
-    ) -> gpui::AnyElement {
+    ) -> gpui_kit::AnyElement {
         let current = topic.parent_id.clone();
         let parent_name = self
             .snapshot

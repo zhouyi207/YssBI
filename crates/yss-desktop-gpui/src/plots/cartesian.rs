@@ -1,14 +1,14 @@
 use super::axes::{AxisDomain, axis_value, chart_box};
-use gpui::prelude::*;
-use gpui::{
-    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, TextAlign,
-    Window, point, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{
         AxisLabelSide, AxisText, Grid, IntoPlot, Plot, PlotAxis, TooltipState, tooltip::Tooltip,
     },
+};
+use gpui_kit::prelude::*;
+use gpui_kit::{
+    AnyElement, App, Bounds, ElementId, IntoElement, Pixels, Point, SharedString, TextAlign,
+    Window, point, px,
 };
 use std::sync::Arc;
 mod marks;
@@ -215,7 +215,7 @@ impl Plot for CartesianPlot {
             .y_label(y_labels)
             .stroke(grid_color)
             .paint(&chart, window, cx);
-        window.with_content_mask(Some(gpui::ContentMask { bounds: chart }), |window| {
+        window.with_content_mask(Some(gpui_kit::ContentMask { bounds: chart }), |window| {
             self.paint_marks(&chart, window, cx);
         });
     }

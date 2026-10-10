@@ -1,8 +1,10 @@
 //! Uncommitted text fields use the component's single-line or multiline control.
-use gpui::{AnyElement, App, AppContext, Entity, IntoElement, SharedString, Window, prelude::*};
-use gpui_component::{
+use gpui_kit::component::{
     Sizable,
     input::{Input, InputState, Textarea, TextareaState},
+};
+use gpui_kit::{
+    AnyElement, App, AppContext, Entity, IntoElement, SharedString, Window, prelude::*,
 };
 
 pub(super) enum TextField {

@@ -1,8 +1,8 @@
 //! Document routing and view-context installation; no parallel workbench topology.
 use super::Workbench;
 use crate::minds::{MindCanvas, MindEvent};
-use gpui::{AppContext, Context, Window};
-use gpui_component::dock::{DockPlacement, panel_handle};
+use gpui_kit::component::dock::{DockPlacement, panel_handle};
+use gpui_kit::{AppContext, Context, Window};
 use yss_project::minds::MindSnapshot;
 use yss_project_model::mind::MindPath;
 
@@ -20,7 +20,11 @@ impl Workbench {
         if self.busy || self.closing {
             return;
         }
-        if let Some(mind) = self.minds.get(&path).and_then(gpui::WeakEntity::upgrade) {
+        if let Some(mind) = self
+            .minds
+            .get(&path)
+            .and_then(gpui_kit::WeakEntity::upgrade)
+        {
             self.present_panel(
                 panel_handle(mind.clone()),
                 DockPlacement::Center,
@@ -87,7 +91,7 @@ impl Workbench {
         snapshot: MindSnapshot,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui::Entity<MindCanvas> {
+    ) -> gpui_kit::Entity<MindCanvas> {
         let path = snapshot.path.as_str().to_owned();
         let services = self.services.clone();
         let mind = cx.new(|cx| MindCanvas::new(services, snapshot, cx));
@@ -112,7 +116,11 @@ impl Workbench {
     }
 
     pub(super) fn refresh_minds(&self, window: &mut Window, cx: &mut Context<Self>) {
-        for mind in self.minds.values().filter_map(gpui::WeakEntity::upgrade) {
+        for mind in self
+            .minds
+            .values()
+            .filter_map(gpui_kit::WeakEntity::upgrade)
+        {
             mind.update(cx, |mind, cx| mind.refresh(window, cx));
         }
     }

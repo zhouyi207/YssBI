@@ -1,7 +1,7 @@
 //! Drag payloads retain source rows and original catalog descriptors until drop.
 use super::*;
-use gpui::WeakEntity;
-use gpui_component::ActiveTheme;
+use gpui_kit::WeakEntity;
+use gpui_kit::component::ActiveTheme;
 use yss_node_catalog::ResourceBoundCreateArgs;
 use yss_project_identity::ProjectInstanceId;
 

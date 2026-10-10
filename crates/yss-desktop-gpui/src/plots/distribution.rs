@@ -2,13 +2,13 @@ use super::{
     axes::AxisDomain,
     frame::{self, Axis, Frame},
 };
-use gpui::{
-    AnyElement, App, Bounds, ElementId, IntoElement, PathBuilder, Pixels, Point, SharedString,
-    Window, point, px, size,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     plot::{IntoPlot, PathCaches, Plot, ShapeKey, TooltipState, tooltip::Tooltip},
+};
+use gpui_kit::{
+    AnyElement, App, Bounds, ElementId, IntoElement, PathBuilder, Pixels, Point, SharedString,
+    Window, point, px, size,
 };
 use std::sync::Arc;
 use yss_application::graph::results::plot::DistributionGroup;
@@ -102,7 +102,7 @@ impl Plot for Distribution {
         let caches = PathCaches::for_paint(self.id.clone(), window, cx);
         caches.update(cx, |caches, _| {
             window.with_content_mask(
-                Some(gpui::ContentMask {
+                Some(gpui_kit::ContentMask {
                     bounds: frame.bounds,
                 }),
                 |window| {

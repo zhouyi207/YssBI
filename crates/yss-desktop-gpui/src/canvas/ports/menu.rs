@@ -1,8 +1,8 @@
 //! Port commands use projected capabilities and the shared graph popup lifecycle.
 use crate::canvas::{GraphCanvas, GraphCommand};
-use gpui::{Context, Pixels, Point, Window};
-use gpui_component::menu::PopupMenuItem;
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::menu::PopupMenuItem;
+use gpui_kit::{Context, Pixels, Point, Window};
 use yss_graph_document::PortAddress;
 use yss_graph_editor::EditorGraphMutation;
 

@@ -1,14 +1,14 @@
 //! Shared native frame and modal actions, built from the existing component controls.
 use super::{ModalContent, state};
 use crate::window_chrome;
-use gpui::{
-    AnyWindowHandle, App, ClickEvent, Context, FocusHandle, IntoElement, Render, SharedString,
-    Window, div, prelude::*, px, size,
-};
-use gpui_base::actions::{Cancel, Confirm};
-use gpui_component::{
+use gpui_kit::base::actions::{Cancel, Confirm};
+use gpui_kit::component::{
     ActiveTheme, Disableable,
     button::{Button, ButtonVariants},
+};
+use gpui_kit::{
+    AnyWindowHandle, App, ClickEvent, Context, FocusHandle, IntoElement, Render, SharedString,
+    Window, div, prelude::*, px, size,
 };
 use std::{cell::RefCell, rc::Rc};
 

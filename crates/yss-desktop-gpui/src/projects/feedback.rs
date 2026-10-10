@@ -140,14 +140,17 @@ impl ProjectFeedback {
     }
 }
 
-pub(crate) fn recovery_target(path: &std::path::Path, cx: &gpui::App) -> impl gpui::IntoElement {
-    use gpui::{ClipboardItem, div, prelude::*};
-    use gpui_component::{
+pub(crate) fn recovery_target(
+    path: &std::path::Path,
+    cx: &gpui_kit::App,
+) -> impl gpui_kit::IntoElement {
+    use gpui_kit::assets::IconName;
+    use gpui_kit::component::{
         ActiveTheme, Sizable,
         button::{Button, ButtonVariants},
         tooltip::Tooltip,
     };
-    use gpui_kit_assets::IconName;
+    use gpui_kit::{ClipboardItem, div, prelude::*};
     let target = path.display().to_string();
     let tooltip = target.clone();
     div()

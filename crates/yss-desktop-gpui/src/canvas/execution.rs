@@ -7,7 +7,7 @@ use std::{
     },
 };
 
-use gpui::Context;
+use gpui_kit::Context;
 use yss_application::graph::run::{
     ExecutionApplicationError, RunApplicationEvent, RunApplicationEventKind, RunDemand,
     RunGraphRequest, RunIdentity, cancel_run, run_graph_with_sink,

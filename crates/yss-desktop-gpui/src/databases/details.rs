@@ -2,14 +2,14 @@ mod columns;
 use super::DatabaseEditor;
 use std::collections::HashSet;
 
-use gpui::{Context, IntoElement, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     input::Textarea,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, Window, div, prelude::*, px};
 
 pub(super) struct DetailsState {
     info_open: bool,
@@ -33,7 +33,7 @@ impl DatabaseEditor {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui::AnyElement {
+    ) -> gpui_kit::AnyElement {
         let mut view = div()
             .p_4()
             .flex()
@@ -42,7 +42,7 @@ impl DatabaseEditor {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child(self.name.clone()),
             )
             .child(

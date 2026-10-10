@@ -10,14 +10,14 @@ mod toolbar;
 
 use crate::services::NativeServices;
 pub(crate) use commands::{DatabaseSaveOutcome, DatabaseSaveRequest};
-use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
-    actions,
-};
-use gpui_component::{
+use gpui_kit::component::{
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
     input::TextareaState,
     table::{TableSelection, TableState},
+};
+use gpui_kit::{
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
+    actions,
 };
 use grid::DatabaseGrid;
 use std::sync::Arc;
@@ -215,7 +215,7 @@ impl BasePanel for DatabaseEditor {
     }
 }
 impl Panel for DatabaseEditor {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         format!("{}{}", self.name, if self.dirty() { " *" } else { "" })
     }
     fn inner_padding(&self, _: &App) -> bool {

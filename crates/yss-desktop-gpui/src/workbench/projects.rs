@@ -7,10 +7,12 @@ use crate::projects::{
     form::{ProjectForm, ProjectFormKind},
     progress::{ProjectProgress, ProjectStage},
 };
-use gpui::{AppContext, Context, Focusable, PathPromptOptions, WeakEntity, Window, prelude::*, px};
-use gpui_component::{
+use gpui_kit::component::{
     IndexPath,
     list::{List, ListDelegate, ListState},
+};
+use gpui_kit::{
+    AppContext, Context, Focusable, PathPromptOptions, WeakEntity, Window, prelude::*, px,
 };
 use std::path::PathBuf;
 use yss_project_identity::ProjectInstanceId;
@@ -37,7 +39,7 @@ pub(crate) struct ProjectOperation {
 impl ProjectOperation {
     pub(super) fn show_progress(
         &self,
-        progress: gpui::Entity<ProjectProgress>,
+        progress: gpui_kit::Entity<ProjectProgress>,
         cx: &mut Context<Workbench>,
     ) {
         if let Some(dialog) = &self.dialog {
@@ -69,9 +71,9 @@ impl ProjectOperation {
 impl ProjectCommand {
     fn progress(
         &self,
-        cx: &mut gpui::App,
+        cx: &mut gpui_kit::App,
     ) -> (
-        gpui::Entity<ProjectProgress>,
+        gpui_kit::Entity<ProjectProgress>,
         tokio::sync::watch::Sender<ProjectStage>,
     ) {
         let (stage, target) = match self {
@@ -96,7 +98,7 @@ impl Workbench {
                         if let Some(picker) = view
                             .recent_picker
                             .as_ref()
-                            .and_then(gpui::WeakEntity::upgrade)
+                            .and_then(gpui_kit::WeakEntity::upgrade)
                         {
                             crate::modal_window::update_child(window, cx, move |window, cx| {
                                 picker.update(cx, |picker, cx| {
@@ -147,7 +149,7 @@ impl Workbench {
         if let Some(picker) = self
             .recent_picker
             .as_ref()
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
         {
             crate::modal_window::update_child(window, cx, move |window, cx| {
                 window.activate_window();
@@ -160,7 +162,7 @@ impl Workbench {
         let owner = cx.entity().downgrade();
         crate::modal_window::open(
             crate::text::t("native.workbench.openRecentProject"),
-            gpui::size(px(680.), px(510.)),
+            gpui_kit::size(px(680.), px(510.)),
             window,
             cx,
             move |window, cx| {
@@ -175,7 +177,7 @@ impl Workbench {
                 let _ = owner.update(cx, |view, _| view.recent_picker = Some(picker.downgrade()));
                 let focus = picker.read(cx).focus_handle(cx);
                 crate::modal_window::ModalContent::new(move |_, _| {
-                    gpui::div().h(px(400.)).child(
+                    gpui_kit::div().h(px(400.)).child(
                         List::new(&picker)
                             .search_placeholder(crate::text::t("native.workbench.searchProjects")),
                     )
@@ -248,7 +250,7 @@ impl Workbench {
         let lifecycle = self.lifecycle;
         crate::modal_window::open(
             kind.title(),
-            gpui::size(px(660.), px(420.)),
+            gpui_kit::size(px(660.), px(420.)),
             window,
             cx,
             move |window, cx| {

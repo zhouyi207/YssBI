@@ -1,11 +1,11 @@
 //! The loaded history range and reading position belong to this conversation view.
 use super::ConversationPanel;
-use gpui::{AnyElement, Context, Pixels, ScrollHandle, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, Pixels, ScrollHandle, div, prelude::*, px};
 use std::cell::Cell;
 
 const PAGE_TURNS: usize = 20;
@@ -139,7 +139,7 @@ impl Viewport {
 impl ConversationPanel {
     pub(super) fn render_thread(&mut self, cx: &mut Context<Self>) -> AnyElement {
         if self.transcript.turns.is_empty() && self.transcript.session_output.parts.is_empty() {
-            return gpui::Empty.into_any_element();
+            return gpui_kit::Empty.into_any_element();
         }
         let first = self.viewport.first_turn(self.transcript.turns.len());
         let owner = cx.entity().downgrade();

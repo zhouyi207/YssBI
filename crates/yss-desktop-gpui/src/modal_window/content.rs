@@ -1,6 +1,6 @@
 //! Modal content and actions; window ownership lives in the host.
-use gpui::{AnyElement, App, ClickEvent, FocusHandle, IntoElement, SharedString, Window};
-use gpui_component::button::ButtonVariant;
+use gpui_kit::component::button::ButtonVariant;
+use gpui_kit::{AnyElement, App, ClickEvent, FocusHandle, IntoElement, SharedString, Window};
 use std::rc::Rc;
 
 pub(super) type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool>;

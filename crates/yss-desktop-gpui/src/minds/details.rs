@@ -2,12 +2,12 @@
 mod parent;
 
 use super::MindCanvas;
-use gpui::{Context, IntoElement, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Textarea,
 };
+use gpui_kit::{Context, IntoElement, Window, div, prelude::*};
 use yss_project_model::file::FileVersion;
 
 #[derive(Clone)]
@@ -32,7 +32,7 @@ impl MindCanvas {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui::AnyElement {
+    ) -> gpui_kit::AnyElement {
         let mut view = div()
             .p_4()
             .flex()
@@ -41,7 +41,7 @@ impl MindCanvas {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child(self.snapshot.path.name().to_owned()),
             )
             .child(
@@ -60,7 +60,7 @@ impl MindCanvas {
                 view.child(
                     div()
                         .id("mind-details-error")
-                        .role(gpui::accesskit::Role::Alert)
+                        .role(gpui_kit::accesskit::Role::Alert)
                         .text_sm()
                         .text_color(cx.theme().danger)
                         .child(error.clone()),

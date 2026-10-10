@@ -1,10 +1,12 @@
 //! Render the existing sidebar panels beside a zoomed conversation from the root topology.
 use super::super::{Workbench, layout::columns, sidebar};
-use gpui::{AnyElement, App, Empty, IntoElement, RenderOnce, WeakEntity, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, AxisExt,
     dock::{DockArea, DockPlacement, PaneNode, PaneRef, PanelHandle},
     tab::{Tab, TabBar},
+};
+use gpui_kit::{
+    AnyElement, App, Empty, IntoElement, RenderOnce, WeakEntity, Window, div, prelude::*,
 };
 
 #[derive(IntoElement)]

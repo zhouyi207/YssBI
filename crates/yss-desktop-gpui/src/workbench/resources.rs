@@ -9,7 +9,7 @@ mod operations;
 mod reveal;
 use super::Workbench;
 pub(super) use authored::AuthoredKind;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 #[derive(Clone, Copy)]
 pub(crate) enum ResourceAction {
     Rename,

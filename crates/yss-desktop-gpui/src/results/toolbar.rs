@@ -1,7 +1,7 @@
 //! Controls derive page ranges from the accepted page, never from a pending request.
 use super::*;
-use gpui::Div;
-use gpui_component::{
+use gpui_kit::Div;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
 };

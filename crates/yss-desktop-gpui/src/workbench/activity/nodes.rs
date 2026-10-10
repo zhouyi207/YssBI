@@ -1,10 +1,10 @@
 //! Node interactions retain the exact Application catalog descriptor.
 use super::*;
-use gpui::{AnyElement, Div, Stateful};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
 };
+use gpui_kit::{AnyElement, Div, Stateful};
 
 impl ActivityPanel {
     pub(super) fn render_node(
@@ -50,13 +50,15 @@ impl ActivityPanel {
                     },
                 )
                 .child(
-                    Button::new(gpui::SharedString::from(format!("add-{}", row.id)))
+                    Button::new(gpui_kit::SharedString::from(format!("add-{}", row.id)))
                         .small()
                         .ghost()
                         .size_5()
                         .icon(IconName::Plus)
                         .tooltip(crate::text::translate("native.workbench.addToGraph"))
-                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
+                            cx.stop_propagation()
+                        })
                         .on_click(cx.listener(move |view, _, _, cx| {
                             cx.stop_propagation();
                             if view.accepts(&expected_creation)

@@ -1,11 +1,11 @@
 //! Field layout consumes current projections; diagnostic text shares the Problems formatter.
 use super::*;
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
 };
-use gpui_kit_assets::IconName;
 use std::collections::BTreeMap;
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_editor::projection::{EditorDiagnosticModel, EditorDiagnosticSeverity};
@@ -61,7 +61,7 @@ impl ParameterForm {
                     .child(
                         div()
                             .text_xs()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                             .text_color(cx.theme().muted_foreground)
                             .child(group.display.title.to_string()),
                     )
@@ -123,14 +123,14 @@ impl ParameterForm {
                 .into_any_element(),
         };
         let content = div()
-            .on_action(
-                cx.listener(move |view, _: &gpui_component::input::Escape, window, cx| {
+            .on_action(cx.listener(
+                move |view, _: &gpui_kit::component::input::Escape, window, cx| {
                     if view.accepts_input(epoch, cx) {
                         view.restore_parameter(index, window, cx);
                         cx.stop_propagation();
                     }
-                }),
-            )
+                },
+            ))
             .flex()
             .flex_col()
             .gap_2()
@@ -208,7 +208,7 @@ impl ParameterForm {
             .children(field.error.as_ref().map(|error| {
                 div()
                     .id(("parameter-error", index))
-                    .role(gpui::accesskit::Role::Alert)
+                    .role(gpui_kit::accesskit::Role::Alert)
                     .text_xs()
                     .text_color(cx.theme().danger)
                     .child(error.clone())

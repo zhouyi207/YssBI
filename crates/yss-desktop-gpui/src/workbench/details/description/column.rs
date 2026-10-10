@@ -1,11 +1,11 @@
 //! Column-local disclosure and a bounded frequency table reuse the result grid.
-use gpui::{AppContext, Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
     table::{DataTable, TableState},
 };
+use gpui_kit::{AppContext, Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
 use yss_application::graph::results::description::{
     DescriptionColumn, DescriptionStatistics, NUMERIC_FIELDS,
 };
@@ -97,7 +97,7 @@ impl ColumnSummary {
         }));
     }
 
-    fn summary(&self, cx: &gpui::App) -> gpui::Div {
+    fn summary(&self, cx: &gpui_kit::App) -> gpui_kit::Div {
         let semantic = match &self.column.statistics {
             DescriptionStatistics::Numeric { .. } => "Numeric",
             DescriptionStatistics::Categorical { semantic, .. } => semantic,
@@ -138,7 +138,7 @@ impl ColumnSummary {
         }))
     }
 
-    fn frequencies(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+    fn frequencies(&self, cx: &mut Context<Self>) -> gpui_kit::AnyElement {
         let DescriptionStatistics::Categorical { categories, .. } = &self.column.statistics else {
             return div().into_any_element();
         };

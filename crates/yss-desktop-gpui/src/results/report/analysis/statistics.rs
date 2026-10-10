@@ -1,15 +1,15 @@
 use super::super::display::number;
-use gpui::{App, ClipboardItem, Div, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{App, ClipboardItem, Div, div, prelude::*};
 use yss_application::graph::results::report::{HypothesisTestOutput, SerialTestsOutput};
 
 fn card(label: &str, statistic: String, probability: Option<f64>, cx: &App) -> Div {
     div()
-        .min_w(gpui::px(190.))
+        .min_w(gpui_kit::px(190.))
         .flex_1()
         .p_3()
         .rounded_md()
@@ -89,7 +89,7 @@ pub(super) fn hypothesis(value: &HypothesisTestOutput, cx: &App) -> Div {
                 .map(|(index, (key, form))| {
                     let copied = form.clone();
                     div()
-                        .min_w(gpui::px(220.))
+                        .min_w(gpui_kit::px(220.))
                         .flex_1()
                         .p_3()
                         .rounded_md()

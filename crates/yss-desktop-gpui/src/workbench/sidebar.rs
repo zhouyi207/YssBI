@@ -1,14 +1,16 @@
 //! Centered header navigation projects the root DockArea's current panels.
 use super::{Workbench, activity::ActivityPanel, layout::columns, menus::WorkbenchPanel};
 use crate::plugins::PluginsSidebar;
-use gpui::{AnyElement, App, Context, Empty, IntoElement, WeakEntity, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Selectable, Sizable,
     button::{Button, ButtonCustomVariant, ButtonVariants},
     dock::{BasePanelView, DockArea, DockPlacement, NodeId, PaneRef, PanelHandle},
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    AnyElement, App, Context, Empty, IntoElement, WeakEntity, Window, div, prelude::*, px,
+};
 use std::{any::TypeId, sync::Arc};
 
 impl Workbench {

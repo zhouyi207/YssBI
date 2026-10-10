@@ -2,8 +2,8 @@
 use super::super::Workbench;
 use super::{Opening, opening::OpeningEvent};
 use crate::project::OpenedGraph;
-use gpui::{AppContext, Context, Entity, Focusable, Window};
-use gpui_component::dock::{PanelId, panel_handle};
+use gpui_kit::component::dock::{PanelId, panel_handle};
+use gpui_kit::{AppContext, Context, Entity, Focusable, Window};
 use yss_application::graph::open::OpenGraphRequest;
 use yss_graph_document::GraphResourcePath;
 

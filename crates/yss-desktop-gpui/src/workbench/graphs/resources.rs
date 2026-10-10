@@ -1,5 +1,5 @@
 //! Committed resource receipts rebind native panels; projections still come from Application.
-use gpui::{Context, Entity, Focusable, Window};
+use gpui_kit::{Context, Entity, Focusable, Window};
 use yss_application::events::CommittedResourceMutation;
 use yss_graph_document::GraphResourcePath;
 use yss_project_history::{ResourceDocumentPatch, ResourceKey, ResourceLifecycleKind};
@@ -70,13 +70,16 @@ impl Workbench {
         if from == to.as_str() || after <= before {
             return;
         }
-        let canvas = self.graphs.get(from).and_then(gpui::WeakEntity::upgrade);
+        let canvas = self
+            .graphs
+            .get(from)
+            .and_then(gpui_kit::WeakEntity::upgrade);
         let moved = if let Some(canvas) = canvas {
             // A delayed receipt must not displace an independently opened destination panel.
             if self
                 .graphs
                 .get(to.as_str())
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
                 .is_some()
                 || !canvas.update(cx, |canvas, cx| {
                     canvas.move_resource(to.clone(), before, after, cx)
@@ -93,7 +96,7 @@ impl Workbench {
         if let Some(opening) = self
             .graph_openings
             .get(from)
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
             && opening
                 .read(cx)
                 .revision
@@ -102,12 +105,12 @@ impl Workbench {
             let destination_open = self
                 .graphs
                 .get(to.as_str())
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
                 .is_some()
                 || self
                     .graph_openings
                     .get(to.as_str())
-                    .and_then(gpui::WeakEntity::upgrade)
+                    .and_then(gpui_kit::WeakEntity::upgrade)
                     .is_some_and(|opening| !opening.read(cx).removed);
             if destination_open {
                 self.redirect_graph_opening(opening, to.as_str(), window, cx);
@@ -118,7 +121,7 @@ impl Workbench {
                     opening.path = to.clone();
                     opening.revision = Some(after);
                     opening.failed = false;
-                    cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+                    cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
                     cx.notify();
                 });
                 self.graph_openings
@@ -154,7 +157,7 @@ impl Workbench {
             || self
                 .graphs
                 .get(to.as_str())
-                .and_then(gpui::WeakEntity::upgrade)
+                .and_then(gpui_kit::WeakEntity::upgrade)
                 .is_some()
             || !canvas.update(cx, |canvas, cx| {
                 canvas.recover_resource(to.clone(), version, cx)
@@ -180,7 +183,7 @@ impl Workbench {
         if let Some(opening) = self
             .graph_openings
             .get(to.as_str())
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
         {
             self.redirect_graph_opening(opening, to.as_str(), window, cx);
         }
@@ -223,7 +226,10 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let canvas = self.graphs.get(path).and_then(gpui::WeakEntity::upgrade);
+        let canvas = self
+            .graphs
+            .get(path)
+            .and_then(gpui_kit::WeakEntity::upgrade);
         let removed = if let Some(canvas) = canvas {
             if canvas.read(cx).resource_revision() > before {
                 return;
@@ -238,7 +244,7 @@ impl Workbench {
         if let Some(opening) = self
             .graph_openings
             .get(path)
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
             && opening
                 .read(cx)
                 .revision
@@ -273,7 +279,7 @@ impl Workbench {
 
     fn retire_graph(
         &mut self,
-        canvas: gpui::Entity<crate::canvas::GraphCanvas>,
+        canvas: gpui_kit::Entity<crate::canvas::GraphCanvas>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {

@@ -6,14 +6,14 @@ mod value;
 
 use crate::{canvas::GraphCanvas, services::NativeServices};
 use constants::{ConstantDraft, ConstantOverview};
-use gpui::{
-    Context, Entity, IntoElement, Render, Subscription, WeakEntity, Window, div, prelude::*,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    Context, Entity, IntoElement, Render, Subscription, WeakEntity, Window, div, prelude::*,
+};
 use signature::SignatureDraft;
 use std::sync::Arc;
 use yss_project::GraphEditVersion;
@@ -106,7 +106,7 @@ impl GraphProperties {
         self.graph.as_ref().and_then(WeakEntity::upgrade)
     }
 
-    fn accepts_input(&self, generation: u64, cx: &gpui::App) -> bool {
+    fn accepts_input(&self, generation: u64, cx: &gpui_kit::App) -> bool {
         generation == self.generation
             && self.ready
             && !self.loading
@@ -170,7 +170,7 @@ impl Render for GraphProperties {
                             .flex_1()
                             .min_w_0()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                             .truncate()
                             .child(title),
                     )
@@ -206,7 +206,7 @@ impl Render for GraphProperties {
             .children(error.as_ref().map(|error| {
                 div()
                     .id("graph-properties-error")
-                    .role(gpui::accesskit::Role::Alert)
+                    .role(gpui_kit::accesskit::Role::Alert)
                     .text_xs()
                     .text_color(cx.theme().danger)
                     .child(error.clone())

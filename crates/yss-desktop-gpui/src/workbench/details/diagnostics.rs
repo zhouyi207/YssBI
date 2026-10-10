@@ -2,13 +2,13 @@
 use super::DetailsPanel;
 use crate::text::{graph_diagnostic, translate};
 use crate::workbench::problems::location;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorNodeModel};
 
 pub(super) const PAGE_DIAGNOSTICS: usize = 50;
@@ -60,7 +60,7 @@ impl DetailsPanel {
                     .min_w_0()
                     .gap_2()
                     .when(pages > 1, |view| {
-                        view.max_h(gpui::px(320.))
+                        view.max_h(gpui_kit::px(320.))
                             .overflow_y_scroll()
                             .track_scroll(&self.diagnostics_scroll)
                     });
@@ -119,7 +119,7 @@ impl DetailsPanel {
                                         |view, label| {
                                             view.child(
                                                 div()
-                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                                     .child(label),
                                             )
                                         },
@@ -147,7 +147,7 @@ impl DetailsPanel {
                                             view.diagnostics_page =
                                                 view.diagnostics_page.saturating_sub(1);
                                             view.diagnostics_scroll
-                                                .set_offset(gpui::Point::default());
+                                                .set_offset(gpui_kit::Point::default());
                                             cx.notify();
                                         }
                                     })),
@@ -169,7 +169,7 @@ impl DetailsPanel {
                                             view.diagnostics_page =
                                                 (view.diagnostics_page + 1).min(pages - 1);
                                             view.diagnostics_scroll
-                                                .set_offset(gpui::Point::default());
+                                                .set_offset(gpui_kit::Point::default());
                                             cx.notify();
                                         }
                                     })),

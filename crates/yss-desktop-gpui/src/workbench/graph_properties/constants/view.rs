@@ -1,14 +1,14 @@
 //! Native constant cards, type controls and graph-scoped drag handles.
 use super::*;
 use crate::workbench::controls;
-use gpui::{AnyElement, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::Input,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, IntoElement, div, prelude::*};
 
 impl GraphProperties {
     pub(super) fn render_constant(
@@ -146,7 +146,7 @@ impl GraphProperties {
                                     .rounded_sm()
                                     .cursor_pointer()
                                     .hover(|view| view.bg(cx.theme().muted))
-                                    .child(gpui_component::Icon::new(IconName::Menu).size_3())
+                                    .child(gpui_kit::component::Icon::new(IconName::Menu).size_3())
                                     .on_drag(drag, |drag, _, _, cx| {
                                         cx.stop_propagation();
                                         cx.new(|_| drag.clone())

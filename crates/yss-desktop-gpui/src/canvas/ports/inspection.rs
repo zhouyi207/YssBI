@@ -1,6 +1,6 @@
 //! Resolve current or explicitly previous output references without running the graph.
 use crate::canvas::{CanvasEvent, GraphCanvas};
-use gpui::Context;
+use gpui_kit::Context;
 use std::sync::Arc;
 use yss_application::graph::results::{ResultPinQuery, ResultQueryApplicationError};
 use yss_graph_document::PortAddress;

@@ -9,8 +9,8 @@ mod selection;
 pub(crate) use feedback::{IMPORT_FAILED, sample_import_failure};
 
 use crate::{services::NativeServices, workbench::Workbench};
-use gpui::{AppContext, Context, Entity, WeakEntity, Window};
-use gpui_component::input::InputState;
+use gpui_kit::component::input::InputState;
+use gpui_kit::{AppContext, Context, Entity, WeakEntity, Window};
 use std::sync::Arc;
 use yss_application::database::samples::SampleDataset;
 use yss_database_contract::{DatabaseEngineSql, DatabaseImportSource};
@@ -199,7 +199,7 @@ impl ImportDialog {
         self.error = None;
         cx.notify();
     }
-    fn optional_name(&self, cx: &gpui::App) -> Option<String> {
+    fn optional_name(&self, cx: &gpui_kit::App) -> Option<String> {
         let name = self.name.read(cx).value().trim().to_owned();
         (!name.is_empty()).then_some(name)
     }

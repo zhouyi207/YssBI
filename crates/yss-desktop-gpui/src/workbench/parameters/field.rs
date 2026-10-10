@@ -4,11 +4,11 @@ pub(super) mod list;
 mod render;
 use super::{ParameterForm, controls, domain::DomainDraft, relational::RelationalDraft};
 use crate::workbench::input::TextField;
-use gpui::{
+use gpui_kit::component::input::InputEvent;
+use gpui_kit::{
     AnyElement, Context, Entity, EntityId, EventEmitter, IntoElement, Subscription, Window, div,
     prelude::*,
 };
-use gpui_component::input::InputEvent;
 use list::ListDraft;
 use serde_json::Value;
 use yss_data_contract::{SemanticType, ValueType};
@@ -171,7 +171,7 @@ impl ParameterField {
         }
     }
 
-    pub fn value(&self, cx: &gpui::App) -> Result<Value, String> {
+    pub fn value(&self, cx: &gpui_kit::App) -> Result<Value, String> {
         match &self.draft {
             ParameterDraft::Text { input, format } => {
                 let text = input.value(cx);

@@ -1,11 +1,11 @@
 //! Menu editing reuses the selected editor's actions and the component text engine.
 use super::super::Workbench;
 use crate::{canvas, databases::CopyDatabaseSelection, minds::DeleteTopics};
-use gpui::{Action, App, Context, Window};
-use gpui_component::{
+use gpui_kit::component::{
     dock::{BasePanelView, DockPlacement},
     input,
 };
+use gpui_kit::{Action, App, Context, Window};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq)]

@@ -5,8 +5,8 @@ pub(crate) mod query;
 mod render;
 
 use crate::services::NativeServices;
-use gpui::{App, Context, EventEmitter, FocusHandle, Focusable, Window, actions};
-use gpui_component::dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState};
+use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState};
+use gpui_kit::{App, Context, EventEmitter, FocusHandle, Focusable, Window, actions};
 use std::sync::Arc;
 use yss_application::database::DatabaseMetaResult;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
@@ -34,7 +34,7 @@ pub(crate) struct ChartEditor {
     draft_epoch: u64,
     read_generation: u64,
     preview_generation: u64,
-    preview_task: Option<gpui::Task<()>>,
+    preview_task: Option<gpui_kit::Task<()>>,
     preview_loading: bool,
     reading: bool,
     saving: bool,
@@ -143,7 +143,7 @@ impl BasePanel for ChartEditor {
     }
 }
 impl Panel for ChartEditor {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         format!(
             "{}{}",
             self.path.display_name().as_str(),

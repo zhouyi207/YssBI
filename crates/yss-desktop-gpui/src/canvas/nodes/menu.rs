@@ -1,8 +1,8 @@
 //! Node actions reuse the same selection, clipboard, edit and execution entry points.
 use crate::canvas::{GraphCanvas, GraphCommand, commands::*};
-use gpui::{Action, Context, MouseDownEvent, Pixels, Point, Window, div, prelude::*};
-use gpui_component::{ActiveTheme, Icon, input, menu::PopupMenuItem};
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, input, menu::PopupMenuItem};
+use gpui_kit::{Action, Context, MouseDownEvent, Pixels, Point, Window, div, prelude::*};
 use yss_graph_document::{GraphResourceKind, NodeId};
 use yss_graph_editor::EditorGraphMutation;
 

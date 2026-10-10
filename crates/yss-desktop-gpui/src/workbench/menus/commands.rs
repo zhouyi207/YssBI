@@ -1,11 +1,11 @@
 //! Menu actions route to existing workbench commands after checking current availability.
 use super::{super::Workbench, WorkbenchPanel, editing::EditCommand, help::HelpPage};
 use crate::{canvas::SaveGraph, workbench::ShowSettings};
-use gpui::{App, Context, KeyBinding, Window};
-use gpui_component::{Placement, dock::DockPlacement};
+use gpui_kit::component::{Placement, dock::DockPlacement};
+use gpui_kit::{App, Context, KeyBinding, Window};
 use yss_graph_document::GraphResourceKind;
 
-#[derive(Clone, PartialEq, gpui::Action)]
+#[derive(Clone, PartialEq, gpui_kit::Action)]
 #[action(namespace = native_workbench, no_json)]
 pub(in crate::workbench) enum MenuCommand {
     SaveProjectAs,

@@ -1,6 +1,6 @@
 //! Shared confirmation form in native modal windows.
 use super::ModalContent;
-use gpui::{App, ClickEvent, SharedString, Window, div, prelude::*, px, size};
+use gpui_kit::{App, ClickEvent, SharedString, Window, div, prelude::*, px, size};
 
 pub(crate) fn confirm(
     title: impl Into<SharedString>,

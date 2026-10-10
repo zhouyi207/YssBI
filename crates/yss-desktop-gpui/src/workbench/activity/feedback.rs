@@ -1,7 +1,7 @@
 //! Query feedback projects the existing workbench request; it does not start another query.
 use super::*;
-use gpui::AnyElement;
-use gpui_component::{
+use gpui_kit::AnyElement;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     spinner::Spinner,
@@ -49,7 +49,7 @@ impl ActivityPanel {
                 .children(document.tools.iter().map(|tool| {
                     let expected = document.clone();
                     let id = tool.id.to_owned();
-                    Button::new(gpui::SharedString::from(format!("activity-tool-{id}")))
+                    Button::new(gpui_kit::SharedString::from(format!("activity-tool-{id}")))
                         .ghost()
                         .small()
                         .size_5()
@@ -71,7 +71,7 @@ impl ActivityPanel {
             ReadState::Loading if self.document.is_none() => Some(
                 div()
                     .id("activity-loading")
-                    .role(gpui::accesskit::Role::Status)
+                    .role(gpui_kit::accesskit::Role::Status)
                     .px_3()
                     .py_2()
                     .flex()
@@ -86,7 +86,7 @@ impl ActivityPanel {
             ReadState::Failed(key) => Some(
                 div()
                     .id("activity-error")
-                    .role(gpui::accesskit::Role::Alert)
+                    .role(gpui_kit::accesskit::Role::Alert)
                     .px_3()
                     .py_2()
                     .flex()
@@ -118,7 +118,7 @@ impl ActivityPanel {
                 Some(
                     div()
                         .id("activity-empty")
-                        .role(gpui::accesskit::Role::Status)
+                        .role(gpui_kit::accesskit::Role::Status)
                         .px_3()
                         .py_4()
                         .flex()
@@ -159,7 +159,11 @@ impl super::super::Workbench {
         cx: &mut Context<Self>,
     ) {
         for id in panels {
-            if let Some(panel) = self.activities.get(id).and_then(gpui::WeakEntity::upgrade) {
+            if let Some(panel) = self
+                .activities
+                .get(id)
+                .and_then(gpui_kit::WeakEntity::upgrade)
+            {
                 panel.update(cx, |panel, cx| panel.set_read_state(state, cx));
             }
         }

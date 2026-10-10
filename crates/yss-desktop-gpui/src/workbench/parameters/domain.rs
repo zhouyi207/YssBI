@@ -4,13 +4,13 @@ mod positive;
 use super::{ParameterForm, controls, field::ParameterDraft};
 use crate::text::translate;
 pub(super) use draft::DomainDraft;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Input,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*, px};
 use yss_data_contract::ConversionDomain;
 
 impl ParameterForm {
@@ -61,7 +61,7 @@ impl ParameterForm {
                                         .into_iter()
                                         .map(
                                             |(direction, icon, label)| {
-                                                Button::new(gpui::SharedString::from(format!(
+                                                Button::new(gpui_kit::SharedString::from(format!(
                                                     "domain-move-{index}-{row}-{direction}"
                                                 )))
                                                 .small()
@@ -92,7 +92,7 @@ impl ParameterForm {
                                         ),
                                     )
                                     .child(
-                                        Button::new(gpui::SharedString::from(format!(
+                                        Button::new(gpui_kit::SharedString::from(format!(
                                             "domain-remove-{index}-{row}"
                                         )))
                                         .small()
@@ -127,7 +127,7 @@ impl ParameterForm {
                     content.child(
                         div()
                             .id(("domain-duplicates", index))
-                            .role(gpui::accesskit::Role::Alert)
+                            .role(gpui_kit::accesskit::Role::Alert)
                             .text_xs()
                             .text_color(cx.theme().danger)
                             .child(translate("conversion.duplicateValues")),
@@ -177,7 +177,7 @@ impl ParameterForm {
                             ]
                             .into_iter()
                             .map(|(direction, icon, label)| {
-                                Button::new(gpui::SharedString::from(format!(
+                                Button::new(gpui_kit::SharedString::from(format!(
                                     "domain-page-{index}-{direction}"
                                 )))
                                 .small()

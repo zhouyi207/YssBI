@@ -1,8 +1,8 @@
 //! Connection menu actions reuse the shared popup and original edit transaction.
 use crate::canvas::{GraphCanvas, GraphCommand};
-use gpui::{Context, Pixels, Point, Window, div, prelude::*};
-use gpui_component::{ActiveTheme, Icon, menu::PopupMenuItem};
-use gpui_kit_assets::IconName;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, menu::PopupMenuItem};
+use gpui_kit::{Context, Pixels, Point, Window, div, prelude::*};
 use yss_graph_editor::EditorGraphMutation;
 
 impl GraphCanvas {

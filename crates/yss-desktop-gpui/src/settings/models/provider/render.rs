@@ -1,14 +1,14 @@
 use super::protocol_label;
 use crate::{settings::SettingsPanel, text::translate as t};
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable,
     button::Button,
     combobox::Combobox,
     input::Input,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use yss_harness_contract::{
     LanguageModelAuthentication as Authentication, LanguageModelProtocol as Protocol,
 };

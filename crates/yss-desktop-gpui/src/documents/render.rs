@@ -1,12 +1,12 @@
 use super::{DocumentEditor, SaveDocument, ToggleDocumentPreview};
 use crate::appearance;
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*, rgb};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     input::Editor,
     text::TextView,
 };
+use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*, rgb};
 
 impl Render for DocumentEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

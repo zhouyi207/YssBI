@@ -37,12 +37,12 @@ mod sidebar;
 mod status_bar;
 mod welcome;
 
-use gpui::{
+use gpui_kit::component::dock::{DockArea, DockLayout, DockPlacement, panel_handle};
+use gpui_kit::component::{Root, WindowExt, notification::Notification};
+use gpui_kit::{
     Context, Entity, FocusHandle, IntoElement, Render, WeakEntity, Window, WindowHandle,
     prelude::*, px,
 };
-use gpui_component::dock::{DockArea, DockLayout, DockPlacement, panel_handle};
-use gpui_component::{Root, WindowExt, notification::Notification};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Arc,
@@ -63,18 +63,18 @@ pub struct Workbench {
     services: Arc<NativeServices>,
     project: Option<DesktopProject>,
     recent: Entity<crate::projects::RecentProjects>,
-    recent_subscription: Option<gpui::Subscription>,
+    recent_subscription: Option<gpui_kit::Subscription>,
     recent_picker:
-        Option<WeakEntity<gpui_component::list::ListState<crate::projects::RecentDelegate>>>,
+        Option<WeakEntity<gpui_kit::component::list::ListState<crate::projects::RecentDelegate>>>,
     plugins: Entity<crate::plugins::PluginsPanel>,
     plugins_sidebar: Entity<crate::plugins::PluginsSidebar>,
     plugin_views: BTreeMap<(String, String), WeakEntity<crate::plugins::PluginViewPanel>>,
-    plugin_subscription: Option<gpui::Subscription>,
+    plugin_subscription: Option<gpui_kit::Subscription>,
     settings: Entity<crate::settings::SettingsPanel>,
     settings_window: Option<WindowHandle<Root>>,
     logs_window: Option<WindowHandle<Root>>,
-    settings_subscription: Option<gpui::Subscription>,
-    menu_bar: Entity<gpui_component::menu::AppMenuBar>,
+    settings_subscription: Option<gpui_kit::Subscription>,
+    menu_bar: Entity<gpui_kit::component::menu::AppMenuBar>,
     menu_context: Option<menus::MenuContext>,
     conversations: BTreeMap<String, Entity<crate::assistant::ConversationPanel>>,
     assistant_generation: u64,
@@ -100,9 +100,9 @@ pub struct Workbench {
     databases: BTreeMap<String, WeakEntity<crate::databases::DatabaseEditor>>,
     opening: BTreeSet<String>,
     graph_openings: BTreeMap<String, WeakEntity<graphs::Opening>>,
-    subscriptions: Vec<gpui::Subscription>,
+    subscriptions: Vec<gpui_kit::Subscription>,
     activities: BTreeMap<&'static str, WeakEntity<ActivityPanel>>,
-    event_task: Option<gpui::Task<()>>,
+    event_task: Option<gpui_kit::Task<()>>,
     graph_subscription: Option<yss_application::graph::editing::GraphActivitySubscription>,
     ui_binding: Option<yss_application::presentation::WorkbenchBinding>,
     ui_delivery: Option<uuid::Uuid>,
@@ -120,8 +120,8 @@ pub struct Workbench {
     pub(crate) lifecycle: u64,
     layout_root: Option<String>,
     restoring_layout: bool,
-    layout_subscription: Option<gpui::Subscription>,
-    layout_task: Option<gpui::Task<()>>,
+    layout_subscription: Option<gpui_kit::Subscription>,
+    layout_task: Option<gpui_kit::Task<()>>,
 }
 
 impl Workbench {
@@ -143,7 +143,7 @@ impl Workbench {
         let plugins_sidebar = cx.new(|cx| crate::plugins::PluginsSidebar::new(plugins.clone(), cx));
         let settings =
             cx.new(|cx| crate::settings::SettingsPanel::new(services.clone(), window, cx));
-        let menu_bar = gpui_component::menu::AppMenuBar::new(cx);
+        let menu_bar = gpui_kit::component::menu::AppMenuBar::new(cx);
         let mut view = Self {
             services,
             project: None,
@@ -426,7 +426,7 @@ impl Workbench {
         }
     }
 
-    pub fn has_unsaved(&self, cx: &gpui::App) -> bool {
+    pub fn has_unsaved(&self, cx: &gpui_kit::App) -> bool {
         if self.settings.read(cx).dirty() {
             return true;
         }
@@ -459,7 +459,7 @@ impl Workbench {
                 .any(|editor| editor.read(cx).dirty())
     }
 
-    pub fn is_closing(&self, cx: &gpui::App) -> bool {
+    pub fn is_closing(&self, cx: &gpui_kit::App) -> bool {
         self.closing
             || self.busy
             || self.plugins.read(cx).busy()

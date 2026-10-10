@@ -2,12 +2,12 @@
 mod render;
 
 use crate::settings::SettingsPanel;
-use gpui::{AppContext, Context, Entity, SharedString, Window};
-use gpui_component::{
+use gpui_kit::component::{
     IndexPath,
     combobox::{ComboboxEvent, ComboboxState},
     searchable_list::{SearchableListItem, SearchableVec},
 };
+use gpui_kit::{AppContext, Context, Entity, SharedString, Window};
 use yss_harness_contract::{
     LanguageModelAuthentication, LanguageModelProtocol, LanguageModelProviderConfig,
     LanguageModelProviderStatus,
@@ -238,7 +238,7 @@ impl SettingsPanel {
             && !self.stored_key_available()
     }
 
-    pub(in crate::settings) fn connection_ready(&self, cx: &gpui::App) -> bool {
+    pub(in crate::settings) fn connection_ready(&self, cx: &gpui_kit::App) -> bool {
         self.editor.as_ref().is_some_and(|draft| {
             !draft.name.trim().is_empty()
                 && !draft.base_url.read(cx).value().trim().is_empty()

@@ -1,6 +1,6 @@
 //! User submission and model selection call the existing session and turn owners.
 use super::{ConversationEvent, ConversationPanel, DraftMessage, Submission};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_application::harness::HarnessSessionError;
 use yss_harness_contract::LanguageModelSelection;
 use yss_harness_core::HarnessError;

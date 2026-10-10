@@ -4,7 +4,7 @@ use crate::{
     imports::{IMPORT_FAILED, ImportDialog, ImportRequest, ImportScope, sample_import_failure},
     project::DesktopProject,
 };
-use gpui::{AppContext, Context, WeakEntity, Window, px};
+use gpui_kit::{AppContext, Context, WeakEntity, Window, px};
 use yss_project_identity::OperationId;
 
 impl Workbench {
@@ -23,7 +23,7 @@ impl Workbench {
         let owner = cx.entity().downgrade();
         crate::modal_window::open(
             crate::text::t("importModal.title"),
-            gpui::size(px(780.), px(660.)),
+            gpui_kit::size(px(780.), px(660.)),
             window,
             cx,
             move |window, cx| {

@@ -1,15 +1,15 @@
 //! Semantic form presentation reuses native inputs and renders only the current mapping page.
 use super::{SemanticDialog, inputs::PAGE_VALUES};
 use crate::text::translate as t;
-use gpui::{Context, Div, IntoElement, Render, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::Input,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, Div, IntoElement, Render, Window, div, prelude::*};
 use yss_data_contract::{ConversionDomain, NumericConstraints, SemanticType};
 
 impl SemanticDialog {

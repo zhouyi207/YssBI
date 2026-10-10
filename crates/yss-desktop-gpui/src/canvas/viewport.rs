@@ -1,7 +1,7 @@
 //! Canvas coordinates are live; the workspace retains checkpoints only for reopening.
 use super::GraphCanvas;
 use crate::services::Viewport;
-use gpui::{Context, point, px};
+use gpui_kit::{Context, point, px};
 
 impl GraphCanvas {
     pub(crate) fn bind_viewport(&mut self, project_root: Option<String>) {

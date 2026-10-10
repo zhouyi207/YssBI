@@ -1,6 +1,6 @@
 //! A port's uncommitted text belongs to its native input, independently of graph decoration.
-use gpui::{App, Entity, Focusable, Pixels, Subscription, TextRun, Window, px};
-use gpui_component::input::InputState;
+use gpui_kit::component::input::InputState;
+use gpui_kit::{App, Entity, Focusable, Pixels, Subscription, TextRun, Window, px};
 use serde_json::Value;
 use yss_data_contract::SemanticType;
 use yss_graph_editor::projection::EditorPortModel;
@@ -81,7 +81,7 @@ impl Field {
             &[TextRun {
                 len: text.len(),
                 font: window.text_style().font(),
-                color: gpui::rgb(crate::appearance::TEXT).into(),
+                color: gpui_kit::rgb(crate::appearance::TEXT).into(),
                 background_color: None,
                 underline: None,
                 strikethrough: None,

@@ -1,10 +1,10 @@
 //! Platform window controls, sharing component icons and theme roles with the workbench.
-use gpui::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, Sizable, TITLE_BAR_HEIGHT};
+use gpui_kit::{
     App, ClickEvent, Decorations, Div, MouseButton, Stateful, Window, WindowControlArea, div,
     prelude::*,
 };
-use gpui_component::{ActiveTheme, Icon, Sizable, TITLE_BAR_HEIGHT};
-use gpui_kit_assets::IconName;
 
 pub(super) fn render(
     on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,

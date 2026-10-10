@@ -1,6 +1,6 @@
 use super::PluginViewPanel;
-use gpui::{App, AppContext, Context, Entity, Window};
-use gpui_component::input::{InputState, TextareaState};
+use gpui_kit::component::input::{InputState, TextareaState};
+use gpui_kit::{App, AppContext, Context, Entity, Window};
 use serde_json::{Map, Value};
 use yss_plugin_runtime::{NativeField, NativeInput, NativeView, PluginFailure};
 

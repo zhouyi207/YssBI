@@ -1,6 +1,6 @@
 //! Graph and diagnostic navigation change only canvas selection and viewport state.
 use super::{GraphCanvas, geometry};
-use gpui::{Bounds, Context, Window, point, px};
+use gpui_kit::{Bounds, Context, Window, point, px};
 use std::collections::BTreeSet;
 use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 

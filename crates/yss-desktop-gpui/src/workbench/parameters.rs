@@ -6,7 +6,7 @@ mod reveal;
 
 use super::{controls, graph_properties::GraphProperties};
 use field::{ParameterDraft, ParameterField};
-use gpui::{App, Context, Entity, EventEmitter, Render, Subscription, Window};
+use gpui_kit::{App, Context, Entity, EventEmitter, Render, Subscription, Window};
 use std::collections::BTreeMap;
 use yss_graph_editor::projection::{
     EditorDiagnosticModel, EditorParameterDisplay, EditorParameterGroupModel,
@@ -182,7 +182,7 @@ impl ParameterForm {
 impl EventEmitter<ParameterChange> for ParameterForm {}
 
 impl Render for ParameterForm {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         self.render_parameters(!(self.can_edit)(cx), cx)
     }
 }

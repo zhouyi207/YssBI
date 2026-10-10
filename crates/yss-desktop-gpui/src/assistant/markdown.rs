@@ -1,15 +1,15 @@
 //! Assistant code actions and resource links reuse the shared rich-text renderer.
 use super::ConversationPanel;
 use crate::{markdown::Markdown, project::resources::ResourceCatalog};
-use gpui::{
-    Context, ElementId, Overflow, SharedString, StyleRefinement, WeakEntity, Window, div,
-    prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable, WindowExt,
     clipboard::Clipboard,
     notification::Notification,
     text::{TextView, TextViewStyle},
+};
+use gpui_kit::{
+    Context, ElementId, Overflow, SharedString, StyleRefinement, WeakEntity, Window, div,
+    prelude::*, px,
 };
 use yss_project_identity::{ProjectResourceKind as Kind, ProjectResourceRef};
 

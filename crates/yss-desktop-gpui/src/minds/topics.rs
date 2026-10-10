@@ -1,6 +1,6 @@
 //! Structural intents and the selection that follows their successful receipt.
 use super::MindCanvas;
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_project_model::mind::{MindEdit, MindNode};
 
 pub(super) struct TopicSelection {

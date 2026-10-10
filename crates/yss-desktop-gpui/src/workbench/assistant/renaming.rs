@@ -1,7 +1,7 @@
 //! Rename the captured session; each form owns its draft and asynchronous outcome.
 use super::{Workbench, principal};
 use crate::workbench::name_form::NameForm;
-use gpui::{Context, Entity, Focusable, Window, px};
+use gpui_kit::{Context, Entity, Focusable, Window, px};
 use yss_application::harness::HarnessSessionError;
 use yss_harness_contract::HarnessSessionId;
 use yss_harness_core::HarnessError;
@@ -24,7 +24,7 @@ impl Workbench {
         let lifecycle = self.lifecycle;
         crate::modal_window::open(
             crate::text::t("native.workbench.renameSession"),
-            gpui::size(px(480.), px(270.)),
+            gpui_kit::size(px(480.), px(270.)),
             window,
             cx,
             move |window, cx| {

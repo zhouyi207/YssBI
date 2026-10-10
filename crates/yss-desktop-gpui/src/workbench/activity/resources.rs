@@ -2,13 +2,13 @@
 mod menu;
 
 use super::*;
-use gpui::{AnyElement, Div, Hsla, Stateful, WeakEntity};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     menu::ContextMenuExt,
     tooltip::Tooltip,
 };
+use gpui_kit::{AnyElement, Div, Hsla, Stateful, WeakEntity};
 use yss_node_catalog::ResourceBoundCreateArgs;
 
 pub(super) struct ResourceRows {
@@ -218,7 +218,9 @@ impl ActivityPanel {
                     ))
                     .opacity(0.)
                     .group_hover("activity-resource", |style| style.opacity(1.))
-                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
+                        cx.stop_propagation()
+                    })
                     .on_click(cx.listener(move |view, _, _, cx| {
                         cx.stop_propagation();
                         view.open_resource(&expected_button, index, cx);
@@ -242,7 +244,7 @@ impl ActivityPanel {
                     .build(window, cx)
                 })
                 .on_mouse_down(
-                    gpui::MouseButton::Left,
+                    gpui_kit::MouseButton::Left,
                     cx.listener(|_, _, _, cx| cx.emit(ActivityEvent::RefreshResources)),
                 )
             });

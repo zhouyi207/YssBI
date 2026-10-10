@@ -10,13 +10,13 @@ mod topics;
 use crate::services::NativeServices;
 use buffers::TopicBuffer;
 pub(crate) use commands::{MindSaveOutcome, MindSaveRequest};
-use gpui::{
-    App, Bounds, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels, Point, Window,
-    actions, point, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
     text::TextViewState,
+};
+use gpui_kit::{
+    App, Bounds, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels, Point, Window,
+    actions, point, px,
 };
 use layout::MindLayout;
 use std::{
@@ -182,7 +182,7 @@ impl BasePanel for MindCanvas {
     }
 }
 impl Panel for MindCanvas {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         format!(
             "{}{}",
             self.snapshot.path.name(),

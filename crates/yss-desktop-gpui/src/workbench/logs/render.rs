@@ -1,11 +1,11 @@
 //! Only visible rows are built; the toolbar and count share the same filtered indices.
 use super::*;
-use gpui::{Render, uniform_list};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme,
     menu::{ContextMenuExt, PopupMenuItem},
     tooltip::Tooltip,
 };
+use gpui_kit::{Render, uniform_list};
 
 impl Render for LogsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -38,7 +38,7 @@ impl Render for LogsPanel {
             .child(
                 div()
                     .id("log-status")
-                    .role(gpui::accesskit::Role::Status)
+                    .role(gpui_kit::accesskit::Role::Status)
                     .flex()
                     .flex_wrap()
                     .items_center()
@@ -145,7 +145,7 @@ fn log_row(
     };
     div()
         .id(entry.key.clone())
-        .role(gpui::accesskit::Role::ListItem)
+        .role(gpui_kit::accesskit::Role::ListItem)
         .aria_label(entry.preview.clone())
         .aria_selected(selected)
         .cursor_pointer()
@@ -211,7 +211,9 @@ fn log_row(
                 PopupMenuItem::new(crate::text::translate("native.logs.copyMessage"))
                     .icon(IconName::Copy)
                     .on_click(move |_, _, cx| {
-                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(message.to_string()))
+                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
+                            message.to_string(),
+                        ))
                     }),
             )
             .item(

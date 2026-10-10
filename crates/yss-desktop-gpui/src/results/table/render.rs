@@ -1,11 +1,11 @@
 use super::*;
-use gpui::{App, Context, IntoElement, Window, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon,
     table::{TableDelegate, TableState},
     tooltip::Tooltip,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{App, Context, IntoElement, Window, div, prelude::*};
 
 impl TableDelegate for ResultGrid {
     fn columns_count(&self, _: &App) -> usize {
@@ -47,7 +47,7 @@ impl TableDelegate for ResultGrid {
         );
         div()
             .id(("result-column", index))
-            .role(gpui::Role::ColumnHeader)
+            .role(gpui_kit::Role::ColumnHeader)
             .size_full()
             .flex()
             .items_center()
@@ -77,7 +77,7 @@ impl TableDelegate for ResultGrid {
         if self.row_numbers && index == 0 {
             return div()
                 .id(("result-row-number", row))
-                .role(gpui::Role::RowHeader)
+                .role(gpui_kit::Role::RowHeader)
                 .size_full()
                 .text_right()
                 .text_xs()

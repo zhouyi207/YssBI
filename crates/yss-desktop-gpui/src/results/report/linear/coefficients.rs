@@ -1,10 +1,10 @@
 use super::super::display;
 use super::*;
-use gpui::{App, Div, IntoElement, Window, div, prelude::*, px, relative};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
 };
+use gpui_kit::{App, Div, IntoElement, Window, div, prelude::*, px, relative};
 
 impl LinearReport {
     pub(super) fn load(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -48,7 +48,7 @@ impl LinearReport {
     }
 
     pub(super) fn refresh_tables(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.locale = gpui_component::locale().to_string();
+        self.locale = gpui_kit::component::locale().to_string();
         if self.report.summary.anova {
             self.anova = self
                 .presentation

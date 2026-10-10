@@ -18,8 +18,8 @@ use crate::{
         commands::{SettingsSaveOutcome, SettingsSaveRequest},
     },
 };
-use gpui::{App, Context, Entity, Window, WindowHandle};
-use gpui_component::Root;
+use gpui_kit::component::Root;
+use gpui_kit::{App, Context, Entity, Window, WindowHandle};
 use std::sync::Arc;
 use yss_application::runtime::ApplicationServices;
 
@@ -225,34 +225,34 @@ impl Workbench {
         let targets = self
             .graphs
             .values()
-            .filter_map(gpui::WeakEntity::upgrade)
+            .filter_map(gpui_kit::WeakEntity::upgrade)
             .filter(|view| view.read(cx).dirty())
             .map(SaveTarget::Graph)
             .chain(
                 self.documents
                     .values()
-                    .filter_map(gpui::WeakEntity::upgrade)
+                    .filter_map(gpui_kit::WeakEntity::upgrade)
                     .filter(|view| view.read(cx).dirty())
                     .map(SaveTarget::Document),
             )
             .chain(
                 self.minds
                     .values()
-                    .filter_map(gpui::WeakEntity::upgrade)
+                    .filter_map(gpui_kit::WeakEntity::upgrade)
                     .filter(|view| view.read(cx).dirty())
                     .map(SaveTarget::Mind),
             )
             .chain(
                 self.databases
                     .values()
-                    .filter_map(gpui::WeakEntity::upgrade)
+                    .filter_map(gpui_kit::WeakEntity::upgrade)
                     .filter(|view| view.read(cx).dirty())
                     .map(SaveTarget::Database),
             )
             .chain(
                 self.charts
                     .values()
-                    .filter_map(gpui::WeakEntity::upgrade)
+                    .filter_map(gpui_kit::WeakEntity::upgrade)
                     .filter(|view| view.read(cx).dirty())
                     .map(SaveTarget::Chart),
             )

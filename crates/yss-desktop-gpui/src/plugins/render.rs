@@ -1,7 +1,7 @@
 //! The editor hosts plugin details; sidebar and modal composition reuse the same owner.
 use super::PluginsPanel;
-use gpui::{Context, IntoElement, Render, Window, div, prelude::*};
-use gpui_component::ActiveTheme;
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*};
 
 impl Render for PluginsPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

@@ -1,12 +1,12 @@
 //! Conversation rows use the original directory identity and the workbench's mutation state.
 use super::*;
-use gpui::{AnyElement, Div, Stateful};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::{ContextMenuExt, PopupMenuItem},
     tooltip::Tooltip,
 };
+use gpui_kit::{AnyElement, Div, Stateful};
 
 pub(super) fn title(value: &str) -> &str {
     if value.is_empty() {
@@ -84,7 +84,9 @@ impl ActivityPanel {
                     .disabled(self.conversation_busy(cx))
                     .opacity(0.)
                     .group_hover("activity-conversation", |button| button.opacity(1.))
-                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
+                        cx.stop_propagation()
+                    })
                     .on_click(cx.listener(move |view, _, _, cx| {
                         cx.stop_propagation();
                         view.rename_row(&expected_rename, index, cx);

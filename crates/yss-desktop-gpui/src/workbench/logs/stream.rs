@@ -198,7 +198,7 @@ impl LogsPanel {
                 .0
                 .borrow()
                 .base_handle
-                .set_offset(gpui::point(offset.x, y));
+                .set_offset(gpui_kit::point(offset.x, y));
         }
         self.lease = Some(lease);
         cx.notify();

@@ -1,6 +1,6 @@
 //! Only remote web URLs reach the platform launcher.
-use gpui::{App, SharedString, Window};
-use gpui_component::{WindowExt, notification::Notification};
+use gpui_kit::component::{WindowExt, notification::Notification};
+use gpui_kit::{App, SharedString, Window};
 
 pub(crate) fn open_external(href: &SharedString, window: &mut Window, cx: &mut App) {
     let Ok(url) = url::Url::parse(href) else {

@@ -1,6 +1,6 @@
 //! Draft restoration and queued messages retain the choices captured with their text.
 use super::{ConversationEvent, ConversationPanel, DraftMessage, projection::TurnState};
-use gpui::{App, Context, Focusable, Window};
+use gpui_kit::{App, Context, Focusable, Window};
 
 impl ConversationPanel {
     pub(super) fn capture_message(&self, cx: &App) -> Option<DraftMessage> {

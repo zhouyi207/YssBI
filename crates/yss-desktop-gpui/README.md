@@ -5,11 +5,15 @@
 > Canonical owners: Cargo.toml、src/main.rs、src/window_chrome.rs、src/modal_window.rs、src/services.rs、src/projects/、src/workbench/、src/canvas/、src/documents/、src/markdown.rs、src/minds/、src/databases/、src/charts/、src/plots/、src/imports/、src/plugins/、src/settings/、src/text.rs、src/assistant/、src/file_commands.rs
 > Update when: 原生宿主能力、状态所有权、启动方式或验收范围变化时
 
-这是 workspace 的默认原生桌面入口，使用 GPUI Pre 0.3.8 和 GPUI Component 0.7.1。
-窗口及画布由 GPU 原生绘制，不启用组件库的 WebView feature。
-窗口手势由项目的 `window_chrome` 统一处理，组件依赖直接使用 crates.io 发布版。
+这是 workspace 的默认原生桌面入口，GPUI 系列只直接依赖 [GPUI Kit](https://docs.rs/gpui-kit/0.7.1/gpui_kit/) 0.7.1。
+核心 API 统一使用 `gpui_kit`，基础能力、组件和图标资源分别通过 `base`、`component`、`assets` 重导出访问；
+入口使用 `gpui_kit::application()`、`gpui_kit::init()` 和 `gpui_kit::assets::AllAssets`。
+Kit 默认启用 component/assets，现有 Tree-sitter 高亮 features 由 Kit 转发，不启用 WebView。
+GPUI Pre 0.3.8、Base/Component/Assets 0.7.1 仍是必要的传递依赖，根 Cargo profile 保留这些实际实现库的定向优化。
+平台 feature 由 Kit 管理，包含 font-kit、Wayland、X11 和仅影响 macOS 的 `runtime_shaders`。
+窗口及画布由 GPU 原生绘制，窗口手势由项目的 `window_chrome` 统一处理，依赖直接使用 crates.io 发布版。
 
-基础界面优先复用 `gpui-component`：标题区域使用原窗口图标与主题，菜单使用 `AppMenuBar`，工作台使用 `DockSkin` 与根 `DockArea`，
+基础界面优先复用 `gpui_kit::component`：标题区域使用原窗口图标与主题，菜单使用 `AppMenuBar`，工作台使用 `DockSkin` 与根 `DockArea`，
 数据库及结果使用 `Table`，设置导航使用 `Sidebar` / `SidebarMenu`，输入、菜单、按钮、
 Markdown 与常规表单使用对应原生控件。主题由 `appearance` 统一设置，不另建基础组件或布局模型。
 图、Mind 画布与专用预览保留本模块的绘制和交互；业务状态、校验及异步提交仍归现有 owner。
@@ -349,8 +353,8 @@ Tokio blocking pool 执行，指针事件不读取磁盘。
   无项目时在独立模态窗口呈现同一个根 DockArea；布局恢复校验持久 session 的项目归属。
   缓存释放和跨重启草稿保存仍待完善，不能以当前基本界面代替这些生命周期验收。
 - `main`：命令行参数、执行器、原生资源、窗口及快捷键；执行器存活到窗口循环结束。
-  图标统一来自 `gpui_kit_assets::IconName`，入口注册同库的 `AllAssets`，使完整枚举与嵌入的 SVG 资源对应；
-  渲染使用 `gpui_component::Icon` 或组件图标接口。聊天、图表、保存、运行、停止、图、数据库和表格均使用库内图标。
+  图标统一来自 `gpui_kit::assets::IconName`，入口注册同模块的 `AllAssets`，使完整枚举与嵌入的 SVG 资源对应；
+  渲染使用 `gpui_kit::component::Icon` 或组件图标接口。聊天、图表、保存、运行、停止、图、数据库和表格均使用库内图标。
   图标参数使用具体 `IconName`，不另建图标枚举、自有 SVG、路径映射或逐个追加的资源注册。
 - `modal_window`：每个 Root 的插件只持有直接模态子窗口、父窗口和待打开请求；父窗口激活后延后创建原生 Dialog，
   由平台保持父子关系和模态输入限制，相同弹窗的重复请求只聚焦已有窗口，新弹窗可以嵌套在当前模态窗口上。关闭父窗口一并释放子窗口，关闭子窗口恢复父窗口焦点。

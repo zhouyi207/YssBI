@@ -1,7 +1,7 @@
 //! Captured document saves preserve the edited snapshot even if disk persistence fails.
 use super::DocumentEditor;
 use crate::file_commands::{FileSaveOutcome, FileSaveRequest};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_project_model::doc::{DocDocument, DocEdit};
 
 pub(crate) type DocumentSaveRequest = FileSaveRequest<DocDocument>;
@@ -55,7 +55,7 @@ impl DocumentEditor {
         if self.refresh_again {
             self.refresh(window, cx);
         }
-        cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+        cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
         cx.emit(super::DocumentEvent::Changed);
         cx.notify();
     }

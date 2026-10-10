@@ -7,7 +7,7 @@ mod menu;
 
 use super::{GraphCanvas, presentation::State};
 use crate::appearance;
-use gpui::{Context, IntoElement, MouseButton, div, prelude::*, px, rgb};
+use gpui_kit::{Context, IntoElement, MouseButton, div, prelude::*, px, rgb};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_graph_editor::projection::{
     ConnectionDecision, EditorDiagnosticSeverity, EditorPortModel, EditorPortTypeState,
@@ -157,7 +157,7 @@ impl GraphCanvas {
         let tooltip_address = port.address.clone();
         let tooltip_owner = cx.entity().downgrade();
         div()
-            .id(gpui::SharedString::from(format!(
+            .id(gpui_kit::SharedString::from(format!(
                 "port-{}-{:?}",
                 port.address.node_id, port.address.port
             )))
@@ -213,7 +213,7 @@ impl GraphCanvas {
             )
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(move |view, event: &gpui::MouseDownEvent, window, cx| {
+                cx.listener(move |view, event: &gpui_kit::MouseDownEvent, window, cx| {
                     view.show_port_menu(menu_address.clone(), event.position, window, cx)
                 }),
             )

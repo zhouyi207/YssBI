@@ -1,13 +1,13 @@
 //! A graph tab before its first projection; it never invents an editable document.
-use gpui::{
-    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Task, Window, div,
-    prelude::*,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::Button,
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
     spinner::Spinner,
+};
+use gpui_kit::{
+    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Task, Window, div,
+    prelude::*,
 };
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ResourceRevision;
@@ -109,7 +109,7 @@ impl Render for Opening {
             .child(if self.failed {
                 div()
                     .id("graph-open-error")
-                    .role(gpui::accesskit::Role::Alert)
+                    .role(gpui_kit::accesskit::Role::Alert)
                     .flex()
                     .flex_col()
                     .items_center()
@@ -125,7 +125,7 @@ impl Render for Opening {
             } else {
                 div()
                     .id("graph-opening")
-                    .role(gpui::accesskit::Role::Status)
+                    .role(gpui_kit::accesskit::Role::Status)
                     .flex()
                     .items_center()
                     .gap_2()

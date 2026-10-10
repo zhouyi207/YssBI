@@ -1,10 +1,10 @@
 //! Menu layout operations mutate the existing DockArea without recreating editor entities.
 use super::{super::Workbench, WorkbenchPanel};
-use gpui::{App, Context, Window, px};
-use gpui_component::{
+use gpui_kit::component::{
     Placement,
     dock::{DockLayout, DockPlacement, InsertTarget, NodeId, PaneRef, PanelId},
 };
+use gpui_kit::{App, Context, Window, px};
 
 impl Workbench {
     pub(super) fn editor_split_target(&self, cx: &App) -> Option<(PanelId, NodeId)> {

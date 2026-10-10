@@ -6,8 +6,8 @@ use crate::{
     plots::cartesian::{CartesianData, CartesianKind, CartesianOptions, ScatterObservation},
     services::NativeServices,
 };
-use gpui::{AppContext, Context, Entity, Subscription, Window};
-use gpui_component::input::{InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::{AppContext, Context, Entity, Subscription, Window};
 use std::sync::Arc;
 use yss_application::{
     chart::PlotPoint,
@@ -90,7 +90,7 @@ pub(super) struct ResidualView {
     loading: bool,
     error: bool,
     generation: u64,
-    task: Option<gpui::Task<()>>,
+    task: Option<gpui_kit::Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
 

@@ -4,11 +4,11 @@ mod missing;
 mod replacement;
 
 use super::Workbench;
-use gpui::{App, AppContext, Context, WeakEntity, Window};
-use gpui_component::dock::{
+use gpui_kit::component::dock::{
     BasePanelView, DockAreaState, DockEvent, DockLayout, DockPlacement, PaneRef, Panel, PanelId,
     PanelInfo, PanelState, panel_handle, register_panel,
 };
+use gpui_kit::{App, AppContext, Context, WeakEntity, Window};
 use missing::MissingPanel;
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use yss_graph_document::GraphResourcePath;
@@ -123,9 +123,9 @@ impl Workbench {
             dock.set_center(DockLayout::tabs(), window, cx);
             dock.remove_dock(DockPlacement::Left, window, cx);
             dock.set_dock(DockPlacement::Right, right, window, cx);
-            dock.set_dock_size(DockPlacement::Right, gpui::px(300.), window, cx);
+            dock.set_dock_size(DockPlacement::Right, gpui_kit::px(300.), window, cx);
             dock.set_dock(DockPlacement::Bottom, bottom, window, cx);
-            dock.set_dock_size(DockPlacement::Bottom, gpui::px(220.), window, cx);
+            dock.set_dock_size(DockPlacement::Bottom, gpui_kit::px(220.), window, cx);
             if !dock.is_dock_open(DockPlacement::Right) {
                 dock.toggle_dock(DockPlacement::Right, window, cx);
             }

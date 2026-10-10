@@ -11,16 +11,16 @@ mod window;
 use crate::services::NativeServices;
 pub(super) use details::LogDetails;
 use entry::LogEntry;
-use gpui::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    UniformListScrollHandle, Window, div, prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Icon,
     dock::{BasePanel, Panel, PanelEvent},
     input::{InputEvent, InputState},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    UniformListScrollHandle, Window, div, prelude::*, px,
+};
 use std::{collections::VecDeque, rc::Rc, sync::Arc};
 use yss_logging::{LogDomain, LogLevel};
 
@@ -36,7 +36,7 @@ const LEVELS: [LogLevel; 5] = [
 
 pub(super) enum LogsEvent {
     Inspect(Entity<LogDetails>),
-    Clear(gpui::EntityId),
+    Clear(gpui_kit::EntityId),
 }
 
 pub struct LogsPanel {
@@ -58,10 +58,10 @@ pub struct LogsPanel {
     sequence: u64,
     epoch: u64,
     lease: Option<stream::LogLease>,
-    task: Option<gpui::Task<()>>,
+    task: Option<gpui_kit::Task<()>>,
     connecting: bool,
     error: Option<&'static str>,
-    _search_subscription: gpui::Subscription,
+    _search_subscription: gpui_kit::Subscription,
 }
 
 impl LogsPanel {

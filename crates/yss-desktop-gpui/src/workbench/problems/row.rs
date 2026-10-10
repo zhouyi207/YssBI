@@ -1,10 +1,10 @@
 use super::{ProblemsPanel, location};
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Icon,
     button::{Button, ButtonVariants},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use std::sync::Arc;
 use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorProjectionModel};
 
@@ -68,7 +68,7 @@ pub(super) fn render(
                                         .min_w_0()
                                         .max_w_full()
                                         .truncate()
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                         .child(label),
                                 )
                                 .child(

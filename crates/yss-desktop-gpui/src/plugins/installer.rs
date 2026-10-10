@@ -1,14 +1,14 @@
 //! Signed-package inspection and explicit native execution/signing consent.
 use super::{PluginKey, PluginsPanel, failure};
 use crate::services::NativeServices;
-use gpui::{
-    AppContext, Context, IntoElement, PathPromptOptions, Render, WeakEntity, Window, div,
-    prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
+};
+use gpui_kit::{
+    AppContext, Context, IntoElement, PathPromptOptions, Render, WeakEntity, Window, div,
+    prelude::*, px,
 };
 use std::{
     path::PathBuf,
@@ -164,7 +164,7 @@ impl Render for PackageInstaller {
                 .child(
                     div()
                         .text_lg()
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .child(format!("{} · {}", manifest.name, manifest.version)),
                 )
                 .child(div().text_sm().child(manifest.description.clone()))
@@ -334,7 +334,7 @@ impl PluginsPanel {
                             let services = view.services.clone();
                             crate::modal_window::open(
                                 crate::text::t("native.plugins.inspectPackage"),
-                                gpui::size(px(800.), px(740.)),
+                                gpui_kit::size(px(800.), px(740.)),
                                 window,
                                 cx,
                                 move |window, cx| {

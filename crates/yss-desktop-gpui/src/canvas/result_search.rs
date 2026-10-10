@@ -2,17 +2,17 @@
 mod list;
 
 use super::{CanvasEvent, GraphCanvas, ResultEntry};
-use gpui::{
-    Anchor, AnyElement, App, Context, Entity, Focusable, IntoElement, Subscription, Task,
-    WeakEntity, Window, div, prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     list::{List, ListState},
     popover::Popover,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    Anchor, AnyElement, App, Context, Entity, Focusable, IntoElement, Subscription, Task,
+    WeakEntity, Window, div, prelude::*, px,
+};
 use list::{Results, Source};
 use std::{collections::BTreeMap, rc::Rc};
 use yss_graph_execution::{plan::ResultCategory, result::ResultValidity};
@@ -102,8 +102,8 @@ impl Picker {
             if changed || locale != self.locale {
                 delegate.catalog = catalog.clone();
                 delegate.rebuild();
-                let selected =
-                    (!delegate.matches.is_empty()).then_some(gpui_component::IndexPath::default());
+                let selected = (!delegate.matches.is_empty())
+                    .then_some(gpui_kit::component::IndexPath::default());
                 list.set_selected_index(selected, window, cx);
                 cx.notify();
             } else if enable_changed {
@@ -185,7 +185,7 @@ impl Picker {
                         });
                     delegate.rebuild();
                     let selected = (!delegate.matches.is_empty())
-                        .then_some(gpui_component::IndexPath::default());
+                        .then_some(gpui_kit::component::IndexPath::default());
                     list.set_selected_index(selected, window, cx);
                     cx.notify();
                     refresh

@@ -1,6 +1,6 @@
 //! Capture control drafts once; successful typed edits acknowledge only their own inputs.
 use super::*;
-use gpui::EntityId;
+use gpui_kit::EntityId;
 use yss_project::GraphEditVersion;
 
 #[derive(Clone)]

@@ -2,7 +2,7 @@
 mod column;
 mod render;
 
-use gpui::{App, AppContext, Context, Entity, Subscription, Task, WeakEntity, Window};
+use gpui_kit::{App, AppContext, Context, Entity, Subscription, Task, WeakEntity, Window};
 use std::sync::Arc;
 use yss_application::graph::results::{ResultValueProjection, description};
 use yss_graph_document::{NodeId, PortAddress};
@@ -39,7 +39,7 @@ pub(super) struct NodeDescription {
     content: Content,
     expanded: bool,
     page: usize,
-    columns_scroll: gpui::ScrollHandle,
+    columns_scroll: gpui_kit::ScrollHandle,
     generation: u64,
     task: Option<Task<()>>,
 }
@@ -54,7 +54,7 @@ impl NodeDescription {
             content: Content::Unavailable,
             expanded: false,
             page: 0,
-            columns_scroll: gpui::ScrollHandle::new(),
+            columns_scroll: gpui_kit::ScrollHandle::new(),
             generation: 0,
             task: None,
         }
@@ -70,7 +70,7 @@ impl NodeDescription {
         self.content = Content::Unavailable;
         self.expanded = false;
         self.page = 0;
-        self.columns_scroll.set_offset(gpui::Point::default());
+        self.columns_scroll.set_offset(gpui_kit::Point::default());
         self.generation = self.generation.wrapping_add(1);
         self.task = None;
         cx.notify();
@@ -144,7 +144,7 @@ impl NodeDescription {
         self.generation = self.generation.wrapping_add(1);
         self.task = None;
         self.page = 0;
-        self.columns_scroll.set_offset(gpui::Point::default());
+        self.columns_scroll.set_offset(gpui_kit::Point::default());
         self.content = if reference.is_some() {
             Content::Unloaded
         } else {

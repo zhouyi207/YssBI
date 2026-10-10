@@ -8,8 +8,8 @@ use super::{
     activity::{ActivityEvent, ActivityPanel, ReadState},
 };
 use crate::assistant::{ConversationEvent, ConversationPanel, principal};
-use gpui::{AppContext, Context, Window, div, prelude::*, px};
-use gpui_component::dock::{DockPlacement, PaneRef, panel_handle};
+use gpui_kit::component::dock::{DockPlacement, PaneRef, panel_handle};
+use gpui_kit::{AppContext, Context, Window, div, prelude::*, px};
 use std::sync::Arc;
 use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, ActivityRowContent};
 use yss_harness_contract::{HarnessSessionId, HarnessSessionRecord};
@@ -134,11 +134,11 @@ impl Workbench {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui::Entity<ActivityPanel> {
+    ) -> gpui_kit::Entity<ActivityPanel> {
         if let Some(panel) = self
             .activities
             .get("assistant")
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
         {
             return panel;
         }
@@ -190,7 +190,7 @@ impl Workbench {
         let Some(panel) = self
             .activities
             .get("assistant")
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
         else {
             return;
         };
@@ -206,7 +206,7 @@ impl Workbench {
             let dock = self.dock.clone();
             crate::modal_window::open(
                 crate::text::t("panel.assistant"),
-                gpui::size(px(1160.), px(740.)),
+                gpui_kit::size(px(1160.), px(740.)),
                 window,
                 cx,
                 move |_, _| {
@@ -369,7 +369,10 @@ impl Workbench {
         self.present_panel(panel_handle(panel), DockPlacement::Center, window, cx);
         self.sync_active_conversation(cx);
     }
-    fn visible_conversation(&self, cx: &gpui::App) -> Option<gpui::Entity<ConversationPanel>> {
+    fn visible_conversation(
+        &self,
+        cx: &gpui_kit::App,
+    ) -> Option<gpui_kit::Entity<ConversationPanel>> {
         let mut active = None;
         let dock = self.dock.read(cx);
         if let Some(tree) = dock.layout(DockPlacement::Center) {
@@ -416,7 +419,7 @@ impl Workbench {
         if let Some(panel) = self
             .activities
             .get("assistant")
-            .and_then(gpui::WeakEntity::upgrade)
+            .and_then(gpui_kit::WeakEntity::upgrade)
         {
             panel.update(cx, |view, cx| {
                 view.set_active_resource(active.as_deref(), cx)

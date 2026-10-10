@@ -3,13 +3,13 @@ mod draft;
 use super::{ParameterForm, controls};
 use crate::text::translate;
 pub(in crate::workbench::parameters) use draft::ListDraft;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Input,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*, px};
 
 impl ParameterForm {
     pub(in crate::workbench::parameters) fn render_list_parameter(
@@ -44,7 +44,7 @@ impl ParameterForm {
                         ]
                         .into_iter()
                         .map(|(direction, icon, label)| {
-                            Button::new(gpui::SharedString::from(format!(
+                            Button::new(gpui_kit::SharedString::from(format!(
                                 "series-move-{index}-{row}-{direction}"
                             )))
                             .small()
@@ -70,7 +70,7 @@ impl ParameterForm {
                         }),
                     )
                     .child(
-                        Button::new(gpui::SharedString::from(format!(
+                        Button::new(gpui_kit::SharedString::from(format!(
                             "series-remove-{index}-{row}"
                         )))
                         .small()

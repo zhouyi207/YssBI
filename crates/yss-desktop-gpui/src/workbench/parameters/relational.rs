@@ -3,7 +3,7 @@ mod columns;
 mod predicate;
 use super::{ParameterForm, field::list::ListDraft};
 use columns::ColumnsDraft;
-use gpui::{AnyElement, Context, EntityId, Window};
+use gpui_kit::{AnyElement, Context, EntityId, Window};
 use predicate::FilterDraft;
 use serde_json::Value;
 use yss_graph_editor::projection::{EditorParameterConfiguration, EditorParameterModel};
@@ -47,7 +47,7 @@ impl RelationalDraft {
     pub fn value(
         &self,
         configuration: &EditorParameterConfiguration,
-        cx: &gpui::App,
+        cx: &gpui_kit::App,
     ) -> Result<Value, String> {
         match (self, configuration) {
             (

@@ -1,8 +1,8 @@
 //! Unsubmitted report choices; the parent result panel dispatches the Application use case.
 mod render;
 use super::ReportView;
-use gpui::{AppContext, Context, Entity, Subscription, Window};
-use gpui_component::input::{InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
+use gpui_kit::{AppContext, Context, Entity, Subscription, Window};
 use std::collections::BTreeSet;
 use yss_application::graph::results::report::{
     LinearSummaryOptions,
@@ -62,7 +62,7 @@ impl AdditionForm {
         }
     }
 
-    fn request(&self, cx: &gpui::App) -> LinearSummaryAddition {
+    fn request(&self, cx: &gpui_kit::App) -> LinearSummaryAddition {
         LinearSummaryAddition {
             contents: self.selected.clone(),
             acf_max_lag: self.acf_lag.read(cx).value().trim().parse().unwrap_or(0),

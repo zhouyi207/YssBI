@@ -30,10 +30,10 @@ use std::{
 };
 
 use gestures::Gesture;
-use gpui::{
+use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent};
+use gpui_kit::{
     App, Bounds, Context, EventEmitter, FocusHandle, Focusable, Pixels, Point, Window, point, px,
 };
-use gpui_component::dock::{BasePanel, Panel, PanelEvent};
 use yss_application::activity_panel::ActivityPanelDocument;
 use yss_graph_document::{ConnectionId, NodeId, NodePosition, PortAddress};
 use yss_graph_editor::projection::EditorProjectionModel;
@@ -69,8 +69,8 @@ pub enum CanvasEvent {
 
 struct Palette {
     point: Point<Pixels>,
-    view: gpui::Entity<palette::NodePalette>,
-    _subscription: gpui::Subscription,
+    view: gpui_kit::Entity<palette::NodePalette>,
+    _subscription: gpui_kit::Subscription,
 }
 
 pub struct GraphCanvas {
@@ -85,12 +85,12 @@ pub struct GraphCanvas {
     hovered_connection: Option<ConnectionId>,
     context_menu: Option<menu::CanvasMenu>,
     connection_click: Option<connections::ConnectionClick>,
-    read_task: Option<gpui::Task<()>>,
+    read_task: Option<gpui_kit::Task<()>>,
     offset: Point<Pixels>,
     zoom: f32,
     viewport_root: Option<String>,
     gesture: Option<Gesture>,
-    _activation: gpui::Subscription,
+    _activation: gpui_kit::Subscription,
     preview: BTreeMap<NodeId, NodePosition>,
     connection_layer: Rc<RefCell<connections::ConnectionLayer>>,
     presentation: Rc<presentation::Presentation>,
@@ -101,7 +101,7 @@ pub struct GraphCanvas {
     bounds: Rc<Cell<Bounds<Pixels>>>,
     palette: Option<Palette>,
     busy: bool,
-    refresh_task: Option<gpui::Task<()>>,
+    refresh_task: Option<gpui_kit::Task<()>>,
     refresh_failed: bool,
     refresh_pending: bool,
     resource_move: Option<loading::ResourceMove>,
@@ -307,17 +307,18 @@ impl BasePanel for GraphCanvas {
             cx.notify();
         }
     }
-    fn dump(&self, cx: &App) -> gpui_component::dock::PanelState {
-        let mut state = gpui_component::dock::PanelState::new(self.panel_name());
-        state.info =
-            gpui_component::dock::PanelInfo::Panel(serde_json::json!({"graphPath":self.path()}));
+    fn dump(&self, cx: &App) -> gpui_kit::component::dock::PanelState {
+        let mut state = gpui_kit::component::dock::PanelState::new(self.panel_name());
+        state.info = gpui_kit::component::dock::PanelInfo::Panel(
+            serde_json::json!({"graphPath":self.path()}),
+        );
         let _ = cx;
         state
     }
 }
 
 impl Panel for GraphCanvas {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
+    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         self.title_text()
     }
     fn inner_padding(&self, _: &App) -> bool {

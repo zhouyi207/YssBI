@@ -1,6 +1,6 @@
 //! Connection selection and commands belong to the same canvas as node gestures.
 use crate::canvas::{GraphCanvas, GraphCommand};
-use gpui::{Context, MouseButton, MouseDownEvent, Pixels, Point, Window};
+use gpui_kit::{Context, MouseButton, MouseDownEvent, Pixels, Point, Window};
 use std::{collections::BTreeSet, sync::Arc};
 use yss_graph_document::{ConnectionId, NodeId};
 use yss_graph_editor::{EditorGraphMutation, projection::EditorProjectionModel};

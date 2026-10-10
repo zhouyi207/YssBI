@@ -9,8 +9,8 @@ use crate::{
 };
 use choices::FilterMenu;
 pub(in crate::workbench::parameters) use draft::FilterDraft;
-use gpui::{AnyElement, Context, IntoElement, div, prelude::*};
-use gpui_component::{Disableable, Sizable, checkbox::Checkbox, input::Input};
+use gpui_kit::component::{Disableable, Sizable, checkbox::Checkbox, input::Input};
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use yss_graph_editor::projection::{EditorFilterLiteralType, EditorParameterConfiguration};
 use yss_node_protocol::dataframe::FilterOperator;
 

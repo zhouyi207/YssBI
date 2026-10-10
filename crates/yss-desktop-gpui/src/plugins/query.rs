@@ -1,6 +1,6 @@
 //! Each selected-plugin read checks the original installation identity before and after I/O.
 use super::{PluginKey, PluginsEvent, PluginsPanel, failure};
-use gpui::{Context, Window};
+use gpui_kit::{Context, Window};
 use yss_plugin_runtime::{
     PluginDiagnostic, PluginFailure, PluginManager, PluginStorageUsage, TaskHistoryPage,
     TaskSnapshot,

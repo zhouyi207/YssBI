@@ -1,18 +1,18 @@
 //! Sidebar projection of the shared plugin manager; it owns no plugin selection or reads.
 use super::{PluginKey, PluginsPanel, commands::PluginAction};
 use crate::appearance;
-use gpui::{
-    AnyElement, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
-    Subscription, Window, div, prelude::*, px, uniform_list,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
     input::Input,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    AnyElement, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
+    Subscription, Window, div, prelude::*, px, uniform_list,
+};
 use std::sync::Arc;
 use yss_application::activity_panel::{ActivityItem, ActivityRowContent, plugins_activity_panel};
 
@@ -206,7 +206,7 @@ impl PluginsPanel {
                         let key = key.clone();
                         let selected = view.selected.as_ref() == Some(&key);
                         div()
-                            .id(gpui::SharedString::from(key.id.clone()))
+                            .id(gpui_kit::SharedString::from(key.id.clone()))
                             .h(px(88.))
                             .px_3()
                             .py_2()
@@ -222,7 +222,7 @@ impl PluginsPanel {
                             .child(
                                 div()
                                     .text_sm()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .truncate()
                                     .child(name.clone()),
                             )

@@ -2,14 +2,14 @@
 pub(in crate::workbench) mod sizing;
 
 use crate::{assistant::ConversationPanel, workbench::dock::EmptyEditor};
-use gpui::{App, AppContext, Axis, Context, Focusable, Window};
-use gpui_component::{
+use gpui_kit::component::{
     Placement,
     dock::{
         BasePanelView, DockArea, DockLayout, DockPlacement, InsertTarget, NodeId, PaneNode,
         PaneRef, PanelId, panel_handle,
     },
 };
+use gpui_kit::{App, AppContext, Axis, Context, Focusable, Window};
 use sizing::default_width;
 use std::{any::TypeId, sync::Arc};
 

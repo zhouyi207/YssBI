@@ -1,6 +1,6 @@
 //! Index immutable projection facts once; format only the port whose tooltip is opened.
-use gpui::{AnyView, App, AppContext, WeakEntity, div, prelude::*, px};
-use gpui_component::tooltip::Tooltip;
+use gpui_kit::component::tooltip::Tooltip;
+use gpui_kit::{AnyView, App, AppContext, WeakEntity, div, prelude::*, px};
 use std::{collections::BTreeMap, sync::Arc};
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::PortAddress;

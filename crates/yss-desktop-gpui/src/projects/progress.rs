@@ -1,6 +1,8 @@
 //! Display the current native project step; Application still owns commit and cancellation.
-use gpui::{App, AppContext, Context, Entity, IntoElement, Render, Task, Window, div, prelude::*};
-use gpui_component::{ActiveTheme, Sizable, progress::Progress, tooltip::Tooltip};
+use gpui_kit::component::{ActiveTheme, Sizable, progress::Progress, tooltip::Tooltip};
+use gpui_kit::{
+    App, AppContext, Context, Entity, IntoElement, Render, Task, Window, div, prelude::*,
+};
 use tokio::sync::watch;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -77,7 +79,7 @@ impl Render for ProjectProgress {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("project-progress")
-            .role(gpui::accesskit::Role::Status)
+            .role(gpui_kit::accesskit::Role::Status)
             .aria_label(self.stage.label())
             .w_full()
             .min_w_0()

@@ -1,12 +1,12 @@
 //! Paged, read-only columns from the chart editor's accepted metadata.
 use super::ChartEditor;
-use gpui::{Context, IntoElement, div, prelude::*};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     tooltip::Tooltip,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{Context, IntoElement, div, prelude::*};
 
 pub(in crate::charts) const PAGE_COLUMNS: usize = 50;
 
@@ -15,7 +15,7 @@ impl ChartEditor {
         let mut view = div().flex().flex_col().min_w_0().gap_2().child(
             div()
                 .text_xs()
-                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                 .child(crate::text::translate("chartsSidebar.columns")),
         );
         if let Some(meta) = &self.meta {

@@ -1,6 +1,6 @@
 //! Product links match react/src/shared/appLinks.ts.
-use gpui::{App, Window, div, prelude::*, px, size};
-use gpui_component::button::{Button, ButtonVariants};
+use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::{App, Window, div, prelude::*, px, size};
 
 const REPOSITORY: &str = "https://github.com/zhouyi207/YssBI";
 

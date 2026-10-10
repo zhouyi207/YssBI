@@ -1,15 +1,15 @@
 //! Citation display state lives with the visible card; knowledge owners validate every read.
 use super::{ConversationEvent, ConversationPanel};
-use gpui::{
-    App, Context, IntoElement, Render, RenderOnce, SharedString, Task, WeakEntity, Window, div,
-    prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
 };
-use gpui_kit_assets::IconName;
+use gpui_kit::{
+    App, Context, IntoElement, Render, RenderOnce, SharedString, Task, WeakEntity, Window, div,
+    prelude::*, px,
+};
 use yss_harness_contract::{KnowledgeCitation, ProjectResourceRef};
 
 #[derive(IntoElement)]

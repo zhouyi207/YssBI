@@ -1,10 +1,12 @@
 //! The first window owns service initialization until the workbench can take over.
 use crate::{services::NativeServices, text, window_chrome, workbench::Workbench};
-use gpui::{AppContext, Context, Entity, IntoElement, Render, Task, Window, div, prelude::*, px};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     progress::Progress,
+};
+use gpui_kit::{
+    AppContext, Context, Entity, IntoElement, Render, Task, Window, div, prelude::*, px,
 };
 use std::path::PathBuf;
 use tokio::{runtime::Handle, task::AbortHandle};
@@ -91,9 +93,9 @@ impl Render for Startup {
         let mut content = div()
             .id("startup-status")
             .role(if failed {
-                gpui::accesskit::Role::Alert
+                gpui_kit::accesskit::Role::Alert
             } else {
-                gpui::accesskit::Role::Status
+                gpui_kit::accesskit::Role::Status
             })
             .aria_label(label.clone())
             .w_full()
