@@ -274,6 +274,23 @@ impl Render for GraphCanvas {
                         })),
                 ),
             )
+            .when(
+                self.resource_move.is_some() && !self.refresh_failed,
+                |view| {
+                    view.child(
+                        div()
+                            .absolute()
+                            .top_2()
+                            .left_2()
+                            .right_2()
+                            .p_2()
+                            .rounded_md()
+                            .bg(rgb(appearance::SURFACE))
+                            .text_sm()
+                            .child(crate::text::t("native.canvas.loadingRenamedGraph")),
+                    )
+                },
+            )
             .when(self.refresh_failed, |view| {
                 view.child(
                     div()

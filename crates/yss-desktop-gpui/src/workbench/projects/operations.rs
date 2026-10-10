@@ -323,6 +323,7 @@ impl Workbench {
         self.databases.clear();
         self.result_panels.clear();
         self.opening.clear();
+        self.graph_openings.clear();
         self.subscriptions.clear();
         self.activities.clear();
         self.layout_task = None;

@@ -286,6 +286,10 @@ impl GraphCanvas {
     }
 
     fn install_response(&mut self, response: GraphEditResponse, cx: &mut Context<Self>) -> bool {
+        if self.resource_move.is_some() {
+            self.refresh_pending = true;
+            return false;
+        }
         if let Err(_error) = self.graph.install_edit(response) {
             self.error = Some("无法更新图状态，请重新打开图。".into());
             return false;

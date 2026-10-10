@@ -96,6 +96,7 @@ pub struct GraphCanvas {
     refresh_task: Option<gpui::Task<()>>,
     refresh_failed: bool,
     refresh_pending: bool,
+    resource_move: Option<loading::ResourceMove>,
     error: Option<String>,
     execution: execution::ExecutionView,
 }
@@ -149,6 +150,7 @@ impl GraphCanvas {
             refresh_task: None,
             refresh_failed: false,
             refresh_pending: false,
+            resource_move: None,
             error: None,
             execution: Default::default(),
         };
@@ -158,7 +160,7 @@ impl GraphCanvas {
     }
 
     pub fn path(&self) -> &str {
-        self.graph.projection.graph_path.as_str()
+        self.resource_path().as_str()
     }
 
     pub(crate) fn command_error(&self) -> Option<&str> {
@@ -170,7 +172,7 @@ impl GraphCanvas {
     }
 
     pub(crate) fn can_edit(&self) -> bool {
-        !self.busy && !self.refresh_failed
+        !self.busy && !self.refresh_failed && self.resource_move.is_none()
     }
 
     pub fn busy(&self) -> bool {

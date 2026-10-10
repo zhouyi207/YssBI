@@ -1,3 +1,5 @@
+mod resources;
+
 use gpui::AppContext;
 use gpui::{Context, Window};
 use gpui_component::dock::DockPlacement;
@@ -9,6 +11,13 @@ use crate::{
     canvas::{CanvasEvent, GraphCanvas},
     project::OpenedGraph,
 };
+
+pub(super) struct Opening {
+    node: Option<String>,
+    intent: Option<String>,
+    revision: Option<yss_project_identity::ResourceRevision>,
+    _task: gpui::Task<()>,
+}
 
 impl Workbench {
     pub(super) fn open_graph(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
@@ -47,6 +56,17 @@ impl Workbench {
         if self.busy || self.closing {
             return;
         }
+        self.start_graph_read(path, node, intent, window, cx);
+    }
+
+    fn start_graph_read(
+        &mut self,
+        path: String,
+        node: Option<String>,
+        intent: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(project) = &self.project else {
             return;
         };
@@ -65,7 +85,7 @@ impl Workbench {
             }
             return;
         }
-        if !self.opening.insert(path.clone()) {
+        if self.graph_openings.contains_key(&path) {
             if let Some(id) = intent {
                 self.finish_intent(&id, false, window, cx);
             }
@@ -76,7 +96,6 @@ impl Workbench {
         let graph_path = match GraphResourcePath::new(path.clone()) {
             Ok(path) => path,
             Err(_) => {
-                self.opening.remove(&path);
                 self.error = Some("图路径无效".into());
                 cx.notify();
                 if let Some(id) = intent {
@@ -85,13 +104,16 @@ impl Workbench {
                 return;
             }
         };
-        let request = OpenGraphRequest::new(identity.clone(), graph_path, 0, "zh-CN");
+        let language = crate::text::locale();
+        let request = OpenGraphRequest::new(identity.clone(), graph_path, 0, language);
         let task = self.services.run(move |services| {
             Ok(OpenedGraph::from_open(
                 services.application.open_graph(request)?,
             ))
         });
-        cx.spawn_in(window, async move |view, cx| {
+        let source = path.clone();
+        let revision = self.indexed_graph_revision(&path);
+        let delivery = cx.spawn_in(window, async move |view, cx| {
             let result = task
                 .await
                 .map_err(anyhow::Error::from)
@@ -105,7 +127,14 @@ impl Workbench {
                 {
                     return;
                 }
-                view.opening.remove(&path);
+                let Some(opening) = view.graph_openings.remove(&path) else {
+                    return;
+                };
+                let Opening { node, intent, .. } = opening;
+                if language != crate::text::locale() {
+                    view.start_graph_read(path, node, intent, window, cx);
+                    return;
+                }
                 let applied = match result {
                     Ok(graph) => view.install_graph(graph, window, cx).is_some_and(|graph| {
                         graph.update(cx, |graph, cx| {
@@ -126,8 +155,16 @@ impl Workbench {
                 }
                 cx.notify();
             });
-        })
-        .detach();
+        });
+        self.graph_openings.insert(
+            source,
+            Opening {
+                node,
+                intent,
+                revision,
+                _task: delivery,
+            },
+        );
     }
 
     pub(super) fn install_graph(
@@ -136,6 +173,19 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<gpui::Entity<GraphCanvas>> {
+        if let Some(canvas) = self
+            .graphs
+            .get(graph.projection.graph_path.as_str())
+            .and_then(gpui::WeakEntity::upgrade)
+        {
+            self.present_panel(
+                gpui_component::dock::panel_handle(canvas.clone()),
+                DockPlacement::Center,
+                window,
+                cx,
+            );
+            return Some(canvas);
+        }
         let catalog = self
             .project
             .as_ref()

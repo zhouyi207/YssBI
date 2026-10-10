@@ -11,6 +11,35 @@ pub(in crate::canvas) struct PortEdit {
 }
 
 impl GraphCanvas {
+    pub(in crate::canvas) fn rebind_moved_port_inputs(
+        &mut self,
+        base: GraphEditVersion,
+        previous: &crate::canvas::ports::details::Details,
+    ) {
+        let version = self.graph.editing.version;
+        if version.session_id != base.session_id {
+            return;
+        }
+        for (address, field) in &mut self.port_inputs.fields {
+            if !field.dirty || field.version != base {
+                continue;
+            }
+            let before = previous.port(address);
+            let after = self
+                .port_details
+                .as_ref()
+                .and_then(|ports| ports.port(address));
+            // A verified rename may advance the input's basis only while its source is unchanged.
+            if let (Some(before), Some(after)) = (before, after)
+                && eligible(before) == Some(field.kind)
+                && eligible(after) == Some(field.kind)
+                && before.input == after.input
+            {
+                field.version = version;
+            }
+        }
+    }
+
     pub(in crate::canvas) fn commit_port_inputs_before(
         &mut self,
         window: &mut Window,

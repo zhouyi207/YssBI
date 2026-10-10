@@ -108,6 +108,7 @@ impl Workbench {
                 self.refresh_minds(window, cx);
             }
             NativeEvent::Resource(mutation) if mutation.project_instance_id == project.identity => {
+                self.accept_graph_resources(&mutation, window, cx);
                 self.refresh_project(window, cx);
                 self.refresh_graphs(cx);
                 for delta in &mutation.deltas {

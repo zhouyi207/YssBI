@@ -5,7 +5,8 @@
       "portTypeConflict": "Type conflict",
       "viewportLoadFailed": "Could not restore canvas views. The default view is shown.",
       "viewportSaveFailed": "Could not save the canvas view. It may not be restored when reopened.",
-      "refreshFailed": "Could not refresh the graph. Editing is paused. Please retry."
+      "refreshFailed": "Could not refresh the graph. Editing is paused. Please retry.",
+      "loadingRenamedGraph": "Loading the renamed graph…"
     }
   },
   "common": {

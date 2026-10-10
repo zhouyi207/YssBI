@@ -4,7 +4,6 @@ use super::super::name_form::NameForm;
 use super::ResourceAction;
 use gpui::{ClipboardItem, Context, Entity, Window};
 use gpui_component::{WindowExt, button::ButtonVariant};
-use yss_application::graph::open::OpenGraphRequest;
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
@@ -59,7 +58,7 @@ impl Workbench {
                 cx.notify();
                 return;
             }
-            revision = graph.graph.editing.version.revision;
+            revision = graph.resource_revision();
         }
         let Ok(path) = GraphResourcePath::new(path) else {
             return;
@@ -174,11 +173,6 @@ impl Workbench {
                 ResourceAction::CopyPath => unreachable!(),
             };
             let path = match action {
-                ResourceAction::Rename => receipt
-                    .moves
-                    .iter()
-                    .find(|moved| moved.from.as_ref() == request.path.as_str())
-                    .map(|moved| moved.to.to_string()),
                 ResourceAction::Duplicate => {
                     receipt
                         .deltas
@@ -194,25 +188,8 @@ impl Workbench {
                 }
                 _ => None,
             };
-            publisher.publish_resource(receipt);
-            let language = crate::text::locale();
-            let projection = if matches!(action, ResourceAction::Rename)
-                && let Some(path) = &path
-            {
-                application
-                    .open_graph(OpenGraphRequest::new(
-                        request.project.clone(),
-                        GraphResourcePath::new(path.clone())?,
-                        0,
-                        language,
-                    ))
-                    .map(|receipt| Some(crate::project::OpenedGraph::from_open(receipt)))
-                    .map_err(anyhow::Error::from)
-            } else {
-                Ok(None)
-            };
-            // Publication succeeded even if its replacement view could not be read.
-            Ok((path, projection))
+            publisher.publish_resource(receipt.clone());
+            Ok((receipt, path))
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job
@@ -238,67 +215,13 @@ impl Workbench {
                     window,
                     cx,
                 );
-                if let (Some(root), Ok((path, _))) = (&view.layout_root, &result) {
-                    let destination = match action {
-                        ResourceAction::Rename => path.as_deref().map(Some),
-                        ResourceAction::Delete => Some(None),
-                        _ => None,
-                    };
-                    if let Some(destination) = destination {
-                        view.services.layouts.remap_viewport(
-                            root,
-                            target.path.as_str(),
-                            destination,
-                        );
-                    }
-                }
                 match result {
-                    Ok((path, projection)) => match action {
-                        ResourceAction::Rename => {
-                            let canvas = view
-                                .graphs
-                                .remove(target.path.as_str())
-                                .and_then(|canvas| canvas.upgrade());
-                            match (path, projection) {
-                                (Some(path), Ok(Some(graph))) => {
-                                    if let Some(canvas) = canvas {
-                                        canvas.update(cx, |canvas, cx| {
-                                            canvas.install_projection(graph, cx)
-                                        });
-                                        view.graphs.insert(path, canvas.downgrade());
-                                    } else {
-                                        view.install_graph(graph, window, cx);
-                                    }
-                                }
-                                (path, _) => {
-                                    if let Some(canvas) = canvas {
-                                        view.retire_graph(canvas, window, cx);
-                                    }
-                                    if let Some(path) = path {
-                                        view.open_graph(path, window, cx);
-                                    }
-                                    view.error = Some(crate::text::translate(
-                                        "native.workbench.renamedGraphUnavailable",
-                                    ));
-                                }
-                            }
+                    Ok((receipt, path)) => {
+                        view.accept_graph_resources(&receipt, window, cx);
+                        if let Some(path) = path {
+                            view.open_graph(path, window, cx);
                         }
-                        ResourceAction::Duplicate => {
-                            if let Some(path) = path {
-                                view.open_graph(path, window, cx);
-                            }
-                        }
-                        ResourceAction::Delete => {
-                            if let Some(canvas) = view
-                                .graphs
-                                .remove(target.path.as_str())
-                                .and_then(|canvas| canvas.upgrade())
-                            {
-                                view.retire_graph(canvas, window, cx);
-                            }
-                        }
-                        ResourceAction::CopyPath => {}
-                    },
+                    }
                     Err(_) => view.refresh_project(window, cx),
                 }
                 view.persist_layout(cx);
@@ -307,30 +230,5 @@ impl Workbench {
         })
         .detach();
         cx.notify();
-    }
-
-    fn retire_graph(
-        &mut self,
-        canvas: gpui::Entity<crate::canvas::GraphCanvas>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self
-            .details
-            .read(cx)
-            .graph()
-            .is_some_and(|current| current.entity_id() == canvas.entity_id())
-        {
-            self.details.update(cx, |details, cx| details.clear(cx));
-            self.problems.update(cx, |problems, cx| problems.clear(cx));
-            self.output
-                .update(cx, |output, cx| output.set_graph(None, cx));
-            self.results.update(cx, |results, cx| {
-                results.set_graph(None);
-                cx.notify();
-            });
-        }
-        self.dock
-            .update(cx, |dock, cx| dock.remove_panel(canvas, window, cx));
     }
 }

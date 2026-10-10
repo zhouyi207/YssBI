@@ -1,8 +1,65 @@
 //! Projection reads retain the last view and drafts; only successful reads restore editing.
 use super::{CanvasEvent, GraphCanvas};
 use gpui::Context;
+use yss_graph_document::GraphResourcePath;
+use yss_project::GraphEditVersion;
+use yss_project_identity::ResourceRevision;
+
+pub(super) struct ResourceMove {
+    path: GraphResourcePath,
+    revision: ResourceRevision,
+    draft_base: Option<GraphEditVersion>,
+}
 
 impl GraphCanvas {
+    pub(super) fn resource_path(&self) -> &GraphResourcePath {
+        self.resource_move
+            .as_ref()
+            .map_or(&self.graph.projection.graph_path, |moved| &moved.path)
+    }
+
+    pub(crate) fn resource_revision(&self) -> ResourceRevision {
+        self.resource_move
+            .as_ref()
+            .map_or(self.graph.editing.version.revision, |moved| moved.revision)
+    }
+
+    pub(crate) fn move_resource(
+        &mut self,
+        path: GraphResourcePath,
+        from: ResourceRevision,
+        to: ResourceRevision,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.resource_revision() > from {
+            return false;
+        }
+        let draft_base = if let Some(moved) = &self.resource_move {
+            (moved.revision == from)
+                .then_some(moved.draft_base)
+                .flatten()
+        } else {
+            (self.graph.editing.version.revision == from).then_some(self.graph.editing.version)
+        };
+        self.refresh_task = None;
+        self.cancel_gesture();
+        self.palette = None;
+        self.resource_move = Some(ResourceMove {
+            path,
+            revision: to,
+            draft_base,
+        });
+        self.refresh_failed = false;
+        self.refresh(cx);
+        cx.emit(CanvasEvent::Projection {
+            nodes: self.selected.iter().copied().collect(),
+            projection: self.graph.projection.clone(),
+        });
+        cx.emit(gpui_component::dock::PanelEvent::LayoutChanged);
+        cx.notify();
+        true
+    }
+
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         if self.busy || self.refresh_task.is_some() {
             self.refresh_pending = true;
@@ -10,11 +67,11 @@ impl GraphCanvas {
         }
         self.refresh_pending = false;
         let version = self.graph.editing.version;
-        let path = self.graph.projection.graph_path.clone();
+        let path = self.resource_path().clone();
         let language = crate::text::locale();
         let request = yss_application::graph::open::OpenGraphRequest::new(
             self.graph.project.clone(),
-            self.graph.projection.graph_path.clone(),
+            path.clone(),
             0,
             language,
         );
@@ -30,7 +87,7 @@ impl GraphCanvas {
                 .and_then(|result| result);
             let _ = view.update(cx, |view, cx| {
                 view.refresh_task = None;
-                if view.graph.projection.graph_path != path {
+                if view.resource_path() != &path {
                     return;
                 }
                 if view.busy
@@ -40,10 +97,10 @@ impl GraphCanvas {
                     view.refresh_pending = true;
                 } else {
                     match result {
-                        Ok(graph) => {
+                        Ok(graph) if view.accepts_projection(&graph) => {
                             view.install_projection(graph, cx);
                         }
-                        Err(_error) => {
+                        _ => {
                             tracing::warn!(
                                 code = "native_graph_refresh_failed",
                                 "Native graph refresh failed"
@@ -64,17 +121,31 @@ impl GraphCanvas {
         cx.notify();
     }
 
-    pub(crate) fn install_projection(
-        &mut self,
-        graph: crate::project::OpenedGraph,
-        cx: &mut Context<Self>,
-    ) {
+    fn accepts_projection(&self, graph: &crate::project::OpenedGraph) -> bool {
+        graph.project == self.graph.project
+            && &graph.projection.graph_path == self.resource_path()
+            && self.resource_move.as_ref().is_none_or(|moved| {
+                graph.editing.version.revision >= moved.revision
+                    && graph.editing.version.session_id == self.graph.editing.version.session_id
+            })
+    }
+
+    fn install_projection(&mut self, graph: crate::project::OpenedGraph, cx: &mut Context<Self>) {
         self.refresh_task = None;
         self.refresh_failed = false;
+        let draft_base = self.resource_move.take().and_then(|moved| {
+            (graph.editing.version.revision == moved.revision)
+                .then_some(moved.draft_base)
+                .flatten()
+        });
+        let previous_ports = self.port_details.clone();
         self.graph.replace(graph);
         *self.connection_layer.borrow_mut() =
             super::connections::ConnectionLayer::new(&self.graph.projection);
         self.refresh_presentation();
+        if let (Some(base), Some(previous_ports)) = (draft_base, previous_ports) {
+            self.rebind_moved_port_inputs(base, &previous_ports);
+        }
         self.cancel_gesture();
         self.retain_located();
         self.selected.retain(|id| {
