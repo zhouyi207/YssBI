@@ -794,6 +794,10 @@ estimates are retained where defined; nonidentifiable coefficients fail and
 unavailable inference uses `None`. `association::ridit` compares independent ordered
 samples and uses tie-corrected rank inference. Input scans and numerical loops check
 execution control; sorts and Linalg decompositions are checked at their boundaries.
+Association confidence/coverage admission reuses `inference::intervals`; Pearson and
+partial Fisher intervals, Kappa intervals and Bland–Altman coverage use its central
+Normal critical value directly. This retains representable widths at tiny positive
+confidence and finite results near one without first rounding a Normal CDF.
 Input failures use Contract's shared violations: confidence/coverage and unsupported
 inference/null-distribution options are `ParameterOutOfRange`; incompatible column
 layouts are `ShapeMismatch`; insufficient samples are `EmptyInput`; out-of-domain

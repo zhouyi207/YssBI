@@ -104,7 +104,7 @@ Meta 的上述版本也涵盖按需 moment trace 与稳定异质性尺度恢复�
 Student-t 临界值的实际消费者统一到现有有界 SCI owner：线性及 Prais 拟合、
 FE/LSDV/FD/Between 和 TWFE 报告、small IV 系数及第一阶段表、ADF、对数曲线、
 调查均值/比例、Bland–Altman、系数图、条件效应和 t 型 Power。
-调查均值/比例与 Bland–Altman 使用 revision 5，系数图使用 revision 6，
+调查均值/比例使用 revision 5，Bland–Altman 与系数图使用 revision 6，
 Moderation 两个入口使用 revision 8；均值差、配对及整群 Power 使用 revision 7，
 TWFE 使用 revision 11。置信度直接传入，单侧尾概率保留方向及原始精度；
 Moderation 共用一次临界值，点估计读取不再构造弃用的推断。
@@ -113,7 +113,7 @@ MacKinnon 校准和非 t 型 Power 计算保持其数值契约与能力版本。
 大自由度 Student-t 概率与临界值复用 SCI 的同一密度准备和有界积分，
 避免不完全 Beta 参数舍入及大 log-Gamma 相减导致的 p 值错误。双侧与单侧
 在 log 空间投影后只舍入一次；零效应 t 型 Power 保持请求的 α。
-实际返回 Student-t 概率的 61 个入口更新能力版本，Pearson/Partial/Spearman 使用 revision 5。
+实际返回 Student-t 概率的入口按真实注册路径维护能力版本，Spearman 使用 revision 5。
 仅返回区间、采样、正态推断或已拟合预测的入口保留其能力版本。
 能力指纹涵盖共享输入错误契约、实际尾概率及系数/协方差坐标恢复。
 
@@ -298,6 +298,11 @@ ACF/PACF 与 Hausman 使用 typed report，避免先经 `json!` 把数值错误�
 已经构造的 JSON 无法恢复被抹去的数值类型，生成这类报告的 owner 必须在编码前完成检查。
 
 相关与一致性适配位于 `statistics::association`。数值列复用 `columns`，Ordinal/分类列复用 `series::columns` 和语义元数据；配对列按位置读取并验证长度，Ridit 的独立样本分别读取。加权 Kappa 要求明确类别顺序，宽整数类别通过精确比较编码并在输出时恢复；不以 Float64 合并标签。Kappa 和 rwg 的条件参数在声明、内核可选性与执行校验中保持一致，inactive 参数不进入调用。排序、残差化、置换、方差与推断属于 SCI；调用前按实际规模检查工作区（包括 Cohen Kappa 的类别平方表和判别分析的类别协方差），执行中转发取消/deadline。
+关联节点直接在 `statistics::association::register` 维护能力版本，中央 `install` 表不持有这些节点的条目。
+Pearson、Partial 和 Bland–Altman 使用 revision 6，Kappa 使用 revision 5；
+这些入口复用 SCI 中心置信度计算，保留极小正置信度的区间宽度及接近 1 的有限结果。
+Spearman 使用 revision 5，涵盖共享 Student-t 尾概率；ICC、Kendall、Ridit 使用 revision 4，
+Kendall W、rwg 使用 revision 3。
 共享分类编码使用精确标量排序索引，避免逐行线性扫描全部类别，保留首次出现与显式有序元数据顺序。
 
 ## 注册与扩展

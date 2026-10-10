@@ -254,11 +254,7 @@ pub(super) fn install(
                 | "yssbi.statistics.timeseries.garch"
                 | "yssbi.statistics.timeseries.egarch"
                 | "yssbi.statistics.timeseries.gjr_garch"
-                | "yssbi.statistics.association.bland_altman"
-                | "yssbi.statistics.survey.mean_proportion"
-                | "yssbi.statistics.association.partial"
-                | "yssbi.statistics.association.pearson"
-                | "yssbi.statistics.association.spearman" => 5,
+                | "yssbi.statistics.survey.mean_proportion" => 5,
                 _ if id.starts_with("yssbi.statistics.survival.")
                     && id != "yssbi.statistics.survival.competing_risks" =>
                 {

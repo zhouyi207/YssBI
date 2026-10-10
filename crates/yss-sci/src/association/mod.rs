@@ -6,6 +6,7 @@ pub use agreement::{bland_altman, icc, kappa, kendall_w, rwg};
 pub use correlation::{kendall, partial, pearson, spearman};
 pub use ridit::ridit;
 
+use crate::inference::intervals::{critical, validate_confidence as level};
 use statrs::distribution::{ContinuousCDF, Normal, StudentsT};
 use yss_sci_contract::association::{ConfidenceInterval, TestInference};
 use yss_sci_contract::execution::{
@@ -129,13 +130,6 @@ fn coefficient(x: &[f64], y: &[f64], control: &Control) -> Result<f64, Error> {
     let y = unit_vector(y, control)?;
     bounded(sum(x.iter().zip(&y).map(|(x, y)| x * y)), -1.0, 1.0)
 }
-fn level(value: f64) -> Result<(), Error> {
-    if value.is_finite() && value > 0.0 && value < 1.0 {
-        Ok(())
-    } else {
-        Err(invalid(Violation::ParameterOutOfRange))
-    }
-}
 fn alternative(value: Alternative) -> &'static str {
     match value {
         Alternative::TwoSided => "two_sided",
@@ -153,14 +147,6 @@ fn normal_tail(z: f64, alternative: Alternative) -> Result<f64, Error> {
         },
         0.0,
         1.0,
-    )
-}
-fn normal_quantile(confidence: f64) -> Result<f64, Error> {
-    level(confidence)?;
-    finite(
-        Normal::new(0.0, 1.0)
-            .map_err(|_| Error::ComputationFailed)?
-            .inverse_cdf((1.0 + confidence) / 2.0),
     )
 }
 fn student_test(
@@ -219,7 +205,7 @@ fn fisher_interval(
     let (lower, upper) = if r.abs() == 1.0 {
         (r, r)
     } else {
-        let delta = normal_quantile(confidence)? / ((n - controls - 3) as f64).sqrt();
+        let delta = critical(confidence, None)? / ((n - controls - 3) as f64).sqrt();
         let z = r.atanh();
         ((z - delta).tanh(), (z + delta).tanh())
     };

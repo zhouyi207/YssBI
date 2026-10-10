@@ -209,7 +209,7 @@ pub fn kappa(
     let standard_error = finite(variance.sqrt())?;
     let confidence_interval = Some(interval(
         coefficient,
-        normal_quantile(options.confidence_level)? * standard_error,
+        critical(options.confidence_level, None)? * standard_error,
         options.confidence_level,
         "normal_delta",
     )?);
@@ -437,10 +437,10 @@ pub fn bland_altman(
     let (centered, scale, mean) = centered(&differences, control)?;
     let bias = finite(mean * scale)?;
     let sd = finite(scale * (sum(centered.iter().map(|x| x * x)) / (n - 1) as f64).sqrt())?;
-    let z = normal_quantile(coverage)?;
+    let z = critical(coverage, None)?;
     let lower_limit = finite(bias - z * sd)?;
     let upper_limit = finite(bias + z * sd)?;
-    let t = crate::inference::intervals::critical(confidence, Some((n - 1) as f64))?;
+    let t = critical(confidence, Some((n - 1) as f64))?;
     let bias_margin = t * sd / (n as f64).sqrt();
     let limit_margin = t * sd * (1.0 / n as f64 + z * z / (2 * (n - 1)) as f64).sqrt();
     let take = n.min(MAX_BLAND_ALTMAN_POINTS);

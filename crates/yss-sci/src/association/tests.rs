@@ -32,6 +32,59 @@ fn ci_close(actual: f64, expected: f64) {
 }
 
 #[test]
+fn kappa_retains_interval_width_at_tiny_confidence() {
+    let confidence = 1e-20;
+    let result = kappa(
+        &[vec![0, 0, 1, 1], vec![0, 1, 0, 1]],
+        2,
+        KappaOptions {
+            method: KappaMethod::Cohen,
+            weighting: KappaWeighting::None,
+            confidence_level: confidence,
+        },
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(result.coefficient, 0.0);
+    let standard_error = result.standard_error.unwrap();
+    assert!(standard_error > 0.0);
+    // The Gaussian central expansion has relative error O(confidence^2).
+    let margin = (std::f64::consts::PI / 2.0).sqrt() * confidence * standard_error;
+    let interval = result.confidence_interval.unwrap();
+    assert_eq!(interval.level, confidence);
+    for (actual, expected) in [(interval.lower, -margin), (interval.upper, margin)] {
+        assert!(
+            (actual / expected - 1.0).abs() < 1e-13,
+            "{actual} != {expected}"
+        );
+    }
+}
+
+#[test]
+fn pearson_retains_finite_interval_at_near_one_confidence() {
+    let confidence = f64::from_bits(1.0_f64.to_bits() - 1);
+    let result = pearson(
+        &[-1.0, 0.0, 1.0, 0.0],
+        &[0.0, -1.0, 0.0, 1.0],
+        CorrelationOptions {
+            confidence_level: confidence,
+            ..Default::default()
+        },
+        &control(),
+    )
+    .unwrap();
+    assert_eq!(result.coefficient, 0.0);
+    // Independent 110-digit Gaussian tail inversion and Fisher transform; n - 3 = 1.
+    let bound = 0.999_999_874_577_153_2;
+    let interval = result.confidence_interval.unwrap();
+    assert_eq!(interval.level, confidence);
+    for (actual, expected) in [(interval.lower, -bound), (interval.upper, bound)] {
+        assert!(actual.is_finite() && actual.abs() < 1.0);
+        assert!((actual - expected).abs() <= 2.0 * f64::EPSILON);
+    }
+}
+
+#[test]
 fn correlations_match_scipy_inference_and_exact_tie_permutations() {
     let fixture = fixture();
     let control = control();
