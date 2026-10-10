@@ -1,4 +1,4 @@
-//! Validated Student-t quantiles from bounded hyperbolic-density integration.
+//! Student-t quantiles and large-df probabilities from bounded hyperbolic-density integration.
 //! Substituting t=sqrt(df)*sinh(u) makes the two-sided density proportional to cosh(u)^(-df).
 
 // Positive half of the 16-point Gauss-Legendre rule (DLMF 3.5).
@@ -88,6 +88,19 @@ struct Density {
     normalization: f64,
 }
 impl Density {
+    fn new(df: f64, inverse_slope: f64) -> Self {
+        let scale = if df >= 1. { df.sqrt() } else { 1. };
+        Self {
+            df,
+            coordinate_scale: scale,
+            normalization: if df >= 1. {
+                inverse_slope.recip()
+            } else {
+                df.sqrt() / inverse_slope
+            },
+        }
+    }
+
     fn kernel(&self, w: f64) -> f64 {
         let u = w / self.coordinate_scale;
         // Scale the log-cosh series before subnormal squaring; its next relative
@@ -128,6 +141,22 @@ impl Density {
             .map(|b| integrate(b[0], b[1], |v| (self.kernel(w + v / slope) - origin).exp()))
             .sum::<f64>()
             / slope
+    }
+
+    fn log_two_sided_tail(&self, w: f64) -> f64 {
+        if w <= 1. {
+            return (-self.normalization * self.central_integral(w)).ln_1p();
+        }
+        let origin = self.kernel(w);
+        let slope = self.df / self.coordinate_scale * (w / self.coordinate_scale).tanh();
+        let log_normalization = self.normalization.ln();
+        // Log-concavity bounds the remaining integral by exp(origin)/slope.
+        // Only probabilities below half the smallest positive value round to zero.
+        if log_normalization + origin - slope.ln() < f64::from_bits(1).ln() - std::f64::consts::LN_2
+        {
+            return f64::NEG_INFINITY;
+        }
+        log_normalization + origin + self.tail_integral(w).ln()
     }
     fn project(&self, w: f64) -> Option<f64> {
         let u = w / self.coordinate_scale;
@@ -237,17 +266,15 @@ fn quantile(confidence: f64, tail: f64, df: f64) -> Option<f64> {
         let q = (0.5 * df.ln() + far + (-correction).ln_1p()).exp();
         return (q.is_finite() && q > 0.).then_some(q);
     }
-    let scale = if df >= 1. { df.sqrt() } else { 1. };
-    let density = Density {
-        df,
-        coordinate_scale: scale,
-        normalization: if df >= 1. {
-            slope.recip()
-        } else {
-            df.sqrt() / slope
-        },
-    };
+    let density = Density::new(df, slope);
     density.solve(confidence, tail)
+}
+
+/// Two-sided log tail in the stable large-df normalization regime (df >= 64).
+pub(super) fn log_two_sided_tail(magnitude: f64, df: f64) -> f64 {
+    let density = Density::new(df, inverse_slope(df));
+    let w = df.sqrt() * (magnitude / df.sqrt()).asinh();
+    density.log_two_sided_tail(w)
 }
 
 pub(crate) fn confidence_quantile(confidence: f64, df: f64) -> Option<f64> {

@@ -153,9 +153,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
                 std::num::NonZeroU32::new(match method {
-                    "regression.glm" => 8,
-                    "regression.curve" => 7,
-                    "regression.hierarchical" | "regression.stepwise" => 7,
+                    "regression.glm" => 9,
+                    "regression.curve" => 8,
+                    "regression.hierarchical" | "regression.stepwise" => 8,
                     "regression.robust"
                     | "regression.logit.firth"
                     | "regression.poisson"
@@ -169,19 +169,18 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                     | "regression.inverse_gaussian"
                     | "regression.cloglog"
                     | "regression.beta"
-                    | "regression.fractional_response"
-                    | "regression.threshold"
+                    | "regression.fractional_response" => 6,
+                    "regression.threshold"
                     | "workflow.regression.baseline"
                     | "workflow.regression.univariate_multivariable"
                     | "workflow.regression.grouped"
-                    | "transform.rcs" => 6,
-                    "regression.nonlinear"
-                    | "regression.nonlinear_formula"
-                    | "regression.logit.multinomial"
+                    | "transform.rcs" => 7,
+                    "regression.logit.multinomial"
                     | "regression.logit.ordinal"
                     | "regression.ridge"
                     | "regression.lasso"
                     | "regression.pls" => 5,
+                    "regression.nonlinear" | "regression.nonlinear_formula" => 6,
                     "regression.deming" => 4,
                     _ => unreachable!("registered regression method"),
                 })

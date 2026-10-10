@@ -10,6 +10,40 @@ fn control() -> ScientificExecutionControl {
 fn close(a: f64, b: f64) {
     assert!((a - b).abs() < 2e-8, "{a} != {b}");
 }
+
+#[test]
+fn null_t_power_retains_alpha_without_allocating_large_sample_data() {
+    // Tail, zero, central and reflected-central thresholds exercise distinct branches.
+    for (design, alternative, alpha) in [
+        (MeanDesign::OneSample, PowerAlternative::TwoSided, 0.05),
+        (MeanDesign::Independent, PowerAlternative::Greater, 0.5),
+        (MeanDesign::OneSample, PowerAlternative::TwoSided, 0.8),
+        (MeanDesign::Independent, PowerAlternative::Less, 0.8),
+    ] {
+        let result = compute(
+            PowerModel::TMean {
+                standardized_effect: 0.0,
+                design,
+            },
+            PowerOptions {
+                alpha,
+                alternative,
+                request: PowerRequest::Power {
+                    sample_size: 1_000_000_000_000_001,
+                },
+            },
+            &control(),
+        )
+        .unwrap();
+        // A central t test's rejection probability under its null is alpha.
+        assert!(
+            (result.power - alpha).abs() < 1e-12,
+            "{} != {alpha}",
+            result.power
+        );
+    }
+}
+
 fn models() -> Vec<(&'static str, PowerModel, PowerAlternative)> {
     use PowerAlternative::*;
     use PowerModel::*;

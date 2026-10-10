@@ -6,6 +6,54 @@ use yss_sci_contract::{
 };
 
 #[test]
+fn summary_student_probabilities_retain_large_degrees_and_direction() {
+    let control = ScientificExecutionControl {
+        cancellation: ScientificCancellationToken::new(),
+        deadline: Instant::now() + Duration::from_secs(30),
+    };
+    let count = 1_000_000_000_000_001;
+    // Independent full Student-density integration at df=10^15 and |t|=2.
+    let two_sided = 0.04550026389635868;
+    for statistic in [-2.0, 2.0] {
+        for alternative in [
+            Alternative::TwoSided,
+            Alternative::Greater,
+            Alternative::Less,
+        ] {
+            let result = sample_mean::run(
+                ClassicalHypothesisTest::Summary {
+                    design: SummaryTDesign::OneSample,
+                    first_count: count,
+                    first_mean: statistic / (count as f64).sqrt(),
+                    first_sd: 1.0,
+                    second_count: None,
+                    second_mean: None,
+                    second_sd: None,
+                    null_difference: 0.0,
+                    equal_variance: false,
+                    alternative,
+                },
+                &control,
+            )
+            .unwrap();
+            let expected = match alternative {
+                Alternative::TwoSided => two_sided,
+                Alternative::Greater if statistic > 0.0 => two_sided / 2.0,
+                Alternative::Less if statistic < 0.0 => two_sided / 2.0,
+                _ => 1.0 - two_sided / 2.0,
+            };
+            assert_eq!(result.degrees_of_freedom, [1e15]);
+            assert!((result.statistic.unwrap() - statistic).abs() < 1e-14);
+            assert!(
+                (result.p_value - expected).abs() < 1e-12,
+                "{} != {expected}",
+                result.p_value
+            );
+        }
+    }
+}
+
+#[test]
 fn sample_mean_preserves_small_and_extreme_student_tails() {
     let control = ScientificExecutionControl {
         cancellation: ScientificCancellationToken::new(),

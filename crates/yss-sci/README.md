@@ -268,11 +268,15 @@ parameter/error and execution-control boundaries; none duplicates the tail calcu
 `distribution::student_t_probability` owns directed probabilities for standard
 Student-t references used by sample-mean/equivalence tests, coefficient constraints,
 regression and panel/IV inference, correlation, pairwise comparisons, path effects
-and central-t power. Ordinary tails use SF/CDF directly. When the incomplete-beta
-argument is below floating-point epsilon, the shared owner evaluates its leading
-integral term in log space, avoiding statistic-square overflow and premature
-subnormal rounding. A fourth-moment bound handles probabilities below the
-representable range without replacing positive tails with a fixed cutoff.
+and central-t power. In the shared stable normalization regime (`df >= 64`),
+probabilities reuse the quantile owner's bounded hyperbolic-density integrals.
+Small central arguments use the central integral and `log1p`; other arguments use
+the logarithmic tail integral, avoiding a rounded incomplete-Beta argument and
+subtraction of large log-Gamma values. Log-concavity bounds tails below half the
+smallest positive value before returning zero. One-sided probabilities include
+their half factor before exponential rounding. Smaller-degree ordinary references
+retain native SF/CDF; their extreme tails retain the leading log-Beta term and
+fourth-moment bound. Quantiles and probabilities share one density preparation.
 The shared calculation retains fractional Welch degrees. Model coefficient tables
 also reuse it for Student references, including Knapp–Hartung Meta and
 design-based survey inference.
