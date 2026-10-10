@@ -1,18 +1,7 @@
 //! Student-t quantiles and large-df probabilities from bounded hyperbolic-density integration.
 //! Substituting t=sqrt(df)*sinh(u) makes the two-sided density proportional to cosh(u)^(-df).
 
-// Positive half of the 16-point Gauss-Legendre rule (DLMF 3.5).
-const GAUSS: [(f64, f64); 8] = [
-    (0.9894009349916499, 0.027152459411754096),
-    (0.9445750230732326, 0.062253523938647894),
-    (0.8656312023878318, 0.09515851168249279),
-    (0.755404408355003, 0.12462897125553388),
-    (0.6178762444026438, 0.14959598881657674),
-    (0.45801677765722737, 0.16915651939500254),
-    (0.2816035507792589, 0.18260341504492358),
-    (0.09501250983763744, 0.1894506104550685),
-];
-use super::stirling_error;
+use super::{integrate_gauss, stirling_error};
 use statrs::function::{
     beta::ln_beta,
     erf::{erf_inv, erfc_inv},
@@ -73,15 +62,6 @@ fn gamma_ratio_per_df(df: f64, slope: f64) -> f64 {
     result
 }
 
-fn integrate(left: f64, right: f64, f: impl Fn(f64) -> f64) -> f64 {
-    let mid = (left + right) / 2.;
-    let half = (right - left) / 2.;
-    half * GAUSS
-        .iter()
-        .map(|&(x, w)| w * (f(mid - half * x) + f(mid + half * x)))
-        .sum::<f64>()
-}
-
 struct Density {
     df: f64,
     coordinate_scale: f64,
@@ -123,7 +103,7 @@ impl Density {
         let step = w / parts as f64;
         (0..parts)
             .map(|i| {
-                integrate(i as f64 * step, (i + 1) as f64 * step, |x| {
+                integrate_gauss(i as f64 * step, (i + 1) as f64 * step, |x| {
                     self.kernel(x).exp()
                 })
             })
@@ -138,7 +118,7 @@ impl Density {
         let bounds = [0., 1., 3., 7., 15., 31., 39.];
         bounds
             .windows(2)
-            .map(|b| integrate(b[0], b[1], |v| (self.kernel(w + v / slope) - origin).exp()))
+            .map(|b| integrate_gauss(b[0], b[1], |v| (self.kernel(w + v / slope) - origin).exp()))
             .sum::<f64>()
             / slope
     }

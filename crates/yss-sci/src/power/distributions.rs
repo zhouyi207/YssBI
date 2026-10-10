@@ -1,6 +1,6 @@
-//! Noncentral t/F tails from centered Poisson/beta series; no asymptotic substitution.
+//! Finite-degree noncentral t/F tails from bounded integrals and centered Poisson/beta series.
 use super::*;
-use crate::distribution::stirling_error;
+use crate::distribution::{integrate_gauss, stirling_error};
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT},
     function::{beta::beta_reg, gamma::ln_gamma},
@@ -76,6 +76,9 @@ fn t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64> {
     if normal().cdf(delta) < EPS {
         return Ok(0.);
     }
+    if df >= 64. {
+        return large_df_t_tail(t, df, delta, control);
+    }
     // If Z >= -12, (Z+delta)^2 >= (delta-12)^2. The omitted normal tail
     // and this chi-square tail bound absolute error before returning one.
     if delta > 12. && upper_bound(df, ((delta - 12.) / t).powi(2))? < EPS {
@@ -88,6 +91,50 @@ fn t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64> {
             + q * beta_reg(df / 2., j as f64 + 1., complement))
     })
 }
+
+fn large_df_t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64> {
+    let scale = df.sqrt();
+    let normalization = (-stirling_error(df / 2.)).exp() / std::f64::consts::PI.sqrt();
+    let normal = normal();
+    // w = sqrt(df) * log(sqrt(V/df)), V ~ chi-square(df). Its exact density
+    // is normalization * exp(df/2 * (2w/sqrt(df) - expm1(2w/sqrt(df)))).
+    // Log-concavity bounds both omitted tails outside [-8,8] below 2e-17
+    // for df >= 64; the conditional Normal probability is at most one.
+    let mut bounds = [0.; 24];
+    for (i, bound) in bounds[..17].iter_mut().enumerate() {
+        *bound = i as f64 - 8.;
+    }
+    let mut count = 17;
+    // Also split the Normal transition, retaining narrow finite-degree tails
+    // when t and delta are large. This keeps panel work independent of df.
+    for z in [-8., -4., -2., 0., 2., 4., 8.] {
+        if delta + z > 0. {
+            let w = scale * ((delta + z - t) / t).ln_1p();
+            if w > -8. && w < 8. {
+                bounds[count] = w;
+                count += 1;
+            }
+        }
+    }
+    bounds[..count].sort_unstable_by(f64::total_cmp);
+    let mut total = 0.;
+    for b in bounds[..count].windows(2) {
+        control.check()?;
+        total += integrate_gauss(b[0], b[1], |w| {
+            let u = 2. * w / scale;
+            let kernel = if u.abs() <= 0.001 {
+                // Scale before squaring and avoid subtracting expm1(u) from u.
+                -w * w * (1. + u * (1. / 3. + u * (1. / 12. + u * (1. / 60. + u / 360.))))
+            } else {
+                df / 2. * (u - u.exp_m1())
+            };
+            let threshold = (t - delta) + t * (w / scale).exp_m1();
+            kernel.exp() * normal.sf(threshold)
+        });
+    }
+    probability(normalization * total)
+}
+
 pub(super) fn f_power(
     df1: f64,
     df2: f64,

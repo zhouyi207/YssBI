@@ -105,7 +105,7 @@ Student-t 临界值的实际消费者统一到现有有界 SCI owner：线性及
 FE/LSDV/FD/Between 和 TWFE 报告、small IV 系数及第一阶段表、ADF、对数曲线、
 调查均值/比例、Bland–Altman、系数图、条件效应和 t 型 Power。
 调查均值/比例使用 revision 5，Bland–Altman 与系数图使用 revision 6，
-Moderation 两个入口使用 revision 8；均值差、配对及整群 Power 使用 revision 7，
+Moderation 两个入口使用 revision 8；均值差、配对及整群 Power 使用 revision 8，
 TWFE 使用 revision 11。置信度直接传入，单侧尾概率保留方向及原始精度；
 Moderation 共用一次临界值，点估计读取不再构造弃用的推断。
 Summary/Predict 继续读取已有拟合结果；RE 的正态推断、面板 Fisher 检验的
@@ -609,3 +609,7 @@ retains revision 8. Full GLM and Heckman continue to request their reported infe
 `builtins/statistics/power` converts model-specific scalar parameters to neutral designs.
 There are no observation inputs; bounded report admission and cooperative scientific
 control apply independently of the proposed sample count.
+Mean-difference, paired and cluster-randomized Power use revision 8 and SCI's
+bounded finite-degree noncentral t integration at large degrees. Scalar calls retain
+the same design, report and sample-unit contracts; the other Power kernels retain
+their revisions.

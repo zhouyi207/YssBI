@@ -159,6 +159,9 @@ pub(super) fn install(
                 | "yssbi.statistics.test.t.one_sample"
                 | "yssbi.statistics.test.t.summary_input"
                 | "yssbi.statistics.timeseries.ecm"
+                | "yssbi.statistics.power.cluster_randomized"
+                | "yssbi.statistics.power.mean_difference"
+                | "yssbi.statistics.power.paired"
                 | "yssbi.statistics.workflow.moderation"
                 | "yssbi.statistics.workflow.moderation_advanced" => 8,
                 "yssbi.statistics.econometrics.panel.cointegration"
@@ -207,9 +210,6 @@ pub(super) fn install(
                 | "yssbi.statistics.inference.confidence_interval"
                 | "yssbi.statistics.postestimation.adjusted_predictions"
                 | "yssbi.statistics.doe.dose_response"
-                | "yssbi.statistics.power.cluster_randomized"
-                | "yssbi.statistics.power.mean_difference"
-                | "yssbi.statistics.power.paired"
                 | "yssbi.statistics.sem.path" => 7,
                 "yssbi.plot.boxplot"
                 | "yssbi.plot.violin"

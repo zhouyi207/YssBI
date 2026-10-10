@@ -139,7 +139,7 @@ with bounded Gauss–Legendre quadrature and bracketed Newton iteration; large-d
 coordinates, logarithmic tails and a corrected power-law inverse preserve finite
 results across scales. Confidence and upper-tail probabilities retain their own
 input precision. The density normalization reuses the shared Stirling remainder;
-Power's noncentral tail series retain their arithmetic. Two public interval regressions and independent
+`distribution::integrate_gauss` owns the shared 16-point integration rule. Two public interval regressions and independent
 high-precision density/Beta references check ordinary, extreme-df and tail results,
 alongside the existing Knapp–Hartung Meta and adjusted-prediction callers.
 `regression::models::common::coefficient_table` receives the actual interval
@@ -1099,9 +1099,16 @@ coefficients. `likelihood` retains other likelihood models. Kish summaries descr
 unequal weighting only.
 
 `power` separates model domains/sample units, test-specific noncentralities, distribution
-tails and integer sample-size solving. Noncentral t/F tails sum centered Poisson/beta
-series with tail-mass stopping bounds; extreme-effect shortcuts have explicit probability
-bounds. Scalar planning never allocates an n-row dataset. Normal approximations are named
+tails and integer sample-size solving. At `df >= 64`, noncentral t tails integrate the
+finite-degree chi-square density against the conditional Normal survival function.
+The scaled log coordinate avoids large Gamma subtraction and rounded Beta arguments;
+the density's omitted tails have an explicit bound. Fixed density panels and additional
+Normal-transition splits bound work independently of sample count and noncentrality,
+with control checked at every panel. The Normal survival function retains its native
+accuracy; independent series references include that error in their tolerance.
+Smaller-degree noncentral t and noncentral F retain centered Poisson/beta series
+with tail-mass stopping bounds and bounded extreme-effect shortcuts. Scalar planning
+never allocates an n-row dataset. Normal approximations are named
 for proportions, Fisher-z correlations, binary-predictor logistic, Poisson rate ratios and
 Schoenfeld survival designs. Equivalence/noninferiority use known-variance normal designs.
 SciPy references cover tails, achieved power and minimum integer sample sizes.

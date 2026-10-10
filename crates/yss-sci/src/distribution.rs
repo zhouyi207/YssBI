@@ -13,6 +13,27 @@ use yss_sci_contract::hypothesis::Alternative;
 
 pub(crate) mod student_t;
 
+/// The 16-point Gauss-Legendre rule shared by bounded reference-density integrals.
+pub(crate) fn integrate_gauss(left: f64, right: f64, f: impl Fn(f64) -> f64) -> f64 {
+    // Positive half of the rule (DLMF 3.5).
+    const GAUSS: [(f64, f64); 8] = [
+        (0.9894009349916499, 0.027152459411754096),
+        (0.9445750230732326, 0.062253523938647894),
+        (0.8656312023878318, 0.09515851168249279),
+        (0.755404408355003, 0.12462897125553388),
+        (0.6178762444026438, 0.14959598881657674),
+        (0.45801677765722737, 0.16915651939500254),
+        (0.2816035507792589, 0.18260341504492358),
+        (0.09501250983763744, 0.1894506104550685),
+    ];
+    let mid = (left + right) / 2.;
+    let half = (right - left) / 2.;
+    half * GAUSS
+        .iter()
+        .map(|&(x, w)| w * (f(mid - half * x) + f(mid + half * x)))
+        .sum::<f64>()
+}
+
 /// Stirling log-Gamma remainder through 1/z^7, for z >= 16.
 pub(crate) fn stirling_error(z: f64) -> f64 {
     let q = 1. / (z * z);

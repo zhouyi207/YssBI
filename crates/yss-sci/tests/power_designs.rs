@@ -12,6 +12,53 @@ fn close(a: f64, b: f64) {
 }
 
 #[test]
+fn noncentral_t_power_retains_large_degrees() {
+    let sample_size = 1_000_000_000_000_001;
+    let result = compute(
+        PowerModel::TMean {
+            standardized_effect: 2.0 / (sample_size as f64).sqrt(),
+            design: MeanDesign::OneSample,
+        },
+        PowerOptions {
+            alpha: 0.05,
+            alternative: PowerAlternative::TwoSided,
+            request: PowerRequest::Power { sample_size },
+        },
+        &control(),
+    )
+    .unwrap();
+    // Independent 110-digit noncentral-t/Beta series at df=1e15 and delta=2.
+    let expected = 0.516_005_273_976_174;
+    assert!((result.power - expected).abs() < 2e-12);
+}
+
+#[test]
+fn noncentral_t_power_retains_small_central_thresholds() {
+    let sample_size = 1_000_000_000_000_001;
+    let result = compute(
+        PowerModel::TMean {
+            standardized_effect: 2.0 / (sample_size as f64).sqrt(),
+            design: MeanDesign::OneSample,
+        },
+        PowerOptions {
+            alpha: 0.8,
+            alternative: PowerAlternative::TwoSided,
+            request: PowerRequest::Power { sample_size },
+        },
+        &control(),
+    )
+    .unwrap();
+    // The old Beta argument rounded to one and falsely reported power one.
+    let expected = 0.971_769_853_179_994_5;
+    // Include the retained native Normal tail's error in the reference tolerance.
+    assert!(
+        (result.power - expected).abs() < 1e-11,
+        "{} != {expected}",
+        result.power
+    );
+}
+
+#[test]
 fn null_t_power_retains_alpha_without_allocating_large_sample_data() {
     // Tail, zero, central and reflected-central thresholds exercise distinct branches.
     for (design, alternative, alpha) in [
