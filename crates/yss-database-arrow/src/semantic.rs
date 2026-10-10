@@ -1,3 +1,4 @@
+use std::cell::LazyCell;
 use std::collections::BTreeSet;
 
 use arrow::array::{Array, ArrayRef, StringArray};
@@ -90,14 +91,15 @@ fn strings(array: &dyn Array) -> Result<StringArray, TabularArrowError> {
     .ok_or(TabularArrowError::UnsupportedType)
 }
 
-fn value_array(field: &Field, value: &str) -> Result<ArrayRef, TabularArrowError> {
+fn physical_field(field: &Field) -> Field {
     // Avoid recursing through semantic validation while decoding the metadata itself.
-    let mut metadata = field.metadata().clone();
-    metadata.remove(SEMANTIC);
-    crate::json_to_array(
-        &field.clone().with_metadata(metadata),
-        &[serde_json::Value::String(value.into())],
-    )
+    let mut physical = field.clone();
+    physical.metadata_mut().remove(SEMANTIC);
+    physical
+}
+
+fn value_array(field: &Field, value: &str) -> Result<ArrayRef, TabularArrowError> {
+    crate::json_to_array(field, &[serde_json::Value::String(value.into())])
 }
 
 fn supports_semantic_type(dtype: &DataType, kind: SemanticType) -> bool {
@@ -138,9 +140,10 @@ fn validate_semantic(field: &Field, semantic: &ColumnSemantic) -> Result<(), Tab
     {
         return Err(TabularArrowError::InvalidValue);
     }
+    let physical = LazyCell::new(|| physical_field(field));
     let mut seen = BTreeSet::new();
     for value in &semantic.values {
-        let array = value_array(field, &value.value)?;
+        let array = value_array(&physical, &value.value)?;
         let canonical = strings(array.as_ref())?;
         if canonical.is_null(0)
             || canonical.value(0) != value.value
@@ -160,12 +163,12 @@ fn validate_semantic(field: &Field, semantic: &ColumnSemantic) -> Result<(), Tab
         let lower = constraints
             .minimum
             .as_ref()
-            .map(|value| value_array(field, value))
+            .map(|value| value_array(&physical, value))
             .transpose()?;
         let upper = constraints
             .maximum
             .as_ref()
-            .map(|value| value_array(field, value))
+            .map(|value| value_array(&physical, value))
             .transpose()?;
         if let (Some(lower), Some(upper)) = (lower, upper) {
             let invalid = arrow::compute::kernels::cmp::gt(&lower, &upper)
@@ -217,12 +220,13 @@ impl PreparedSemanticValidator {
         let mut integer = false;
         if let Some(constraints) = &semantic.numeric {
             integer = constraints.integer;
+            let physical = LazyCell::new(|| physical_field(field));
             for (bound, minimum) in [
                 (constraints.minimum.as_ref(), true),
                 (constraints.maximum.as_ref(), false),
             ] {
                 if let Some(bound) = bound {
-                    bounds.push((value_array(field, bound)?, minimum));
+                    bounds.push((value_array(&physical, bound)?, minimum));
                 }
             }
         }
@@ -302,10 +306,11 @@ pub fn cast_column_semantic(
     target: &Field,
 ) -> Result<ColumnSemantic, TabularArrowError> {
     let mut semantic = column_semantic(source)?;
+    let physical = LazyCell::new(|| physical_field(source));
     let positive = semantic.positive_value.clone();
     for value in &mut semantic.values {
         let original = value.value.clone();
-        let array = value_array(source, &original)?;
+        let array = value_array(&physical, &original)?;
         let converted = lossless_cast(array.as_ref(), target.data_type(), false)?;
         value.value = strings(converted.as_ref())?.value(0).to_owned();
         if positive.as_deref() == Some(&original) {
@@ -317,7 +322,7 @@ pub fn cast_column_semantic(
             .into_iter()
             .flatten()
         {
-            let array = value_array(source, bound)?;
+            let array = value_array(&physical, bound)?;
             let converted = lossless_cast(array.as_ref(), target.data_type(), false)?;
             *bound = strings(converted.as_ref())?.value(0).to_owned();
         }

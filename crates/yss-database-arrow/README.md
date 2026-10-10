@@ -19,6 +19,9 @@ projection budget returns `TabularArrowError::MemoryLimitExceeded`.
 `json_to_array` admits edited values against an explicit physical field; `to_record_batch`
 materializes ordered document literals. Neither projection replaces the source schema.
 Semantic conversion, category domains and schema metadata reuse the shared contracts.
+Domain-code and numeric-bound validation reuse one lazily prepared physical field per
+validation or cast. It retains the original field attributes and other metadata while
+removing the semantic annotation for decoding; each code no longer copies the full JSON.
 Database lifecycle and query admission belong to [Database Runtime](../yss-database-runtime/README.md).
 
 Run focused checks from the repository root:
