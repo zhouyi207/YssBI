@@ -859,7 +859,7 @@ fn category_values(
         .ok_or(KernelError::InvalidNumericInput)?;
     let mut categories = Vec::new();
     let mut bytes = 0usize;
-    match value {
+    match value.unannotated() {
         RuntimeValue::List(values) => {
             for value in values.iter() {
                 let RuntimeValue::Scalar(value) = value.unannotated() else {

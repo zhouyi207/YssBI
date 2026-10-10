@@ -516,7 +516,10 @@ admit retained numeric columns, ranks/order/ties and sort scratch, deviations,
 per-condition rows and report sizes. Categorical encoding admits retained prior
 columns and batch/scalar temporaries before allocation. Dictionary/Utf8View labels
 are expanded one row at a time through the existing Arrow converter, so repeated
-references do not create an unadmitted full-column string expansion. Count-table preparation
+references do not create an unadmitted full-column string expansion. Materialized
+semantic annotations use the shared `RuntimeValue::unannotated`
+payload view, preserving the original caller-owned metadata and exact typed category keys.
+Count-table preparation
 admits linear category indexes before constructing them, then uses actual row and
 column cardinalities for the dense table. These are conservative workspace
 estimates, not process RSS limits. Classical inference retains its design-specific

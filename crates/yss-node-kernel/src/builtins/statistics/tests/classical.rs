@@ -1,6 +1,62 @@
 use super::*;
 
 #[test]
+fn classical_count_tables_accept_materialized_semantic_annotations() {
+    use yss_data_contract::{ColumnSemantic, ConversionMetadata, SemanticType, SemanticValue};
+    let mut semantic = ColumnSemantic::new(SemanticType::Categorical);
+    semantic.values = vec![
+        SemanticValue {
+            value: "0".into(),
+            label: "No".into(),
+        },
+        SemanticValue {
+            value: "1".into(),
+            label: "Yes".into(),
+        },
+    ];
+    let metadata = ConversionMetadata {
+        semantic,
+        temporal: None,
+        dummy_base_level: None,
+    };
+    let first = series(&[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0]);
+    let second = series(&[0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+    for (id, inputs) in [
+        (
+            "yssbi.statistics.test.chisquare.crosstab",
+            vec![("row", first.clone()), ("column", second.clone())],
+        ),
+        (
+            "yssbi.statistics.test.fisher_exact",
+            vec![("row", first.clone()), ("column", second.clone())],
+        ),
+        (
+            "yssbi.statistics.test.cmh",
+            vec![
+                ("exposed", first),
+                ("outcome", second),
+                ("strata", series(&[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0])),
+            ],
+        ),
+    ] {
+        let plain = run(id, &inputs, &[], 1).unwrap();
+        let annotated: Vec<_> = inputs
+            .iter()
+            .map(|(key, value)| (*key, value.clone().with_metadata(metadata.clone()).unwrap()))
+            .collect();
+        let annotated_report = run(id, &annotated, &[], 1);
+        assert!(
+            annotated_report.is_ok(),
+            "{id}: valid annotated input was rejected: {annotated_report:?}"
+        );
+        assert_eq!(annotated_report.unwrap(), plain, "{id}");
+        for (_, value) in &annotated {
+            assert_eq!(value.metadata(), Some(&metadata));
+        }
+    }
+}
+
+#[test]
 fn summary_t_node_rejects_sample_counts_outside_usize_without_saturation() {
     let upper_exclusive = (usize::MAX as u128 + 1) as f64;
     for (design, values) in [
