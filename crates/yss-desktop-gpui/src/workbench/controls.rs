@@ -21,7 +21,7 @@ pub(super) fn apply(id: impl Into<ElementId>, disabled: bool) -> Button {
         .disabled(disabled)
 }
 
-pub(super) fn number(text: &str) -> Result<serde_json::Value, String> {
+pub(crate) fn number(text: &str) -> Result<serde_json::Value, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("请输入数字".into());

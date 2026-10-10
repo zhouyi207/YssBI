@@ -41,7 +41,7 @@ impl Render for GraphCanvas {
         let activity = running_visible.then(|| self.render_connection_activity(pending.is_some()));
         let projection = self.graph.projection.clone();
         let visible = self.bounds.get().size;
-        let nodes = projection
+        let visible_nodes = projection
             .nodes
             .iter()
             .filter(|node| {
@@ -53,6 +53,10 @@ impl Render for GraphCanvas {
                     && (visible.width == px(0.) || top_left.x <= visible.width)
                     && (visible.height == px(0.) || top_left.y <= visible.height)
             })
+            .collect::<Vec<_>>();
+        self.prepare_port_inputs(&visible_nodes, window, cx);
+        let nodes = visible_nodes
+            .into_iter()
             .map(|node| self.render_node(node, cx))
             .collect::<Vec<_>>();
 
@@ -116,6 +120,7 @@ impl Render for GraphCanvas {
                 view.located_port = None;
                 view.connection_click = None;
                 window.focus(&view.focus, cx);
+                view.commit_blurred_port_inputs(window, cx);
                 view.emit_selection(cx);
                 cx.notify();
             }))

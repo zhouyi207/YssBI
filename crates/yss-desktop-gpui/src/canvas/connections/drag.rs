@@ -164,7 +164,17 @@ impl GraphCanvas {
         cx.notify();
     }
 
-    pub(in crate::canvas) fn end_port(&mut self, target: PortAddress, cx: &mut Context<Self>) {
+    pub(in crate::canvas) fn end_port(
+        &mut self,
+        target: PortAddress,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.finish_port(target, cx);
+        self.commit_blurred_port_inputs(window, cx);
+    }
+
+    fn finish_port(&mut self, target: PortAddress, cx: &mut Context<Self>) {
         if self.connection_drag().is_none() {
             return;
         }

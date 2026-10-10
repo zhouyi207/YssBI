@@ -673,6 +673,17 @@
 - 14 个 Rust 文件局部格式、两份文档相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）及 git diff --check 通过。
 - 本批完成 PinContextMenu，累计 200/265；GraphPinController/View 的完整类型提示、端口内联输入及其余条目继续审查。物理键鼠/IME、读屏、Windows/macOS 和多源输入交互验收保持开放，临时窗口入口与隔离项目不提交。
 
+### 端口内联标量输入
+
+- 已逐项核对 PinInput、usePinInput 及 GraphPinController/View 的调用路径。未连接且精确为数值、文本或布尔的输入端口提供内联控件，类型能力和数值解析复用 Details；未引入新依赖。
+- 数值/文本使用原生 Input，布尔使用可缩放的原生 toggle Button。只创建可见输入，离屏保留未提交或聚焦字段，投影替换保留同类型草稿；文本测量有界，控件与画布统一缩放。
+- Enter、失焦提交和 Escape 恢复沿用当前投影；空数字与不完整小数按参考规则提交零，整数保持精确。连线、移动、保存和运行先通过原 Application 用例提交输入，每一步只接续自身成功回执的版本；部分失败只确认成功字段，不增加图草稿或历史。
+- 节点、端口和连线菜单及节点选择器等待输入提交与在途刷新结束，再校验焦点、手势和版本，避免菜单刚打开就因该次编辑关闭。UI 输入计入原保存/关闭检查；指针及滚轮隔离避免编辑文字时拖动画布。
+- 独立 Linux/X11 窗口通过真实 Application 核对小数、未完成数字、u64 最大值和越界、文本提交/取消、布尔切换及撤销、输入后连线、保存与运行。工作区窗口核对中文草稿切换英文仍保留、外部并发修改拒绝旧草稿、后续粘贴失败仍保留已成功提交值，以及编辑后节点/端口右键菜单保持可用。
+- 原生窗口实际发现并修复小比例下开关和 Input 高度未缩放、连线手势被失焦提交取消，以及提交刷新关闭菜单的问题。27% 和 66% 比例已核对；物理键鼠/IME、读屏、Windows/macOS 和大图性能仍待验收。
+- L2：工作区与独立提交内容通过 cargo clippy -p yss-desktop-gpui --bin yss-desktop-gpui --no-deps --locked -- -D warnings；临时窗口使用 cargo build -p yss-desktop-gpui --example pin_input_review --locked。cargo test -p yss-graph-editor --lib projection::tests::editor_projection_closes_resource_node_port_and_connection_facts --locked -- --exact 实际运行 1 项通过，核对控件消费的端口读投影。
+- 本批 17 个 Rust 文件局部格式、两份文档声明/相对链接、265 项清单、模块索引（59 crates / 240 条依赖声明）和 git diff --check 通过。未新增 UI 单元测试、未运行全工作区验证；临时窗口入口与隔离数据不提交。完成 PinInput，累计 201/265；GraphPinController/View 的完整类型形状与提示继续审查。
+
 ## app
 
 | 参考文件（含其子组件） | 必要性/架构结论 | 原生对应与缺口 | 实现/验收 |
@@ -905,9 +916,9 @@
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeController.tsx) | 优化 | 原生共享节点运行/结果/诊断展示投影，布局与菜单复用画布入口；不创建逐节点状态 owner | 节点状态、结果计数及菜单已核对；Pin 子组件的输入/菜单另行追踪 |
 | [modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx) | 迁移 | 原生节点外框、布局、状态、选择、候选淡化及目标菜单；共用画布几何与生命周期 | 隔离窗口核对选择、菜单和既有状态/淡化；物理输入及跨平台开放 |
 | [modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx](../../react/src/modules/graph-editor/internal/ui/Nodes/RerouteNodeLayout.tsx) | 迁移 | 按 builtin.reroute 使用紧凑节点、中央拖动柄与隐藏标签的端口，复用原手势、图事务及透明执行 | 窗口核对选择、拖动、运行与撤销；标量/表格执行及缓存回归通过，平台验收开放 |
-| [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 已读；共享状态与起手能力已接入，菜单已接入，内联输入及完整提示待完成 | 组件未完成 |
+| [modules/graph-editor/internal/ui/Pins/GraphPinController.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinController.tsx) | 待查 | 已读；共享状态、起手能力、菜单与内联输入已接入，完整提示待完成 | 组件未完成 |
 | [modules/graph-editor/internal/ui/Pins/GraphPinView.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/GraphPinView.tsx) | 待查 | 已读；共享状态、紧凑端口和候选已接入，完整类型形状/提示待完成 | 组件未完成 |
-| [modules/graph-editor/internal/ui/Pins/PinInput.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/PinInput.tsx) | 待查 | 已读；画布内联端口值编辑待迁移，Details 原输入继续可用 | 组件未完成 |
+| [modules/graph-editor/internal/ui/Pins/PinInput.tsx](../../react/src/modules/graph-editor/internal/ui/Pins/PinInput.tsx) | 迁移：复用原生 Input 与 toggle Button | 未连接标量内联输入；共享解析、提交/取消和版本校验；可见控件与缩放、草稿保护、原图事务 | Linux 窗口核对提交、取消、撤销、连线、保存、运行及并发失败；物理输入/IME 与平台验收开放 |
 
 ## modules/logs
 

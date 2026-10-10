@@ -1,4 +1,5 @@
 //! Port presentation shares its type palette with connections; decisions stay backend-owned.
+pub(super) mod input;
 mod inspection;
 mod menu;
 
@@ -58,6 +59,12 @@ impl GraphCanvas {
         let end = start.clone();
         let menu_address = start.clone();
         let output = port.direction == PortDirection::Output;
+        let input = (!compact
+            && self
+                .connection_drag()
+                .is_none_or(|drag| drag.source != port.address))
+        .then(|| self.render_port_input(port, cx))
+        .flatten();
         let label = port
             .display
             .instance_label
@@ -155,14 +162,15 @@ impl GraphCanvas {
             .on_mouse_down(MouseButton::Middle, |_, _, cx| cx.stop_propagation())
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(move |view, _, _, cx| view.end_port(end.clone(), cx)),
+                cx.listener(move |view, _, window, cx| view.end_port(end.clone(), window, cx)),
             )
             .when(!output, |view| {
                 view.ml(px(-diameter / 2. * self.zoom))
                     .child(dot())
                     .when(!compact, |view| {
-                        view.child(div().min_w_0().flex_1().truncate().child(label.clone()))
+                        view.child(div().min_w_0().truncate().child(label.clone()))
                     })
+                    .children(input)
             })
             .when(output, |view| {
                 view.mr(px(-diameter / 2. * self.zoom))

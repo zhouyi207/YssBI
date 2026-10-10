@@ -105,6 +105,7 @@ pub struct GraphCanvas {
     connection_layer: Rc<RefCell<connections::ConnectionLayer>>,
     presentation: Rc<presentation::Presentation>,
     node_contents: nodes::summary::Contents,
+    port_inputs: ports::input::Inputs,
     selected: BTreeSet<NodeId>,
     bounds: Rc<Cell<Bounds<Pixels>>>,
     palette: Option<Palette>,
@@ -147,6 +148,7 @@ impl GraphCanvas {
             connection_layer,
             presentation: Rc::default(),
             node_contents: Default::default(),
+            port_inputs: Default::default(),
             selected: BTreeSet::new(),
             bounds: Rc::new(Cell::new(Bounds::default())),
             palette: None,
@@ -171,7 +173,7 @@ impl GraphCanvas {
     }
 
     pub fn dirty(&self) -> bool {
-        self.graph.editing.dirty
+        self.graph.editing.dirty || self.has_dirty_port_inputs()
     }
 
     pub fn busy(&self) -> bool {
@@ -501,6 +503,7 @@ impl GraphCanvas {
             }
             _ => {}
         }
+        self.commit_blurred_port_inputs(window, cx);
         cx.notify();
     }
 

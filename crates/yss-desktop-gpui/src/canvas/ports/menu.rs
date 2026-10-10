@@ -18,6 +18,12 @@ impl GraphCanvas {
         if self.busy {
             return;
         }
+        let after_address = address.clone();
+        if self.commit_port_inputs_before(window, cx, move |view, window, cx| {
+            view.show_port_menu(after_address, position, window, cx)
+        }) {
+            return;
+        }
         let Some(port) = self
             .graph
             .projection

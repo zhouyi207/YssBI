@@ -3,6 +3,7 @@ mod assistant;
 mod charts;
 mod chrome;
 mod controls;
+pub(crate) use controls::number as parse_number;
 mod graph_properties;
 mod input;
 mod resources;

@@ -12,6 +12,11 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.commit_port_inputs_before(window, cx, move |view, window, cx| {
+            view.show_connection_menu(position, window, cx)
+        }) {
+            return;
+        }
         let ids = self
             .selected_connections
             .iter()

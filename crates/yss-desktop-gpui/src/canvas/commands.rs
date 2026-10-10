@@ -1,3 +1,5 @@
+mod worker;
+
 use gpui::{Context, actions};
 use yss_application::graph::editing::{GraphEditRequest, GraphEditResponse};
 use yss_graph_editor::EditorGraphMutation;
@@ -26,6 +28,8 @@ actions!(
 );
 
 pub enum GraphCommand {
+    CommitPortInputs,
+    RunAfterPortInputs(yss_application::graph::run::RunDemand),
     Edit(EditorGraphMutation),
     Undo,
     Redo,
@@ -54,7 +58,9 @@ impl GraphCanvas {
         version: Option<GraphEditVersion>,
         cx: &mut Context<Self>,
     ) {
-        self.submit_command(command, version, None, cx);
+        if let Some(task) = self.submit_command(command, version, None, cx) {
+            task.detach();
+        }
     }
 
     pub(super) fn submit_creation(
@@ -70,18 +76,31 @@ impl GraphCanvas {
             }
             return;
         }
-        self.submit_command(GraphCommand::Edit(mutation), Some(version), creation, cx);
+        if let Some(task) =
+            self.submit_command(GraphCommand::Edit(mutation), Some(version), creation, cx)
+        {
+            task.detach();
+        }
     }
 
-    fn submit_command(
+    pub(in crate::canvas) fn submit_command(
         &mut self,
         command: GraphCommand,
         version: Option<GraphEditVersion>,
         creation: Option<gpui::Entity<super::palette::NodePalette>>,
         cx: &mut Context<Self>,
-    ) {
+    ) -> Option<gpui::Task<Option<GraphEditVersion>>> {
         if self.busy {
-            return;
+            return None;
+        }
+        let Some(inputs) = self.prepare_port_edits(version, cx) else {
+            if let Some(creation) = creation {
+                creation.update(cx, |creation, cx| creation.creation_failed(cx));
+            }
+            return None;
+        };
+        if inputs.is_empty() && matches!(command, GraphCommand::CommitPortInputs) {
+            return None;
         }
         let reroute_selection = if matches!(
             &command,
@@ -114,78 +133,48 @@ impl GraphCanvas {
             operation_id: OperationId::new(),
             locale: "zh-CN".into(),
         };
+        let run_after = if let GraphCommand::RunAfterPortInputs(demand) = &command {
+            Some(demand.clone())
+        } else {
+            None
+        };
+        let submitted_inputs = inputs.clone();
         let task = self.services.run(move |services| {
-            let application = &services.application;
-            let response = match command {
-                GraphCommand::Paste { source, anchor } => {
-                    let snapshot =
-                        yss_graph_editor::deserialize_clipboard_subgraph(source.as_bytes())?;
-                    application.edit_graph(
-                        request,
-                        EditorGraphMutation::InsertSubgraph { snapshot, anchor },
-                    )?
-                }
-                GraphCommand::Edit(mutation) => application.edit_graph(request, mutation)?,
-                GraphCommand::Undo => application.change_graph_history(request, false)?,
-                GraphCommand::Redo => application.change_graph_history(request, true)?,
-                GraphCommand::Save => application.save_current_graph(request)?.graph,
-                GraphCommand::UpdateConstant {
-                    id,
-                    name,
-                    data_type,
-                    value,
-                } => {
-                    let document = application.current_graph_document(
-                        &request.project_instance_id,
-                        &request.graph_path,
-                        request.version,
-                    )?;
-                    let mut constant = document
-                        .constants
-                        .get(&id)
-                        .ok_or_else(|| anyhow::anyhow!("constant disappeared"))?
-                        .clone();
-                    constant.name = name;
-                    constant.data_type = data_type;
-                    if let Some(value) = value {
-                        constant.data_value =
-                            super::authoring::parse_constant_input(value, &constant.data_type)?;
-                        constant.tabular = None;
-                    }
-                    application.edit_graph(
-                        request,
-                        EditorGraphMutation::SetConstant {
-                            id,
-                            constant: Some(constant),
-                        },
-                    )?
-                }
-                GraphCommand::SetParameter {
-                    node_id,
-                    key,
-                    value,
-                } => application.edit_graph(
-                    request,
-                    EditorGraphMutation::SetParameters {
-                        node_id,
-                        parameters: [(key, value)].into_iter().collect(),
-                    },
-                )?,
-            };
-            Ok(response)
+            Ok(worker::apply(
+                &services.application,
+                request,
+                &inputs,
+                command,
+            ))
         });
-        cx.spawn(async move |view, cx| {
+        let task = cx.spawn(async move |view, cx| {
             let result = task
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.busy = false;
+                let mut outcome = result.unwrap_or_else(|error| worker::Outcome {
+                    error: Some(error),
+                    ..Default::default()
+                });
+                let completed = outcome.error.is_none();
+                view.accept_port_edits(&submitted_inputs[..outcome.applied_inputs]);
+                if outcome.error.is_some()
+                    && let Some(response) = outcome.response.take()
+                {
+                    view.install_response(response, cx);
+                }
+                let result = match outcome.error {
+                    Some(error) => Err(error),
+                    None => Ok(outcome.response),
+                };
                 match result {
                     Ok(response) => {
-                        if insertion_selection
-                            .as_ref()
-                            .is_some_and(|selection| *selection == view.selected)
+                        if let Some(response) = &response
+                            && insertion_selection
+                                .as_ref()
+                                .is_some_and(|selection| *selection == view.selected)
                         {
                             view.selected = response
                                 .update
@@ -201,7 +190,12 @@ impl GraphCanvas {
                                 .collect();
                             view.selected_connections.clear();
                         }
-                        view.install_response(response, cx);
+                        if let Some(response) = response {
+                            view.install_response(response, cx);
+                        }
+                        if let Some(demand) = run_after {
+                            view.run_graph(demand, cx);
+                        }
                         if let Some(creation) = &creation {
                             creation.update(cx, |creation, cx| creation.creation_succeeded(cx));
                         }
@@ -230,10 +224,13 @@ impl GraphCanvas {
                     view.refresh(cx);
                 }
                 cx.notify();
-            });
-        })
-        .detach();
+                completed.then_some(view.graph.editing.version)
+            })
+            .ok()
+            .flatten()
+        });
         cx.notify();
+        Some(task)
     }
 
     pub fn install_response(&mut self, response: GraphEditResponse, cx: &mut Context<Self>) {

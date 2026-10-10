@@ -168,6 +168,10 @@ impl GraphCanvas {
         if !self.can_run() {
             return;
         }
+        if self.has_dirty_port_inputs() {
+            self.submit(super::GraphCommand::RunAfterPortInputs(demand), None, cx);
+            return;
+        }
         self.context_menu = None;
         let project = self.graph.project.clone();
         let path = self.graph.projection.graph_path.clone();

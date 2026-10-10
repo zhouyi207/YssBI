@@ -38,6 +38,11 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.commit_port_inputs_before(window, cx, move |view, window, cx| {
+            view.show_node_menu(id, position, window, cx)
+        }) {
+            return;
+        }
         let Some(node) = self
             .graph
             .projection

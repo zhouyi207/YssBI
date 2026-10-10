@@ -11,6 +11,12 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let after_source = source.clone();
+        if self.commit_port_inputs_before(window, cx, move |view, window, cx| {
+            view.show_palette(point, after_source, window, cx)
+        }) {
+            return;
+        }
         if self.busy {
             return;
         }
