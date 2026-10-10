@@ -1,6 +1,7 @@
 //! Test-specific noncentralities and explicitly named planning approximations.
-use super::distributions::{f_power, normal, normal_power, t_power};
+use super::distributions::{f_power, normal_power, t_power};
 use super::*;
+use crate::distribution::normal;
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 pub(super) fn power(
     model: PowerModel,
@@ -156,15 +157,15 @@ pub(super) fn power(
             standardized_difference,
             margin,
         } => {
-            let z = -normal().inverse_cdf(alpha);
+            let z = crate::distribution::normal::upper_quantile(alpha);
             let lower = finite((-margin - standardized_difference) * (n / 2.).sqrt() + z)?;
             let upper = finite((margin - standardized_difference) * (n / 2.).sqrt() - z)?;
             if lower >= upper {
                 0.
             } else if lower > 0. {
-                normal().sf(lower) - normal().sf(upper)
+                normal::sf(lower) - normal::sf(upper)
             } else {
-                normal().cdf(upper) - normal().cdf(lower)
+                normal::cdf(upper) - normal::cdf(lower)
             }
         }
     };
@@ -179,19 +180,28 @@ fn proportion(
     alpha: f64,
     alternative: PowerAlternative,
 ) -> Result<f64> {
-    let one = |greater: bool, prob: f64| {
-        let critical = -normal().inverse_cdf(prob) * (null_variance / n).sqrt();
+    let z = if alternative == PowerAlternative::TwoSided {
+        normal::two_sided_critical(alpha)
+    } else {
+        normal::upper_quantile(alpha)
+    };
+    let critical = z * (null_variance / n).sqrt();
+    let statistic = |greater: bool| {
         let delta = if greater { delta } else { -delta };
         if variance == 0. {
-            f64::from(u8::from(delta > critical))
+            if delta > critical {
+                f64::NEG_INFINITY
+            } else {
+                f64::INFINITY
+            }
         } else {
-            normal().sf((critical - delta) / (variance / n).sqrt())
+            (critical - delta) / (variance / n).sqrt()
         }
     };
     finite(match alternative {
-        PowerAlternative::TwoSided => one(true, alpha / 2.) + one(false, alpha / 2.),
-        PowerAlternative::Greater => one(true, alpha),
-        PowerAlternative::Less => one(false, alpha),
+        PowerAlternative::TwoSided => normal::sum_sf(statistic(true), statistic(false)),
+        PowerAlternative::Greater => normal::sf(statistic(true)),
+        PowerAlternative::Less => normal::sf(statistic(false)),
     })
 }
 fn variance(

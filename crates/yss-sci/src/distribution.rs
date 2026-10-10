@@ -11,7 +11,9 @@ use yss_sci_contract::execution::{
 };
 use yss_sci_contract::hypothesis::Alternative;
 
+pub(crate) mod normal;
 pub(crate) mod student_t;
+pub(crate) use normal::two_sided_p as normal_two_sided_p;
 
 /// The 16-point Gauss-Legendre rule shared by bounded reference-density integrals.
 pub(crate) fn integrate_gauss(left: f64, right: f64, f: impl Fn(f64) -> f64) -> f64 {
@@ -38,11 +40,6 @@ pub(crate) fn integrate_gauss(left: f64, right: f64, f: impl Fn(f64) -> f64) -> 
 pub(crate) fn stirling_error(z: f64) -> f64 {
     let q = 1. / (z * z);
     (1. / 12. - q * (1. / 360. - q * (1. / 1260. - q / 1680.))) / z
-}
-
-/// Standard-normal two-sided tails round once, including subnormal probabilities.
-pub(crate) fn normal_two_sided_p(statistic: f64) -> f64 {
-    statrs::function::erf::erfc(statistic.abs() / std::f64::consts::SQRT_2)
 }
 
 /// Directed probabilities for validated standard Student-t reference distributions.

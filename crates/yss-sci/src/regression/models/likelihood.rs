@@ -1,4 +1,5 @@
 use super::common::*;
+use crate::distribution::normal::log_cdf as normal_log_cdf;
 use statrs::function::gamma::ln_gamma;
 use yss_sci_contract::execution::ScientificExecutionControl as Control;
 use yss_sci_contract::regression::models::*;

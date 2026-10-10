@@ -7,7 +7,7 @@ pub use correlation::{kendall, partial, pearson, spearman};
 pub use ridit::ridit;
 
 use crate::inference::intervals::{critical, validate_confidence as level};
-use statrs::distribution::{ContinuousCDF, Normal, StudentsT};
+use statrs::distribution::{ContinuousCDF, StudentsT};
 use yss_sci_contract::association::{ConfidenceInterval, TestInference};
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl as Control,
@@ -138,12 +138,11 @@ fn alternative(value: Alternative) -> &'static str {
     }
 }
 fn normal_tail(z: f64, alternative: Alternative) -> Result<f64, Error> {
-    let distribution = Normal::new(0.0, 1.0).map_err(|_| Error::ComputationFailed)?;
     bounded(
         match alternative {
             Alternative::TwoSided => crate::distribution::normal_two_sided_p(z),
-            Alternative::Greater => distribution.sf(z),
-            Alternative::Less => distribution.cdf(z),
+            Alternative::Greater => crate::distribution::normal::sf(z),
+            Alternative::Less => crate::distribution::normal::cdf(z),
         },
         0.0,
         1.0,

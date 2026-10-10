@@ -75,7 +75,7 @@ impl Probit {
 
             // p = Φ(η), φ = PDF
             let p: Col<f64> = eta.map(|&e| {
-                let phi_cdf = normal.cdf(e);
+                let phi_cdf = crate::distribution::normal::cdf(e);
                 phi_cdf.clamp(EPS, 1.0 - EPS)
             });
             let phi: Col<f64> = eta.map(|&e| normal.pdf(e));
@@ -125,12 +125,13 @@ impl Probit {
 
             if diff < self.config.tolerance {
                 let eta_final = self.exog.as_ref() * beta.as_ref();
-                let p_final: Col<f64> = eta_final.map(|&e| normal.cdf(e).clamp(EPS, 1.0 - EPS));
+                let p_final: Col<f64> =
+                    eta_final.map(|&e| crate::distribution::normal::cdf(e).clamp(EPS, 1.0 - EPS));
                 // Observed Bernoulli-probit information: λ(qη)[λ(qη)+qη],
                 // q=2y-1, λ(a)=φ(a)/Φ(a). Unlike logit it differs from expected information.
                 let w_final: Col<f64> = Col::from_fn(n, |i| {
                     let signed_eta = (2.0 * self.endog[i] - 1.0) * eta_final[i];
-                    let probability = normal.cdf(signed_eta);
+                    let probability = crate::distribution::normal::cdf(signed_eta);
                     let ratio = normal.pdf(signed_eta) / probability;
                     ratio * (ratio + signed_eta)
                 });

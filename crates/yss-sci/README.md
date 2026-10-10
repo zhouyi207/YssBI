@@ -284,12 +284,22 @@ design-based survey inference.
 [Student density](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.t.html)
 define the calculation; normal/F/chi-square quantiles and noncentral tail algorithms retain their owners.
 
-`distribution::normal_two_sided_p` owns standard-normal two-sided inference.
-It evaluates `erfc(abs(z)/sqrt(2))` directly, avoiding subtraction from a rounded
-CDF and the intermediate halving that can erase a representable subnormal.
+`distribution::normal` owns standard-normal CDF/SF, two-sided probabilities,
+log probabilities and the log-CDF/density ratio. Ordinary tails reuse the existing
+pure Rust `libm::erfc` primitive and compensate the sqrt(2) argument conversion.
+At |z| >= 8, a fixed 32-level Mills continued fraction supplies the tail ratio;
+its adjacent convergents bound truncation beyond f64 precision. Forward tails
+compensate the square before exponentiation and include the one/two-sided factor
+before the final product, preserving subnormal probabilities. Log-CDF uses
+`log1p` on the positive side; the negative density ratio stays logarithmic after
+probability underflow. Truncated-normal, lognormal AFT, Heckman and Frontier reuse
+this owner; Heckman does not subtract quadratic log-density terms to obtain Mills.
+`normal_two_sided_p` re-exports the same calculation for existing inference callers.
 Binary, IV, random/dynamic panel, model coefficient, asymptotic constraint,
-correlation/rank and VAR/VEC inference reuse this calculation. The time-series
-boundary retains its existing rejection of nonfinite statistics.
+correlation/rank and VAR/VEC inference reuse it. Probit links, MacKinnon calibration,
+Power, process capability and probability plots use the same directed probabilities.
+The time-series boundary retains its existing rejection of nonfinite statistics.
+The [Mills continued fraction](https://dlmf.nist.gov/7.9) bounds the tail calculation.
 Chi-square upper tails reuse the validated native distribution's SF directly,
 including diagnostics, binary likelihood ratios, IV, random panel and VAR/VEC
 postestimation; these callers keep their existing degrees, unavailable-result
@@ -627,7 +637,7 @@ coordinates, then restores coefficients, covariance, sigma and observation resul
 through the existing design map. Reported likelihood includes the response-density
 scale adjustment. Objective evaluations accumulate row predictions directly without
 allocating a full fitted vector each time. Conditional moments use normalized scale
-ratios; efficiency uses the shared log-CDF/density ratio and its existing tail series,
+ratios; efficiency uses the shared Normal log-CDF/density ratio,
 avoiding raw variance products and quadratic cancellation. Both production and cost
 retain `E[exp(-u)]`, which changes with response units. Small/large response-unit
 regressions check independent regular inference and the appropriate efficiency limits.
@@ -666,9 +676,9 @@ after each native sort; index construction and queries retain controlled scans.
 Focused backend tests cover both-sided ties, unequal tie counts, rounded distance
 ties, the caliper boundary and interruption.
 
-Shared regression designs, coefficient tables, stable normal log-CDF and controlled
-optimization remain owned by `regression::models::common`; all matrix arithmetic
-stays behind Linalg. Algorithms check cancellation/deadlines between scans and
+Shared regression designs, coefficient tables and controlled optimization remain
+owned by `regression::models::common`; reference Normal probabilities belong to
+`distribution::normal`. All matrix arithmetic stays behind Linalg. Algorithms check cancellation/deadlines between scans and
 iterations. Nonidentification, nonconvergence and nonfinite computations fail;
 frontier boundary solutions are not mislabeled as regular interior inference.
 `tests/fixtures/causal_category_reference.py` reproduces independent SciPy,
@@ -1104,8 +1114,8 @@ finite-degree chi-square density against the conditional Normal survival functio
 The scaled log coordinate avoids large Gamma subtraction and rounded Beta arguments;
 the density's omitted tails have an explicit bound. Fixed density panels and additional
 Normal-transition splits bound work independently of sample count and noncentrality,
-with control checked at every panel. The Normal survival function retains its native
-accuracy; independent series references include that error in their tolerance.
+with control checked at every panel. The conditional Normal survival function
+reuses `distribution::normal` and its bounded, stable tail calculation.
 Smaller-degree noncentral t retains its centered Poisson/beta series.
 `power::fisher` owns F Power's finite-Beta density in a scaled log-ratio coordinate,
 its bracketed Newton critical value, and the Poisson mixture's component tails.
@@ -1116,8 +1126,9 @@ when both degrees are large. Null F Power equals the requested alpha directly.
 Both series share one controlled accumulator and propagate component errors.
 The shared chi-square shortcut uses a conservative analytic Chernoff bound;
 F's extreme-effect shortcut bounds both numerator and denominator events.
-Scalar planning
-never allocates an n-row dataset. Normal approximations are named
+Normal Power retains the full two-sided alpha before critical-value evaluation
+and sums tails in log space, avoiding halving and intermediate underflow.
+Its null power equals alpha directly. Scalar planning never allocates an n-row dataset. Normal approximations are named
 for proportions, Fisher-z correlations, binary-predictor logistic, Poisson rate ratios and
 Schoenfeld survival designs. Equivalence/noninferiority use known-variance normal designs.
 SciPy references cover tails, achieved power and minimum integer sample sizes.

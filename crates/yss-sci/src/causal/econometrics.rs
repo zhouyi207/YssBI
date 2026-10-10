@@ -1,9 +1,9 @@
 //! Linear IV GMM, Heckman two-step, normal–half-normal frontiers and SUR.
 use super::common::*;
-use crate::regression::models::{
-    common::{normal_log_cdf, normal_log_cdf_density_ratio},
-    glm,
+use crate::distribution::normal::{
+    log_cdf as normal_log_cdf, log_cdf_density_ratio as normal_log_cdf_density_ratio,
 };
+use crate::regression::models::glm;
 use yss_sci_contract::causal::models::*;
 use yss_sci_contract::regression::models::{GlmFamily, GlmLink, GlmOptions};
 use yss_sci_linalg::matrix_rank;
@@ -274,12 +274,7 @@ fn heckman_point(
         .collect::<Vec<_>>();
     let mills = indices
         .iter()
-        .map(|&i| {
-            (-0.5 * eta[i] * eta[i]
-                - 0.5 * (2.0 * std::f64::consts::PI).ln()
-                - normal_log_cdf(eta[i]))
-            .exp()
-        })
+        .map(|&i| (-normal_log_cdf_density_ratio(eta[i])).exp())
         .collect::<Vec<_>>();
     let design = {
         let predictor_rows = predictors

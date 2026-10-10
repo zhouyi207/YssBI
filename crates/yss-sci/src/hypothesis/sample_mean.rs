@@ -1,8 +1,6 @@
 //! Mean/count tests with explicit data and option admission; observations are not dropped.
 use super::{Error, Violation, checkpoint, failed, finite, invalid, parameter};
-use statrs::distribution::{
-    Binomial, ContinuousCDF, Discrete, DiscreteCDF, Normal, Poisson, StudentsT,
-};
+use statrs::distribution::{Binomial, Discrete, DiscreteCDF, Poisson, StudentsT};
 use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{
     Alternative, ClassicalHypothesisTest, ClassicalTestResult, SummaryTDesign,
@@ -511,12 +509,11 @@ fn finish_normal(
         return Err(invalid(Violation::DataOutOfRange));
     }
     let statistic = finite(estimate / standard_error)?;
-    let distribution = Normal::new(0.0, 1.0).map_err(|_| failed())?;
     control.check()?;
     let p_value = match alternative {
         Alternative::TwoSided => crate::distribution::normal_two_sided_p(statistic),
-        Alternative::Greater => distribution.sf(statistic),
-        Alternative::Less => distribution.cdf(statistic),
+        Alternative::Greater => crate::distribution::normal::sf(statistic),
+        Alternative::Less => crate::distribution::normal::cdf(statistic),
     }
     .clamp(0.0, 1.0);
     control.check()?;

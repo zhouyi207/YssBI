@@ -123,9 +123,9 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             .register(
                 KernelId::new(format!("yssbi.statistics.{id}").into()).expect("association ID"),
                 std::num::NonZeroU32::new(match method {
-                    Pearson | Partial | BlandAltman => 6,
-                    Spearman | Kappa => 5,
-                    Icc | Kendall | Ridit => 4,
+                    Pearson | Partial | BlandAltman | Kappa => 6,
+                    Spearman | Kendall | Ridit => 5,
+                    Icc => 4,
                     KendallW | Rwg => 3,
                 })
                 .unwrap(),

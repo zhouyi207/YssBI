@@ -27,6 +27,48 @@ fn bounded_power(model: PowerModel, options: PowerOptions) -> PowerResult {
 }
 
 #[test]
+fn normal_power_preserves_reference_tail_precision() {
+    let result = compute(
+        PowerModel::NormalMean {
+            standardized_effect: 1.0,
+        },
+        PowerOptions {
+            alpha: 0.8,
+            alternative: PowerAlternative::TwoSided,
+            request: PowerRequest::Power { sample_size: 4 },
+        },
+        &control(),
+    )
+    .unwrap();
+    // Independent Gaussian central series at the represented critical value.
+    let expected = 0.971_769_853_179_994_6;
+    assert!(
+        (result.power - expected).abs() < 2e-15,
+        "{} != {expected}",
+        result.power
+    );
+}
+
+#[test]
+fn normal_power_retains_subnormal_significance() {
+    for standardized_effect in [0.0, 0.01] {
+        let result = compute(
+            PowerModel::NormalMean {
+                standardized_effect,
+            },
+            PowerOptions {
+                alpha: f64::from_bits(1),
+                alternative: PowerAlternative::TwoSided,
+                request: PowerRequest::Power { sample_size: 4 },
+            },
+            &control(),
+        )
+        .unwrap();
+        assert_eq!(result.power, f64::from_bits(1));
+    }
+}
+
+#[test]
 fn noncentral_f_power_finishes_for_large_denominator_degrees() {
     let sample_size = 1_000_000_000_000_001;
     let result = bounded_power(

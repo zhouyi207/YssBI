@@ -182,7 +182,9 @@ pub fn probability(
         let p = (i as f64 + 0.5) / values.len() as f64;
         data.push(match mode {
             ProbabilityPlotMode::Pp => PlotPoint {
-                x: finite(normal.cdf(values[i]))?,
+                x: finite(crate::distribution::normal::cdf(
+                    (values[i] - mean) / standard_deviation,
+                ))?,
                 y: p,
             },
             ProbabilityPlotMode::Qq => PlotPoint {

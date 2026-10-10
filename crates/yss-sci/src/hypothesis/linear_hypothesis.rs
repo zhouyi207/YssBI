@@ -192,15 +192,13 @@ pub fn run_hypothesis_test(
 pub fn run_asymptotic_hypothesis_test(
     input: HypothesisTestInput,
 ) -> Result<HypothesisTestOutput, HypothesisError> {
-    use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
+    use statrs::distribution::{ChiSquared, ContinuousCDF};
     let mut result = run_hypothesis_test(input)?;
     if result.test_type == "t" {
-        let normal =
-            Normal::new(0.0, 1.0).map_err(|e| HypothesisError::InvalidInput(e.to_string()))?;
         result.p_value = if result.alternative == "two_sided" {
             crate::distribution::normal_two_sided_p(result.stat)
         } else {
-            normal.sf(result.stat)
+            crate::distribution::normal::sf(result.stat)
         };
         result.test_type = "z".into();
     } else {

@@ -9,6 +9,7 @@ yss-math-expr = { path = "../yss-math-expr" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 yss-sci-linalg = { path = "../yss-sci-linalg" }
 num-traits.workspace = true
+libm.workspace = true
 serde.workspace = true
 statrs.workspace = true
 rand.workspace = true

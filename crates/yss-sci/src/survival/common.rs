@@ -1,6 +1,7 @@
+pub(super) use crate::distribution::normal::log_cdf as normal_log_cdf;
 pub(super) use crate::regression::models::common::{
     Design, Result, check_iteration, coefficient_table, failed, finite, fitted, hessian, invalid,
-    inverse, least_squares, minimize, names, normal_log_cdf, parameter, validate,
+    inverse, least_squares, minimize, names, parameter, validate,
 };
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 pub(super) use yss_sci_contract::execution::ScientificExecutionControl as Control;

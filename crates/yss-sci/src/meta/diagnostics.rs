@@ -118,7 +118,7 @@ pub fn combine_p(
         studies: n,
         statistic: statistic.is_finite().then_some(statistic),
         degrees_of_freedom: None,
-        p_value: normal.sf(statistic),
+        p_value: crate::distribution::normal::sf(statistic),
     })
 }
 pub fn leave_one_out(

@@ -1,6 +1,6 @@
 //! Rank, sign, and sequence tests with explicit small-sample and tie handling.
 use super::{Error, Violation, checkpoint, failed, finite, invalid, parameter};
-use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
+use statrs::distribution::{ChiSquared, ContinuousCDF};
 use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{Alternative, ClassicalTestResult, RankHypothesisTest as Input};
 
@@ -750,12 +750,11 @@ fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<(), 
 
 fn normal_p(z: f64, a: Alternative, control: &ScientificExecutionControl) -> Result<f64, Error> {
     finite(z)?;
-    let n = Normal::new(0.0, 1.0).expect("standard normal");
     control.check()?;
     let p = match a {
         Alternative::TwoSided => crate::distribution::normal_two_sided_p(z),
-        Alternative::Greater => n.sf(z),
-        Alternative::Less => n.cdf(z),
+        Alternative::Greater => crate::distribution::normal::sf(z),
+        Alternative::Less => crate::distribution::normal::cdf(z),
     }
     .clamp(0.0, 1.0);
     control.check()?;

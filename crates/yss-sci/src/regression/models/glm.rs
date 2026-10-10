@@ -48,7 +48,7 @@ fn mean_link(eta: f64, link: GlmLink) -> Result<(f64, f64)> {
         }
         GlmLink::Probit => {
             let norm = Normal::new(0.0, 1.0).expect("normal");
-            (norm.cdf(eta), norm.pdf(eta))
+            (crate::distribution::normal::cdf(eta), norm.pdf(eta))
         }
         GlmLink::Cloglog => {
             let e = eta.exp();

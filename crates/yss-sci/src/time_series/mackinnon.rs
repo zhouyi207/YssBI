@@ -1,7 +1,6 @@
 //! MacKinnon (1994) tau response-surface coefficients, N = 1..6.
 //! Numerical tables: statsmodels 0.14.6, statsmodels/tsa/adfvalues.py.
 //! https://www.statsmodels.org/stable/generated/statsmodels.tsa.stattools.coint.html
-use statrs::distribution::{ContinuousCDF, Normal};
 use yss_sci_contract::time_series::forecast::Deterministic;
 
 pub(crate) fn p_value(statistic: f64, deterministic: Deterministic, series: usize) -> f64 {
@@ -111,5 +110,5 @@ pub(crate) fn p_value(statistic: f64, deterministic: Deterministic, series: usiz
     } else {
         large[0] + statistic * (large[1] + statistic * (large[2] + statistic * large[3]))
     };
-    Normal::new(0.0, 1.0).expect("standard normal").cdf(x)
+    crate::distribution::normal::cdf(x)
 }

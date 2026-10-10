@@ -1,5 +1,5 @@
 use crate::regression::models::common::{Result, finite, parameter};
-use statrs::distribution::{Continuous, ContinuousCDF, Normal};
+use statrs::distribution::{Continuous, Normal};
 use std::collections::HashMap;
 use yss_sci_contract::{
     execution::ScientificExecutionControl as Control,
@@ -85,7 +85,7 @@ pub(crate) fn binary_link(
             (p, d, d * (q - p), q)
         }
         BinaryRegressionLink::Probit => {
-            let p = normal.cdf(eta);
+            let p = crate::distribution::normal::cdf(eta);
             let d = normal.pdf(eta);
             (p, d, -eta * d, 0.)
         }

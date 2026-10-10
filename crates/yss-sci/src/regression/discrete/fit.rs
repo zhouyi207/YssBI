@@ -2,7 +2,6 @@
 use super::{Logit, Probit};
 use crate::error::computation_failed;
 use crate::regression::design::{covariance_rows, design_condition_number};
-use statrs::distribution::{ContinuousCDF, Normal};
 use yss_sci_contract::regression::fit::{
     BinaryRegressionLink, BinaryRegressionStatistics, RegressionCoefficientStatistics,
     RegressionFit, RegressionStatistics,
@@ -49,14 +48,12 @@ pub fn predict_binary(
             yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
         ));
     }
-    let normal =
-        Normal::new(0.0, 1.0).map_err(|_| computation_failed(SciOperationCode::Regression))?;
     Ok((&x * &Col::from_iter(coefficients.iter().copied()))
         .iter()
         .map(|&v| match link {
             BinaryRegressionLink::Logit if v >= 0.0 => 1.0 / (1.0 + (-v).exp()),
             BinaryRegressionLink::Logit => v.exp() / (1.0 + v.exp()),
-            BinaryRegressionLink::Probit => normal.cdf(v),
+            BinaryRegressionLink::Probit => crate::distribution::normal::cdf(v),
         })
         .collect())
 }
@@ -152,11 +149,9 @@ pub(crate) fn fit_probit_design(
         .map_err(|_| computation_failed(SciOperationCode::Regression))?;
     let (y, x) = (&model.endog, &model.exog);
     let coefficients = result.betas.iter().copied().collect::<Vec<_>>();
-    let normal =
-        Normal::new(0.0, 1.0).map_err(|_| computation_failed(SciOperationCode::Regression))?;
     let fitted = (x * &result.betas)
         .iter()
-        .map(|&value| normal.cdf(value))
+        .map(|&value| crate::distribution::normal::cdf(value))
         .collect::<Vec<_>>();
     let adjusted_pseudo_r2 =
         1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;

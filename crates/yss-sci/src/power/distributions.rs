@@ -1,28 +1,27 @@
 //! Finite-degree noncentral t/F tails from bounded integrals and centered Poisson/beta series.
 pub(super) use super::fisher::power as f_power;
 use super::*;
-use crate::distribution::{integrate_gauss, stirling_error};
+use crate::distribution::{integrate_gauss, normal, stirling_error};
 use statrs::{
-    distribution::{ContinuousCDF, Normal, StudentsT},
+    distribution::StudentsT,
     function::{beta::beta_reg, gamma::ln_gamma},
 };
 pub(super) const EPS: f64 = 2e-14;
-pub(super) fn normal() -> Normal {
-    Normal::new(0., 1.).expect("normal")
-}
 pub(super) fn normal_power(
     noncentrality: f64,
     alpha: f64,
     alternative: PowerAlternative,
 ) -> Result<f64> {
-    let normal = normal();
+    if noncentrality == 0.0 {
+        return Ok(alpha);
+    }
     let value = match alternative {
         PowerAlternative::TwoSided => {
-            let z = -normal.inverse_cdf(alpha / 2.);
-            normal.sf(z - noncentrality) + normal.cdf(-z - noncentrality)
+            let z = normal::two_sided_critical(alpha);
+            normal::sum_sf(z - noncentrality, z + noncentrality)
         }
-        PowerAlternative::Greater => normal.sf(-normal.inverse_cdf(alpha) - noncentrality),
-        PowerAlternative::Less => normal.cdf(normal.inverse_cdf(alpha) - noncentrality),
+        PowerAlternative::Greater => normal::sf(normal::upper_quantile(alpha) - noncentrality),
+        PowerAlternative::Less => normal::sf(normal::upper_quantile(alpha) + noncentrality),
     };
     probability(value)
 }
@@ -72,9 +71,9 @@ fn t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64> {
         return probability(1. - t_tail(-t, df, -delta, control)?);
     }
     if t == 0. {
-        return probability(normal().cdf(delta));
+        return probability(normal::cdf(delta));
     }
-    if normal().cdf(delta) < EPS {
+    if normal::cdf(delta) < EPS {
         return Ok(0.);
     }
     if df >= 64. {
@@ -97,7 +96,6 @@ fn t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64> {
 fn large_df_t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64> {
     let scale = df.sqrt();
     let normalization = (-stirling_error(df / 2.)).exp() / std::f64::consts::PI.sqrt();
-    let normal = normal();
     // w = sqrt(df) * log(sqrt(V/df)), V ~ chi-square(df). Its exact density
     // is normalization * exp(df/2 * (2w/sqrt(df) - expm1(2w/sqrt(df)))).
     // Log-concavity bounds both omitted tails outside [-8,8] below 2e-17
@@ -131,7 +129,7 @@ fn large_df_t_tail(t: f64, df: f64, delta: f64, control: &Control) -> Result<f64
                 df / 2. * (u - u.exp_m1())
             };
             let threshold = (t - delta) + t * (w / scale).exp_m1();
-            kernel.exp() * normal.sf(threshold)
+            kernel.exp() * normal::sf(threshold)
         });
     }
     probability(normalization * total)

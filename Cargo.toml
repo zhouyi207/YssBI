@@ -31,6 +31,7 @@ faer = "0.24.0"
 notify = "8.2.0"
 walkdir = "2.5.0"
 num-traits = "0.2.19"
+libm = "0.2.16"
 rand = "0.10"
 rig-agent = { version = "=0.43.0", default-features = false }
 rig-core = { version = "=0.43.0", default-features = false, features = ["reqwest", "rustls"] }

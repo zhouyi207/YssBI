@@ -1,6 +1,5 @@
 use super::process::{Process, pooled_sigma};
 use super::*;
-use statrs::distribution::{ContinuousCDF, Normal};
 pub fn process_capability(
     values: &[f64],
     groups: Option<&[usize]>,
@@ -36,10 +35,12 @@ pub fn process_capability(
     };
     let width = upper - lower;
     let nearest = (upper - p.mean).min(p.mean - lower);
-    let normal = Normal::new(0., 1.).map_err(|_| failed())?;
     let ppm = |s: f64| {
         if s > 0. {
-            Some(1e6 * (normal.cdf((lower - p.mean) / s) + normal.sf((upper - p.mean) / s)))
+            Some(
+                1e6 * (crate::distribution::normal::cdf((lower - p.mean) / s)
+                    + crate::distribution::normal::sf((upper - p.mean) / s)),
+            )
         } else {
             None
         }

@@ -77,16 +77,12 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
 不归为参数错误。`inference.cluster_robust` 使用 revision 8，并复用 SCI 的稳定 Student-t 尾概率与临界值。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
-回归模型按实际消费者维护能力版本：层次、逐步使用 revision 8，GLM 使用 revision 9；
-Robust、Quantile、Firth、计数/比例/Tobit/Conditional Logit 和其余 GLM 入口使用 revision 6。
-曲线使用 revision 8；RCS、阈值和回归流程使用 revision 7，Multinomial/Ordinal Logit 使用 revision 5；
-两个非线性入口使用 revision 6，Deming 使用 revision 4。Ridge/Lasso/PLS 使用 revision 5，不输出系数 p 值。
-五个参数生存拟合内核（Exponential、Weibull、Lognormal、Loglogistic、AFT）采用 revision 10，
-Mixed/GEE 采用 revision 7；共线性诊断使用 revision 5。Meta Regression 使用 revision 14，
-无 moderator 的 Meta 模型、逐项排除和敏感性使用 revision 13；Egger 使用 revision 11，Begg 使用 revision 8。
-置信区间与调整预测使用 revision 7，多重比较使用 revision 9；六个 Meta 效应转换使用 revision 6，
-Forest 绘图使用 revision 10；Funnel 使用 revision 10，Q/I²/tau² 使用 revision 8，
-这些入口直接请求实际输出，不因丢弃的系数推断失败而拒绝有限结果。
+能力版本由实际 Rust 注册入口拥有：[中央 install](src/builtins/statistics/mod.rs)、
+[模型注册](src/builtins/statistics/regression_models.rs) 和
+[关联注册](src/builtins/statistics/association.rs)。共享数值行为变化时更新实际消费者；
+README 描述计算职责和契约，不复制这些版本表。Ridge/Lasso/PLS 不输出系数 p 值。
+回归、生存、混合/GEE、Meta 和绘图入口直接请求实际输出，
+不因丢弃的系数推断失败而拒绝有限结果。
 SCI 的共享正态临界值直接从中心置信度计算，
 保留接近 1 的有限区间和极小正置信度的可表示宽度；多重比较只校验其实际使用的置信度，
 不预先计算并丢弃正态分位数。接近零的 Student-t 临界值复用 SCI 受误差界约束的中心展开，
@@ -96,25 +92,24 @@ SCI 的共享正态临界值直接从中心置信度计算，
 Bonferroni 的原始置信度，较大的 Bonferroni 家族直接传入其显式尾概率。
 组内缩放矩和组摘要由 SCI 共用，输出恢复原单位；合并方差临界值只计算一次，
 Welch 自由度以归一化方差权重计算，避免因响应单位改变而出现无效方差或自由度。
-Meta 的上述版本也涵盖按需 moment trace 与稳定异质性尺度恢复。
+Meta 复用按需 moment trace 与稳定异质性尺度恢复。
 共享系数表直接接收实际置信度，有协方差时才准备推断；Meta 不再先构造固定 95% 区间后覆盖。
-固定 95% 的正态临界值保留原始浮点位模式，原正态推断和无协方差输出沿用其能力版本；
-实际使用 Student-t 系数区间的入口更新版本，响应面与剂量反应分别采用 revision 8、7。
-中介 bootstrap 采用 revision 10，涵盖共享参数恢复、稳定分位数二分点和 Student-t 尾概率。
+固定 95% 的正态临界值保留原始浮点位模式；共享尾概率由 SCI 的
+`distribution::normal` 拥有，置信区间和无协方差点估计保持其契约。
+中介 bootstrap 复用共享参数恢复、稳定分位数二分点和 Student-t 尾概率。
 Student-t 临界值的实际消费者统一到现有有界 SCI owner：线性及 Prais 拟合、
 FE/LSDV/FD/Between 和 TWFE 报告、small IV 系数及第一阶段表、ADF、对数曲线、
 调查均值/比例、Bland–Altman、系数图、条件效应和 t 型 Power。
-调查均值/比例使用 revision 5，Bland–Altman 与系数图使用 revision 6，
-Moderation 两个入口使用 revision 8；均值差、配对及整群 Power 使用 revision 9，
-TWFE 使用 revision 11。置信度直接传入，单侧尾概率保留方向及原始精度；
-Moderation 共用一次临界值，点估计读取不再构造弃用的推断。
-Summary/Predict 继续读取已有拟合结果；RE 的正态推断、面板 Fisher 检验的
-MacKinnon 校准和正态规划计算保持其数值契约与能力版本。
+置信度直接传入，单侧尾概率保留方向及原始精度；Moderation 共用一次临界值，
+点估计读取不再构造弃用的推断。Summary/Predict 继续读取已有拟合结果。
+实际返回 Normal 概率或使用 Probit/MacKinnon 校准的入口复用同一 SCI owner，
+包括 Power、过程能力、概率图、拟合及推断。关联的 Kendall、Kappa、Ridit 在自己的
+注册入口更新版本；中央表不维护这些节点的条目。模型注册也在自己的 owner 更新。
 大自由度 Student-t 概率与临界值复用 SCI 的同一密度准备和有界积分，
 避免不完全 Beta 参数舍入及大 log-Gamma 相减导致的 p 值错误。双侧与单侧
 在 log 空间投影后只舍入一次；零效应 t 型 Power 保持请求的 α。
 实际返回 Student-t 概率的入口按真实注册路径维护能力版本，Spearman 使用 revision 5。
-仅返回区间、采样、正态推断或已拟合预测的入口保留其能力版本。
+仅返回区间、采样及未使用改变后计算的读取入口保留其能力版本。
 能力指纹涵盖共享输入错误契约、实际尾概率及系数/协方差坐标恢复。
 
 `builtins/statistics/diagnostics/models` 接入共线性、Harman、NRI/IDI、残差/Cook、
@@ -128,7 +123,7 @@ AIC/BIC、LR/Score/嵌套比较及 Cox PH 诊断。模型输入复用原生线�
 不以向量长度代替地区对应关系。计算按权重地区顺序、时期首次出现顺序组织，
 观测结果恢复输入行序；地区效应保持权重顺序。密集权重、矩阵分解、似然 Hessian、
 物化输入和结构化输出合并预算准入，并向 SCI 传递取消和期限。结果复用现有报告页面。
-OLS、SLX 和可选择这两种模型的 Panel 入口使用 revision 7，其余五个空间回归入口使用 revision 6。
+OLS/SLX 使用 Student 推断，其余空间回归模型使用共享 Normal 推断；Panel 按实际模型选择。
 这些版本涵盖共享参数恢复与各入口实际使用的系数推断。
 
 `builtins/statistics/time_series/forecast` 注册时间序列分类的 16 个新增入口。
@@ -139,7 +134,7 @@ Markov 恢复原始状态标签，时序图可省略时间列并使用从 1 开�
 ECM 使用 revision 7，均衡误差统一位于 `long_run.residuals`，短期方程复用这份序列。
 Markov 保持原能力版本，SCI 借用上一期预测分布并将下一期缓冲移入结果历史；
 Kernel 在已生成的记录上补充状态标签，保留原顺序和既有工作区预算。
-Grey Prediction 使用 revision 6；Phillips–Perron 使用 revision 6，KPSS 使用 revision 5。
+Grey Prediction 与 KPSS 保持其算法；Phillips–Perron 复用共享 MacKinnon/Normal 校准。
 两个平稳性检验在 SCI 的规范化响应坐标中拟合和计算矩，仅恢复报告的长期方差单位；
 PP 复用 Design 的尺度直接计算滞后系数推断，不恢复整份逆矩阵。
 借用列和拟合缓冲复用保留现有观测工作区预算，报告字段、校准和执行中断沿用当前边界。
@@ -156,24 +151,24 @@ ARCH/GARCH/EGARCH/GJR-GARCH 使用 revision 5，SCI 在规范化坐标中拟合�
 精确分组编码和有限结果序列化。Heckman 仅在未入选行允许空结果；其余输入不静默删行。
 SUR 将方程自变量索引解析为中立列表，并按所有方程的总参数规模预算密集系统。
 数值工作区、bootstrap 顺序重拟合、结构化输出与常驻输入合并准入，取消和期限传递给 SCI。
-GMM 使用 revision 8，涵盖 SCI 的响应尺度规范化及响应/自变量单位的联合坐标恢复；
+GMM 复用 SCI 的响应尺度规范化及响应/自变量单位的联合坐标恢复；
 系数、协方差、观测结果和原工具变量矩仍沿用现有中立结果与有限值转换。
-RDD 和异质性分析使用 revision 7，复用 SCI 的共享 HC3 影响量累加器和参数恢复；
+RDD 和异质性分析复用 SCI 的共享 HC3 影响量累加器和参数恢复；
 有效加权杠杆率保留实际余量，未定义或非有限推断为科学计算失败，取消与期限保持原分类。
-PSM 使用 revision 8，SCI 按处理组排序得分并查询全部最近距离平局，
+PSM 的 SCI 实现按处理组排序得分并查询全部最近距离平局，
 复用均值索引，结果恢复输入行序；排序与均值索引由现有线性观测工作区预算覆盖。
-IPW、RA 和 AIPW 使用 revision 8，涵盖共享参数恢复、IPW 先归一化权重再计算均值，
+IPW、RA 和 AIPW 复用共享参数恢复、IPW 先归一化权重再计算均值，
 以及共享 bootstrap 按系数量纲规范化在线矩、恢复单位并原位检查和对称化协方差；
 重拟合、结果单位、有限值和执行中断仍由现有 SCI/Runtime/Kernel 边界处理。
-Heckman 使用 revision 9，第二阶段点估计直接恢复自变量单位，保留共享 bootstrap；sigma 使用残差与
+Heckman 第二阶段点估计直接恢复自变量单位，保留共享 bootstrap；sigma 使用残差与
 Mills 系数的共同尺度计算，rho 保留原单位比值与未定义参数失败，取消和期限传入受控扫描。
-SUR 使用 revision 8，在 SCI 的方程响应坐标中构造残差协方差和块 GLS 系统，
+SUR 在 SCI 的方程响应坐标中构造残差协方差和块 GLS 系统，
 完整系数协方差只恢复一次，方程推断使用同一结果；原单位输出、有限值与中断保持现有边界。
 GMM 和 SUR 的联合坐标映射由共享 Design 直接计算尺度比值，避免先求自变量倒数溢出；
 SUR 与 Heckman 复用借用列准备，现有工作区预算仍覆盖临时行选择和方程尺度。
 普通 Design 的点估计逐系数恢复，协方差在已有矩阵中恢复尺度和截距，
 减少密集矩阵工作量并避免自变量倒数的中间溢出；现有消费者预算继续覆盖该路径。
-SFA 使用 revision 7，在规范化响应坐标中拟合并恢复原单位及似然密度；目标函数逐行计算，
+SFA 在规范化响应坐标中拟合并恢复原单位及似然密度；目标函数逐行计算，
 条件效率复用 SCI 的稳定尾部比值。生产/成本均保留 `E[exp(-u)]` 与非正规边界失败。
 ATE/ATT 复用预算化结果解码，保留上游处理效应的方法、目标样本数及可空推断，
 不会将普通报告或原始数列解释为处理效应结果。
@@ -238,8 +233,8 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 预算和取消协议。普通事件列支持布尔或 0/1；竞争风险原因保留整数代码。
 观测时间、事件/治疗编码、计数过程区间、分组可辨识性和预测概率保持为数值输入错误；
 数组或模型布局不符保持为形状错误。预测期限、分箱/刻度数及迭代设置仍为参数错误。
-参数生存使用 revision 10，Cox/计数过程及亚组使用 revision 9；分组曲线与 Log-rank 使用 revision 8；竞争风险、校准及
-决策曲线使用 revision 7，Cox PH 诊断使用 revision 6，列线图使用 revision 5。
+参数生存、Cox/计数过程及亚组估计复用共享 Normal 推断；分组曲线、Log-rank、竞争风险、
+校准、决策曲线、Cox PH 诊断和列线图保留各自算法与注册 owner。
 生存工作区分别计算设计宽度、矩阵维度和线性组元数据；受试者数和曲线组数不增加
 模型列数。Log-rank 保留组协方差预算，亚组治疗效应保留设计矩阵预算；竞争风险输出
 按行数与原因数计费。SCI 共用一次建立的精确分组行索引，
@@ -299,10 +294,10 @@ ACF/PACF 与 Hausman 使用 typed report，避免先经 `json!` 把数值错误�
 
 相关与一致性适配位于 `statistics::association`。数值列复用 `columns`，Ordinal/分类列复用 `series::columns` 和语义元数据；配对列按位置读取并验证长度，Ridit 的独立样本分别读取。加权 Kappa 要求明确类别顺序，宽整数类别通过精确比较编码并在输出时恢复；不以 Float64 合并标签。Kappa 和 rwg 的条件参数在声明、内核可选性与执行校验中保持一致，inactive 参数不进入调用。排序、残差化、置换、方差与推断属于 SCI；调用前按实际规模检查工作区（包括 Cohen Kappa 的类别平方表和判别分析的类别协方差），执行中转发取消/deadline。
 关联节点直接在 `statistics::association::register` 维护能力版本，中央 `install` 表不持有这些节点的条目。
-Pearson、Partial 和 Bland–Altman 使用 revision 6，Kappa 使用 revision 5；
+Pearson、Partial、Bland–Altman 和 Kappa 复用各自的推断与区间 owner；
 这些入口复用 SCI 中心置信度计算，保留极小正置信度的区间宽度及接近 1 的有限结果。
-Spearman 使用 revision 5，涵盖共享 Student-t 尾概率；ICC、Kendall、Ridit 使用 revision 4，
-Kendall W、rwg 使用 revision 3。
+Spearman 复用共享 Student-t 尾概率，Kendall、Kappa、Ridit 使用共享 Normal 尾概率；
+ICC、Kendall W、rwg 保留其参考分布与一致性计算。
 共享分类编码使用精确标量排序索引，避免逐行线性扫描全部类别，保留首次出现与显式有序元数据顺序。
 
 ## 注册与扩展
@@ -332,8 +327,8 @@ uses revision 5, and both mediation bootstrap kernels use revision 10.
 
 OLS、WLS、GLS 和 Prais 未定义推断现在返回科学错误；线性 Fit 及实际复用该路径的面板、分阶段回归、曲线/RCS、路径分析、响应面与 ECM 内核同步推进 revision，能力指纹涵盖这项错误行为变化。统一线性 Fit（OLS/WLS/GLS）使用 revision 18，保留 WLS 权重和 GLS 协方差数据的形状、非有限及定义域错误分类，以及 SCI 的稳定 F/Student-t 尾概率；Prais Fit 使用 revision 11。Summary/Predict 不重新拟合。
 DID 随机化的 nonrobust 拟合也保留 OLS 未定义推断错误，使用 revision 7。TWFE DID 保持默认 TwoWay/cluster 拟合，直接接收 typed `PanelFit`，在组装 JSON 报告前复用有限值校验；非有限模型返回 `NonFiniteResult`，稳定 F/Student-t 尾概率的实现使用 revision 11。
-IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；2SLS Fit 使用 revision 14，LIML Fit 使用 revision 16。SCI 的两种估计器共用 `IvModel` 与同一份工具变量/投影设计；LIML 的稳健协方差保留 κ 类交叉乘积逆矩阵和结构残差，并使用工具变量投影后的得分自变量，HC2/HC3 的杠杆值也采用该投影。标签仍由当前适配器和 Runtime 恢复，不进入数值输入。系数概率及 95% 区间默认采用正态参考分布，`small=true` 采用结构模型剩余自由度的 Student-t；整体检验在当前 `statistics.modelTest` 中明确记录 χ² 或 F、统计量、自由度及 p 值，F 为 Wald 统计量除以非截距系数数目。负或非有限系数方差、未定义或非有限统计量及区间在 SCI 返回计算失败，适配器映射为 `ScientificFailure`，不再使用零统计量掩盖错误；其他非有限模型仍在 JSON 编码前返回 `NonFiniteResult`。Fit 和 Summary 复用现有准入入口，按实际的线性观测工作区计算预算。Summary 从已存运行值解码当前模型并按所选内容计算报告，系数与可选约束检验使用一致的参考分布。独立 Hausman 读取同一模型契约，按 OLS 的线性观测工作区准入，使用 revision 8。
-IV 2SLS Summary 使用 revision 24，LIML Summary 使用 revision 21，保留 SCI 第一阶段、内生性、过度识别及 Wald 检验的稳定 F 尾概率。第一阶段要求正的剩余自由度及可定义的推断，饱和工具变量回归或零残差方差返回 `ScientificFailure`；未选择该分析时，结构模型仍可汇总。方程使用当前 `inference` 记录保存所选协方差和系数推断，另有实际 `df_residual`；系数表和排除工具变量的 F 检验复用同一协方差，分别采用第一阶段 OLS 剩余自由度的 t 及 F 参考分布，不受结构模型 `small` 控制。无常数模型采用未中心化 R²，正的微小方差保留原量纲。系数、拟合值及工具变量分解复用同一次设计准备，残差计算不构造观测数平方大小的投影矩阵。多内生变量的最小特征值通过 Cholesky 白化后交给对称特征值算法，保留列顺序和单位变换下的结果一致性。多内生变量矩阵保持观测行与变量列的对应关系，Shea 指标与报告展示继续使用共享类型字段，不从已编码的 JSON 重读系数。诊断不可用原因与 SCI 共用模型保存的 `OlsCovariance::is_robust` 判断，不使用协方差显示名推断；固定尺度协方差保留非稳健分支的原因。
+IV 2SLS/LIML Fit 直接接收共享 `InstrumentalVariableFit`，恢复响应、自变量与工具变量标签后交给既有输出转换；两个 Fit 的能力版本由实际注册入口拥有。SCI 的两种估计器共用 `IvModel` 与同一份工具变量/投影设计；LIML 的稳健协方差保留 κ 类交叉乘积逆矩阵和结构残差，并使用工具变量投影后的得分自变量，HC2/HC3 的杠杆值也采用该投影。标签仍由当前适配器和 Runtime 恢复，不进入数值输入。系数概率及 95% 区间默认采用正态参考分布，`small=true` 采用结构模型剩余自由度的 Student-t；整体检验在当前 `statistics.modelTest` 中明确记录 χ² 或 F、统计量、自由度及 p 值，F 为 Wald 统计量除以非截距系数数目。负或非有限系数方差、未定义或非有限统计量及区间在 SCI 返回计算失败，适配器映射为 `ScientificFailure`，不再使用零统计量掩盖错误；其他非有限模型仍在 JSON 编码前返回 `NonFiniteResult`。Fit 和 Summary 复用现有准入入口，按实际的线性观测工作区计算预算。Summary 从已存运行值解码当前模型并按所选内容计算报告，系数与可选约束检验使用一致的参考分布。独立 Hausman 读取同一模型契约，按 OLS 的线性观测工作区准入，使用 revision 8。
+IV 2SLS/LIML Summary 保留 SCI 第一阶段、内生性、过度识别及 Wald 检验的稳定 F 尾概率。第一阶段要求正的剩余自由度及可定义的推断，饱和工具变量回归或零残差方差返回 `ScientificFailure`；未选择该分析时，结构模型仍可汇总。方程使用当前 `inference` 记录保存所选协方差和系数推断，另有实际 `df_residual`；系数表和排除工具变量的 F 检验复用同一协方差，分别采用第一阶段 OLS 剩余自由度的 t 及 F 参考分布，不受结构模型 `small` 控制。无常数模型采用未中心化 R²，正的微小方差保留原量纲。系数、拟合值及工具变量分解复用同一次设计准备，残差计算不构造观测数平方大小的投影矩阵。多内生变量的最小特征值通过 Cholesky 白化后交给对称特征值算法，保留列顺序和单位变换下的结果一致性。多内生变量矩阵保持观测行与变量列的对应关系，Shea 指标与报告展示继续使用共享类型字段，不从已编码的 JSON 重读系数。诊断不可用原因与 SCI 共用模型保存的 `OlsCovariance::is_robust` 判断，不使用协方差显示名推断；固定尺度协方差保留非稳健分支的原因。
 结构模型与第一阶段的 R²/调整 R² 复用 SCI 同一个借用输入计算入口，以共同尺度计算残差与总变异的比值，微小响应量纲不再被固定方差下限改成零。截距模型中心化，无截距模型不中心化；采用实际剩余自由度，保留合法的负 IV R²。零或未定义总变异及非有限结果映射为 `ScientificFailure`，Summary 直接保留拟合模型指标。
 
 2SLS 过度识别直接借用当前模型的结构残差，以共同尺度进行辅助回归；正的微小量纲保持可检验。Sargan 保留辅助拟合平方和与结构残差平方和的比值；Basmann 直接使用辅助残差平方和，避免 `n-Sargan` 相消。辅助残差变异或工具变量回归剩余自由度为零时，仅 Basmann 的统计量和概率为 null，Sargan 仍可报告；结构残差全零时保留整项不可用原因。SCI 复用同一工具变量准备、内生变量投影和自变量组装入口；nonrobust 只准备工具变量，Wooldridge 按需投影并直接求解得分交叉乘积，均不重建响应、系数或观测结构自变量。Summary 继续保留矩阵预算及执行控制准入。稳健分支借用 Linalg 分解参数维度的 `W'Z`，将其 `m` 个右零空间方向与已准备的工具变量相乘，覆盖完整约束空间；列顺序不再选到无效方向，也不需要高矩阵 SVD 或观测数平方的分解因子。SCI 现有协方差 owner 为 HC0–HC3 使用独立行得分协方差，为 cluster 使用组内得分和，为 HAC/newey 使用模型保存的核、带宽或滞后数；渐近得分检验不应用系数的有限样本或杠杆调整，参考 χ²(m)。原回归协方差复用同一原始 lag/cluster 计算，保留原 sandwich 和修正。无效聚类/滞后及奇异得分协方差映射为 `ScientificFailure`。Catalog 的 IV Fit 配置仍只提供 nonrobust 和 HC0–HC3；共享模型 API 的聚类/HAC 配置由 Summary 按实际保留值处理。
@@ -342,9 +337,9 @@ LIML Fit 通过正定的已包含自变量残差交叉乘积进行 Cholesky 白�
 
 LIML 过度识别检验直接复用拟合后的 κ：Anderson–Rubin 为 `n*(κ-1)`，Basmann F 为 `(κ-1)*(n-k_z)/m`，`m` 为排除工具变量数减内生变量数。SCI 复用原模型准入校验，不重建矩阵和残差；无效 κ 或非有限统计量映射为 `ScientificFailure`。只选择该分析时不再计费拟合矩阵工作区，模型解码及输出的预算、取消和期限检查继续生效。第一阶段、2SLS 过度识别及内生性分析仍执行原矩阵工作区准入。
 
-ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；`yssbi.statistics.adf.test` 使用 revision 11。SCI 在构建设计矩阵前要求正的剩余自由度，饱和回归和未定义推断返回 `ScientificFailure`，多序列报告保留逐序列失败信息。Drift 和辅助回归复用同一个 Student-t 分布及稳定尾概率，不再将自由度改为 1 或钳制标准误；参考分布约定与临界值保持原契约。复用该回归的面板单位根和协整检验使用 revision 7，并保留其 MacKinnon 校准。
-HC2/HC3 复用 SCI 的系数影响量累计，不截断可分辨的杠杆修正；单位或无效杠杆值映射为 `ScientificFailure`。受影响的 FE/FD 使用 revision 12、RE 使用 revision 11；Between、动态 GMM 和 Prais 不消费这条 HC2/HC3 路径。
-Panel Fit 使用 revision 14，Compare 使用 revision 12：双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Fit 保留 SCI 的稳定整体 F 和系数 Student-t 尾概率；Summary/Predict 沿用已拟合模型。
+ADF 的无常数和趋势选项复用 SCI 的共享 MacKinnon 校准，修正原重复实现的多项式系数顺序；ADF 的能力版本由实际注册入口拥有。SCI 在构建设计矩阵前要求正的剩余自由度，饱和回归和未定义推断返回 `ScientificFailure`，多序列报告保留逐序列失败信息。Drift 和辅助回归复用同一个 Student-t 分布及稳定尾概率，不再将自由度改为 1 或钳制标准误；参考分布约定与临界值保持原契约。复用该回归的面板单位根和协整检验保留其 MacKinnon 校准，并调用共享 Normal 概率。
+HC2/HC3 复用 SCI 的系数影响量累计，不截断可分辨的杠杆修正；单位或无效杠杆值映射为 `ScientificFailure`。受影响的 FE/FD 与 RE 复用同一杠杆修正；Between、动态 GMM 和 Prais 不消费这条 HC2/HC3 路径。
+Panel Fit 与 Compare 双向随机效应 MLE 的似然计算按保留列映射读取紧凑系数，避免删除中间共线列后使用原列号索引系数。Fit 保留 SCI 的稳定整体 F 和系数 Student-t 尾概率；Summary/Predict 沿用已拟合模型。
 系数约束的负或 NaN 对比方差在原 SCI 校验边界返回计算失败，不再把开方后的 NaN 交给参考分布。线性、Logit/Probit/Prais、IV Summary 和实际复用 Summary 检验的 diagnostic.wald 同步更新实现 revision。普通样本均值 t 检验使用另一算法入口。
 稳定 F 尾概率由 SCI 分布模块统一计算。线性 Summary 使用 revision 15，Prais Summary 使用
 revision 10，独立 Wald 使用 revision 8；RESET、嵌套模型比较、测量系统、ANOVA 与线性回归
@@ -354,8 +349,8 @@ revision 10，独立 Wald 使用 revision 8；RESET、嵌套模型比较、测�
 响应面/剂量反应、ECM、OLS/SLX 空间回归、调查回归以及均值/配对/整群效能规划。
 注册实现拥有各入口的能力版本；返回这些推断结果的内核随计算行为更新指纹。
 正态双侧尾概率复用 SCI 的单次 `erfc` 计算，卡方上尾直接复用 SCI 中已校验分布的 SF。
-Logit/Probit Fit 使用 revision 7，Summary 使用 revision 9；VAR/VEC Fit、VAR 阶数选择和 VEC
-Summary 使用 revision 7，VAR Summary 使用 revision 9。残差正态性、Ljung–Box 与
+Logit/Probit、VAR/VEC 的正态推断复用共享 Normal owner；仅使用卡方推断的分析保留其计算。
+残差正态性、Ljung–Box 与
 Breusch–Godfrey 的报告保留小概率；返回这些结果的内核按注册表更新能力身份。
 
 ## 验证
@@ -520,20 +515,13 @@ are expanded one row at a time through the existing Arrow converter, so repeated
 references do not create an unadmitted full-column string expansion. Count-table preparation
 admits linear category indexes before constructing them, then uses actual row and
 column cardinalities for the dense table. These are conservative workspace
-estimates, not process RSS limits. Classical kernels use revision 6, except the
-paired t, McNemar, CMH, categorical independence, Pearson contingency, chi-square goodness-of-fit and
-multiple-proportion and Bartlett kernels,
-which use revision 7;
-Mann–Whitney, Kruskal–Wallis, Friedman, Runs and Mann–Kendall also use revision 7,
-covering corrected rank moments and tie handling. The rank-family selector uses
-revision 9, including Mood's shared Pearson calculation, data-error contract and
-stable shared median. Mood median uses revision 8 for that shared median.
-Levene uses revision 8 and Brown-Forsythe revision 9 for the stable shared F tail.
-Fisher exact, exact Binomial and Poisson use revision 8. Binomial/Poisson count
-admission uses invocation resources and execution control; SCI retains numeric
-representation checks and samples the shared control during exact enumeration.
-Item discrimination reuses the same Welch computation errors and the stable
-shared quantile midpoint, using revision 7.
+estimates, not process RSS limits. Classical inference retains its design-specific
+Normal, Student, F, chi-square or exact-count reference. Implementations share
+ordered labels, tie/cardinality checks, mean/median preparations and reference
+probabilities. Count admission uses invocation resources and execution control;
+SCI retains numeric representation checks and samples the shared control during
+exact enumeration. Item discrimination reuses Welch computation errors and the
+stable shared quantile midpoint.
 CMH exposure and outcome reuse the controlled scalar-column and binary numeric
 reader, without encoding numeric observations as category strings. Each temporary
 column is released after conversion; admission includes retained earlier columns,
@@ -602,15 +590,16 @@ Shared `regression_outputs` receives explicit predictor labels, excluding survey
 columns from coefficient-axis names; complete observations remain paged relations.
 The three survey regression kernels use revision 9 for shared parameter restoration,
 bounded Student-t intervals and direct design-based inference from the shared GLM fit.
-They do not construct model inference that will be overwritten. Matching/IPW/AIPW use
-revision 9 and request only fitted propensity probabilities; Regression Adjustment
-retains revision 8. Full GLM and Heckman continue to request their reported inference.
+They do not construct model inference that will be overwritten. Matching/IPW/AIPW
+request only fitted propensity probabilities; Regression Adjustment retains its
+point-estimation path. Full GLM and Heckman request their reported inference.
 
 `builtins/statistics/power` converts model-specific scalar parameters to neutral designs.
 There are no observation inputs; bounded report admission and cooperative scientific
 control apply independently of the proposed sample count.
-Mean-difference, paired and cluster-randomized Power use revision 9 for bounded
-finite-degree noncentral t integration and the shared analytic tail bound.
-ANOVA and linear-regression Power use revision 6 and SCI's controlled log-Beta
-critical-value and component-tail calculation. These scalar calls retain the same
-design, report and sample-unit contracts; the other Power kernels retain their revisions.
+Mean-difference, paired and cluster-randomized Power use bounded finite-degree
+noncentral t integration and the shared analytic tail bound. ANOVA and linear
+regression use controlled log-Beta critical values and component tails. Normal
+planning and conditional Normal probabilities reuse SCI's single probability owner,
+retaining subnormal two-sided significance. Scalar design, report and sample-unit
+contracts stay the same; revisions follow the actual changed consumers.

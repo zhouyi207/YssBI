@@ -1,4 +1,4 @@
-use statrs::distribution::{ContinuousCDF, Normal, StudentsT};
+use statrs::distribution::StudentsT;
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl as Control,
     ScientificInputViolation as Violation,
@@ -21,25 +21,6 @@ pub(crate) fn finite(value: f64) -> Result<f64> {
         Ok(value)
     } else {
         Err(failed())
-    }
-}
-pub(crate) fn normal_log_cdf(z: f64) -> f64 {
-    if z < -10.0 {
-        -0.5 * z * z - (-z).ln() - 0.5 * (2.0 * std::f64::consts::PI).ln()
-            + normal_log_tail_correction(z)
-    } else {
-        Normal::new(0.0, 1.0).expect("normal").cdf(z).ln()
-    }
-}
-fn normal_log_tail_correction(z: f64) -> f64 {
-    let t = 1.0 / (z * z);
-    (1.0 - t + 3.0 * t * t - 15.0 * t.powi(3) + 105.0 * t.powi(4)).ln()
-}
-pub(crate) fn normal_log_cdf_density_ratio(z: f64) -> f64 {
-    if z < -10.0 {
-        -(-z).ln() + normal_log_tail_correction(z)
-    } else {
-        normal_log_cdf(z) + 0.5 * z * z + 0.5 * (2.0 * std::f64::consts::PI).ln()
     }
 }
 pub(crate) fn check_iteration(options: IterationOptions) -> Result<()> {
