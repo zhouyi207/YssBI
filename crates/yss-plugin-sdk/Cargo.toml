@@ -2,7 +2,6 @@
 name = "yss-plugin-sdk"
 version = "0.2.0"
 edition = "2024"
-rust-version.workspace = true
 publish = false
 
 [dependencies]

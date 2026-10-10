@@ -66,9 +66,9 @@
 
 ## 快速开始
 
-从仓库根目录运行 Cargo 命令。Rust 最低版本由 [Cargo.toml](Cargo.toml) 的
-`workspace.package.rust-version` 定义；[rust-toolchain.toml](rust-toolchain.toml) 固定开发工具链，
-rustup 会自动选择该版本，首次使用时安装缺失的工具链。根目录是纯 Rust workspace，默认成员为
+从仓库根目录运行 Cargo 命令。Rust 版本及开发组件统一由
+[rust-toolchain.toml](rust-toolchain.toml) 定义，不另行声明最低支持版本。
+rustup 会自动选择该版本并安装配置的工具链及组件。根目录是纯 Rust workspace，默认成员为
 `yss-desktop-gpui`；启动和构建不需要 Node.js、pnpm 或 Tauri 配置。
 
 ```bash

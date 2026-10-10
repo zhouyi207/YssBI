@@ -6,7 +6,6 @@ default-members = ["crates/yss-desktop-gpui"]
 [workspace.package]
 version = "0.4.0"
 edition = "2024"
-rust-version = "1.95"
 
 [workspace.dependencies]
 dunce = "1.0.5"
