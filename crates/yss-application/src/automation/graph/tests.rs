@@ -1930,7 +1930,6 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
                     "zh-CN",
                 ))
                 .unwrap()
-                .into_transport_parts()
                 .into_fields();
             assert!(result.matches.iter().all(|item| {
                 catalog.items.iter().any(|entry| {

@@ -46,6 +46,11 @@ Decompose 端口，不改写图文档或编辑 revision；已引用但消失的�
 
 图编辑直接更新 Project 的当前驻留文档，不维护独立 Draft 文档或前端历史。临时变更候选用于验证及原子提交，不构成另一套可写状态。保存状态比较当前内容与已保存内容的指纹，不保留完整 savedDocument 副本。
 
+兼容节点目录请求只携带项目、图路径、`GraphEditVersion`、来源端口与语言；Application 直接读取
+Project 的共享 `Arc<GraphDocument>`，在计算前后核对编辑版本，不接收或复制调用方图草稿。
+目录结果通过 `CatalogQueryResult::into_fields` 直接交给原生 Activity 面板与自动化消费者，
+不再经过专为传输准备的中间 parts 对象。
+
 资源复制接受可选名称，由原 Project 事务一次分配名称、路径及新元素身份；GUI 未指定时保留默认命名。Harness 轻量目录和元信息查询不打开图，实际编辑与执行才建立所需编辑/语义依据。
 
 GraphEditVersion 包含后端编辑会话 ID 与 Project resource revision，原生调用直接持有这些 Rust 类型。

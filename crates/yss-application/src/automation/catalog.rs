@@ -75,7 +75,7 @@ pub(super) fn browse_nodes(
         LocalizedCatalogRequest::new(captured.project_instance_id().clone(), request.locale),
     )
     .map_err(map_catalog_error)?;
-    let (_, _, _, catalog) = result.into_transport_parts().into_fields();
+    let (_, _, _, catalog) = result.into_fields();
     let normalized_query = request.query.to_lowercase();
     let query_terms = normalized_query
         .split(|c: char| c.is_whitespace() || matches!(c, '/' | ',' | '|'))
@@ -141,7 +141,7 @@ pub(super) fn inspect_node_type(
         LocalizedCatalogRequest::new(captured.project_instance_id().clone(), request.locale),
     )
     .map_err(map_catalog_error)?;
-    let (_, _, _, catalog) = result.into_transport_parts().into_fields();
+    let (_, _, _, catalog) = result.into_fields();
     let mut types = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
     for type_id in request.type_ids {

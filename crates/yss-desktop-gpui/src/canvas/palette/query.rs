@@ -48,23 +48,11 @@ impl NodePalette {
         let source = self.target.source.clone();
         let task = self.services.run(move |services| {
             let catalog = if let Some(source) = source {
-                let document = services
-                    .application
-                    .current_graph_document(&project, &path, version)?;
-                let catalog =
-                    services
-                        .application
-                        .compatible_node_catalog(CompatibleCatalogRequest::new(
-                            project.clone(),
-                            path.clone(),
-                            (*document).clone(),
-                            source,
-                            language,
-                        ))?;
                 services
                     .application
-                    .current_graph_document(&project, &path, version)?;
-                catalog
+                    .compatible_node_catalog(CompatibleCatalogRequest::new(
+                        project, path, version, source, language,
+                    ))?
             } else {
                 services
                     .application

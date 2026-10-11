@@ -281,7 +281,7 @@ pub fn project_activity_panel(index: Option<&yss_project::ProjectIndex>) -> Acti
 pub fn nodes_activity_panel_from_catalog(
     result: crate::graph::catalog::CatalogQueryResult,
 ) -> ActivityPanelDocument {
-    let (project, _, revision, catalog) = result.into_transport_parts().into_fields();
+    let (project, _, revision, catalog) = result.into_fields();
     let mut document = ActivityPanelDocument::new("nodes", "activityBar.nodes");
     document.project_instance_id = Some(project.as_str().into());
     document.publication_revision = revision;

@@ -1011,26 +1011,67 @@ fn all_non_deferred_builtin_nodes_are_available_in_catalog_and_sidebar() {
 }
 
 #[test]
-fn compatible_catalog_filters_against_unsaved_draft_source() {
+fn compatible_catalog_reads_unsaved_resident_changes_and_rejects_old_versions() {
     let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
     let source_node = NodeId::new();
+    let document = compatible_draft(source_node);
+    let mut constant = document.constants.values().next().unwrap().clone();
+    constant.data_type =
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Binary);
+    constant.data_value = yss_data_contract::DataValue::Bool(true);
+    let mut project = compatible_project(&graph_path);
+    project.graphs.get_mut(&graph_path).unwrap().document = Arc::new(document);
     let session = staged_session(
-        compatible_project(&graph_path),
-        "compatible-draft-source",
+        project,
+        "compatible-resident-source",
         GraphRuntimeTestControl::default(),
     );
-    let mut document = compatible_draft(source_node);
-    document
-        .nodes
-        .get_mut(&source_node)
-        .unwrap()
-        .parameters
-        .insert("aaa".parse().unwrap(), serde_json::json!("databases/wrong"));
+    let instance = session.session.project_instance_id().clone();
+    let before = session
+        .session
+        .project()
+        .read_graph_editing(&instance, &graph_path)
+        .unwrap();
+    let edited = session
+        .application
+        .edit_graph(
+            crate::graph::editing::GraphEditRequest {
+                project_instance_id: instance.clone(),
+                graph_path: graph_path.clone(),
+                version: before.state.version,
+                operation_id: yss_project_identity::OperationId::new(),
+                locale: "en-US".into(),
+            },
+            yss_graph_editor::EditorGraphMutation::SetConstant {
+                id: constant.id,
+                constant: Some(constant),
+            },
+        )
+        .unwrap();
+    assert!(edited.editing.dirty);
+    let source = PortAddress::declared(source_node, PortKey::new("value").unwrap());
+    let stale = session
+        .application
+        .compatible_node_catalog(CompatibleCatalogRequest::new(
+            instance.clone(),
+            graph_path.clone(),
+            before.state.version,
+            source.clone(),
+            "en-US",
+        ));
+    assert!(matches!(
+        stale,
+        Err(CatalogQueryApplicationError::Editing(
+            crate::graph::resources::ResourceMutationApplicationError::GraphOperation(
+                yss_project::ProjectGraphOperationError::RevisionConflict { .. }
+            )
+        ))
+    ));
     let request = CompatibleCatalogRequest::new(
-        session.session.project_instance_id().clone(),
-        graph_path,
-        document,
-        PortAddress::declared(source_node, PortKey::new("value").unwrap()),
+        instance,
+        graph_path.clone(),
+        edited.editing.version,
+        source,
         "en-US",
     );
 
@@ -1045,18 +1086,20 @@ fn compatible_catalog_filters_against_unsaved_draft_source() {
         .map(|item| item.node_type_id.as_ref())
         .collect::<std::collections::BTreeSet<_>>();
 
-    assert!(ids.contains("yssbi.numeric.add"));
-    assert!(!ids.contains("yssbi.logic.not"));
+    assert!(ids.contains("yssbi.logic.not"));
+    assert!(!ids.contains("yssbi.numeric.add"));
+    let after = session
+        .session
+        .project()
+        .read_graph_editing(session.session.project_instance_id(), &graph_path)
+        .unwrap();
+    assert_eq!(after.state, edited.editing);
+    assert!(Arc::ptr_eq(&after.document, &edited.update.document));
 }
 
 #[test]
 fn compatible_catalog_excludes_disjoint_numeric_and_model_result_types_in_both_directions() {
     let graph = GraphResourcePath::new("events/Types.yssbi-event").unwrap();
-    let session = staged_session(
-        compatible_project(&graph),
-        "compatible-model-result",
-        GraphRuntimeTestControl::default(),
-    );
     let mut document = GraphDocument::default();
     let summary = NodeId::new();
     let multiply = NodeId::new();
@@ -1075,6 +1118,20 @@ fn compatible_catalog_excludes_disjoint_numeric_and_model_result_types_in_both_d
             },
         );
     }
+    let mut project = compatible_project(&graph);
+    project.graphs.get_mut(&graph).unwrap().document = Arc::new(document);
+    let session = staged_session(
+        project,
+        "compatible-model-result",
+        GraphRuntimeTestControl::default(),
+    );
+    let version = session
+        .session
+        .project()
+        .read_graph_editing(session.session.project_instance_id(), &graph)
+        .unwrap()
+        .state
+        .version;
     for (source, excluded, included) in [
         (
             PortAddress::declared(summary, "result".parse().unwrap()),
@@ -1092,7 +1149,7 @@ fn compatible_catalog_excludes_disjoint_numeric_and_model_result_types_in_both_d
             .compatible_node_catalog(CompatibleCatalogRequest::new(
                 session.session.project_instance_id().clone(),
                 graph.clone(),
-                document.clone(),
+                version,
                 source,
                 "en-US",
             ))
@@ -1579,7 +1636,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
             .compatible_node_catalog(CompatibleCatalogRequest::new(
                 instance.clone(),
                 graph.clone(),
-                document.clone(),
+                opened.editing().version,
                 output,
                 "en-US",
             ))
@@ -1607,7 +1664,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
         .compatible_node_catalog(CompatibleCatalogRequest::new(
             instance.clone(),
             graph.clone(),
-            document.clone(),
+            opened.editing().version,
             amount.clone(),
             "en-US",
         ))
@@ -1694,10 +1751,30 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     constant.tabular = None;
     constant.data_value = DataValue::String(r#"{"label":["a","b"]}"#.into());
     yss_graph_document::normalize_constant_value(constant).unwrap();
+    let edited = session
+        .application
+        .edit_graph(
+            crate::graph::editing::GraphEditRequest {
+                project_instance_id: instance.clone(),
+                graph_path: graph.clone(),
+                version: opened.editing().version,
+                operation_id: yss_project_identity::OperationId::new(),
+                locale: "en-US".into(),
+            },
+            yss_graph_editor::EditorGraphMutation::SetConstant {
+                id: constant.id,
+                constant: Some(constant.clone()),
+            },
+        )
+        .unwrap();
     let error = session
         .application
         .compatible_node_catalog(CompatibleCatalogRequest::new(
-            instance, graph, stale, amount, "en-US",
+            instance,
+            graph,
+            edited.editing.version,
+            amount,
+            "en-US",
         ))
         .unwrap_err();
     assert!(matches!(

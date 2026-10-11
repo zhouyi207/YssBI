@@ -6,8 +6,7 @@ use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
 };
-use yss_graph_document::{GraphDocument, GraphResourcePath, PortAddress};
-use yss_graph_document_edit::{DocumentError, validate_graph_document};
+use yss_graph_document::{GraphResourcePath, PortAddress};
 use yss_graph_editor::{CatalogMutationResource, CatalogMutationValidationSnapshot};
 use yss_graph_resource_contract::{FunctionParameterContract, FunctionSignature, GraphResourceId};
 use yss_graph_runtime::GraphRuntimeCatalogError;
@@ -16,8 +15,8 @@ use yss_node_catalog::{
     CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
 };
 use yss_node_registry::RegistryFingerprint;
-use yss_project::ProjectIndex;
 use yss_project::ProjectOperationError;
+use yss_project::{GraphEditVersion, ProjectIndex};
 use yss_project_identity::ProjectInstanceId;
 
 use super::inputs::{
@@ -55,7 +54,7 @@ impl LocalizedCatalogRequest {
 pub struct CompatibleCatalogRequest {
     project_instance_id: ProjectInstanceId,
     graph_path: GraphResourcePath,
-    document: GraphDocument,
+    version: GraphEditVersion,
     source_port: PortAddress,
     locale: Box<str>,
 }
@@ -64,14 +63,14 @@ impl CompatibleCatalogRequest {
     pub fn new(
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        document: GraphDocument,
+        version: GraphEditVersion,
         source_port: PortAddress,
         locale: impl Into<Box<str>>,
     ) -> Self {
         Self {
             project_instance_id,
             graph_path,
-            document,
+            version,
             source_port,
             locale: locale.into(),
         }
@@ -85,8 +84,8 @@ impl CompatibleCatalogRequest {
         &self.graph_path
     }
 
-    pub fn document(&self) -> &GraphDocument {
-        &self.document
+    pub fn version(&self) -> GraphEditVersion {
+        self.version
     }
 
     pub fn source_port(&self) -> &PortAddress {
@@ -163,16 +162,14 @@ pub enum ProjectCatalogReadError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum GraphCatalogQueryError {
-    #[error("graph is not loaded")]
-    GraphNotLoaded { graph: GraphResourcePath },
-    #[error("compatible-catalog graph draft is invalid")]
-    InvalidDraft(#[source] DocumentError),
     #[error("compatible-catalog source port is invalid")]
     CompatibleSourceInvalid,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum CatalogQueryApplicationError {
+    #[error(transparent)]
+    Editing(#[from] super::resources::ResourceMutationApplicationError),
     #[error(transparent)]
     Parameters(#[from] yss_graph_editor::MutationConflict),
     #[error(transparent)]
@@ -224,24 +221,6 @@ impl CatalogQueryResult {
         }
     }
 
-    pub fn into_transport_parts(self) -> CatalogQueryResultParts {
-        CatalogQueryResultParts {
-            project_instance_id: self.project_instance_id,
-            registry_fingerprint: self.registry_fingerprint,
-            resource_publication_revision: self.resource_publication_revision,
-            catalog: self.catalog,
-        }
-    }
-}
-
-pub struct CatalogQueryResultParts {
-    project_instance_id: ProjectInstanceId,
-    registry_fingerprint: RegistryFingerprint,
-    resource_publication_revision: u64,
-    catalog: LocalizedCatalog,
-}
-
-impl CatalogQueryResultParts {
     pub fn into_fields(
         self,
     ) -> (
@@ -408,28 +387,6 @@ impl LocalizedCatalogProjectFacts {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct CompatibleCatalogProjectFacts {
-    localized: LocalizedCatalogProjectFacts,
-    graph: DraftGraphCatalogFacts,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct DraftGraphCatalogFacts {
-    path: GraphResourcePath,
-    document: Arc<GraphDocument>,
-}
-
-impl DraftGraphCatalogFacts {
-    pub(crate) fn path(&self) -> &GraphResourcePath {
-        &self.path
-    }
-
-    pub(crate) fn document(&self) -> &Arc<GraphDocument> {
-        &self.document
-    }
-}
-
 pub(crate) fn capture_localized_project_facts(
     session: &ApplicationSession,
 ) -> Result<LocalizedCatalogProjectFacts, ProjectCatalogReadError> {
@@ -461,34 +418,6 @@ pub(crate) fn localized_project_facts_from_index(
         },
         resource_publication_revision,
         resources,
-    })
-}
-
-pub(crate) fn capture_compatible_project_facts(
-    session: &ApplicationSession,
-    path: &GraphResourcePath,
-    document: &GraphDocument,
-) -> Result<CompatibleCatalogProjectFacts, CatalogQueryApplicationError> {
-    let localized = capture_localized_project_facts(session)?;
-    let resident = session
-        .project()
-        .has_resident_graph(path)
-        .map_err(map_project_catalog_error)
-        .map_err(CatalogQueryApplicationError::Project)?;
-    revalidate_project_catalog_facts(session, &localized)?;
-    if !resident {
-        return Err(GraphCatalogQueryError::GraphNotLoaded {
-            graph: path.clone(),
-        }
-        .into());
-    }
-    validate_graph_document(document).map_err(GraphCatalogQueryError::InvalidDraft)?;
-    Ok(CompatibleCatalogProjectFacts {
-        localized,
-        graph: DraftGraphCatalogFacts {
-            path: path.clone(),
-            document: Arc::new(document.clone()),
-        },
     })
 }
 
@@ -588,15 +517,19 @@ pub(crate) fn compatible_node_catalog_in_session(
     request: CompatibleCatalogRequest,
 ) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
     ensure_requested_project(captured, request.project_instance_id())?;
-    let CompatibleCatalogProjectFacts { localized, graph } =
-        capture_compatible_project_facts(captured, request.graph_path(), request.document())?;
-    let mut context = GraphResolutionContext::from_project_facts(captured, localized)?;
-    context.include_functions(captured, graph.document())?;
+    let document = application.current_graph_document(
+        request.project_instance_id(),
+        request.graph_path(),
+        request.version(),
+    )?;
+    let project = capture_localized_project_facts(captured)?;
+    let mut context = GraphResolutionContext::from_project_facts(captured, project)?;
+    context.include_functions(captured, &document)?;
     let mut localized = captured
         .graph()
         .compatible_catalog_with_resources(
-            graph.path(),
-            graph.document(),
+            request.graph_path(),
+            &document,
             request.source_port(),
             &context.graph_catalog,
             context.project.resources().entries(),
@@ -611,6 +544,11 @@ pub(crate) fn compatible_node_catalog_in_session(
 
     context.revalidate(captured)?;
     revalidate_application_session(application, captured)?;
+    application.current_graph_document(
+        request.project_instance_id(),
+        request.graph_path(),
+        request.version(),
+    )?;
 
     Ok(CatalogQueryResult::new(
         context.project.project_instance_id().clone(),

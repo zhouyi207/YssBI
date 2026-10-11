@@ -35,6 +35,8 @@ The `react/` tree is reference source. Its models and lifecycles do not define c
 
 Do not create a second graph draft, undo stack or saved-content identity in the frontend. Replace graph projections from their owner in one direction. Other resource-specific drafts keep their documented owners.
 
+Compatible-node queries pass graph identity, editing version and source port, not a caller-owned graph document. Application reads the shared resident document and checks its version before and after computation. Worker tasks and concurrent edits still require these checks even without IPC.
+
 Project instances, resource paths, graph sessions, nodes, ports, runs, results and panels have different identities. A late read or callback cannot install data into a different project, graph or view. Graph constants belong to their graph document, not to a separate global resource store.
 
 ## Editing, saving and execution

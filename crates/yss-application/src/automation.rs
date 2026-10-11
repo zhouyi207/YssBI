@@ -438,7 +438,8 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
         CatalogQueryApplicationError::CatalogProjectStale => {
             CapabilityFailure::new(CapabilityFailureCode::ProjectSessionMismatch)
         }
-        CatalogQueryApplicationError::Parameters(_)
+        CatalogQueryApplicationError::Editing(_)
+        | CatalogQueryApplicationError::Parameters(_)
         | CatalogQueryApplicationError::Project(_)
         | CatalogQueryApplicationError::Database(_)
         | CatalogQueryApplicationError::Contract(_)
