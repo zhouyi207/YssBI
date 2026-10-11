@@ -590,9 +590,6 @@ impl Workbench {
             }
             panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
         });
-        register_panel(cx, "result", |context, _, cx| {
-            panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
-        });
     }
 }
 

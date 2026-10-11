@@ -389,8 +389,8 @@ fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
                 &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
             )
             .unwrap();
-        assert!(weak.iter().all(|result| result.upgrade().is_some()));
-        assert!(ids.iter().all(|id| state.query_result(*id).is_some()));
+        assert!(weak.iter().all(|result| result.upgrade().is_none()));
+        assert!(ids.iter().all(|id| state.query_result(*id).is_none()));
         assert!(state.publish_committed_results(&candidate.into_finalization_handoff()));
         assert!(weak.iter().all(|result| result.upgrade().is_none()));
         assert!(ids.iter().all(|id| state.query_result(*id).is_none()));
@@ -415,12 +415,17 @@ fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
     assert!(
         previous_ids
             .iter()
-            .all(|id| state.query_result(*id).is_some())
+            .all(|id| state.query_result(*id).is_none())
     );
     assert!(
         outputs
             .iter()
             .all(|output| state.query_pin_result(output).is_none())
+    );
+    assert!(
+        state
+            .query_graph_result_entries("events/main", None)
+            .is_empty()
     );
 }
 
@@ -909,4 +914,72 @@ fn execute_prepared_cancellation_happens_before_run_registration() {
         })
     ));
     assert_eq!(state.runs().state(RunId::from_existing(1)), None);
+}
+
+#[test]
+fn cancellation_after_rerun_admission_does_not_restore_previous_results() {
+    let state = state();
+    let plan = numeric_chain_plan(&state);
+    let candidate = state
+        .execute_prepared(
+            &plan,
+            empty_bindings(),
+            &ResourceProviderFactory::new("session".into()),
+            &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
+        )
+        .unwrap();
+    let first_run = candidate.results()[0].pin().provenance().run_id();
+    let previous = candidate
+        .results()
+        .iter()
+        .map(|result| {
+            (
+                result.result_id(),
+                result.output().clone(),
+                Arc::downgrade(result.value()),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(state.publish_committed_results(&candidate.into_finalization_handoff()));
+    let cancellation = Arc::new(AtomicBool::new(false));
+    let control = RunExecutionControl::with_cancellation(
+        cancellation.clone(),
+        Instant::now() + Duration::from_secs(1),
+    );
+    let outcome = state.execute_prepared_handoff(
+        &plan,
+        empty_bindings(),
+        &ResourceProviderFactory::new("session".into()),
+        &control,
+        ExecutionResultRequest {
+            demand: &PlanExecutionDemand::Default,
+            basis: None,
+        },
+        |event| {
+            if matches!(event, PreparedExecutionEvent::RunStarted { .. }) {
+                for (id, output, weak) in &previous {
+                    assert!(state.query_result(*id).is_none());
+                    assert!(state.query_pin_result(output).is_none());
+                    assert!(weak.upgrade().is_none());
+                }
+                cancellation.store(true, Ordering::Release);
+            }
+        },
+    );
+    assert!(matches!(
+        outcome,
+        Err(ExecutePreparedError::Cancelled { .. })
+    ));
+    for (id, output, weak) in previous {
+        assert!(state.query_result(id).is_none());
+        assert!(state.query_pin_result(&output).is_none());
+        assert!(weak.upgrade().is_none());
+    }
+    for run in [None, Some(first_run)] {
+        assert!(
+            state
+                .query_graph_result_entries("events/main", run)
+                .is_empty()
+        );
+    }
 }

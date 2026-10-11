@@ -25,6 +25,7 @@ mod settings;
 mod startup;
 mod text;
 mod window_chrome;
+mod window_state;
 mod workbench;
 
 use anyhow::{Result, bail};
@@ -56,6 +57,7 @@ fn main() -> Result<()> {
     let initial_resource = args
         .get(1)
         .map(|value| value.to_string_lossy().into_owned());
+    let window_state = window_state::WindowState::load(executor.clone());
     gpui_kit::application()
         .with_assets(gpui_kit::assets::AllAssets)
         .run(move |cx: &mut App| {
@@ -258,7 +260,7 @@ fn main() -> Result<()> {
                     KeyBinding::new("shift-f5", canvas::CancelRun, Some("Workbench")),
                 ],
             );
-            let bounds = Bounds::centered(None, size(px(1480.), px(940.)), cx);
+            let bounds = Bounds::centered(None, window_state.size(), cx);
             cx.open_window(
                 WindowOptions {
                     titlebar: Some(gpui_kit::TitlebarOptions {
@@ -274,8 +276,16 @@ fn main() -> Result<()> {
                 move |window, cx| {
                     appearance::install(window, cx);
                     window.set_window_title("YssBI");
+                    let window_state = window_state.attach(window, cx);
                     let startup = cx.new(|cx| {
-                        Startup::new(executor, initial_project, initial_resource, window, cx)
+                        Startup::new(
+                            executor,
+                            initial_project,
+                            initial_resource,
+                            window_state,
+                            window,
+                            cx,
+                        )
                     });
                     let weak = startup.downgrade();
                     window.on_window_should_close(cx, move |window, cx| {

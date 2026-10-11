@@ -24,6 +24,7 @@ enum State {
 
 pub(crate) struct Startup {
     state: State,
+    _window_state: Entity<crate::window_state::WindowState>,
 }
 
 impl Startup {
@@ -31,6 +32,7 @@ impl Startup {
         executor: Handle,
         project: Option<PathBuf>,
         resource: Option<String>,
+        window_state: Entity<crate::window_state::WindowState>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -122,6 +124,7 @@ impl Startup {
             }
         });
         Self {
+            _window_state: window_state,
             state: State::Loading {
                 worker,
                 _delivery: delivery,

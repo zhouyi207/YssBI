@@ -294,7 +294,7 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
                 .any(|(port, _)| output.port().as_str() == port.to_string()))
             .all(|(_, state)| matches!(
                 state,
-                yss_graph_execution::result::ResultCacheState::Stale { .. }
+                yss_graph_execution::result::ResultCacheState::Missing
             ))
     );
     events.clear();

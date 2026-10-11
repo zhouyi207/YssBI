@@ -42,9 +42,6 @@ impl Results {
             .iter()
             .enumerate()
             .filter_map(|(index, entry)| {
-                if !entry.current() {
-                    return None;
-                }
                 let source = self.source(entry)?;
                 let search = format!(
                     "{} {} {} {}",
@@ -147,15 +144,10 @@ impl ListDelegate for Results {
         else {
             return;
         };
-        let Some(address) = &entry.address else {
-            return;
-        };
+        let address = &entry.address;
         let _ = self.owner.update(cx, |canvas, cx| {
-            if canvas.can_edit()
-                && Rc::ptr_eq(canvas.result_entries(), &self.catalog)
-                && entry.current()
-            {
-                canvas.inspect_port_result(address, false, cx);
+            if canvas.can_edit() && Rc::ptr_eq(canvas.result_entries(), &self.catalog) {
+                canvas.inspect_port_result(address, cx);
             }
         });
     }

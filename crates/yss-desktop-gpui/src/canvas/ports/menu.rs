@@ -38,7 +38,6 @@ impl GraphCanvas {
                 .as_ref()
                 .is_some_and(|input| input.literal_override.is_some());
         let outputs = self.port_result_outputs(port);
-        let previous = !self.previous_port_results(&outputs).is_empty();
         let view = !outputs.is_empty();
         self.cancel_gesture();
         self.palette = None;
@@ -55,16 +54,14 @@ impl GraphCanvas {
                 (PortAction::Disconnect, links),
                 (PortAction::Reset, reset),
                 (PortAction::View, view),
-                (PortAction::Previous, previous),
             ] {
-                if !enabled && matches!(command, PortAction::View | PortAction::Previous) {
+                if !enabled && matches!(command, PortAction::View) {
                     continue;
                 }
                 let (label, icon) = match command {
                     PortAction::Disconnect => ("contextMenu.pin.breakLinks", IconName::Unlink),
                     PortAction::Reset => ("contextMenu.pin.resetValue", IconName::RotateCcw),
                     PortAction::View => ("contextMenu.pin.view", IconName::Eye),
-                    PortAction::Previous => ("contextMenu.pin.viewPrevious", IconName::Clock),
                 };
                 let owner = owner.clone();
                 let projection = projection.clone();
@@ -96,12 +93,7 @@ impl GraphCanvas {
                                         Some(version),
                                         cx,
                                     ),
-                                    PortAction::View | PortAction::Previous => view
-                                        .inspect_port_result(
-                                            &address,
-                                            matches!(command, PortAction::Previous),
-                                            cx,
-                                        ),
+                                    PortAction::View => view.inspect_port_result(&address, cx),
                                 }
                             });
                         }),
@@ -120,5 +112,4 @@ enum PortAction {
     Disconnect,
     Reset,
     View,
-    Previous,
 }

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use super::{PendingOutput, ResultEntry, ResultId, ResultStore, ResultStoreRegistry};
+use super::{ResultEntry, ResultId, ResultStore, ResultStoreRegistry};
 use crate::finalization::{ReadyResult, ResultObservationIntent};
 use crate::plan::PlanOutputRef;
 use crate::result::{ResultRunBasis, StoredResultSnapshot};
@@ -15,7 +15,7 @@ impl ResultStore {
         basis: Option<&ResultRunBasis>,
         reused_inputs: &BTreeMap<PlanOutputRef, ResultId>,
     ) -> bool {
-        self.update(|registry, _retired| {
+        self.update(|registry, retired| {
             if reused_inputs.iter().any(|(output, id)| {
                 outputs.contains(output)
                     || !registry
@@ -54,25 +54,26 @@ impl ResultStore {
             }
             for output in outputs {
                 let cached = registry.outputs.entry(output.clone()).or_default();
+                let previous = cached.result.take();
                 cached.run = Some(run);
-                cached.pending = Some(PendingOutput {
-                    inputs: basis.and_then(|basis| basis.inputs.outputs.get(output).cloned()),
-                    source_results: basis
-                        .and_then(|basis| basis.inputs.outputs.get(output))
-                        .into_iter()
-                        .flat_map(|inputs| inputs.sources())
-                        .filter_map(|source| {
-                            reused_inputs.get(source).map(|id| (source.clone(), *id))
-                        })
-                        .collect(),
-                });
+                cached.inputs = basis.and_then(|basis| basis.inputs.outputs.get(output).cloned());
+                cached.source_results = cached
+                    .inputs
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|inputs| inputs.sources())
+                    .filter_map(|source| reused_inputs.get(source).map(|id| (source.clone(), *id)))
+                    .collect();
+                if let Some(previous) = previous {
+                    registry.detach(previous, retired);
+                }
             }
             for graph in outputs
                 .iter()
                 .map(|output| output.graph().as_str())
                 .collect::<BTreeSet<_>>()
             {
-                registry.refresh_graph(graph);
+                registry.refresh_graph(graph, retired);
             }
             true
         })
@@ -102,7 +103,7 @@ impl ResultStore {
                 return false;
             }
             for result in results {
-                registry.publish_result(result, &published, retired);
+                registry.publish_result(result, &published);
             }
             for observation in observations {
                 registry.record_observation(observation, &published);
@@ -117,7 +118,7 @@ impl ResultStore {
                 )
                 .collect::<BTreeSet<_>>()
             {
-                registry.refresh_graph(graph);
+                registry.refresh_graph(graph, retired);
             }
             true
         })
@@ -174,16 +175,13 @@ impl ResultStoreRegistry {
         let Some(cached) = self.outputs.get(result.output()) else {
             return false;
         };
-        if cached.run != Some(result.pin().provenance().run_id()) {
+        if cached.run != Some(result.pin().provenance().run_id()) || cached.result.is_some() {
             return false;
         }
-        let Some(pending) = &cached.pending else {
-            return false;
-        };
-        if pending.inputs.as_ref().is_some_and(|inputs| {
+        if cached.inputs.as_ref().is_some_and(|inputs| {
             inputs.sources().any(|source| {
                 !published.contains_key(source)
-                    && !pending.source_results.get(source).is_some_and(|expected| {
+                    && !cached.source_results.get(source).is_some_and(|expected| {
                         self.outputs.get(source).is_some_and(|current| {
                             current.valid && current.result == Some(*expected)
                         })
@@ -202,18 +200,13 @@ impl ResultStoreRegistry {
         &mut self,
         result: &ReadyResult,
         published: &BTreeMap<PlanOutputRef, ResultId>,
-        retired: &mut Vec<ResultEntry>,
     ) {
         let id = result.result_id();
         let cached = self
             .outputs
             .get_mut(result.output())
             .expect("admitted output");
-        let pending = cached
-            .pending
-            .take()
-            .expect("validated pending publication");
-        let source_results = pending
+        let source_results = cached
             .inputs
             .as_ref()
             .into_iter()
@@ -221,17 +214,13 @@ impl ResultStoreRegistry {
             .filter_map(|source| {
                 published
                     .get(source)
-                    .or_else(|| pending.source_results.get(source))
+                    .or_else(|| cached.source_results.get(source))
                     .copied()
                     .map(|id| (source.clone(), id))
             })
             .collect();
-        let previous = cached.result.replace(id);
-        cached.inputs = pending.inputs;
+        cached.result = Some(id);
         cached.source_results = source_results;
-        if let Some(previous) = previous.filter(|previous| *previous != id) {
-            self.detach(previous, retired);
-        }
         self.values
             .entry(id)
             .or_insert_with(|| ResultEntry {

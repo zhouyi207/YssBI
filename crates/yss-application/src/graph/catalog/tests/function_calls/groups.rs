@@ -216,7 +216,7 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
                 .result_state()
                 .outputs
                 .get(&output_ref(node, "result")),
-            Some(ResultCacheState::Stale { .. })
+            Some(ResultCacheState::Missing)
         ));
     }
     let (receipt, events) = run(apply, NodeExecutionMode::CurrentInputs);

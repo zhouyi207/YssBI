@@ -3,7 +3,7 @@ pub(super) mod window;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, Sizable,
+    ActiveTheme, Icon, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, DockPlacement, Panel, PanelEvent},
 };
@@ -67,38 +67,22 @@ impl Render for ResultsPanel {
                                 .map(|index| {
                                     let entry = &view.entries[index];
                                     let reference = entry.reference;
-                                    div()
-                                        .h_8()
-                                        .flex()
-                                        .items_center()
-                                        .px_2()
-                                        .gap_2()
-                                        .child(
-                                            Button::new(("open-result", index))
-                                                .small()
-                                                .ghost()
-                                                .icon(IconName::Table)
-                                                .label(entry.title.clone())
-                                                .disabled(entry.waiting)
-                                                .on_click(cx.listener(move |_, _, _, cx| {
-                                                    cx.emit(ResultsEvent::Open(reference))
-                                                })),
-                                        )
-                                        .when(entry.stale, |view| {
-                                            view.child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(cx.theme().muted_foreground)
-                                                    .child(crate::text::t(
-                                                        "native.workbench.staleResults",
-                                                    )),
-                                            )
-                                        })
-                                        .when(entry.waiting, |view| {
-                                            view.child(crate::text::t(
-                                                "native.workbench.syncingResults",
-                                            ))
-                                        })
+                                    div().h_8().flex().items_center().px_2().gap_2().child(
+                                        Button::new(("open-result", reference.result_id.get()))
+                                            .small()
+                                            .ghost()
+                                            .icon(IconName::Table)
+                                            .label(entry.title.clone())
+                                            .on_click(cx.listener(move |view, _, _, cx| {
+                                                if view
+                                                    .entries
+                                                    .iter()
+                                                    .any(|entry| entry.reference == reference)
+                                                {
+                                                    cx.emit(ResultsEvent::Open(reference));
+                                                }
+                                            })),
+                                    )
                                 })
                                 .collect()
                         }),

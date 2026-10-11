@@ -227,7 +227,6 @@ impl ListGraphResultsRequest {
 #[serde(rename_all = "camelCase")]
 pub enum ResultValidity {
     CurrentValid,
-    CurrentStale,
     Retained,
 }
 

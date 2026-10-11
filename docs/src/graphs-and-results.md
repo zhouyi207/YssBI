@@ -30,13 +30,13 @@ A node appearing in the catalog does not guarantee that your configured instance
 
 ## Save and execute separately
 
-Ordinary graph edits update the project's current in-memory graph. **Save writes the graph body; Execute computes results. Neither is a substitute for the other.** Undo and redo change the current graph and reevaluate its validity; they do not promise to restore an old result that has already been released.
+Ordinary graph edits update the project's current in-memory graph. **Save writes the graph body; Execute computes results. Neither is a substitute for the other.** Undo and redo restore graph edits, not discarded execution results.
 
-Use the graph toolbar for full-graph execution. Local execution supports a single node using current inputs, or computing its dependencies first. The latter is useful when upstream values are missing or stale. Local readiness is checked for the requested dependency scope; an unrelated unfinished branch need not block it.
+Use the graph toolbar for full-graph execution. Local execution supports a single node using current inputs, or computing its dependencies first. The latter is useful when upstream values are missing. Local readiness is checked for the requested dependency scope; an unrelated unfinished branch need not block it.
 
 The run controls apply pending port input before preparing execution. A blocked or busy run control explains why execution is unavailable. Use Cancel to request cancellation, then inspect the reported terminal state rather than assuming that clicking it immediately stopped every operation.
 
-Editing relevant inputs can make results stale. A last successful value is not necessarily a valid input for the current graph. Inspecting an existing output does not run its node automatically.
+Editing relevant inputs discards affected results. Once a run is admitted, outputs being recomputed and their dependent results are removed; failure or cancellation does not restore previous values. Unaffected valid inputs remain available for local execution. Inspecting an existing output does not run its node automatically.
 
 ## Choose the right panel
 
@@ -44,7 +44,7 @@ Editing relevant inputs can make results stale. A last successful value is not n
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Problems | Current graph diagnostics, including severity, blocking status, and links to affected nodes, parameters, ports, connections, or resources. |
 | Output   | The current graph's execution status and failures, including the execution phase and stable error code when available.                     |
-| Results  | Available graph outputs and explicit access to retained last-successful results when offered.                                              |
+| Results  | Current valid graph outputs. Outputs being recomputed or awaiting synchronization are not listed.                                         |
 | Logs     | Application diagnostic records, filtered by domain, level, or text. These are not the graph's authoritative Problems or execution state.   |
 
 Fix the graph to resolve Problems; there is no manual clear operation for canonical diagnostics. Clearing a completed Output notice only acknowledges its presentation: it does not delete cached results, undo the run, or save the graph. Clearing Logs clears the display, not the underlying persistent log history.
@@ -53,9 +53,9 @@ Fix the graph to resolve Problems; there is no manual clear operation for canoni
 
 Open a result from Results or an output port's inspection action. Connected input ports can inspect their upstream output. Tables load bounded pages; structured results can expose nested tables, and supported statistical reports offer numerical and report views. These views use backend values rather than recomputing statistics in the interface.
 
-An open result tab retains the specific execution result you selected. Rerunning the graph does not silently turn that tab into the new result. Open the new output to compare it with the retained snapshot. When offered, **View Last Successful Result** explicitly opens the older value; it does not make that value current again.
+An open result tab retains the specific execution result you selected. Rerunning the graph does not silently turn that tab into the new result. This explicitly held snapshot is not part of the current Results list or port inspection; open the new output to inspect the new computation.
 
-You can open a result in an independent native window. Each window retains its own result reference. Closing a source tab does not by itself invalidate an already retained window, but a project or execution-session change can release the old results. Result tabs are not durable files or a guarantee of availability after restarting the application.
+You can open a result in an independent native window. Each window retains its own result reference. Closing a source tab does not by itself invalidate an already retained window, but a project or execution-session change can release the old results. Result tabs are not durable files and are not saved or restored with the workbench layout.
 
 Reading or paging an existing result does not execute the graph. An explicit report action that appends analysis is different: it edits the relevant Summary configuration and runs the requested output. That edit remains subject to the normal graph save boundary.
 

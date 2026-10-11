@@ -284,14 +284,14 @@ impl Workbench {
                 );
             },
         ));
-        self.subscriptions.push(cx.subscribe_in(
-            &self.results,
-            window,
-            |view, _, event, window, cx| {
+        self.subscriptions.push(
+            cx.subscribe_in(&self.results, window, |view, _, event, _, cx| {
                 let results::ResultsEvent::Open(reference) = event;
-                view.open_result(*reference, None, None, window, cx);
-            },
-        ));
+                if let Some(canvas) = view.details.read(cx).graph() {
+                    canvas.update(cx, |canvas, cx| canvas.inspect_result(*reference, cx));
+                }
+            }),
+        );
     }
 
     fn install_activity(&mut self, window: &mut Window, cx: &mut Context<Self>) {

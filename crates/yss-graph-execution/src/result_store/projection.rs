@@ -34,9 +34,6 @@ impl ResultStoreRegistry {
                     Some(cached) if cached.valid => ResultCacheState::Valid {
                         result_id: cached.result.expect("valid result"),
                     },
-                    Some(cached) if cached.result.is_some() => ResultCacheState::Stale {
-                        result_id: cached.result.expect("retained stale result"),
-                    },
                     _ => ResultCacheState::Missing,
                 };
                 (output.clone(), state)
@@ -52,15 +49,6 @@ impl ResultStoreRegistry {
                 for source in sources {
                     let state = match cached {
                         Some(cached) if cached.valid => ConnectionCacheState::Valid,
-                        Some(cached)
-                            if cached
-                                .inputs
-                                .as_ref()
-                                .and_then(|inputs| inputs.bindings.get(input))
-                                .is_some_and(|consumed| consumed.contains(source)) =>
-                        {
-                            ConnectionCacheState::Stale
-                        }
                         _ => ConnectionCacheState::New,
                     };
                     // Any matching output proves the binding was consumed; node completeness is separate.
@@ -128,8 +116,7 @@ impl ResultStore {
         registry.read_snapshot(id)
     }
 
-    /// Without a run filter, return current pins including retained stale values.
-    /// A run filter reads only still-owned immutable results, never a run archive.
+    /// Return only current valid outputs, optionally restricted to their producing run.
     pub(crate) fn query_graph_result_entries(
         &self,
         graph: &str,
@@ -139,24 +126,13 @@ impl ResultStore {
             .registry
             .read()
             .unwrap_or_else(|error| error.into_inner());
-        if let Some(run) = run {
-            registry
-                .values
-                .iter()
-                .filter(|(_, entry)| {
-                    entry.snapshot.output().graph().as_str() == graph
-                        && entry.snapshot.provenance().run_id() == run
-                })
-                .filter_map(|(id, _)| registry.read_snapshot(*id))
-                .collect()
-        } else {
-            registry
-                .outputs
-                .iter()
-                .filter(|(output, _)| output.graph().as_str() == graph)
-                .filter_map(|(_, cached)| registry.read_snapshot(cached.result?))
-                .collect()
-        }
+        registry
+            .outputs
+            .iter()
+            .filter(|(output, cached)| output.graph().as_str() == graph && cached.valid)
+            .filter_map(|(_, cached)| registry.read_snapshot(cached.result?))
+            .filter(|snapshot| run.is_none_or(|run| snapshot.result.provenance().run_id() == run))
+            .collect()
     }
 
     pub(crate) fn schema_candidates(&self, graph: &str) -> Vec<StoredResultSnapshot> {
@@ -167,7 +143,7 @@ impl ResultStore {
         registry
             .outputs
             .iter()
-            .filter(|(output, _)| output.graph().as_str() == graph)
+            .filter(|(output, cached)| output.graph().as_str() == graph && cached.valid)
             .filter_map(|(_, cached)| cached.result.and_then(|id| registry.values.get(&id)))
             .filter(|entry| entry.snapshot.value().is_evaluated())
             .map(|entry| entry.snapshot.clone())
@@ -183,10 +159,8 @@ impl ResultStore {
             .registry
             .read()
             .unwrap_or_else(|error| error.into_inner());
-        // Last-success Schema remains useful during a same-input rerun, while the
-        // execution cache remains stale. Edits and changed source IDs still invalidate it.
         registry
-            .matching_outputs(graph, Some(inputs), true)
+            .matching_outputs(graph, Some(inputs))
             .into_iter()
             .filter_map(|output| Some((output.clone(), registry.outputs.get(&output)?.result?)))
             .collect()
@@ -200,7 +174,7 @@ impl ResultStore {
         registry
             .outputs
             .iter()
-            .filter(|(output, _)| output.graph().as_str() == graph)
+            .filter(|(output, cached)| output.graph().as_str() == graph && cached.valid)
             .filter(|(_, cached)| {
                 cached
                     .result
@@ -276,7 +250,6 @@ impl ResultStoreRegistry {
             Some(cached) if cached.result == Some(id) && cached.valid => {
                 ResultValidity::CurrentValid
             }
-            Some(cached) if cached.result == Some(id) => ResultValidity::CurrentStale,
             _ => ResultValidity::Retained,
         };
         Some(ResultReadSnapshot {

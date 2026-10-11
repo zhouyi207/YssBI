@@ -15,17 +15,9 @@ use super::GraphCanvas;
 pub(crate) struct ResultEntry {
     pub title: String,
     pub search_label: String,
-    pub address: Option<PortAddress>,
+    pub address: PortAddress,
     pub output: PlanOutputRef,
     pub reference: ResultReference,
-    pub stale: bool,
-    pub waiting: bool,
-}
-
-impl ResultEntry {
-    pub(super) fn current(&self) -> bool {
-        !self.stale && !self.waiting && self.address.is_some()
-    }
 }
 
 impl GraphCanvas {
@@ -35,6 +27,13 @@ impl GraphCanvas {
 
     pub(super) fn project_result_entries(&self, pending: &BTreeSet<&str>) -> Rc<[ResultEntry]> {
         let graph = &self.graph;
+        if graph.results.semantic_input_hash != graph.projection.basis.semantic_input_hash {
+            return if self.result_entries().is_empty() {
+                self.result_entries().clone()
+            } else {
+                Rc::default()
+            };
+        }
         let labels: BTreeMap<_, _> = graph
             .projection
             .nodes
@@ -63,34 +62,27 @@ impl GraphCanvas {
                 })
             })
             .collect();
-        let current =
-            graph.results.semantic_input_hash == graph.projection.basis.semantic_input_hash;
         let entries: Vec<_> = graph
             .results
             .outputs
             .iter()
             .filter_map(|(output, state)| {
-                let (result_id, stale) = match state {
-                    ResultCacheState::Valid { result_id } => (*result_id, false),
-                    ResultCacheState::Stale { result_id } => (*result_id, true),
-                    ResultCacheState::Missing => return None,
+                let ResultCacheState::Valid { result_id } = state else {
+                    return None;
                 };
-                let label = labels.get(output.port().as_str());
+                if pending.contains(output.port().as_str()) {
+                    return None;
+                }
+                let (address, title, search_label) = labels.get(output.port().as_str())?;
                 Some(ResultEntry {
-                    title: label
-                        .map_or_else(|| output.port().to_string(), |(_, title, _)| title.clone()),
-                    search_label: label.map_or_else(
-                        || output.port().as_str().to_lowercase(),
-                        |(_, _, search)| search.clone(),
-                    ),
-                    address: label.map(|(address, _, _)| address.clone()),
+                    title: title.clone(),
+                    search_label: search_label.clone(),
+                    address: address.clone(),
                     output: output.clone(),
                     reference: ResultReference {
                         execution_session_id: graph.results.execution_session_id,
-                        result_id,
+                        result_id: *result_id,
                     },
-                    stale,
-                    waiting: !current || pending.contains(output.port().as_str()),
                 })
             })
             .collect();

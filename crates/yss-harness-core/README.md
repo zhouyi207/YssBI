@@ -267,7 +267,7 @@ Contract 中的结果引用通过 `hex` 编解码会话和表选择的 UTF-8 字
 长度限制和完整引用格式校验；非法 UTF-8 或非规范引用继续拒绝。
 Core 的审批、工具幂等、任务、技能和知识摘要也由 `hex` 编码；领域分隔及摘要输入仍归各自 owner。
 
-`list_graph_results` 可按节点、输出 Pin、运行筛选并分页；默认包含当前 Pin 的有效值和保留的过时值，指定运行只读取仍被原 owner 持有的结果。每个引用和读取回执区分 `currentValid`、`currentStale`、`retained`。运行状态、过期会话、已回收结果和不存在的表分别反馈；读取永不触发重算。Worker 授权、委派和历史回放使用同一完整业务引用。
+`list_graph_results` 只列出当前有效输出，可按节点、输出 Pin、运行筛选并分页；指定运行也不返回仅由报告租约持有的旧结果。读取回执区分 `currentValid` 与显式租约持有的 `retained`，后者不进入结果目录。重跑准入或输入失效移除相关旧输出，失败、取消与撤销均不恢复。运行状态、过期会话、已回收结果和不存在的表分别反馈；读取永不触发重算。Worker 授权、委派和历史回放使用同一完整业务引用。
 
 Model-facing schema 来自 Contract 的 `model::CapabilityInput` 所用业务参数类型。
 `ModelCapabilityExecutor` 接收公开意图；Core 的 [capabilities.rs](src/orchestration/capabilities.rs) 先授权，

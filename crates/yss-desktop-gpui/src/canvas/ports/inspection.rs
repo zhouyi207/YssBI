@@ -1,14 +1,11 @@
-//! Resolve current or explicitly previous output references without running the graph.
+//! Resolve current output identities without running the graph.
 use crate::canvas::{CanvasEvent, GraphCanvas};
 use gpui_kit::Context;
 use std::sync::Arc;
 use yss_application::graph::results::{ResultPinQuery, ResultQueryApplicationError};
 use yss_graph_document::PortAddress;
 use yss_graph_editor::projection::EditorPortModel;
-use yss_graph_execution::{
-    plan::{PlanGraphId, PlanOutputRef, PlanPortAddress},
-    result::{ResultCacheState, ResultReference, ResultRetentionError},
-};
+use yss_graph_execution::result::{ResultReference, ResultRetentionError};
 use yss_node_protocol::PortDirection;
 
 impl GraphCanvas {
@@ -25,39 +22,29 @@ impl GraphCanvas {
             .collect()
     }
 
-    pub(super) fn previous_port_results(&self, outputs: &[PortAddress]) -> Vec<ResultReference> {
-        if self.graph.results.semantic_input_hash != self.graph.projection.basis.semantic_input_hash
-        {
-            return vec![];
-        }
-        outputs
+    pub(crate) fn inspect_result(&mut self, reference: ResultReference, cx: &mut Context<Self>) {
+        let Some(address) = self
+            .result_entries()
             .iter()
-            .filter_map(|address| {
-                let output = self.plan_output(address);
-                match self.graph.results.outputs.get(&output) {
-                    Some(ResultCacheState::Stale { result_id }) => Some(ResultReference {
-                        execution_session_id: self.graph.results.execution_session_id,
-                        result_id: *result_id,
-                    }),
-                    _ => None,
-                }
-            })
-            .collect()
-    }
-
-    fn plan_output(&self, address: &PortAddress) -> PlanOutputRef {
-        PlanOutputRef::new(
-            PlanGraphId::from_existing(self.path().to_owned().into_boxed_str()),
-            PlanPortAddress::from_existing(address.to_string().into_boxed_str()),
-        )
+            .find(|entry| entry.reference == reference)
+            .map(|entry| entry.address.clone())
+        else {
+            return;
+        };
+        self.inspect_port_result(&address, cx);
     }
 
     pub(in crate::canvas) fn inspect_port_result(
         &mut self,
         address: &PortAddress,
-        previous: bool,
         cx: &mut Context<Self>,
     ) {
+        if !self.can_edit()
+            || self.graph.results.semantic_input_hash
+                != self.graph.projection.basis.semantic_input_hash
+        {
+            return;
+        }
         let Some(port) = self
             .graph
             .projection
@@ -68,19 +55,17 @@ impl GraphCanvas {
         else {
             return;
         };
-        let outputs = self.port_result_outputs(port);
-        let targets = if previous {
-            self.previous_port_results(&outputs)
-                .into_iter()
-                .map(Target::Previous)
-                .collect::<Vec<_>>()
-        } else {
-            outputs
-                .into_iter()
-                .filter(|output| !self.result_waiting(&self.plan_output(output)))
-                .map(Target::Current)
-                .collect()
-        };
+        let targets = self
+            .port_result_outputs(port)
+            .into_iter()
+            .filter_map(|address| {
+                let entry = self
+                    .result_entries()
+                    .iter()
+                    .find(|entry| entry.address == address)?;
+                (!self.result_waiting(&entry.output)).then_some((address, entry.reference))
+            })
+            .collect::<Vec<_>>();
         self.cancel_gesture();
         self.error = None;
         let projection = self.graph.projection.clone();
@@ -91,27 +76,29 @@ impl GraphCanvas {
         let task = self.services.run(move |services| {
             let app = &services.application;
             app.current_graph_document(&project, &path, version)?;
-            for target in targets {
-                let (reference, output) = match target {
-                    Target::Previous(reference) => (reference, None),
-                    Target::Current(output) => {
-                        let Some(result) =
-                            app.query_pin_result(ResultPinQuery::new(path.clone(), output))?
-                        else {
-                            continue;
-                        };
-                        (
-                            result.provenance().reference(),
-                            Some(result.output().clone()),
-                        )
-                    }
+            for (address, expected) in targets {
+                let Some(result) =
+                    app.query_pin_result(ResultPinQuery::new(path.clone(), address.clone()))?
+                else {
+                    continue;
                 };
+                let reference = result.provenance().reference();
+                if reference != expected {
+                    continue;
+                }
+                let output = result.output().clone();
                 if reference.execution_session_id != session {
                     return Err(ResultQueryApplicationError::SessionChanged.into());
                 }
                 match app.retain_owned_result(reference) {
                     Ok((lease, _)) => {
                         app.current_graph_document(&project, &path, version)?;
+                        if app
+                            .query_pin_result(ResultPinQuery::new(path.clone(), address))?
+                            .is_none_or(|result| result.provenance().reference() != reference)
+                        {
+                            continue;
+                        }
                         return Ok(Some((Arc::new(lease), output)));
                     }
                     Err(ResultQueryApplicationError::Retention(
@@ -138,13 +125,12 @@ impl GraphCanvas {
                 }
                 match result {
                     Ok(Some((lease, output))) => {
-                        let current = output.as_ref().is_none_or(|output| {
-                            view.result_entries().iter().any(|entry| {
-                                entry.current()
-                                    && entry.output == *output
-                                    && entry.reference == lease.reference()
-                            })
-                        });
+                        let current = view.graph.results.semantic_input_hash
+                            == view.graph.projection.basis.semantic_input_hash
+                            && !view.result_waiting(&output)
+                            && view.result_entries().iter().any(|entry| {
+                                entry.output == output && entry.reference == lease.reference()
+                            });
                         if current {
                             cx.emit(CanvasEvent::InspectResult(lease));
                         } else {
@@ -160,10 +146,4 @@ impl GraphCanvas {
         }));
         cx.notify();
     }
-}
-
-// Only the explicit previous-value action bypasses the current output query.
-enum Target {
-    Current(PortAddress),
-    Previous(ResultReference),
 }

@@ -174,7 +174,7 @@ impl Picker {
                     delegate.failed = result.is_err();
                     delegate.sources = result.unwrap_or_default();
                     let refresh = !delegate.failed
-                        && catalog.iter().filter(|entry| entry.current()).any(|entry| {
+                        && catalog.iter().any(|entry| {
                             delegate
                                 .sources
                                 .get(&entry.reference.result_id)
@@ -228,11 +228,7 @@ impl GraphCanvas {
                     .small()
                     .ghost()
                     .icon(IconName::Search)
-                    .disabled(
-                        !open
-                            && (!self.can_edit()
-                                || !self.result_entries().iter().any(ResultEntry::current)),
-                    )
+                    .disabled(!open && (!self.can_edit() || self.result_entries().is_empty()))
                     .tooltip(crate::text::t(if open {
                         "canvas.pinResultSearch.close"
                     } else {

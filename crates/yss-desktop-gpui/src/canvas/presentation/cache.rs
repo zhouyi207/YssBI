@@ -30,7 +30,6 @@ impl<'a> CacheStates<'a> {
             } else {
                 match state {
                     ResultCacheState::Missing => State::Unexecuted,
-                    ResultCacheState::Stale { .. } => State::Stale,
                     ResultCacheState::Valid { .. } => State::Valid,
                 }
             };

@@ -34,7 +34,6 @@ fn validity(value: yss_graph_execution::result::ResultValidity) -> ResultValidit
     use yss_graph_execution::result::ResultValidity as V;
     match value {
         V::CurrentValid => ResultValidity::CurrentValid,
-        V::CurrentStale => ResultValidity::CurrentStale,
         V::Retained => ResultValidity::Retained,
     }
 }

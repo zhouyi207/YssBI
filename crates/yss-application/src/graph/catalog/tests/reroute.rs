@@ -213,7 +213,7 @@ fn inserted_reroutes_run_with_cached_inputs_and_follow_edits_and_undo() {
     for route in &routes {
         assert!(matches!(
             changed.result_state().outputs[&output(&graph, *route, "output")],
-            ResultCacheState::Stale { .. }
+            ResultCacheState::Missing
         ));
     }
     assert!(matches!(
@@ -237,7 +237,7 @@ fn inserted_reroutes_run_with_cached_inputs_and_follow_edits_and_undo() {
     for route in &routes {
         assert!(matches!(
             restored.result_state().outputs[&output(&graph, *route, "output")],
-            ResultCacheState::Valid { .. }
+            ResultCacheState::Missing
         ));
     }
     session

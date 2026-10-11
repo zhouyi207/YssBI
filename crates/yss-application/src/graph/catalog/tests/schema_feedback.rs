@@ -370,10 +370,9 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         "old columns are withdrawn when producer inputs change"
     );
     let restored = app.change_graph_history(edit_request(), false).unwrap();
-    assert_eq!(
-        output_columns(&restored.update.projection_replacement.projection),
-        columns,
-        "undo may reuse a retained result with matching inputs"
+    assert!(
+        output_columns(&restored.update.projection_replacement.projection).is_empty(),
+        "undo does not restore discarded result schemas"
     );
     let changed = app.change_graph_history(edit_request(), true).unwrap();
     run_drop(

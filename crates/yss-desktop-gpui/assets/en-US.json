@@ -514,7 +514,6 @@
       "set_column_semantics": "Set column semantics",
       "retained": "Available",
       "current_valid": "Current and valid",
-      "current_stale": "Current and stale",
       "overview": "Overview",
       "nodes": "Nodes",
       "ports": "Ports",
@@ -859,8 +858,7 @@
     "pin": {
       "breakLinks": "Break Links",
       "resetValue": "Reset to Default",
-      "view": "View",
-      "viewPrevious": "View Last Successful Result"
+      "view": "View"
     }
   },
   "projectPicker": {
@@ -2544,8 +2542,6 @@
       "settingsWindowFailed": "Could not open the settings window. Try again.",
       "settingsWindowDirtyTitle": "Settings •",
       "resultsHint": "Run a graph, then select data to inspect here",
-      "staleResults": "Previous results · Out of date",
-      "syncingResults": "Syncing results…",
       "getStarted": "Get started",
       "openProjectDirectory": "Open project directory…",
       "newProject": "New project…",
@@ -2684,11 +2680,8 @@
       "projectContentFailed": "Project switched, but content was not read. Reopen the project directory.",
       "projectStateUnconfirmed": "Project state unconfirmed. Your input is preserved. Reopen the project.",
       "projectTaskFailed": "Project task did not complete. Your input is preserved. Check the current directory.",
-      "previousRunResults": "Previous run results",
       "resourceUnavailable": "Resource unavailable",
-      "expiredResultsHint": "These results belong to an ended execution session. Run the graph again to open results",
       "missingResourceHint": "This resource may have moved or been deleted. Reopen it from the project explorer",
-      "previousResults": "Previous results",
       "logsWindowTitle": "Logs — YssBI",
       "logsWindowFailed": "Could not open the logs window. Try again.",
       "aboutTitle": "About YssBI",

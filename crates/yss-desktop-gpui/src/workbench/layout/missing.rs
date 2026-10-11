@@ -22,16 +22,8 @@ impl Render for MissingPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         appearance::empty_state(
             IconName::File,
-            if self.state.panel_name == "result" {
-                crate::text::t("native.workbench.previousRunResults")
-            } else {
-                crate::text::t("native.workbench.resourceUnavailable")
-            },
-            if self.state.panel_name == "result" {
-                crate::text::t("native.workbench.expiredResultsHint")
-            } else {
-                crate::text::t("native.workbench.missingResourceHint")
-            },
+            crate::text::t("native.workbench.resourceUnavailable"),
+            crate::text::t("native.workbench.missingResourceHint"),
             cx,
         )
     }
@@ -54,9 +46,7 @@ impl BasePanel for MissingPanel {
 
 impl Panel for MissingPanel {
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        if self.state.panel_name == "result" {
-            crate::text::t("native.workbench.previousResults").into_owned()
-        } else if let gpui_kit::component::dock::PanelInfo::Panel(info) = &self.state.info {
+        if let gpui_kit::component::dock::PanelInfo::Panel(info) = &self.state.info {
             info.get("graphPath")
                 .or_else(|| info.get("documentPath"))
                 .or_else(|| info.get("mindPath"))

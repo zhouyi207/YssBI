@@ -46,10 +46,7 @@ impl ResultStoreRegistry {
             // Authored edits revoke admission. Schema feedback only revokes a run
             // whose own inputs changed, never the producer of the observed value.
             if definition_changed
-                || cached
-                    .pending
-                    .as_ref()
-                    .is_some_and(|pending| pending.inputs.as_ref() != inputs.outputs.get(output))
+                || (cached.result.is_none() && cached.inputs.as_ref() != inputs.outputs.get(output))
             {
                 cached.run = None;
             }
@@ -71,10 +68,10 @@ impl ResultStoreRegistry {
                 inputs,
             },
         );
-        self.refresh_graph(graph);
+        self.refresh_graph(graph, retired);
     }
 
-    pub(super) fn refresh_graph(&mut self, graph: &str) {
+    pub(super) fn refresh_graph(&mut self, graph: &str, retired: &mut Vec<ResultEntry>) {
         self.revision = self
             .revision
             .checked_add(1)
@@ -82,12 +79,23 @@ impl ResultStoreRegistry {
         let valid = self.matching_outputs(
             graph,
             self.graph_inputs.get(graph).map(|current| &current.inputs),
-            false,
         );
+        let mut detached = Vec::new();
         for (output, cached) in &mut self.outputs {
             if output.graph().as_str() == graph {
                 cached.valid = valid.contains(output);
+                if !cached.valid
+                    && let Some(id) = cached.result.take()
+                {
+                    cached.run = None;
+                    cached.inputs = None;
+                    cached.source_results.clear();
+                    detached.push(id);
+                }
             }
+        }
+        for id in detached {
+            self.detach(id, retired);
         }
     }
 
@@ -95,16 +103,12 @@ impl ResultStoreRegistry {
         &self,
         graph: &str,
         observed: Option<&GraphResultInputs>,
-        allow_pending: bool,
     ) -> BTreeSet<PlanOutputRef> {
         let mut pending = Vec::new();
         let mut remaining = BTreeMap::new();
         let mut dependents: BTreeMap<PlanOutputRef, Vec<PlanOutputRef>> = BTreeMap::new();
         for (output, cached) in &self.outputs {
-            if output.graph().as_str() != graph
-                || cached.result.is_none()
-                || (!allow_pending && cached.pending.is_some())
-            {
+            if output.graph().as_str() != graph || cached.result.is_none() {
                 continue;
             }
             match (
@@ -182,7 +186,7 @@ impl ResultStore {
             {
                 return None;
             }
-            let matching = registry.matching_outputs(graph, Some(&inputs), true);
+            let matching = registry.matching_outputs(graph, Some(&inputs));
             if inputs.schema_observations.iter().any(|(output, id)| {
                 !matching.contains(output)
                     || registry
@@ -227,7 +231,7 @@ impl ResultStore {
         &self,
         versions: &BTreeMap<Box<str>, Option<[u8; 32]>>,
     ) {
-        self.update(|registry, _retired| {
+        self.update(|registry, retired| {
             let mut changed = Vec::new();
             for (graph, current) in &mut registry.graph_inputs {
                 let mut dirty = false;
@@ -257,7 +261,7 @@ impl ResultStore {
                         cached.run = None;
                     }
                 }
-                registry.refresh_graph(&graph);
+                registry.refresh_graph(&graph, retired);
             }
         })
     }

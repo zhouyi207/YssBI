@@ -13,4 +13,4 @@ configurations. To return fewer, more or reordered rows, use **Apply to Groups**
 
 Empty input calls the function once with an empty source to determine its output structure, and
 returns zero rows. Groups run sequentially with the caller's cancellation and budgets. Errors retain
-the group and function location, while the last successful result remains subject to normal cache validity.
+the group and function location; a failed or cancelled run does not restore the previous output.

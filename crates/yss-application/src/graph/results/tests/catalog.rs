@@ -28,6 +28,12 @@ fn graph_result_query_keeps_graph_scope_and_current_output_ownership() {
         execution_session_id: captured.execution_session_id(),
         result_id: old,
     };
+    let old_run = app
+        .query_result(reference)
+        .unwrap()
+        .unwrap()
+        .provenance()
+        .run_id();
     let (lease, _) = app.retain_owned_result(reference).unwrap();
     let current = captured
         .execution()
@@ -55,6 +61,12 @@ fn graph_result_query_keeps_graph_scope_and_current_output_ownership() {
             .value()
     ));
     assert!(app.query_result(reference).unwrap().is_some());
+    assert!(
+        query_graph_result_entries(&captured, &graph, Some(old_run))
+            .unwrap()
+            .is_empty(),
+        "a run filter must not turn a leased report into historical result discovery"
+    );
 
     captured
         .execution()

@@ -514,7 +514,6 @@
       "set_column_semantics": "设置列语义",
       "retained": "可读取",
       "current_valid": "当前有效",
-      "current_stale": "当前已过期",
       "overview": "概览",
       "nodes": "节点",
       "ports": "端口",
@@ -859,8 +858,7 @@
     "pin": {
       "breakLinks": "断开连接",
       "resetValue": "恢复默认值",
-      "view": "查看",
-      "viewPrevious": "查看上次成功结果"
+      "view": "查看"
     }
   },
   "projectPicker": {
@@ -2544,8 +2542,6 @@
       "settingsWindowFailed": "设置窗口未能打开，请重试。",
       "settingsWindowDirtyTitle": "设置 •",
       "resultsHint": "运行图后，在这里选择要查看的数据",
-      "staleResults": "上次结果 · 已过期",
-      "syncingResults": "正在同步结果…",
       "getStarted": "开始",
       "openProjectDirectory": "打开项目目录…",
       "newProject": "新建项目…",
@@ -2684,11 +2680,8 @@
       "projectContentFailed": "项目已切换，但内容未读取；请重新打开项目目录。",
       "projectStateUnconfirmed": "项目状态未确认，输入已保留；请重新打开项目。",
       "projectTaskFailed": "项目任务未完成，输入已保留；请检查当前目录。",
-      "previousRunResults": "先前的运行结果",
       "resourceUnavailable": "资源暂不可用",
-      "expiredResultsHint": "运行结果属于已结束的执行会话，请重新运行图后打开结果",
       "missingResourceHint": "资源可能已移动或删除，可从项目目录重新打开",
-      "previousResults": "先前的结果",
       "logsWindowTitle": "日志 — YssBI",
       "logsWindowFailed": "日志窗口未能打开，请重试。",
       "aboutTitle": "关于 YssBI",

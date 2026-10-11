@@ -205,7 +205,7 @@ fn observed_input_branches_require_consumption_and_follow_the_shared_result_life
         Some(&basis),
         &BTreeMap::new()
     ));
-    assert!(store.get(ResultId::from_existing(1)).is_some());
+    assert!(store.get(ResultId::from_existing(1)).is_none());
     assert!(!store.publish(&[], &observations));
     assert!(store.publish(&[cached_result(2, run, output.clone())], &[]));
     assert!(store.get(ResultId::from_existing(1)).is_none());
@@ -222,7 +222,7 @@ fn observed_input_branches_require_consumption_and_follow_the_shared_result_life
 }
 
 #[test]
-fn edits_revalidate_only_dependent_caches_and_undo_cannot_resurrect_deleted_outputs() {
+fn edits_discard_dependent_caches_and_undo_cannot_resurrect_results() {
     let store = ResultStore::new();
     let original = cache_inputs(
         1,
@@ -260,15 +260,21 @@ fn edits_revalidate_only_dependent_caches_and_undo_cannot_resurrect_deleted_outp
         assert!(store.query_pin_result(&named_output(port)).is_some());
     }
     for port in ["b", "c"] {
-        let ResultCacheState::Stale { result_id } = states.outputs[&named_output(port)] else {
-            panic!("edited output must retain a stale result identity");
-        };
-        assert_eq!(store.get(result_id).unwrap().output(), &named_output(port));
-        if port == "b" {
-            assert_eq!(result_id, b_id);
-        }
+        assert_eq!(
+            states.outputs[&named_output(port)],
+            ResultCacheState::Missing
+        );
         assert!(store.query_pin_result(&named_output(port)).is_none());
     }
+    assert!(store.get(b_id).is_none());
+    assert!(weak.upgrade().is_none());
+    assert_eq!(store.query_graph_result_entries(graph, None).len(), 2);
+    assert_eq!(
+        store
+            .query_graph_result_entries(graph, Some(RunId::from_existing(1)))
+            .len(),
+        2
+    );
     assert_eq!(
         states.outputs[&named_output("e")],
         ResultCacheState::Missing
@@ -289,7 +295,7 @@ fn edits_revalidate_only_dependent_caches_and_undo_cannot_resurrect_deleted_outp
     );
     assert_eq!(
         connection(&states, "b", "c:input"),
-        ConnectionCacheState::Stale
+        ConnectionCacheState::New
     );
     assert_eq!(
         connection(&states, "a", "e:input"),
@@ -312,27 +318,23 @@ fn edits_revalidate_only_dependent_caches_and_undo_cannot_resurrect_deleted_outp
     );
     assert_eq!(
         connection(&states, "b", "c:input"),
-        ConnectionCacheState::Stale
+        ConnectionCacheState::New
     );
-    assert!(store.get(b_id).is_some());
+    assert!(store.get(b_id).is_none());
     assert!(store.query_cache_states(graph, &[1; 32]).is_none());
     store.observe_graph_inputs(graph, original.clone());
     let states = store.query_cache_states(graph, &[1; 32]).unwrap();
-    assert!(
-        states
-            .connections
-            .iter()
-            .all(|connection| connection.state == ConnectionCacheState::Valid)
-    );
     assert_eq!(
-        store
-            .query_pin_result(&named_output("b"))
-            .unwrap()
-            .provenance()
-            .result_id(),
-        b_id
+        connection(&states, "a", "d:input"),
+        ConnectionCacheState::Valid
     );
-    assert!(store.query_pin_result(&named_output("c")).is_some());
+    for port in ["b", "c"] {
+        assert_eq!(
+            states.outputs[&named_output(port)],
+            ResultCacheState::Missing
+        );
+        assert!(store.query_pin_result(&named_output(port)).is_none());
+    }
     store.observe_graph_inputs(graph, edited);
     assert!(store.query_pin_result(&named_output("c")).is_none());
     let mut deleted = original.clone();
@@ -433,7 +435,7 @@ fn rerun_versions_and_edit_epochs_prevent_obsolete_cache_or_run_restoration() {
         .insert("database:source".into(), Some([7; 32]));
     resources.observe_graph_inputs(graph, original);
     assert!(resources.query_pin_result(&named_output("b")).is_none());
-    assert!(resources.get(ResultId::from_existing(1)).is_some());
+    assert!(resources.get(ResultId::from_existing(1)).is_none());
 
     let feedback = ResultStore::new();
     let initial = cache_inputs(1, &[("a", 1, &[])]);
@@ -452,11 +454,18 @@ fn rerun_versions_and_edit_epochs_prevent_obsolete_cache_or_run_restoration() {
     let run = RunId::from_existing(2);
     assert!(feedback.begin_run(run, &outputs, Some(&basis), &BTreeMap::new()));
     assert!(feedback.query_pin_result(&named_output("a")).is_none());
-    assert_eq!(
+    assert!(
         feedback
             .matching_schema_results(graph, &observed)
-            .get(&named_output("a")),
-        Some(&first)
+            .is_empty()
+    );
+    assert!(feedback.schema_candidates(graph).is_empty());
+    assert!(feedback.get(first).is_none());
+    assert!(
+        feedback
+            .capture_run_basis(graph, observed.clone())
+            .is_none(),
+        "an admitted rerun discards the schema result used by its preparation"
     );
     feedback.observe_graph_inputs(graph, initial.clone());
     assert!(
@@ -567,10 +576,15 @@ fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() 
             .result_id(),
         ResultId::from_existing(2)
     );
-    let old_run = store.query_graph_result_entries("events/main.yssbi-event", Some(first));
-    assert_eq!(old_run.len(), 1);
-    assert_eq!(old_run[0].validity, crate::result::ResultValidity::Retained);
-    drop(old_run);
+    assert!(
+        store
+            .query_graph_result_entries("events/main.yssbi-event", Some(first))
+            .is_empty()
+    );
+    assert_eq!(
+        store.query_result_with_validity(id).unwrap().validity,
+        crate::result::ResultValidity::Retained
+    );
     store.release(a, "main").unwrap();
     store.release(a, "main").unwrap();
     assert!(store.get(id).is_some());
@@ -636,7 +650,7 @@ fn window_handoffs_and_owner_reconciliation_do_not_leak_or_drop_claimed_results(
 }
 
 #[test]
-fn rerun_preserves_previous_success_until_replacement_and_rejects_obsolete_publication() {
+fn rerun_discards_previous_success_at_admission_and_rejects_obsolete_publication() {
     let store = ResultStore::new();
     let first = RunId::from_existing(1);
     let second = RunId::from_existing(2);
@@ -644,15 +658,18 @@ fn rerun_preserves_previous_success_until_replacement_and_rejects_obsolete_publi
     assert!(store.publish(&[result(1, first)], &[]));
     let previous = Arc::downgrade(store.get(ResultId::from_existing(1)).unwrap().value());
     store.begin_run(second, &[output()], None, &BTreeMap::new());
-    let pending = store.query_graph_result_entries("events/main.yssbi-event", None);
-    assert_eq!(pending.len(), 1);
-    assert_eq!(
-        pending[0].validity,
-        crate::result::ResultValidity::CurrentStale
+    assert!(
+        store
+            .query_graph_result_entries("events/main.yssbi-event", None)
+            .is_empty()
     );
-    drop(pending);
-    assert!(previous.upgrade().is_some());
-    assert!(store.get(ResultId::from_existing(1)).is_some());
+    assert!(
+        store
+            .query_graph_result_entries("events/main.yssbi-event", Some(first))
+            .is_empty()
+    );
+    assert!(previous.upgrade().is_none());
+    assert!(store.get(ResultId::from_existing(1)).is_none());
     assert!(store.query_pin_result(&output()).is_none());
     assert!(!store.publish(&[result(2, first)], &[]));
     assert!(store.publish(&[result(3, second)], &[]));
@@ -723,11 +740,181 @@ fn superseded_batch_does_not_publish_any_output_or_remove_unrelated_results() {
         output().graph().as_str(),
         cache_inputs(1, &[("node:result", 1, &[])]),
     );
-    assert!(store.get(ResultId::from_existing(5)).is_some());
+    assert!(store.get(ResultId::from_existing(5)).is_none());
     store.observe_graph_inputs(
         output().graph().as_str(),
         cache_inputs(2, &[("node:result", 2, &[])]),
     );
     assert!(store.query_pin_result(&output()).is_none());
     assert!(!store.publish(&[result(6, third)], &[]));
+}
+
+#[test]
+fn partial_rerun_discards_downstream_without_dropping_valid_reused_inputs() {
+    let store = ResultStore::new();
+    let inputs = cache_inputs(
+        1,
+        &[
+            ("a", 1, &[]),
+            ("b", 2, &["a"]),
+            ("c", 3, &["b"]),
+            ("d", 4, &["a"]),
+        ],
+    );
+    publish_cached_graph(&store, &inputs);
+    let graph = "events/main.yssbi-event";
+    let basis = store.capture_run_basis(graph, inputs.clone()).unwrap();
+    let a = store.query_pin_result(&named_output("a")).unwrap();
+    let a_id = a.provenance().result_id();
+    let b_id = store
+        .query_pin_result(&named_output("b"))
+        .unwrap()
+        .provenance()
+        .result_id();
+    let c_id = store
+        .query_pin_result(&named_output("c"))
+        .unwrap()
+        .provenance()
+        .result_id();
+    let outputs = [named_output("b")];
+    let run = RunId::from_existing(2);
+    assert!(!store.begin_run(
+        run,
+        &outputs,
+        Some(&basis),
+        &BTreeMap::from([(named_output("a"), ResultId::from_existing(99))]),
+    ));
+    assert!(
+        store.get(b_id).is_some(),
+        "rejected admission is not a rerun"
+    );
+    assert!(store.begin_run(
+        run,
+        &outputs,
+        Some(&basis),
+        &BTreeMap::from([(named_output("a"), a_id)]),
+    ));
+    assert!(store.get(b_id).is_none());
+    assert!(store.get(c_id).is_none());
+    let states = store.observe_graph_inputs(graph, inputs.clone());
+    for port in ["b", "c"] {
+        assert_eq!(
+            states.outputs[&named_output(port)],
+            ResultCacheState::Missing
+        );
+    }
+    for port in ["a", "d"] {
+        assert!(matches!(
+            states.outputs[&named_output(port)],
+            ResultCacheState::Valid { .. }
+        ));
+    }
+    assert!(Arc::ptr_eq(
+        a.value(),
+        store.query_pin_result(&named_output("a")).unwrap().value()
+    ));
+    let listed = store.query_graph_result_entries(graph, Some(RunId::from_existing(1)));
+    assert_eq!(
+        listed
+            .iter()
+            .map(|entry| entry.result.output().clone())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([named_output("a"), named_output("d")])
+    );
+    assert!(
+        store
+            .query_graph_result_entries(graph, Some(run))
+            .is_empty()
+    );
+    assert!(!store.publish(
+        &[cached_result(
+            10,
+            RunId::from_existing(1),
+            named_output("b")
+        )],
+        &[],
+    ));
+    assert!(store.publish(&[cached_result(11, run, named_output("b"))], &[]));
+    assert_eq!(store.query_graph_result_entries(graph, Some(run)).len(), 1);
+    assert!(store.query_pin_result(&named_output("c")).is_none());
+    assert_eq!(store.matching_schema_results(graph, &inputs).len(), 3);
+}
+
+#[test]
+fn dependency_edits_and_undo_do_not_rebind_explicitly_leased_results() {
+    let store = ResultStore::new();
+    let original = cache_inputs(1, &[("a", 1, &[]), ("b", 2, &["a"]), ("c", 3, &["b"])]);
+    publish_cached_graph(&store, &original);
+    let graph = "events/main.yssbi-event";
+    let id = store
+        .query_pin_result(&named_output("b"))
+        .unwrap()
+        .provenance()
+        .result_id();
+    let weak = Arc::downgrade(store.get(id).unwrap().value());
+    let lease = Uuid::new_v4();
+    store.retain(id, lease, "report", None).unwrap();
+    let edited = cache_inputs(2, &[("a", 1, &[]), ("b", 8, &["a"]), ("c", 3, &["b"])]);
+    store.observe_graph_inputs(graph, edited);
+    assert_eq!(
+        store.query_result_with_validity(id).unwrap().validity,
+        crate::result::ResultValidity::Retained
+    );
+    let states = store.observe_graph_inputs(graph, original);
+    for port in ["b", "c"] {
+        assert_eq!(
+            states.outputs[&named_output(port)],
+            ResultCacheState::Missing
+        );
+        assert!(store.query_pin_result(&named_output(port)).is_none());
+    }
+    for run in [None, Some(RunId::from_existing(1))] {
+        let listed = store.query_graph_result_entries(graph, run);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].result.output(), &named_output("a"));
+    }
+    assert_eq!(store.schema_candidates(graph).len(), 1);
+    let reading = store.query_result_with_validity(id).unwrap();
+    store.release(lease, "report").unwrap();
+    assert!(store.get(id).is_none());
+    assert!(
+        weak.upgrade().is_some(),
+        "an in-flight read owns its snapshot"
+    );
+    assert_eq!(
+        reading.result.value().value(),
+        &yss_node_kernel::RuntimeValue::Scalar(TabularScalar::Integer(id.get() as i64))
+    );
+    drop(reading);
+    assert!(weak.upgrade().is_none());
+}
+
+#[test]
+fn pending_rerun_keeps_only_explicit_leases_outside_all_result_catalogs() {
+    let store = ResultStore::new();
+    let first = RunId::from_existing(1);
+    let second = RunId::from_existing(2);
+    assert!(store.begin_run(first, &[output()], None, &BTreeMap::new()));
+    assert!(store.publish(&[result(1, first)], &[]));
+    let id = ResultId::from_existing(1);
+    let weak = Arc::downgrade(store.get(id).unwrap().value());
+    let lease = Uuid::new_v4();
+    store.retain(id, lease, "report", None).unwrap();
+    assert!(store.begin_run(second, &[output()], None, &BTreeMap::new()));
+    let graph = "events/main.yssbi-event";
+    for run in [None, Some(first), Some(second)] {
+        assert!(store.query_graph_result_entries(graph, run).is_empty());
+    }
+    assert!(store.query_graph_results(graph, 10).is_empty());
+    assert!(store.schema_candidates(graph).is_empty());
+    assert!(store.retained_boundaries(graph).is_empty());
+    assert_eq!(
+        store.query_result_with_validity(id).unwrap().validity,
+        crate::result::ResultValidity::Retained
+    );
+    store.release(lease, "report").unwrap();
+    assert!(store.get(id).is_none());
+    assert!(weak.upgrade().is_none());
+    assert!(!store.publish(&[result(1, first)], &[]));
+    assert!(store.query_pin_result(&output()).is_none());
 }

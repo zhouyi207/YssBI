@@ -30,7 +30,6 @@ pub struct ResultReference {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResultValidity {
     CurrentValid,
-    CurrentStale,
     Retained,
 }
 
@@ -75,7 +74,6 @@ pub struct ResultRunBasis {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResultCacheState {
     Missing,
-    Stale { result_id: ResultId },
     Valid { result_id: ResultId },
 }
 
