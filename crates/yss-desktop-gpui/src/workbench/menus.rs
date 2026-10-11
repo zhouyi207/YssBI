@@ -6,6 +6,7 @@ mod help;
 mod layout;
 pub(super) use commands::MenuCommand;
 pub(crate) use commands::bind_keys;
+pub(crate) use commands::shortcut_commands;
 
 use super::Workbench;
 use crate::canvas::GraphCommand;

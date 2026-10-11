@@ -273,17 +273,6 @@ pub(in crate::workbench) fn prepare_editor_close(
     }
 }
 
-pub(super) fn restore(dock: &mut DockArea, window: &mut Window, cx: &mut Context<DockArea>) {
-    let active = selected(dock);
-    for panel in panels(dock).into_iter().filter(is_conversation) {
-        present(dock, panel, window, cx);
-    }
-    maintain_editor_space(dock, window, cx);
-    for active in active {
-        dock.select_panel(active, window, cx);
-    }
-}
-
 pub(in crate::workbench) fn reset(
     dock: &mut DockArea,
     window: &mut Window,

@@ -88,6 +88,10 @@ pub struct GraphCanvas {
     read_task: Option<gpui_kit::Task<()>>,
     offset: Point<Pixels>,
     zoom: f32,
+    // World geometry and hit-testing share this UI scale; persisted zoom excludes it.
+    font_scale: f32,
+    font_family: gpui_kit::SharedString,
+    _appearance: gpui_kit::Subscription,
     viewport_root: Option<String>,
     gesture: Option<Gesture>,
     _activation: gpui_kit::Subscription,
@@ -121,6 +125,8 @@ impl GraphCanvas {
         let connection_layer = Rc::new(RefCell::new(connections::ConnectionLayer::new(
             &graph.projection,
         )));
+        let font_scale = crate::preferences::current(cx).appearance.ui_font_size / 14.;
+        let text_system = window.text_system().clone();
         let mut view = Self {
             graph,
             services,
@@ -135,7 +141,30 @@ impl GraphCanvas {
             connection_click: None,
             read_task: None,
             offset: Point::default(),
-            zoom: 1.,
+            zoom: font_scale,
+            font_scale,
+            font_family: gpui_kit::component::Theme::global(cx).font_family.clone(),
+            _appearance: cx.observe_global::<crate::preferences::Preferences>(move |view, cx| {
+                let scale = crate::preferences::current(cx).appearance.ui_font_size / 14.;
+                let family = gpui_kit::component::Theme::global(cx).font_family.clone();
+                let changed = family != view.font_family || scale != view.font_scale;
+                if scale != view.font_scale {
+                    view.cancel_gesture();
+                    let ratio = scale / view.font_scale;
+                    let center = point(
+                        view.bounds.get().size.width / 2.,
+                        view.bounds.get().size.height / 2.,
+                    );
+                    view.offset = center - (center - view.offset) * ratio;
+                    view.zoom *= ratio;
+                    view.font_scale = scale;
+                }
+                if changed {
+                    view.font_family = family;
+                    view.port_inputs.remeasure(&text_system, cx);
+                    cx.notify();
+                }
+            }),
             viewport_root: None,
             gesture: None,
             _activation: cx.observe_window_activation(window, |view, window, cx| {
@@ -193,7 +222,7 @@ impl GraphCanvas {
     }
 
     pub(crate) fn zoom(&self) -> f32 {
-        self.zoom
+        self.zoom / self.font_scale
     }
 
     pub(crate) fn viewport_offset(&self) -> Point<Pixels> {

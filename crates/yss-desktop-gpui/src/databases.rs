@@ -52,9 +52,12 @@ pub struct DatabaseEditor {
     selection_preview_open: bool,
     details: details::DetailsState,
     _grid_subscription: Subscription,
+    _preferences_subscription: Subscription,
     selection_cursor_sync: Option<TableSelection>,
     generation: u64,
     offset: usize,
+    page_size: usize,
+    page_epoch: u64,
     busy: bool,
     mutating: bool,
     ready: bool,
@@ -85,6 +88,10 @@ impl DatabaseEditor {
         let subscription = cx.subscribe_in(&grid, window, |view, _, event, window, cx| {
             view.selection_changed(event, window, cx);
         });
+        let preferences_subscription =
+            cx.observe_global_in::<crate::preferences::Preferences>(window, |view, window, cx| {
+                view.preferences_changed(window, cx);
+            });
         Self {
             services,
             project,
@@ -98,9 +105,12 @@ impl DatabaseEditor {
             selection_preview_open: false,
             details: details::DetailsState::default(),
             _grid_subscription: subscription,
+            _preferences_subscription: preferences_subscription,
             selection_cursor_sync: None,
             generation: 0,
             offset: 0,
+            page_size: crate::preferences::current(cx).tables.page_size,
+            page_epoch: 0,
             busy: false,
             mutating: false,
             ready: false,
@@ -138,6 +148,10 @@ impl DatabaseEditor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if read.page_size != self.page_size {
+            self.reload(true, window, cx);
+            return;
+        }
         self.name = read.meta.name.clone();
         let meta = Arc::new(read.meta);
         self.details.retain_columns(&meta);

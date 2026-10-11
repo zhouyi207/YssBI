@@ -1,7 +1,7 @@
 use super::super::display;
 use super::*;
-use gpui_kit::component::{ActiveTheme, Sizable, StyledExt, table::DataTable};
-use gpui_kit::{IntoElement, Render, Window, div, prelude::*, px};
+use gpui_kit::component::{ActiveTheme, StyledExt};
+use gpui_kit::{IntoElement, Render, Window, div, prelude::*};
 
 impl Render for LinearReport {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -42,8 +42,11 @@ impl Render for LinearReport {
             body = body.child(display::section(
                 "reportSections.anova",
                 div()
-                    .h(px(148.))
-                    .child(DataTable::new(table).small().stripe(true)),
+                    .h(crate::results::table::height(
+                        table.read(cx).delegate().row_count(),
+                        cx,
+                    ))
+                    .child(crate::results::table::present(table, cx)),
                 cx,
             ));
         }
@@ -69,8 +72,11 @@ impl Render for LinearReport {
                         )))
                         .child(
                             div()
-                                .h(px((page.coefficients.len().min(10) as f32 + 1.) * 32. + 20.))
-                                .child(DataTable::new(table).small().stripe(true)),
+                                .h(crate::results::table::height(
+                                    page.coefficients.len().min(10),
+                                    cx,
+                                ))
+                                .child(crate::results::table::present(table, cx)),
                         )
                         .child(
                             div()

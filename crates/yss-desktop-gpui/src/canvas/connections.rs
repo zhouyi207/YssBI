@@ -9,7 +9,8 @@ pub(super) use drag::ConnectionDrag;
 pub(super) use interaction::ConnectionClick;
 
 use gpui_kit::base::plot::{PathCache, ShapeKey};
-use gpui_kit::{Bounds, Pixels, Point, Window, fill, point, px, rgb, size};
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{App, Bounds, Hsla, Pixels, Point, Window, fill, point, px, size};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -158,13 +159,13 @@ impl ConnectionLayer {
     pub fn paint(
         &mut self,
         bounds: Bounds<Pixels>,
-        offset: Point<Pixels>,
-        zoom: f32,
+        (offset, zoom): (Point<Pixels>, f32),
         preview: &BTreeMap<NodeId, NodePosition>,
         interaction: Interaction<'_>,
         window: &mut Window,
+        cx: &App,
     ) {
-        self.paint_grid(bounds, offset, zoom, window);
+        self.paint_grid(bounds, offset, zoom, window, cx);
         for connection in &mut self.connections {
             let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
             if !visible(curve, origin, bounds) {
@@ -183,27 +184,27 @@ impl ConnectionLayer {
             };
             if selected || hovered || state == State::Valid {
                 let (width, color, alpha) = if selected {
-                    (16., theme::BLUE, 0.55)
+                    (16., cx.theme().primary, 0.55)
                 } else if hovered {
-                    (7., theme::BLUE, 0.35)
+                    (7., cx.theme().primary, 0.35)
                 } else {
-                    (6., connection.output.color, 0.16)
+                    (6., theme::data_color(connection.output.color, cx), 0.16)
                 };
                 paint_connection(
                     &mut connection.highlight,
                     origin,
                     curve,
                     (px(width), State::Valid),
-                    rgb(color).opacity(alpha * opacity),
+                    color.opacity(alpha * opacity),
                     window,
                 );
             }
             let color = if replaced {
-                theme::AMBER
+                cx.theme().warning
             } else if state == State::Error {
-                theme::RED
+                cx.theme().danger
             } else {
-                connection.output.color
+                theme::data_color(connection.output.color, cx)
             };
             let width = if replaced || state == State::Valid {
                 3.
@@ -215,7 +216,7 @@ impl ConnectionLayer {
                 origin,
                 curve,
                 (px(width), state),
-                rgb(color).opacity(state.opacity() * opacity),
+                color.opacity(state.opacity() * opacity),
                 window,
             );
         }
@@ -241,7 +242,7 @@ impl ConnectionLayer {
         a: Point<Pixels>,
         b: Point<Pixels>,
         from_input: bool,
-        color: u32,
+        color: Hsla,
         window: &mut Window,
     ) {
         paint_connection(
@@ -252,7 +253,7 @@ impl ConnectionLayer {
                 from_input,
             },
             (px(2.), State::Valid),
-            rgb(color),
+            color,
             window,
         );
     }
@@ -277,11 +278,11 @@ impl ConnectionLayer {
     pub fn paint_activity(
         &self,
         bounds: Bounds<Pixels>,
-        offset: Point<Pixels>,
-        zoom: f32,
+        (offset, zoom): (Point<Pixels>, f32),
         preview: &BTreeMap<NodeId, NodePosition>,
         (presentation, progress): (&Presentation, f32),
         window: &mut Window,
+        cx: &App,
     ) {
         for connection in self
             .connections
@@ -298,7 +299,7 @@ impl ConnectionLayer {
                 window.paint_quad(
                     fill(
                         Bounds::new(position - point(px(3.), px(3.)), size(px(6.), px(6.))),
-                        rgb(connection.output.color),
+                        theme::data_color(connection.output.color, cx),
                     )
                     .corner_radii(px(3.)),
                 );
@@ -312,6 +313,7 @@ impl ConnectionLayer {
         offset: Point<Pixels>,
         zoom: f32,
         window: &mut Window,
+        cx: &App,
     ) {
         let spacing = px(40. * zoom);
         let phase = point(
@@ -346,7 +348,7 @@ impl ConnectionLayer {
                     }
                     path.build().ok()
                 }) {
-                    window.paint_path(path, rgb(theme::BORDER_STRONG));
+                    window.paint_path(path, cx.theme().input);
                 }
                 x += spacing * CELLS as f32;
             }
@@ -366,7 +368,7 @@ fn paint_connection(
     origin: Point<Pixels>,
     curve: Curve,
     (width, state): (Pixels, State),
-    color: gpui_kit::Rgba,
+    color: Hsla,
     window: &mut Window,
 ) {
     let key = ShapeKey::new((curve.from_input, state))

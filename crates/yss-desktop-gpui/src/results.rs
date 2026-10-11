@@ -5,7 +5,7 @@ mod query;
 mod reading;
 mod render;
 mod report;
-mod table;
+pub(crate) mod table;
 mod toolbar;
 mod value;
 

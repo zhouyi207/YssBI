@@ -1,12 +1,11 @@
 use super::*;
-use crate::appearance;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::{Escape, Input},
     tooltip::Tooltip,
 };
-use gpui_kit::{AnyElement, IntoElement, MouseButton, div, px, rgb};
+use gpui_kit::{AnyElement, IntoElement, MouseButton, div, px};
 
 impl GraphCanvas {
     pub(in crate::canvas::ports) fn render_port_input(
@@ -88,13 +87,13 @@ impl GraphCanvas {
                 .px(px(4. * self.zoom))
                 .py_0()
                 .rounded(px(2. * self.zoom))
-                .bg(rgb(appearance::SURFACE))
-                .text_color(rgb(appearance::TEXT))
-                .border_color(rgb(if field.error.is_some() {
-                    appearance::RED
+                .bg(cx.theme().background)
+                .text_color(cx.theme().foreground)
+                .border_color(if field.error.is_some() {
+                    cx.theme().danger
                 } else {
-                    appearance::BORDER_STRONG
-                }))
+                    cx.theme().input
+                })
                 .disabled(!self.can_edit())
                 .into_any_element()
         };

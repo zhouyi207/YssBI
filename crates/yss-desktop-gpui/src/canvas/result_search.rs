@@ -11,7 +11,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     Anchor, AnyElement, App, Context, Entity, Focusable, IntoElement, Subscription, Task,
-    WeakEntity, Window, div, prelude::*, px,
+    WeakEntity, Window, div, prelude::*, rems,
 };
 use list::{Results, Source};
 use std::{collections::BTreeMap, rc::Rc};
@@ -248,17 +248,13 @@ impl GraphCanvas {
                 let failed = list.read(cx).delegate().failed;
                 let retry = picker.clone();
                 div()
-                    .w(px(320.))
+                    .w(rems(320. / 14.))
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .child(
-                        List::new(&list)
-                            .max_h(px(264.))
-                            .search_placeholder(crate::text::t(
-                                "canvas.pinResultSearch.searchPlaceholder",
-                            )),
-                    )
+                    .child(List::new(&list).max_h(rems(264. / 14.)).search_placeholder(
+                        crate::text::t("canvas.pinResultSearch.searchPlaceholder"),
+                    ))
                     .when(failed, |view| {
                         view.child(
                             Button::new("retry-result-search")

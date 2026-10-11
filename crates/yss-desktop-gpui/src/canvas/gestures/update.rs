@@ -175,8 +175,8 @@ impl GraphCanvas {
             return;
         }
         let zoom = (self.zoom * factor).clamp(
-            crate::services::Viewport::MIN_SCALE,
-            crate::services::Viewport::MAX_SCALE,
+            crate::services::Viewport::MIN_SCALE * self.font_scale,
+            crate::services::Viewport::MAX_SCALE * self.font_scale,
         );
         if zoom == self.zoom {
             return;

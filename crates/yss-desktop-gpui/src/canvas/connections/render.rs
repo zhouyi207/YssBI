@@ -1,36 +1,42 @@
 use std::{rc::Rc, time::Duration};
 
+use gpui_kit::component::ActiveTheme;
 use gpui_kit::{
-    Animation, AnimationExt, App, IntoElement, Pixels, Point, canvas, div, prelude::*, px, rgb,
+    Animation, AnimationExt, App, Hsla, IntoElement, Pixels, Point, canvas, div, prelude::*, px,
 };
 use yss_node_protocol::PortDirection;
 
-use crate::{appearance, canvas::GraphCanvas};
+use crate::canvas::GraphCanvas;
 
 pub(in crate::canvas) struct PendingConnection {
     pub start: Point<Pixels>,
     pub end: Point<Pixels>,
     pub from_input: bool,
-    pub color: u32,
+    pub color: Hsla,
     pub feedback: Option<String>,
 }
 
 impl PendingConnection {
-    pub fn feedback(&self, size: gpui_kit::Size<Pixels>) -> Option<impl IntoElement + use<>> {
+    pub fn feedback(
+        &self,
+        size: gpui_kit::Size<Pixels>,
+        cx: &App,
+    ) -> Option<impl IntoElement + use<>> {
         let text = self.feedback.clone()?;
+        let unit = cx.theme().font_size / 14.;
         Some(
             div()
                 .absolute()
-                .left((self.end.x + px(16.)).min((size.width - px(300.)).max(px(0.))))
-                .top((self.end.y + px(16.)).min((size.height - px(64.)).max(px(0.))))
-                .max_w(px(300.))
+                .left((self.end.x + unit * 16.).min((size.width - unit * 300.).max(px(0.))))
+                .top((self.end.y + unit * 16.).min((size.height - unit * 64.).max(px(0.))))
+                .max_w(unit * 300.)
                 .p_2()
                 .rounded_md()
                 .border_1()
-                .border_color(rgb(self.color))
-                .bg(rgb(appearance::SURFACE))
+                .border_color(self.color)
+                .bg(cx.theme().background)
                 .text_xs()
-                .text_color(rgb(self.color))
+                .text_color(self.color)
                 .child(text),
         )
     }
@@ -40,7 +46,7 @@ impl GraphCanvas {
     pub(in crate::canvas) fn pending_connection(&self, cx: &App) -> Option<PendingConnection> {
         let layer = self.connection_layer.borrow();
         let (source, end, color, feedback) = if let Some(drag) = self.connection_drag() {
-            let (color, feedback) = drag.feedback();
+            let (color, feedback) = drag.feedback(cx);
             let end = drag
                 .target
                 .as_ref()
@@ -53,7 +59,7 @@ impl GraphCanvas {
             (
                 palette.view.read(cx).connection_source(&self.graph)?,
                 palette.point,
-                appearance::BLUE,
+                cx.theme().primary,
                 None,
             )
         };
@@ -91,14 +97,14 @@ impl GraphCanvas {
                     view.child(
                         canvas(
                             |_, _, _| (),
-                            move |bounds, _, window, _| {
+                            move |bounds, _, window, cx| {
                                 layer.borrow().paint_activity(
                                     bounds,
-                                    offset,
-                                    zoom,
+                                    (offset, zoom),
                                     &preview,
                                     (&presentation, progress),
                                     window,
+                                    cx,
                                 );
                             },
                         )

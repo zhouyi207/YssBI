@@ -25,6 +25,18 @@ pub(in crate::canvas) struct Inputs {
     fields: BTreeMap<PortAddress, Field>,
 }
 
+impl Inputs {
+    pub(in crate::canvas) fn remeasure(
+        &mut self,
+        text_system: &gpui_kit::WindowTextSystem,
+        cx: &gpui_kit::App,
+    ) {
+        for field in self.fields.values_mut() {
+            field.measure(text_system, cx);
+        }
+    }
+}
+
 fn eligible(port: &EditorPortModel) -> Option<SemanticType> {
     (port.connections.current == 0)
         .then(|| super::scalar_input_type(port))
@@ -71,7 +83,7 @@ impl GraphCanvas {
                         != crate::text::t("conversion.text")
                 {
                     crate::text::input_placeholder(&field.input, "conversion.text", window, cx);
-                    field.measure(window, cx);
+                    field.measure(window.text_system(), cx);
                 }
                 continue;
             }
@@ -99,7 +111,7 @@ impl GraphCanvas {
                 error: None,
                 _subscription: subscription,
             };
-            field.measure(window, cx);
+            field.measure(window.text_system(), cx);
             self.port_inputs.fields.insert(port.address.clone(), field);
         }
         self.port_inputs.fields.retain(|address, field| {
@@ -139,7 +151,7 @@ impl GraphCanvas {
                 field.dirty = true;
                 field.pending = None;
                 field.error = None;
-                field.measure(window, cx);
+                field.measure(window.text_system(), cx);
                 if !was_dirty {
                     cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
                 }

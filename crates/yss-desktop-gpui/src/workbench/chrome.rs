@@ -4,7 +4,6 @@ use super::{
     menus::{MenuCommand, WorkbenchPanel},
 };
 use crate::{
-    appearance,
     canvas::{CancelRun, RunWholeGraph, SaveGraph},
     window_chrome,
 };
@@ -13,7 +12,7 @@ use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit::{Context, IntoElement, MouseButton, Window, actions, div, prelude::*, px, rgb};
+use gpui_kit::{Context, IntoElement, MouseButton, Window, actions, div, prelude::*, rems};
 
 actions!(
     native_workbench,
@@ -104,11 +103,11 @@ impl Workbench {
                             .child(
                                 Icon::new(IconName::Workflow)
                                     .size_4()
-                                    .text_color(rgb(appearance::BLUE)),
+                                    .text_color(cx.theme().primary),
                             )
                             .child(
                                 div()
-                                    .text_size(px(13.))
+                                    .text_size(rems(13. / 14.))
                                     .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .child("YssBI"),
                             ),
@@ -116,7 +115,7 @@ impl Workbench {
                     .when(!cfg!(target_os = "macos"), |view| {
                         view.child(
                             div()
-                                .w(px(350.))
+                                .w(rems(25.))
                                 .h_full()
                                 .flex_shrink_0()
                                 .child(self.menu_bar.clone()),
@@ -181,7 +180,7 @@ impl Workbench {
                                         view.child(
                                             div()
                                                 .w_full()
-                                                .max_w(px(420.))
+                                                .max_w(rems(30.))
                                                 .min_w_0()
                                                 .p_5()
                                                 .rounded_lg()

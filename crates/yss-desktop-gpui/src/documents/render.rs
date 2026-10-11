@@ -1,12 +1,11 @@
 use super::{DocumentEditor, SaveDocument, ToggleDocumentPreview};
-use crate::appearance;
 use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
     input::Editor,
     text::TextView,
 };
-use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*, rgb};
+use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*};
 
 impl Render for DocumentEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -16,7 +15,7 @@ impl Render for DocumentEditor {
             .size_full()
             .relative()
             .overflow_hidden()
-            .bg(rgb(appearance::CANVAS))
+            .bg(cx.theme().table)
             .on_action(cx.listener(|view, _: &SaveDocument, window, cx| view.save(window, cx)))
             .on_action(cx.listener(|view, _: &ToggleDocumentPreview, window, cx| {
                 view.toggle_preview(window, cx)
@@ -35,7 +34,7 @@ impl Render for DocumentEditor {
                     .size_full()
                     .bordered(false)
                     .appearance(false)
-                    .readonly(self.busy || self.refreshing)
+                    .readonly((self.busy && !self.autosave_in_flight) || self.refreshing)
                     .into_any_element()
             })
             .child(
@@ -57,6 +56,8 @@ impl Render for DocumentEditor {
             .when_some(self.error.as_ref(), |view, error| {
                 view.child(
                     div()
+                        .id("document-save-error")
+                        .role(gpui_kit::accesskit::Role::Alert)
                         .absolute()
                         .bottom_2()
                         .left_3()

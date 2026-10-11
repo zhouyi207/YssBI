@@ -10,9 +10,11 @@ pub(crate) type DocumentSaveOutcome = FileSaveOutcome<DocDocument>;
 impl DocumentEditor {
     pub fn cancel_prepared_save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.busy = false;
+        self.autosave_in_flight = false;
         if self.refresh_again {
             self.refresh(window, cx);
         }
+        self.resume_autosave(window, cx);
         cx.emit(super::DocumentEvent::Changed);
         cx.notify();
     }
@@ -32,6 +34,9 @@ impl DocumentEditor {
                 vec![]
             },
         };
+        self.autosave_task = None;
+        self.autosave.save_started();
+        self.autosave_in_flight = false;
         self.busy = true;
         self.error = None;
         cx.notify();
@@ -45,30 +50,54 @@ impl DocumentEditor {
         cx: &mut Context<Self>,
     ) {
         self.busy = false;
+        let was_autosave = self.autosave_in_flight;
+        self.autosave_in_flight = false;
         if let Some(snapshot) = outcome.snapshot {
             self.snapshot = snapshot;
             self.draft_dirty = self.input.read(cx).text() != self.snapshot.content.0.as_str();
         }
         if outcome.failed {
-            self.error = Some(crate::text::t("native.documents.saveFailed").into());
+            self.error = Some(
+                crate::text::t(if was_autosave {
+                    "preferences.documents.autosaveFailed"
+                } else {
+                    "native.documents.saveFailed"
+                })
+                .into(),
+            );
+            self.autosave.failed();
+            self.autosave_task = None;
         }
         if self.refresh_again {
             self.refresh(window, cx);
         }
+        self.resume_autosave(window, cx);
         cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
         cx.emit(super::DocumentEvent::Changed);
         cx.notify();
     }
 
     pub fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.save_document(false, window, cx);
+    }
+
+    pub(super) fn save_document(
+        &mut self,
+        automatic: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(request) = self.prepare_save(cx) else {
             return;
         };
+        // Explicit saves and file-operation locks remain readonly for close/save-all.
+        // Autosaves capture a revision without interrupting continued typing.
+        self.autosave_in_flight = automatic;
         let owner = self.services.clone();
         let job = self
             .services
             .run(move |services| Ok(request.commit(services, &owner)));
-        cx.spawn_in(window, async move |view, cx| {
+        self._save_task = Some(cx.spawn_in(window, async move |view, cx| {
             let outcome = job
                 .await
                 .ok()
@@ -78,8 +107,7 @@ impl DocumentEditor {
                     failed: true,
                 });
             let _ = view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx));
-        })
-        .detach();
+        }));
     }
 
     pub fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -88,6 +116,7 @@ impl DocumentEditor {
             return;
         }
         self.refresh_again = false;
+        self.autosave_task = None;
         self.refreshing = true;
         cx.notify();
         let project = self.snapshot.project_instance_id.clone();
@@ -95,7 +124,7 @@ impl DocumentEditor {
         let job = self
             .services
             .run(move |services| Ok(services.application.read_doc(project, path)?));
-        cx.spawn_in(window, async move |view, cx| {
+        self._refresh_task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
             let _ = view.update_in(cx, |view, window, cx| {
                 view.refreshing = false;
@@ -113,17 +142,21 @@ impl DocumentEditor {
                         }
                     }
                     Some(_) => {
-                        view.error = Some(crate::text::t("native.documents.externalChange").into())
+                        view.error = Some(crate::text::t("native.documents.externalChange").into());
+                        view.autosave.failed();
                     }
-                    None => view.error = Some(crate::text::t("native.documents.readFailed").into()),
+                    None => {
+                        view.error = Some(crate::text::t("native.documents.readFailed").into());
+                        view.autosave.failed();
+                    }
                 }
                 if view.refresh_again {
                     view.refresh(window, cx);
                 }
+                view.resume_autosave(window, cx);
                 cx.emit(super::DocumentEvent::Changed);
                 cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 }

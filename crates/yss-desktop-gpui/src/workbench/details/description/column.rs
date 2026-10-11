@@ -3,9 +3,9 @@ use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     collapsible::Collapsible,
-    table::{DataTable, TableState},
+    table::TableState,
 };
-use gpui_kit::{AppContext, Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
+use gpui_kit::{AppContext, Context, Entity, IntoElement, Render, Window, div, prelude::*};
 use yss_application::graph::results::description::{
     DescriptionColumn, DescriptionStatistics, NUMERIC_FIELDS,
 };
@@ -176,8 +176,8 @@ impl ColumnSummary {
                             body.child(
                                 div()
                                     .w_full()
-                                    .h(px(((end - start + 1) as f32 * 28. + 12.).clamp(72., 280.)))
-                                    .child(DataTable::new(table).small().stripe(true)),
+                                    .h(crate::results::table::height((end - start).min(8), cx))
+                                    .child(crate::results::table::present(table, cx)),
                             )
                         })
                         .when(categories.len() > PAGE_ROWS, |body| {

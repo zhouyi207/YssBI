@@ -1,12 +1,12 @@
 //! Shared empty editor presentation, including the editor space beside conversations.
-use crate::{appearance, text};
+use crate::text;
 use gpui_kit::component::{
     ActiveTheme,
     dock::{BasePanel, DockArea, DockPlacement, NodeId, Panel, PanelEvent},
 };
 use gpui_kit::{
     App, Context, Empty, EventEmitter, FocusHandle, Focusable, FontWeight, IntoElement, Render,
-    RenderOnce, WeakEntity, Window, div, prelude::*, px, rgb,
+    RenderOnce, WeakEntity, Window, div, prelude::*, px, rems,
 };
 
 #[derive(IntoElement)]
@@ -100,7 +100,7 @@ fn content(cx: &App) -> impl IntoElement + use<> {
         .items_center()
         .justify_center()
         .overflow_hidden()
-        .bg(rgb(appearance::CANVAS))
+        .bg(cx.theme().table)
         .px_6()
         .py_10()
         .child(
@@ -112,7 +112,7 @@ fn content(cx: &App) -> impl IntoElement + use<> {
                 .child(
                     div()
                         .flex()
-                        .text_size(px(48.))
+                        .text_size(rems(24. / 7.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(cx.theme().foreground.opacity(0.8))
                         .child("Yss")

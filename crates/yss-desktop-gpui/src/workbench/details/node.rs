@@ -1,6 +1,6 @@
 //! Selected-node presentation; binding and drafts remain with DetailsPanel.
 use super::DetailsPanel;
-use crate::{appearance, canvas::GraphCommand};
+use crate::canvas::GraphCommand;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
@@ -39,7 +39,7 @@ impl DetailsPanel {
                             .child(
                                 Icon::new(IconName::Workflow)
                                     .size_4()
-                                    .text_color(gpui_kit::rgb(appearance::BLUE)),
+                                    .text_color(cx.theme().primary),
                             )
                             .child(
                                 div()

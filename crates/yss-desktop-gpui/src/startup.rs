@@ -1,8 +1,9 @@
 //! The first window owns service initialization until the workbench can take over.
 use crate::{services::NativeServices, text, window_chrome, workbench::Workbench};
 use gpui_kit::component::{
-    ActiveTheme, Sizable,
+    ActiveTheme, Sizable, WindowExt,
     button::{Button, ButtonVariants},
+    notification::Notification,
     progress::Progress,
 };
 use gpui_kit::{
@@ -41,15 +42,84 @@ impl Startup {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
-                view.state = match result {
-                    Ok(services) => State::Ready(
-                        cx.new(|cx| Workbench::new(services, project, resource, window, cx)),
-                    ),
-                    Err(error) => State::Failed(error),
-                };
-                cx.notify();
-            });
+            match result {
+                Ok(services) => {
+                    let restore_last = view.update_in(cx, |_, window, cx| {
+                        if services.preference_load_failed {
+                            window.push_notification(
+                                Notification::error(text::translate(
+                                    "preferences.startup.loadFailed",
+                                ))
+                                .autohide(false),
+                                cx,
+                            );
+                        }
+                        if let Err(error) =
+                            crate::preferences::publish(services.preferences.snapshot(), cx)
+                        {
+                            tracing::warn!(
+                                code = "native_preferences_publish_failed",
+                                %error,
+                                "Native preferences could not be applied"
+                            );
+                            // Invalid overrides must not prevent opening the workbench.
+                            // Keep the saved file untouched so Settings can repair it.
+                            if let Err(error) = crate::preferences::publish(
+                                std::sync::Arc::new(yss_settings::UserSettings::default()),
+                                cx,
+                            ) {
+                                tracing::error!(%error, "Default preferences could not be applied");
+                            }
+                            window.push_notification(
+                                Notification::error(text::translate(
+                                    "preferences.startup.applyFailed",
+                                ))
+                                .autohide(false),
+                                cx,
+                            );
+                        }
+                        project.is_none()
+                            && resource.is_none()
+                            && crate::preferences::current(cx)
+                                .workspace
+                                .restore_last_project
+                    });
+                    let mut project = project;
+                    let mut recent_failed = false;
+                    if matches!(restore_last, Ok(true)) {
+                        let owner = services.clone();
+                        let job = services
+                            .executor
+                            .spawn_blocking(move || owner.layouts.last_project());
+                        match job.await {
+                            Ok(Ok(last_project)) => project = last_project,
+                            _ => recent_failed = true,
+                        }
+                    }
+                    let _ = view.update_in(cx, |view, window, cx| {
+                        if recent_failed {
+                            window.push_notification(
+                                Notification::error(text::translate(
+                                    "preferences.startup.recentFailed",
+                                ))
+                                .autohide(false),
+                                cx,
+                            );
+                        }
+                        // Resolve this once at startup. A later explicit Close must stay closed.
+                        view.state = State::Ready(
+                            cx.new(|cx| Workbench::new(services, project, resource, window, cx)),
+                        );
+                        cx.notify();
+                    });
+                }
+                Err(error) => {
+                    let _ = view.update_in(cx, |view, _, cx| {
+                        view.state = State::Failed(error);
+                        cx.notify();
+                    });
+                }
+            }
         });
         Self {
             state: State::Loading {

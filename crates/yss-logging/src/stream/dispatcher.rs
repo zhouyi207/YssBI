@@ -1,3 +1,4 @@
+use crate::LogRetentionPolicy;
 use crate::store::{LogPage, LogQuery, LogStatistics, LogStore, LogStoreError, MAX_SAFE_SEQUENCE};
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -29,6 +30,7 @@ const DISPATCH_RESPONSE_TIMEOUT: Duration = Duration::from_secs(2);
 const DISPATCH_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 pub(crate) const LIVE_BATCH_MAX_RECORDS: usize = 128;
 pub(crate) const LIVE_BATCH_INTERVAL: Duration = Duration::from_millis(16);
+const RETENTION_INTERVAL: Duration = Duration::from_secs(1);
 
 const DROPPED_EVENT: &str = "logs.records_dropped";
 const DROPPED_TARGET: &str = "yss_logging";
@@ -107,6 +109,10 @@ enum DispatcherCommand {
     Statistics {
         response: mpsc::Sender<Result<LogStatistics, LogStoreError>>,
     },
+    SetRetention {
+        policy: LogRetentionPolicy,
+        response: mpsc::Sender<Result<(), LogStoreError>>,
+    },
     Publish(PendingLog),
     PublishRust {
         record: CapturedLog,
@@ -135,6 +141,8 @@ struct DispatcherState {
     live_pending: Vec<LogRecordDto>,
     live_deadline: Option<Instant>,
     subscriber_queue_capacity: usize,
+    retention: LogRetentionPolicy,
+    retention_deadline: Option<Instant>,
 }
 
 struct DispatcherConfig {
@@ -154,24 +162,36 @@ impl DispatcherConfig {
 impl LogHub {
     #[cfg(test)]
     pub(crate) fn start() -> (Self, LogDispatcherGuard) {
-        Self::start_with_config(DispatcherConfig::production(), None, None)
-            .expect("start logs dispatcher")
+        Self::start_with_config(
+            DispatcherConfig::production(),
+            None,
+            None,
+            LogRetentionPolicy::default(),
+        )
+        .expect("start logs dispatcher")
     }
 
     pub(crate) fn start_production(
         path: PathBuf,
+        policy: LogRetentionPolicy,
     ) -> Result<(Self, LogDispatcherGuard), LogDispatcherStartError> {
-        Self::start_with_config(DispatcherConfig::production(), None, Some(path))
+        Self::start_with_config(DispatcherConfig::production(), None, Some(path), policy)
     }
 
     pub(crate) fn start_memory() -> Result<(Self, LogDispatcherGuard), LogDispatcherStartError> {
-        Self::start_with_config(DispatcherConfig::production(), None, None)
+        Self::start_with_config(
+            DispatcherConfig::production(),
+            None,
+            None,
+            LogRetentionPolicy::default(),
+        )
     }
 
     fn start_with_config(
         config: DispatcherConfig,
         startup_gate: Option<Receiver<()>>,
         storage_path: Option<PathBuf>,
+        policy: LogRetentionPolicy,
     ) -> Result<(Self, LogDispatcherGuard), LogDispatcherStartError> {
         let (sender, receiver) = mpsc::sync_channel(config.ingress_capacity.max(1));
         let dropped_records = Arc::new(AtomicU64::new(0));
@@ -191,6 +211,11 @@ impl LogHub {
                             let mut state = DispatcherState::new(&config, worker_storage_failed);
                             if let Some(path) = storage_path {
                                 let mut storage = LogStore::open(path)?;
+                                storage.set_retention(policy)?;
+                                let outcome =
+                                    storage.maintain(chrono::Local::now().naive_local())?;
+                                state.retention = policy;
+                                state.schedule_retention(outcome.pending);
                                 let snapshot = storage.snapshot(RECENT_LOG_CAPACITY)?;
                                 state.stream_id = snapshot.stream_id;
                                 state.latest_sequence = snapshot.latest_sequence;
@@ -250,6 +275,7 @@ impl LogHub {
             },
             None,
             None,
+            LogRetentionPolicy::default(),
         )
         .expect("start logs dispatcher")
     }
@@ -266,6 +292,7 @@ impl LogHub {
             },
             Some(startup_gate),
             None,
+            LogRetentionPolicy::default(),
         )
         .expect("start logs dispatcher");
         (hub, guard, release)
@@ -369,6 +396,19 @@ impl LogHub {
             .map_err(|_| LogStoreError::Unavailable)?
     }
 
+    pub(crate) fn set_retention(&self, policy: LogRetentionPolicy) -> Result<(), LogStoreError> {
+        if self.shutdown.load(Ordering::Acquire) || self.storage_failed.load(Ordering::Acquire) {
+            return Err(LogStoreError::Unavailable);
+        }
+        let (response, result) = mpsc::channel();
+        self.sender
+            .try_send(DispatcherCommand::SetRetention { policy, response })
+            .map_err(|_| LogStoreError::Unavailable)?;
+        // Policy changes may perform a one-time SQLite auto-vacuum conversion. A
+        // timeout could report failure after the destructive change succeeded.
+        result.recv().map_err(|_| LogStoreError::Unavailable)?
+    }
+
     fn try_enqueue_dropped_marker(&self) -> Result<(), LogsUnavailable> {
         let dropped_count = self.dropped_records.swap(0, Ordering::AcqRel);
         if dropped_count == 0 {
@@ -433,6 +473,8 @@ impl DispatcherState {
             live_pending: Vec::with_capacity(LIVE_BATCH_MAX_RECORDS),
             live_deadline: None,
             subscriber_queue_capacity: config.subscriber_queue_capacity,
+            retention: LogRetentionPolicy::default(),
+            retention_deadline: None,
         }
     }
 
@@ -510,21 +552,10 @@ impl DispatcherState {
             &mut self.live_pending,
             Vec::with_capacity(LIVE_BATCH_MAX_RECORDS),
         );
-        if self
-            .storage
-            .as_mut()
-            .is_some_and(|storage| storage.append(&entries).is_err())
+        if let Some(storage) = self.storage.as_mut()
+            && storage.append(&entries).is_err()
         {
-            self.storage_failed.store(true, Ordering::Release);
-            self.truncated = true;
-            let failure = Arc::new(LogBatchDto {
-                stream_id: self.stream_id.clone(),
-                entries: Vec::new(),
-                failure: Some(LogStreamFailure::StorageUnavailable),
-            });
-            for subscription in std::mem::take(&mut self.subscriptions).into_values() {
-                subscription.finish(failure.clone());
-            }
+            self.fail_storage(LogStreamFailure::StorageUnavailable);
             return false;
         }
         for record in &entries {
@@ -537,8 +568,14 @@ impl DispatcherState {
         let batch = Arc::new(LogBatchDto {
             stream_id: self.stream_id.clone(),
             entries,
+            evicted_sequences: Vec::new(),
             failure: None,
         });
+        self.broadcast(batch);
+        true
+    }
+
+    fn broadcast(&mut self, batch: Arc<LogBatchDto>) {
         self.subscriptions.retain(|_, subscription| {
             match subscription.try_enqueue(batch.clone()) {
                 EnqueueResult::Enqueued => true,
@@ -546,6 +583,7 @@ impl DispatcherState {
                     subscription.finish(Arc::new(LogBatchDto {
                         stream_id: self.stream_id.clone(),
                         entries: Vec::new(),
+                        evicted_sequences: Vec::new(),
                         failure: Some(LogStreamFailure::SubscriberLagged),
                     }));
                     false
@@ -553,7 +591,87 @@ impl DispatcherState {
                 EnqueueResult::Closed => false,
             }
         });
-        true
+    }
+
+    fn fail_storage(&mut self, reason: LogStreamFailure) {
+        self.storage_failed.store(true, Ordering::Release);
+        self.truncated = true;
+        let failure = Arc::new(LogBatchDto {
+            stream_id: self.stream_id.clone(),
+            entries: Vec::new(),
+            evicted_sequences: Vec::new(),
+            failure: Some(reason),
+        });
+        for subscription in std::mem::take(&mut self.subscriptions).into_values() {
+            subscription.finish(failure.clone());
+        }
+    }
+
+    fn schedule_retention(&mut self, pending: bool) {
+        self.retention_deadline = self.retention.is_enabled().then(|| {
+            Instant::now()
+                + if pending {
+                    DISPATCH_IDLE_POLL_INTERVAL
+                } else {
+                    RETENTION_INTERVAL
+                }
+        });
+    }
+
+    fn maintain_retention(&mut self) -> Result<(), LogStoreError> {
+        let result = self
+            .storage
+            .as_mut()
+            .ok_or(LogStoreError::Unavailable)?
+            .maintain(chrono::Local::now().naive_local());
+        let outcome = match result {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                self.fail_storage(LogStreamFailure::RetentionFailed);
+                return Err(error);
+            }
+        };
+        self.schedule_retention(outcome.pending);
+        if !outcome.evicted.is_empty() {
+            self.truncated = true;
+            self.recent
+                .retain(|record| outcome.evicted.binary_search(&record.sequence).is_err());
+            self.broadcast(Arc::new(LogBatchDto {
+                stream_id: self.stream_id.clone(),
+                entries: Vec::new(),
+                evicted_sequences: outcome.evicted,
+                failure: None,
+            }));
+        }
+        Ok(())
+    }
+
+    fn maintain_if_due(&mut self) {
+        if !self.storage_failed.load(Ordering::Acquire)
+            && self
+                .retention_deadline
+                .is_some_and(|deadline| Instant::now() >= deadline)
+            && self.flush_live()
+        {
+            let _ = self.maintain_retention();
+        }
+    }
+
+    fn set_retention(&mut self, policy: LogRetentionPolicy) -> Result<(), LogStoreError> {
+        if !self.flush_live() {
+            return Err(LogStoreError::Unavailable);
+        }
+        let result = self
+            .storage
+            .as_mut()
+            .ok_or(LogStoreError::Unavailable)?
+            .set_retention(policy);
+        if let Err(error) = result {
+            self.fail_storage(LogStreamFailure::RetentionFailed);
+            return Err(error);
+        }
+        self.retention = policy;
+        self.maintain_retention()
     }
 
     fn prune_subscriptions(&mut self) {
@@ -616,6 +734,7 @@ fn run_dispatcher(
 
         state.prune_subscriptions();
         state.flush_if_due(Instant::now());
+        state.maintain_if_due();
         let now = Instant::now();
         let poll_deadline = now.checked_add(DISPATCH_IDLE_POLL_INTERVAL).unwrap_or(now);
         let deadline = state.live_deadline.map_or(poll_deadline, |live_deadline| {
@@ -643,6 +762,9 @@ fn run_dispatcher(
 
 fn process_command(command: DispatcherCommand, state: &mut DispatcherState) -> bool {
     match command {
+        DispatcherCommand::SetRetention { policy, response } => {
+            let _ = response.send(state.set_retention(policy));
+        }
         DispatcherCommand::Query { query, response } => {
             let result = if state.flush_live() {
                 state
@@ -703,6 +825,9 @@ fn drain_for_shutdown(
             Ok(DispatcherCommand::Statistics { response }) => {
                 let _ = response.send(Err(LogStoreError::Unavailable));
             }
+            Ok(DispatcherCommand::SetRetention { response, .. }) => {
+                let _ = response.send(Err(LogStoreError::Unavailable));
+            }
             Ok(DispatcherCommand::Publish(record)) => state.publish(record),
             Ok(DispatcherCommand::PublishRust { record, console }) => {
                 state.publish_rust(record, console);
@@ -722,4 +847,55 @@ fn drain_for_shutdown(
     }
     state.publish_dropped(dropped_records.swap(0, Ordering::AcqRel));
     state.flush_live();
+}
+
+#[cfg(test)]
+mod retention_tests {
+    use super::*;
+
+    #[test]
+    fn scheduled_maintenance_expires_ingested_records_without_changing_stream_position() {
+        let directory = tempfile::tempdir().unwrap();
+        let storage = LogStore::open(directory.path().join("logs.sqlite")).unwrap();
+        let mut state = DispatcherState::new(
+            &DispatcherConfig::production(),
+            Arc::new(AtomicBool::new(false)),
+        );
+        state.storage = Some(storage);
+        state.stream_id = state
+            .storage
+            .as_mut()
+            .unwrap()
+            .snapshot(1)
+            .unwrap()
+            .stream_id;
+        state
+            .set_retention(LogRetentionPolicy::new(Some(1), None).unwrap())
+            .unwrap();
+        let stream = state.stream_id.clone();
+        state.publish(PendingLog {
+            timestamp: "2000-01-01T00:00:00.000".into(),
+            level: LogLevel::Info,
+            origin: LogOrigin::Rust,
+            domain: LogDomain::System,
+            target: "retention.test".into(),
+            event: None,
+            message: "late delivery".into(),
+            source: None,
+            fields: BTreeMap::new(),
+        });
+        // Force the scheduling boundary instead of sleeping for wall-clock time.
+        state.retention_deadline = Some(Instant::now());
+        state.maintain_if_due();
+        assert!(state.recent.is_empty());
+        assert!(state.live_pending.is_empty());
+        assert_eq!(state.latest_sequence, 1);
+        assert_eq!(state.stream_id, stream);
+        assert_eq!(
+            state.storage.as_mut().unwrap().statistics().unwrap().total,
+            0
+        );
+        assert!(!state.storage_failed.load(Ordering::Acquire));
+        assert!(state.retention_deadline.is_some());
+    }
 }

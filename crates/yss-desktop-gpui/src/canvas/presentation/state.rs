@@ -1,4 +1,6 @@
-use crate::{appearance, text};
+use crate::text;
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{App, Hsla};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub(in crate::canvas) enum State {
@@ -33,12 +35,12 @@ impl State {
         })
     }
 
-    pub fn color(self) -> u32 {
+    pub fn color(self, cx: &App) -> Hsla {
         match self {
-            Self::Error => appearance::RED,
-            Self::Running | Self::Stale => appearance::AMBER,
-            Self::Valid | Self::Partial => appearance::GREEN,
-            Self::Unexecuted => appearance::MUTED,
+            Self::Error => cx.theme().danger,
+            Self::Running | Self::Stale => cx.theme().warning,
+            Self::Valid | Self::Partial => cx.theme().success,
+            Self::Unexecuted => cx.theme().muted_foreground,
         }
     }
 

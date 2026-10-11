@@ -2,14 +2,13 @@
 use std::time::Duration;
 
 use gpui_kit::base::plot::{PathCaches, ShapeKey};
+use gpui_kit::component::ActiveTheme;
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, Bounds, IntoElement, Path, PathBuilder, Pixels, canvas,
-    div, fill, point, prelude::*, px, rgb, size,
+    Animation, AnimationExt, AnyElement, App, Bounds, Hsla, IntoElement, Path, PathBuilder, Pixels,
+    canvas, div, fill, point, prelude::*, px, size,
 };
 use yss_data_contract::ValueType;
 use yss_graph_editor::projection::EditorPortTypeState;
-
-use crate::appearance;
 
 #[derive(Clone, Copy, Debug, Hash)]
 enum Shape {
@@ -44,13 +43,20 @@ impl Glyph {
         }
     }
 
-    pub fn render(self, diameter: Pixels, color: u32, connected: bool, pulse: bool) -> AnyElement {
+    pub fn render(
+        self,
+        diameter: Pixels,
+        color: Hsla,
+        connected: bool,
+        pulse: bool,
+        cx: &App,
+    ) -> AnyElement {
         let view = div().id("glyph").size(diameter).child(
             canvas(
                 |_, _, _| (),
                 move |bounds, _, window, cx| {
                     let caches = PathCaches::for_paint("port-shape", window, cx);
-                    caches.update(cx, |caches, _| {
+                    caches.update(cx, |caches, cx| {
                         let scale = bounds.size.width / px(12.);
                         for (slot, fill) in [true, false].into_iter().enumerate() {
                             let key = ShapeKey::new((self.shape, self.dashed, fill))
@@ -61,23 +67,21 @@ impl Glyph {
                                 .get(key, bounds.origin, || self.path(scale, fill))
                             {
                                 let ink = if fill {
-                                    rgb(color).opacity(if connected { 1. } else { 0.05 })
+                                    color.opacity(if connected { 1. } else { 0.05 })
+                                } else if connected || pulse {
+                                    color
                                 } else {
-                                    rgb(if connected || pulse {
-                                        color
-                                    } else {
-                                        appearance::MUTED
-                                    })
+                                    cx.theme().muted_foreground
                                 };
                                 window.paint_path(path, ink);
                             }
                         }
                         if matches!(self.shape, Shape::Frame) {
-                            let ink = rgb(if connected {
-                                appearance::CANVAS
+                            let ink = if connected {
+                                cx.theme().table
                             } else {
-                                appearance::MUTED
-                            });
+                                cx.theme().muted_foreground
+                            };
                             let unit = px(scale);
                             for (x, y, width, height) in [(1.5, 4.1, 9., 0.8), (4.6, 1.5, 0.8, 9.)]
                             {
@@ -103,7 +107,7 @@ impl Glyph {
                     .top(diameter * 0.4)
                     .size(diameter * 0.2)
                     .rounded_full()
-                    .bg(rgb(0xffffff)),
+                    .bg(cx.theme().table),
             )
         });
         if pulse {

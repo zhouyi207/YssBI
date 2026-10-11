@@ -1,3 +1,4 @@
+use crate::LogRetentionPolicy;
 use crate::collector::{CapturedLogSink, OutputHandle};
 use crate::store::{LogPage, LogQuery, LogStatistics, LogStoreError};
 use std::{path::PathBuf, sync::Arc};
@@ -20,7 +21,16 @@ pub struct LogRuntime {
 
 impl LogRuntime {
     pub fn open(path: PathBuf) -> Result<Self, LogInitializationError> {
-        let (hub, dispatcher_guard) = LogHub::start_production(path)?;
+        Self::open_with_retention(path, LogRetentionPolicy::default())
+    }
+
+    /// Opens persistent history and applies the first bounded retention pass
+    /// before exposing a snapshot. Remaining work runs on the dispatcher.
+    pub fn open_with_retention(
+        path: PathBuf,
+        policy: LogRetentionPolicy,
+    ) -> Result<Self, LogInitializationError> {
+        let (hub, dispatcher_guard) = LogHub::start_production(path, policy)?;
         Ok(Self {
             hub,
             _dispatcher_guard: Arc::new(dispatcher_guard),
@@ -40,6 +50,14 @@ impl LogRuntime {
     }
     pub fn statistics(&self) -> Result<LogStatistics, LogStoreError> {
         self.hub.statistics()
+    }
+
+    /// Changes logging-owned retention without changing collection or display
+    /// levels. Call from a blocking executor: SQLite may need a one-time
+    /// auto-vacuum conversion. Errors include maintenance failures;
+    /// subsequent asynchronous failures terminate subscribers visibly.
+    pub fn set_retention(&self, policy: LogRetentionPolicy) -> Result<(), LogStoreError> {
+        self.hub.set_retention(policy)
     }
     pub fn shutdown(&self) {
         self._dispatcher_guard.shutdown();

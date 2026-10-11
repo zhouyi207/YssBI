@@ -59,6 +59,7 @@ pub(super) fn read(
     catalog: &ProjectIndex,
     document: &ChartDocument,
     metadata: Option<Arc<DatabaseMetaResult>>,
+    max_points: usize,
 ) -> PreviewRead {
     if document.database_id.is_empty() {
         return PreviewRead {
@@ -144,7 +145,7 @@ pub(super) fn read(
                             .map_err(|_| PreviewFailure::Read)?,
                         y_column: TabularColumnName::try_from(y.as_str())
                             .map_err(|_| PreviewFailure::Read)?,
-                        max_points: None,
+                        max_points: Some(max_points),
                     })
                     .map_err(|error| match error {
                         ChartPlotApplicationError::PlotDataEmpty => PreviewFailure::NoFinitePoints,

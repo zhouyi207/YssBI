@@ -1,7 +1,7 @@
 //! Input literals and instance operations share the graph's existing typed edit transaction.
 mod list;
 use super::{DetailsPanel, controls};
-use crate::{appearance, canvas::GraphCommand};
+use crate::canvas::GraphCommand;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
@@ -140,11 +140,11 @@ impl DetailsPanel {
                             .size(px(6.))
                             .flex_shrink_0()
                             .rounded_full()
-                            .bg(gpui_kit::rgb(if input {
-                                appearance::BLUE
+                            .bg(if input {
+                                cx.theme().primary
                             } else {
-                                appearance::GREEN
-                            })),
+                                cx.theme().success
+                            }),
                     )
                     .child(
                         div()

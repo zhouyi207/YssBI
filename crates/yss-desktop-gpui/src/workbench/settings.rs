@@ -6,7 +6,9 @@ use crate::{
     window_chrome,
 };
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme, Icon, Root, TitleBar};
+use gpui_kit::component::{
+    ActiveTheme, Icon, Root, TitleBar, WindowExt, button::Button, notification::Notification,
+};
 use gpui_kit::{
     AnyWindowHandle, AppContext, Bounds, Context, Entity, Focusable, IntoElement, Render,
     Subscription, WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, div,
@@ -81,6 +83,7 @@ impl Workbench {
                     ..TitleBar::window_options()
                 },
                 move |window, cx| {
+                    crate::appearance::install(window, cx);
                     let close_panel = panel.downgrade();
                     window.on_window_should_close(cx, move |_, cx| {
                         close_panel
@@ -120,27 +123,66 @@ impl SettingsWindow {
         cx: &mut Context<Self>,
     ) -> Self {
         let mut subscriptions = vec![cx.observe(&panel, |_, _, cx| cx.notify())];
-        subscriptions.push(cx.subscribe(&panel, |view, _, event, cx| match event {
-            SettingsEvent::OpenDocument { project, path } => {
-                let project = project.clone();
-                let path = path.clone();
-                view.in_workbench(cx, move |view, window, cx| {
-                    if view
-                        .project
-                        .as_ref()
-                        .is_some_and(|current| current.identity == project)
-                    {
-                        view.open_document(path, None, window, cx);
+        subscriptions.push(
+            cx.subscribe_in(
+                &panel,
+                window,
+                |view, panel, event, window, cx| match event {
+                    SettingsEvent::OpenDocument { project, path } => {
+                        let project = project.clone();
+                        let path = path.clone();
+                        view.in_workbench(cx, move |view, window, cx| {
+                            if view
+                                .project
+                                .as_ref()
+                                .is_some_and(|current| current.identity == project)
+                            {
+                                view.open_document(path, None, window, cx);
+                            }
+                        });
                     }
-                });
-            }
-        }));
+                    SettingsEvent::Error {
+                        message,
+                        retry_catalog,
+                    } => {
+                        let mut notification = Notification::error(message.clone())
+                            .id::<SettingsPanel>()
+                            .autohide(false);
+                        if *retry_catalog {
+                            let panel = panel.downgrade();
+                            notification = notification.action(move |_, _, cx| {
+                                let panel = panel.clone();
+                                Button::new("settings-retry")
+                                    .label(crate::text::t("common.retry"))
+                                    .on_click(cx.listener(move |notice, _, window, cx| {
+                                        if let Err(error) =
+                                            panel.update(cx, |panel, cx| panel.ensure_loaded(cx))
+                                        {
+                                            tracing::debug!(%error, "Settings view closed");
+                                        }
+                                        notice.dismiss(window, cx);
+                                    }))
+                            });
+                        }
+                        window.push_notification(notification, cx);
+                    }
+                    SettingsEvent::Success(message) => {
+                        window.push_notification(
+                            Notification::success(message.clone()).id::<SettingsPanel>(),
+                            cx,
+                        );
+                    }
+                },
+            ),
+        );
         if let Some(owner) = owner.upgrade() {
             subscriptions.push(cx.observe(&owner, |view, _, cx| view.sync_project(cx)));
         }
         panel.update(cx, |panel, cx| panel.ensure_loaded(cx));
         cx.defer_in(window, |view, window, cx| {
             view.sync_project(cx);
+            view.panel
+                .update(cx, |panel, cx| panel.report_preference_error(cx));
             window.focus(&view.panel.read(cx).focus_handle(cx), cx);
         });
         Self {

@@ -52,6 +52,9 @@ impl Workbench {
         if self.project.is_none() {
             return;
         }
+        let defaults = &crate::preferences::current(cx).workspace;
+        let show_details = defaults.show_details;
+        let show_bottom = defaults.show_bottom_panel;
         let active = self.active_editor_panel(cx);
         let dock = self.dock.read(cx);
         let mut panels = [
@@ -80,13 +83,13 @@ impl Workbench {
             (
                 DockPlacement::Right,
                 300.,
-                true,
+                show_details,
                 vec![WorkbenchPanel::Details],
             ),
             (
                 DockPlacement::Bottom,
                 220.,
-                false,
+                show_bottom,
                 vec![
                     WorkbenchPanel::Problems,
                     WorkbenchPanel::Output,

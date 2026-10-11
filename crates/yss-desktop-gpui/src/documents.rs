@@ -1,4 +1,5 @@
 //! Native Markdown input and preview; Project owns the committed document and version.
+mod autosave;
 pub(crate) mod commands;
 mod details;
 mod render;
@@ -28,9 +29,14 @@ pub struct DocumentEditor {
     pub snapshot: DocSnapshot,
     input: Entity<EditorState>,
     preview: Entity<TextViewState>,
-    _input_subscription: Subscription,
+    _subscriptions: [Subscription; 3],
     preview_visible: bool,
     preview_task: Option<gpui_kit::Task<()>>,
+    autosave: autosave::AutosaveState,
+    autosave_task: Option<gpui_kit::Task<()>>,
+    _save_task: Option<gpui_kit::Task<()>>,
+    _refresh_task: Option<gpui_kit::Task<()>>,
+    autosave_in_flight: bool,
     draft_dirty: bool,
     busy: bool,
     refreshing: bool,
@@ -45,37 +51,61 @@ impl DocumentEditor {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let input =
-            cx.new(|cx| EditorState::new(window, cx).default_value(snapshot.content.0.clone()));
+        let settings = crate::preferences::current(cx).editor.clone();
+        let input = cx.new(|cx| {
+            let mut input = EditorState::new(window, cx).default_value(snapshot.content.0.clone());
+            input.set_soft_wrap(settings.soft_wrap, window, cx);
+            input.set_line_number(settings.line_numbers, window, cx);
+            input
+        });
         let preview =
             cx.new(|cx| TextViewState::markdown(&snapshot.content.0, cx).selectable(true));
-        let subscription = cx.subscribe(&input, |view, _, event, cx| match event {
-            InputEvent::Change => {
-                view.draft_dirty = view.input.read(cx).text() != view.snapshot.content.0.as_str();
-                if view.preview_visible {
-                    let timer = cx
-                        .background_executor()
-                        .timer(std::time::Duration::from_millis(200));
-                    view.preview_task = Some(cx.spawn(async move |view, cx| {
-                        timer.await;
-                        let _ = view.update(cx, |view, cx| view.update_preview(cx));
-                    }));
+        let subscription =
+            cx.subscribe_in(&input, window, |view, _, event, window, cx| match event {
+                InputEvent::Change => {
+                    view.draft_dirty =
+                        view.input.read(cx).text() != view.snapshot.content.0.as_str();
+                    view.autosave.edited();
+                    view.schedule_autosave(window, cx);
+                    if view.preview_visible {
+                        let timer = cx
+                            .background_executor()
+                            .timer(std::time::Duration::from_millis(200));
+                        view.preview_task = Some(cx.spawn(async move |view, cx| {
+                            timer.await;
+                            let _ = view.update(cx, |view, cx| view.update_preview(cx));
+                        }));
+                    }
+                    cx.emit(PanelEvent::LayoutChanged);
+                    cx.emit(DocumentEvent::Changed);
+                    cx.notify();
                 }
-                cx.emit(PanelEvent::LayoutChanged);
-                cx.emit(DocumentEvent::Changed);
-                cx.notify();
+                InputEvent::Focus => cx.emit(DocumentEvent::Activated),
+                InputEvent::Blur => view.autosave_on_focus_change(window, cx),
+                _ => {}
+            });
+        let preferences = cx
+            .observe_global_in::<crate::preferences::Preferences>(window, |view, window, cx| {
+                view.apply_preferences(window, cx)
+            });
+        let activation = cx.observe_window_activation(window, |view, window, cx| {
+            if !window.is_window_active() {
+                view.autosave_on_focus_change(window, cx);
             }
-            InputEvent::Focus => cx.emit(DocumentEvent::Activated),
-            _ => {}
         });
         Self {
             services,
             snapshot,
             input,
             preview,
-            _input_subscription: subscription,
-            preview_visible: false,
+            _subscriptions: [subscription, preferences, activation],
+            preview_visible: settings.open_in_preview,
             preview_task: None,
+            autosave: autosave::AutosaveState::new(settings),
+            autosave_task: None,
+            _save_task: None,
+            _refresh_task: None,
+            autosave_in_flight: false,
             draft_dirty: false,
             busy: false,
             refreshing: false,
@@ -142,9 +172,11 @@ impl BasePanel for DocumentEditor {
     fn closable(&self, _: &App) -> bool {
         !self.dirty() && !self.busy()
     }
-    fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
+    fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {
         if active {
             cx.emit(DocumentEvent::Activated);
+        } else {
+            self.autosave_on_focus_change(window, cx);
         }
     }
     fn dump(&self, _: &App) -> PanelState {

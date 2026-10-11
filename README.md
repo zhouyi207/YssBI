@@ -27,6 +27,7 @@
 - **领域层**：Project、Graph、Database、Execution、SCI 和 Harness 各自拥有业务状态；领域与应用层不依赖 GPUI。
 - **基础设施**：文件系统、日志、数据库存储与插件适配按各自模块边界接入。外部计算插件不改变桌面前端的 Rust 架构。
 - **本地化**：`yss-i18n` 封装 `rust-i18n` 的文本查询与单次插值，供原生业务文案、节点元数据和图诊断复用；领域查询显式传入语言，不依赖 GPUI 的界面语言状态。桌面组件自身沿用 GPUI Kit 的间接依赖。
+- **用户偏好**：`yss-settings` 拥有平台中立的分组类型、默认值、校验和原子持久化；桌面 `preferences` 发布已生效快照，各业务视图订阅使用。模型凭据、项目布局和日志历史继续归原服务。
 
 状态所有权和依赖关系见[系统架构](docs/src/development/architecture.md)，模块入口见[开发指南](docs/src/development.md)。
 

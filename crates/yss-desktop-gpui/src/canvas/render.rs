@@ -1,13 +1,12 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{Disableable, Sizable};
+use gpui_kit::component::{ActiveTheme, Disableable, Sizable};
 use gpui_kit::{
     Bounds, Context, IntoElement, MouseButton, Pixels, Render, Window, canvas, div, point,
-    prelude::*, px, rgb,
+    prelude::*, px,
 };
 
 use super::{Gesture, GraphCanvas, commands::*, geometry};
-use crate::appearance;
 
 impl Render for GraphCanvas {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -23,7 +22,7 @@ impl Render for GraphCanvas {
         let pending = self.pending_connection(cx);
         let feedback = pending
             .as_ref()
-            .and_then(|pending| pending.feedback(self.bounds.get().size));
+            .and_then(|pending| pending.feedback(self.bounds.get().size, cx));
         let replacements = pending.as_ref().map(|_| {
             self.connection_drag()
                 .map(|drag| drag.replaced.clone())
@@ -70,8 +69,8 @@ impl Render for GraphCanvas {
             .min_h_0()
             .relative()
             .overflow_hidden()
-            .bg(rgb(appearance::CANVAS))
-            .text_color(rgb(appearance::TEXT))
+            .bg(cx.theme().table)
+            .text_color(cx.theme().foreground)
             .on_action(
                 cx.listener(|view, _: &SaveGraph, _, cx| view.submit(GraphCommand::Save, None, cx)),
             )
@@ -180,13 +179,12 @@ impl Render for GraphCanvas {
                     move |bounds, _, _| {
                         bounds_cell.set(bounds);
                     },
-                    move |bounds, _, window, _| {
+                    move |bounds, _, window, cx| {
                         Self::register_gesture_events(owner, window);
                         let mut layer = connection_layer.borrow_mut();
                         layer.paint(
                             bounds,
-                            offset,
-                            zoom,
+                            (offset, zoom),
                             &preview,
                             super::connections::Interaction {
                                 presentation: &presentation,
@@ -195,6 +193,7 @@ impl Render for GraphCanvas {
                                 replacements: replacements.as_ref(),
                             },
                             window,
+                            cx,
                         );
                         if let Some(pending) = pending {
                             layer.paint_pending(
@@ -233,8 +232,8 @@ impl Render for GraphCanvas {
                         .w(rect.size.width)
                         .h(rect.size.height)
                         .border_1()
-                        .border_color(rgb(appearance::BLUE))
-                        .bg(gpui_kit::rgba((appearance::BLUE << 8) | 0x18)),
+                        .border_color(cx.theme().primary)
+                        .bg(cx.theme().primary.opacity(0.1)),
                 )
             })
             .child(
@@ -260,7 +259,7 @@ impl Render for GraphCanvas {
                             .right_2()
                             .p_2()
                             .rounded_md()
-                            .bg(rgb(appearance::SURFACE))
+                            .bg(cx.theme().background)
                             .text_sm()
                             .child(crate::text::t("native.canvas.loadingRenamedGraph")),
                     )
@@ -278,10 +277,10 @@ impl Render for GraphCanvas {
                         .items_center()
                         .gap_2()
                         .rounded_md()
-                        .bg(rgb(appearance::SURFACE))
+                        .bg(cx.theme().background)
                         .border_1()
-                        .border_color(rgb(appearance::RED))
-                        .text_color(rgb(appearance::RED))
+                        .border_color(cx.theme().danger)
+                        .text_color(cx.theme().danger)
                         .text_sm()
                         .occlude()
                         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
@@ -308,8 +307,8 @@ impl Render for GraphCanvas {
                         .right_2()
                         .p_2()
                         .rounded_md()
-                        .bg(gpui_kit::rgba((appearance::RED << 8) | 0x26))
-                        .text_color(rgb(appearance::RED))
+                        .bg(cx.theme().danger.opacity(0.15))
+                        .text_color(cx.theme().danger)
                         .text_sm()
                         .child(error),
                 )
@@ -344,13 +343,13 @@ impl GraphCanvas {
         let palette = self.palette.as_ref().expect("palette is open");
         let size = self.bounds.get().size;
         let configuring = palette.view.read(cx).configuring();
-        let width = if configuring { 420. } else { 300. };
-        let height = if configuring { 560. } else { 396. };
-        let height = px(height).min(size.height);
+        let unit = window.rem_size() / 14.;
+        let width = unit * if configuring { 420. } else { 300. };
+        let height = (unit * if configuring { 560. } else { 396. }).min(size.height);
         let x = palette
             .point
             .x
-            .min((size.width - px(width)).max(px(0.)))
+            .min((size.width - width).max(px(0.)))
             .max(px(0.));
         let y = palette
             .point
@@ -380,7 +379,7 @@ impl GraphCanvas {
                             .absolute()
                             .left(origin.x + x)
                             .top(origin.y + y)
-                            .w(px(width).min(size.width))
+                            .w(width.min(size.width))
                             .h(height)
                             .child(view),
                     ),

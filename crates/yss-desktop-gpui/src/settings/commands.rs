@@ -41,8 +41,6 @@ impl SettingsPanel {
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
         self.loading = true;
-        self.error = None;
-        self.load_failed = false;
         let service = self.services.application.harness.models.clone();
         let job = self
             .services
@@ -59,11 +57,9 @@ impl SettingsPanel {
                 match outcome {
                     Ok(catalog) => {
                         view.install_catalog(catalog);
-                        view.error = None;
                     }
                     Err(error) => {
-                        view.error = Some(failure(&error));
-                        view.load_failed = true;
+                        view.report_error(failure(&error), true, cx);
                     }
                 }
                 cx.notify();
@@ -80,14 +76,18 @@ impl SettingsPanel {
         let config = match self.configuration(cx) {
             Ok(config) => config,
             Err(error) => {
-                self.error = Some(error);
+                self.report_error(error, false, cx);
                 cx.notify();
                 return None;
             }
         };
         let key = self.editor.as_ref().unwrap().key.read(cx).value();
         if self.replacement_key_required() && key.trim().is_empty() {
-            self.error = Some(crate::text::translate("settings.models.newProviderKeyHint"));
+            self.report_error(
+                crate::text::translate("settings.models.newProviderKeyHint"),
+                false,
+                cx,
+            );
             cx.notify();
             return None;
         }
@@ -96,16 +96,13 @@ impl SettingsPanel {
                 CredentialChange::Keep
             } else {
                 let Ok(secret) = SecretCredential::new(key.to_string()) else {
-                    self.error = Some(crate::text::t("native.settings.emptyApiKey").into());
+                    self.report_error(crate::text::t("native.settings.emptyApiKey"), false, cx);
                     cx.notify();
                     return None;
                 };
                 CredentialChange::Replace(secret)
             };
         self.task = Some(crate::text::t("native.settings.savingModels"));
-        self.error = None;
-        self.load_failed = false;
-        self.feedback = None;
         cx.notify();
         Some(SettingsSaveRequest { config, credential })
     }
@@ -136,9 +133,9 @@ impl SettingsPanel {
                 if let Some(saved) = saved {
                     self.edit_provider(Some(saved), None, window, cx);
                 }
-                self.feedback = Some(crate::text::t("native.settings.modelsSaved").into());
+                self.report_success(crate::text::t("native.settings.modelsSaved"), cx);
             }
-            Err(error) => self.error = Some(failure(&error)),
+            Err(error) => self.report_error(failure(&error), false, cx),
         }
         cx.notify();
     }
@@ -183,15 +180,13 @@ impl SettingsPanel {
                 match SecretCredential::new(key.to_string()) {
                     Ok(key) => Some(key),
                     Err(_) => {
-                        self.error = Some(crate::text::t("native.settings.emptyApiKey").into());
+                        self.report_error(crate::text::t("native.settings.emptyApiKey"), false, cx);
                         cx.notify();
                         return;
                     }
                 }
             };
         self.task = Some(crate::text::t("native.settings.discoveringModels"));
-        self.error = None;
-        self.load_failed = false;
         let epoch = self.epoch;
         let service = self.services.application.harness.models.clone();
         let job = self
@@ -226,12 +221,15 @@ impl SettingsPanel {
                             }
                             draft.changed |= added > 0;
                         }
-                        view.feedback = Some(crate::text::format(
-                            "settings.models.discoveryAdded",
-                            &[("count", added.to_string())],
-                        ));
+                        view.report_success(
+                            crate::text::format(
+                                "settings.models.discoveryAdded",
+                                &[("count", added.to_string())],
+                            ),
+                            cx,
+                        );
                     }
-                    Err(error) => view.error = Some(failure(&error)),
+                    Err(error) => view.report_error(failure(&error), false, cx),
                 }
                 cx.notify();
             });
@@ -250,8 +248,6 @@ impl SettingsPanel {
             return;
         }
         self.task = Some(crate::text::t("native.settings.settingDefault"));
-        self.error = None;
-        self.load_failed = false;
         let service = self.services.application.harness.models.clone();
         let job = self
             .services
@@ -265,10 +261,9 @@ impl SettingsPanel {
                     Ok(catalog) => {
                         view.services.models_changed();
                         view.install_catalog(catalog);
-                        view.feedback =
-                            Some(crate::text::t("native.settings.defaultUpdated").into());
+                        view.report_success(crate::text::t("native.settings.defaultUpdated"), cx);
                     }
-                    Err(error) => view.error = Some(failure(&error)),
+                    Err(error) => view.report_error(failure(&error), false, cx),
                 }
                 cx.notify();
             });
@@ -325,8 +320,6 @@ impl SettingsPanel {
             return false;
         }
         self.task = Some(crate::text::t("native.settings.deletingProvider"));
-        self.error = None;
-        self.load_failed = false;
         let service = self.services.application.harness.models.clone();
         let job = self
             .services
@@ -344,10 +337,9 @@ impl SettingsPanel {
                         view.services.models_changed();
                         view.install_catalog(catalog);
                         view.discard(cx);
-                        view.feedback =
-                            Some(crate::text::t("native.settings.providerDeleted").into());
+                        view.report_success(crate::text::t("native.settings.providerDeleted"), cx);
                     }
-                    Err(error) => view.error = Some(failure(&error)),
+                    Err(error) => view.report_error(failure(&error), false, cx),
                 }
                 cx.notify();
             });

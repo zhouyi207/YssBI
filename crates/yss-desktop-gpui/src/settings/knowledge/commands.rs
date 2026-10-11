@@ -1,5 +1,5 @@
 use super::{Failure, KnowledgeSettings, ProjectScope};
-use crate::settings::{Page, SettingsEvent, SettingsPanel};
+use crate::settings::{SettingsEvent, SettingsPanel};
 use gpui_kit::Context;
 use std::sync::Arc;
 use yss_harness_contract::{KnowledgeSourceId, ProjectKnowledgeStatus};
@@ -59,11 +59,7 @@ impl SettingsPanel {
     }
 
     pub(in crate::settings) fn load_knowledge(&mut self, cx: &mut Context<Self>) {
-        if self.page != Page::Knowledge
-            || !self.knowledge.refresh_pending
-            || self.knowledge.loading
-            || self.knowledge.pending
-        {
+        if !self.knowledge.refresh_pending || self.knowledge.loading || self.knowledge.pending {
             return;
         }
         let Some(scope) = &self.knowledge.scope else {
@@ -121,8 +117,7 @@ impl SettingsPanel {
         path: DocPath,
         cx: &mut Context<Self>,
     ) {
-        if self.page == Page::Knowledge
-            && !self.knowledge_busy()
+        if !self.knowledge_busy()
             && self.knowledge.current(project, generation)
             && self.knowledge.can_add(&path)
         {
@@ -138,10 +133,7 @@ impl SettingsPanel {
         mutation: Mutation,
         cx: &mut Context<Self>,
     ) {
-        if self.page != Page::Knowledge
-            || self.knowledge_busy()
-            || !self.knowledge.current(project, generation)
-        {
+        if self.knowledge_busy() || !self.knowledge.current(project, generation) {
             return;
         }
         let valid = match &mutation {
@@ -194,10 +186,7 @@ impl SettingsPanel {
         source: &KnowledgeSourceId,
         cx: &mut Context<Self>,
     ) {
-        if self.page != Page::Knowledge
-            || self.knowledge_busy()
-            || !self.knowledge.current(project, generation)
-        {
+        if self.knowledge_busy() || !self.knowledge.current(project, generation) {
             return;
         }
         if let Some(source) = self

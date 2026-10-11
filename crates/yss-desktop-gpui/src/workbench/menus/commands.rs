@@ -59,6 +59,118 @@ pub(crate) fn bind_keys(cx: &mut App) {
     )]);
 }
 
+/// Explicit IDs distinguish parameterized `no_json` actions without accepting arbitrary JSON.
+pub(crate) fn shortcut_commands() -> Vec<crate::keymap::ShortcutCommand> {
+    use crate::keymap::ShortcutCommand;
+    [
+        (
+            "SaveProjectAs",
+            "menubar.saveProjectAs",
+            MenuCommand::SaveProjectAs,
+        ),
+        (
+            "CloseProject",
+            "menubar.closeProject",
+            MenuCommand::CloseProject,
+        ),
+        ("ImportData", "menubar.importData", MenuCommand::ImportData),
+        (
+            "NewEventGraph",
+            "menubar.newEventGraph",
+            MenuCommand::NewGraph(GraphResourceKind::EventGraph),
+        ),
+        (
+            "NewFunctionGraph",
+            "menubar.newFunctionGraph",
+            MenuCommand::NewGraph(GraphResourceKind::FunctionGraph),
+        ),
+        ("NewDocument", "documents.newDoc", MenuCommand::NewDocument),
+        ("NewMind", "documents.newMind", MenuCommand::NewMind),
+        ("NewChart", "menubar.newChart", MenuCommand::NewChart),
+        (
+            "ToggleSidebar",
+            "panel.primarySideBar",
+            MenuCommand::ToggleSidebar,
+        ),
+        (
+            "ShowAssistant",
+            "panel.assistant",
+            MenuCommand::ShowPanel(WorkbenchPanel::Assistant),
+        ),
+        ("Undo", "common.undo", MenuCommand::Edit(EditCommand::Undo)),
+        ("Redo", "common.redo", MenuCommand::Edit(EditCommand::Redo)),
+        ("Cut", "menubar.cut", MenuCommand::Edit(EditCommand::Cut)),
+        ("Copy", "menubar.copy", MenuCommand::Edit(EditCommand::Copy)),
+        (
+            "Paste",
+            "menubar.paste",
+            MenuCommand::Edit(EditCommand::Paste),
+        ),
+        (
+            "Delete",
+            "common.delete",
+            MenuCommand::Edit(EditCommand::Delete),
+        ),
+        (
+            "ResetLayout",
+            "menubar.resetLayout",
+            MenuCommand::ResetLayout,
+        ),
+        (
+            "SplitEditorRight",
+            "menubar.splitEditorRight",
+            MenuCommand::SplitEditor(Placement::Right),
+        ),
+        (
+            "SplitEditorDown",
+            "menubar.splitEditorDown",
+            MenuCommand::SplitEditor(Placement::Bottom),
+        ),
+        (
+            "OpenLogsWindow",
+            "menubar.openLogsInNewWindow",
+            MenuCommand::OpenLogsWindow,
+        ),
+        (
+            "Architecture",
+            "menubar.architecture",
+            MenuCommand::Help(HelpPage::Architecture),
+        ),
+        (
+            "Documentation",
+            "menubar.documentation",
+            MenuCommand::Help(HelpPage::Documentation),
+        ),
+        (
+            "ReleaseNotes",
+            "menubar.releaseNotes",
+            MenuCommand::Help(HelpPage::ReleaseNotes),
+        ),
+        (
+            "Repository",
+            "menubar.githubRepository",
+            MenuCommand::Help(HelpPage::Repository),
+        ),
+        (
+            "ReportIssue",
+            "menubar.reportIssue",
+            MenuCommand::Help(HelpPage::ReportIssue),
+        ),
+        ("About", "menubar.about", MenuCommand::About),
+        ("Exit", "native.workbench.quit", MenuCommand::Exit),
+    ]
+    .into_iter()
+    .map(|(id, label, action)| {
+        ShortcutCommand::new(
+            format!("native_workbench::MenuCommand::{id}"),
+            label,
+            "Workbench",
+            Box::new(action),
+        )
+    })
+    .collect()
+}
+
 impl Workbench {
     pub(in crate::workbench) fn dispatch_menu(
         &mut self,

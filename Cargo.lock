@@ -12918,6 +12918,7 @@ dependencies = [
  "yss-project-model",
  "yss-project-registry",
  "yss-project-registry-contract",
+ "yss-settings",
  "yss-ui-contract",
 ]
 
@@ -13499,6 +13500,17 @@ dependencies = [
  "serde_json",
  "yss-sci",
  "yss-sci-contract",
+]
+
+[[package]]
+name = "yss-settings"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "yss-filesystem",
 ]
 
 [[package]]

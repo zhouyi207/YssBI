@@ -107,6 +107,7 @@ fn batch_and_subscription_serialize_exact_entries_contract() {
     let batch = serde_json::to_value(LogBatchDto {
         stream_id: "stream-1".into(),
         entries: vec![record.clone()],
+        evicted_sequences: Vec::new(),
         failure: None,
     })
     .unwrap();

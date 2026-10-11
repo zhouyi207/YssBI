@@ -1,188 +1,182 @@
-use super::{Page, SaveSettings, SettingsPanel, models::provider_name};
+use super::{BackInSettings, Page, SaveSettings, SettingsPanel, models::provider_name};
 use crate::text::t;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, Sizable,
-    button::{Button, ButtonVariants},
+    ActiveTheme, Disableable,
+    breadcrumb::{Breadcrumb, BreadcrumbItem},
+    button::Button,
+    group_box::GroupBoxVariant,
     menu::{DropdownMenu, PopupMenuItem},
+    setting::{SettingGroup, SettingItem, SettingPage, Settings},
 };
-use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
+use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*};
 use yss_harness_contract::{LanguageModelAuthentication, LanguageModelSelection};
 
 impl Render for SettingsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.refresh_key_placeholder(window, cx);
-        crate::text::input_placeholder(&self.search, "settings.searchPlaceholder", window, cx);
-        let width = f32::from(window.viewport_size().width);
-        self.render_width = width;
-        let compact = width <= 720.;
-        let padding = if compact {
-            20.
-        } else if width <= 900. {
-            24.
-        } else {
-            32.
-        };
-        let empty = self.visible_categories(cx).is_empty();
+        let owner = cx.weak_entity();
+        let mut groups = vec![
+            SettingGroup::new().item(
+                SettingItem::render(move |_, _, cx| {
+                    owner
+                        .update(cx, |view, cx| view.header(cx))
+                        .unwrap_or_else(|_| div().into_any_element())
+                })
+                .keywords([t("settings.sections.ai"), t("settings.models.providers")]),
+            ),
+        ];
+        match self.page {
+            Page::Overview => {
+                groups.push(self.overview(cx));
+                groups.push(self.assistant_preferences(cx));
+            }
+            Page::Providers => groups.push(self.providers(cx)),
+            Page::Provider => groups.extend(self.provider_form(cx)),
+        }
+        let owner = cx.weak_entity();
+        let knowledge_status = SettingGroup::new().item(
+            SettingItem::render(move |_, _, cx| {
+                owner
+                    .update(cx, |view, cx| view.knowledge_status(cx))
+                    .unwrap_or_else(|_| div().into_any_element())
+            })
+            .keywords([
+                t("settings.knowledge.title"),
+                t("settings.knowledge.document"),
+                t("settings.knowledge.description"),
+                t("settings.knowledge.rebuild"),
+            ]),
+        );
+        let knowledge = [
+            category_header("settings.knowledge.title"),
+            knowledge_status,
+        ]
+        .into_iter()
+        .chain(self.knowledge_page(cx));
+        let appearance = self.appearance_preferences(cx);
+        let documents = self.document_preferences(cx);
+        let data = self.data_preferences(cx);
+        let workspace = self.workspace_preferences(cx);
+        let logs = self.log_preferences(cx);
+        let keybindings = self.keybindings(cx);
+        let hidden_header = div().hidden().style().clone();
         div()
             .id("native-settings")
             .key_context("Settings")
             .track_focus(&self.focus)
             .size_full()
             .flex()
-            .when(compact, |view| view.flex_col())
+            .flex_col()
             .bg(cx.theme().background)
             .on_action(cx.listener(|view, _: &SaveSettings, window, cx| view.save(window, cx)))
-            .child(self.navigation(compact, if width <= 900. { 184. } else { 208. }, cx))
             .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .min_h_0()
-                    .flex()
-                    .flex_col()
-                    .when(!empty, |view| view.child(self.header(padding, cx)))
-                    .child(self.status(cx))
-                    .when(self.page == Page::Knowledge, |view| {
-                        view.child(self.knowledge_status(cx))
-                    })
-                    .child(
-                        div()
-                            .id(("settings-content", self.epoch))
-                            .flex_1()
-                            .min_h_0()
-                            .overflow_y_scroll()
-                            .child(
-                                div()
-                                    .w_full()
-                                    .max_w(px(920.))
-                                    .mx_auto()
-                                    .px(px(padding))
-                                    .py_6()
-                                    .child(if empty {
-                                        div()
-                                            .h(px(280.))
-                                            .flex()
-                                            .flex_col()
-                                            .items_center()
-                                            .justify_center()
-                                            .gap_3()
-                                            .child(Icon::new(IconName::Search).size_6())
-                                            .child(div().text_sm().child(t("settings.noResults")))
-                                            .child(
-                                                div()
-                                                    .text_xs()
-                                                    .text_color(cx.theme().muted_foreground)
-                                                    .child(t("settings.noResultsHint")),
-                                            )
-                                            .child(
-                                                Button::new("clear-settings-search")
-                                                    .small()
-                                                    .ghost()
-                                                    .label(t("settings.clearSearch"))
-                                                    .on_click(cx.listener(
-                                                        |view, _, window, cx| {
-                                                            view.search.update(cx, |search, cx| {
-                                                                search.set_value("", window, cx)
-                                                            })
-                                                        },
-                                                    )),
-                                            )
-                                            .into_any_element()
-                                    } else {
-                                        match self.page {
-                                            Page::Overview => self.overview(cx),
-                                            Page::Providers => self.providers(cx),
-                                            Page::Provider => self.provider_form(cx),
-                                            Page::Knowledge => self.knowledge_page(cx),
-                                            Page::Appearance => self.appearance(cx),
-                                        }
-                                    }),
-                            ),
-                    ),
+                div().flex_1().min_h_0().min_w_0().child(
+                    // Settings retains its translated search placeholder for the keyed lifetime.
+                    Settings::new((
+                        gpui_kit::ElementId::from("application-settings"),
+                        gpui_kit::SharedString::from(crate::text::locale()),
+                    ))
+                    .default_selected_index(self.initial_page)
+                    .with_group_variant(GroupBoxVariant::Normal)
+                    .pages([
+                        SettingPage::new(t("settings.sections.ai"))
+                            .icon(IconName::Bot)
+                            .header_style(&hidden_header)
+                            .groups(groups),
+                        SettingPage::new(t("settings.knowledge.title"))
+                            .icon(IconName::Search)
+                            .header_style(&hidden_header)
+                            .groups(knowledge),
+                        SettingPage::new(t("settings.sections.appearance"))
+                            .icon(IconName::Languages)
+                            .header_style(&hidden_header)
+                            .group(category_header("settings.sections.appearance"))
+                            .group(appearance),
+                        SettingPage::new(t("preferences.sections.documents"))
+                            .header_style(&hidden_header)
+                            .group(category_header("preferences.sections.documents"))
+                            .group(documents),
+                        SettingPage::new(t("preferences.sections.data"))
+                            .header_style(&hidden_header)
+                            .group(category_header("preferences.sections.data"))
+                            .group(data),
+                        SettingPage::new(t("preferences.sections.workspace"))
+                            .header_style(&hidden_header)
+                            .group(category_header("preferences.sections.workspace"))
+                            .group(workspace),
+                        SettingPage::new(t("preferences.sections.logs"))
+                            .header_style(&hidden_header)
+                            .group(category_header("preferences.sections.logs"))
+                            .group(logs),
+                        SettingPage::new(t("preferences.sections.keybindings"))
+                            .header_style(&hidden_header)
+                            .group(category_header("preferences.sections.keybindings"))
+                            .group(keybindings),
+                    ]),
+                ),
             )
     }
 }
 
 impl SettingsPanel {
-    fn header(&self, padding: f32, cx: &mut Context<Self>) -> AnyElement {
-        let mut breadcrumbs = div().flex_1().min_w_0().flex().items_center().gap_1();
-        if self.page == Page::Knowledge {
-            breadcrumbs = breadcrumbs.child(t("settings.knowledge.title"));
-        } else if self.page == Page::Appearance {
-            breadcrumbs = breadcrumbs.child(t("settings.sections.appearance"));
-        } else if self.page == Page::Overview {
-            breadcrumbs = breadcrumbs.child(t("settings.sections.ai"));
-        } else {
-            breadcrumbs = breadcrumbs
-                .child(
-                    Button::new("breadcrumb-ai")
-                        .small()
-                        .ghost()
-                        .label(t("settings.sections.ai"))
+    fn header(&self, cx: &mut Context<Self>) -> AnyElement {
+        let mut breadcrumb = Breadcrumb::new().flex_1().min_w_0();
+        let mut overview = BreadcrumbItem::new(t("settings.sections.ai"));
+        if self.page != Page::Overview {
+            overview =
+                overview
+                    .disabled(self.busy())
+                    .on_click(cx.listener(|view, _, window, cx| {
+                        view.navigate(Page::Overview, window, cx);
+                    }));
+        }
+        breadcrumb = breadcrumb.child(overview);
+        if self.page != Page::Overview {
+            let mut providers = BreadcrumbItem::new(t("settings.models.providers"));
+            if self.page == Page::Provider {
+                providers =
+                    providers
                         .disabled(self.busy())
                         .on_click(cx.listener(|view, _, window, cx| {
-                            view.navigate(Page::Overview, window, cx)
-                        })),
-                )
-                .child(Icon::new(IconName::ChevronRight).size_3());
-            if self.page == Page::Providers {
-                breadcrumbs = breadcrumbs.child(t("settings.models.providers"));
-            } else {
-                let title = self
-                    .editor
-                    .as_ref()
-                    .map(|draft| draft.display_name(cx))
-                    .filter(|title| !title.is_empty())
-                    .unwrap_or_else(|| t("native.settings.newProvider").into());
-                breadcrumbs = breadcrumbs
-                    .child(
-                        Button::new("breadcrumb-providers")
-                            .small()
-                            .ghost()
-                            .label(t("settings.models.providers"))
-                            .disabled(self.busy())
-                            .on_click(cx.listener(|view, _, window, cx| {
-                                view.navigate(Page::Providers, window, cx)
-                            })),
-                    )
-                    .child(Icon::new(IconName::ChevronRight).size_3())
-                    .child(div().min_w_0().truncate().child(title));
+                            view.navigate(Page::Providers, window, cx);
+                        }));
             }
+            breadcrumb = breadcrumb.child(providers);
         }
-        let mut header = div()
-            .h(px(64.))
-            .w_full()
-            .max_w(px(920.))
-            .mx_auto()
-            .flex_shrink_0()
-            .px(px(padding))
-            .flex()
-            .items_center()
-            .gap_3()
-            .text_sm()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .child(breadcrumbs);
         if self.page == Page::Provider {
-            header = header.child(
-                Button::new("settings-save")
-                    .small()
-                    .primary()
-                    .label(t("common.save"))
-                    .disabled(self.busy() || !self.dirty())
-                    .on_click(cx.listener(|view, _, window, cx| view.save(window, cx))),
-            );
-        } else if self.page == Page::Providers {
-            header = header.child(self.add_provider_button(cx));
+            let title = self
+                .editor
+                .as_ref()
+                .map(|draft| draft.display_name(cx))
+                .filter(|title| !title.is_empty())
+                .unwrap_or_else(|| t("native.settings.newProvider").into());
+            breadcrumb = breadcrumb.child(BreadcrumbItem::new(title).min_w_0().truncate());
         }
-        header.into_any_element()
+        breadcrumb_row()
+            .id("settings-breadcrumb")
+            .focusable()
+            .focus_visible(|style| style.bg(cx.theme().secondary))
+            .tab_stop(true)
+            .key_context("SettingsBreadcrumb")
+            .on_action(cx.listener(|view, _: &BackInSettings, window, cx| {
+                if !view.busy() {
+                    match view.page {
+                        Page::Provider => view.navigate(Page::Providers, window, cx),
+                        Page::Providers => view.navigate(Page::Overview, window, cx),
+                        Page::Overview => {}
+                    }
+                }
+            }))
+            .child(breadcrumb)
+            .when(self.page == Page::Providers, |header| {
+                header.child(self.add_provider_button(cx))
+            })
+            .into_any_element()
     }
 
     fn add_provider_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         Button::new("add-provider")
-            .small()
-            .primary()
             .icon(IconName::Plus)
             .label(t("settings.models.addProvider"))
             .disabled(
@@ -204,50 +198,38 @@ impl SettingsPanel {
             }))
     }
 
-    fn status(&self, cx: &mut Context<Self>) -> AnyElement {
-        let message = self
-            .error
-            .clone()
-            .or_else(|| self.preference_error.map(crate::text::translate))
-            .or_else(|| self.task.as_ref().map(|task| task.to_string()))
-            .or_else(|| {
-                self.loading
-                    .then(|| crate::text::t("native.settings.loadingModels").into_owned())
-            })
-            .or_else(|| self.feedback.clone());
-        let Some(message) = message else {
-            return div().into_any_element();
-        };
-        div()
-            .px_5()
-            .py_2()
-            .flex()
-            .items_center()
-            .gap_3()
-            .flex_shrink_0()
-            .bg(cx.theme().muted)
-            .text_sm()
-            .text_color(if self.error.is_some() || self.preference_error.is_some() {
-                cx.theme().danger
-            } else {
-                cx.theme().muted_foreground
-            })
-            .child(div().flex_1().child(message))
-            .when(self.load_failed, |view| {
-                view.child(
-                    Button::new("settings-retry")
-                        .small()
-                        .ghost()
-                        .label(crate::text::t("common.retry"))
-                        .disabled(self.busy())
-                        .on_click(cx.listener(|view, _, _, cx| view.ensure_loaded(cx))),
+    fn overview(&self, cx: &mut Context<Self>) -> SettingGroup {
+        SettingGroup::new()
+            .item(
+                self.render_field(
+                    t("settings.models.defaultModel"),
+                    t("native.settings.defaultModelHint"),
+                    |view, cx| view.default_model_button(cx),
+                    cx,
                 )
-            })
-            .into_any_element()
+                .keywords([t("settings.sections.ai")]),
+            )
+            .item(
+                self.render_field(
+                    t("settings.models.modelProviders"),
+                    t("settings.models.modelProvidersDescription"),
+                    |view, cx| {
+                        Button::new("configure-providers")
+                            .label(t("settings.models.configure"))
+                            .icon(IconName::ChevronRight)
+                            .disabled(view.busy())
+                            .on_click(cx.listener(|view, _, window, cx| {
+                                view.navigate(Page::Providers, window, cx)
+                            }))
+                    },
+                    cx,
+                )
+                .keywords([t("settings.sections.ai")]),
+            )
     }
 
-    fn overview(&self, cx: &mut Context<Self>) -> AnyElement {
-        let mut label = crate::text::t("native.settings.noDefaultModel").into_owned();
+    fn default_model_button(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let mut label = t("native.settings.noDefaultModel").into_owned();
         let mut options = vec![];
         if let Some(catalog) = &self.catalog {
             for provider in &catalog.providers {
@@ -267,133 +249,74 @@ impl SettingsPanel {
             }
         }
         let generation = self.generation;
-        let owner = cx.entity().downgrade();
-        div()
-            .flex()
-            .flex_col()
-            .child(
-                self.render_field(
-                    crate::text::t("settings.models.defaultModel"),
-                    crate::text::t("native.settings.defaultModelHint"),
-                    Button::new("settings-default-model")
-                        .label(label)
-                        .disabled(self.busy() || options.is_empty())
-                        .dropdown_menu(move |mut menu, _, _| {
-                            for (selection, title, enabled) in &options {
-                                let owner = owner.clone();
-                                let selection = selection.clone();
-                                menu = menu.item(
-                                    PopupMenuItem::new(title.clone())
-                                        .disabled(!enabled)
-                                        .on_click(move |_, window, cx| {
-                                            let _ = owner.update(cx, |view, cx| {
-                                                if view.generation == generation {
-                                                    view.set_default(selection.clone(), window, cx);
-                                                }
-                                            });
-                                        }),
-                                );
-                            }
-                            menu
-                        }),
-                    cx,
-                ),
-            )
-            .child(
-                self.render_field(
-                    t("settings.models.modelProviders"),
-                    t("settings.models.modelProvidersDescription"),
-                    Button::new("configure-providers")
-                        .label(t("settings.models.configure"))
-                        .icon(IconName::ChevronRight)
-                        .disabled(self.busy())
-                        .on_click(cx.listener(|view, _, window, cx| {
-                            view.navigate(Page::Providers, window, cx)
-                        })),
-                    cx,
-                ),
-            )
-            .into_any_element()
+        let owner = cx.weak_entity();
+        Button::new("settings-default-model")
+            .label(label)
+            .disabled(self.busy() || options.is_empty())
+            .dropdown_menu(move |mut menu, _, _| {
+                for (selection, title, enabled) in &options {
+                    let owner = owner.clone();
+                    let selection = selection.clone();
+                    menu = menu.item(
+                        PopupMenuItem::new(title.clone())
+                            .disabled(!enabled)
+                            .on_click(move |_, window, cx| {
+                                if let Err(error) = owner.update(cx, |view, cx| {
+                                    if view.generation == generation {
+                                        view.set_default(selection.clone(), window, cx);
+                                    }
+                                }) {
+                                    tracing::debug!(%error, "Settings view closed");
+                                }
+                            }),
+                    );
+                }
+                menu
+            })
     }
 
-    fn providers(&self, cx: &mut Context<Self>) -> AnyElement {
-        let mut content = div()
-            .flex()
-            .flex_col()
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded_lg()
-            .overflow_hidden();
+    fn providers(&self, cx: &mut Context<Self>) -> SettingGroup {
+        let mut group = SettingGroup::new();
         let Some(catalog) = &self.catalog else {
-            return content.into_any_element();
+            return group;
         };
         if catalog.providers.is_empty() {
-            content = content.child(
-                div()
-                    .py_8()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(crate::text::t("native.settings.providersEmpty")),
+            group = group.item(
+                SettingItem::render(|_, _, _| t("native.settings.providersEmpty"))
+                    .keywords([t("settings.sections.ai"), t("settings.models.providers")]),
             );
         }
         for provider in &catalog.providers {
             let id = provider.config.id.clone();
-            let label = provider_name(&provider.config);
             let info = crate::text::format(
                 "native.settings.providerSummary",
                 &[
                     ("value0", provider.config.models.len().to_string()),
                     (
                         "value1",
-                        (if provider.config.authentication == LanguageModelAuthentication::None {
-                            crate::text::t("settings.models.noAuthentication")
-                        } else if provider.has_api_key {
-                            crate::text::t("native.settings.credentialsSaved")
-                        } else {
-                            crate::text::t("native.settings.credentialsRequired")
-                        })
+                        t(
+                            if provider.config.authentication == LanguageModelAuthentication::None {
+                                "settings.models.noAuthentication"
+                            } else if provider.has_api_key {
+                                "native.settings.credentialsSaved"
+                            } else {
+                                "native.settings.credentialsRequired"
+                            },
+                        )
                         .to_string(),
                     ),
                 ],
             );
-            content = content.child(
-                div()
-                    .p_4()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(div().text_sm().truncate().child(label))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .flex()
-                                    .flex_wrap()
-                                    .gap_2()
-                                    .child(provider.config.name.clone())
-                                    .child(info),
-                            ),
-                    )
-                    .child(
-                        Button::new(gpui_kit::SharedString::from(format!(
-                            "provider-edit-{}",
-                            provider.config.id
-                        )))
-                        .small()
-                        .ghost()
-                        .label(crate::text::t("detail.constantValue.edit"))
-                        .disabled(self.busy())
-                        .on_click(cx.listener(
-                            move |view, _, window, cx| {
+            group = group.item(
+                self.render_field(
+                    provider_name(&provider.config),
+                    info,
+                    move |view, cx| {
+                        let id = id.clone();
+                        Button::new(gpui_kit::SharedString::from(format!("provider-edit-{id}")))
+                            .label(t("detail.constantValue.edit"))
+                            .disabled(view.busy())
+                            .on_click(cx.listener(move |view, _, window, cx| {
                                 let provider = view
                                     .catalog
                                     .as_ref()
@@ -407,11 +330,26 @@ impl SettingsPanel {
                                 if let Some(provider) = provider {
                                     view.edit_provider(Some(provider), None, window, cx);
                                 }
-                            },
-                        )),
-                    ),
+                            }))
+                    },
+                    cx,
+                )
+                .keywords([t("settings.sections.ai"), t("settings.models.providers")]),
             );
         }
-        content.into_any_element()
+        group
     }
+}
+
+fn category_header(key: &'static str) -> SettingGroup {
+    SettingGroup::new().item(
+        SettingItem::render(move |_, _, _| {
+            breadcrumb_row().child(Breadcrumb::new().child(BreadcrumbItem::new(t(key))))
+        })
+        .keywords([t(key)]),
+    )
+}
+
+fn breadcrumb_row() -> gpui_kit::Div {
+    div().w_full().min_w_0().h_8().flex().items_center().gap_3()
 }

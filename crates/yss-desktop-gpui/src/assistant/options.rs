@@ -36,6 +36,15 @@ impl ConversationPanel {
 
     pub(super) fn reconcile_effort(&mut self) {
         if self.catalog.is_some()
+            && let Some(selection) = self.selection()
+            && let Some(effort) = self.preferred_effort.take()
+        {
+            self.options.reasoning_effort = self
+                .model_config(&selection)
+                .filter(|(_, model)| model.reasoning_efforts.contains(&effort))
+                .map(|_| effort);
+        }
+        if self.catalog.is_some()
             && self
                 .options
                 .reasoning_effort
@@ -46,6 +55,7 @@ impl ConversationPanel {
     }
 
     fn set_effort(&mut self, effort: Option<ReasoningEffort>, cx: &mut Context<Self>) {
+        self.preferred_effort = None;
         let (choices, default) = self.effort_choices();
         if effort.is_some_and(|effort| !choices.contains(&effort)) {
             return;

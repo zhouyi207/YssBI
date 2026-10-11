@@ -113,6 +113,9 @@ impl Workbench {
     }
 
     pub(super) fn install_default_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let defaults = &crate::preferences::current(cx).workspace;
+        let show_details = defaults.show_details;
+        let show_bottom = defaults.show_bottom_panel;
         let right = DockLayout::tabs().panel_view(panel_handle(self.details.clone()), cx);
         let bottom = DockLayout::tabs()
             .panel_view(panel_handle(self.problems.clone()), cx)
@@ -126,10 +129,10 @@ impl Workbench {
             dock.set_dock_size(DockPlacement::Right, gpui_kit::px(300.), window, cx);
             dock.set_dock(DockPlacement::Bottom, bottom, window, cx);
             dock.set_dock_size(DockPlacement::Bottom, gpui_kit::px(220.), window, cx);
-            if !dock.is_dock_open(DockPlacement::Right) {
+            if dock.is_dock_open(DockPlacement::Right) != show_details {
                 dock.toggle_dock(DockPlacement::Right, window, cx);
             }
-            if dock.is_dock_open(DockPlacement::Bottom) {
+            if dock.is_dock_open(DockPlacement::Bottom) != show_bottom {
                 dock.toggle_dock(DockPlacement::Bottom, window, cx);
             }
         });
@@ -206,6 +209,8 @@ impl Workbench {
         let identity = project.identity.clone();
         let expected = identity.clone();
         let lifecycle = self.lifecycle;
+        let restore_enabled = crate::preferences::current(cx).workspace.restore_layout;
+        let page_size = crate::preferences::current(cx).tables.page_size;
         self.busy = true;
         self.restoring_layout = true;
         self.layout_root = None;
@@ -215,17 +220,21 @@ impl Workbench {
                 .application
                 .query_project_path(identity.clone())?
                 .ok_or_else(|| anyhow::anyhow!("project root unavailable"))?;
-            let layout = match owner.layouts.read(&root) {
-                Ok(layout) => layout,
-                Err(_) => {
-                    tracing::warn!(
-                        code = "native_layout_load_failed",
-                        "Native layout could not be read"
-                    );
-                    None
+            let (layout, layout_failed) = if restore_enabled {
+                match owner.layouts.read(&root) {
+                    Ok(layout) => (layout, false),
+                    Err(_) => {
+                        tracing::warn!(
+                            code = "native_layout_load_failed",
+                            "Native layout could not be read"
+                        );
+                        (None, true)
+                    }
                 }
+            } else {
+                (None, false)
             };
-            let viewport_failed = owner.layouts.load_viewports(&root).is_err();
+            let viewport_failed = restore_enabled && owner.layouts.load_viewports(&root).is_err();
             if viewport_failed {
                 tracing::warn!(
                     code = "native_viewport_load_failed",
@@ -269,6 +278,7 @@ impl Workbench {
                         entry.id.clone(),
                         entry.revision,
                         0,
+                        page_size,
                         None,
                     )
                 {
@@ -317,6 +327,7 @@ impl Workbench {
             services.application.query_project_path(identity)?;
             Ok((
                 root,
+                layout_failed,
                 viewport_failed,
                 layout,
                 documents,
@@ -345,6 +356,7 @@ impl Workbench {
                 match result {
                     Ok((
                         root,
+                        layout_failed,
                         viewport_failed,
                         layout,
                         documents,
@@ -354,7 +366,14 @@ impl Workbench {
                         conversations,
                         assistant,
                     )) => {
-                        view.layout_root = Some(root);
+                        // A clean session must not erase the saved topology or seed
+                        // canvases from same-process retained viewport checkpoints.
+                        view.layout_root = restore_enabled.then_some(root);
+                        if layout_failed {
+                            view.error = Some(crate::text::translate(
+                                "native.workbench.layoutRestoreFailed",
+                            ));
+                        }
                         if viewport_failed {
                             view.error =
                                 Some(crate::text::translate("native.canvas.viewportLoadFailed"));
@@ -386,20 +405,26 @@ impl Workbench {
                             view.install_conversation(session, window, cx);
                         }
                         view.register_layout_panels(cx);
-                        let restored = layout.is_some();
-                        if let Some(layout) = layout {
-                            view.dock.update(cx, |dock, cx| {
-                                if dock.load(layout, window, cx).is_err() {
-                                    tracing::warn!(
-                                        code = "native_layout_install_failed",
-                                        "Native layout could not be installed"
-                                    );
-                                }
-                                cx.notify();
-                            });
-                        }
-                        view.dock
-                            .update(cx, |dock, cx| columns::restore(dock, window, cx));
+                        let restored = if let Some(layout) = layout {
+                            let loaded = view
+                                .dock
+                                .update(cx, |dock, cx| dock.load(layout, window, cx));
+                            if loaded.is_err() {
+                                view.install_default_layout(window, cx);
+                                view.install_activity(window, cx);
+                                view.error = Some(crate::text::translate(
+                                    "native.workbench.layoutRestoreFailed",
+                                ));
+                            }
+                            loaded.is_ok()
+                        } else {
+                            false
+                        };
+                        // Restored conversation groups are user topology too; do not
+                        // consolidate them into the default column on every restart.
+                        view.dock.update(cx, |dock, cx| {
+                            columns::maintain_editor_space(dock, window, cx)
+                        });
                         view.restoring_layout = false;
                         drop(openings);
                         let path = initial_resource.or_else(|| {

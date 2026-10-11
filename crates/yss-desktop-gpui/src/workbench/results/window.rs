@@ -97,6 +97,7 @@ impl Workbench {
                     ..TitleBar::window_options()
                 },
                 move |window, cx| {
+                    crate::appearance::install(window, cx);
                     panel.update(cx, |panel, cx| {
                         panel.load_retained(Some(handoff), window, cx);
                     });

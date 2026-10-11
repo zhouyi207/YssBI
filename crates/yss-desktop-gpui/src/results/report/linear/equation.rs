@@ -4,9 +4,8 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Selectable, Sizable,
     button::{Button, ButtonVariants},
-    table::DataTable,
 };
-use gpui_kit::{Div, div, prelude::*, px};
+use gpui_kit::{Div, div, prelude::*};
 use yss_application::graph::results::report::coefficients::RegressionCoefficient;
 
 pub(super) struct EquationData {
@@ -159,8 +158,11 @@ impl LinearReport {
                     )
                     .child(
                         div()
-                            .h(px((equation.mappings.len().min(6) as f32 + 1.) * 32. + 20.))
-                            .child(DataTable::new(table).small().stripe(true)),
+                            .h(crate::results::table::height(
+                                equation.mappings.len().min(6),
+                                cx,
+                            ))
+                            .child(crate::results::table::present(table, cx)),
                     )
                 })
             })

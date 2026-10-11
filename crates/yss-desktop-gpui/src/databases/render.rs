@@ -1,5 +1,5 @@
 use super::{ClearDatabaseSelection, CopyDatabaseSelection, DatabaseEditor, SelectDatabasePage};
-use gpui_kit::component::{ActiveTheme, Sizable, table::DataTable};
+use gpui_kit::component::ActiveTheme;
 use gpui_kit::{Context, IntoElement, MouseButton, Render, Window, div, prelude::*};
 impl Render for DatabaseEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -37,7 +37,7 @@ impl Render for DatabaseEditor {
                     .min_h_0()
                     .relative()
                     .overflow_hidden()
-                    .child(DataTable::new(&self.grid).small().stripe(true))
+                    .child(crate::results::table::present(&self.grid, cx))
                     .when(busy || !self.ready, |view| {
                         view.child(
                             div()

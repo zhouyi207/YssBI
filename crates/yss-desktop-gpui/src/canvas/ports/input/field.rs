@@ -1,5 +1,5 @@
 //! A port's uncommitted text belongs to its native input, independently of graph decoration.
-use gpui_kit::component::input::InputState;
+use gpui_kit::component::{ActiveTheme, input::InputState};
 use gpui_kit::{App, Entity, Focusable, Pixels, Subscription, TextRun, Window, px};
 use serde_json::Value;
 use yss_data_contract::SemanticType;
@@ -58,10 +58,10 @@ impl Field {
         self.dirty = false;
         self.pending = None;
         self.error = None;
-        self.measure(window, cx);
+        self.measure(window.text_system(), cx);
     }
 
-    pub fn measure(&mut self, window: &Window, cx: &App) {
+    pub fn measure(&mut self, text_system: &gpui_kit::WindowTextSystem, cx: &App) {
         let value = self.input.read(cx).value();
         let value = if value.is_empty() {
             self.input.read(cx).presentation().placeholder().clone()
@@ -75,13 +75,13 @@ impl Field {
             .chars()
             .take(32)
             .collect::<String>();
-        let line = window.text_system().shape_line(
+        let line = text_system.shape_line(
             text.clone().into(),
             px(10.),
             &[TextRun {
                 len: text.len(),
-                font: window.text_style().font(),
-                color: gpui_kit::rgb(crate::appearance::TEXT).into(),
+                font: gpui_kit::font(cx.theme().font_family.clone()),
+                color: cx.theme().foreground,
                 background_color: None,
                 underline: None,
                 strikethrough: None,

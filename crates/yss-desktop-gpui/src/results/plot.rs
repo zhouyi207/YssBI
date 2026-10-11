@@ -18,7 +18,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants},
     switch::Switch,
 };
-use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*, px};
+use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*};
 use std::sync::Arc;
 use yss_application::graph::results::plot::{PlotAnnotation, PlotMetadata, ResultPlotProjection};
 use yss_graph_execution::plan::PlotDataKind;

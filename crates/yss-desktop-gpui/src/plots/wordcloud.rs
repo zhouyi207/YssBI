@@ -78,6 +78,7 @@ impl Plot for WordCloud {
             if cached.as_ref().is_none_or(|layout| {
                 layout.size != bounds.size
                     || layout.font != font
+                    || layout.rem_size != window.rem_size()
                     || !Arc::ptr_eq(&layout.data, &self.data)
             }) {
                 *cached = Some(Arc::new(Layout::new(
@@ -100,12 +101,13 @@ impl Plot for WordCloud {
             return;
         };
         let palette = [
-            cx.theme().primary,
-            cx.theme().yellow,
-            cx.theme().green,
-            cx.theme().magenta,
-            cx.theme().cyan,
+            cx.theme().chart_1,
+            cx.theme().chart_2,
+            cx.theme().chart_3,
+            cx.theme().chart_4,
+            cx.theme().chart_5,
         ];
+        let unit = window.rem_size() / 14.;
         window.with_content_mask(Some(gpui_kit::ContentMask { bounds }), |window| {
             for (i, placed) in layout.placed.iter().enumerate() {
                 let word = &self.data.words[placed.index];
@@ -117,8 +119,8 @@ impl Plot for WordCloud {
                     window,
                 );
                 let _ = line.paint(
-                    bounds.origin + placed.bounds.origin + point(px(4.), px(2.)),
-                    placed.bounds.size.height - px(4.),
+                    bounds.origin + placed.bounds.origin + point(unit * 4., unit * 2.),
+                    placed.bounds.size.height - unit * 4.,
                     TextAlign::Left,
                     None,
                     window,
@@ -136,17 +138,17 @@ impl Plot for WordCloud {
             .into();
             let information = truncate_text_to_width(
                 &information,
-                px(11.),
-                bounds.size.width.as_f32() - 8.,
+                unit * 11.,
+                (bounds.size.width - unit * 8.).as_f32(),
                 window,
             );
             PlotLabel::new(vec![
                 Text::new(
                     information,
-                    point(px(4.), px(0.)),
+                    point(unit * 4., px(0.)),
                     cx.theme().muted_foreground,
                 )
-                .font_size(px(11.)),
+                .font_size(unit * 11.),
             ])
             .paint(&bounds, window, cx);
         });

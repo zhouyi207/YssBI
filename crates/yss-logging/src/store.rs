@@ -7,6 +7,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sqlx::{ConnectOptions, Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 
+use crate::retention::{self, LogRetentionPolicy, RetentionOutcome};
 use crate::{LogLevel, LogOrigin, LogRecordDto};
 
 pub const LOG_DATABASE_NAME: &str = "logs.sqlite";
@@ -61,6 +62,8 @@ pub enum LogStoreError {
     InvalidQuery,
     #[error("log sequence is outside the supported range")]
     InvalidSequence,
+    #[error("log retention policy is invalid")]
+    InvalidRetention,
     #[error("log storage is unavailable")]
     Unavailable,
 }
@@ -76,6 +79,8 @@ pub(crate) struct LogStore {
     connection: Option<SqliteConnection>,
     runtime: tokio::runtime::Runtime,
     stream_id: String,
+    latest_sequence: u64,
+    retention: LogRetentionPolicy,
 }
 
 impl LogStore {
@@ -96,7 +101,7 @@ impl LogStore {
             .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
             .busy_timeout(Duration::from_secs(2))
             .disable_statement_logging();
-        let (connection, stream_id) = runtime.block_on(async {
+        let (connection, stream_id, latest_sequence) = runtime.block_on(async {
             let mut connection = SqliteConnection::connect_with(&options).await?;
             sqlx::raw_sql(
                 "CREATE TABLE IF NOT EXISTS tracing_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -107,19 +112,47 @@ impl LogStore {
                     fields TEXT NOT NULL
                  );
                  CREATE INDEX IF NOT EXISTS logs_level_sequence ON logs(level, sequence);
-                 CREATE INDEX IF NOT EXISTS logs_origin_sequence ON logs(origin, sequence);"
+                 CREATE INDEX IF NOT EXISTS logs_origin_sequence ON logs(origin, sequence);
+                 CREATE INDEX IF NOT EXISTS logs_timestamp_sequence ON logs(timestamp, sequence);
+                 INSERT OR IGNORE INTO tracing_meta(key,value)
+                    SELECT 'latest_sequence', CAST(COALESCE(MAX(sequence),0) AS TEXT) FROM logs;"
             ).execute(&mut connection).await?;
             sqlx::query("INSERT OR IGNORE INTO tracing_meta(key,value) VALUES ('stream_id',?)")
                 .bind(uuid::Uuid::new_v4().to_string()).execute(&mut connection).await?;
             let stream_id: String = sqlx::query_scalar("SELECT value FROM tracing_meta WHERE key='stream_id'")
                 .fetch_one(&mut connection).await?;
-            Ok::<_, sqlx::Error>((connection, stream_id))
+            let latest_sequence: i64 = sqlx::query_scalar("SELECT CAST(value AS INTEGER) FROM tracing_meta WHERE key='latest_sequence'")
+                .fetch_one(&mut connection).await?;
+            Ok::<_, sqlx::Error>((connection, stream_id, latest_sequence as u64))
         })?;
         Ok(Self {
             connection: Some(connection),
             runtime,
             stream_id,
+            latest_sequence,
+            retention: LogRetentionPolicy::default(),
         })
+    }
+
+    pub(crate) fn set_retention(
+        &mut self,
+        policy: LogRetentionPolicy,
+    ) -> Result<(), LogStoreError> {
+        if policy.is_enabled() {
+            let connection = self.connection.as_mut().ok_or(LogStoreError::Unavailable)?;
+            self.runtime.block_on(retention::prepare(connection))?;
+        }
+        self.retention = policy;
+        Ok(())
+    }
+
+    pub(crate) fn maintain(
+        &mut self,
+        now: chrono::NaiveDateTime,
+    ) -> Result<RetentionOutcome, LogStoreError> {
+        let connection = self.connection.as_mut().ok_or(LogStoreError::Unavailable)?;
+        self.runtime
+            .block_on(retention::maintain(connection, self.retention, now))
     }
 
     pub(crate) fn snapshot(&mut self, capacity: usize) -> Result<StoredSnapshot, LogStoreError> {
@@ -127,15 +160,21 @@ impl LogStore {
         let mut rows = self.runtime.block_on(
             sqlx::query("SELECT * FROM logs ORDER BY sequence DESC LIMIT ?")
                 .bind((capacity + 1) as i64)
-                .fetch_all(connection),
+                .fetch_all(&mut *connection),
         )?;
-        let truncated = rows.len() > capacity;
+        let evicted: bool = self.runtime.block_on(
+            sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM tracing_meta WHERE key='retention_evicted')",
+            )
+            .fetch_one(&mut *connection),
+        )?;
+        let truncated = rows.len() > capacity || evicted;
         rows.truncate(capacity);
         let mut entries = rows
             .into_iter()
             .map(decode_record)
             .collect::<Result<Vec<_>, _>>()?;
-        let latest_sequence = entries.first().map_or(0, |entry| entry.sequence);
+        let latest_sequence = self.latest_sequence;
         entries.reverse();
         Ok(StoredSnapshot {
             stream_id: self.stream_id.clone(),
@@ -151,7 +190,15 @@ impl LogStore {
         }
         if entries
             .iter()
-            .any(|entry| entry.sequence > MAX_SAFE_SEQUENCE || entry.stream_id != self.stream_id)
+            .scan(self.latest_sequence, |previous, entry| {
+                let invalid = entry.sequence <= *previous;
+                *previous = entry.sequence;
+                Some(invalid)
+            })
+            .any(|invalid| invalid)
+            || entries.iter().any(|entry| {
+                entry.sequence > MAX_SAFE_SEQUENCE || entry.stream_id != self.stream_id
+            })
         {
             return Err(LogStoreError::InvalidSequence);
         }
@@ -166,9 +213,15 @@ impl LogStore {
                     .bind(serde_json::to_string(&entry.fields)?)
                     .execute(&mut *transaction).await?;
             }
+            sqlx::query("UPDATE tracing_meta SET value=? WHERE key='latest_sequence'")
+                .bind(entries.last().unwrap().sequence.to_string())
+                .execute(&mut *transaction)
+                .await?;
             transaction.commit().await?;
-            Ok(())
-        })
+            Ok::<_, LogStoreError>(())
+        })?;
+        self.latest_sequence = entries.last().unwrap().sequence;
+        Ok(())
     }
 
     pub fn query(&mut self, query: LogQuery) -> Result<LogPage, LogStoreError> {
@@ -208,11 +261,9 @@ impl LogStore {
     pub fn statistics(&mut self) -> Result<LogStatistics, LogStoreError> {
         let connection = self.connection.as_mut().ok_or(LogStoreError::Unavailable)?;
         self.runtime.block_on(async {
-            let summary = sqlx::query(
-                "SELECT COUNT(*) AS total, COALESCE(MAX(sequence),0) AS latest FROM logs",
-            )
-            .fetch_one(&mut *connection)
-            .await?;
+            let summary = sqlx::query("SELECT COUNT(*) AS total FROM logs")
+                .fetch_one(&mut *connection)
+                .await?;
             let levels = sqlx::query("SELECT level, COUNT(*) AS count FROM logs GROUP BY level")
                 .fetch_all(&mut *connection)
                 .await?;
@@ -221,7 +272,7 @@ impl LogStore {
                 .await?;
             Ok(LogStatistics {
                 total: summary.try_get::<i64, _>("total")? as u64,
-                latest_sequence: summary.try_get::<i64, _>("latest")? as u64,
+                latest_sequence: self.latest_sequence,
                 by_level: levels
                     .into_iter()
                     .map(|row| {

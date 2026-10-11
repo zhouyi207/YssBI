@@ -39,6 +39,7 @@ impl Workbench {
                 ..TitleBar::window_options()
             },
             move |window, cx| {
+                crate::appearance::install(window, cx);
                 let panel = cx.new(|cx| LogsPanel::new(services, window, cx));
                 window.focus(&panel.read(cx).focus_handle(cx), cx);
                 let view = cx.new(|_| LogsWindow { panel });

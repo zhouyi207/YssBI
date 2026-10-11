@@ -2,8 +2,8 @@ mod menu;
 pub(super) mod summary;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{Icon, tooltip::Tooltip};
-use gpui_kit::{Context, IntoElement, MouseButton, div, point, prelude::*, px, rgb};
+use gpui_kit::component::{ActiveTheme, Icon, tooltip::Tooltip};
+use gpui_kit::{App, Context, IntoElement, MouseButton, div, point, prelude::*, px};
 use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorNodeModel};
 use yss_node_protocol::PortDirection;
 
@@ -12,7 +12,7 @@ use super::{
     geometry::{self, NodeLayout},
     presentation::{NodeAppearance, State},
 };
-use crate::{appearance, text};
+use crate::text;
 
 impl GraphCanvas {
     pub(super) fn render_node(
@@ -32,11 +32,11 @@ impl GraphCanvas {
             .unwrap_or_default();
         let selected = self.selected.contains(&id);
         let border = if selected {
-            appearance::BLUE
+            cx.theme().primary
         } else if display.state == State::Unexecuted {
-            appearance::BORDER_STRONG
+            cx.theme().input
         } else {
-            display.state.color()
+            display.state.color(cx)
         };
         let inputs = node
             .ports
@@ -65,12 +65,12 @@ impl GraphCanvas {
             .h(px(layout.height * self.zoom))
             .rounded(px(4. * self.zoom))
             .border_1()
-            .border_color(rgb(border))
+            .border_color(border)
             .when(
                 matches!(display.state, State::Unexecuted | State::Stale),
                 |view| view.border_dashed(),
             )
-            .bg(rgb(appearance::SURFACE))
+            .bg(cx.theme().background)
             .opacity(if dimmed { 0.35 } else { 1. })
             .on_mouse_down(
                 MouseButton::Left,
@@ -90,7 +90,7 @@ impl GraphCanvas {
                             .absolute()
                             .size_full()
                             .rounded(px(4. * self.zoom))
-                            .bg(rgb(display.state.color()).opacity(0.07)),
+                            .bg(display.state.color(cx).opacity(0.07)),
                     )
                 },
             )
@@ -101,12 +101,12 @@ impl GraphCanvas {
                         .inset(px(3. * self.zoom))
                         .rounded(px(2. * self.zoom))
                         .border_1()
-                        .border_color(rgb(appearance::GREEN)),
+                        .border_color(cx.theme().success),
                 )
             })
             .when(!layout.compact, |view| {
-                view.child(self.render_node_header(node))
-                    .child(self.render_node_parameters(id))
+                view.child(self.render_node_header(node, cx))
+                    .child(self.render_node_parameters(id, cx))
             })
             .when(layout.compact, |view| {
                 view.child(
@@ -117,7 +117,7 @@ impl GraphCanvas {
                         .size(px(8. * self.zoom))
                         .rounded_full()
                         .border_1()
-                        .border_color(rgb(appearance::MUTED)),
+                        .border_color(cx.theme().muted_foreground),
                 )
             })
             .children((0..inputs.len().max(outputs.len())).map(|index| {
@@ -159,13 +159,13 @@ impl GraphCanvas {
                             ),
                     )
             }))
-            .child(self.render_node_badge(display, primary))
+            .child(self.render_node_badge(display, primary, cx))
             .when(display.state != State::Error, |view| {
                 view.children(primary.map(|diagnostic| {
                     let color = match diagnostic.severity {
-                        EditorDiagnosticSeverity::Error => appearance::RED,
-                        EditorDiagnosticSeverity::Warning => appearance::AMBER,
-                        EditorDiagnosticSeverity::Information => appearance::BLUE,
+                        EditorDiagnosticSeverity::Error => cx.theme().danger,
+                        EditorDiagnosticSeverity::Warning => cx.theme().warning,
+                        EditorDiagnosticSeverity::Information => cx.theme().primary,
                     };
                     let diagnostic = diagnostic.clone();
                     div()
@@ -175,7 +175,7 @@ impl GraphCanvas {
                         .top(px(-5. * self.zoom))
                         .size(px(10. * self.zoom))
                         .rounded_full()
-                        .bg(rgb(color))
+                        .bg(color)
                         .tooltip(move |window, cx| {
                             Tooltip::new(text::graph_diagnostic(&diagnostic)).build(window, cx)
                         })
@@ -183,7 +183,7 @@ impl GraphCanvas {
             })
     }
 
-    fn render_node_header(&self, node: &EditorNodeModel) -> impl IntoElement + use<> {
+    fn render_node_header(&self, node: &EditorNodeModel, cx: &App) -> impl IntoElement + use<> {
         div()
             .h(px(geometry::TITLE_HEIGHT * self.zoom))
             .px(px(12. * self.zoom))
@@ -191,9 +191,9 @@ impl GraphCanvas {
             .items_center()
             .gap(px(8. * self.zoom))
             .rounded_t(px(4. * self.zoom))
-            .bg(rgb(appearance::SURFACE_RAISED))
+            .bg(cx.theme().muted)
             .border_b_1()
-            .border_color(rgb(appearance::BORDER))
+            .border_color(cx.theme().border)
             .text_size(px(13. * self.zoom))
             .font_weight(gpui_kit::FontWeight::MEDIUM)
             .child(
@@ -209,19 +209,23 @@ impl GraphCanvas {
                         .max_w(px(120. * self.zoom))
                         .truncate()
                         .text_size(px(11. * self.zoom))
-                        .text_color(rgb(appearance::MUTED))
+                        .text_color(cx.theme().muted_foreground)
                         .child(label.to_string()),
                 )
             })
     }
 
-    fn render_node_parameters(&self, id: yss_graph_document::NodeId) -> impl IntoElement + use<> {
+    fn render_node_parameters(
+        &self,
+        id: yss_graph_document::NodeId,
+        cx: &App,
+    ) -> impl IntoElement + use<> {
         let rows = self.node_contents.rows(id);
         div().when(!rows.is_empty(), |view| {
             view.py(px(6. * self.zoom))
                 .px(px(8. * self.zoom))
                 .border_b_1()
-                .border_color(rgb(appearance::BORDER))
+                .border_color(cx.theme().border)
                 .children(rows.iter().map(|row| {
                     div()
                         .h(px(geometry::PARAMETER_HEIGHT * self.zoom))
@@ -234,7 +238,7 @@ impl GraphCanvas {
                             div()
                                 .max_w(px(130. * self.zoom))
                                 .truncate()
-                                .text_color(rgb(appearance::MUTED))
+                                .text_color(cx.theme().muted_foreground)
                                 .child(row.value.clone()),
                         )
                 }))
@@ -245,6 +249,7 @@ impl GraphCanvas {
         &self,
         display: NodeAppearance,
         diagnostic: Option<&yss_graph_editor::projection::EditorDiagnosticModel>,
+        cx: &App,
     ) -> impl IntoElement + use<> {
         let icon = match display.state {
             State::Unexecuted => IconName::CircleDashed,
@@ -269,18 +274,18 @@ impl GraphCanvas {
             .py(px(self.zoom))
             .rounded(px(4. * self.zoom))
             .border_1()
-            .border_color(rgb(appearance::BORDER_STRONG))
-            .bg(rgb(appearance::SURFACE))
+            .border_color(cx.theme().input)
+            .bg(cx.theme().background)
             .text_size(px(10. * self.zoom))
             .child(
                 Icon::new(icon)
                     .size(px(12. * self.zoom))
-                    .text_color(rgb(display.state.color())),
+                    .text_color(display.state.color(cx)),
             )
             .when(display.cache.total > 0, |view| {
                 view.child(
                     div()
-                        .text_color(rgb(display.cache.state().color()))
+                        .text_color(display.cache.state().color(cx))
                         .child(format!("{}/{}", display.cache.valid, display.cache.total)),
                 )
             })

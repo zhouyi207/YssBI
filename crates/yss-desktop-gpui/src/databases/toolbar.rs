@@ -1,5 +1,5 @@
 //! Controls and counters are derived from the accepted page, not a second pagination model.
-use super::{DatabaseEditor, query::PAGE_ROWS};
+use super::DatabaseEditor;
 use crate::text::translate as t;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
@@ -15,10 +15,14 @@ impl DatabaseEditor {
         let rows = self.meta.as_ref().map_or(0, |meta| meta.row_count);
         let columns = self.meta.as_ref().map_or(0, |meta| meta.column_count);
         let grid = self.grid.read(cx).delegate();
-        let page_start = if rows == 0 { 0 } else { grid.offset + 1 };
+        let page_start = if grid.rows.row_count() == 0 {
+            0
+        } else {
+            grid.offset + 1
+        };
         let page_end = (grid.offset + grid.rows.row_count()).min(rows);
-        let page = grid.offset / PAGE_ROWS + 1;
-        let page_count = rows.div_ceil(PAGE_ROWS).max(1);
+        let page = grid.offset / self.page_size + 1;
+        let page_count = rows.div_ceil(self.page_size).max(1);
         let fetch_time = grid
             .fetch_time
             .map(|time| {

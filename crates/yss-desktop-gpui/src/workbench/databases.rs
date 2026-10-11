@@ -62,6 +62,7 @@ impl Workbench {
         let expected = identity.clone();
         let lifecycle = self.lifecycle;
         let read_entry = entry.clone();
+        let page_size = crate::preferences::current(cx).tables.page_size;
         let task = self.services.run(move |services| {
             query::read(
                 services,
@@ -69,6 +70,7 @@ impl Workbench {
                 read_entry.id,
                 read_entry.revision,
                 0,
+                page_size,
                 None,
             )
         });
@@ -89,6 +91,10 @@ impl Workbench {
                         .as_deref()
                         .is_some_and(|id| !view.is_current_intent(id))
                     {
+                        return;
+                    }
+                    if page_size != crate::preferences::current(cx).tables.page_size {
+                        view.open_database(entry.id, intent, window, cx);
                         return;
                     }
                     if view.project.as_ref().is_none_or(|project| {

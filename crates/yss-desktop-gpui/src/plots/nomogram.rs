@@ -45,19 +45,28 @@ impl Plot for Nomogram {
         Some(self.id.clone().into())
     }
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
-        let span = bounds.size.width - px(80.);
+        let unit = window.rem_size() / 14.;
+        let span = bounds.size.width - unit * 80.;
         if span <= px(0.) {
             return;
         }
         let mut labels = Vec::new();
         for (row, axis) in self.data.axes.iter().enumerate() {
-            let y = px(row as f32 * 82. + 40.);
-            let x = |position: f64| px(40.) + span * position as f32;
-            let title =
-                truncate_text_to_width(&axis.label.clone().into(), px(12.), span.as_f32(), window);
+            let y = unit * (row as f32 * 82. + 40.);
+            let x = |position: f64| unit * 40. + span * position as f32;
+            let title = truncate_text_to_width(
+                &axis.label.clone().into(),
+                unit * 12.,
+                span.as_f32(),
+                window,
+            );
             labels.push(
-                Text::new(title, point(px(40.), y - px(22.)), cx.theme().foreground)
-                    .font_size(px(12.)),
+                Text::new(
+                    title,
+                    point(unit * 40., y - unit * 22.),
+                    cx.theme().foreground,
+                )
+                .font_size(unit * 12.),
             );
             if let (Some(first), Some(last)) = (axis.ticks.first(), axis.ticks.last()) {
                 frame::line(
@@ -72,8 +81,8 @@ impl Plot for Nomogram {
             for tick in &axis.ticks {
                 let position = x(tick.position);
                 frame::line(
-                    bounds.origin + point(position, y - px(4.)),
-                    bounds.origin + point(position, y + px(5.)),
+                    bounds.origin + point(position, y - unit * 4.),
+                    bounds.origin + point(position, y + unit * 5.),
                     1.,
                     if row == 0 {
                         cx.theme().primary
@@ -82,13 +91,14 @@ impl Plot for Nomogram {
                     },
                     window,
                 );
-                if position.as_f32() - previous >= 60. {
+                if position.as_f32() - previous >= (unit * 60.).as_f32() {
                     labels.push(
                         Text::new(
                             tick.label.clone(),
-                            point(position, y + px(10.)),
+                            point(position, y + unit * 10.),
                             cx.theme().muted_foreground,
                         )
+                        .font_size(unit * 10.)
                         .align(TextAlign::Center),
                     );
                     previous = position.as_f32();
@@ -101,22 +111,23 @@ impl Plot for Nomogram {
         &self,
         p: Point<Pixels>,
         bounds: Bounds<Pixels>,
-        _: &App,
+        cx: &App,
     ) -> Option<TooltipState> {
-        let row = (p.y.as_f32() / 82.) as usize;
+        let unit = cx.theme().font_size / 14.;
+        let row = (p.y / (unit * 82.)) as usize;
         let axis = self.data.axes.get(row)?;
-        let span = bounds.size.width - px(80.);
+        let span = bounds.size.width - unit * 80.;
         let (index, tick) = axis.ticks.iter().enumerate().min_by(|a, b| {
-            (px(40.) + span * a.1.position as f32 - p.x)
+            (unit * 40. + span * a.1.position as f32 - p.x)
                 .abs()
-                .partial_cmp(&(px(40.) + span * b.1.position as f32 - p.x).abs())
+                .partial_cmp(&(unit * 40. + span * b.1.position as f32 - p.x).abs())
                 .unwrap_or(std::cmp::Ordering::Equal)
         })?;
         let target = point(
-            px(40.) + span * tick.position as f32,
-            px(row as f32 * 82. + 40.),
+            unit * 40. + span * tick.position as f32,
+            unit * (row as f32 * 82. + 40.),
         );
-        ((target.x - p.x).abs() < px(20.)).then_some(TooltipState::new(
+        ((target.x - p.x).abs() < unit * 20.).then_some(TooltipState::new(
             self.data.offsets[row] + index,
             target,
             vec![target],

@@ -73,6 +73,7 @@ pub(crate) struct ConversationPanel {
     references: Vec<ProjectResourceRef>,
     resource_catalog: Option<Arc<crate::project::resources::ResourceCatalog>>,
     options: HarnessTurnOptions,
+    preferred_effort: Option<yss_harness_contract::ReasoningEffort>,
     pending: Option<Submission>,
     unsent: Option<DraftMessage>,
     queue: VecDeque<DraftMessage>,
@@ -123,7 +124,27 @@ impl ConversationPanel {
             catalog: None,
             references: vec![],
             resource_catalog: None,
-            options: Default::default(),
+            options: HarnessTurnOptions {
+                mode: match crate::preferences::current(cx).assistant.mode {
+                    yss_settings::AssistantMode::Ask => yss_harness_contract::HarnessMode::Ask,
+                    yss_settings::AssistantMode::Write => yss_harness_contract::HarnessMode::Write,
+                },
+                reasoning_effort: None,
+            },
+            preferred_effort: crate::preferences::current(cx)
+                .assistant
+                .reasoning_effort
+                .map(|effort| match effort {
+                    yss_settings::ReasoningEffort::Low => {
+                        yss_harness_contract::ReasoningEffort::Low
+                    }
+                    yss_settings::ReasoningEffort::Medium => {
+                        yss_harness_contract::ReasoningEffort::Medium
+                    }
+                    yss_settings::ReasoningEffort::High => {
+                        yss_harness_contract::ReasoningEffort::High
+                    }
+                }),
             pending: None,
             unsent: None,
             queue: VecDeque::new(),

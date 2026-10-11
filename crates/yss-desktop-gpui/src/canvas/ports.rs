@@ -7,7 +7,8 @@ mod menu;
 
 use super::{GraphCanvas, presentation::State};
 use crate::appearance;
-use gpui_kit::{Context, IntoElement, MouseButton, div, prelude::*, px, rgb};
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{Context, IntoElement, MouseButton, div, prelude::*, px};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_graph_editor::projection::{
     ConnectionDecision, EditorDiagnosticSeverity, EditorPortModel, EditorPortTypeState,
@@ -82,9 +83,9 @@ impl GraphCanvas {
         let target = drag.is_some_and(|drag| drag.target.as_ref() == Some(&port.address));
         let dimmed = !active && matches!(decision, Some(ConnectionDecision::Invalid { .. }));
         let color = if port.orphan {
-            appearance::RED
+            cx.theme().danger
         } else {
-            type_color(port)
+            appearance::data_color(type_color(port), cx)
         };
         let display = self
             .presentation
@@ -108,22 +109,22 @@ impl GraphCanvas {
             .as_ref()
             .is_some_and(|menu| menu.port.as_ref() == Some(&port.address));
         let ring = if active || menu_open {
-            Some(appearance::BLUE)
+            Some(cx.theme().primary)
         } else {
             match decision {
-                Some(ConnectionDecision::Append) => Some(appearance::GREEN),
-                Some(ConnectionDecision::Replace { .. }) => Some(appearance::AMBER),
-                Some(ConnectionDecision::Invalid { .. }) if target => Some(appearance::RED),
+                Some(ConnectionDecision::Append) => Some(cx.theme().success),
+                Some(ConnectionDecision::Replace { .. }) => Some(cx.theme().warning),
+                Some(ConnectionDecision::Invalid { .. }) if target => Some(cx.theme().danger),
                 _ if diagnostic.is_some() => {
                     diagnostic.map(|diagnostic| match diagnostic.severity {
-                        EditorDiagnosticSeverity::Error => appearance::RED,
-                        EditorDiagnosticSeverity::Warning => appearance::AMBER,
-                        EditorDiagnosticSeverity::Information => appearance::BLUE,
+                        EditorDiagnosticSeverity::Error => cx.theme().danger,
+                        EditorDiagnosticSeverity::Warning => cx.theme().warning,
+                        EditorDiagnosticSeverity::Information => cx.theme().primary,
                     })
                 }
                 _ => match state {
-                    State::Error => Some(appearance::RED),
-                    State::Stale | State::Running => Some(appearance::AMBER),
+                    State::Error => Some(cx.theme().danger),
+                    State::Stale | State::Running => Some(cx.theme().warning),
                     State::Valid => Some(color),
                     State::Unexecuted | State::Partial => None,
                 },
@@ -143,7 +144,7 @@ impl GraphCanvas {
                             .inset(px(-2. * self.zoom))
                             .rounded_full()
                             .border_1()
-                            .border_color(rgb(ring))
+                            .border_color(ring)
                             .when(state == State::Stale, |dot| dot.border_dashed()),
                     )
                 })
@@ -152,6 +153,7 @@ impl GraphCanvas {
                     color,
                     port.connections.current > 0 || active,
                     pulse,
+                    cx,
                 ))
         };
         let tooltip_address = port.address.clone();
@@ -167,13 +169,13 @@ impl GraphCanvas {
             .w_full()
             .min_w_0()
             .text_size(px(12. * self.zoom))
-            .text_color(rgb(if menu_open {
-                appearance::BLUE
+            .text_color(if menu_open {
+                cx.theme().primary
             } else if port.connections.current > 0 || active {
-                appearance::TEXT
+                cx.theme().foreground
             } else {
-                appearance::MUTED
-            }))
+                cx.theme().muted_foreground
+            })
             .opacity(if port.orphan {
                 0.25
             } else if dimmed && !target {
@@ -188,7 +190,7 @@ impl GraphCanvas {
             })
             .when(self.located_port.as_ref() == Some(&port.address), |view| {
                 view.track_focus(&self.port_focus)
-                    .bg(rgb(appearance::BLUE).opacity(0.2))
+                    .bg(cx.theme().primary.opacity(0.2))
             })
             .cursor_crosshair()
             .on_hover(cx.listener(move |view, over, _, cx| {

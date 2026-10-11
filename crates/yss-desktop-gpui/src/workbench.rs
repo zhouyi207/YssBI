@@ -22,7 +22,7 @@ mod logs;
 mod menus;
 mod node_creation;
 mod parameters;
-pub(crate) use menus::bind_keys as bind_menu_keys;
+pub(crate) use menus::{bind_keys as bind_menu_keys, shortcut_commands};
 pub(crate) use node_creation::{CreationEvent, CreationTarget, NodeCreationView};
 mod minds;
 mod name_form;
@@ -74,6 +74,7 @@ pub struct Workbench {
     settings_window: Option<WindowHandle<Root>>,
     logs_window: Option<WindowHandle<Root>>,
     settings_subscription: Option<gpui_kit::Subscription>,
+    preference_subscription: Option<gpui_kit::Subscription>,
     menu_bar: Entity<gpui_kit::component::menu::AppMenuBar>,
     menu_context: Option<menus::MenuContext>,
     conversations: BTreeMap<String, Entity<crate::assistant::ConversationPanel>>,
@@ -158,6 +159,7 @@ impl Workbench {
             settings_window: None,
             logs_window: None,
             settings_subscription: None,
+            preference_subscription: None,
             menu_bar,
             menu_context: None,
             conversations: BTreeMap::new(),
@@ -218,6 +220,15 @@ impl Workbench {
         view.connect_plugins(window, cx);
         view.connect_native_plugin_views(window, cx);
         view.connect_settings(window, cx);
+        view.preference_subscription = Some(cx.observe_global::<crate::preferences::Preferences>(
+            |view, cx| {
+                // Menu labels and shortcut hints are retained; workspace defaults
+                // intentionally do not mutate the live user-arranged DockArea.
+                view.menu_context = None;
+                view.prepare_menus(cx);
+                cx.notify();
+            },
+        ));
         cx.on_release(|view, cx| {
             view.close_result_windows(cx);
             if let Some(handle) = view.settings_window {

@@ -44,6 +44,27 @@ impl LayoutStore {
         self.read_snapshot(&Self::file_name(project_root)?)
     }
 
+    /// The last successfully opened native project, independent of registry favorites,
+    /// discovery timestamps, and user preferences. Explicit Close affects this session only.
+    pub(crate) fn last_project(&self) -> Result<Option<PathBuf>> {
+        Ok(self
+            .read_snapshot::<String>("last-project.json")?
+            .map(PathBuf::from))
+    }
+
+    pub(crate) fn remember_project(
+        self: &Arc<Self>,
+        path: String,
+        executor: &tokio::runtime::Handle,
+    ) -> tokio::task::JoinHandle<Result<()>> {
+        self.queue_write(
+            Ok("last-project.json".into()),
+            move || Ok(serde_json::to_vec(&path)?),
+            false,
+            executor,
+        )
+    }
+
     fn read_snapshot<T: serde::de::DeserializeOwned>(&self, file_name: &str) -> Result<Option<T>> {
         if !self.directory.exists() {
             return Ok(None);

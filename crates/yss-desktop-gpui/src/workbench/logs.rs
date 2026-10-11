@@ -62,6 +62,8 @@ pub struct LogsPanel {
     connecting: bool,
     error: Option<&'static str>,
     _search_subscription: gpui_kit::Subscription,
+    _preferences_subscription: gpui_kit::Subscription,
+    preferences: yss_settings::LogSettings,
 }
 
 impl LogsPanel {
@@ -79,6 +81,11 @@ impl LogsPanel {
                 }
             }
         });
+        let preferences = crate::preferences::current(cx).logs.clone();
+        let preferences_subscription =
+            cx.observe_global::<crate::preferences::Preferences>(|view, cx| {
+                view.apply_preferences(cx)
+            });
         let mut panel = Self {
             services,
             focus: cx.focus_handle(),
@@ -86,12 +93,17 @@ impl LogsPanel {
             visible: vec![],
             selected: None,
             domain: None,
-            levels: LEVELS.to_vec(),
+            levels: preferences
+                .visible_levels
+                .iter()
+                .copied()
+                .map(display_level)
+                .collect(),
             search,
             query: String::new(),
             view_locale: crate::text::locale(),
             scroll: UniformListScrollHandle::new(),
-            auto_scroll: true,
+            auto_scroll: preferences.auto_scroll,
             truncated: false,
             recovery_attempts: 0,
             stream: String::new(),
@@ -102,9 +114,50 @@ impl LogsPanel {
             connecting: false,
             error: None,
             _search_subscription: subscription,
+            _preferences_subscription: preferences_subscription,
+            preferences,
         };
         panel.connect(window, cx);
         panel
+    }
+
+    fn apply_preferences(&mut self, cx: &mut Context<Self>) {
+        let preferences = &crate::preferences::current(cx).logs;
+        // Toolbar choices remain local until that particular preference changes;
+        // saving an unrelated preference must not reset an active investigation.
+        let levels_changed = self.preferences.visible_levels != preferences.visible_levels;
+        let scroll_changed = self.preferences.auto_scroll != preferences.auto_scroll;
+        if levels_changed {
+            self.levels = preferences
+                .visible_levels
+                .iter()
+                .copied()
+                .map(display_level)
+                .collect();
+        }
+        if scroll_changed {
+            self.auto_scroll = preferences.auto_scroll;
+        }
+        self.preferences = preferences.clone();
+        if levels_changed {
+            self.refilter();
+        }
+        if scroll_changed && self.auto_scroll {
+            self.scroll.scroll_to_bottom();
+        }
+        if levels_changed || scroll_changed {
+            cx.notify();
+        }
+    }
+}
+
+fn display_level(level: yss_settings::LogLevel) -> LogLevel {
+    match level {
+        yss_settings::LogLevel::Error => LogLevel::Error,
+        yss_settings::LogLevel::Warn => LogLevel::Warn,
+        yss_settings::LogLevel::Info => LogLevel::Info,
+        yss_settings::LogLevel::Debug => LogLevel::Debug,
+        yss_settings::LogLevel::Trace => LogLevel::Trace,
     }
 }
 impl EventEmitter<PanelEvent> for LogsPanel {}

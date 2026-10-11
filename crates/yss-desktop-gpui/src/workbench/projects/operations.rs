@@ -19,6 +19,7 @@ struct ProjectObservation {
     project: Result<Option<DesktopProject>, anyhow::Error>,
     error: Option<ProjectFeedback>,
     recovery: Option<PathBuf>,
+    opened_path: Option<String>,
 }
 fn read_project(
     services: &ApplicationServices,
@@ -57,6 +58,10 @@ fn commit(
 ) -> ProjectObservation {
     let mut receipt = None;
     let register = matches!(&command, ProjectCommand::Open { .. });
+    let remember = matches!(
+        &command,
+        ProjectCommand::Open { .. } | ProjectCommand::Create { .. } | ProjectCommand::SaveAs(_)
+    );
     let result = (|| -> anyhow::Result<()> {
         if let Some(expected) = &expected
             && services
@@ -150,6 +155,21 @@ fn commit(
             .and_then(|receipt| receipt.path.as_deref())
             .map(PathBuf::from);
     }
+    let opened_path = if remember && error.is_none() {
+        match (
+            &project,
+            services.application.query_current_project_activation(),
+        ) {
+            (Ok(Some(project)), Ok(activation))
+                if project.identity == activation.project_instance_id =>
+            {
+                Some(activation.path)
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
     if register
         && error.is_none()
         && let Ok(Some(project)) = &project
@@ -174,6 +194,7 @@ fn commit(
         project,
         error,
         recovery,
+        opened_path,
     }
 }
 impl Workbench {
@@ -228,13 +249,23 @@ impl Workbench {
             _ => None,
         };
         let job = self.services.run(move |services| {
-            let observation = commit(
+            let mut observation = commit(
                 operation.command,
                 operation.project,
                 services,
                 &executor,
                 &delivery,
             );
+            if let Some(path) = observation.opened_path.take()
+                && !matches!(
+                    executor.block_on(watcher.layouts.remember_project(path, &executor)),
+                    Ok(Ok(()))
+                )
+            {
+                observation.error = Some(ProjectFeedback::message(
+                    "preferences.startup.rememberFailed",
+                ));
+            }
             if let Some(identity) = &observation.active {
                 delivery.send_replace(ProjectStage::Watching);
                 let _ = watcher.watch_project(identity);

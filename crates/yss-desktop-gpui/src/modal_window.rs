@@ -184,6 +184,7 @@ fn open_pending(
             ..TitleBar::window_options()
         },
         move |window, cx| {
+            crate::appearance::install(window, cx);
             let content = (pending.build)(window, cx);
             let modal = cx.new(|cx| {
                 ModalWindow::new(title, parent, pending.origin, focus, content, window, cx)

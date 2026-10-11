@@ -122,7 +122,7 @@ impl SettingsPanel {
         cx: &mut Context<Self>,
     ) {
         if self.busy() || self.dirty() {
-            self.error = Some(crate::text::t("native.settings.saveOrDiscard").into());
+            self.report_error(crate::text::t("native.settings.saveOrDiscard"), false, cx);
             cx.notify();
             return;
         }
@@ -191,8 +191,6 @@ impl SettingsPanel {
                     if let Some(draft) = &mut view.editor {
                         draft.changed = true;
                     }
-                    view.error = None;
-                    view.feedback = None;
                     cx.notify();
                 }
             }));
@@ -205,7 +203,11 @@ impl SettingsPanel {
             return;
         }
         if self.model.as_ref().is_some_and(|draft| draft.changed) {
-            self.error = Some(crate::text::t("native.settings.applyOrCancelModel").into());
+            self.report_error(
+                crate::text::t("native.settings.applyOrCancelModel"),
+                false,
+                cx,
+            );
             cx.notify();
             return;
         }
@@ -243,7 +245,6 @@ impl SettingsPanel {
                     if let Some(draft) = &mut view.model {
                         draft.changed = true;
                     }
-                    view.error = None;
                     cx.notify();
                 }
             }));
@@ -284,7 +285,6 @@ impl SettingsPanel {
             efforts: config.reasoning_efforts,
             changed: index.is_none(),
         });
-        self.error = None;
         cx.notify();
     }
 
@@ -303,7 +303,6 @@ impl SettingsPanel {
                     if let Some(draft) = &mut view.model {
                         draft.changed = true;
                     }
-                    view.error = None;
                     cx.notify();
                 }
             }));
@@ -362,9 +361,8 @@ impl SettingsPanel {
                 provider.changed = true;
                 self.model = None;
                 self.model_subscriptions.clear();
-                self.error = None;
             }
-            Err(error) => self.error = Some(error),
+            Err(error) => self.report_error(error, false, cx),
         }
         cx.notify();
     }
@@ -376,7 +374,6 @@ impl SettingsPanel {
         if !self.dirty() {
             self.discard(cx);
             self.page = page;
-            self.load_knowledge(cx);
             return;
         }
         let epoch = self.epoch;
@@ -394,7 +391,6 @@ impl SettingsPanel {
                         if view.epoch == epoch && !view.busy() {
                             view.discard(cx);
                             view.page = page;
-                            view.load_knowledge(cx);
                             cx.notify();
                         }
                     })

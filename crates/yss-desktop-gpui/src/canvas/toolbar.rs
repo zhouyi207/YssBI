@@ -1,13 +1,12 @@
 //! Compact graph controls live outside the pointer-interaction surface.
 use super::{GraphCanvas, commands::*};
-use crate::appearance;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::DropdownMenu,
 };
-use gpui_kit::{Context, IntoElement, Window, div, prelude::*, px, rgb};
+use gpui_kit::{Context, IntoElement, Window, div, prelude::*, px};
 
 impl GraphCanvas {
     pub(super) fn render_toolbar(
@@ -23,13 +22,13 @@ impl GraphCanvas {
             == yss_graph_document::GraphResourceKind::EventGraph;
         let focus = self.focus.clone();
         div()
-            .h(px(32.))
+            .h_8()
             .flex_shrink_0()
             .px_2()
             .flex()
             .items_center()
             .gap_1()
-            .bg(rgb(appearance::CANVAS))
+            .bg(cx.theme().table)
             .border_b_1()
             .border_color(cx.theme().border)
             .child(

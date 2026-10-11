@@ -131,13 +131,13 @@ impl GraphCanvas {
         if viewport.width <= px(0.) || viewport.height <= px(0.) {
             return;
         }
-        let width = f32::from((viewport.width - px(128.)).max(px(1.)));
-        let height = f32::from((viewport.height - px(128.)).max(px(1.)));
+        let width = f32::from((viewport.width - px(128. * self.font_scale)).max(px(1.)));
+        let height = f32::from((viewport.height - px(128. * self.font_scale)).max(px(1.)));
         self.zoom = (width / f32::from(bounds.size.width))
             .min(height / f32::from(bounds.size.height))
             .clamp(
-                crate::services::Viewport::MIN_SCALE,
-                crate::services::Viewport::MAX_SCALE,
+                crate::services::Viewport::MIN_SCALE * self.font_scale,
+                crate::services::Viewport::MAX_SCALE * self.font_scale,
             );
         self.offset = point(
             (viewport.width - bounds.size.width * self.zoom) / 2. - bounds.origin.x * self.zoom,

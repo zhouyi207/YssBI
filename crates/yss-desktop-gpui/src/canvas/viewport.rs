@@ -10,7 +10,7 @@ impl GraphCanvas {
             .and_then(|root| self.services.layouts.viewport(root, self.path()))
         {
             self.offset = point(px(viewport.x), px(viewport.y));
-            self.zoom = viewport.scale;
+            self.zoom = viewport.scale * self.font_scale;
         }
         self.viewport_root = project_root;
     }
@@ -19,7 +19,7 @@ impl GraphCanvas {
         Viewport {
             x: self.offset.x.into(),
             y: self.offset.y.into(),
-            scale: self.zoom,
+            scale: self.zoom / self.font_scale,
         }
     }
 

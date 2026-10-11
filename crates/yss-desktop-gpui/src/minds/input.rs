@@ -117,7 +117,8 @@ impl MindCanvas {
             return;
         }
         let delta = f32::from(event.delta.pixel_delta(px(20.)).y);
-        let zoom = (self.zoom * (delta * 0.002).exp()).clamp(0.1, 3.);
+        let zoom =
+            (self.zoom * (delta * 0.002).exp()).clamp(0.1 * self.font_scale, 3. * self.font_scale);
         let pointer = event.position - self.bounds.get().origin;
         self.offset = pointer - (pointer - self.offset) * (zoom / self.zoom);
         self.zoom = zoom;
@@ -140,9 +141,13 @@ impl MindCanvas {
         } else {
             self.layout.bounds
         };
-        self.zoom = ((f32::from(viewport.width) - 96.) / f32::from(rect.size.width).max(1.))
-            .min((f32::from(viewport.height) - 96.) / f32::from(rect.size.height).max(1.))
-            .clamp(0.1, 1.2);
+        self.zoom = ((f32::from(viewport.width) - 96. * self.font_scale)
+            / f32::from(rect.size.width).max(1.))
+        .min(
+            (f32::from(viewport.height) - 96. * self.font_scale)
+                / f32::from(rect.size.height).max(1.),
+        )
+        .clamp(0.1 * self.font_scale, 1.2 * self.font_scale);
         self.offset = point(
             (viewport.width - rect.size.width * self.zoom) / 2.,
             (viewport.height - rect.size.height * self.zoom) / 2.,

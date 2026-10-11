@@ -56,6 +56,7 @@ yss-harness-contract = { path = "../yss-harness-contract" }
 yss-harness-core = { path = "../yss-harness-core" }
 yss-ui-contract = { path = "../yss-ui-contract" }
 yss-filesystem = { path = "../yss-filesystem" }
+yss-settings = { path = "../yss-settings" }
 tokio = { workspace = true, features = ["sync", "time"] }
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }

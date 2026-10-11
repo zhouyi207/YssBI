@@ -55,6 +55,7 @@ pub struct LogRecordDto {
 #[serde(rename_all = "snake_case")]
 pub enum LogStreamFailure {
     StorageUnavailable,
+    RetentionFailed,
     SubscriberLagged,
 }
 
@@ -63,6 +64,10 @@ pub enum LogStreamFailure {
 pub struct LogBatchDto {
     pub stream_id: String,
     pub entries: Vec<LogRecordDto>,
+    /// Committed retention deletions, sorted by sequence. They do not reset the
+    /// stream high-water mark or require subscribers to reconnect.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evicted_sequences: Vec<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<LogStreamFailure>,
 }

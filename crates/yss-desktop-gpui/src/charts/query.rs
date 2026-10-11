@@ -46,6 +46,23 @@ pub(crate) fn read(
 }
 impl ChartEditor {
     pub(super) fn schedule_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self._preferences_subscription.is_none() {
+            self._preferences_subscription =
+                Some(cx.observe_global_in::<crate::preferences::Preferences>(
+                    window,
+                    |view, window, cx| {
+                        let limit = crate::preferences::current(cx).charts.max_preview_points;
+                        if view.preview_limit != limit {
+                            view.preview_limit = limit;
+                            if view.available {
+                                view.schedule_preview(window, cx);
+                            }
+                        }
+                    },
+                ));
+        }
+        self.preview_limit = crate::preferences::current(cx).charts.max_preview_points;
+        let max_points = self.preview_limit;
         self.preview_generation = self.preview_generation.wrapping_add(1);
         let generation = self.preview_generation;
         self.preview_loading = true;
@@ -71,14 +88,14 @@ impl ChartEditor {
             let result = owner
                 .run(move |services| {
                     Ok(preview::read(
-                        services, project, &catalog, &document, metadata,
+                        services, project, &catalog, &document, metadata, max_points,
                     ))
                 })
                 .await
                 .ok()
                 .and_then(Result::ok);
             let _ = view.update(cx, |view, cx| {
-                if view.preview_generation != generation {
+                if view.preview_generation != generation || view.preview_limit != max_points {
                     return;
                 }
                 view.preview_loading = false;

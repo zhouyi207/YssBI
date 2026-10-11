@@ -1,5 +1,5 @@
 use crate::collector::{LoggingInitializationError, LoggingRuntime};
-use crate::{LOG_DATABASE_NAME, LogInitializationError, LogRuntime};
+use crate::{LOG_DATABASE_NAME, LogInitializationError, LogRetentionPolicy, LogRuntime};
 use std::path::PathBuf;
 
 /// Owns the process subscriber and drains its dispatcher before console shutdown.
@@ -13,8 +13,19 @@ impl LogCollection {
     pub fn initialize(
         directory: Option<PathBuf>,
     ) -> Result<Self, LogCollectionInitializationError> {
+        Self::initialize_with_retention(directory, LogRetentionPolicy::default())
+    }
+
+    /// Applies retention before history becomes available to the host.
+    pub fn initialize_with_retention(
+        directory: Option<PathBuf>,
+        policy: LogRetentionPolicy,
+    ) -> Result<Self, LogCollectionInitializationError> {
         let logs = directory
-            .and_then(|directory| LogRuntime::open(directory.join(LOG_DATABASE_NAME)).ok());
+            .map(|directory| {
+                LogRuntime::open_with_retention(directory.join(LOG_DATABASE_NAME), policy)
+            })
+            .transpose()?;
         let runtime = match &logs {
             Some(logs) => logs.clone(),
             None => LogRuntime::initialize()?,

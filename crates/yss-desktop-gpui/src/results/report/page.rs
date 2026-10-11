@@ -3,7 +3,7 @@ use std::sync::Arc;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
-    table::{DataTable, TableState},
+    table::TableState,
 };
 use gpui_kit::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
 use yss_application::graph::results::{
@@ -193,8 +193,8 @@ impl Render for ReportPage {
         if let Some(content) = &self.content {
             body = body.child(match content {
                 Content::Grid(table) => div()
-                    .h(px((self.count.min(10) as f32 + 1.) * 32. + 20.))
-                    .child(DataTable::new(table).small().stripe(true))
+                    .h(crate::results::table::height(self.count.min(10), cx))
+                    .child(crate::results::table::present(table, cx))
                     .into_any_element(),
                 Content::Roots(data) => div()
                     .w_full()

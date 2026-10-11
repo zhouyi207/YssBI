@@ -8,7 +8,7 @@ use gpui_kit::component::{
     input::Input,
 };
 use gpui_kit::{
-    AnyElement, IntoElement, MouseButton, Render, SharedString, div, prelude::*, px, uniform_list,
+    AnyElement, IntoElement, MouseButton, Render, SharedString, div, prelude::*, rems, uniform_list,
 };
 
 impl Render for NodePalette {
@@ -184,9 +184,9 @@ impl NodePalette {
         let generation = self.browser.generation;
         let body = div()
             .id(SharedString::from(row.id.clone()))
-            .h(px(32.))
+            .h_8()
             .w_full()
-            .pl(px(6. + row.depth as f32 * 12.))
+            .pl(rems((6. + row.depth as f32 * 12.) / 14.))
             .pr_2()
             .flex()
             .items_center()

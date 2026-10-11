@@ -121,8 +121,6 @@ impl SettingsPanel {
         draft.changed = true;
         self.model = None;
         self.model_subscriptions.clear();
-        self.error = None;
-        self.feedback = None;
         self.refresh_key_placeholder(window, cx);
         cx.notify();
     }
@@ -168,8 +166,6 @@ impl SettingsPanel {
             draft.authentication = LanguageModelAuthentication::ApiKey;
         }
         draft.changed = true;
-        self.error = None;
-        self.feedback = None;
         self.refresh_key_placeholder(window, cx);
         cx.notify();
     }
@@ -200,8 +196,6 @@ impl SettingsPanel {
             .key
             .update(cx, |input, cx| input.set_value("", window, cx));
         draft.changed = true;
-        self.error = None;
-        self.feedback = None;
         self.refresh_key_placeholder(window, cx);
         cx.notify();
     }

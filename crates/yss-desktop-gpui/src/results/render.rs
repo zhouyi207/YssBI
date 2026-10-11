@@ -3,7 +3,6 @@ use super::*;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
-    table::DataTable,
     tooltip::Tooltip,
 };
 use gpui_kit::{Render, px, uniform_list};
@@ -39,7 +38,7 @@ impl Render for ResultPanel {
                     )
                     .when_some(
                         self.table.as_ref().filter(|_| !self.report_mode),
-                        |body, table| body.child(DataTable::new(table).small().stripe(true)),
+                        |body, table| body.child(super::table::present(table, cx)),
                     )
                     .when_some(self.plot.as_ref(), |body, plot| body.child(plot.clone()))
                     .when(

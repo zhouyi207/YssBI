@@ -108,7 +108,7 @@ impl ListDelegate for Results {
         let title = crate::results::window_title(self.source(entry)?.plot);
         Some(
             ListItem::new(("pin-result", ix.row))
-                .h(px(32.))
+                .h_8()
                 .disabled(!self.enabled || self.loading || self.failed)
                 .child(
                     div()

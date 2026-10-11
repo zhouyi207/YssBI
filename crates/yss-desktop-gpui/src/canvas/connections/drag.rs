@@ -1,7 +1,8 @@
 //! The gesture owns its candidate query, so cancellation also cancels late delivery.
 use std::collections::{BTreeMap, BTreeSet};
 
-use gpui_kit::{Context, MouseButton, MouseDownEvent, Pixels, Point, Task, Window};
+use gpui_kit::component::ActiveTheme;
+use gpui_kit::{App, Context, Hsla, MouseButton, MouseDownEvent, Pixels, Point, Task, Window};
 use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 use yss_graph_editor::{
     EditorGraphMutation,
@@ -60,25 +61,25 @@ impl ConnectionDrag {
         };
     }
 
-    pub fn feedback(&self) -> (u32, Option<String>) {
-        use crate::{appearance, text};
+    pub fn feedback(&self, cx: &App) -> (Hsla, Option<String>) {
+        use crate::text;
         match self
             .target
             .as_ref()
             .and_then(|target| self.decision(target))
         {
-            Some(ConnectionDecision::Append) => (appearance::GREEN, None),
+            Some(ConnectionDecision::Append) => (cx.theme().success, None),
             Some(ConnectionDecision::Replace { .. }) => (
-                appearance::AMBER,
+                cx.theme().warning,
                 Some(text::translate("canvas.connection.feedback.replace")),
             ),
             Some(ConnectionDecision::Invalid { reason }) => (
-                appearance::RED,
+                cx.theme().danger,
                 Some(text::translate(&format!(
                     "canvas.connection.errors.{reason}"
                 ))),
             ),
-            _ => (appearance::BLUE, None),
+            _ => (cx.theme().primary, None),
         }
     }
 }

@@ -2,7 +2,6 @@
 mod layout_store;
 pub(crate) use layout_store::Viewport;
 mod paths;
-mod preferences;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -54,32 +53,37 @@ pub struct NativeServices {
     events: broadcast::Sender<NativeEvent>,
     pub logging: yss_logging::LogCollection,
     pub layouts: Arc<layout_store::LayoutStore>,
-    pub preferences: Arc<preferences::PreferencesStore>,
+    pub preferences: Arc<yss_settings::SettingsStore>,
     pub preference_load_failed: bool,
 }
 
 impl NativeServices {
     pub async fn initialize(executor: Handle) -> Result<Arc<Self>> {
         let paths = paths::NativePaths::resolve()?;
-        let preferences = Arc::new(preferences::PreferencesStore::new(
+        let preferences = Arc::new(yss_settings::SettingsStore::new(
             &paths.application.app_data_dir,
         ));
         let reader = preferences.clone();
-        let language = executor
-            .spawn_blocking(move || reader.read_language())
-            .await?;
-        let preference_load_failed = language.is_err();
-        crate::text::set_locale(language.unwrap_or(crate::text::DEFAULT_LANGUAGE));
-        if preference_load_failed {
+        let loaded = executor.spawn_blocking(move || reader.load()).await?;
+        let preference_load_failed = loaded.is_err();
+        crate::text::set_locale(preferences.snapshot().language.locale());
+        if let Err(error) = loaded {
             tracing::warn!(
                 code = "native_preferences_read_failed",
+                %error,
                 "Native preferences could not be read"
             );
         }
         let layouts = Arc::new(layout_store::LayoutStore::new(
             &paths.application.app_data_dir,
         ));
-        let logging = yss_logging::LogCollection::initialize(Some(paths.logs))?;
+        let settings = preferences.snapshot();
+        let retention = yss_logging::LogRetentionPolicy::new(
+            settings.logs.retention_days,
+            settings.logs.max_storage_mib,
+        )?;
+        let logging =
+            yss_logging::LogCollection::initialize_with_retention(Some(paths.logs), retention)?;
         let (events, _) = broadcast::channel(512);
         let publisher = events.clone();
         let application = ApplicationServices::initialize(paths.application, move |application| {

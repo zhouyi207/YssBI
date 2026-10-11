@@ -69,6 +69,8 @@ pub struct MindCanvas {
     bounds: Rc<Cell<Bounds<Pixels>>>,
     offset: Point<Pixels>,
     zoom: f32,
+    font_scale: f32,
+    _appearance: gpui_kit::Subscription,
     fit_pending: bool,
     gesture: Option<Gesture>,
     busy: bool,
@@ -84,6 +86,7 @@ impl MindCanvas {
         cx: &mut Context<Self>,
     ) -> Self {
         let layout = MindLayout::new(&snapshot.content, &BTreeSet::new());
+        let font_scale = crate::preferences::current(cx).appearance.ui_font_size / 14.;
         Self {
             services,
             snapshot,
@@ -94,8 +97,25 @@ impl MindCanvas {
             buffers: BTreeMap::new(),
             labels: BTreeMap::new(),
             bounds: Rc::new(Cell::new(Bounds::default())),
-            offset: point(px(48.), px(48.)),
-            zoom: 1.,
+            offset: point(px(48. * font_scale), px(48. * font_scale)),
+            zoom: font_scale,
+            font_scale,
+            _appearance: cx.observe_global::<crate::preferences::Preferences>(|view, cx| {
+                let scale = crate::preferences::current(cx).appearance.ui_font_size / 14.;
+                if scale == view.font_scale {
+                    return;
+                }
+                view.cancel_gesture();
+                let ratio = scale / view.font_scale;
+                let center = point(
+                    view.bounds.get().size.width / 2.,
+                    view.bounds.get().size.height / 2.,
+                );
+                view.offset = center - (center - view.offset) * ratio;
+                view.zoom *= ratio;
+                view.font_scale = scale;
+                cx.notify();
+            }),
             fit_pending: true,
             gesture: None,
             busy: false,

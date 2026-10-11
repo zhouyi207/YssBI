@@ -2,7 +2,6 @@ use super::layout::TopicPlacement;
 use super::{
     CancelMindGesture, DeleteTopics, FitMind, FitTopics, MindCanvas, SaveMind, SelectTopics,
 };
-use crate::appearance;
 use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
@@ -10,7 +9,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     AppContext, Context, IntoElement, MouseButton, PathBuilder, Render, Window, canvas, div, point,
-    prelude::*, px, rgb,
+    prelude::*, px,
 };
 use std::collections::HashMap;
 
@@ -69,7 +68,7 @@ impl Render for MindCanvas {
             .size_full()
             .relative()
             .overflow_hidden()
-            .bg(rgb(appearance::CANVAS))
+            .bg(cx.theme().table)
             .on_action(cx.listener(|view, _: &SaveMind, window, cx| view.save(window, cx)))
             .on_action(cx.listener(|view, _: &SelectTopics, _, cx| {
                 view.selected = view
@@ -111,7 +110,7 @@ impl Render for MindCanvas {
                             }
                         });
                     },
-                    move |rect, _, window, _| {
+                    move |rect, _, window, cx| {
                         let mut path = PathBuilder::stroke(px(1.5));
                         for (a, b) in &edges {
                             let a = rect.origin + offset + *a * zoom;
@@ -121,7 +120,7 @@ impl Render for MindCanvas {
                             path.cubic_bezier_to(b, point(a.x + bend, a.y), point(b.x - bend, b.y));
                         }
                         if let Ok(path) = path.build() {
-                            window.paint_path(path, rgb(0x647c9d));
+                            window.paint_path(path, cx.theme().muted_foreground);
                         }
                     },
                 )
@@ -139,7 +138,7 @@ impl Render for MindCanvas {
                         .h(rect.size.height)
                         .border_1()
                         .border_color(cx.theme().primary)
-                        .bg(gpui_kit::rgba((appearance::BLUE << 8) | 0x18)),
+                        .bg(cx.theme().primary.opacity(0.1)),
                 )
             })
             .when_some(self.error.clone(), |view, error| {
@@ -186,11 +185,11 @@ impl MindCanvas {
         let collapsed = self.collapsed.contains(&id);
         let click_id = id.clone();
         let color = [
-            appearance::BLUE,
-            0x6eb4bf,
-            appearance::GREEN,
-            appearance::AMBER,
-            0xb477cf,
+            cx.theme().chart_1,
+            cx.theme().chart_2,
+            cx.theme().chart_3,
+            cx.theme().chart_4,
+            cx.theme().chart_5,
         ][placement.depth % 5];
         div()
             .id(gpui_kit::SharedString::from(format!("mind-topic-{id}")))
@@ -203,16 +202,12 @@ impl MindCanvas {
             .text_size(px(13. * self.zoom))
             .rounded(px(6. * self.zoom))
             .bg(if selected {
-                rgb(appearance::SELECTED)
+                cx.theme().list_active
             } else {
-                rgb(appearance::SURFACE)
+                cx.theme().background
             })
             .border_1()
-            .border_color(if selected {
-                cx.theme().primary
-            } else {
-                rgb(color).into()
-            })
+            .border_color(if selected { cx.theme().primary } else { color })
             .overflow_hidden()
             .cursor_pointer()
             .on_mouse_down(

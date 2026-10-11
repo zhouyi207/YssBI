@@ -205,21 +205,23 @@ impl Render for PlotView {
                         format!("result-wordcloud-{}", cx.entity_id()).into(),
                     ))
                     .into_any_element(),
-                Geometry::Nomogram { data, .. } => {
-                    div()
-                        .id("nomogram-scroll")
-                        .flex_1()
-                        .min_h_0()
-                        .min_w_0()
-                        .overflow_scroll()
-                        .child(div().min_w(px(640.)).w_full().h(px(data.height())).child(
-                            Nomogram {
+                Geometry::Nomogram { data, .. } => div()
+                    .id("nomogram-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .min_w_0()
+                    .overflow_scroll()
+                    .child(
+                        div()
+                            .min_w(gpui_kit::rems(640. / 14.))
+                            .w_full()
+                            .h(gpui_kit::rems(data.height() / 14.))
+                            .child(Nomogram {
                                 data: data.clone(),
                                 id: format!("result-nomogram-{}", cx.entity_id()).into(),
-                            },
-                        ))
-                        .into_any_element()
-                }
+                            }),
+                    )
+                    .into_any_element(),
             })
     }
 }

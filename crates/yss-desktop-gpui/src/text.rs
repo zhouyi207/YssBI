@@ -3,7 +3,6 @@ use std::{borrow::Cow, sync::LazyLock};
 use yss_application::activity_panel::ActivityText;
 use yss_graph_editor::projection::EditorDiagnosticModel;
 
-pub const LANGUAGES: [&str; 2] = ["zh-CN", "en-US"];
 pub const DEFAULT_LANGUAGE: &str = "zh-CN";
 
 pub fn locale() -> &'static str {
@@ -116,7 +115,7 @@ mod tests {
     #[test]
     fn bundled_interpolation_preserves_placeholder_like_user_input() {
         let name = "report %{name} {{name}}".to_owned();
-        for language in LANGUAGES {
+        for language in ["zh-CN", "en-US"] {
             let template = yss_i18n::translate(
                 &*BACKEND,
                 language,

@@ -1,29 +1,25 @@
 //! Native settings keep read projections and unsubmitted forms over Application services.
-mod appearance;
 pub(crate) mod commands;
 mod fields;
+mod keybindings;
 mod knowledge;
 mod models;
-mod navigation;
+mod preference_fields;
+mod preferences;
 mod render;
 
 use crate::services::NativeServices;
-use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Subscription, Window, actions,
-};
+use gpui_kit::{App, Context, FocusHandle, Focusable, Subscription, Window, actions};
 use std::sync::Arc;
 use yss_harness_contract::LanguageModelCatalog;
 
-actions!(native_settings, [SaveSettings]);
+actions!(native_settings, [SaveSettings, BackInSettings]);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Page {
     Overview,
     Providers,
     Provider,
-    Knowledge,
-    Appearance,
 }
 
 pub(crate) enum SettingsEvent {
@@ -31,6 +27,11 @@ pub(crate) enum SettingsEvent {
         project: yss_project_identity::ProjectInstanceId,
         path: String,
     },
+    Error {
+        message: String,
+        retry_catalog: bool,
+    },
+    Success(String),
 }
 
 impl gpui_kit::EventEmitter<SettingsEvent> for SettingsPanel {}
@@ -41,7 +42,7 @@ pub(crate) struct SettingsPanel {
     catalog: Option<Arc<LanguageModelCatalog>>,
     knowledge: knowledge::KnowledgeSettings,
     page: Page,
-    render_width: f32,
+    initial_page: gpui_kit::component::setting::SelectIndex,
     editor: Option<models::ProviderDraft>,
     model: Option<models::ModelDraft>,
     provider_subscriptions: Vec<Subscription>,
@@ -50,37 +51,20 @@ pub(crate) struct SettingsPanel {
     generation: u64,
     loading: bool,
     task: Option<std::borrow::Cow<'static, str>>,
-    error: Option<String>,
     preference_error: Option<&'static str>,
-    load_failed: bool,
-    feedback: Option<String>,
-    search: Entity<InputState>,
-    _search_subscription: Subscription,
+    preference_draft: Option<yss_settings::UserSettings>,
+    preference_revision: u64,
+    preference_timer: Option<gpui_kit::Task<()>>,
+    preference_write: Option<gpui_kit::Task<()>>,
+    font_names: Arc<[gpui_kit::SharedString]>,
 }
 
 impl SettingsPanel {
     pub(crate) fn new(
         services: Arc<NativeServices>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let search = cx.new(|cx| InputState::new(window, cx));
-        let search_subscription = cx.subscribe_in(&search, window, |view, _, event, window, cx| {
-            if matches!(event, InputEvent::Change) {
-                let categories = view.visible_categories(cx);
-                let current_visible = categories
-                    .iter()
-                    .any(|(page, _, _)| page.category() == view.page.category());
-                if !current_visible
-                    && !view.dirty()
-                    && !view.busy()
-                    && let Some((page, _, _)) = categories.first()
-                {
-                    view.navigate(*page, window, cx);
-                }
-                cx.notify();
-            }
-        });
         let preference_error = services
             .preference_load_failed
             .then_some("native.settings.preferencesReadFailed");
@@ -90,7 +74,7 @@ impl SettingsPanel {
             catalog: None,
             knowledge: knowledge::KnowledgeSettings::default(),
             page: Page::Overview,
-            render_width: 1000.,
+            initial_page: Default::default(),
             editor: None,
             model: None,
             provider_subscriptions: vec![],
@@ -99,12 +83,17 @@ impl SettingsPanel {
             generation: 0,
             loading: false,
             task: None,
-            error: None,
             preference_error,
-            load_failed: false,
-            feedback: None,
-            search,
-            _search_subscription: search_subscription,
+            preference_draft: None,
+            preference_revision: 0,
+            preference_timer: None,
+            preference_write: None,
+            font_names: {
+                let mut names = cx.text_system().all_font_names();
+                names.sort();
+                names.dedup();
+                names.into_iter().map(Into::into).collect()
+            },
         }
     }
 
@@ -113,12 +102,41 @@ impl SettingsPanel {
     }
 
     pub(crate) fn has_pending_operation(&self) -> bool {
-        self.task.is_some() || self.knowledge.pending
+        self.task.is_some()
+            || self.knowledge.pending
+            || self.preference_timer.is_some()
+            || self.preference_write.is_some()
     }
 
     pub(crate) fn dirty(&self) -> bool {
         self.editor.as_ref().is_some_and(|draft| draft.changed)
             || self.model.as_ref().is_some_and(|draft| draft.changed)
+    }
+
+    fn report_error(
+        &self,
+        message: impl Into<String>,
+        retry_catalog: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let message = message.into();
+        tracing::warn!(code = "native_settings_failed", %message, "Settings operation failed");
+        cx.emit(SettingsEvent::Error {
+            message,
+            retry_catalog,
+        });
+    }
+
+    fn report_success(&self, message: impl Into<String>, cx: &mut Context<Self>) {
+        let message = message.into();
+        tracing::info!(code = "native_settings_completed", %message, "Settings operation completed");
+        cx.emit(SettingsEvent::Success(message));
+    }
+
+    pub(crate) fn report_preference_error(&self, cx: &mut Context<Self>) {
+        if let Some(key) = self.preference_error {
+            self.report_error(crate::text::translate(key), false, cx);
+        }
     }
 
     fn install_catalog(&mut self, catalog: LanguageModelCatalog) {
@@ -133,8 +151,6 @@ impl SettingsPanel {
         self.provider_subscriptions.clear();
         self.model_subscriptions.clear();
         self.page = Page::Providers;
-        self.error = None;
-        self.feedback = None;
         cx.notify();
     }
 }

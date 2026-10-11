@@ -106,6 +106,9 @@ impl LogsPanel {
                 LogStreamFailure::StorageUnavailable => {
                     self.error = Some("native.workbench.logStorageUnavailable")
                 }
+                LogStreamFailure::RetentionFailed => {
+                    self.error = Some("preferences.logs.retentionFailed")
+                }
                 LogStreamFailure::SubscriberLagged => self.recover(window, cx),
             }
             cx.notify();
@@ -119,6 +122,9 @@ impl LogsPanel {
         {
             self.recover(window, cx);
             return false;
+        }
+        if !batch.evicted_sequences.is_empty() {
+            self.evict_records(&batch.evicted_sequences, cx);
         }
         let following = self.following();
         let previous = self.sequence;
@@ -142,6 +148,53 @@ impl LogsPanel {
             cx.notify();
         }
         true
+    }
+
+    fn evict_records(&mut self, sequences: &[u64], cx: &mut Context<Self>) {
+        let following = self.following();
+        let offset = self.scroll.0.borrow().base_handle.offset();
+        let top = (-f32::from(offset.y) / ROW_HEIGHT).floor().max(0.) as usize;
+        let removed_above = self
+            .visible
+            .iter()
+            .take(top)
+            .filter(|index| {
+                sequences
+                    .binary_search(&self.entries[**index].record.sequence)
+                    .is_ok()
+            })
+            .count();
+        self.entries
+            .retain(|entry| sequences.binary_search(&entry.record.sequence).is_err());
+        if self.selected.as_ref().is_some_and(|selected| {
+            !self
+                .entries
+                .iter()
+                .any(|entry| &entry.key == selected.read(cx).key())
+        }) {
+            self.clear_selection(cx);
+        }
+        // Sequence remains the stream high-water mark even after all rows expire.
+        self.visible = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| self.matches(entry).then_some(index))
+            .collect();
+        self.truncated = true;
+        if following {
+            self.scroll.scroll_to_bottom();
+        } else {
+            self.scroll
+                .0
+                .borrow()
+                .base_handle
+                .set_offset(gpui_kit::point(
+                    offset.x,
+                    (offset.y + px(ROW_HEIGHT * removed_above as f32)).min(px(0.)),
+                ));
+        }
+        cx.notify();
     }
     fn install_snapshot(
         &mut self,
