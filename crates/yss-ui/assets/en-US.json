@@ -2108,7 +2108,8 @@
     "unavailable": "Details for this file are currently unavailable.",
     "sections": {
       "info": "Info",
-      "diagnostics": "Problems"
+      "diagnostics": "Problems",
+      "parameters": "Parameters"
     },
     "parameterEditor": {
       "column": "Column",
@@ -3155,6 +3156,9 @@
       "environmentFailed": "The application environment could not be initialized. Check access to the application data directory, then close YssBI and restart.",
       "failureCode": "Reason code: %{code}",
       "close": "Close"
+    },
+    "inspector": {
+      "moreActions": "More actions"
     }
   }
 }

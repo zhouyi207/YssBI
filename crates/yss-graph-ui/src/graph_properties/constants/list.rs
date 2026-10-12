@@ -1,13 +1,8 @@
 //! Bounded constant directory; row controls are created only for visited pages.
 use super::*;
-use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    Disableable, Sizable,
-    button::{Button, ButtonVariants},
-    collapsible::Collapsible,
-};
+use gpui_kit::component::Disableable;
 use gpui_kit::{AnyElement, IntoElement, div, prelude::*};
-use yss_ui::controls;
+use yss_ui::inspector::{self, InspectorSection, Pager};
 
 impl GraphProperties {
     pub(in crate::graph_properties) fn render_constants(
@@ -18,106 +13,65 @@ impl GraphProperties {
         let generation = self.generation;
         let page = self.constants_page;
         let pages = self.constants.len().div_ceil(PAGE_CONSTANTS).max(1);
-        Collapsible::new()
-            .open(self.constants_open)
+        let mut section = InspectorSection::new(
+            "graph-constants",
+            yss_ui::text::translate("detail.constants.title"),
+        )
+        .count(self.constants.len())
+        .collapsible(
+            self.constants_open,
+            cx.listener(|view, open: &bool, _, cx| {
+                view.constants_open = *open;
+                cx.notify();
+            }),
+        );
+        if !self.constants_open {
+            return section.into_any_element();
+        }
+        if self.constants.is_empty() {
+            section = section.child(inspector::hint(
+                yss_ui::text::t("native.workbench.constantsHint"),
+                cx,
+            ));
+        }
+        for (row, field) in self
+            .constants
+            .iter()
+            .enumerate()
+            .skip(page * PAGE_CONSTANTS)
+            .take(PAGE_CONSTANTS)
+        {
+            section = section.child(self.render_constant(row, field, busy, cx));
+        }
+        section
             .child(
-                Button::new("constants-toggle")
-                    .small()
-                    .ghost()
-                    .w_full()
-                    .label(yss_ui::text::translate("detail.constants.title"))
-                    .icon(if self.constants_open {
-                        IconName::ChevronDown
-                    } else {
-                        IconName::ChevronRight
-                    })
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.constants_open = !view.constants_open;
-                        cx.notify();
-                    })),
-            )
-            .when(self.constants_open, |section| {
-                section.content(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_3()
-                        .child(
-                            div().flex().items_center().gap_1().justify_end().child(
-                                Button::new("add-graph-constant")
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::Plus)
-                                    .label(yss_ui::text::translate("detail.constants.add"))
-                                    .tooltip(yss_ui::text::t(
-                                        "panel.assistantToolNames.create_constants",
-                                    ))
-                                    .disabled(busy)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        if view.accepts_input(generation, cx) {
-                                            view.add_constant(cx);
-                                        }
-                                    })),
-                            ),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(
+                        inspector::add_button(
+                            "add-graph-constant",
+                            yss_ui::text::translate("detail.constants.add"),
                         )
-                        .when(self.constants.is_empty(), |view| {
-                            view.child(controls::hint(
-                                yss_ui::text::t("native.workbench.constantsHint"),
-                                cx,
-                            ))
-                        })
-                        .when(pages > 1, |view| {
-                            view.child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .child(
-                                        Button::new("constants-previous")
-                                            .small()
-                                            .ghost()
-                                            .icon(IconName::ChevronLeft)
-                                            .tooltip(yss_ui::text::translate(
-                                                "databaseEditor.previousPage",
-                                            ))
-                                            .disabled(page == 0)
-                                            .on_click(cx.listener(|view, _, _, cx| {
-                                                view.constants_page =
-                                                    view.constants_page.saturating_sub(1);
-                                                cx.notify();
-                                            })),
-                                    )
-                                    .child(div().text_xs().child(format!("{} / {pages}", page + 1)))
-                                    .child(
-                                        Button::new("constants-next")
-                                            .small()
-                                            .ghost()
-                                            .icon(IconName::ChevronRight)
-                                            .tooltip(yss_ui::text::translate(
-                                                "databaseEditor.nextPage",
-                                            ))
-                                            .disabled(page + 1 >= pages)
-                                            .on_click(cx.listener(move |view, _, _, cx| {
-                                                view.constants_page = (view.constants_page + 1)
-                                                    .min(
-                                                        view.constants.len().saturating_sub(1)
-                                                            / PAGE_CONSTANTS,
-                                                    );
-                                                cx.notify();
-                                            })),
-                                    ),
-                            )
-                        })
-                        .children(
-                            self.constants
-                                .iter()
-                                .enumerate()
-                                .skip(page * PAGE_CONSTANTS)
-                                .take(PAGE_CONSTANTS)
-                                .map(|(row, field)| self.render_constant(row, field, busy, cx)),
-                        ),
-                )
-            })
+                        .disabled(busy)
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if view.accepts_input(generation, cx) {
+                                view.add_constant(cx);
+                            }
+                        })),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        Pager::new("constants-pager", page, pages).on_change(cx.listener(
+                            |view, page: &usize, _, cx| {
+                                view.constants_page = (*page)
+                                    .min(view.constants.len().saturating_sub(1) / PAGE_CONSTANTS);
+                                cx.notify();
+                            },
+                        )),
+                    ),
+            )
             .into_any_element()
     }
 }

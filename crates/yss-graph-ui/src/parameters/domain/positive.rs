@@ -1,12 +1,11 @@
 //! Positive selection follows the authored row; menu labels are built on open.
 use super::{DomainDraft, ParameterDraft, ParameterForm};
-use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    Disableable, Sizable,
-    button::Button,
+    Disableable,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
+use gpui_kit::{AnyElement, Context, IntoElement, div};
+use yss_ui::inspector;
 use yss_ui::text::translate;
 
 impl ParameterForm {
@@ -27,38 +26,22 @@ impl ParameterForm {
             .unwrap_or_else(|| translate("conversion.unspecified"));
         let epoch = self.epoch;
         let owner = cx.entity().downgrade();
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(yss_ui::controls::hint(
-                translate("conversion.positiveValue"),
-                cx,
-            ))
-            .child(
-                Button::new(("domain-positive", index))
-                    .small()
-                    .w_full()
-                    .label(label)
-                    .icon(IconName::ChevronDown)
-                    .disabled(busy)
-                    .dropdown_menu(move |mut menu, _, cx| {
-                        menu = menu.scrollable(true);
-                        let Some(view) = owner.upgrade() else {
-                            return menu;
-                        };
-                        let view = view.read(cx);
-                        if !view.accepts_input(epoch, cx) {
-                            return menu;
-                        }
-                        let ParameterDraft::Domain(draft) = &view.fields[index].draft else {
-                            return menu;
-                        };
-                        let options = std::iter::once((
-                            None,
-                            String::new(),
-                            translate("conversion.unspecified"),
-                        ))
+        let trigger = inspector::choice_trigger(("domain-positive", index), label)
+            .disabled(busy)
+            .dropdown_menu(move |mut menu, _, cx| {
+                menu = menu.scrollable(true);
+                let Some(view) = owner.upgrade() else {
+                    return menu;
+                };
+                let view = view.read(cx);
+                if !view.accepts_input(epoch, cx) {
+                    return menu;
+                }
+                let ParameterDraft::Domain(draft) = &view.fields[index].draft else {
+                    return menu;
+                };
+                let options =
+                    std::iter::once((None, String::new(), translate("conversion.unspecified")))
                         .chain((0..draft.len()).map(|row| {
                             (
                                 Some(row),
@@ -67,40 +50,37 @@ impl ParameterForm {
                             )
                         }))
                         .collect::<Vec<_>>();
-                        for (row, code, label) in options {
-                            let owner = owner.clone();
-                            menu = menu.item(
-                                PopupMenuItem::new(label)
-                                    .checked(draft.positive == row)
-                                    .on_click(move |_, _, cx| {
-                                        let _ = owner.update(cx, |view, cx| {
-                                            if !view.accepts_input(epoch, cx) {
-                                                return;
-                                            }
-                                            let field = &mut view.fields[index];
-                                            let ParameterDraft::Domain(draft) = &mut field.draft
-                                            else {
-                                                return;
-                                            };
-                                            if row.is_some_and(|row| {
-                                                draft.code(row, cx).as_deref()
-                                                    != Some(code.as_str())
-                                            }) {
-                                                return;
-                                            }
-                                            if draft.positive != row {
-                                                draft.positive = row;
-                                                field.error = None;
-                                                field.dirty = true;
-                                                cx.notify();
-                                            }
-                                        });
-                                    }),
-                            );
-                        }
-                        menu
-                    }),
-            )
-            .into_any_element()
+                for (row, code, label) in options {
+                    menu = menu.item(
+                        PopupMenuItem::new(label)
+                            .checked(draft.positive == row)
+                            .on_click(inspector::owner_command(
+                                owner.clone(),
+                                move |view: &mut ParameterForm, _, cx| {
+                                    if !view.accepts_input(epoch, cx) {
+                                        return;
+                                    }
+                                    let field = &mut view.fields[index];
+                                    let ParameterDraft::Domain(draft) = &mut field.draft else {
+                                        return;
+                                    };
+                                    if row.is_some_and(|row| {
+                                        draft.code(row, cx).as_deref() != Some(code.as_str())
+                                    }) {
+                                        return;
+                                    }
+                                    if draft.positive != row {
+                                        draft.positive = row;
+                                        field.error = None;
+                                        field.dirty = true;
+                                        cx.notify();
+                                    }
+                                },
+                            )),
+                    );
+                }
+                menu
+            });
+        inspector::sub_field(translate("conversion.positiveValue"), trigger, cx).into_any_element()
     }
 }

@@ -5,13 +5,14 @@ use super::{GraphDetails, ports::PortField};
 use crate::canvas::GraphCommand;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    Disableable, IndexPath, Sizable,
-    button::{Button, ButtonVariants},
+    ActiveTheme, Disableable, Icon, IndexPath, Sizable,
     list::{List, ListState},
     popover::Popover,
     tooltip::Tooltip,
 };
-use gpui_kit::{AnyElement, Context, Focusable, IntoElement, Window, div, prelude::*, px};
+use gpui_kit::{
+    Anchor, AnyElement, Context, Focusable, IntoElement, SharedString, Window, div, prelude::*,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_document::{ConnectionId, PortAddress};
 use yss_graph_editor::{
@@ -19,6 +20,7 @@ use yss_graph_editor::{
     projection::{ConnectionIntent, EditorProjectionModel},
 };
 use yss_node_protocol::PortDirection;
+use yss_ui::inspector::{self, Pager};
 use yss_ui::text::translate;
 
 pub(super) use picker::ConnectionPicker;
@@ -163,7 +165,8 @@ impl GraphDetails {
         .detach();
     }
 
-    pub(super) fn render_port_connections(
+    /// Trailing "+" in a port row; the picker popover anchors to it and opens toward the canvas.
+    pub(super) fn render_port_connect(
         &self,
         index: usize,
         field: &PortField,
@@ -182,15 +185,16 @@ impl GraphDetails {
         let disabled = busy
             || field.model.orphan
             || !(field.model.connections.can_append || field.model.connections.can_replace);
-        let popover = Popover::new(("port-connect-picker", index))
+        Popover::new(("port-connect-picker", index))
+            .anchor(Anchor::TopRight)
             .open(picker.is_some())
             .trigger(
-                Button::new(("port-connect", index))
-                    .small()
-                    .ghost()
-                    .icon(IconName::Plus)
-                    .label(translate("detail.nodeDoc.addConnection"))
-                    .disabled(disabled),
+                inspector::action_button(
+                    ("port-connect", index),
+                    IconName::Plus,
+                    translate("detail.nodeDoc.addConnection"),
+                )
+                .disabled(disabled),
             )
             .when_some(picker, |popover, picker| {
                 popover.track_focus(&picker.focus_handle(cx))
@@ -218,116 +222,102 @@ impl GraphDetails {
             }))
             .content(move |_, _, _| {
                 div()
-                    .w(px(320.))
-                    .h(px(300.))
+                    .w_80()
+                    .h_80()
                     .when_some(content.clone(), |view, picker| {
                         view.child(List::new(&picker))
                     })
-            });
-        let page = field.connections_page;
-        let pages = field.peers.len().div_ceil(PAGE_CONNECTIONS).max(1);
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .when(field.peers.is_empty(), |view| {
-                view.child(yss_ui::controls::hint(
-                    translate("detail.nodeDoc.unconnected"),
-                    cx,
-                ))
             })
-            .children(
-                field
-                    .peers
-                    .iter()
-                    .skip(page * PAGE_CONNECTIONS)
-                    .take(PAGE_CONNECTIONS)
-                    .map(|peer| {
-                        let id = peer.id;
-                        let tooltip = peer.label.clone();
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .id(gpui_kit::SharedString::from(format!(
-                                        "connection-peer-{id}"
-                                    )))
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_sm()
-                                    .truncate()
-                                    .child(peer.label.clone())
-                                    .tooltip(move |window, cx| {
-                                        Tooltip::new(tooltip.clone()).build(window, cx)
-                                    }),
-                            )
-                            .child(
-                                Button::new(gpui_kit::SharedString::from(format!(
-                                    "remove-connection-{id}"
-                                )))
-                                .small()
-                                .ghost()
-                                .icon(IconName::Minus)
-                                .tooltip(translate("detail.nodeDoc.removeConnection"))
-                                .disabled(busy)
-                                .on_click(cx.listener(
-                                    move |view, _, _, cx| {
-                                        if view.accepts_input(epoch, cx) {
-                                            view.submit(
-                                                GraphCommand::Edit(
-                                                    EditorGraphMutation::DisconnectConnections {
-                                                        connection_ids: vec![id],
-                                                    },
-                                                ),
-                                                cx,
-                                            );
-                                        }
-                                    },
-                                )),
-                            )
-                    }),
-            )
-            .when(pages > 1, |view| {
-                view.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            Button::new(("peer-prev", index))
-                                .small()
-                                .ghost()
-                                .icon(IconName::ChevronLeft)
-                                .tooltip(translate("databaseEditor.previousPage"))
-                                .disabled(page == 0)
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    if view.epoch == epoch {
-                                        view.ports[index].connections_page = page.saturating_sub(1);
-                                        cx.notify();
-                                    }
-                                })),
-                        )
-                        .child(div().text_xs().child(format!("{} / {pages}", page + 1)))
-                        .child(
-                            Button::new(("peer-next", index))
-                                .small()
-                                .ghost()
-                                .icon(IconName::ChevronRight)
-                                .tooltip(translate("databaseEditor.nextPage"))
-                                .disabled(page + 1 >= pages)
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    if view.epoch == epoch {
-                                        view.ports[index].connections_page =
-                                            (page + 1).min(pages - 1);
-                                        cx.notify();
-                                    }
-                                })),
-                        ),
-                )
-            })
-            .child(popover)
             .into_any_element()
+    }
+
+    /// Connected peers of one port, or `None` when it has none.
+    pub(super) fn render_port_connections(
+        &self,
+        index: usize,
+        field: &PortField,
+        busy: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        if field.peers.is_empty() {
+            return None;
+        }
+        let epoch = self.epoch;
+        let page = field.connections_page;
+        let pages = field.peers.len().div_ceil(PAGE_CONNECTIONS);
+        let peers = field
+            .peers
+            .iter()
+            .skip(page * PAGE_CONNECTIONS)
+            .take(PAGE_CONNECTIONS)
+            .map(|peer| {
+                let id = peer.id;
+                let tooltip = peer.label.clone();
+                div()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap_1p5()
+                    .child(
+                        Icon::new(IconName::CornerDownRight)
+                            .xsmall()
+                            .text_color(cx.theme().muted_foreground),
+                    )
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("connection-peer-{id}")))
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_xs()
+                            .child(peer.label.clone())
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(tooltip.clone()).build(window, cx)
+                            }),
+                    )
+                    .child(
+                        inspector::action_button(
+                            SharedString::from(format!("remove-connection-{id}")),
+                            IconName::Close,
+                            translate("detail.nodeDoc.removeConnection"),
+                        )
+                        .disabled(busy)
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if view.accepts_input(epoch, cx) {
+                                view.submit(
+                                    GraphCommand::Edit(
+                                        EditorGraphMutation::DisconnectConnections {
+                                            connection_ids: vec![id],
+                                        },
+                                    ),
+                                    cx,
+                                );
+                            }
+                        })),
+                    )
+            });
+        Some(
+            div()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap_0p5()
+                .children(peers)
+                .when(pages > 1, |list| {
+                    list.child(div().flex().justify_end().child(
+                        Pager::new(("peer-pager", index), page, pages).on_change(cx.listener(
+                            move |view, page: &usize, _, cx| {
+                                if view.epoch == epoch
+                                    && let Some(field) = view.ports.get_mut(index)
+                                {
+                                    field.connections_page = *page;
+                                    cx.notify();
+                                }
+                            },
+                        )),
+                    ))
+                })
+                .into_any_element(),
+        )
     }
 }

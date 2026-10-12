@@ -2108,7 +2108,8 @@
     "unavailable": "此文件的详情暂不可用。",
     "sections": {
       "info": "信息",
-      "diagnostics": "问题"
+      "diagnostics": "问题",
+      "parameters": "参数"
     },
     "parameterEditor": {
       "column": "列",
@@ -3155,6 +3156,9 @@
       "environmentFailed": "应用运行环境无法初始化。请检查应用数据目录的访问权限，关闭后重新启动。",
       "failureCode": "原因代码：%{code}",
       "close": "关闭"
+    },
+    "inspector": {
+      "moreActions": "更多操作"
     }
   }
 }

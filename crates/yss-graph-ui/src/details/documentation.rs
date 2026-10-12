@@ -115,7 +115,6 @@ impl super::GraphDetails {
         self.node_definition = Some(node_type.clone());
         self.connection_picker = None;
         self.hidden = None;
-        self.error = None;
         self.epoch = self.epoch.wrapping_add(1);
         self.documentation.update(cx, |documentation, cx| {
             documentation.set_target(

@@ -1,15 +1,10 @@
 //! Read-only node diagnostics from the current editor projection.
 use super::GraphDetails;
-use crate::feedback::graph_diagnostic;
+use crate::feedback::diagnostic_message;
 use crate::problems::location;
-use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, Sizable,
-    button::{Button, ButtonVariants},
-    collapsible::Collapsible,
-};
 use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
-use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorNodeModel};
+use yss_graph_editor::projection::EditorNodeModel;
+use yss_ui::inspector::{InspectorSection, Pager};
 use yss_ui::text::translate;
 
 pub(super) const PAGE_DIAGNOSTICS: usize = 50;
@@ -20,164 +15,65 @@ impl GraphDetails {
         node: &EditorNodeModel,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        if node.diagnostics.is_empty() {
+        let Some(projection) = self
+            .projection
+            .as_ref()
+            .filter(|_| !node.diagnostics.is_empty())
+        else {
             return div().into_any_element();
-        }
+        };
         let epoch = self.epoch;
         let pages = node.diagnostics.len().div_ceil(PAGE_DIAGNOSTICS);
-        Collapsible::new()
-            .w_full()
-            .min_w_0()
-            .open(self.diagnostics_open)
-            .child(
-                Button::new("node-diagnostics-toggle")
-                    .small()
-                    .ghost()
-                    .w_full()
-                    .h_7()
-                    .px_2()
-                    .rounded_none()
-                    .justify_start()
-                    .bg(cx.theme().muted.opacity(0.6))
-                    .text_xs()
-                    .icon(if self.diagnostics_open {
-                        IconName::ChevronDown
-                    } else {
-                        IconName::ChevronRight
-                    })
-                    .label(translate("detail.sections.diagnostics"))
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        if view.epoch == epoch {
-                            view.diagnostics_open = !view.diagnostics_open;
-                            cx.notify();
-                        }
-                    })),
+        let rows = node
+            .diagnostics
+            .iter()
+            .skip(self.diagnostics_page * PAGE_DIAGNOSTICS)
+            .take(PAGE_DIAGNOSTICS)
+            .map(|diagnostic| {
+                diagnostic_message(diagnostic).when_some(
+                    location::label(&diagnostic.location, projection, Some(node))
+                        .filter(|label| label != location::node_title(node)),
+                    |message, label| message.subject(label),
+                )
+            });
+        InspectorSection::new("node-diagnostics", translate("detail.sections.diagnostics"))
+            .count(node.diagnostics.len())
+            .collapsible(
+                self.diagnostics_open,
+                cx.listener(move |view, open: &bool, _, cx| {
+                    if view.epoch == epoch {
+                        view.diagnostics_open = *open;
+                        cx.notify();
+                    }
+                }),
             )
-            .when(self.diagnostics_open, |section| {
-                let mut rows = div()
+            .child(
+                div()
                     .id("node-diagnostic-rows")
+                    .min_w_0()
                     .flex()
                     .flex_col()
-                    .min_w_0()
                     .gap_2()
-                    .when(pages > 1, |view| {
-                        view.max_h(gpui_kit::px(320.))
+                    .when(pages > 1, |rows| {
+                        rows.max_h_80()
                             .overflow_y_scroll()
                             .track_scroll(&self.diagnostics_scroll)
-                    });
-                let projection = self.projection.as_ref().expect("selected node projection");
-                for diagnostic in node
-                    .diagnostics
-                    .iter()
-                    .skip(self.diagnostics_page * PAGE_DIAGNOSTICS)
-                    .take(PAGE_DIAGNOSTICS)
-                {
-                    let (icon, color, key) = match diagnostic.severity {
-                        EditorDiagnosticSeverity::Error => (
-                            IconName::CircleX,
-                            cx.theme().danger,
-                            "native.workbench.diagnosticError",
-                        ),
-                        EditorDiagnosticSeverity::Warning => (
-                            IconName::TriangleAlert,
-                            cx.theme().warning,
-                            "native.workbench.diagnosticWarning",
-                        ),
-                        EditorDiagnosticSeverity::Information => (
-                            IconName::Info,
-                            cx.theme().muted_foreground,
-                            "native.workbench.diagnosticInformation",
-                        ),
-                    };
-                    rows = rows.child(
-                        div()
-                            .flex()
-                            .items_start()
-                            .gap_2()
-                            .text_xs()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .flex_shrink_0()
-                                    .gap_1()
-                                    .text_color(color)
-                                    .child(Icon::new(icon).size_3())
-                                    .child(translate(key)),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .when_some(
-                                        location::label(
-                                            &diagnostic.location,
-                                            projection,
-                                            Some(node),
-                                        )
-                                        .filter(|label| label != location::node_title(node)),
-                                        |view, label| {
-                                            view.child(
-                                                div()
-                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                                    .child(label),
-                                            )
-                                        },
-                                    )
-                                    .child(graph_diagnostic(diagnostic)),
-                            ),
-                    );
-                }
-                let mut body = div().flex().flex_col().min_w_0().p_2().gap_2().child(rows);
-                if pages > 1 {
-                    body = body.child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                Button::new("node-diagnostics-previous")
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::ChevronLeft)
-                                    .tooltip(translate("databaseEditor.previousPage"))
-                                    .disabled(self.diagnostics_page == 0)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        if view.epoch == epoch {
-                                            view.diagnostics_page =
-                                                view.diagnostics_page.saturating_sub(1);
-                                            view.diagnostics_scroll
-                                                .set_offset(gpui_kit::Point::default());
-                                            cx.notify();
-                                        }
-                                    })),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .child(format!("{} / {pages}", self.diagnostics_page + 1)),
-                            )
-                            .child(
-                                Button::new("node-diagnostics-next")
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::ChevronRight)
-                                    .tooltip(translate("databaseEditor.nextPage"))
-                                    .disabled(self.diagnostics_page + 1 >= pages)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        if view.epoch == epoch {
-                                            view.diagnostics_page =
-                                                (view.diagnostics_page + 1).min(pages - 1);
-                                            view.diagnostics_scroll
-                                                .set_offset(gpui_kit::Point::default());
-                                            cx.notify();
-                                        }
-                                    })),
-                            ),
-                    );
-                }
-                section.content(body)
+                    })
+                    .children(rows),
+            )
+            .when(pages > 1, |section| {
+                section.child(div().flex().justify_end().child(
+                    Pager::new("node-diagnostics-pager", self.diagnostics_page, pages).on_change(
+                        cx.listener(move |view, page: &usize, _, cx| {
+                            if view.epoch == epoch {
+                                view.diagnostics_page = *page;
+                                view.diagnostics_scroll
+                                    .set_offset(gpui_kit::Point::default());
+                                cx.notify();
+                            }
+                        }),
+                    ),
+                ))
             })
             .into_any_element()
     }

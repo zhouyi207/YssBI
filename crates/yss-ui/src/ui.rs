@@ -1,8 +1,8 @@
 //! Product presentation shared by desktop feature crates and the application shell.
 pub mod appearance;
 pub mod constant_values;
-pub mod controls;
 pub mod input;
+pub mod inspector;
 pub mod keymap;
 pub mod layout_store;
 pub mod markdown;

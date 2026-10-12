@@ -1,19 +1,23 @@
 //! Bounded code/label controls share the existing parameter commit and restore paths.
 mod draft;
 mod positive;
-use super::{ParameterForm, controls, field::ParameterDraft};
-pub(super) use draft::DomainDraft;
-use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
-    input::Input,
+use super::{
+    ParameterForm,
+    field::{
+        ParameterDraft,
+        list::{RowCommand, row_number},
+    },
 };
-use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*, px};
+pub(super) use draft::DomainDraft;
+use gpui_kit::component::{ActiveTheme, Disableable, Sizable, input::Input};
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use yss_data_contract::ConversionDomain;
+use yss_ui::appearance::HEADER_BUTTON_SIZE;
+use yss_ui::inspector::{self, InlineMessage, Pager};
 use yss_ui::text::translate;
 
 impl ParameterForm {
+    /// Codes and labels form two aligned columns; the header row reserves the same lanes.
     pub(super) fn render_domain(
         &self,
         index: usize,
@@ -22,115 +26,91 @@ impl ParameterForm {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let epoch = self.epoch;
-        let pages = draft.pages();
-        let page = draft.page;
+        let len = draft.len();
         let duplicates = draft.has_duplicates(cx);
+        let mut rows = div()
+            .id(("domain-values", index))
+            .max_h_64()
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_1();
+        for (row, inputs) in draft.visible() {
+            rows = rows.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(row_number(row, cx))
+                    .child(
+                        Input::new(&inputs.code)
+                            .small()
+                            .flex_1()
+                            .min_w_0()
+                            .disabled(busy),
+                    )
+                    .child(
+                        Input::new(&inputs.label)
+                            .small()
+                            .flex_1()
+                            .min_w_0()
+                            .disabled(busy),
+                    )
+                    .child(self.row_menu(
+                        ("domain-actions", inputs.code.entity_id().as_u64() as usize),
+                        (row, len),
+                        true,
+                        busy,
+                        cx,
+                        move |view, command, window, cx| {
+                            let Some(field) = view.fields.get_mut(index) else {
+                                return;
+                            };
+                            let ParameterDraft::Domain(draft) = &mut field.draft else {
+                                return;
+                            };
+                            match command {
+                                RowCommand::Move(direction) => {
+                                    draft.move_row(row, direction, window, cx)
+                                }
+                                RowCommand::Remove => draft.remove(row, window, cx),
+                            }
+                            field.error = None;
+                            field.dirty = true;
+                            cx.notify();
+                        },
+                    )),
+            );
+        }
+        let columns = div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child(div().w_6().flex_shrink_0())
+            .child(div().flex_1().min_w_0().child(translate("conversion.code")))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(translate("conversion.label")),
+            )
+            .child(div().w(HEADER_BUTTON_SIZE).flex_shrink_0());
         div()
             .flex()
             .flex_col()
             .gap_2()
-            .child(controls::hint(translate("conversion.domainHelp"), cx))
-            .child(
-                div()
-                    .id(("domain-values", index))
-                    .max_h(px(256.))
-                    .overflow_y_scroll()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .children(draft.visible().map(|(row, inputs)| {
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .p_2()
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .rounded_md()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap_1()
-                                    .child(div().flex_1().text_xs().child((row + 1).to_string()))
-                                    .children(
-                                        [
-                                            (-1, IconName::ChevronUp, "conversion.moveUp"),
-                                            (1, IconName::ChevronDown, "conversion.moveDown"),
-                                        ]
-                                        .into_iter()
-                                        .map(
-                                            |(direction, icon, label)| {
-                                                Button::new(gpui_kit::SharedString::from(format!(
-                                                    "domain-move-{index}-{row}-{direction}"
-                                                )))
-                                                .small()
-                                                .ghost()
-                                                .icon(icon)
-                                                .tooltip(translate(label))
-                                                .disabled(
-                                                    busy || (direction < 0 && row == 0)
-                                                        || (direction > 0
-                                                            && row + 1 == draft.len()),
-                                                )
-                                                .on_click(cx.listener(
-                                                    move |view, _, window, cx| {
-                                                        if view.accepts_input(epoch, cx)
-                                                            && let ParameterDraft::Domain(draft) =
-                                                                &mut view.fields[index].draft
-                                                        {
-                                                            draft.move_row(
-                                                                row, direction, window, cx,
-                                                            );
-                                                            view.fields[index].error = None;
-                                                            view.fields[index].dirty = true;
-                                                            cx.notify();
-                                                        }
-                                                    },
-                                                ))
-                                            },
-                                        ),
-                                    )
-                                    .child(
-                                        Button::new(gpui_kit::SharedString::from(format!(
-                                            "domain-remove-{index}-{row}"
-                                        )))
-                                        .small()
-                                        .ghost()
-                                        .icon(IconName::Minus)
-                                        .tooltip(translate("conversion.removeValue"))
-                                        .disabled(busy)
-                                        .on_click(
-                                            cx.listener(move |view, _, window, cx| {
-                                                if view.accepts_input(epoch, cx)
-                                                    && let ParameterDraft::Domain(draft) =
-                                                        &mut view.fields[index].draft
-                                                {
-                                                    draft.remove(row, window, cx);
-                                                    view.fields[index].error = None;
-                                                    view.fields[index].dirty = true;
-                                                    cx.notify();
-                                                }
-                                            }),
-                                        ),
-                                    ),
-                            )
-                            .child(controls::hint(translate("conversion.code"), cx))
-                            .child(Input::new(&inputs.code).small().disabled(busy))
-                            .child(controls::hint(translate("conversion.label"), cx))
-                            .child(Input::new(&inputs.label).small().disabled(busy))
-                    })),
-            )
+            .child(inspector::hint(translate("conversion.domainHelp"), cx))
+            .when(len > 0, |content| {
+                content.child(div().flex().flex_col().gap_1().child(columns).child(rows))
+            })
             .when(
                 duplicates && self.fields[index].error.is_none(),
                 |content| {
                     content.child(
-                        div()
-                            .id(("domain-duplicates", index))
-                            .role(gpui_kit::accesskit::Role::Alert)
-                            .text_xs()
-                            .text_color(cx.theme().danger)
-                            .child(translate("conversion.duplicateValues")),
+                        InlineMessage::error(translate("conversion.duplicateValues"))
+                            .id(("domain-duplicates", index)),
                     )
                 },
             )
@@ -138,17 +118,17 @@ impl ParameterForm {
             .child(
                 div()
                     .flex()
-                    .items_center()
                     .flex_wrap()
+                    .items_center()
                     .gap_1()
                     .child(
-                        Button::new(("domain-add", index))
-                            .small()
-                            .ghost()
-                            .icon(IconName::Plus)
-                            .label(translate("conversion.addValue"))
-                            .disabled(busy || draft.len() >= ConversionDomain::MAX_VALUES)
-                            .on_click(cx.listener(move |view, _, window, cx| {
+                        inspector::add_button(
+                            ("domain-add", index),
+                            translate("conversion.addValue"),
+                        )
+                        .disabled(busy || len >= ConversionDomain::MAX_VALUES)
+                        .on_click(cx.listener(
+                            move |view, _, window, cx| {
                                 if view.accepts_input(epoch, cx)
                                     && let ParameterDraft::Domain(draft) =
                                         &mut view.fields[index].draft
@@ -158,55 +138,35 @@ impl ParameterForm {
                                     view.fields[index].dirty = true;
                                     cx.notify();
                                 }
-                            })),
+                            },
+                        )),
                     )
+                    .child(div().flex_1())
                     .child(
-                        controls::apply(("domain-apply", index), busy || duplicates)
-                            .tooltip(translate("native.workbench.applyMapping"))
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                if view.accepts_input(epoch, cx) {
-                                    view.apply_parameter(index, cx);
+                        Pager::new(("domain-pager", index), draft.page, draft.pages())
+                            .disabled(busy)
+                            .on_change(cx.listener(move |view, page: &usize, window, cx| {
+                                if view.accepts_input(epoch, cx)
+                                    && let ParameterDraft::Domain(draft) =
+                                        &mut view.fields[index].draft
+                                {
+                                    draft.show_page(*page, window, cx);
+                                    cx.notify();
                                 }
                             })),
                     )
-                    .when(pages > 1, |bar| {
-                        bar.children(
-                            [
-                                (-1, IconName::ChevronLeft, "conversion.previousValues"),
-                                (1, IconName::ChevronRight, "conversion.nextValues"),
-                            ]
-                            .into_iter()
-                            .map(|(direction, icon, label)| {
-                                Button::new(gpui_kit::SharedString::from(format!(
-                                    "domain-page-{index}-{direction}"
-                                )))
-                                .small()
-                                .ghost()
-                                .icon(icon)
-                                .tooltip(translate(label))
-                                .disabled(
-                                    busy || (direction < 0 && page == 0)
-                                        || (direction > 0 && page + 1 == pages),
-                                )
-                                .on_click(cx.listener(
-                                    move |view, _, window, cx| {
-                                        if view.accepts_input(epoch, cx)
-                                            && let ParameterDraft::Domain(draft) =
-                                                &mut view.fields[index].draft
-                                        {
-                                            draft.show_page(
-                                                page.saturating_add_signed(direction),
-                                                window,
-                                                cx,
-                                            );
-                                            cx.notify();
-                                        }
-                                    },
-                                ))
-                            }),
+                    .child(
+                        inspector::commit_button(
+                            ("domain-apply", index),
+                            translate("native.workbench.applyMapping"),
+                            busy || duplicates,
                         )
-                        .child(div().text_xs().child(format!("{} / {pages}", page + 1)))
-                    }),
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if view.accepts_input(epoch, cx) {
+                                view.apply_parameter(index, cx);
+                            }
+                        })),
+                    ),
             )
             .into_any_element()
     }

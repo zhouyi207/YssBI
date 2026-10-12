@@ -129,7 +129,7 @@ impl GraphCanvas {
             } else if matches!(text.as_ref(), "" | "-" | "." | "-.") {
                 Ok(Value::from(0))
             } else {
-                yss_ui::controls::number(&text)
+                yss_ui::input::number(&text)
             };
             let Ok(value) = value else {
                 field.error = Some(InputError::Number);

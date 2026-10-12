@@ -166,7 +166,7 @@ impl ListDraft {
                     Row::Input { input, .. } => input.read(cx).value().to_string(),
                 };
                 if self.numeric {
-                    yss_ui::controls::number(&text)
+                    yss_ui::input::number(&text)
                 } else {
                     Ok(Value::String(text))
                 }

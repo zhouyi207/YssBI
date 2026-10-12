@@ -7,16 +7,14 @@ mod value;
 use crate::{GraphServices, canvas::GraphCanvas};
 use constants::{ConstantDraft, ConstantOverview};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
-};
+use gpui_kit::component::Disableable;
 use gpui_kit::{
     Context, Entity, IntoElement, Render, Subscription, WeakEntity, Window, div, prelude::*,
 };
 use signature::SignatureDraft;
 use std::sync::Arc;
 use yss_project::GraphEditVersion;
+use yss_ui::inspector::{self, InlineMessage, InspectorHeader};
 
 pub(super) struct GraphProperties {
     services: Arc<GraphServices>,
@@ -155,64 +153,40 @@ impl Render for GraphProperties {
             .graph()
             .map(|graph| graph.read(cx).title_text())
             .unwrap_or_default();
+        let header = InspectorHeader::new(IconName::Workflow, title)
+            .when(self.signature.is_some(), |header| {
+                header.detail(yss_ui::text::translate("detail.typeLabels.function_graph"))
+            })
+            .tool(
+                inspector::action_button(
+                    "refresh-graph-properties",
+                    IconName::RefreshCw,
+                    yss_ui::text::translate("native.workbench.refreshGraphProperties"),
+                )
+                .disabled(self.loading)
+                .on_click(cx.listener(|view, _, window, cx| {
+                    if let Some(graph) = view.graph() {
+                        graph.update(cx, |graph, cx| graph.refresh(cx));
+                    }
+                    view.read(window, cx);
+                })),
+            );
         div()
+            .min_w_0()
             .flex()
             .flex_col()
-            .gap_4()
-            .px_4()
-            .pb_4()
-            .child(
-                div()
-                    .h(yss_ui::appearance::HEADER_HEIGHT)
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_sm()
-                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                            .truncate()
-                            .child(title),
-                    )
-                    .child(
-                        Button::new("refresh-graph-properties")
-                            .small()
-                            .ghost()
-                            .icon(IconName::Redo2)
-                            .tooltip(yss_ui::text::t("native.workbench.refreshGraphProperties"))
-                            .disabled(self.loading)
-                            .on_click(cx.listener(|view, _, window, cx| {
-                                if let Some(graph) = view.graph() {
-                                    graph.update(cx, |graph, cx| graph.refresh(cx));
-                                }
-                                view.read(window, cx);
-                            })),
+            .child(header)
+            .when(self.loading, |view| {
+                view.child(inspector::status_band(
+                    inspector::hint(
+                        yss_ui::text::t("native.workbench.loadingGraphProperties"),
+                        cx,
                     ),
-            )
-            .when(self.signature.is_some(), |view| {
-                view.child(yss_ui::controls::hint(
-                    yss_ui::text::translate("detail.typeLabels.function_graph"),
                     cx,
                 ))
             })
-            .when(self.loading, |view| {
-                view.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(yss_ui::text::t("native.workbench.loadingGraphProperties")),
-                )
-            })
-            .children(error.as_ref().map(|error| {
-                div()
-                    .id("graph-properties-error")
-                    .role(gpui_kit::accesskit::Role::Alert)
-                    .text_xs()
-                    .text_color(cx.theme().danger)
-                    .child(error.clone())
+            .children(error.map(|error| {
+                inspector::status_band(InlineMessage::error(error).id("graph-properties-error"), cx)
             }))
             .children(
                 self.signature

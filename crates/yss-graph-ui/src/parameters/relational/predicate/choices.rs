@@ -1,15 +1,14 @@
 //! Build typed choices on menu open; revalidate them against the current draft on selection.
 use super::{FilterDraft, literal_label, operator_label};
 use crate::parameters::{ParameterForm, field::ParameterDraft, relational::RelationalDraft};
-use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    Disableable, Sizable,
-    button::Button,
+    Disableable,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit::{AnyElement, Context, IntoElement, prelude::*};
+use gpui_kit::{AnyElement, Context, IntoElement};
 use yss_graph_editor::projection::{EditorFilterLiteralType, EditorParameterConfiguration};
 use yss_node_protocol::dataframe::FilterOperator;
+use yss_ui::inspector;
 use yss_ui::text::translate;
 
 #[derive(Clone, Copy)]
@@ -85,11 +84,7 @@ impl ParameterForm {
         };
         let epoch = self.epoch;
         let owner = cx.entity().downgrade();
-        Button::new((id, index))
-            .small()
-            .w_full()
-            .label(label)
-            .icon(IconName::ChevronDown)
+        inspector::choice_trigger((id, index), label)
             .disabled(busy || empty)
             .dropdown_menu(move |mut menu, _, cx| {
                 menu = menu.scrollable(true);
@@ -136,11 +131,11 @@ impl ParameterForm {
                 };
                 for choice in choices {
                     let (label, checked) = choice.presentation(draft, cx);
-                    let owner = owner.clone();
                     let column = column.clone();
                     menu = menu.item(PopupMenuItem::new(label).checked(checked).on_click(
-                        move |_, window, cx| {
-                            let _ = owner.update(cx, |view, cx| {
+                        inspector::owner_command(
+                            owner.clone(),
+                            move |view: &mut ParameterForm, window, cx| {
                                 if !view.accepts_input(epoch, cx) {
                                     return;
                                 }
@@ -182,8 +177,8 @@ impl ParameterForm {
                                     field.dirty = true;
                                     cx.notify();
                                 }
-                            });
-                        },
+                            },
+                        ),
                     ));
                 }
                 menu

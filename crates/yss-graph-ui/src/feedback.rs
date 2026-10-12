@@ -1,6 +1,16 @@
 //! Graph diagnostics and execution failures use the shared desktop locale and translations.
-use yss_graph_editor::projection::EditorDiagnosticModel;
+use yss_graph_editor::projection::{EditorDiagnosticModel, EditorDiagnosticSeverity};
+use yss_ui::inspector::{InlineMessage, Severity};
 use yss_ui::text::{format, locale, translate};
+
+pub(crate) fn diagnostic_message(diagnostic: &EditorDiagnosticModel) -> InlineMessage {
+    let severity = match diagnostic.severity {
+        EditorDiagnosticSeverity::Error => Severity::Error,
+        EditorDiagnosticSeverity::Warning => Severity::Warning,
+        EditorDiagnosticSeverity::Information => Severity::Information,
+    };
+    InlineMessage::new(severity, graph_diagnostic(diagnostic))
+}
 
 pub fn graph_diagnostic(diagnostic: &EditorDiagnosticModel) -> String {
     let fallback = || {

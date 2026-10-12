@@ -12,7 +12,6 @@ use yss_graph_editor::projection::{
     EditorDiagnosticModel, EditorParameterDisplay, EditorParameterGroupModel,
 };
 use yss_node_protocol::{ParameterKey, ParameterValues};
-use yss_ui::controls;
 
 pub(super) struct ParameterChange {
     pub key: ParameterKey,

@@ -2,9 +2,10 @@
 use super::*;
 use gpui_kit::component::{
     ActiveTheme,
+    button::{Button, ButtonVariants},
     list::{ListDelegate, ListItem},
 };
-use gpui_kit::{App, Task, WeakEntity};
+use gpui_kit::{App, Task, WeakEntity, px};
 use yss_graph_editor::projection::{ConnectionCandidates, ConnectionDecision};
 
 pub(super) struct ConnectionOption {

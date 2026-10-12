@@ -1,4 +1,3 @@
-use yss_ui::controls;
 mod connections;
 mod description;
 mod diagnostics;
@@ -52,7 +51,6 @@ pub struct GraphDetails {
     _parameter_subscription: gpui_kit::Subscription,
     ports: Vec<PortField>,
     epoch: u64,
-    error: Option<String>,
 }
 
 impl GraphDetails {
@@ -116,7 +114,6 @@ impl GraphDetails {
             _parameter_subscription: parameter_subscription,
             ports: vec![],
             epoch: 0,
-            error: None,
         }
     }
 
@@ -161,7 +158,6 @@ impl GraphDetails {
         self.properties
             .update(cx, |properties, cx| properties.clear(cx));
         self.epoch = self.epoch.wrapping_add(1);
-        self.error = None;
         cx.notify();
     }
 
@@ -228,7 +224,6 @@ impl GraphDetails {
         self.selected = nodes;
         self.projection = Some(projection.clone());
         self.version = Some(version);
-        self.error = None;
         self.epoch = self.epoch.wrapping_add(1);
         let node = self.node_in(&projection);
         let diagnostics_page = self.diagnostics_page.min(node.map_or(0, |node| {
@@ -356,19 +351,6 @@ impl Render for GraphDetails {
             )
             .into_any_element()
         };
-        panel
-            .child(content)
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .m_3()
-                        .p_3()
-                        .rounded_md()
-                        .text_sm()
-                        .text_color(cx.theme().danger)
-                        .child(error),
-                )
-            })
-            .into_any_element()
+        panel.child(content).into_any_element()
     }
 }

@@ -45,7 +45,7 @@ use crate::{GraphServices, OpenedGraph};
 pub use authoring::ConstantValueInput;
 pub use commands::*;
 pub(crate) use constant_drag::ConstantDrag;
-pub(crate) use ports::scalar_input_type;
+pub(crate) use ports::{port_glyph, scalar_input_type};
 pub(crate) use result_catalog::ResultEntry;
 
 pub enum CanvasEvent {

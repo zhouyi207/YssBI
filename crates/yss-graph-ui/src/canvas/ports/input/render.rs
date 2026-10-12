@@ -100,7 +100,7 @@ impl GraphCanvas {
         let address = port.address.clone();
         let error = field.and_then(|field| match field.error? {
             InputError::Conflict => Some(yss_ui::text::translate("native.canvas.commandFailed")),
-            InputError::Number => yss_ui::controls::number(&field.input.read(cx).value()).err(),
+            InputError::Number => yss_ui::input::number(&field.input.read(cx).value()).err(),
         });
         Some(
             div()

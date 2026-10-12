@@ -58,3 +58,26 @@ impl TextField {
         }
     }
 }
+
+/// Parses a numeric draft into the JSON value submitted for a parameter or literal.
+pub fn number(text: &str) -> Result<serde_json::Value, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(crate::text::t("notifications.parameter.enterNumber").into());
+    }
+    // Integer drafts stay exact in Rust; never fall back to a rounded float on overflow.
+    if !text.contains(['.', 'e', 'E']) {
+        if let Ok(value) = text.parse::<i64>() {
+            return Ok(value.into());
+        }
+        return text
+            .parse::<u64>()
+            .map(serde_json::Value::from)
+            .map_err(|_| crate::text::t("native.workbench.integerOutOfRange").into());
+    }
+    text.parse::<f64>()
+        .ok()
+        .and_then(serde_json::Number::from_f64)
+        .map(serde_json::Value::Number)
+        .ok_or_else(|| crate::text::t("native.workbench.finiteNumberRequired").into())
+}

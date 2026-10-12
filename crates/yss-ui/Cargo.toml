@@ -36,6 +36,7 @@ raw-window-handle = "0.6.2"
 x11rb = { version = "0.13.2", features = ["shape"] }
 
 [dev-dependencies]
+gpui-kit = { workspace = true, features = ["test-support"] }
 markdown = "=1.0.0"
 uuid.workspace = true
 
