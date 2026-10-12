@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Theme, ThemeMode};
 use gpui_kit::{
-    App, Global, Hsla, IntoElement, Pixels, SharedString, Subscription, Window, WindowAppearance,
-    WindowId, div, prelude::*, px, rgb,
+    Anchor, App, Global, Hsla, IntoElement, Pixels, SharedString, Subscription, Window,
+    WindowAppearance, WindowId, div, prelude::*, px, rgb,
 };
 use yss_settings::AppearanceSettings;
 
@@ -93,6 +93,7 @@ pub fn apply(cx: &mut App) {
         Theme::change(mode, None, cx);
     }
     Theme::update(cx, |theme| {
+        theme.notification.placement = Anchor::BottomRight;
         theme.font_family = ui_font;
         theme.font_size = px(settings.ui_font_size);
         theme.mono_font_family = mono_font;
