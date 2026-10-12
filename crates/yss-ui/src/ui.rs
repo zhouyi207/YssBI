@@ -11,6 +11,7 @@ pub mod name_form;
 pub mod preferences;
 pub mod table;
 pub mod text;
+pub mod tool_panel;
 pub mod window_chrome;
 
 /// Install shared presentation after GPUI Kit and before application keybindings or windows.

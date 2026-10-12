@@ -1,4 +1,3 @@
-//! Only visible rows are built; the toolbar and count share the same filtered indices.
 use super::*;
 use gpui_kit::component::{
     ActiveTheme,
@@ -6,19 +5,13 @@ use gpui_kit::component::{
     tooltip::Tooltip,
 };
 use gpui_kit::{Render, uniform_list};
+use yss_ui::tool_panel::ToolPanel;
 
 impl Render for LogsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.following() {
             self.scroll.scroll_to_bottom();
         }
-        let status_color = if self.error.is_some() {
-            cx.theme().danger
-        } else if self.connecting || self.truncated {
-            cx.theme().warning
-        } else {
-            cx.theme().success
-        };
         let locale = crate::text::locale();
         if self.view_locale != locale {
             self.view_locale = locale;
@@ -26,105 +19,50 @@ impl Render for LogsPanel {
                 input.set_placeholder(crate::text::translate("log.searchPlaceholder"), window, cx)
             });
         }
+        let body = if self.visible.is_empty() {
+            let (title, hint) = if self.entries.is_empty() {
+                ("log.noLogs", "native.workbench.logsEmpty")
+            } else {
+                ("log.noMatches", "log.adjustFilterHint")
+            };
+            crate::appearance::empty_state(
+                IconName::SquareTerminal,
+                crate::text::translate(title),
+                crate::text::translate(hint),
+                cx,
+            )
+        } else {
+            uniform_list(
+                "logs-list",
+                self.visible.len(),
+                cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
+                    let selected = view
+                        .selected
+                        .as_ref()
+                        .map(|selected| selected.read(cx).key().clone());
+                    range
+                        .filter_map(|index| {
+                            view.visible
+                                .get(index)
+                                .and_then(|index| view.entries.get(*index))
+                        })
+                        .map(|entry| {
+                            log_row(entry.clone(), selected.as_ref() == Some(&entry.key), cx)
+                        })
+                        .collect::<Vec<_>>()
+                }),
+            )
+            .track_scroll(&self.scroll)
+            .size_full()
+            .into_any_element()
+        };
         div()
             .id("logs")
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|view, event, window, cx| view.key_down(event, window, cx)))
             .size_full()
-            .flex()
-            .flex_col()
-            .bg(cx.theme().background)
-            .child(self.toolbar(cx))
             .child(
-                div()
-                    .id("log-status")
-                    .role(gpui_kit::accesskit::Role::Status)
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_3()
-                    .px_3()
-                    .py_1()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(
-                        div()
-                            .size(px(6.))
-                            .flex_shrink_0()
-                            .rounded_full()
-                            .bg(status_color),
-                    )
-                    .child(crate::text::format(
-                        "log.showCount",
-                        &[
-                            ("filtered", self.visible.len().to_string()),
-                            ("total", self.entries.len().to_string()),
-                        ],
-                    ))
-                    .when(self.truncated && self.error.is_none(), |bar| {
-                        bar.child(
-                            div()
-                                .text_color(cx.theme().warning)
-                                .child(crate::text::translate("log.streamTruncated")),
-                        )
-                    })
-                    .when(self.connecting, |bar| {
-                        bar.child(crate::text::translate("log.loadingLogs"))
-                    })
-                    .when_some(self.error, |bar, key| {
-                        bar.child(
-                            div()
-                                .text_color(cx.theme().danger)
-                                .child(crate::text::translate(key)),
-                        )
-                    }),
-            )
-            .when(!self.visible.is_empty(), |view| {
-                view.child(
-                    uniform_list(
-                        "logs-list",
-                        self.visible.len(),
-                        cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
-                            let selected = view
-                                .selected
-                                .as_ref()
-                                .map(|selected| selected.read(cx).key().clone());
-                            range
-                                .filter_map(|index| {
-                                    view.visible
-                                        .get(index)
-                                        .and_then(|index| view.entries.get(*index))
-                                })
-                                .map(|entry| {
-                                    log_row(
-                                        entry.clone(),
-                                        selected.as_ref() == Some(&entry.key),
-                                        cx,
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                        }),
-                    )
-                    .track_scroll(&self.scroll)
-                    .flex_1()
-                    .min_h_0(),
-                )
-            })
-            .when(
-                self.visible.is_empty() && !self.connecting && self.error.is_none(),
-                |view| {
-                    let (title, hint) = if self.entries.is_empty() {
-                        ("log.noLogs", "native.workbench.logsEmpty")
-                    } else {
-                        ("log.noMatches", "log.adjustFilterHint")
-                    };
-                    view.child(crate::appearance::empty_state(
-                        IconName::SquareTerminal,
-                        crate::text::translate(title),
-                        crate::text::translate(hint),
-                        cx,
-                    ))
-                },
+                ToolPanel::new(crate::text::translate("log.title"), body).tools(self.toolbar(cx)),
             )
     }
 }

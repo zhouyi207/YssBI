@@ -2,7 +2,7 @@
 use crate::canvas::{GraphCanvas, ResultEntry};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Icon, Sizable,
+    Icon, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
 };
@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 use std::rc::Rc;
 use yss_graph_execution::result::ResultReference;
-use yss_ui::appearance;
+use yss_ui::{appearance, tool_panel::ToolPanel};
 pub struct ResultsPanel {
     focus: FocusHandle,
     entries: Rc<[ResultEntry]>,
@@ -36,52 +36,50 @@ impl ResultsPanel {
 }
 impl Render for ResultsPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let body = if self.entries.is_empty() {
+            appearance::empty_state(
+                IconName::Inbox,
+                yss_ui::text::t("panel.results"),
+                yss_ui::text::t("native.workbench.resultsHint"),
+                cx,
+            )
+        } else {
+            uniform_list(
+                "result-entries",
+                self.entries.len(),
+                cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
+                    range
+                        .map(|index| {
+                            let entry = &view.entries[index];
+                            let reference = entry.reference;
+                            div().h_8().flex().items_center().px_2().gap_2().child(
+                                Button::new(("open-result", reference.result_id.get()))
+                                    .small()
+                                    .ghost()
+                                    .icon(IconName::Table)
+                                    .label(entry.title.clone())
+                                    .on_click(cx.listener(move |view, _, _, cx| {
+                                        if view
+                                            .entries
+                                            .iter()
+                                            .any(|entry| entry.reference == reference)
+                                        {
+                                            cx.emit(ResultsEvent::Open(reference));
+                                        }
+                                    })),
+                            )
+                        })
+                        .collect()
+                }),
+            )
+            .size_full()
+            .into_any_element()
+        };
         div()
             .id("current-results")
             .track_focus(&self.focus)
             .size_full()
-            .bg(cx.theme().background)
-            .when(self.entries.is_empty(), |view| {
-                view.child(appearance::empty_state(
-                    IconName::Inbox,
-                    yss_ui::text::t("panel.results"),
-                    yss_ui::text::t("native.workbench.resultsHint"),
-                    cx,
-                ))
-            })
-            .when(!self.entries.is_empty(), |view| {
-                view.child(
-                    uniform_list(
-                        "result-entries",
-                        self.entries.len(),
-                        cx.processor(|view, range: std::ops::Range<usize>, _, cx| {
-                            range
-                                .map(|index| {
-                                    let entry = &view.entries[index];
-                                    let reference = entry.reference;
-                                    div().h_8().flex().items_center().px_2().gap_2().child(
-                                        Button::new(("open-result", reference.result_id.get()))
-                                            .small()
-                                            .ghost()
-                                            .icon(IconName::Table)
-                                            .label(entry.title.clone())
-                                            .on_click(cx.listener(move |view, _, _, cx| {
-                                                if view
-                                                    .entries
-                                                    .iter()
-                                                    .any(|entry| entry.reference == reference)
-                                                {
-                                                    cx.emit(ResultsEvent::Open(reference));
-                                                }
-                                            })),
-                                    )
-                                })
-                                .collect()
-                        }),
-                    )
-                    .size_full(),
-                )
-            })
+            .child(ToolPanel::new(yss_ui::text::t("panel.results"), body))
     }
 }
 impl EventEmitter<PanelEvent> for ResultsPanel {}

@@ -11,6 +11,7 @@ use yss_settings::AppearanceSettings;
 
 // Keep dock tabs, panel titles and toolbars aligned independently of the UI font size.
 pub const HEADER_HEIGHT: Pixels = px(28.);
+pub const HEADER_BUTTON_SIZE: Pixels = px(20.);
 
 struct Appearance {
     system: WindowAppearance,

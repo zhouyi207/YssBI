@@ -3,8 +3,7 @@ mod failure;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, Sizable,
-    button::{Button, ButtonVariants},
+    Disableable, Icon,
     dock::{BasePanel, Panel, PanelEvent},
 };
 use gpui_kit::{
@@ -13,6 +12,10 @@ use gpui_kit::{
 };
 use yss_application::graph::run::RunApplicationEventKind;
 use yss_graph_execution::plan::PlanSourceIdentity;
+use yss_ui::{
+    appearance,
+    tool_panel::{self, ToolPanel},
+};
 
 use crate::canvas::{CanvasEvent, GraphCanvas};
 
@@ -78,77 +81,48 @@ impl Render for OutputPanel {
             .and_then(|graph| graph.read(cx).clearable_run())
             .cloned();
         let body = match failure {
-            Some((run, failure)) => failure::render(run, failure, cx),
-            None => div()
+            Some((run, failure)) => div()
+                .id("output-body")
                 .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .p_4()
-                .text_color(cx.theme().muted_foreground)
-                .child(crate::text::t(if graph.is_some() {
+                .overflow_y_scroll()
+                .overflow_x_scroll()
+                .child(failure::render(run, failure, cx))
+                .into_any_element(),
+            None => appearance::empty_state(
+                IconName::SquareTerminal,
+                crate::text::t("panel.output"),
+                crate::text::t(if graph.is_some() {
                     "panel.outputEmpty"
                 } else {
                     "panel.outputNoGraph"
-                }))
-                .into_any_element(),
+                }),
+                cx,
+            ),
         };
         div()
             .id("output")
             .track_focus(&self.focus)
             .size_full()
-            .flex()
-            .flex_col()
-            .bg(cx.theme().background)
-            .text_color(cx.theme().foreground)
-            .text_xs()
             .child(
-                div()
-                    .h(super::dock::HEADER_HEIGHT)
-                    .px_2()
-                    .flex()
-                    .flex_shrink_0()
-                    .items_center()
-                    .gap_2()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(div().flex_1().child(crate::text::t("panel.output")))
-                    .when_some(graph.as_ref(), |view, graph| {
-                        view.child(
-                            div()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(graph.read(cx).run_status()),
-                        )
-                    })
-                    .child(
-                        Button::new("clear-output-run-notice")
-                            .small()
-                            .ghost()
-                            .icon(IconName::Trash)
-                            .tooltip(crate::text::t(if clear_run.is_some() {
-                                "canvas.clearExecutionArtifacts"
-                            } else {
-                                "canvas.clearExecutionArtifactsDisabled"
-                            }))
-                            .disabled(clear_run.is_none())
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                if let Some(run) = &clear_run
-                                    && let Some(graph) =
-                                        view.graph.as_ref().and_then(WeakEntity::upgrade)
-                                {
-                                    graph.update(cx, |graph, cx| graph.clear_run_notice(run, cx));
-                                }
-                            })),
-                    ),
-            )
-            .child(
-                div()
-                    .id("output-body")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .overflow_x_scroll()
-                    .child(body),
+                ToolPanel::new(crate::text::t("panel.output"), body).tool(
+                    tool_panel::button("clear-output-run-notice")
+                        .icon(IconName::Trash)
+                        .accessibility_label(crate::text::t("canvas.clearExecutionArtifacts"))
+                        .tooltip(crate::text::t(if clear_run.is_some() {
+                            "canvas.clearExecutionArtifacts"
+                        } else {
+                            "canvas.clearExecutionArtifactsDisabled"
+                        }))
+                        .disabled(clear_run.is_none())
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if let Some(run) = &clear_run
+                                && let Some(graph) =
+                                    view.graph.as_ref().and_then(WeakEntity::upgrade)
+                            {
+                                graph.update(cx, |graph, cx| graph.clear_run_notice(run, cx));
+                            }
+                        })),
+                ),
             )
     }
 }

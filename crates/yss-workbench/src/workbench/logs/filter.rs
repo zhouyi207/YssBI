@@ -41,7 +41,6 @@ impl LogsPanel {
         if removed == 0 {
             return;
         }
-        self.truncated = true;
         let removed_visible = self.visible.partition_point(|index| *index < removed);
         self.entries.drain(..removed);
         self.visible.drain(..removed_visible);
@@ -64,7 +63,6 @@ impl LogsPanel {
         self.clear_selection(cx);
         self.entries.clear();
         self.visible.clear();
-        self.truncated = false;
         self.scroll
             .0
             .borrow()

@@ -88,7 +88,6 @@
       "storage": "History storage target",
       "storageHint": "0 disables size eviction; 1–10240 MiB of SQLite pages. Deletes oldest records first. Background reclamation, WAL, readers and fragmentation can leave files above this target. Deletion cannot be undone.",
       "applyFailed": "Log retention was saved but maintenance could not be applied. Check disk space and database access.",
-      "retentionFailed": "Log history maintenance failed. Check available disk space and database access, then restart the application.",
       "visibleLevelsDescription": "Filter displayed records only. This does not change log collection; Rust uses RUST_LOG and explicit UI logs collect INFO and above.",
       "retentionDaysDescription": "Delete records older than this many days, using their recorded local time. Disabled keeps all ages. Cleanup continues in bounded background passes.",
       "maxStorageDescription": "Target for allocated SQLite history pages, including indexes. Oldest records are removed first; free pages and WAL space are reclaimed gradually. Readers, fragmentation and pending work may keep files above this target. This is not a hard file-size cap.",
@@ -769,7 +768,6 @@
     "outputClear": "Clear run failure",
     "problemsNoGraph": "Open a graph to view its problems",
     "problemsEmpty": "No problems were reported for the current graph",
-    "problemsCount": "%{count} problems",
     "problemsLocateNode": "Locate problem node"
   },
   "resultSource": {
@@ -1924,10 +1922,7 @@
     "failedInitialize": "Failed to initialize window"
   },
   "log": {
-    "streamTruncated": "Some logs may be missing",
-    "streamDisconnected": "Log stream disconnected",
     "title": "Logs",
-    "showCount": "Showing %{filtered} / %{total}",
     "refresh": "Refresh logs",
     "autoScrollEnabled": "Auto scroll enabled",
     "autoScrollDisabled": "Auto scroll disabled",
@@ -1944,7 +1939,6 @@
       "ui": "UI"
     },
     "clear": "Clear logs",
-    "loadingLogs": "Loading logs...",
     "noLogs": "No logs",
     "noMatches": "No matching logs",
     "runGraphHint": "Run a graph to show logs",
@@ -2528,8 +2522,6 @@
       "expandAll": "Expand all",
       "switchPanel": "Switch panel in this area",
       "restoreLayout": "Restore layout",
-      "logStorageUnavailable": "Log storage unavailable",
-      "logConnectionFailed": "Could not connect to log storage",
       "clearDisplay": "Clear display",
       "entryCount": "%{value0} entries",
       "logsEmpty": "Application activity will appear here",

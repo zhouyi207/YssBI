@@ -22,8 +22,7 @@ use gpui_kit::{
 };
 use std::{any::TypeId, cell::Cell, rc::Rc, sync::Arc};
 
-pub(super) use yss_ui::appearance::HEADER_HEIGHT;
-pub(super) const HEADER_BUTTON_SIZE: Pixels = px(20.);
+pub(super) use yss_ui::appearance::{HEADER_BUTTON_SIZE, HEADER_HEIGHT};
 
 pub(super) fn create(
     workbench: WeakEntity<Workbench>,

@@ -88,7 +88,6 @@
       "storage": "历史存储目标",
       "storageHint": "0 表示不限制；1–10240 MiB。以 SQLite 页为目标，先删最旧记录；后台回收，WAL、读取事务和碎片可能使文件暂时超出目标。删除无法撤销。",
       "applyFailed": "日志保留设置已保存，但未能应用清理策略。请检查磁盘空间和数据库访问权限。",
-      "retentionFailed": "日志历史清理失败。请检查可用磁盘空间和数据库访问权限，然后重启应用。",
       "visibleLevelsDescription": "仅过滤显示的记录，不改变日志采集。Rust 使用 RUST_LOG，显式界面日志仅采集 INFO 及以上级别。",
       "retentionDaysDescription": "按记录的本机时间删除超过此天数的日志。禁用后不按时间删除；清理会在后台分批继续。",
       "maxStorageDescription": "SQLite 日志历史已分配页的目标大小，包含索引。先删除最旧记录，再逐步回收空闲页和 WAL 空间。读取事务、碎片及待处理清理可能使文件超过目标；这不是文件大小硬上限。",
@@ -769,7 +768,6 @@
     "outputClear": "清除运行错误",
     "problemsNoGraph": "请打开图以查看问题",
     "problemsEmpty": "当前图没有问题",
-    "problemsCount": "%{count} 个问题",
     "problemsLocateNode": "定位问题节点"
   },
   "resultSource": {
@@ -1924,10 +1922,7 @@
     "failedInitialize": "窗口初始化失败"
   },
   "log": {
-    "streamTruncated": "部分日志可能已丢失",
-    "streamDisconnected": "日志连接已断开",
     "title": "日志",
-    "showCount": "显示 %{filtered} / %{total} 条",
     "refresh": "刷新日志",
     "autoScrollEnabled": "自动滚动已启用",
     "autoScrollDisabled": "自动滚动已禁用",
@@ -1944,7 +1939,6 @@
       "ui": "界面"
     },
     "clear": "清空日志",
-    "loadingLogs": "加载日志中...",
     "noLogs": "暂无日志",
     "noMatches": "没有匹配的日志",
     "runGraphHint": "执行图后将显示日志",
@@ -2528,8 +2522,6 @@
       "expandAll": "全部展开",
       "switchPanel": "切换此区域的面板",
       "restoreLayout": "恢复布局",
-      "logStorageUnavailable": "日志存储不可用",
-      "logConnectionFailed": "无法连接日志存储",
       "clearDisplay": "清空显示",
       "entryCount": "%{value0} 条",
       "logsEmpty": "应用运行记录会显示在这里",

@@ -27,7 +27,6 @@ impl LogsPanel {
         self.epoch += 1;
         self.connecting = false;
         let Some(runtime) = self.services.logging.logs().cloned() else {
-            self.error = Some("native.workbench.logStorageUnavailable");
             cx.notify();
             return;
         };
@@ -35,7 +34,6 @@ impl LogsPanel {
         let executor = self.services.executor.clone();
         let (sender, mut receiver) = mpsc::channel(64);
         self.connecting = true;
-        self.error = None;
         let task = self.services.executor.spawn_blocking(move || {
             let snapshot =
                 runtime.subscribe_batches(move |batch| sender.try_send(batch).is_ok())?;
@@ -51,17 +49,20 @@ impl LogsPanel {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result.map_err(anyhow::Error::from));
-            let Ok((snapshot, lease)) = result else {
-                if let Err(error) = view.update(cx, |view, cx| {
-                    if view.epoch == epoch {
-                        view.connecting = false;
-                        view.error = Some("native.workbench.logConnectionFailed");
-                        cx.notify();
+            let (snapshot, lease) = match result {
+                Ok(connected) => connected,
+                Err(error) => {
+                    if let Err(error) = view.update(cx, |view, cx| {
+                        if view.epoch == epoch {
+                            tracing::warn!(%error, "Log subscription could not be established");
+                            view.connecting = false;
+                            cx.notify();
+                        }
+                    }) {
+                        tracing::debug!(%error, "Log panel closed before connection failure delivery");
                     }
-                }) {
-                    tracing::debug!(%error, "Log panel closed before connection failure delivery");
+                    return;
                 }
-                return;
             };
             let accepted = view
                 .update(cx, |view, cx| {
@@ -108,16 +109,9 @@ impl LogsPanel {
     ) -> bool {
         if let Some(failure) = batch.failure {
             self.lease = None;
-            match failure {
-                LogStreamFailure::StorageUnavailable => {
-                    self.error = Some("native.workbench.logStorageUnavailable")
-                }
-                LogStreamFailure::RetentionFailed => {
-                    self.error = Some("preferences.logs.retentionFailed")
-                }
-                LogStreamFailure::SubscriberLagged => self.recover(window, cx),
+            if failure == LogStreamFailure::SubscriberLagged {
+                self.recover(window, cx);
             }
-            cx.notify();
             return false;
         }
         if batch.stream_id != self.stream
@@ -187,7 +181,6 @@ impl LogsPanel {
             .enumerate()
             .filter_map(|(index, entry)| self.matches(entry).then_some(index))
             .collect();
-        self.truncated = true;
         if following {
             self.scroll.scroll_to_bottom();
         } else {
@@ -222,11 +215,7 @@ impl LogsPanel {
             .filter(|_| same_stream)
             .map(|entry| (entry.record.sequence, entry))
             .collect();
-        self.truncated |= snapshot.truncated
-            || snapshot.entries.len() > VIEW_CAPACITY
-            || (!self.stream.is_empty() && !same_stream);
         self.connecting = false;
-        self.error = None;
         self.stream = snapshot.stream_id;
         self.sequence = snapshot.latest_sequence;
         self.entries = snapshot
@@ -265,14 +254,12 @@ impl LogsPanel {
 
     fn recover(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.lease = None;
-        self.truncated = true;
         if self.recovery_attempts < 3 {
             self.recovery_attempts += 1;
             self.connecting = true;
             cx.defer_in(window, |view, window, cx| view.connect(window, cx));
         } else {
             self.connecting = false;
-            self.error = Some("log.streamDisconnected");
         }
         cx.notify();
     }

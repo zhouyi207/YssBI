@@ -4,7 +4,7 @@ mod row;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Icon,
+    Icon,
     dock::{BasePanel, Panel, PanelEvent},
     scroll::Scrollbar,
 };
@@ -14,6 +14,7 @@ use gpui_kit::{
 };
 use std::{cell::Cell, rc::Rc, sync::Arc};
 use yss_graph_editor::projection::EditorProjectionModel;
+use yss_ui::{appearance, tool_panel::ToolPanel};
 
 #[derive(Clone)]
 pub struct LocateProblem {
@@ -120,19 +121,16 @@ impl Render for ProblemsPanel {
             self.rows.remeasure();
         }
         let body = if count == 0 {
-            div()
-                .size_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .p_4()
-                .text_color(cx.theme().muted_foreground)
-                .child(yss_ui::text::t(if self.projection.is_some() {
+            appearance::empty_state(
+                IconName::TriangleAlert,
+                yss_ui::text::t("panel.problems"),
+                yss_ui::text::t(if self.projection.is_some() {
                     "panel.problemsEmpty"
                 } else {
                     "panel.problemsNoGraph"
-                }))
-                .into_any_element()
+                }),
+                cx,
+            )
         } else {
             let owner = cx.entity().downgrade();
             let projection = self.projection.as_ref().unwrap().clone();
@@ -150,34 +148,11 @@ impl Render for ProblemsPanel {
             .id("problems")
             .track_focus(&self.focus)
             .size_full()
-            .flex()
-            .flex_col()
-            .bg(cx.theme().background)
-            .text_color(cx.theme().foreground)
-            .text_xs()
-            .child(
-                div()
-                    .h(yss_ui::appearance::HEADER_HEIGHT)
-                    .px_2()
-                    .flex()
-                    .flex_shrink_0()
-                    .items_center()
-                    .gap_2()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(div().flex_1().child(yss_ui::text::t("panel.problems")))
-                    .child(div().text_color(cx.theme().muted_foreground).child(
-                        yss_ui::text::format(
-                            "panel.problemsCount",
-                            &[("count", count.to_string())],
-                        ),
-                    )),
-            )
-            .child(
+            .child(ToolPanel::new(
+                yss_ui::text::t("panel.problems"),
                 div()
                     .relative()
-                    .flex_1()
-                    .min_h_0()
+                    .size_full()
                     .child(body)
                     .on_children_prepainted(move |_, window, _| {
                         let width = rows.viewport_bounds().size.width;
@@ -191,7 +166,7 @@ impl Render for ProblemsPanel {
                     .when(count > 0, |view| {
                         view.child(Scrollbar::vertical(&self.rows))
                     }),
-            )
+            ))
     }
 }
 
