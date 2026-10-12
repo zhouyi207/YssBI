@@ -66,6 +66,19 @@ class ReleaseWorkflowTests(unittest.TestCase):
                         f"{hashlib.sha256(payload).hexdigest()}  {name}\n"
                     )
 
+    def test_native_packaging_steps_use_platform_shell_and_target_variable(self):
+        for platform, shell, target_variable in (
+            ("Windows", "pwsh", "$env:BUILD_TARGET"),
+            ("macOS", "bash", "$BUILD_TARGET"),
+        ):
+            with self.subTest(platform=platform):
+                step = WORKFLOW.split(f"      - name: Build {platform} packages\n", 1)[1]
+                step = step.split("\n      - name:", 1)[0]
+                fields = dict(line.strip().split(": ", 1) for line in step.splitlines() if line.strip())
+                self.assertEqual(fields["if"], f"runner.os == '{platform}'")
+                self.assertEqual(fields["shell"], shell)
+                self.assertEqual(fields["run"], f'python scripts/package.py --target "{target_variable}" --output dist')
+
     def test_push_tag_filter(self):
         patterns = ast.literal_eval(re.search(r"^    tags: (.+)$", WORKFLOW, re.MULTILINE)[1])
         for tag, accepted in (("app-v0.4.0", True), ("app-v0.5.0-rc.1", True),

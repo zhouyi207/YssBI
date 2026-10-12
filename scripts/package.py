@@ -49,6 +49,25 @@ def version():
     return value
 
 
+def verify_windows_linker(architecture):
+    toolchain = os.environ.get("VCToolsInstallDir")
+    linker = shutil.which("link.exe")
+    if not toolchain or not linker:
+        raise ValueError("Windows packaging requires the Visual Studio developer environment and MSVC link.exe")
+    linker = Path(linker).resolve()
+    target_architecture = {"x86_64": "x64", "aarch64": "arm64"}[architecture]
+    candidates = {
+        (Path(toolchain) / "bin" / host / target_architecture / "link.exe").resolve()
+        for host in ("Hostx64", "Hostarm64", "Hostx86")
+    }
+    # Git Bash prepends its unrelated GNU link.exe ahead of the developer PATH.
+    if not linker.is_file() or linker not in candidates:
+        raise ValueError(
+            f"Expected MSVC link.exe for {target_architecture}, but PATH resolves to {linker}. "
+            "Run packaging from PowerShell in the matching Visual Studio developer environment, not Git Bash."
+        )
+
+
 def sha256(path):
     with path.open("rb") as source:
         return hashlib.file_digest(source, "sha256").hexdigest()
@@ -198,6 +217,8 @@ def main():
         for package_format in linux_formats:
             if package_format != "tar.gz":
                 validate_distribution(package_format)
+    if system == "windows":
+        verify_windows_linker(architecture)
     release_version = version()
     output = arguments.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
