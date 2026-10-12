@@ -44,22 +44,21 @@ impl ActivityPanel {
         }
         Some(
             div()
-                .h_7()
-                .px_2()
+                .flex_shrink_0()
                 .flex()
                 .items_center()
-                .justify_end()
                 .gap_1()
                 .children(document.tools.iter().map(|tool| {
                     let expected = document.clone();
                     let id = tool.id.to_owned();
+                    let label = tool.label.resolve_with(translate);
                     Button::new(gpui_kit::SharedString::from(format!("activity-tool-{id}")))
                         .ghost()
                         .small()
-                        .size_5()
                         .icon(tool_icon(tool.icon))
                         .disabled(self.conversation_busy(cx))
-                        .tooltip(tool.label.resolve_with(translate))
+                        .accessibility_label(label.clone())
+                        .tooltip(label)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             if view.accepts(&expected) {
                                 cx.emit(ActivityEvent::Tool(id.clone()));

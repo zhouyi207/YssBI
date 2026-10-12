@@ -29,18 +29,16 @@ impl Render for ActivityPanel {
             .flex()
             .flex_col()
             .bg(cx.theme().sidebar)
-            .px_1()
-            .py_1()
+            .child(self.render_header(cx))
             .when_some(self.search.as_ref(), |view, search| {
                 view.child(
-                    div().px_1().pb_1().child(
+                    div().p_2().child(
                         Input::new(search)
                             .small()
                             .prefix(Icon::new(IconName::Search).size_3()),
                     ),
                 )
             })
-            .children(self.tools(cx))
             .children(self.feedback(cx))
             .when(!self.rows.is_empty(), |body| {
                 body.child(
@@ -55,6 +53,7 @@ impl Render for ActivityPanel {
                     )
                     .flex_1()
                     .min_h_0()
+                    .px_1()
                     .track_scroll(&self.scroll),
                 )
             })
@@ -62,6 +61,26 @@ impl Render for ActivityPanel {
 }
 
 impl ActivityPanel {
+    fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        div()
+            .h(yss_ui::appearance::HEADER_HEIGHT)
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .gap_1()
+            .px_2()
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_sm()
+                    .truncate()
+                    .child(self.title_text()),
+            )
+            .children(self.render_category_toggle(cx))
+            .children(self.tools(cx))
+    }
+
     fn render_row(
         &self,
         index: usize,

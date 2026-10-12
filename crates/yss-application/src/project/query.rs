@@ -45,7 +45,6 @@ pub struct ProjectIndexSnapshot {
 pub struct ProjectActivation {
     pub path: String,
     pub project_instance_id: ProjectInstanceId,
-    pub activation_revision: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -143,7 +142,6 @@ impl ApplicationState {
         &self,
     ) -> Result<ProjectActivation, ProjectQueryApplicationError> {
         let captured = self.capture_session()?;
-        let activation_revision = captured.project().activation_revision();
         let path = captured.project().get_path().ok_or(
             ProjectQueryApplicationError::ProjectIdentityMismatch {
                 requested: captured.project_instance_id().clone(),
@@ -158,7 +156,6 @@ impl ApplicationState {
         Ok(ProjectActivation {
             path: normalize_existing_path(&path).unwrap_or(path),
             project_instance_id: captured.project_instance_id().clone(),
-            activation_revision,
         })
     }
 

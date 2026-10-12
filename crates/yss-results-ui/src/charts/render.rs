@@ -28,10 +28,12 @@ impl Render for ChartEditor {
             )
             .child(
                 div()
+                    .h(appearance::HEADER_HEIGHT)
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap_2()
-                    .p_3()
+                    .px_3()
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .child(Icon::new(IconName::ChartLine).size_4())

@@ -221,6 +221,7 @@ pub struct GraphEditResponse {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphSaveResponse {
     pub project_instance_id: ProjectInstanceId,
+    /// A replay retains the original saved revision even when `graph` includes later edits.
     pub resource_revision: ResourceRevision,
     pub graph: GraphEditResponse,
 }

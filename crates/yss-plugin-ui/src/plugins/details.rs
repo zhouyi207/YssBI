@@ -44,40 +44,22 @@ impl PluginsPanel {
             .flex_col()
             .child(
                 div()
+                    .h(appearance::HEADER_HEIGHT)
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap_3()
-                    .p_4()
+                    .px_4()
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .child(
                         div()
                             .flex_1()
                             .min_w_0()
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                    .truncate()
-                                    .child(plugin.manifest.name.clone()),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(format!(
-                                        "{} · {} · {}",
-                                        plugin.manifest.version,
-                                        plugin.manifest.publisher,
-                                        match plugin.process_state.as_str() {
-                                            "running" => yss_ui::text::t("native.plugins.running"),
-                                            "crashed" => yss_ui::text::t("native.plugins.exited"),
-                                            "stopped" =>
-                                                yss_ui::text::t("canvas.graphState.unexecuted"),
-                                            _ => yss_ui::text::t("panel.assistantToolUnknown"),
-                                        }
-                                    )),
-                            ),
+                            .text_sm()
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                            .truncate()
+                            .child(plugin.manifest.name.clone()),
                     )
                     .child(
                         Button::new("plugin-enable")
@@ -112,6 +94,24 @@ impl PluginsPanel {
                                 )
                             })),
                     ),
+            )
+            .child(
+                div()
+                    .px_4()
+                    .py_2()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(format!(
+                        "{} · {} · {}",
+                        plugin.manifest.version,
+                        plugin.manifest.publisher,
+                        match plugin.process_state.as_str() {
+                            "running" => yss_ui::text::t("native.plugins.running"),
+                            "crashed" => yss_ui::text::t("native.plugins.exited"),
+                            "stopped" => yss_ui::text::t("canvas.graphState.unexecuted"),
+                            _ => yss_ui::text::t("panel.assistantToolUnknown"),
+                        }
+                    )),
             )
             .child(self.render_tabs(cx))
             .child(div().flex_1().min_h_0().child(match self.tab {

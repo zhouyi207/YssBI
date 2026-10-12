@@ -1,5 +1,3 @@
-pub mod control;
-
 use thiserror::Error;
 
 use super::{ExecutionPlan, PlanGraphId};

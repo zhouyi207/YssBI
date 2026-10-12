@@ -4,10 +4,13 @@ use std::collections::HashMap;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Theme, ThemeMode};
 use gpui_kit::{
-    App, Global, Hsla, IntoElement, SharedString, Subscription, Window, WindowAppearance, WindowId,
-    div, prelude::*, px, rgb,
+    App, Global, Hsla, IntoElement, Pixels, SharedString, Subscription, Window, WindowAppearance,
+    WindowId, div, prelude::*, px, rgb,
 };
 use yss_settings::AppearanceSettings;
+
+// Keep dock tabs, panel titles and toolbars aligned independently of the UI font size.
+pub const HEADER_HEIGHT: Pixels = px(28.);
 
 struct Appearance {
     system: WindowAppearance,

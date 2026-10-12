@@ -8,6 +8,56 @@ use gpui_kit::component::{
 use gpui_kit::{AnyElement, Div, Stateful};
 
 impl ActivityPanel {
+    pub(super) fn render_category_toggle(&self, cx: &mut Context<Self>) -> Option<Button> {
+        let document = self.document.as_ref()?;
+        let any_expanded = document
+            .rows
+            .iter()
+            .filter_map(|row| match &row.content {
+                ActivityRowContent::Category {
+                    default_expanded, ..
+                } => Some(
+                    self.expanded
+                        .get(&row.id)
+                        .copied()
+                        .unwrap_or(*default_expanded),
+                ),
+                _ => None,
+            })
+            .reduce(|any, expanded| any || expanded)?;
+        let label = translate(if any_expanded {
+            "native.workbench.collapseAll"
+        } else {
+            "native.workbench.expandAll"
+        });
+        let expected = document.clone();
+        Some(
+            Button::new("activity-toggle-categories")
+                .small()
+                .ghost()
+                .icon(if any_expanded {
+                    IconName::ChevronsDownUp
+                } else {
+                    IconName::ChevronsUpDown
+                })
+                .accessibility_label(label.clone())
+                .tooltip(label)
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    if !view.accepts(&expected) {
+                        return;
+                    }
+                    for row in &expected.rows {
+                        if matches!(row.content, ActivityRowContent::Category { .. }) {
+                            view.expanded.insert(row.id.clone(), !any_expanded);
+                        }
+                    }
+                    view.rebuild_rows(cx);
+                    view.scroll.scroll_to_item(0, gpui_kit::ScrollStrategy::Top);
+                    cx.notify();
+                })),
+        )
+    }
+
     pub(super) fn render_category(
         &self,
         index: usize,

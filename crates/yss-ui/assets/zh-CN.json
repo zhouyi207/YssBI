@@ -2524,6 +2524,8 @@
       "databaseOpenFailed": "数据未打开，请刷新项目目录后重试。",
       "chartOpenFailed": "无法打开图表，请刷新项目后重试。",
       "nodeCatalog": "节点目录",
+      "collapseAll": "全部收起",
+      "expandAll": "全部展开",
       "switchPanel": "切换此区域的面板",
       "restoreLayout": "恢复布局",
       "logStorageUnavailable": "日志存储不可用",

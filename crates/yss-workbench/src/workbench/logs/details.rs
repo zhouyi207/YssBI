@@ -176,7 +176,8 @@ impl Render for LogDetails {
                     .justify_between()
                     .gap_2()
                     .px_3()
-                    .py_2()
+                    .h(yss_ui::appearance::HEADER_HEIGHT)
+                    .flex_shrink_0()
                     .child(
                         div()
                             .text_sm()

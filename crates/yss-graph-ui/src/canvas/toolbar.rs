@@ -164,7 +164,7 @@ impl GraphCanvas {
         let focus = self.focus.clone();
         div()
             .w_full()
-            .h_8()
+            .h(yss_ui::appearance::HEADER_HEIGHT)
             .flex_shrink_0()
             .px_2()
             .flex()

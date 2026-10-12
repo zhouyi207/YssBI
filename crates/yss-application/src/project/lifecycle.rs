@@ -83,7 +83,6 @@ impl ApplicationState {
             .map(|session| ProjectActivation {
                 path,
                 project_instance_id: session.instance_id,
-                activation_revision: replacement.project().activation_revision(),
             })
             .map_err(ProjectLifecycleError::LoadFailed);
         // Project rechecks files under its final lease. If that check fails after draining,
@@ -254,7 +253,6 @@ pub fn load_project(
     Ok(ProjectActivation {
         path,
         project_instance_id: session.instance_id,
-        activation_revision: state.activation_revision(),
     })
 }
 

@@ -149,12 +149,6 @@ impl ProjectState {
             .unwrap() = Some(hook);
     }
 
-    pub fn activation_revision(&self) -> u64 {
-        self.activation_generation
-            .load(std::sync::atomic::Ordering::Acquire)
-            / 2
-    }
-
     #[cfg(any(test, feature = "test-support"))]
     pub fn revision_state_for_test(
         &self,

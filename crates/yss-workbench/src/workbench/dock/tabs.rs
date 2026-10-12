@@ -105,6 +105,8 @@ impl Tabs {
         let presentation = handle.map(PanelHandle::panel);
         TabBar::new("tab-bar")
             .small()
+            .h(super::HEADER_HEIGHT)
+            .flex_shrink_0()
             .track_scroll(&self.scroll_handle)
             .children(
                 group
@@ -132,6 +134,9 @@ impl Tabs {
                             .flatten();
                         Some(
                             Tab::new()
+                                // Tab applies its size-tier height during render.
+                                .min_h(super::HEADER_HEIGHT)
+                                .max_h(super::HEADER_HEIGHT)
                                 .selected(id == active_id)
                                 .child(title)
                                 .when(closable, |tab| {

@@ -157,7 +157,7 @@ impl Render for ProblemsPanel {
             .text_xs()
             .child(
                 div()
-                    .h_8()
+                    .h(yss_ui::appearance::HEADER_HEIGHT)
                     .px_2()
                     .flex()
                     .flex_shrink_0()

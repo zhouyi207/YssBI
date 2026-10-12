@@ -37,12 +37,19 @@ impl DocumentEditor {
 
     pub fn render_details(&self, cx: &App) -> impl IntoElement + use<> {
         div()
-            .p_4()
+            .px_4()
+            .pb_4()
             .flex()
             .flex_col()
             .gap_3()
             .child(
                 div()
+                    .h(yss_ui::appearance::HEADER_HEIGHT)
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .min_w_0()
+                    .truncate()
                     .text_sm()
                     .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child(self.snapshot.path.name().to_owned()),

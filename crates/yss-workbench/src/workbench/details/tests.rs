@@ -118,27 +118,6 @@ fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<InspectorWindow>) {
     })
 }
 
-pub(in crate::workbench) fn open_overlay_fixture(
-    cx: &mut TestAppContext,
-) -> (
-    AnyWindowHandle,
-    Entity<DocumentEditor>,
-    Entity<DetailsPanel>,
-    Rc<Cell<usize>>,
-) {
-    let (window, view) = open(cx);
-    cx.update(|cx| {
-        let view = view.read(cx);
-        view.notifications.set(0);
-        (
-            window,
-            view.document.clone(),
-            view.details.clone(),
-            view.notifications.clone(),
-        )
-    })
-}
-
 fn notifications(view: &Entity<InspectorWindow>, cx: &mut TestAppContext) -> usize {
     cx.update(|cx| view.read(cx).notifications.replace(0))
 }

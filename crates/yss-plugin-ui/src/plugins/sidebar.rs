@@ -95,7 +95,7 @@ impl PluginsPanel {
         let busy = self.busy();
         let owner = cx.entity().downgrade();
         div()
-            .h(px(36.))
+            .h(appearance::HEADER_HEIGHT)
             .flex_shrink_0()
             .flex()
             .items_center()

@@ -1,6 +1,6 @@
 # Getting Started
 
-YssBI is a native desktop application for building data-analysis graphs, inspecting results, and working with an AI Assistant. The current desktop uses Rust and GPUI; the `react/` directory is reference material, not a second application to launch.
+YssBI is a native desktop application for building data-analysis graphs, inspecting results, and working with an AI Assistant. The current desktop uses Rust and GPUI.
 
 ## Run from source
 

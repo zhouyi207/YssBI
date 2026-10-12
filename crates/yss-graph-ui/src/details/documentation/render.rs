@@ -135,8 +135,8 @@ impl crate::details::GraphDetails {
             .child(
                 div()
                     .px_3()
-                    .py_1()
-                    .min_h_7()
+                    .h(yss_ui::appearance::HEADER_HEIGHT)
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap_2()
@@ -150,6 +150,7 @@ impl crate::details::GraphDetails {
                         div()
                             .flex_1()
                             .min_w_0()
+                            .truncate()
                             .text_right()
                             .text_color(cx.theme().muted_foreground)
                             .child(node_type.as_str().to_owned()),

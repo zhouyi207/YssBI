@@ -104,7 +104,7 @@ impl Render for OutputPanel {
             .text_xs()
             .child(
                 div()
-                    .h_8()
+                    .h(super::dock::HEADER_HEIGHT)
                     .px_2()
                     .flex()
                     .flex_shrink_0()

@@ -159,9 +159,12 @@ impl Render for GraphProperties {
             .flex()
             .flex_col()
             .gap_4()
-            .p_4()
+            .px_4()
+            .pb_4()
             .child(
                 div()
+                    .h(yss_ui::appearance::HEADER_HEIGHT)
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap_1()

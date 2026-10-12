@@ -1,6 +1,5 @@
 //! Native search, domain/level menus and live-view controls.
 use super::*;
-use gpui_kit::Div;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
@@ -9,7 +8,7 @@ use gpui_kit::component::{
 };
 
 impl LogsPanel {
-    pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let owner = cx.weak_entity();
         let domain = self.domain;
         let levels = self.levels.clone();
@@ -20,12 +19,16 @@ impl LogsPanel {
             "log.autoScrollDisabled"
         };
         div()
+            .id("logs-toolbar")
+            .h(yss_ui::appearance::HEADER_HEIGHT)
+            .flex_shrink_0()
             .flex()
-            .flex_wrap()
+            .min_w_0()
+            .overflow_x_scroll()
+            .whitespace_nowrap()
             .items_center()
             .gap_2()
             .px_3()
-            .py_1()
             .border_b_1()
             .border_color(cx.theme().border)
             .child(

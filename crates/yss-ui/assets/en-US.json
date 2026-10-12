@@ -2524,6 +2524,8 @@
       "databaseOpenFailed": "Could not open data. Refresh the project explorer and retry.",
       "chartOpenFailed": "Could not open the chart. Refresh the project and retry.",
       "nodeCatalog": "Node catalog",
+      "collapseAll": "Collapse all",
+      "expandAll": "Expand all",
       "switchPanel": "Switch panel in this area",
       "restoreLayout": "Restore layout",
       "logStorageUnavailable": "Log storage unavailable",

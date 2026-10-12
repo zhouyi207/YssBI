@@ -32,8 +32,6 @@ The readonly `ResourceCatalog` lives in `yss-desktop-services::resources`. Workb
 
 Generic filesystem primitives are a foundation for Project and Application. `yss-filesystem` owns file access, transactions, change facts and watcher sessions, with no dependency on other repository crates. Project path conventions, document validation and business failures remain with Project and its adapters.
 
-The `react/` tree is reference source. Its models and lifecycles do not define current native behavior.
-
 ## State ownership {#state-ownership}
 
 | State or fact                                                       | Owner                             | Desktop responsibility                    |

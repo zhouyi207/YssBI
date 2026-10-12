@@ -55,22 +55,6 @@ fn resource_identity_reads_and_domain_page_limits_have_distinct_schemas() {
 }
 
 #[test]
-fn model_catalog_preserves_shared_provider_and_generation_configuration() {
-    let wire: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../react/src/tests/fixtures/node-system-contracts/harness-models.json"
-    ))
-    .unwrap();
-    let catalog: LanguageModelCatalog = serde_json::from_value(wire.clone()).unwrap();
-    assert!(
-        catalog
-            .providers
-            .iter()
-            .all(|entry| entry.config.validate())
-    );
-    assert_eq!(serde_json::to_value(catalog).unwrap(), wire);
-}
-
-#[test]
 fn graph_tool_contracts_require_the_facts_used_by_followup_edits() {
     let mut request = serde_json::json!({
         "graphPath": "events/Main.yssbi-event", "baseRevision": 1,

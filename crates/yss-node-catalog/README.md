@@ -65,6 +65,7 @@ Application 在构建活动面板投影的 worker 中生成该文本；原生视
 `authoritative_static_descriptor(protocol)` 从协议生成普通创建描述。带有尚未填写的必填文本、
 数值或结构化参数的节点仍可作为 `parameterizedStatic` 进入目录；参数不必先有实际输入。
 资源绑定节点只通过捕获了资源身份和 revision 的目录描述创建，managed 和 hidden 节点维持专用边界。
+本地化目录项通过 `creation: NodeCreation::ResourceBound` 携带创建时的资源版本，展示字段不另存版本副本。
 创建请求的实例参数由 Graph Editor 接收，不属于目录描述；参数声明、默认值及约束仍只来自 Protocol。
 
 `NodeProtocol::configuration_schema()` 将同一声明投影为 `parameters` / `portCounts` 的 JSON Schema。

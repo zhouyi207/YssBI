@@ -1,6 +1,6 @@
 # Developing YssBI
 
-Build the native desktop application from the repository root. YssBI uses a Rust Cargo workspace with `yss-desktop-gpui` as its default member. The `react/` tree is reference source, not a second application build.
+Build the native desktop application from the repository root. YssBI uses a Rust Cargo workspace with `yss-desktop-gpui` as its default member.
 
 Start with the [Linux instructions](./development/linux.md). Windows and macOS input, window behavior and distribution still require target-platform acceptance; the presence of platform dependencies is not evidence that those workflows work.
 

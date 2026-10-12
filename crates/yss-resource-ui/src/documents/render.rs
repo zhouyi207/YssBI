@@ -23,13 +23,13 @@ impl Render for DocumentEditor {
             }))
             .child(
                 div()
+                    .h(yss_ui::appearance::HEADER_HEIGHT)
                     .flex()
                     .items_center()
                     .justify_between()
                     .flex_shrink_0()
                     .gap_3()
                     .px_3()
-                    .py_1()
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .child(

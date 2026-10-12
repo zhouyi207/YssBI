@@ -63,8 +63,6 @@ Reroute 是计划中的透明转交操作，保留节点、端口、demand 和�
 Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 传运行值、固定端口/重复组的局部键、有序输出类型与字段、取消/deadline 及中立关系工厂。Application 装配时核对输入布局；调用时注册表复核布局和输出外层载体。Literal 与资源运行值可以借用，列表和记录使用不可变共享缓冲。Execution 将局部输出映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
 输入 coercion 保留于计划校验，标量广播由 Kernel 执行，调度器交付原值。
 
-`PlanValidationControl` 按已确认的保留决定继续归属本模块，当前尚未接入计划准入；计划校验不检查它的 deadline。
-
 `RunExecutionControl` 只携带取消和 deadline。调度器通过 `KernelControl::new` 为所有节点创建
 无固定内存上限的执行控制，输入读取、工作区、结果编码、函数私有帧、分组调用和快照共享该策略。
 尺寸溢出与实际分配失败继续由原错误入口交付，取消和 deadline 独立生效。

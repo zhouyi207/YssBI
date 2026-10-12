@@ -7,7 +7,7 @@ use gpui_kit::component::{
 };
 
 impl ResultPanel {
-    pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let paging = self
             .table
             .as_ref()
@@ -22,17 +22,20 @@ impl ResultPanel {
                 )
             });
         let has_toolbar = self.report.is_some() || paging.is_some() || self.loading;
-        div().when(has_toolbar, |bar| {
-            bar.flex()
+        div().id("result-toolbar").when(has_toolbar, |bar| {
+            bar.h(yss_ui::appearance::HEADER_HEIGHT)
+                .flex()
                 .flex_shrink_0()
-                .flex_wrap()
+                .min_w_0()
+                .overflow_x_scroll()
+                .whitespace_nowrap()
                 .items_center()
-                .justify_end()
                 .gap_2()
-                .p_2()
+                .px_2()
                 .text_xs()
                 .border_b_1()
                 .border_color(cx.theme().border)
+                .child(div().flex_1())
                 .when(self.report.is_some(), |bar| {
                     bar.children(
                         [
