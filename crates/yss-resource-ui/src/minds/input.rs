@@ -43,6 +43,7 @@ impl MindCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        cx.stop_propagation();
         self.cancel_gesture();
         self.focus_canvas(window, cx);
         if event.button != MouseButton::Left || event.modifiers.alt {

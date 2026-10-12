@@ -3,7 +3,7 @@ mod controls;
 #[cfg(target_os = "linux")]
 mod input_region;
 
-use gpui_kit::base::RootPlugin;
+use gpui_kit::base::{GlobalState, RootPlugin};
 use gpui_kit::component::{
     ActiveTheme, InteractiveElementExt, Root, TITLE_BAR_HEIGHT, window_paddings,
 };
@@ -119,6 +119,10 @@ fn title_bar_with_controls(
         .bg(cx.theme().title_bar)
         .border_b_1()
         .border_color(cx.theme().title_bar_border)
+        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+            // Window selection accepts presses outside text; this press belongs to the title bar.
+            GlobalState::suppress_text_selection(cx);
+        })
         .child(
             div()
                 .id("native-title-bar-content")

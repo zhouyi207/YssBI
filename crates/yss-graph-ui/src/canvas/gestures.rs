@@ -156,6 +156,7 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        cx.stop_propagation();
         if !self.can_edit() {
             return;
         }

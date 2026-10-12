@@ -216,7 +216,11 @@ impl MindCanvas {
                     view.begin_topic(click_id.clone(), event, window, cx)
                 }),
             )
-            .child(TextView::new(&label).plugin(yss_ui::markdown::Markdown::default()))
+            .child(
+                TextView::new(&label)
+                    .plugin(yss_ui::markdown::Markdown::default())
+                    .selectable(false),
+            )
             .when(placement.children > 0, |view| {
                 view.child(
                     div()
