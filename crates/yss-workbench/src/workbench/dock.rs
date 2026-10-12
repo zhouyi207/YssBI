@@ -23,7 +23,7 @@ use gpui_kit::{
 use std::{any::TypeId, cell::Cell, rc::Rc, sync::Arc};
 
 // Match the component TabBar's Small tier, which uses logical pixel dimensions.
-pub(super) const HEADER_HEIGHT: Pixels = px(24.);
+pub(super) const HEADER_HEIGHT: Pixels = px(28.);
 pub(super) const HEADER_BUTTON_SIZE: Pixels = px(20.);
 
 pub(super) fn create(

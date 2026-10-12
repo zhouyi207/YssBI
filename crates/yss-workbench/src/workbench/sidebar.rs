@@ -3,16 +3,19 @@ use super::{Workbench, activity::ActivityPanel, layout::columns, menus::Workbenc
 use crate::plugins::PluginsSidebar;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, Selectable, Sizable, Theme,
-    button::{Button, ButtonCustomVariant, ButtonVariants},
+    ActiveTheme, Disableable, Selectable, Sizable, Theme,
+    button::{Button, ButtonVariants},
     dock::{BasePanelView, DockArea, DockPlacement, NodeId, PaneRef, PanelHandle},
     menu::{DropdownMenu, PopupMenuItem},
 };
 use gpui_kit::{
-    AnyElement, App, AppContext, Context, Empty, Entity, EntityId, IntoElement, Render,
-    StyleRefinement, Subscription, WeakEntity, Window, div, prelude::*, px,
+    AnyElement, App, AppContext, Context, Empty, Entity, EntityId, IntoElement, Rems, Render,
+    StyleRefinement, Subscription, WeakEntity, Window, div, prelude::*, rems,
 };
 use std::{any::TypeId, cell::RefCell, collections::BTreeMap, sync::Arc};
+
+const NAVIGATION_BUTTON_WIDTH: Rems = rems(2.);
+const NAVIGATION_GAP: Rems = rems(0.25);
 
 /// Shared by the regular and conversation-zoom dock renderers. Each group keeps
 /// its control identity until that group leaves the dock topology.
@@ -61,7 +64,7 @@ impl NavigationHeaders {
             .clone()
             .cached(
                 StyleRefinement::default()
-                    .w(super::dock::HEADER_BUTTON_SIZE * 4. + px(12.))
+                    .w(NAVIGATION_BUTTON_WIDTH * 4. + NAVIGATION_GAP * 3.)
                     .h_full()
                     .flex_shrink_0(),
             )
@@ -276,12 +279,12 @@ pub(super) fn render_header(
 }
 
 impl Render for Navigation {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        render_navigation(self, cx)
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        render_navigation(self)
     }
 }
 
-fn render_navigation(view: &Navigation, cx: &mut App) -> AnyElement {
+fn render_navigation(view: &Navigation) -> AnyElement {
     let navigation = [
         (
             "sidebar-project",
@@ -291,19 +294,19 @@ fn render_navigation(view: &Navigation, cx: &mut App) -> AnyElement {
         ),
         (
             "sidebar-nodes",
-            IconName::Frame,
+            IconName::Workflow,
             crate::text::t("native.workbench.nodeCatalog"),
             WorkbenchPanel::Nodes,
         ),
         (
             "sidebar-assistant",
-            IconName::MessageSquareText,
+            IconName::Bot,
             crate::text::t("panel.assistant"),
             WorkbenchPanel::Assistant,
         ),
         (
             "sidebar-plugins",
-            IconName::Puzzle,
+            IconName::Blocks,
             crate::text::t("activityBar.plugins"),
             WorkbenchPanel::Plugins,
         ),
@@ -311,58 +314,35 @@ fn render_navigation(view: &Navigation, cx: &mut App) -> AnyElement {
     .into_iter()
     .zip(view.state.buttons)
     .map(|((id, icon, title, panel), (active, disabled))| {
-        div()
-            .relative()
+        Button::new(id)
+            .ghost()
+            .with_size(super::dock::HEADER_BUTTON_SIZE)
+            .w(NAVIGATION_BUTTON_WIDTH)
             .h_full()
-            .flex()
-            .items_center()
-            .child(
-                Button::new(id)
-                    .custom(
-                        ButtonCustomVariant::new(cx)
-                            .foreground(if active {
-                                cx.theme().sidebar_foreground
-                            } else {
-                                cx.theme().muted_foreground
-                            })
-                            .hover(cx.theme().sidebar_accent.opacity(0.5))
-                            .active(cx.theme().sidebar_accent.opacity(0.5)),
-                    )
-                    .size(super::dock::HEADER_BUTTON_SIZE)
-                    .p_0()
-                    .rounded(px(4.))
-                    // A child icon keeps its explicit pixel size independent of Button's size.
-                    .child(Icon::new(icon).with_size(px(16.)))
-                    .accessibility_label(title.clone())
-                    .tooltip(title)
-                    .selected(active)
-                    .disabled(disabled)
-                    .on_click({
-                        let workbench = view.workbench.clone();
-                        move |_, window, cx| {
-                            let _ = workbench.update(cx, |view, cx| {
-                                view.select_sidebar_panel(panel, window, cx);
-                            });
-                        }
-                    }),
-            )
-            .when(active, |item| {
-                item.child(
-                    div()
-                        .absolute()
-                        .bottom_0()
-                        .left(px(6.))
-                        .right(px(6.))
-                        .h(px(2.))
-                        .bg(cx.theme().sidebar_primary),
-                )
+            .icon(icon)
+            .accessibility_label(title.clone())
+            .tooltip(title)
+            .selected(active)
+            .toggled(active)
+            .disabled(disabled)
+            .on_click({
+                let workbench = view.workbench.clone();
+                move |_, window, cx| {
+                    let Some(workbench) = workbench.upgrade() else {
+                        return;
+                    };
+                    workbench.update(cx, |view, cx| {
+                        view.select_sidebar_panel(panel, window, cx);
+                    });
+                }
             })
     });
     div()
         .flex()
         .size_full()
         .items_center()
-        .gap(px(4.))
+        .gap(NAVIGATION_GAP)
+        .py_0p5()
         .children(navigation)
         .into_any_element()
 }
