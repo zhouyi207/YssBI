@@ -56,17 +56,9 @@ A component test or event-injected preview does not establish physical input, ac
 
 For crate-boundary changes, exercise cross-owner paths: run a graph and open a leased result in another window; close the source tab; import and paginate a real dataset; save document, mind and chart edits; hide/reopen Assistant input; fail and then complete a project switch; change preferences and restart with saved DockArea layout. Use `YSSBI_APP_DATA_DIR` with an absolute temporary directory to avoid touching normal application state. These scenarios do not establish real-provider streaming, signed plugin execution, physical IME behavior or untested platform support.
 
-## Documentation and generated data
+## Documentation
 
 For book changes, use the [documentation build instructions](https://github.com/zhouyi207/YssBI/blob/main/docs/README.md). Build and inspect the book, check relative links and anchors, and run `git diff --check`. Documentation-only changes do not require a desktop rebuild.
-
-The React reference dependency data has a separate check:
-
-```sh
-node scripts/generate-crate-dependencies.mjs --check
-```
-
-That command checks the existing `crateDependencies.json` against Cargo metadata. It does not generate book pages, validate architecture or require the React application build.
 
 ## Report the evidence
 

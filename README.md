@@ -98,7 +98,6 @@ cargo run -p yss-application --example build_samples -- --check --stage target/r
 原生宿主、已实现交互与待验收范围见 [GPUI host](crates/yss-desktop-gpui/README.md)。
 普通 `cargo run` 对桌面入口、Workbench、共享与功能 UI，以及渲染、曲线细分和布局依赖启用定向开发优化；首次构建这些依赖会更慢。
 帧率验收使用 `cargo run --release`，并在相同图规模、窗口大小和显示器刷新率下比较。
-`react/` 保留原界面源码和契约样本作为开发参考，不参与原生应用构建。
 示例 Parquet 已随源码提供，开发启动可离线读取；更新来源和资源校验见
 [示例资产](resources/samples/README.md)。
 
@@ -133,10 +132,8 @@ package 和 target，并检查受影响的原生调用方。界面行为仍需�
 | 原生功能静态检查 | `cargo clippy -p <affected-ui-package> -p yss-workbench --all-targets --no-deps -- -D warnings` |
 | 库的聚焦测试 | `cargo test -p <package> --lib <case>` |
 | 包格式检查 | `cargo fmt -p <package> -- --check` |
-| React 参考依赖数据 | `node scripts/generate-crate-dependencies.mjs --check` |
 
 日常改动按[验证规则](docs/src/development/testing.md#select-checks)选择受影响范围，不将 workspace 全量检查作为局部改动的默认收尾。
-生成器仅维护 React 参考界面的 crate 依赖 JSON；运行桌面应用不依赖 Node.js。
 
 <!-- ## 致谢
 
