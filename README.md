@@ -115,7 +115,7 @@ python3 scripts/package.py --target x86_64-unknown-linux-gnu
 python3 scripts/package.py --target x86_64-unknown-linux-gnu --linux-format tar.gz --linux-format deb --linux-format rpm --output dist/ubuntu
 ```
 
-GitHub CI 检查三个操作系统；推送与 Cargo 版本一致的 `v*` 标签触发六个原生构建任务，
+GitHub CI 检查三个操作系统；推送与 Cargo 版本一致的 `app-v*` 标签触发六个原生构建任务，
 产出六个 Rust 目标的十二份分发包。包内启动、Ubuntu runner 上的 DEB 安装／卸载、
 RPM 内容及解包运行检查成功后，校验完整产物集合与摘要并创建 **Release 草稿**，不自动公开发布。
 无需证书或签名 Secrets；macOS 仅保留免证书 ad-hoc 签名，下载时仍可能出现系统安全提示。

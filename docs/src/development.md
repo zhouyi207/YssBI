@@ -144,8 +144,9 @@ After committing and pushing the workflow and application changes to `gpui`:
 
 1. Set `[workspace.package].version` in `Cargo.toml` to the intended version and land that
    change on `gpui`. A release commit must be an ancestor of `origin/gpui`.
-2. Create and push the matching tag, for example `v0.4.0`. A mismatched tag fails preflight.
-   Alternatively, dispatch `release.yml` with an existing matching version tag as its ref.
+2. Create and push the matching tag, for example `app-v0.4.0`. A mismatched tag fails preflight.
+   Alternatively, dispatch `release.yml` with an existing matching `app-v<version>` tag as its ref,
+   not a branch. The tag must point to a commit containing this release workflow.
 3. CI and all six native build jobs must pass: two Linux, two macOS and two Windows jobs
    produce twelve bundles. Each target runs packaged `--help` checks.
    DEB is installed directly on its ephemeral Ubuntu build runner with normal APT dependency
