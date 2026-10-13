@@ -5,7 +5,7 @@ use gpui_kit::component::{
     Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit::{AnyElement, Context, Pixels, ScrollHandle, div, prelude::*, px};
+use gpui_kit::{AnyElement, Context, Pixels, ScrollHandle, div, prelude::*, px, rems};
 use std::cell::Cell;
 use yss_ui::lifecycle::LogReleased;
 
@@ -200,7 +200,7 @@ impl ConversationPanel {
             body = body.child(
                 div()
                     .w_full()
-                    .max_w(px(768.))
+                    .max_w(rems(48.))
                     .min_w_0()
                     .flex_shrink_0()
                     .self_center()
@@ -211,7 +211,7 @@ impl ConversationPanel {
             body = body.child(
                 div()
                     .w_full()
-                    .max_w(px(768.))
+                    .max_w(rems(48.))
                     .min_w_0()
                     .flex_shrink_0()
                     .self_center()
@@ -237,7 +237,7 @@ impl ConversationPanel {
                             Button::new("assistant-latest")
                                 .small()
                                 .icon(IconName::ArrowDown)
-                                .tooltip(yss_ui::text::t("panel.assistantScrollToBottom"))
+                                .label(yss_ui::text::t("panel.assistantScrollToBottom"))
                                 .accessibility_label(yss_ui::text::t(
                                     "panel.assistantScrollToBottom",
                                 ))

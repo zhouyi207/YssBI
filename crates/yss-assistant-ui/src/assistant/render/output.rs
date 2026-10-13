@@ -5,10 +5,12 @@ use super::super::{
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Sizable,
+    ActiveTheme, Icon, Sizable,
     button::{Button, ButtonVariants},
+    marker::{Marker, MarkerContent, MarkerIcon},
+    progress::Progress,
 };
-use gpui_kit::{AnyElement, Context, IntoElement, SharedString, div, prelude::*, px};
+use gpui_kit::{AnyElement, Context, IntoElement, Role, SharedString, div, prelude::*, rems};
 use yss_harness_contract::ModelCallPurpose;
 
 impl ConversationPanel {
@@ -89,45 +91,63 @@ impl ConversationPanel {
             }
             Content::Reasoning(text) => {
                 let key = format!("reasoning-{id}");
-                let open = self.is_expanded(&key, running);
-                let label = if running && self.timing_connected() && last {
-                    yss_ui::text::t("native.assistant.thinking")
+                let active = running && self.timing_connected() && last;
+                let open = self.is_expanded(&key, false);
+                let label = yss_ui::text::t(if active {
+                    "native.assistant.thinking"
                 } else {
-                    yss_ui::text::t("panel.assistantThinking")
-                };
+                    "panel.assistantThinking"
+                });
                 let mut body = div()
                     .min_w_0()
                     .flex()
                     .flex_col()
-                    .gap_1()
-                    .child(self.disclosure(
-                        key,
-                        yss_ui::text::format(
-                            "native.assistant.characterCount",
-                            &[
-                                ("label", label.to_string()),
-                                ("value0", text.chars().count().to_string()),
-                            ],
-                        ),
-                        open,
-                        cx,
-                    ));
+                    .gap_2()
+                    .p_2()
+                    .rounded(cx.theme().radius)
+                    .bg(cx.theme().muted)
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Marker::new()
+                                    .id(SharedString::from(format!("reasoning-status-{id}")))
+                                    .role(Role::Status)
+                                    .w_auto()
+                                    .loading(active)
+                                    .when(!active, |marker| {
+                                        marker.icon(
+                                            MarkerIcon::new()
+                                                .child(Icon::new(IconName::Lightbulb).small()),
+                                        )
+                                    }),
+                            )
+                            .child(self.disclosure(key, label.into_owned(), open, cx)),
+                    );
                 if open {
                     body = body.child(
                         div()
                             .id(SharedString::from(format!("reasoning-scroll-{id}")))
                             .min_w_0()
-                            .max_h(px(288.))
+                            .max_h(rems(18.))
                             .overflow_y_scroll()
-                            .pl_3()
-                            .border_l_1()
-                            .border_color(cx.theme().border)
                             .text_color(cx.theme().muted_foreground)
-                            .child(super::plain::PlainText::new(
-                                SharedString::from(format!("reasoning-text-{id}")),
+                            .child(markdown(
+                                format!("reasoning-text-{id}"),
                                 text.clone(),
-                                "panel.assistantThinking",
+                                active,
+                                cx,
                             )),
+                    );
+                } else if let Some(preview) = reasoning_preview(text, active) {
+                    body = body.child(
+                        div()
+                            .min_w_0()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(preview),
                     );
                 }
                 body.into_any_element()
@@ -142,14 +162,26 @@ impl ConversationPanel {
                 cx.entity().downgrade(),
             )
             .into_any_element(),
-            Content::Status { event, error } => div()
+            Content::Status { event, error } => Marker::new()
+                .id(SharedString::from(format!("event-status-{id}")))
+                .role(Role::Status)
                 .text_xs()
                 .text_color(if *error {
                     cx.theme().danger
                 } else {
                     cx.theme().muted_foreground
                 })
-                .child(status_text(event))
+                .icon(
+                    MarkerIcon::new().child(
+                        Icon::new(if *error {
+                            IconName::CircleAlert
+                        } else {
+                            IconName::Info
+                        })
+                        .small(),
+                    ),
+                )
+                .content(MarkerContent::new().text(status_text(event)))
                 .into_any_element(),
             Content::Failure(code) => self.failure_card(id, code, cx),
             Content::Usage(usage) => self.usage_card(id, usage, cx),
@@ -282,6 +314,17 @@ impl ConversationPanel {
                 open,
                 cx,
             ));
+        if compaction.total_bytes > 0 {
+            body = body.child(
+                Progress::new(SharedString::from(format!("compaction-progress-{id}")))
+                    .xsmall()
+                    .accessibility_label(yss_ui::text::t("native.assistant.compactContext"))
+                    .value(
+                        (compaction.completed_bytes as f64 / compaction.total_bytes as f64 * 100.)
+                            .clamp(0., 100.) as f32,
+                    ),
+            );
+        }
         if open {
             body = body.child(
                 div()
@@ -294,6 +337,22 @@ impl ConversationPanel {
         }
         body.into_any_element()
     }
+}
+
+fn reasoning_preview(text: &str, active: bool) -> Option<String> {
+    // A bounded excerpt keeps streaming reasoning from displacing the answer;
+    // expanding always reveals the original, unmodified Markdown.
+    let line = if active {
+        text.lines().rev().find(|line| !line.trim().is_empty())
+    } else {
+        text.lines().find(|line| !line.trim().is_empty())
+    }?;
+    let mut characters = line.trim().chars();
+    let mut preview: String = characters.by_ref().take(160).collect();
+    if characters.next().is_some() {
+        preview.push('…');
+    }
+    Some(preview)
 }
 
 pub(super) fn markdown(
@@ -313,8 +372,8 @@ pub(super) fn markdown(
 
 /// Localize status events at presentation time, preserving all authored/model text verbatim.
 pub(super) fn status_text(event: &yss_assistant_contract::AssistantEventKind) -> String {
-    use yss_harness_contract::AgentRuntimePhase;
     use yss_assistant_contract::AssistantEventKind as Event;
+    use yss_harness_contract::AgentRuntimePhase;
     use yss_ui::text::{format, t};
     let (key, run_id, step_id, retriable) = match event {
         Event::RuntimeStatus { phase, attempt } => {

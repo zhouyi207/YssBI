@@ -1,5 +1,7 @@
 //! Expanded worker output borrows the same timeline as the main conversation.
 use super::super::{ConversationPanel, projection::Task};
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, Sizable};
 use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 
 impl ConversationPanel {
@@ -28,7 +30,17 @@ impl ConversationPanel {
             ));
         }
         for warning in &task.warnings {
-            body = body.child(div().text_xs().child(warning.clone()));
+            body = body.child(
+                div()
+                    .min_w_0()
+                    .flex()
+                    .items_start()
+                    .gap_2()
+                    .text_xs()
+                    .text_color(cx.theme().warning)
+                    .child(Icon::new(IconName::CircleAlert).small())
+                    .child(div().min_w_0().child(warning.clone())),
+            );
         }
         body.into_any_element()
     }
@@ -39,11 +51,17 @@ impl ConversationPanel {
             .flex()
             .flex_col()
             .gap_2()
-            .children(
-                task.warnings
-                    .iter()
-                    .map(|warning| div().text_xs().child(warning.clone())),
-            )
+            .children(task.warnings.iter().map(|warning| {
+                div()
+                    .min_w_0()
+                    .flex()
+                    .items_start()
+                    .gap_2()
+                    .text_xs()
+                    .text_color(cx.theme().warning)
+                    .child(Icon::new(IconName::CircleAlert).small())
+                    .child(div().min_w_0().child(warning.clone()))
+            }))
             .when(
                 !task.artifacts.is_empty() || !task.results.is_empty(),
                 |body| {

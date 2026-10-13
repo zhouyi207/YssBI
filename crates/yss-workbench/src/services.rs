@@ -55,13 +55,6 @@ impl NativeServices {
         let loaded = executor.spawn_blocking(move || reader.load()).await?;
         let preference_load_failed = loaded.is_err();
         crate::text::set_locale(preferences.snapshot().language.locale());
-        if let Err(error) = loaded {
-            tracing::warn!(
-                code = "native_preferences_read_failed",
-                %error,
-                "Native preferences could not be read"
-            );
-        }
         let layouts = Arc::new(LayoutStore::new(&paths.application.app_data_dir));
         let settings = preferences.snapshot();
         let retention = yss_logging::LogRetentionPolicy::new(
@@ -70,6 +63,15 @@ impl NativeServices {
         )?;
         let logging =
             yss_logging::LogCollection::initialize_with_retention(Some(paths.logs), retention)?;
+        // The subscriber must exist before reporting an early settings failure.
+        if let Err(error) = loaded {
+            tracing::warn!(
+                code = "native_preferences_read_failed",
+                path = %paths.application.app_data_dir.join("preferences.json").display(),
+                error = %format_args!("{error:#}"),
+                "Native preferences could not be read"
+            );
+        }
         let events = DesktopEvents::default();
         let publisher = events.clone();
         let application = ApplicationServices::initialize(paths.application, move |application| {

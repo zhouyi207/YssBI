@@ -8,7 +8,7 @@ use gpui_kit::component::{
     spinner::Spinner,
     text::TextView,
 };
-use gpui_kit::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px};
+use gpui_kit::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, rems};
 use serde_json::Value;
 use yss_ui::lifecycle::LogReleased;
 
@@ -28,16 +28,7 @@ impl Render for Inspection {
         row = if active {
             row.child(Spinner::new().small().icon(IconName::LoaderCircle))
         } else {
-            row.child(
-                Icon::new(if tool.running() {
-                    IconName::Clock
-                } else if failed {
-                    IconName::CircleAlert
-                } else {
-                    IconName::Check
-                })
-                .small(),
-            )
+            row.child(Icon::new(tool.state.icon(self.card.connected)).small())
         };
         row = row
             .child(div().min_w_0().flex_1().truncate().child(title.clone()))
@@ -68,7 +59,6 @@ impl Render for Inspection {
                 IconName::ChevronRight
             })
             .accessibility_label(title.clone())
-            .tooltip(title)
             .child(row)
             .on_click(cx.listener(|view, _, window, cx| {
                 view.open = !view.open;
@@ -82,19 +72,54 @@ impl Render for Inspection {
             .min_w_0()
             .gap_1()
             .child(header);
-        if let Some(target) = self
-            .detail
-            .as_ref()
-            .and_then(|detail| detail.target.as_ref())
-        {
-            card = card.child(
-                div()
-                    .pl_6()
-                    .min_w_0()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(target.clone()),
-            );
+        if let Some(detail) = &self.detail {
+            let mut preview = div()
+                .min_w_0()
+                .pl_6()
+                .pr_2()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .text_xs();
+            if let Some(target) = &detail.target {
+                preview = preview.child(div().min_w_0().truncate().child(target.clone()));
+            }
+            let parameters = detail
+                .parameters
+                .iter()
+                .filter(|(_, value)| !value.is_null());
+            let has_meaningful = parameters
+                .clone()
+                .any(|(key, _)| !matches!(key.as_str(), "offset" | "limit"));
+            let parameters = parameters
+                .filter(|(key, _)| !has_meaningful || !matches!(key.as_str(), "offset" | "limit"))
+                .take(2);
+            for (key, value) in parameters {
+                preview = preview.child(preview_fact(key, value, cx));
+            }
+            if let Some(output) = detail.output.as_ref().filter(|value| !value.is_null()) {
+                preview = preview.child(
+                    div()
+                        .min_w_0()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(yss_ui::text::format(
+                            "panel.assistantToolResultPreview",
+                            &[("preview", output_preview(output))],
+                        )),
+                );
+            }
+            if !detail.artifacts.is_empty() || !detail.results.is_empty() {
+                preview = preview.child(div().text_color(cx.theme().muted_foreground).child(
+                    yss_ui::text::format(
+                        "panel.assistantToolResources",
+                        &[
+                            ("artifacts", detail.artifacts.len().to_string()),
+                            ("results", detail.results.len().to_string()),
+                        ],
+                    ),
+                ));
+            }
+            card = card.child(preview);
         }
         let failure = tool.failure.as_deref().or_else(|| {
             self.detail
@@ -125,10 +150,8 @@ impl Inspection {
             .flex()
             .flex_col()
             .gap_2()
-            .p_2()
-            .rounded_md()
-            .border_1()
-            .border_color(cx.theme().border)
+            .px_2()
+            .pb_2()
             .text_xs();
         if self.loading == Loading::Reading {
             body = body.child(yss_ui::text::t("panel.assistantLoadingDetails"));
@@ -251,7 +274,7 @@ impl Inspection {
                     div()
                         .id("tool-json")
                         .min_w_0()
-                        .max_h(px(280.))
+                        .max_h(rems(17.5))
                         .overflow_y_scroll()
                         .child(TextView::markdown("tool-inspection", json)),
                 );
@@ -309,5 +332,101 @@ fn translated(prefix: &str, value: &str) -> String {
         value.to_owned()
     } else {
         label
+    }
+}
+
+fn preview_fact(key: &str, value: &Value, cx: &gpui_kit::App) -> impl IntoElement {
+    div()
+        .min_w_0()
+        .flex()
+        .flex_wrap()
+        .gap_2()
+        .text_color(cx.theme().muted_foreground)
+        .child(translated("panel.assistantToolFacts", key))
+        .child(div().min_w_0().child(value_preview(value)))
+}
+
+fn output_preview(value: &Value) -> String {
+    match value {
+        Value::Object(fields) if !fields.is_empty() => {
+            use std::fmt::Write;
+            let mut preview = String::new();
+            for (key, value) in fields.iter().filter(|(_, value)| !value.is_null()).take(3) {
+                if !preview.is_empty() {
+                    preview.push_str(" · ");
+                }
+                write!(
+                    preview,
+                    "{}: {}",
+                    translated("panel.assistantToolFacts", key),
+                    value_preview(value)
+                )
+                .expect("writing a string cannot fail");
+            }
+            if preview.is_empty() {
+                value_preview(value)
+            } else {
+                preview
+            }
+        }
+        value => value_preview(value),
+    }
+}
+
+fn value_preview(value: &Value) -> String {
+    match value {
+        Value::String(value) => {
+            let mut characters = value.chars();
+            let mut preview: String = characters
+                .by_ref()
+                .take(120)
+                .map(|character| {
+                    if character.is_whitespace() {
+                        ' '
+                    } else {
+                        character
+                    }
+                })
+                .collect();
+            if characters.next().is_some() {
+                preview.push('…');
+            }
+            preview
+        }
+        Value::Array(items) => yss_ui::text::format(
+            "panel.assistantPreviewItems",
+            &[("count", items.len().to_string())],
+        ),
+        Value::Object(fields) => yss_ui::text::format(
+            "panel.assistantPreviewFields",
+            &[("count", fields.len().to_string())],
+        ),
+        value => value.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::value_preview;
+    use serde_json::Value;
+
+    #[test]
+    fn string_preview_is_bounded_without_changing_authored_data() {
+        let source = format!("{}\n{}", "分析".repeat(60), "后续内容");
+        let value = Value::String(source.clone());
+        assert_eq!(value_preview(&value), format!("{}…", "分析".repeat(60)));
+        assert_eq!(value.as_str(), Some(source.as_str()));
+    }
+
+    #[test]
+    fn string_preview_flattens_lines_without_truncating_short_values() {
+        assert_eq!(
+            value_preview(&Value::String("first\nsecond".into())),
+            "first second"
+        );
+        assert_eq!(
+            value_preview(&Value::String("x".repeat(120))),
+            "x".repeat(120)
+        );
     }
 }

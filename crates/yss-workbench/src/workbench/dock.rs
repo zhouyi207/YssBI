@@ -59,6 +59,24 @@ pub(super) struct WorkbenchDock {
 }
 
 impl WorkbenchDock {
+    pub(super) fn render_area(&self, area: &Entity<DockArea>) -> impl IntoElement {
+        div()
+            .relative()
+            .size_full()
+            .child(area.clone())
+            .child(regions::conversation_surface(
+                self.area.clone(),
+                self.workbench.clone(),
+                self.measurements.clone(),
+            ))
+            .child(regions::status_bars(
+                self.area.clone(),
+                self.workbench.clone(),
+                self.measurements.clone(),
+                -self.center_bottom_margin.get(),
+            ))
+    }
+
     pub(super) fn update_style(&self, area: &DockArea, cx: &App) {
         self.navigation_headers.retain_groups(area);
         let hide_strip = !area.is_zoomed()
@@ -102,12 +120,6 @@ impl DockAreaRenderer for WorkbenchDock {
             .mb(self.center_bottom_margin.get())
             .relative()
             .pb(STATUS_BAR_HEIGHT)
-            .child(regions::status_bars(
-                self.area.clone(),
-                self.workbench.clone(),
-                self.measurements.clone(),
-                -self.center_bottom_margin.get(),
-            ))
             .on_prepaint(move |bounds, window, cx| {
                 let has_conversation = area.upgrade().is_some_and(|area| {
                     super::layout::columns::conversation_edge(area.read(cx)).is_some()
@@ -370,7 +382,7 @@ impl TabGroupRenderer for WorkbenchTabs {
         let content = self.skin.render_active_panel(panel, group, window, cx);
         if conversation::matches(group) && !group.is_zoomed() {
             regions::RegionContent::conversation(
-                div()
+                conversation::capture_close(self.skin.frame(group, window, cx), &self.workbench)
                     .relative()
                     .size_full()
                     .flex()

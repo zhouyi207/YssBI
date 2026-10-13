@@ -6,17 +6,20 @@ use super::super::{
 };
 use gpui_kit::component::dock::{DockArea, NodeId};
 use gpui_kit::{
-    AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId,
-    InspectorElementId, IntoElement, LayoutId, Pixels, WeakEntity, Window, deferred, div,
-    prelude::*, px,
+    AnyElement, App, AvailableSpace, Bounds, Element, ElementId, GlobalElementId,
+    InspectorElementId, IntoElement, LayoutId, Pixels, WeakEntity, Window, div, prelude::*, px,
 };
-use std::{cell::Cell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 use yss_ui::lifecycle::LogReleased;
 
 #[derive(Default)]
 pub(in crate::workbench) struct Measurements {
     center: Cell<Bounds<Pixels>>,
     editor_left: Cell<Pixels>,
+    conversation: RefCell<Vec<(NodeId, AnyElement, Bounds<Pixels>)>>,
 }
 
 impl Measurements {
@@ -58,12 +61,12 @@ impl Measurements {
 
 enum Region {
     Conversation(NodeId),
+    ConversationSurface,
     Bottom,
-    Status(StatusColumn),
+    Status(StatusColumn, Pixels),
 }
 
 /// Reuses the original panel element at its measured workbench boundary.
-/// Only conversation content needs deferred painting to extend past the center split's clip.
 pub(super) struct RegionContent {
     child: Option<AnyElement>,
     region: Region,
@@ -105,6 +108,20 @@ impl RegionContent {
     }
 }
 
+pub(super) fn conversation_surface(
+    area: WeakEntity<DockArea>,
+    owner: WeakEntity<Workbench>,
+    measurements: Rc<Measurements>,
+) -> impl IntoElement {
+    div().absolute().inset_0().child(RegionContent {
+        child: None,
+        region: Region::ConversationSurface,
+        area,
+        owner,
+        measurements,
+    })
+}
+
 pub(super) fn status_bars(
     area: WeakEntity<DockArea>,
     owner: WeakEntity<Workbench>,
@@ -113,19 +130,16 @@ pub(super) fn status_bars(
 ) -> impl IntoElement {
     div()
         .absolute()
-        .bottom(bottom)
-        .left_0()
-        .right_0()
-        .h(STATUS_BAR_HEIGHT)
+        .inset_0()
         .children(
             [StatusColumn::Conversation, StatusColumn::Editor].map(|column| {
-                div().absolute().inset_0().child(deferred(RegionContent {
+                div().absolute().inset_0().child(RegionContent {
                     child: Some(ColumnStatusBar::new(owner.clone(), column).into_any_element()),
-                    region: Region::Status(column),
+                    region: Region::Status(column, bottom),
                     area: area.clone(),
                     owner: owner.clone(),
                     measurements: measurements.clone(),
-                }))
+                })
             }),
         )
 }
@@ -173,8 +187,37 @@ impl Element for RegionContent {
         window: &mut Window,
         cx: &mut App,
     ) {
+        if matches!(self.region, Region::ConversationSurface) {
+            let mut surface = {
+                let mut conversation = self.measurements.conversation.borrow_mut();
+                if conversation.is_empty() {
+                    return;
+                }
+                div()
+                    .size_full()
+                    .children(conversation.drain(..).map(|(node, child, target)| {
+                        div()
+                            .id(("conversation-surface", node.as_u64()))
+                            .absolute()
+                            .left(target.left() - bounds.left())
+                            .top(target.top() - bounds.top())
+                            .w(target.size.width)
+                            .h(target.size.height)
+                            .overflow_hidden()
+                            .child(child)
+                    }))
+                    .into_any_element()
+            };
+            surface.prepaint_as_root(
+                bounds.origin,
+                bounds.size.map(AvailableSpace::Definite),
+                window,
+                cx,
+            );
+            self.child = Some(surface);
+            return;
+        }
         let mut target = bounds;
-        let mut extend = false;
         if let Some(area) = self.area.upgrade() {
             let area = area.read(cx);
             match self.region {
@@ -186,7 +229,6 @@ impl Element for RegionContent {
                     if !blocked {
                         target.size.height =
                             (area.bounds().bottom() - STATUS_BAR_HEIGHT - bounds.top()).max(px(0.));
-                        extend = target.size.height > bounds.size.height;
                     }
                 }
                 Region::Bottom if columns::conversation_edge(area).is_some() => {
@@ -198,22 +240,29 @@ impl Element for RegionContent {
                     target.origin.x = left;
                     target.size.width = bounds.right() - left;
                 }
-                Region::Status(column) => {
-                    // Resolve after the split's prepaint so footer and tool panel
-                    // use the same current-frame column boundary during resizing.
+                Region::Status(column, bottom) => {
+                    if area.is_zoomed() {
+                        self.child = None;
+                        return;
+                    }
+                    // This sibling follows DockArea's prepaint, so the split boundary
+                    // is current without deferring chrome above Root's overlays.
+                    target = self.measurements.center.get();
+                    target.origin.y = target.bottom() - bottom - STATUS_BAR_HEIGHT;
+                    target.size.height = STATUS_BAR_HEIGHT;
                     let edge = if columns::conversation_edge(area).is_some() {
                         self.measurements
                             .editor_left
                             .get()
-                            .clamp(bounds.left(), bounds.right())
+                            .clamp(target.left(), target.right())
                     } else {
-                        bounds.left()
+                        target.left()
                     };
                     if matches!(column, StatusColumn::Conversation) {
-                        target.size.width = edge - bounds.left();
+                        target.size.width = edge - target.left();
                     } else {
+                        target.size.width = target.right() - edge;
                         target.origin.x = edge;
-                        target.size.width = bounds.right() - edge;
                     }
                 }
                 _ => {}
@@ -223,18 +272,22 @@ impl Element for RegionContent {
             self.child = None;
             return;
         }
-        let available = target.size.map(AvailableSpace::Definite);
-        if extend {
-            let mut child = self.child.take().expect("region content is painted once");
-            child.layout_as_root(available, window, cx);
-            window.defer_draw(
-                child,
-                target.origin,
-                0,
-                Some(ContentMask { bounds: target }),
-            );
+        if let Region::Conversation(node) = self.region {
+            // Escape the split's clip as an ordinary workbench sibling, not a
+            // deferred draw that would also escape above window-level overlays.
+            if let Some(child) = self.child.take() {
+                self.measurements
+                    .conversation
+                    .borrow_mut()
+                    .push((node, child, target));
+            }
         } else if let Some(child) = self.child.as_mut() {
-            child.prepaint_as_root(target.origin, available, window, cx);
+            child.prepaint_as_root(
+                target.origin,
+                target.size.map(AvailableSpace::Definite),
+                window,
+                cx,
+            );
         }
     }
 

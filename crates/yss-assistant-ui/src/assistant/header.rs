@@ -25,7 +25,7 @@ impl ConversationPanel {
     pub fn read_only_button(&self, cx: &mut Context<Self>) -> Button {
         let read_only = self.options.mode == HarnessMode::Ask;
         Button::new("conversation-read-only")
-            .xsmall()
+            .small()
             .ghost()
             .icon(if read_only {
                 IconName::Lock
@@ -33,7 +33,16 @@ impl ConversationPanel {
                 IconName::LockOpen
             })
             .selected(read_only)
-            .accessibility_label(yss_ui::text::t("panel.assistantReadOnly"))
+            .label(yss_ui::text::t(if read_only {
+                "panel.assistantModes.ask"
+            } else {
+                "panel.assistantModes.write"
+            }))
+            .accessibility_label(yss_ui::text::t(if read_only {
+                "panel.assistantAllowEdits"
+            } else {
+                "panel.assistantReadOnly"
+            }))
             .tooltip(yss_ui::text::t(if read_only {
                 "panel.assistantModeHint.ask"
             } else {

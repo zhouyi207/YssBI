@@ -156,7 +156,9 @@ impl Workbench {
                     .min_h_0()
                     .relative()
                     .child(if self.project.is_some() {
-                        self.dock.clone().into_any_element()
+                        self.dock_renderer
+                            .render_area(&self.dock)
+                            .into_any_element()
                     } else {
                         div()
                             .size_full()

@@ -21,14 +21,16 @@ impl ConversationPanel {
         running: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (mut count, mut pending, mut failed, mut current) = (0, 0, 0, None);
+        let (mut count, mut pending, mut failed, mut uncertain, mut current) = (0, 0, 0, 0, None);
         for tool in tools.clone() {
             count += 1;
             if tool.running() {
                 pending += 1;
-                current.get_or_insert_with(|| tool.kind.clone());
+                current.get_or_insert(&tool.kind);
             } else if tool.state.failed() {
                 failed += 1;
+            } else if matches!(tool.state, ToolState::Unknown | ToolState::Interrupted) {
+                uncertain += 1;
             }
         }
         if count == 0 {
@@ -42,11 +44,13 @@ impl ConversationPanel {
                 "panel.assistantToolsRunning"
             } else if pending > 0 {
                 "panel.assistantToolsUnconfirmed"
+            } else if uncertain > 0 {
+                "panel.assistantToolsUncertain"
             } else {
                 "panel.assistantToolsFinished"
             },
             &[
-                ("completed", (count - pending).to_string()),
+                ("completed", (count - pending - uncertain).to_string()),
                 ("count", count.to_string()),
             ],
         );
@@ -78,12 +82,12 @@ impl ConversationPanel {
                 div()
                     .min_w_0()
                     .truncate()
-                    .child(super::activity::tool_name(&kind)),
+                    .child(super::activity::tool_name(kind)),
             );
         }
         let mut body = div().min_w_0().flex().flex_col().gap_1();
         if open {
-            body = body.children(tools.map(|tool| ToolCard {
+            body = body.children(tools.clone().map(|tool| ToolCard {
                 tool: tool.clone(),
                 owner: cx.entity().downgrade(),
                 generation: self.generation,
@@ -116,6 +120,37 @@ impl ConversationPanel {
                         cx.notify();
                     })),
             )
+            .when(!open, |group| {
+                group.child(
+                    div()
+                        .min_w_0()
+                        .px_2()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .children(tools.take(3).map(|tool| {
+                            div()
+                                .min_w_0()
+                                .flex()
+                                .flex_wrap()
+                                .items_center()
+                                .gap_2()
+                                .child(Icon::new(tool.state.icon(connected)).small())
+                                .child(super::activity::tool_name(&tool.kind))
+                                .child(
+                                    div()
+                                        .text_color(if tool.state.failed() {
+                                            cx.theme().danger
+                                        } else {
+                                            cx.theme().muted_foreground
+                                        })
+                                        .child(tool.state.label(connected)),
+                                )
+                        })),
+                )
+            })
             .content(body)
             .into_any_element()
     }
@@ -123,7 +158,16 @@ impl ConversationPanel {
 
 impl ToolState {
     pub(super) fn failed(self) -> bool {
-        !matches!(self, Self::Running | Self::Completed | Self::GraphSucceeded)
+        matches!(self, Self::Failed | Self::TimedOut | Self::GraphFailed)
+    }
+
+    pub(super) fn icon(self, connected: bool) -> IconName {
+        match self {
+            Self::Completed | Self::GraphSucceeded => IconName::Check,
+            Self::Failed | Self::TimedOut | Self::GraphFailed => IconName::CircleAlert,
+            Self::Running if connected => IconName::LoaderCircle,
+            Self::Running | Self::Unknown | Self::Interrupted | Self::Cancelled => IconName::Clock,
+        }
     }
 
     pub(super) fn label(self, connected: bool) -> std::borrow::Cow<'static, str> {
@@ -139,5 +183,31 @@ impl ToolState {
             Self::GraphSucceeded => "panel.assistantGraphSucceeded",
             Self::GraphFailed => "panel.assistantGraphFailed",
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ToolState;
+
+    #[test]
+    fn failure_counts_do_not_conflate_unknown_or_cancelled_outcomes() {
+        for state in [
+            ToolState::Failed,
+            ToolState::TimedOut,
+            ToolState::GraphFailed,
+        ] {
+            assert!(state.failed());
+        }
+        for state in [
+            ToolState::Running,
+            ToolState::Completed,
+            ToolState::GraphSucceeded,
+            ToolState::Unknown,
+            ToolState::Interrupted,
+            ToolState::Cancelled,
+        ] {
+            assert!(!state.failed());
+        }
     }
 }

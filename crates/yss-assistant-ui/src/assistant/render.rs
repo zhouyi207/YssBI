@@ -2,8 +2,16 @@ use super::{
     CancelResponse, ConversationPanel,
     projection::{Turn, TurnState},
 };
-use gpui_kit::component::{ActiveTheme, Sizable, clipboard::Clipboard};
-use gpui_kit::{AnyElement, Context, IntoElement, Render, SharedString, Window, div, prelude::*};
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{
+    ActiveTheme, Icon, Sizable,
+    clipboard::Clipboard,
+    marker::{Marker, MarkerContent, MarkerIcon},
+    message::{Message, MessageContent, MessageFooter, MessageHeader},
+};
+use gpui_kit::{
+    AnyElement, Context, IntoElement, Render, Role, SharedString, Window, div, prelude::*,
+};
 mod failure;
 mod output;
 mod plain;
@@ -30,81 +38,103 @@ impl Render for ConversationPanel {
 }
 impl ConversationPanel {
     pub(super) fn render_turn(&self, turn: &Turn, cx: &mut Context<Self>) -> AnyElement {
-        let text = turn.user.clone();
         let id = &turn.id;
-        let mut item = div().flex().flex_col().gap_3().min_w_0().child(
-            div()
+        let user =
+            Message::new()
+                .id(SharedString::from(format!("user-message-{id}")))
+                .role(Role::ListItem)
                 .p_3()
-                .rounded_md()
-                .border_1()
-                .border_color(cx.theme().border)
-                .bg(cx.theme().tab_active)
-                .flex()
-                .flex_col()
-                .gap_2()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .child(
-                            div()
-                                .flex_1()
-                                .text_xs()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(yss_ui::text::t("panel.assistantYou")),
-                        )
-                        .when(!text.is_empty(), |row| {
-                            row.child(self.copy_action(turn, true, cx))
+                .rounded(cx.theme().radius)
+                .bg(cx.theme().muted)
+                .header(
+                    MessageHeader::new()
+                        .content_inset(false)
+                        .w_full()
+                        .child(Icon::new(IconName::User).small())
+                        .child(div().flex_1().child(yss_ui::text::t("panel.assistantYou")))
+                        .when(!turn.user.is_empty(), |header| {
+                            header.child(self.copy_action(turn, true, cx))
                         }),
                 )
-                .child(plain::PlainText::new(
-                    SharedString::from(format!("user-{id}")),
-                    text,
-                    "panel.assistantYou",
-                ))
-                .child(
-                    self.reference_chips(
-                        format!("history-references-{}", turn.id),
-                        turn.resources
-                            .iter()
-                            .map(|reference| (&reference.resource, Some(reference.name.as_str()))),
-                        false,
-                        cx,
-                    ),
-                ),
-        );
-        item = item.child(self.execution_header(turn, cx));
-        item = item.child(self.render_output(
-            &turn.output,
-            &turn.tasks,
-            turn.state == TurnState::Running,
-            cx,
-        ));
-        item = item.child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .text_xs()
-                .text_color(cx.theme().muted_foreground)
-                .justify_end()
-                .when(turn.state != TurnState::Completed, |footer| {
-                    footer.child(match turn.state {
-                        TurnState::Running => yss_ui::text::t("native.assistant.generating"),
-                        TurnState::Completed => "".into(),
-                        TurnState::Failed if turn.output.failure().is_none() => {
-                            yss_ui::text::t("panel.assistantReplyInterrupted")
-                        }
-                        TurnState::Failed => "".into(),
-                        TurnState::Cancelled => yss_ui::text::t("panel.assistantReplyStopped"),
+                .content(
+                    MessageContent::new()
+                        .child(plain::PlainText::new(
+                            SharedString::from(format!("user-{id}")),
+                            turn.user.clone(),
+                            "panel.assistantYou",
+                        ))
+                        .child(self.reference_chips(
+                            format!("history-references-{id}"),
+                            turn.resources.iter().map(|reference| {
+                                (&reference.resource, Some(reference.name.as_str()))
+                            }),
+                            false,
+                            cx,
+                        )),
+                );
+        let active = turn.state == TurnState::Running && self.timing_connected();
+        let mut footer = MessageFooter::new()
+            .content_inset(false)
+            .w_full()
+            .flex_wrap()
+            .gap_2();
+        let status = match turn.state {
+            TurnState::Running if active => Some(("native.assistant.generating", None)),
+            TurnState::Running => Some(("panel.assistantToolUnknown", Some(IconName::Clock))),
+            TurnState::Failed if turn.output.failure().is_none() => Some((
+                "panel.assistantReplyInterrupted",
+                Some(IconName::CircleAlert),
+            )),
+            TurnState::Cancelled => Some(("panel.assistantReplyStopped", Some(IconName::Square))),
+            _ => None,
+        };
+        if let Some((label, icon)) = status {
+            footer = footer.child(
+                Marker::new()
+                    .id(SharedString::from(format!("turn-status-{id}")))
+                    .role(Role::Status)
+                    .flex_1()
+                    .text_xs()
+                    .loading(active)
+                    .when_some(icon, |marker, icon| {
+                        marker.icon(MarkerIcon::new().child(Icon::new(icon).small()))
                     })
-                })
-                .when(
-                    turn.state != TurnState::Running && turn.output.has_text(),
-                    |footer| footer.child(self.copy_action(turn, false, cx)),
-                ),
-        );
-        item.into_any_element()
+                    .content(MarkerContent::new().text(yss_ui::text::t(label))),
+            );
+        }
+        if turn.state != TurnState::Running && turn.output.has_text() {
+            footer = footer.child(self.copy_action(turn, false, cx));
+        }
+        div()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(user)
+            .child(
+                Message::new()
+                    .id(SharedString::from(format!("assistant-message-{id}")))
+                    .role(Role::ListItem)
+                    .header(
+                        MessageHeader::new()
+                            .content_inset(false)
+                            .child(self.execution_header(turn, cx)),
+                    )
+                    .content(
+                        MessageContent::new()
+                            .items_stretch()
+                            .child(self.render_output(
+                                &turn.output,
+                                &turn.tasks,
+                                turn.state == TurnState::Running,
+                                cx,
+                            )),
+                    )
+                    .when(status.is_some() || turn.output.has_text(), |message| {
+                        message.footer(footer)
+                    }),
+            )
+            .into_any_element()
     }
 
     fn copy_action(&self, turn: &Turn, user: bool, cx: &Context<Self>) -> Clipboard {
@@ -117,7 +147,6 @@ impl ConversationPanel {
         });
         Clipboard::new(SharedString::from(format!("copy-{user}-{id}")))
             .xsmall()
-            .tooltip(label.clone())
             .accessibility_label(label)
             .value_fn(move |_, cx| {
                 owner
