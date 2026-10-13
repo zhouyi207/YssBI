@@ -1,6 +1,7 @@
 //! Read-only file and SQL discovery runs outside the window event loop.
 use super::{ImportDialog, ImportKind, ImportStage, ImportTask, SourceLocation};
 use gpui_kit::{Context, PathPromptOptions, Window};
+use yss_ui::lifecycle::LogReleased;
 
 impl ImportDialog {
     pub(super) fn choose_file(
@@ -33,7 +34,7 @@ impl ImportDialog {
                 .and_then(Result::ok)
                 .flatten()
                 .and_then(|paths| paths.into_iter().next());
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.task = None;
                 if failed {
                     view.error = Some(yss_ui::text::t("native.imports.pickerFailed").into());
@@ -50,7 +51,8 @@ impl ImportDialog {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -115,7 +117,7 @@ impl ImportDialog {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -128,7 +130,8 @@ impl ImportDialog {
                     None => view.error = Some(yss_ui::text::t("native.imports.readFailed").into()),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -153,7 +156,7 @@ impl ImportDialog {
             let result = job.await.ok().and_then(Result::ok).unwrap_or(Err(
                 "importModal.samples.errors.sample_resource_unavailable",
             ));
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 view.task = None;
                 match result {
                     Ok(entries) => {
@@ -171,7 +174,8 @@ impl ImportDialog {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

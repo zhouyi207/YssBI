@@ -14,6 +14,7 @@ use gpui_kit::{
     AnyElement, App, Empty, IntoElement, RenderOnce, WeakEntity, Window, div, prelude::*,
 };
 use std::rc::Rc;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(IntoElement)]
 pub(super) struct Sidebar {
@@ -143,8 +144,8 @@ fn render_node(
                         let area = area.clone();
                         Some(Tab::new().child(handle.title(window, cx)).on_click(
                             move |_, window, cx| {
-                                let _ =
-                                    area.update(cx, |dock, cx| dock.select_panel(id, window, cx));
+                                area.update(cx, |dock, cx| dock.select_panel(id, window, cx))
+                                    .log_released();
                             },
                         ))
                     })

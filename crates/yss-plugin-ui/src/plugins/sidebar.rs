@@ -15,6 +15,7 @@ use gpui_kit::{
 use std::sync::Arc;
 use yss_application::activity_panel::{ActivityItem, ActivityRowContent, plugins_activity_panel};
 use yss_ui::appearance;
+use yss_ui::lifecycle::LogReleased;
 
 pub struct PluginsSidebar {
     owner: Entity<PluginsPanel>,
@@ -137,14 +138,16 @@ impl PluginsPanel {
                         menu.item(
                             PopupMenuItem::new(yss_ui::text::t("native.plugins.collectPackages"))
                                 .on_click(move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        view.request_action(
-                                            None,
-                                            PluginAction::CollectPackages,
-                                            window,
-                                            cx,
-                                        )
-                                    });
+                                    owner
+                                        .update(cx, |view, cx| {
+                                            view.request_action(
+                                                None,
+                                                PluginAction::CollectPackages,
+                                                window,
+                                                cx,
+                                            )
+                                        })
+                                        .log_released();
                                 }),
                         )
                     }),

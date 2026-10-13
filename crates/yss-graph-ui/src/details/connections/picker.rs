@@ -7,6 +7,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{App, Task, WeakEntity, px};
 use yss_graph_editor::projection::{ConnectionCandidates, ConnectionDecision};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) struct ConnectionOption {
     address: PortAddress,
@@ -174,44 +175,48 @@ impl ListDelegate for ConnectionPicker {
         let direction = self.direction;
         let epoch = self.epoch;
         let picker_id = cx.entity_id();
-        let _ = self.owner.update(cx, |view, cx| {
-            if !view.accepts_input(epoch, cx)
-                || view
-                    .connection_picker
-                    .as_ref()
-                    .is_none_or(|(_, picker)| picker.entity_id() != picker_id)
-            {
-                return;
-            }
-            let (output, input) = if direction == PortDirection::Output {
-                (source, target)
-            } else {
-                (target, source)
-            };
-            view.connection_picker = None;
-            view.submit(
-                GraphCommand::Edit(EditorGraphMutation::Connect {
-                    output,
-                    input,
-                    order: None,
-                }),
-                cx,
-            );
-            cx.notify();
-        });
+        self.owner
+            .update(cx, |view, cx| {
+                if !view.accepts_input(epoch, cx)
+                    || view
+                        .connection_picker
+                        .as_ref()
+                        .is_none_or(|(_, picker)| picker.entity_id() != picker_id)
+                {
+                    return;
+                }
+                let (output, input) = if direction == PortDirection::Output {
+                    (source, target)
+                } else {
+                    (target, source)
+                };
+                view.connection_picker = None;
+                view.submit(
+                    GraphCommand::Edit(EditorGraphMutation::Connect {
+                        output,
+                        input,
+                        order: None,
+                    }),
+                    cx,
+                );
+                cx.notify();
+            })
+            .log_released();
     }
     fn cancel(&mut self, _: &mut Window, cx: &mut Context<ListState<Self>>) {
         let picker_id = cx.entity_id();
-        let _ = self.owner.update(cx, |view, cx| {
-            if view
-                .connection_picker
-                .as_ref()
-                .is_some_and(|(_, picker)| picker.entity_id() == picker_id)
-            {
-                view.connection_picker = None;
-                cx.notify();
-            }
-        });
+        self.owner
+            .update(cx, |view, cx| {
+                if view
+                    .connection_picker
+                    .as_ref()
+                    .is_some_and(|(_, picker)| picker.entity_id() == picker_id)
+                {
+                    view.connection_picker = None;
+                    cx.notify();
+                }
+            })
+            .log_released();
     }
     fn render_empty(
         &mut self,
@@ -242,16 +247,17 @@ impl ListDelegate for ConnectionPicker {
                         .ghost()
                         .label(translate("common.retry"))
                         .on_click(move |_, window, cx| {
-                            let _ = owner.update(cx, |view, cx| {
-                                if view.accepts_input(epoch, cx)
-                                    && view
-                                        .connection_picker
-                                        .as_ref()
-                                        .is_some_and(|(_, picker)| picker.entity_id() == picker_id)
-                                {
-                                    view.load_connection_picker(window, cx);
-                                }
-                            });
+                            owner
+                                .update(cx, |view, cx| {
+                                    if view.accepts_input(epoch, cx)
+                                        && view.connection_picker.as_ref().is_some_and(
+                                            |(_, picker)| picker.entity_id() == picker_id,
+                                        )
+                                    {
+                                        view.load_connection_picker(window, cx);
+                                    }
+                                })
+                                .log_released();
                         }),
                 )
             })

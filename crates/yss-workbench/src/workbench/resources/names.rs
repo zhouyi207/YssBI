@@ -5,6 +5,7 @@ use super::{
     operations::GraphTarget,
 };
 use gpui_kit::{Context, Entity, Focusable, SharedString, Window};
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn resource_name_dialog(
@@ -45,28 +46,30 @@ impl Workbench {
                         let Some(name) = form.read(cx).value(cx) else {
                             return false;
                         };
-                        let _ = owner.update(cx, |view, cx| {
-                            if view.lifecycle != lifecycle
-                                || view.is_closing(cx)
-                                || view
-                                    .project
-                                    .as_ref()
-                                    .is_none_or(|current| current.identity != project)
-                            {
-                                form.update(cx, |form, cx| {
-                                    form.finish(Some("native.workbench.resourceChanged"), cx);
-                                });
-                                return;
-                            }
-                            submit(view, name, form.clone(), window, cx);
-                            form.update(cx, |form, cx| {
-                                if view.busy {
-                                    form.submitting(cx);
-                                } else {
-                                    form.finish(Some("native.workbench.resourceChanged"), cx);
+                        owner
+                            .update(cx, |view, cx| {
+                                if view.lifecycle != lifecycle
+                                    || view.is_closing(cx)
+                                    || view
+                                        .project
+                                        .as_ref()
+                                        .is_none_or(|current| current.identity != project)
+                                {
+                                    form.update(cx, |form, cx| {
+                                        form.finish(Some("native.workbench.resourceChanged"), cx);
+                                    });
+                                    return;
                                 }
-                            });
-                        });
+                                submit(view, name, form.clone(), window, cx);
+                                form.update(cx, |form, cx| {
+                                    if view.busy {
+                                        form.submitting(cx);
+                                    } else {
+                                        form.finish(Some("native.workbench.resourceChanged"), cx);
+                                    }
+                                });
+                            })
+                            .log_released();
                         false
                     })
                     .cancel(crate::text::translate("common.cancel"))

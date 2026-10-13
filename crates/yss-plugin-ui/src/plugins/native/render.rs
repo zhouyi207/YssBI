@@ -9,6 +9,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*};
 use yss_plugin_runtime::{NativeInput, NativeOperation};
+use yss_ui::lifecycle::LogReleased;
 
 impl Render for PluginViewPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -65,16 +66,18 @@ impl Render for PluginViewPanel {
                                         PopupMenuItem::new(option.clone())
                                             .checked(*option == current)
                                             .on_click(move |_, _, cx| {
-                                                let _ = panel.update(cx, |panel, cx| {
-                                                    if !panel.busy
-                                                        && !panel.closed
-                                                        && panel.form_generation == generation
-                                                    {
-                                                        panel.fields[index].draft =
-                                                            Draft::Choice(selected.clone());
-                                                        cx.notify();
-                                                    }
-                                                });
+                                                panel
+                                                    .update(cx, |panel, cx| {
+                                                        if !panel.busy
+                                                            && !panel.closed
+                                                            && panel.form_generation == generation
+                                                        {
+                                                            panel.fields[index].draft =
+                                                                Draft::Choice(selected.clone());
+                                                            cx.notify();
+                                                        }
+                                                    })
+                                                    .log_released();
                                             }),
                                     );
                                 }

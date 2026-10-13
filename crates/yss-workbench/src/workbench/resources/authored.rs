@@ -1,5 +1,6 @@
 //! One native name dialog; each resource retains its original typed creation command.
 use super::super::name_form::NameForm;
+use yss_ui::lifecycle::LogReleased;
 
 use crate::workbench::Workbench;
 use gpui_kit::{Context, Entity, Window};
@@ -123,7 +124,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle
                     || view
                         .project
@@ -175,7 +176,8 @@ impl Workbench {
                 }
                 view.refresh_project(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

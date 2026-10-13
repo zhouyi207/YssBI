@@ -5,6 +5,7 @@ use yss_graph_document::ConstantId;
 use yss_graph_editor::EditorGraphMutation;
 use yss_project::GraphEditVersion;
 use yss_project_history::{FunctionDocumentPatch, MutationRequest};
+use yss_ui::lifecycle::LogReleased;
 
 use super::{GraphCanvas, GraphCommand};
 
@@ -78,7 +79,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|value| value);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.busy = false;
                 if result.is_err() {
                     view.error = Some(yss_ui::text::t("native.canvas.signatureFailed").into());
@@ -90,7 +91,8 @@ impl GraphCanvas {
                 view.refresh_pending = true;
                 view.refresh(cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

@@ -7,6 +7,7 @@ use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_ui::canvas::GraphCanvas;
 use yss_graph_ui::problems::LocateProblem;
 use yss_project_identity::ProjectResourceKind;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     fn problem_graph(&self, event: &LocateProblem, cx: &App) -> Option<Entity<GraphCanvas>> {
@@ -93,9 +94,11 @@ impl Workbench {
         // Dock resize is painted before reading the canvas bounds.
         window.on_next_frame(move |window, _| {
             window.on_next_frame(move |window, cx| {
-                let _ = owner.update(cx, |view, cx| {
-                    view.apply_problem_location(&event, focus, window, cx)
-                });
+                owner
+                    .update(cx, |view, cx| {
+                        view.apply_problem_location(&event, focus, window, cx)
+                    })
+                    .log_released();
             });
         });
     }

@@ -6,6 +6,7 @@ use crate::services::NativeServices;
 use gpui_kit::{Context, EntityId, EventEmitter};
 use std::sync::Arc;
 use yss_project_registry_contract::ProjectRecord;
+use yss_ui::lifecycle::LogReleased;
 
 pub(crate) enum RecentProjectEvent {
     Changed,
@@ -68,7 +69,7 @@ impl RecentProjects {
         // The workbench owns this read; closing its optional picker must not strand loading.
         cx.spawn(async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if view.snapshot.generation != generation {
                     return;
                 }
@@ -87,7 +88,8 @@ impl RecentProjects {
                 }
                 cx.emit(RecentProjectEvent::Changed);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.emit(RecentProjectEvent::Changed);

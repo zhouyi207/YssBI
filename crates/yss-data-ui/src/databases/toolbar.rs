@@ -7,6 +7,7 @@ use gpui_kit::component::{
     menu::{DropdownMenu, PopupMenuItem},
 };
 use gpui_kit::{Context, IntoElement, div, prelude::*};
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::text::translate as t;
 
 impl DatabaseEditor {
@@ -67,8 +68,9 @@ impl DatabaseEditor {
                             let owner = owner.clone();
                             menu = menu.item(PopupMenuItem::new(label).on_click(
                                 move |_, window, cx| {
-                                    let _ = owner
-                                        .update(cx, |view, cx| view.export(format, window, cx));
+                                    owner
+                                        .update(cx, |view, cx| view.export(format, window, cx))
+                                        .log_released();
                                 },
                             ));
                         }

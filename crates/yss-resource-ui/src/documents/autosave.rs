@@ -3,6 +3,7 @@ use super::DocumentEditor;
 use gpui_kit::{Context, Window};
 use std::time::Duration;
 use yss_settings::{Autosave, EditorSettings};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) struct AutosaveState {
     pub settings: EditorSettings,
@@ -100,14 +101,15 @@ impl DocumentEditor {
         let timer = cx.background_executor().timer(delay);
         self.autosave_task = Some(cx.spawn_in(window, async move |view, cx| {
             timer.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.autosave_task = None;
                 // An in-flight save/refresh resumes the pending work on completion;
                 // never spin or start a second write against the same revision.
                 if view.autosave.can_save(view.dirty(), view.busy()) {
                     view.save_document(true, window, cx);
                 }
-            });
+            })
+            .log_released();
         }));
     }
 

@@ -11,6 +11,7 @@ use yss_graph_execution::{
     result::{ResultId, ResultReference},
 };
 use yss_harness_contract::{AssistantResultReference, ResourceChange};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) fn cards(
     scope: impl Into<SharedString>,
@@ -59,7 +60,9 @@ pub(super) fn cards(
                         .tooltip(artifact.resource.id.clone())
                         .disabled(unavailable)
                         .on_click(move |_, _, cx| {
-                            let _ = owner.update(cx, |view, cx| view.open_reference(&resource, cx));
+                            owner
+                                .update(cx, |view, cx| view.open_reference(&resource, cx))
+                                .log_released();
                         }),
                 )
                 .child(
@@ -112,9 +115,11 @@ pub(super) fn cards(
                         .disabled(reference.is_none())
                         .on_click(move |_, _, cx| {
                             if let Some(reference) = reference {
-                                let _ = owner.update(cx, |_, cx| {
-                                    cx.emit(ConversationEvent::OpenResult(reference))
-                                });
+                                owner
+                                    .update(cx, |_, cx| {
+                                        cx.emit(ConversationEvent::OpenResult(reference))
+                                    })
+                                    .log_released();
                             }
                         }),
                 )

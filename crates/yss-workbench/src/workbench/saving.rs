@@ -13,6 +13,7 @@ use gpui_kit::component::Root;
 use gpui_kit::{App, Context, Entity, Window, WindowHandle};
 use std::sync::Arc;
 use yss_application::runtime::ApplicationServices;
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) enum SaveTarget {
     Graph(Entity<GraphCanvas>),
@@ -174,11 +175,13 @@ fn finish_settings_save(
 ) {
     let mut outcome = Some(outcome);
     if let Some(handle) = target_window {
-        let _ = handle.update(cx, |_, window, cx| {
-            panel.update(cx, |view, cx| {
-                view.finish_save(outcome.take().unwrap(), window, cx);
-            });
-        });
+        handle
+            .update(cx, |_, window, cx| {
+                panel.update(cx, |view, cx| {
+                    view.finish_save(outcome.take().unwrap(), window, cx);
+                });
+            })
+            .log_released();
     }
     // A closed settings window still has a retained draft; an open one owns its controls.
     if let Some(outcome) = outcome {

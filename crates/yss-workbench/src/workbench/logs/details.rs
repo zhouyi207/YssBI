@@ -2,17 +2,15 @@
 use super::*;
 use gpui_kit::component::{
     ActiveTheme, Sizable,
-    button::{Button, ButtonVariants},
-    collapsible::Collapsible,
     input::{Input, Textarea, TextareaState},
 };
-use gpui_kit::{ClipboardItem, Render, SharedString};
+use gpui_kit::{ClipboardItem, Render, SharedString, relative};
 use yss_logging::LogOrigin;
+use yss_ui::inspector::{self, InspectorHeader, InspectorSection};
 
 struct LogSection {
     label: &'static str,
     text: Entity<TextareaState>,
-    open: bool,
 }
 
 pub(in crate::workbench) struct LogDetails {
@@ -74,7 +72,6 @@ impl LogDetails {
             .map(|(label, value)| LogSection {
                 label,
                 text: cx.new(|cx| TextareaState::new(window, cx).default_value(value).rows(6)),
-                open: true,
             })
             .collect();
         Self {
@@ -89,60 +86,54 @@ impl LogDetails {
         &self.entry.key
     }
 
-    fn section(&self, index: usize, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    fn section(&self, index: usize, cx: &App) -> InspectorSection {
         let section = &self.sections[index];
         let text = section.text.clone();
-        Collapsible::new()
-            .open(section.open)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        Button::new(section.label)
-                            .small()
-                            .ghost()
-                            .flex_1()
-                            .min_w_0()
-                            .label(crate::text::translate(section.label))
-                            .icon(if section.open {
-                                IconName::ChevronDown
-                            } else {
-                                IconName::ChevronRight
-                            })
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                view.sections[index].open = !view.sections[index].open;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Button::new(("copy-log-section", index))
-                            .small()
-                            .ghost()
-                            .icon(IconName::Copy)
-                            .tooltip(crate::text::translate("menubar.copy"))
-                            .accessibility_label(crate::text::translate("menubar.copy"))
-                            .on_click(move |_, _, cx| {
-                                cx.write_to_clipboard(ClipboardItem::new_string(
-                                    text.read(cx).value().to_string(),
-                                ))
-                            }),
-                    ),
+        InspectorSection::new(
+            ("log-section", index),
+            crate::text::translate(section.label),
+        )
+        .tool(
+            inspector::action_button(
+                ("copy-log-section", index),
+                IconName::Copy,
+                crate::text::translate("menubar.copy"),
             )
-            .content(
-                div()
-                    .px_3()
-                    .py_2()
-                    .font_family(cx.theme().mono_font_family.clone())
-                    .child(
-                        Textarea::new(&section.text)
-                            .readonly(true)
-                            .small()
-                            .h(px(150.)),
-                    ),
-            )
+            .on_click(move |_, _, cx| {
+                cx.write_to_clipboard(ClipboardItem::new_string(text.read(cx).value().to_string()))
+            }),
+        )
+        .child(
+            div()
+                .font_family(cx.theme().mono_font_family.clone())
+                .child(Textarea::new(&section.text).readonly(true).small().h_40()),
+        )
     }
+}
+
+/// Record metadata keeps a fixed label lane so long, selectable values start on one edge.
+fn field_row(label: &str, value: &Entity<InputState>, cx: &App) -> impl IntoElement + use<> {
+    div()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap_2()
+        .text_xs()
+        .child(
+            div()
+                .w(relative(0.3))
+                .flex_shrink_0()
+                .truncate()
+                .text_color(cx.theme().muted_foreground)
+                .child(crate::text::translate(label)),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .font_family(cx.theme().mono_font_family.clone())
+                .child(Input::new(value).readonly(true).small().appearance(false)),
+        )
 }
 
 impl Render for LogDetails {
@@ -166,66 +157,30 @@ impl Render for LogDetails {
         }
         let entry = self.entry.clone();
         div()
+            .min_w_0()
             .flex()
             .flex_col()
-            .min_w_0()
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_2()
-                    .px_3()
-                    .h(yss_ui::appearance::HEADER_HEIGHT)
-                    .flex_shrink_0()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                            .child(crate::text::translate("log.title")),
+                InspectorHeader::new(
+                    IconName::SquareTerminal,
+                    crate::text::translate("log.title"),
+                )
+                .tool(
+                    inspector::action_button(
+                        "copy-log-record",
+                        IconName::Copy,
+                        crate::text::translate("native.logs.copyRecord"),
                     )
-                    .child(
-                        Button::new("copy-log-record")
-                            .small()
-                            .ghost()
-                            .icon(IconName::Copy)
-                            .tooltip(crate::text::translate("native.logs.copyRecord"))
-                            .accessibility_label(crate::text::translate("native.logs.copyRecord"))
-                            .on_click(move |_, _, cx| super::selection::copy_record(&entry, cx)),
-                    ),
+                    .on_click(move |_, _, cx| super::selection::copy_record(&entry, cx)),
+                ),
             )
             .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .px_3()
-                    .py_1()
-                    .children(self.fields.iter().map(|(label, value)| {
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .min_w_0()
-                            .text_xs()
-                            .child(
-                                div()
-                                    .w(gpui_kit::relative(0.35))
-                                    .min_w_0()
-                                    .truncate()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(crate::text::translate(label)),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .font_family(cx.theme().mono_font_family.clone())
-                                    .child(
-                                        Input::new(value).readonly(true).small().appearance(false),
-                                    ),
-                            )
-                    })),
+                InspectorSection::new("log-fields", crate::text::translate("detail.sections.info"))
+                    .child(inspector::property_list(
+                        self.fields
+                            .iter()
+                            .map(|(label, value)| field_row(label, value, cx)),
+                    )),
             )
             .children((0..self.sections.len()).map(|index| self.section(index, cx)))
     }

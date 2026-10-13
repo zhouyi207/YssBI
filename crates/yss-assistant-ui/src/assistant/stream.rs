@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
 use yss_desktop_services::DesktopEvent;
 use yss_harness_contract::{AssistantEvent, HarnessEvent, HarnessEventEnvelope};
+use yss_ui::lifecycle::LogReleased;
 
 impl ConversationPanel {
     pub(super) fn connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -126,7 +127,7 @@ impl ConversationPanel {
             let result = job
                 .await
                 .unwrap_or_else(|_| Err(yss_ui::text::t("native.assistant.readFailed").into()));
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -169,7 +170,8 @@ impl ConversationPanel {
                 view.buffered.clear();
                 view.advance_queue(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -186,7 +188,7 @@ impl ConversationPanel {
             .spawn(async move { service.catalog().await });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 if view.model_generation != generation || view.generation != session_generation {
                     return;
                 }
@@ -198,7 +200,8 @@ impl ConversationPanel {
                 }
                 view.reconcile_effort();
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
     }

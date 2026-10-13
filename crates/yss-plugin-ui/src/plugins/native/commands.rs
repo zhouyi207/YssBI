@@ -5,6 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use yss_plugin_runtime::{
     NativeCommandReply, NativeOperation, PluginFailure, TaskSnapshot, operation_id,
 };
+use yss_ui::lifecycle::LogReleased;
 
 enum Reply {
     Command(NativeCommandReply),
@@ -117,37 +118,40 @@ impl PluginViewPanel {
                     }
                     .map_err(|_| PluginFailure::new("plugin_response_invalid"))
                 });
-            let _ = panel.update_in(cx, |panel, window, cx| {
-                if panel.closed {
-                    return;
-                }
-                panel.busy = false;
-                match result {
-                    Ok(Reply::Command(reply)) => {
-                        panel.message = Some(reply.message);
-                        if let Some(form) = reply.view
-                            && let Err(error) = panel.install_form(form, Value::Null, window, cx)
-                        {
-                            panel.error = Some(error);
+            panel
+                .update_in(cx, |panel, window, cx| {
+                    if panel.closed {
+                        return;
+                    }
+                    panel.busy = false;
+                    match result {
+                        Ok(Reply::Command(reply)) => {
+                            panel.message = Some(reply.message);
+                            if let Some(form) = reply.view
+                                && let Err(error) =
+                                    panel.install_form(form, Value::Null, window, cx)
+                            {
+                                panel.error = Some(error);
+                            }
                         }
-                    }
-                    Ok(Reply::Task(task)) => {
-                        panel.task = Some(*task);
-                        panel.poll_task(window, cx);
-                    }
-                    Ok(Reply::Open(view)) => {
-                        if let Some(key) = &panel.key {
-                            cx.emit(OpenNativeView {
-                                key: key.clone(),
-                                view,
-                            });
+                        Ok(Reply::Task(task)) => {
+                            panel.task = Some(*task);
+                            panel.poll_task(window, cx);
                         }
+                        Ok(Reply::Open(view)) => {
+                            if let Some(key) = &panel.key {
+                                cx.emit(OpenNativeView {
+                                    key: key.clone(),
+                                    view,
+                                });
+                            }
+                        }
+                        Ok(Reply::Saved) => {}
+                        Err(error) => panel.error = Some(error),
                     }
-                    Ok(Reply::Saved) => {}
-                    Err(error) => panel.error = Some(error),
-                }
-                cx.notify();
-            });
+                    cx.notify();
+                })
+                .log_released();
         })
         .detach();
         cx.notify();
@@ -195,19 +199,21 @@ impl PluginViewPanel {
                     serde_json::from_value(value)
                         .map_err(|_| PluginFailure::new("plugin_response_invalid"))
                 });
-            let _ = panel.update_in(cx, |panel, window, cx| {
-                if panel.closed {
-                    return;
-                }
-                match result {
-                    Ok(task) => {
-                        panel.task = Some(task);
-                        panel.poll_task(window, cx);
+            panel
+                .update_in(cx, |panel, window, cx| {
+                    if panel.closed {
+                        return;
                     }
-                    Err(error) => panel.error = Some(error),
-                }
-                cx.notify();
-            });
+                    match result {
+                        Ok(task) => {
+                            panel.task = Some(task);
+                            panel.poll_task(window, cx);
+                        }
+                        Err(error) => panel.error = Some(error),
+                    }
+                    cx.notify();
+                })
+                .log_released();
         })
         .detach();
     }

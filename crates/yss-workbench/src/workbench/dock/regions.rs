@@ -11,6 +11,7 @@ use gpui_kit::{
     prelude::*, px,
 };
 use std::{cell::Cell, rc::Rc};
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Default)]
 pub(in crate::workbench) struct Measurements {
@@ -50,7 +51,7 @@ impl Measurements {
     fn notify_owner(owner: &WeakEntity<Workbench>, window: &mut Window, cx: &mut App) {
         let owner = owner.clone();
         window.defer(cx, move |_, cx| {
-            let _ = owner.update(cx, |_, cx| cx.notify());
+            owner.update(cx, |_, cx| cx.notify()).log_released();
         });
     }
 }

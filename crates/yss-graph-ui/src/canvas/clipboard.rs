@@ -3,6 +3,7 @@ use super::{GraphCanvas, GraphCommand};
 use gpui_kit::{ClipboardItem, Context};
 use std::sync::Arc;
 use yss_graph_editor::EditorGraphMutation;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub(super) fn copy_selection(&mut self, cut: bool, cx: &mut Context<Self>) {
@@ -25,7 +26,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.read_task = None;
                 if !view.can_edit()
                     || view.graph.editing.version != version
@@ -56,7 +57,8 @@ impl GraphCanvas {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }
@@ -72,7 +74,7 @@ impl GraphCanvas {
         let task = cx.read_from_clipboard_async();
         self.read_task = Some(cx.spawn(async move |view, cx| {
             let result = task.await;
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.read_task = None;
                 if !view.can_edit()
                     || view.graph.editing.version != version
@@ -89,7 +91,8 @@ impl GraphCanvas {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

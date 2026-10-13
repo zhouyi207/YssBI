@@ -5,6 +5,7 @@ use yss_application::ApplicationState;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_desktop_services::ApplicationTasks;
 use yss_project_identity::{OperationId, ProjectInstanceId};
+use yss_ui::lifecycle::LogReleased;
 
 pub struct ChartSaveRequest {
     project: ProjectInstanceId,
@@ -105,7 +106,8 @@ impl ChartEditor {
                 .ok()
                 .and_then(Result::ok)
                 .unwrap_or_else(ChartSaveOutcome::failure);
-            let _ = view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx));
+            view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx))
+                .log_released();
         })
         .detach();
     }

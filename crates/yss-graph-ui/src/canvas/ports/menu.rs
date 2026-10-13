@@ -5,6 +5,7 @@ use gpui_kit::component::menu::PopupMenuItem;
 use gpui_kit::{Context, Pixels, Point, Window};
 use yss_graph_document::PortAddress;
 use yss_graph_editor::EditorGraphMutation;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub(in crate::canvas) fn show_port_menu(
@@ -71,31 +72,35 @@ impl GraphCanvas {
                         .icon(icon)
                         .disabled(!enabled)
                         .on_click(move |_, _, cx| {
-                            let _ = owner.update(cx, |view, cx| {
-                                if !enabled
-                                    || !view.menu_is_current(id, &projection, version, language)
-                                {
-                                    return;
-                                }
-                                match command {
-                                    PortAction::Disconnect => view.submit(
-                                        GraphCommand::Edit(EditorGraphMutation::DisconnectPort {
-                                            address: address.clone(),
-                                        }),
-                                        Some(version),
-                                        cx,
-                                    ),
-                                    PortAction::Reset => view.submit(
-                                        GraphCommand::Edit(EditorGraphMutation::SetLiteral {
-                                            address: address.clone(),
-                                            literal: None,
-                                        }),
-                                        Some(version),
-                                        cx,
-                                    ),
-                                    PortAction::View => view.inspect_port_result(&address, cx),
-                                }
-                            });
+                            owner
+                                .update(cx, |view, cx| {
+                                    if !enabled
+                                        || !view.menu_is_current(id, &projection, version, language)
+                                    {
+                                        return;
+                                    }
+                                    match command {
+                                        PortAction::Disconnect => view.submit(
+                                            GraphCommand::Edit(
+                                                EditorGraphMutation::DisconnectPort {
+                                                    address: address.clone(),
+                                                },
+                                            ),
+                                            Some(version),
+                                            cx,
+                                        ),
+                                        PortAction::Reset => view.submit(
+                                            GraphCommand::Edit(EditorGraphMutation::SetLiteral {
+                                                address: address.clone(),
+                                                literal: None,
+                                            }),
+                                            Some(version),
+                                            cx,
+                                        ),
+                                        PortAction::View => view.inspect_port_result(&address, cx),
+                                    }
+                                })
+                                .log_released();
                         }),
                 );
             }

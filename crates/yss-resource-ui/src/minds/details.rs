@@ -2,35 +2,48 @@
 mod parent;
 
 use super::MindCanvas;
+use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
+    Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Textarea,
+    menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit::{Context, IntoElement, Window, div, prelude::*};
+use gpui_kit::{Anchor, App, ClickEvent, Context, IntoElement, Window, div, prelude::*};
 use std::borrow::Cow;
 use yss_project_model::file::FileVersion;
+use yss_ui::inspector::{self, InlineMessage, InspectorHeader, InspectorSection, PropertyField};
+use yss_ui::text::translate;
 
 /// Read-only inspector identity and controls, excluding editable topic text.
 #[derive(PartialEq)]
 pub struct DetailsDisplay<'a> {
     path: Cow<'a, str>,
-    topic: Option<(Cow<'a, FileVersion>, Cow<'a, str>, bool, bool)>,
+    topic: Option<TopicDisplay<'a>>,
     selected_count: usize,
     error: Option<Cow<'a, str>>,
+}
+
+/// The selected topic's inspector state; an unapplied draft reveals its discard action.
+#[derive(PartialEq)]
+struct TopicDisplay<'a> {
+    version: Cow<'a, FileVersion>,
+    id: Cow<'a, str>,
+    collapsed: bool,
+    busy: bool,
+    dirty: bool,
 }
 
 impl DetailsDisplay<'_> {
     pub fn into_owned(self) -> DetailsDisplay<'static> {
         DetailsDisplay {
             path: Cow::Owned(self.path.into_owned()),
-            topic: self.topic.map(|(version, id, collapsed, busy)| {
-                (
-                    Cow::Owned(version.into_owned()),
-                    Cow::Owned(id.into_owned()),
-                    collapsed,
-                    busy,
-                )
+            topic: self.topic.map(|topic| TopicDisplay {
+                version: Cow::Owned(topic.version.into_owned()),
+                id: Cow::Owned(topic.id.into_owned()),
+                collapsed: topic.collapsed,
+                busy: topic.busy,
+                dirty: topic.dirty,
             }),
             selected_count: self.selected_count,
             error: self.error.map(|error| Cow::Owned(error.into_owned())),
@@ -60,13 +73,15 @@ impl MindCanvas {
     pub fn details_state(&self) -> DetailsDisplay<'_> {
         DetailsDisplay {
             path: Cow::Borrowed(self.path()),
-            topic: self.selected_topic().map(|topic| {
-                (
-                    Cow::Borrowed(&self.snapshot.version),
-                    Cow::Borrowed(topic.id.as_str()),
-                    self.collapsed.contains(&topic.id),
-                    self.busy(),
-                )
+            topic: self.selected_topic().map(|topic| TopicDisplay {
+                version: Cow::Borrowed(&self.snapshot.version),
+                id: Cow::Borrowed(topic.id.as_str()),
+                collapsed: self.collapsed.contains(&topic.id),
+                busy: self.busy(),
+                dirty: self
+                    .buffers
+                    .get(&topic.id)
+                    .is_some_and(|buffer| buffer.dirty),
             }),
             selected_count: self.selected.len(),
             error: self.error.as_deref().map(Cow::Borrowed),
@@ -78,231 +93,245 @@ impl MindCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> gpui_kit::AnyElement {
-        let mut view = div()
-            .px_4()
-            .pb_4()
+        let topic = self.render_topic_section(window, cx);
+        div()
+            .min_w_0()
             .flex()
             .flex_col()
-            .gap_3()
             .child(
-                div()
-                    .h(yss_ui::appearance::HEADER_HEIGHT)
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .min_w_0()
-                    .truncate()
-                    .text_sm()
-                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                    .child(self.snapshot.path.name().to_owned()),
+                InspectorHeader::new(IconName::Network, self.snapshot.path.name().to_owned())
+                    .detail(translate("detail.itemTypes.mind")),
             )
+            .when_some(self.error.clone(), |view, error| {
+                view.child(inspector::status_band(
+                    InlineMessage::error(error).id("mind-details-error"),
+                    cx,
+                ))
+            })
+            .child(topic)
             .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::t("documents.minds")),
+                InspectorSection::new("mind-info", translate("detail.sections.info")).child(
+                    inspector::property_row(
+                        translate("detail.fields.path"),
+                        self.path().to_owned(),
+                        cx,
+                    ),
+                ),
             )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(self.path().to_owned()),
-            )
-            .when_some(self.error.as_ref(), |view, error| {
-                view.child(
-                    div()
-                        .id("mind-details-error")
-                        .role(gpui_kit::accesskit::Role::Alert)
-                        .text_sm()
-                        .text_color(cx.theme().danger)
-                        .child(error.clone()),
-                )
-            });
+            .into_any_element()
+    }
+
+    fn render_topic_section(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> InspectorSection {
+        let section = InspectorSection::new("mind-topic", translate("detail.sections.topic"));
         let Some(id) = self.selected_topic().map(|topic| topic.id.clone()) else {
-            return view
-                .child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(if self.selected.is_empty() {
-                            yss_ui::text::t("native.minds.selectTopicHint").into()
-                        } else {
-                            yss_ui::text::format(
-                                "native.minds.selectedTopics",
-                                &[("value0", self.selected.len().to_string())],
-                            )
-                        }),
-                )
-                .into_any_element();
+            return section.child(inspector::hint(
+                if self.selected.is_empty() {
+                    translate("native.minds.selectTopicHint")
+                } else {
+                    yss_ui::text::format(
+                        "native.minds.selectedTopics",
+                        &[("value0", self.selected.len().to_string())],
+                    )
+                },
+                cx,
+            ));
         };
         let Some(input) = self.ensure_buffer(&id, window, cx) else {
-            return view.into_any_element();
+            return section;
         };
         let Some(topic) = self.selected_topic() else {
-            return view.into_any_element();
+            return section;
         };
+        let busy = self.busy();
+        let root = topic.parent_id.is_none();
+        let dirty = self.buffers.get(&id).is_some_and(|buffer| buffer.dirty);
         let target = TopicTarget {
             id,
             version: self.snapshot.version.clone(),
         };
-        let busy = self.busy();
-        let root = topic.parent_id.is_none();
-        view = view
+        section
             .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::t("native.minds.topicContent")),
+                PropertyField::new(translate("native.minds.topicContent"))
+                    .when(dirty, |field| {
+                        field.action(
+                            inspector::action_button(
+                                "discard-topic-input",
+                                IconName::RotateCcw,
+                                translate("native.minds.restoreContent"),
+                            )
+                            .disabled(busy)
+                            .on_click(self.topic_command(
+                                TopicAction::DiscardInput,
+                                &target,
+                                cx,
+                            )),
+                        )
+                    })
+                    .control(Textarea::new(&input).small().disabled(busy)),
             )
-            .child(Textarea::new(&input).small().disabled(busy))
             .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(self.topic_button(
+                div().flex().justify_end().child(
+                    inspector::commit_button(
                         "apply-topic-content",
-                        yss_ui::text::t("native.minds.applyContent"),
+                        translate("native.minds.applyContent"),
+                        busy,
+                    )
+                    .on_click(self.topic_command(
                         TopicAction::Apply,
                         &target,
                         cx,
-                    ))
-                    .child(self.topic_button(
-                        "discard-topic-input",
-                        yss_ui::text::t("native.minds.restoreContent"),
-                        TopicAction::DiscardInput,
-                        &target,
+                    )),
+                ),
+            )
+            .when(!root, |section| {
+                section.child(
+                    PropertyField::new(translate("documents.parent")).control(self.parent_picker(
+                        topic,
+                        target.clone(),
                         cx,
                     )),
-            )
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(self.topic_button(
-                        "add-child-topic",
-                        yss_ui::text::t("documents.addChild"),
-                        TopicAction::AddChild,
-                        &target,
-                        cx,
-                    ))
-                    .child(
-                        self.topic_button(
-                            "add-sibling-topic",
-                            yss_ui::text::t("native.minds.addSibling"),
-                            TopicAction::AddSibling,
-                            &target,
-                            cx,
-                        )
-                        .disabled(busy || root),
-                    ),
-            );
-        if !root {
-            view = view
-                .child(self.parent_picker(topic, target.clone(), cx))
-                .child(
-                    div()
-                        .flex()
-                        .gap_2()
-                        .child(
-                            self.topic_button(
-                                "topic-up",
-                                yss_ui::text::t("conversion.moveUp"),
-                                TopicAction::Up,
-                                &target,
-                                cx,
-                            )
-                            .disabled(busy || self.sibling_edit(false).is_none()),
-                        )
-                        .child(
-                            self.topic_button(
-                                "topic-down",
-                                yss_ui::text::t("conversion.moveDown"),
-                                TopicAction::Down,
-                                &target,
-                                cx,
-                            )
-                            .disabled(busy || self.sibling_edit(true).is_none()),
-                        ),
-                );
-        }
-        let collapse_label = if self.collapsed.contains(&topic.id) {
-            yss_ui::text::t("documents.expand")
-        } else {
-            yss_ui::text::t("documents.collapse")
-        };
-        view.child(
-            div()
-                .flex()
-                .gap_2()
-                .child(self.topic_button(
-                    "topic-collapse",
-                    collapse_label,
-                    TopicAction::Collapse,
-                    &target,
+                )
+            })
+            .when_some(topic.reference.as_ref(), |section, reference| {
+                section.child(inspector::property_row(
+                    translate("detail.fields.reference"),
+                    reference_label(reference),
                     cx,
                 ))
-                .child(
-                    self.topic_button(
-                        "delete-topic",
-                        yss_ui::text::t("documents.deleteBranch"),
-                        TopicAction::Delete,
-                        &target,
-                        cx,
-                    )
-                    .disabled(busy || root),
-                ),
-        )
-        .when_some(topic.reference.as_ref(), |view, reference| {
-            view.child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::format(
-                        "native.minds.reference",
-                        &[("value0", reference_label(reference))],
-                    )),
-            )
-        })
-        .into_any_element()
+            })
+            .child(self.topic_commands(&target, root, cx))
     }
+
+    /// Adding topics stays visible; reordering, folding and deletion are secondary commands.
+    fn topic_commands(
+        &self,
+        target: &TopicTarget,
+        root: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let busy = self.busy();
+        let leaf = !self
+            .snapshot
+            .content
+            .nodes
+            .iter()
+            .any(|node| node.parent_id.as_ref() == Some(&target.id));
+        let (collapse_label, collapse_icon) = if self.collapsed.contains(&target.id) {
+            (translate("documents.expand"), IconName::ChevronsUpDown)
+        } else {
+            (translate("documents.collapse"), IconName::ChevronsDownUp)
+        };
+        let commands = [
+            (
+                TopicAction::Up,
+                translate("conversion.moveUp"),
+                IconName::ArrowUp,
+                self.sibling_edit(false).is_none(),
+            ),
+            (
+                TopicAction::Down,
+                translate("conversion.moveDown"),
+                IconName::ArrowDown,
+                self.sibling_edit(true).is_none(),
+            ),
+            (TopicAction::Collapse, collapse_label, collapse_icon, leaf),
+        ];
+        let owner = cx.entity().downgrade();
+        let item = {
+            let target = target.clone();
+            move |action: TopicAction, label: String, icon: IconName, disabled: bool| {
+                let target = target.clone();
+                PopupMenuItem::new(label)
+                    .icon(icon)
+                    .disabled(busy || disabled)
+                    .on_click(inspector::owner_command(
+                        owner.clone(),
+                        move |view: &mut MindCanvas, window, cx| {
+                            view.perform(action, &target, window, cx)
+                        },
+                    ))
+            }
+        };
+        div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .child(
+                inspector::add_button("add-child-topic", translate("documents.addChild"))
+                    .disabled(busy)
+                    .on_click(self.topic_command(TopicAction::AddChild, target, cx)),
+            )
+            .child(
+                Button::new("add-sibling-topic")
+                    .small()
+                    .ghost()
+                    .icon(IconName::Plus)
+                    .label(translate("native.minds.addSibling"))
+                    .disabled(busy || root)
+                    .on_click(self.topic_command(TopicAction::AddSibling, target, cx)),
+            )
+            .child(div().flex_1())
+            .child(
+                inspector::overflow_button("topic-actions")
+                    .disabled(busy)
+                    .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, _| {
+                        for (action, label, icon, disabled) in &commands {
+                            menu = menu.item(item(*action, label.clone(), *icon, *disabled));
+                        }
+                        menu.separator().item(item(
+                            TopicAction::Delete,
+                            translate("documents.deleteBranch"),
+                            IconName::Trash,
+                            root,
+                        ))
+                    }),
+            )
+    }
+
     fn accepts_topic(&self, target: &TopicTarget) -> bool {
         !self.busy()
             && self.snapshot.version == target.version
             && self.selected.len() == 1
             && self.selected.contains(&target.id)
     }
-    fn topic_button(
+
+    fn topic_command(
         &self,
-        id: &'static str,
-        label: std::borrow::Cow<'static, str>,
         action: TopicAction,
         target: &TopicTarget,
         cx: &mut Context<Self>,
-    ) -> Button {
+    ) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
         let target = target.clone();
-        Button::new(id)
-            .small()
-            .ghost()
-            .label(label)
-            .disabled(self.busy())
-            .on_click(cx.listener(move |view, _, window, cx| {
-                if !view.accepts_topic(&target) {
-                    return;
+        cx.listener(move |view, _, window, cx| view.perform(action, &target, window, cx))
+    }
+
+    fn perform(
+        &mut self,
+        action: TopicAction,
+        target: &TopicTarget,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.accepts_topic(target) {
+            return;
+        }
+        match action {
+            TopicAction::Apply => self.apply_edits(vec![], window, cx),
+            TopicAction::DiscardInput => self.discard_input(&target.id, window, cx),
+            TopicAction::AddChild => self.add_topic(false, window, cx),
+            TopicAction::AddSibling => self.add_topic(true, window, cx),
+            TopicAction::Up | TopicAction::Down => {
+                if let Some(edit) = self.sibling_edit(matches!(action, TopicAction::Down)) {
+                    self.apply_edits(vec![edit], window, cx);
                 }
-                match action {
-                    TopicAction::Apply => view.apply_edits(vec![], window, cx),
-                    TopicAction::DiscardInput => view.discard_input(&target.id, window, cx),
-                    TopicAction::AddChild => view.add_topic(false, window, cx),
-                    TopicAction::AddSibling => view.add_topic(true, window, cx),
-                    TopicAction::Up | TopicAction::Down => {
-                        if let Some(edit) = view.sibling_edit(matches!(action, TopicAction::Down)) {
-                            view.apply_edits(vec![edit], window, cx);
-                        }
-                    }
-                    TopicAction::Collapse => view.toggle_branch(target.id.clone(), cx),
-                    TopicAction::Delete => view.delete_topics(window, cx),
-                }
-            }))
+            }
+            TopicAction::Collapse => self.toggle_branch(target.id.clone(), cx),
+            TopicAction::Delete => self.delete_topics(window, cx),
+        }
     }
 }
 fn reference_label(reference: &yss_project_model::mind::MindReference) -> String {

@@ -77,22 +77,17 @@ impl NodeDocumentation {
                     )
                     .into_any_element()
             }
-            DocumentationState::Failed => div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap_2()
-                .child(InlineMessage::error(translate(
-                    "native.workbench.nodeDocumentationFailed",
-                )))
-                .child(
-                    Button::new("retry-node-documentation")
-                        .small()
-                        .ghost()
-                        .label(translate("common.retry"))
-                        .on_click(cx.listener(|view, _, _, cx| view.read(cx))),
-                )
-                .into_any_element(),
+            DocumentationState::Failed => {
+                InlineMessage::error(translate("native.workbench.nodeDocumentationFailed"))
+                    .action(
+                        Button::new("retry-node-documentation")
+                            .small()
+                            .ghost()
+                            .label(translate("common.retry"))
+                            .on_click(cx.listener(|view, _, _, cx| view.read(cx))),
+                    )
+                    .into_any_element()
+            }
         }
     }
 }

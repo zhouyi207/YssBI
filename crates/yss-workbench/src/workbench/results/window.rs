@@ -7,6 +7,7 @@ use gpui_kit::{
     WeakEntity, Window, WindowBounds, WindowDecorations, WindowHandle, WindowOptions, div,
     prelude::*, px, size,
 };
+use yss_ui::lifecycle::LogReleased;
 
 pub(in crate::workbench) struct ResultWindowHandle {
     window: WindowHandle<Root>,
@@ -20,7 +21,9 @@ impl ResultWindowHandle {
         }
         let handle = self.window;
         cx.defer(move |cx| {
-            let _ = handle.update(cx, |_, window, _| window.remove_window());
+            handle
+                .update(cx, |_, window, _| window.remove_window())
+                .log_released();
         });
     }
 }

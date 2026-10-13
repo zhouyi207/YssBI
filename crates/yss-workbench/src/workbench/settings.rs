@@ -14,6 +14,7 @@ use gpui_kit::{
     Subscription, WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, div,
     prelude::*, px, size,
 };
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn connect_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -214,12 +215,14 @@ impl SettingsWindow {
         let owner_window = self.owner_window;
         // Return the current window before forwarding actions to another window.
         cx.defer(move |cx| {
-            let _ = owner_window.update(cx, |_, window, cx| {
-                if let Some(owner) = owner.upgrade() {
-                    window.activate_window();
-                    owner.update(cx, |view, cx| command(view, window, cx));
-                }
-            });
+            owner_window
+                .update(cx, |_, window, cx| {
+                    if let Some(owner) = owner.upgrade() {
+                        window.activate_window();
+                        owner.update(cx, |view, cx| command(view, window, cx));
+                    }
+                })
+                .log_released();
         });
     }
 }

@@ -12,6 +12,7 @@ use gpui_kit::{App, AppContext, Context, WeakEntity, Window};
 use missing::MissingPanel;
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use yss_graph_document::GraphResourcePath;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(in crate::workbench) fn active_editor_panel(
@@ -163,7 +164,8 @@ impl Workbench {
             let timer = cx.background_executor().timer(Duration::from_millis(300));
             view.layout_task = Some(cx.spawn(async move |view, cx| {
                 timer.await;
-                let _ = view.update(cx, |view, cx| view.persist_layout(cx));
+                view.update(cx, |view, cx| view.persist_layout(cx))
+                    .log_released();
             }));
         });
         self.layout_subscription = Some(subscription);
@@ -184,13 +186,14 @@ impl Workbench {
         cx.spawn(async move |view, cx| {
             let failed = !matches!(job.await, Ok(Ok(())));
             if failed {
-                let _ = view.update(cx, |view, cx| {
+                view.update(cx, |view, cx| {
                     if view.layout_root.as_ref() == Some(&root) {
                         view.error =
                             Some(crate::text::t("native.workbench.layoutSaveFailed").into());
                         cx.notify();
                     }
-                });
+                })
+                .log_released();
             }
         })
         .detach();
@@ -344,7 +347,7 @@ impl Workbench {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle
                     || view
                         .project
@@ -472,7 +475,8 @@ impl Workbench {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

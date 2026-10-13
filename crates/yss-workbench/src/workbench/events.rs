@@ -5,6 +5,7 @@ use tokio::sync::broadcast::error::RecvError;
 use yss_application::graph::editing::GraphActivity;
 use yss_desktop_services::DesktopEvent;
 use yss_graph_document::GraphResourcePath;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn connect_events(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -315,7 +316,7 @@ impl Workbench {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle
                     || view.index_generation != generation
                     || view
@@ -348,7 +349,8 @@ impl Workbench {
                     view.refresh_project(window, cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
     }

@@ -12,6 +12,7 @@ use gpui_kit::{
     prelude::*, px,
 };
 use std::collections::HashMap;
+use yss_ui::lifecycle::LogReleased;
 
 impl Render for MindCanvas {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -104,11 +105,13 @@ impl Render for MindCanvas {
                 canvas(
                     move |rect, _, cx| {
                         bounds.set(rect);
-                        let _ = owner.update(cx, |view, cx| {
-                            if view.fit_pending {
-                                view.fit(false, cx);
-                            }
-                        });
+                        owner
+                            .update(cx, |view, cx| {
+                                if view.fit_pending {
+                                    view.fit(false, cx);
+                                }
+                            })
+                            .log_released();
                     },
                     move |rect, _, window, cx| {
                         let mut path = PathBuilder::stroke(px(1.5));

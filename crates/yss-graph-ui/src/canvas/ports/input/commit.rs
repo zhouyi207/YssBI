@@ -2,6 +2,7 @@
 use super::*;
 use gpui_kit::EntityId;
 use yss_project::GraphEditVersion;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 pub(in crate::canvas) struct PortEdit {
@@ -66,7 +67,7 @@ impl GraphCanvas {
                 if let Some(version) = task.await
                     && settled.await.ok() == Some(version)
                 {
-                    let _ = view.update_in(cx, |view, window, cx| {
+                    view.update_in(cx, |view, window, cx| {
                         if view.can_edit()
                             && view.refresh_task.is_none()
                             && !view.refresh_pending
@@ -76,7 +77,8 @@ impl GraphCanvas {
                         {
                             show(view, window, cx);
                         }
-                    });
+                    })
+                    .log_released();
                 }
                 drop(observation);
             })

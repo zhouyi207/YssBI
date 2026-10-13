@@ -6,6 +6,7 @@ use yss_harness_contract::{KnowledgeSourceId, ProjectKnowledgeStatus};
 use yss_project::ProjectIndex;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_model::doc::DocPath;
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) enum Mutation {
     Rebuild(DocPath),
@@ -83,7 +84,7 @@ impl SettingsPanel {
         // The retained settings entity, not its window, owns completion delivery.
         cx.spawn(async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if !view.knowledge.current(&expected, generation) {
                     return;
                 }
@@ -101,7 +102,8 @@ impl SettingsPanel {
                     view.knowledge.failure = Some(Failure::Load);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -165,7 +167,7 @@ impl SettingsPanel {
         });
         cx.spawn(async move |view, cx| {
             let success = job.await.is_ok_and(|result| result.is_ok());
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if !view.knowledge.current(&expected, generation) {
                     return;
                 }
@@ -174,7 +176,8 @@ impl SettingsPanel {
                 // Also re-read after failure: a completed store write may precede a stale-session error.
                 view.refresh_knowledge(cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

@@ -4,6 +4,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, menu::PopupMenuItem};
 use gpui_kit::{Context, Pixels, Point, Window, div, prelude::*};
 use yss_graph_editor::EditorGraphMutation;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub(super) fn show_connection_menu(
@@ -54,17 +55,21 @@ impl GraphCanvas {
                     PopupMenuItem::new(yss_ui::text::t(label)).icon(IconName::Unlink)
                 };
                 menu = menu.item(item.on_click(move |_, _, cx| {
-                    let _ = owner.update(cx, |view, cx| {
-                        if view.menu_is_current(menu_id, &projection, version, language) {
-                            view.submit(
-                                GraphCommand::Edit(EditorGraphMutation::DisconnectConnections {
-                                    connection_ids: ids.clone(),
-                                }),
-                                Some(version),
-                                cx,
-                            );
-                        }
-                    });
+                    owner
+                        .update(cx, |view, cx| {
+                            if view.menu_is_current(menu_id, &projection, version, language) {
+                                view.submit(
+                                    GraphCommand::Edit(
+                                        EditorGraphMutation::DisconnectConnections {
+                                            connection_ids: ids.clone(),
+                                        },
+                                    ),
+                                    Some(version),
+                                    cx,
+                                );
+                            }
+                        })
+                        .log_released();
                 }));
             }
             menu

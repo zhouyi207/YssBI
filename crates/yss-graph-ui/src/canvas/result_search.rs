@@ -16,6 +16,7 @@ use gpui_kit::{
 use list::{Results, Source};
 use std::{collections::BTreeMap, rc::Rc};
 use yss_graph_execution::{plan::ResultCategory, result::ResultValidity};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) struct Picker {
     open: bool,
@@ -171,43 +172,48 @@ impl Picker {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = picker.update_in(cx, |picker, window, cx| {
-                if !picker.open || !Rc::ptr_eq(&picker.list.read(cx).delegate().catalog, &catalog) {
-                    return;
-                }
-                picker.task = None;
-                let refresh = picker.list.update(cx, |list, cx| {
-                    let delegate = list.delegate_mut();
-                    delegate.loading = false;
-                    delegate.failed = result.is_err();
-                    delegate.sources = result.unwrap_or_default();
-                    let refresh = !delegate.failed
-                        && catalog.iter().any(|entry| {
-                            delegate
-                                .sources
-                                .get(&entry.reference.result_id)
-                                .is_none_or(|source| {
-                                    source.reference != entry.reference
-                                        || source.output != entry.output
-                                })
-                        });
-                    delegate.rebuild();
-                    let selected = (!delegate.matches.is_empty())
-                        .then_some(gpui_kit::component::IndexPath::default());
-                    list.set_selected_index(selected, window, cx);
-                    cx.notify();
-                    refresh
-                });
-                let owner = picker.list.read(cx).delegate().owner.clone();
-                let _ = owner.update(cx, |canvas, cx| {
-                    if refresh {
-                        canvas.refresh(cx);
-                    } else {
-                        cx.notify();
+            picker
+                .update_in(cx, |picker, window, cx| {
+                    if !picker.open
+                        || !Rc::ptr_eq(&picker.list.read(cx).delegate().catalog, &catalog)
+                    {
+                        return;
                     }
-                });
-                cx.notify();
-            });
+                    picker.task = None;
+                    let refresh = picker.list.update(cx, |list, cx| {
+                        let delegate = list.delegate_mut();
+                        delegate.loading = false;
+                        delegate.failed = result.is_err();
+                        delegate.sources = result.unwrap_or_default();
+                        let refresh = !delegate.failed
+                            && catalog.iter().any(|entry| {
+                                delegate.sources.get(&entry.reference.result_id).is_none_or(
+                                    |source| {
+                                        source.reference != entry.reference
+                                            || source.output != entry.output
+                                    },
+                                )
+                            });
+                        delegate.rebuild();
+                        let selected = (!delegate.matches.is_empty())
+                            .then_some(gpui_kit::component::IndexPath::default());
+                        list.set_selected_index(selected, window, cx);
+                        cx.notify();
+                        refresh
+                    });
+                    let owner = picker.list.read(cx).delegate().owner.clone();
+                    owner
+                        .update(cx, |canvas, cx| {
+                            if refresh {
+                                canvas.refresh(cx);
+                            } else {
+                                cx.notify();
+                            }
+                        })
+                        .log_released();
+                    cx.notify();
+                })
+                .log_released();
         }));
     }
 }
@@ -249,7 +255,7 @@ impl GraphCanvas {
             )
             .on_open_change(move |open, window, cx| {
                 control.update(cx, |picker, cx| picker.set_open(*open, window, cx));
-                let _ = owner.update(cx, |_, cx| cx.notify());
+                owner.update(cx, |_, cx| cx.notify()).log_released();
             })
             .content(move |_, _, cx| {
                 let failed = list.read(cx).delegate().failed;

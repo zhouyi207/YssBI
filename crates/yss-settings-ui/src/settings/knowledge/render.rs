@@ -11,6 +11,7 @@ use gpui_kit::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use yss_harness_contract::{ProjectKnowledgeSourceSummary, ProjectKnowledgeStatus};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_model::doc::DocPath;
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::text::translate as t;
 
 impl SettingsPanel {
@@ -146,14 +147,16 @@ impl SettingsPanel {
                     let owner = owner.clone();
                     menu =
                         menu.item(PopupMenuItem::new(label.clone()).on_click(move |_, _, cx| {
-                            let _ = owner.update(cx, |view, cx| {
-                                view.select_knowledge_document(
-                                    &expected,
-                                    generation,
-                                    path.clone(),
-                                    cx,
-                                );
-                            });
+                            owner
+                                .update(cx, |view, cx| {
+                                    view.select_knowledge_document(
+                                        &expected,
+                                        generation,
+                                        path.clone(),
+                                        cx,
+                                    );
+                                })
+                                .log_released();
                         }));
                 }
                 menu

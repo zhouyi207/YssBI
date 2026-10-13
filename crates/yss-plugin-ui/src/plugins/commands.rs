@@ -1,6 +1,7 @@
 //! Mutations capture the selected installation; completion rereads manager-owned facts.
 use super::{PluginKey, PluginsPanel, failure};
 use gpui_kit::{Context, Window};
+use yss_ui::lifecycle::LogReleased;
 #[derive(Clone, Copy)]
 pub(super) enum PluginAction {
     Enable(bool),
@@ -62,11 +63,12 @@ impl PluginsPanel {
             );
             cx.spawn_in(window, async move |view, cx| {
                 if matches!(prompt.await, Ok(0)) {
-                    let _ = view.update_in(cx, |view, window, cx| {
+                    view.update_in(cx, |view, window, cx| {
                         if view.generation == generation {
                             view.mutate(key, action, window, cx);
                         }
-                    });
+                    })
+                    .log_released();
                 }
             })
             .detach();
@@ -133,7 +135,7 @@ impl PluginsPanel {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -158,7 +160,8 @@ impl PluginsPanel {
                     view.read_details(key, None, window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);

@@ -78,15 +78,8 @@ impl NodeDescription {
                     })
                     .into_any_element()
             }
-            Content::Failed => div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap_2()
-                .child(InlineMessage::error(translate(
-                    "native.results.unavailable",
-                )))
-                .child(
+            Content::Failed => InlineMessage::error(translate("native.results.unavailable"))
+                .action(
                     Button::new("description-retry")
                         .small()
                         .ghost()

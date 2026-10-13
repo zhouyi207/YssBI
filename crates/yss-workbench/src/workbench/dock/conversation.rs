@@ -10,13 +10,16 @@ use gpui_kit::component::{
     tooltip::Tooltip,
 };
 use gpui_kit::{AnyElement, App, Empty, Entity, IntoElement, WeakEntity, Window, div, prelude::*};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) fn matches(group: &TabGroupContext) -> bool {
     !group.panels().is_empty() && group.panels().iter().all(columns::is_conversation)
 }
 
 fn close(workbench: &WeakEntity<Workbench>, window: &mut Window, cx: &mut App) {
-    let _ = workbench.update(cx, |view, cx| view.close_conversation_window(window, cx));
+    workbench
+        .update(cx, |view, cx| view.close_conversation_window(window, cx))
+        .log_released();
 }
 
 pub(super) fn render(
@@ -76,7 +79,9 @@ pub(super) fn render(
                 .on_click({
                     let workbench = workbench.clone();
                     move |_, window, cx| {
-                        let _ = workbench.update(cx, |view, cx| view.new_conversation(window, cx));
+                        workbench
+                            .update(cx, |view, cx| view.new_conversation(window, cx))
+                            .log_released();
                     }
                 }),
         )
@@ -141,11 +146,13 @@ fn options(
                 PopupMenuItem::new(crate::text::t("native.workbench.renameConversation"))
                     .disabled(busy)
                     .on_click(move |_, window, cx| {
-                        let _ = rename.update(cx, |view, cx| {
-                            if Some(view.lifecycle) == lifecycle {
-                                view.rename_conversation(id.clone(), title.clone(), window, cx);
-                            }
-                        });
+                        rename
+                            .update(cx, |view, cx| {
+                                if Some(view.lifecycle) == lifecycle {
+                                    view.rename_conversation(id.clone(), title.clone(), window, cx);
+                                }
+                            })
+                            .log_released();
                     }),
             )
             .item(
@@ -156,14 +163,18 @@ fn options(
                             let view = owner.read(cx);
                             Some(view.lifecycle) == lifecycle && !view.is_closing(cx)
                         }) {
-                            let _ = refresh.update(cx, |view, cx| view.refresh(window, cx));
+                            refresh
+                                .update(cx, |view, cx| view.refresh(window, cx))
+                                .log_released();
                         }
                     }),
             )
             .item(
                 PopupMenuItem::new(crate::text::t("native.workbench.modelSettings")).on_click(
                     move |_, window, cx| {
-                        let _ = settings.update(cx, |view, cx| view.show_settings(window, cx));
+                        settings
+                            .update(cx, |view, cx| view.show_settings(window, cx))
+                            .log_released();
                     },
                 ),
             )

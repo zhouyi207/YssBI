@@ -7,6 +7,7 @@ use gpui_kit::component::{
     tooltip::Tooltip,
 };
 use gpui_kit::{AnyElement, Div, Stateful};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) fn title(value: &str) -> std::borrow::Cow<'_, str> {
     if value.is_empty() {
@@ -114,9 +115,9 @@ impl ActivityPanel {
                         .icon(IconName::Pencil)
                         .disabled(busy)
                         .on_click(move |_, _, cx| {
-                            let _ = rename.update(cx, |view, cx| {
-                                view.rename_row(&rename_document, index, cx)
-                            });
+                            rename
+                                .update(cx, |view, cx| view.rename_row(&rename_document, index, cx))
+                                .log_released();
                         }),
                 )
                 .separator()
@@ -127,20 +128,22 @@ impl ActivityPanel {
                     .icon(IconName::Trash)
                     .disabled(busy)
                     .on_click(move |_, _, cx| {
-                        let _ = delete.update(cx, |view, cx| {
-                            if view.accepts(&delete_document)
-                                && let ActivityRowContent::Item(ActivityItem::Conversation {
-                                    session_id,
-                                    title,
-                                    ..
-                                }) = &delete_document.rows[index].content
-                            {
-                                cx.emit(ActivityEvent::DeleteConversation(
-                                    session_id.clone(),
-                                    title.clone(),
-                                ));
-                            }
-                        });
+                        delete
+                            .update(cx, |view, cx| {
+                                if view.accepts(&delete_document)
+                                    && let ActivityRowContent::Item(ActivityItem::Conversation {
+                                        session_id,
+                                        title,
+                                        ..
+                                    }) = &delete_document.rows[index].content
+                                {
+                                    cx.emit(ActivityEvent::DeleteConversation(
+                                        session_id.clone(),
+                                        title.clone(),
+                                    ));
+                                }
+                            })
+                            .log_released();
                     }),
                 )
             })

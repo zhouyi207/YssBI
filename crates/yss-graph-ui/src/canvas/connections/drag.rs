@@ -1,5 +1,6 @@
 //! The gesture owns its candidate query, so cancellation also cancels late delivery.
 use std::collections::{BTreeMap, BTreeSet};
+use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::{App, Context, Hsla, MouseButton, MouseDownEvent, Pixels, Point, Task, Window};
@@ -239,7 +240,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if view.graph.editing.version != version {
                     return;
                 }
@@ -288,7 +289,8 @@ impl GraphCanvas {
                 };
                 drag.update_replaced();
                 cx.notify();
-            });
+            })
+            .log_released();
         })
     }
 }

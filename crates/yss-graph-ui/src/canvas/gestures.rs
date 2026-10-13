@@ -2,6 +2,7 @@
 mod update;
 
 use std::collections::{BTreeMap, BTreeSet};
+use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::{
     Context, DispatchPhase, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
@@ -202,30 +203,34 @@ impl GraphCanvas {
             if phase != DispatchPhase::Capture {
                 return;
             }
-            let _ = moving.update(cx, |view, cx| {
-                if view.gesture.is_some() {
-                    view.pointer_move(event, cx);
-                }
-            });
+            moving
+                .update(cx, |view, cx| {
+                    if view.gesture.is_some() {
+                        view.pointer_move(event, cx);
+                    }
+                })
+                .log_released();
         });
         window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
             if phase != DispatchPhase::Capture {
                 return;
             }
-            let _ = owner.update(cx, |view, cx| {
-                if view
-                    .gesture
-                    .as_ref()
-                    .is_some_and(|g| g.button() == event.button)
-                {
-                    let event = event.clone();
-                    // Let a port consume the release first. The deferred fallback also runs
-                    // when another child stops bubbling, without retaining window listeners.
-                    cx.defer_in(window, move |view, window, cx| {
-                        view.pointer_up(&event, window, cx);
-                    });
-                }
-            });
+            owner
+                .update(cx, |view, cx| {
+                    if view
+                        .gesture
+                        .as_ref()
+                        .is_some_and(|g| g.button() == event.button)
+                    {
+                        let event = event.clone();
+                        // Let a port consume the release first. The deferred fallback also runs
+                        // when another child stops bubbling, without retaining window listeners.
+                        cx.defer_in(window, move |view, window, cx| {
+                            view.pointer_up(&event, window, cx);
+                        });
+                    }
+                })
+                .log_released();
         });
     }
 

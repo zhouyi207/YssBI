@@ -10,6 +10,7 @@ mod reveal;
 use super::Workbench;
 pub(super) use authored::AuthoredKind;
 use gpui_kit::{Context, Window};
+use yss_ui::lifecycle::LogReleased;
 #[derive(Clone, Copy)]
 pub(crate) enum ResourceAction {
     Rename,
@@ -71,7 +72,7 @@ impl Workbench {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|value| value);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle
                     || view
                         .project
@@ -102,7 +103,8 @@ impl Workbench {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

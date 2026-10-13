@@ -1,5 +1,6 @@
 use super::*;
 use yss_node_protocol::ParameterKey;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone, Default)]
 pub(super) struct Preparation {
@@ -43,7 +44,7 @@ impl NodeCreationView {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation || language != yss_ui::text::locale() {
                     return;
                 }
@@ -88,7 +89,8 @@ impl NodeCreationView {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

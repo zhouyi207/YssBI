@@ -5,6 +5,7 @@ use super::{
 };
 use crate::projects::progress::{ProjectProgress, ProjectStage};
 use gpui_kit::{AppContext, Context, Window};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) enum AfterSave {
     Stay,
@@ -73,7 +74,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = task.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle {
                     return;
                 }
@@ -108,7 +109,8 @@ impl Workbench {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

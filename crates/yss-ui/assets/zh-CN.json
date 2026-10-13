@@ -2109,7 +2109,8 @@
     "sections": {
       "info": "信息",
       "diagnostics": "问题",
-      "parameters": "参数"
+      "parameters": "参数",
+      "topic": "主题"
     },
     "parameterEditor": {
       "column": "列",
@@ -2147,13 +2148,17 @@
       "origin": "记录来源",
       "target": "目标",
       "event": "事件",
-      "fields": "字段"
+      "fields": "字段",
+      "path": "路径",
+      "status": "状态",
+      "reference": "引用"
     },
     "itemTypes": {
       "event_graph": "事件图",
       "function_graph": "函数图",
       "data": "数据集",
-      "chart": "图表"
+      "chart": "图表",
+      "mind": "思维导图"
     },
     "typeLabels": {
       "function_graph": "函数图"
@@ -3001,7 +3006,6 @@
       "applyContent": "应用内容",
       "restoreContent": "恢复内容",
       "addSibling": "添加同级",
-      "reference": "引用：%{value0}",
       "unnamedTopic": "未命名主题"
     },
     "charts": {
@@ -3028,7 +3032,6 @@
       "unnamedDataset": "未命名数据集",
       "chooseDataset": "选择数据集",
       "removedDataset": "已移除的数据集",
-      "configuration": "图表配置",
       "noDataset": "不选择数据集",
       "externalChange": "文件已变化，本地配置已保留。保存会写入当前配置。",
       "unsavedConfiguration": "配置有未保存的更改。Ctrl/Cmd+S 保存。",

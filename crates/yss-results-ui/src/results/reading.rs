@@ -1,5 +1,6 @@
 //! Read one immutable result or page; only a successful delivery changes the visible content.
 use super::*;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 pub(super) enum ReadFailure {
@@ -56,7 +57,7 @@ impl ResultPanel {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.closed || view.generation != generation {
                     return;
                 }
@@ -67,7 +68,8 @@ impl ResultPanel {
                 }
                 cx.emit(ResultEvent::Loaded(view.loaded()));
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }
@@ -159,7 +161,7 @@ impl ResultPanel {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.closed || view.generation != generation {
                     return;
                 }
@@ -172,7 +174,8 @@ impl ResultPanel {
                     Err(_) => view.error = Some(ReadFailure::Page { part, offset }),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

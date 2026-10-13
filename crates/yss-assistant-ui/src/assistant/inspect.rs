@@ -10,6 +10,7 @@ use yss_desktop_services::resources::ResourceCatalog;
 use yss_harness_contract::{
     AssistantToolIdentity, AssistantToolInspection, ProjectResourceRef, ToolInvocationId,
 };
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(IntoElement, Clone)]
 pub(super) struct ToolCard {
@@ -159,7 +160,7 @@ impl Inspection {
         });
         self.task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = job.await.unwrap_or(Err(()));
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 if view.query != query {
                     return;
                 }
@@ -183,7 +184,8 @@ impl Inspection {
                 view.copied = None;
                 view.resolve_target();
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

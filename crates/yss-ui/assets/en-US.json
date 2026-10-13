@@ -2109,7 +2109,8 @@
     "sections": {
       "info": "Info",
       "diagnostics": "Problems",
-      "parameters": "Parameters"
+      "parameters": "Parameters",
+      "topic": "Topic"
     },
     "parameterEditor": {
       "column": "Column",
@@ -2147,13 +2148,17 @@
       "origin": "Origin",
       "target": "Target",
       "event": "Event",
-      "fields": "Fields"
+      "fields": "Fields",
+      "path": "Path",
+      "status": "Status",
+      "reference": "Reference"
     },
     "itemTypes": {
       "event_graph": "Event Graph",
       "function_graph": "Function Graph",
       "data": "Dataset",
-      "chart": "Chart"
+      "chart": "Chart",
+      "mind": "Mind map"
     },
     "typeLabels": {
       "function_graph": "Function Graph"
@@ -3001,7 +3006,6 @@
       "applyContent": "Apply content",
       "restoreContent": "Restore content",
       "addSibling": "Add sibling",
-      "reference": "Reference: %{value0}",
       "unnamedTopic": "Unnamed topic"
     },
     "charts": {
@@ -3028,7 +3032,6 @@
       "unnamedDataset": "Unnamed dataset",
       "chooseDataset": "Choose dataset",
       "removedDataset": "Removed dataset",
-      "configuration": "Chart configuration",
       "noDataset": "No dataset",
       "externalChange": "The file changed. Local configuration is preserved. Saving writes the current configuration.",
       "unsavedConfiguration": "Configuration has unsaved changes. Ctrl/Cmd+S to save.",

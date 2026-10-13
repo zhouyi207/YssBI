@@ -12,6 +12,7 @@ use gpui_kit::{
 };
 use yss_desktop_services::resources::ResourceCatalog;
 use yss_project_identity::{ProjectResourceKind as Kind, ProjectResourceRef};
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::markdown::Markdown;
 
 pub(super) fn view(
@@ -33,7 +34,9 @@ pub(super) fn view(
     table.overflow.x = Some(Overflow::Scroll);
     TextView::markdown(id, text)
         .plugin(Markdown::default().on_link_click(move |href, window, cx| {
-            let _ = owner.update(cx, |view, cx| view.open_markdown_link(href, window, cx));
+            owner
+                .update(cx, |view, cx| view.open_markdown_link(href, window, cx))
+                .log_released();
         }))
         .stream_fade(streaming)
         .style(TextViewStyle::default().code_block(code).table(table))

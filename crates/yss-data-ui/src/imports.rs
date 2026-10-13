@@ -15,6 +15,7 @@ use std::sync::Arc;
 use yss_application::database::samples::SampleDataset;
 use yss_database_contract::{DatabaseEngineSql, DatabaseImportSource};
 use yss_project_identity::ProjectInstanceId;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 pub struct ImportScope {
@@ -343,13 +344,14 @@ impl ImportDialog {
         );
         cx.spawn_in(window, async move |view, cx| {
             let choice = prompt.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.confirming_close = false;
                 if matches!(choice, Ok(0)) {
                     yss_ui::modal_window::close(window, cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         false

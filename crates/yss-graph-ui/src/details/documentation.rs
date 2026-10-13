@@ -1,5 +1,6 @@
 //! Read-only node documentation from the application's localized catalog.
 use std::sync::Arc;
+use yss_ui::lifecycle::LogReleased;
 
 mod render;
 
@@ -84,7 +85,7 @@ impl NodeDocumentation {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if view.generation != generation
                     || view.target.as_ref() != Some(&target)
                     || target.language != yss_ui::text::locale()
@@ -99,7 +100,8 @@ impl NodeDocumentation {
                     Err(_) => DocumentationState::Failed,
                 };
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

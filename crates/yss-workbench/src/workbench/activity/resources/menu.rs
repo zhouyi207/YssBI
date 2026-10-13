@@ -3,6 +3,7 @@ use super::*;
 use crate::workbench::resources::ResourceAction;
 use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use yss_project::RevealProjectResourceRequest;
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) fn resource_menu(
     menu: PopupMenu,
@@ -19,8 +20,9 @@ pub(super) fn resource_menu(
             PopupMenuItem::new(crate::text::translate("contextMenu.sidebar.open"))
                 .icon(IconName::ChevronRight)
                 .on_click(move |_, _, cx| {
-                    let _ = open_owner
-                        .update(cx, |view, cx| view.open_resource(&open_document, row, cx));
+                    open_owner
+                        .update(cx, |view, cx| view.open_resource(&open_document, row, cx))
+                        .log_released();
                 }),
         )
         .item(
@@ -29,14 +31,17 @@ pub(super) fn resource_menu(
             ))
             .icon(IconName::FolderOpen)
             .on_click(move |_, _, cx| {
-                let _ = reveal_owner.update(cx, |view, cx| {
-                    if view.accepts(&reveal_document)
-                        && let ActivityRowContent::Item(item) = &reveal_document.rows[row].content
-                        && let Some(request) = reveal_request(item)
-                    {
-                        cx.emit(ActivityEvent::RevealResource(request));
-                    }
-                });
+                reveal_owner
+                    .update(cx, |view, cx| {
+                        if view.accepts(&reveal_document)
+                            && let ActivityRowContent::Item(item) =
+                                &reveal_document.rows[row].content
+                            && let Some(request) = reveal_request(item)
+                        {
+                            cx.emit(ActivityEvent::RevealResource(request));
+                        }
+                    })
+                    .log_released();
             }),
         );
     for (label, icon, action) in [
@@ -76,31 +81,33 @@ pub(super) fn resource_menu(
             PopupMenuItem::new(crate::text::translate(label))
         };
         menu = menu.item(item.icon(icon).on_click(move |_, _, cx| {
-            let _ = owner.update(cx, |view, cx| {
-                if !view.accepts(&document) {
-                    return;
-                }
-                let event = match &document.rows[row].content {
-                    ActivityRowContent::Item(
-                        ActivityItem::EventGraph { path, .. }
-                        | ActivityItem::FunctionGraph { path, .. },
-                    ) => ActivityEvent::GraphResource(path.clone(), action),
-                    ActivityRowContent::Item(ActivityItem::Database { id, .. }) => {
-                        ActivityEvent::DatabaseResource(id.clone(), action)
+            owner
+                .update(cx, |view, cx| {
+                    if !view.accepts(&document) {
+                        return;
                     }
-                    ActivityRowContent::Item(ActivityItem::Chart { path, .. }) => {
-                        ActivityEvent::ChartResource(path.clone(), action)
-                    }
-                    ActivityRowContent::Item(ActivityItem::Doc { path, .. }) => {
-                        ActivityEvent::DocumentResource(path.clone(), action)
-                    }
-                    ActivityRowContent::Item(ActivityItem::Mind { path, .. }) => {
-                        ActivityEvent::MindResource(path.clone(), action)
-                    }
-                    _ => return,
-                };
-                cx.emit(event);
-            });
+                    let event = match &document.rows[row].content {
+                        ActivityRowContent::Item(
+                            ActivityItem::EventGraph { path, .. }
+                            | ActivityItem::FunctionGraph { path, .. },
+                        ) => ActivityEvent::GraphResource(path.clone(), action),
+                        ActivityRowContent::Item(ActivityItem::Database { id, .. }) => {
+                            ActivityEvent::DatabaseResource(id.clone(), action)
+                        }
+                        ActivityRowContent::Item(ActivityItem::Chart { path, .. }) => {
+                            ActivityEvent::ChartResource(path.clone(), action)
+                        }
+                        ActivityRowContent::Item(ActivityItem::Doc { path, .. }) => {
+                            ActivityEvent::DocumentResource(path.clone(), action)
+                        }
+                        ActivityRowContent::Item(ActivityItem::Mind { path, .. }) => {
+                            ActivityEvent::MindResource(path.clone(), action)
+                        }
+                        _ => return,
+                    };
+                    cx.emit(event);
+                })
+                .log_released();
         }));
     }
     menu

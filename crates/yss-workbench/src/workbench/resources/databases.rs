@@ -4,6 +4,7 @@ use super::{super::Workbench, ResourceAction};
 use crate::project::DesktopProject;
 use gpui_kit::{ClipboardItem, Context, Entity, Window};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 struct DatabaseTarget {
@@ -60,16 +61,18 @@ impl Workbench {
                     window,
                     cx,
                     move |_, window, cx| {
-                        let _ = owner.update(cx, |view, cx| {
-                            view.mutate_database_resource(
-                                target.clone(),
-                                action,
-                                None,
-                                None,
-                                window,
-                                cx,
-                            )
-                        });
+                        owner
+                            .update(cx, |view, cx| {
+                                view.mutate_database_resource(
+                                    target.clone(),
+                                    action,
+                                    None,
+                                    None,
+                                    window,
+                                    cx,
+                                )
+                            })
+                            .log_released();
                         true
                     },
                 );
@@ -174,7 +177,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != target.lifecycle
                     || view
                         .project
@@ -228,7 +231,8 @@ impl Workbench {
                 }
                 view.persist_layout(cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

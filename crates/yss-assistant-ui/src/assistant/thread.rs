@@ -7,6 +7,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{AnyElement, Context, Pixels, ScrollHandle, div, prelude::*, px};
 use std::cell::Cell;
+use yss_ui::lifecycle::LogReleased;
 
 const PAGE_TURNS: usize = 20;
 const BOTTOM_THRESHOLD: Pixels = px(32.);
@@ -151,7 +152,7 @@ impl ConversationPanel {
                 {
                     let owner = owner.clone();
                     window.on_next_frame(move |_, cx| {
-                        let _ = owner.update(cx, |_, cx| cx.notify());
+                        owner.update(cx, |_, cx| cx.notify()).log_released();
                     });
                 }
             })

@@ -25,11 +25,12 @@ impl Render for NodePalette {
             window,
             cx,
         );
+        // The browser and the creation form each own their inset, so the form's header, sections
+        // and commands share one spine.
         div()
             .id("node-palette")
             .track_focus(&self.focus)
             .size_full()
-            .p_2()
             .rounded_md()
             .bg(cx.theme().popover)
             .text_color(cx.theme().popover_foreground)
@@ -38,7 +39,6 @@ impl Render for NodePalette {
             .shadow_lg()
             .flex()
             .flex_col()
-            .gap_2()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
@@ -62,6 +62,7 @@ impl NodePalette {
         div()
             .size_full()
             .min_h_0()
+            .p_2()
             .flex()
             .flex_col()
             .gap_2()

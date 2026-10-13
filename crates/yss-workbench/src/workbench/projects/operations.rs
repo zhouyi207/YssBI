@@ -13,6 +13,7 @@ use yss_application::{
     session::{SessionCaptureError, SessionRevalidationError},
 };
 use yss_project_identity::{OperationId, ProjectInstanceId};
+use yss_ui::lifecycle::LogReleased;
 
 struct ProjectObservation {
     active: Option<ProjectInstanceId>,
@@ -271,7 +272,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle {
                     return;
                 }
@@ -320,15 +321,18 @@ impl Workbench {
                     if error.is_none() {
                         crate::modal_window::close_child(window, cx);
                     } else {
-                        let _ = dialog.update(cx, |form, cx| {
-                            form.finish(lifecycle, error.clone(), recovery, cx)
-                        });
+                        dialog
+                            .update(cx, |form, cx| {
+                                form.finish(lifecycle, error.clone(), recovery, cx)
+                            })
+                            .log_released();
                     }
                 }
                 view.error = error.take();
                 view.recent.update(cx, |recent, cx| recent.reload(cx));
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

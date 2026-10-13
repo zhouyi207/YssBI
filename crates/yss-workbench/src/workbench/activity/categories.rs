@@ -6,6 +6,7 @@ use gpui_kit::component::{
     menu::{ContextMenuExt, PopupMenuItem},
 };
 use gpui_kit::{AnyElement, Div, Stateful};
+use yss_ui::lifecycle::LogReleased;
 
 impl ActivityPanel {
     pub(super) fn render_category_toggle(&self, cx: &mut Context<Self>) -> Option<Button> {
@@ -139,11 +140,13 @@ impl ActivityPanel {
                         PopupMenuItem::new(tool.label.resolve_with(translate))
                             .icon(feedback::tool_icon(tool.icon))
                             .on_click(move |_, _, cx| {
-                                let _ = owner.update(cx, |view, cx| {
-                                    if view.accepts(&expected) {
-                                        cx.emit(ActivityEvent::Tool(tool_id.clone()));
-                                    }
-                                });
+                                owner
+                                    .update(cx, |view, cx| {
+                                        if view.accepts(&expected) {
+                                            cx.emit(ActivityEvent::Tool(tool_id.clone()));
+                                        }
+                                    })
+                                    .log_released();
                             }),
                     );
                 }

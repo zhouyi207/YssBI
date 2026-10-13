@@ -13,6 +13,7 @@ use gpui_kit::{
     StyleRefinement, Subscription, WeakEntity, Window, div, prelude::*, rems,
 };
 use std::{any::TypeId, cell::RefCell, collections::BTreeMap, sync::Arc};
+use yss_ui::lifecycle::LogReleased;
 
 const NAVIGATION_BUTTON_WIDTH: Rems = rems(2.);
 const NAVIGATION_GAP: Rems = rems(0.25);
@@ -234,9 +235,10 @@ pub(super) fn render_header(
                                     })
                                     .on_click(
                                         move |_, window, cx| {
-                                            let _ = area.update(cx, |dock, cx| {
+                                            area.update(cx, |dock, cx| {
                                                 dock.select_panel(id, window, cx)
-                                            });
+                                            })
+                                            .log_released();
                                         },
                                     ),
                                 );
@@ -256,7 +258,8 @@ pub(super) fn render_header(
                     .on_click({
                         let area = area.clone();
                         move |_, window, cx| {
-                            let _ = area.update(cx, |dock, cx| dock.set_zoomed_out(window, cx));
+                            area.update(cx, |dock, cx| dock.set_zoomed_out(window, cx))
+                                .log_released();
                         }
                     }),
             )

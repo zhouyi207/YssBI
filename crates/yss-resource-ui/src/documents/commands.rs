@@ -3,6 +3,7 @@ use super::DocumentEditor;
 use crate::file_commands::{FileSaveOutcome, FileSaveRequest};
 use gpui_kit::{Context, Window};
 use yss_project_model::doc::{DocDocument, DocEdit};
+use yss_ui::lifecycle::LogReleased;
 
 pub type DocumentSaveRequest = FileSaveRequest<DocDocument>;
 pub type DocumentSaveOutcome = FileSaveOutcome<DocDocument>;
@@ -104,7 +105,8 @@ impl DocumentEditor {
                     snapshot: None,
                     failed: true,
                 });
-            let _ = view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx));
+            view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx))
+                .log_released();
         }));
     }
 
@@ -124,7 +126,7 @@ impl DocumentEditor {
             .run(move |services| Ok(services.read_doc(project, path)?));
         self._refresh_task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.refreshing = false;
                 match result {
                     Some(snapshot) if snapshot.version == view.snapshot.version => {}
@@ -154,7 +156,8 @@ impl DocumentEditor {
                 }
                 view.resume_autosave(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
     }
 }

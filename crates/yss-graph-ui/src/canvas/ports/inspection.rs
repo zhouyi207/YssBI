@@ -7,6 +7,7 @@ use yss_graph_document::PortAddress;
 use yss_graph_editor::projection::EditorPortModel;
 use yss_graph_execution::result::{ResultReference, ResultRetentionError};
 use yss_node_protocol::PortDirection;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub(super) fn port_result_outputs(&self, port: &EditorPortModel) -> Vec<PortAddress> {
@@ -114,7 +115,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.read_task = None;
                 if !view.can_edit()
                     || view.graph.editing.version != version
@@ -143,7 +144,8 @@ impl GraphCanvas {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

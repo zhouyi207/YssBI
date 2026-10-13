@@ -114,6 +114,7 @@ pub struct InlineMessage {
     severity: Severity,
     subject: Option<SharedString>,
     text: SharedString,
+    action: Option<AnyElement>,
 }
 
 impl InlineMessage {
@@ -123,6 +124,7 @@ impl InlineMessage {
             severity,
             subject: None,
             text: text.into(),
+            action: None,
         }
     }
 
@@ -143,6 +145,12 @@ impl InlineMessage {
     /// The object the message is about, such as a parameter or a port.
     pub fn subject(mut self, subject: impl Into<SharedString>) -> Self {
         self.subject = Some(subject.into());
+        self
+    }
+
+    /// The recovery for the reported condition, such as Retry, at the trailing edge.
+    pub fn action(mut self, action: impl IntoElement) -> Self {
+        self.action = Some(action.into_any_element());
         self
     }
 }
@@ -191,14 +199,24 @@ impl RenderOnce for InlineMessage {
                     })
                     .child(self.text),
             );
+        let message = match self.action {
+            Some(action) => div()
+                .min_w_0()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(content.flex_1())
+                .child(div().flex_shrink_0().child(action)),
+            None => content,
+        };
         match self.id {
-            Some(id) => content
+            Some(id) => message
                 .id(id)
-                .when(self.severity == Severity::Error, |content| {
-                    content.role(Role::Alert)
+                .when(self.severity == Severity::Error, |message| {
+                    message.role(Role::Alert)
                 })
                 .into_any_element(),
-            None => content.into_any_element(),
+            None => message.into_any_element(),
         }
     }
 }

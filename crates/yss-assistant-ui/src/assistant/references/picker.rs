@@ -6,6 +6,7 @@ use gpui_kit::component::{
     popover::Popover,
 };
 use gpui_kit::{Anchor, App, Entity, Focusable, Task, WeakEntity, Window};
+use yss_ui::lifecycle::LogReleased;
 
 pub(in crate::assistant) struct Picker {
     open: bool,
@@ -112,9 +113,9 @@ impl ListDelegate for Resources {
         else {
             return;
         };
-        let _ = self
-            .owner
-            .update(cx, |owner, cx| owner.toggle_reference(&resource, cx));
+        self.owner
+            .update(cx, |owner, cx| owner.toggle_reference(&resource, cx))
+            .log_released();
         cx.notify();
     }
 
@@ -232,12 +233,14 @@ impl ConversationPanel {
             )
             .on_open_change(move |open, window, cx| {
                 control.update(cx, |picker, cx| picker.set_open(*open, window, cx));
-                let _ = owner.update(cx, |view, cx| {
-                    if !open {
-                        view.input.focus_handle(cx).focus(window, cx);
-                    }
-                    cx.notify();
-                });
+                owner
+                    .update(cx, |view, cx| {
+                        if !open {
+                            view.input.focus_handle(cx).focus(window, cx);
+                        }
+                        cx.notify();
+                    })
+                    .log_released();
             })
             .content(move |_, _, cx| {
                 div()

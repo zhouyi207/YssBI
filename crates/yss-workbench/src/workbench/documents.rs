@@ -5,6 +5,7 @@ use gpui_kit::component::dock::{DockPlacement, panel_handle};
 use gpui_kit::{AppContext, Context, Window};
 use yss_project::docs::DocSnapshot;
 use yss_project_model::doc::DocPath;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn open_document(
@@ -53,7 +54,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = task.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle
                     || view
                         .project
@@ -81,7 +82,8 @@ impl Workbench {
                     view.finish_intent(&intent, applied, window, cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
     }

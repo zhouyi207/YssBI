@@ -21,6 +21,7 @@ use std::sync::Arc;
 use yss_application::graph::results::report::ResultAnalysisRequest;
 use yss_desktop_services::ApplicationTasks;
 use yss_graph_execution::result::ResultReference;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone, Copy)]
 pub(super) enum AnalysisKind {
@@ -85,7 +86,7 @@ impl AnalysisView {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 view.loading = false;
                 match result {
                     Ok(mut data) => {
@@ -121,7 +122,8 @@ impl AnalysisView {
                     Err(_) => view.error = true,
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

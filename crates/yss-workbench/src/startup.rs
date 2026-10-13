@@ -12,6 +12,7 @@ use gpui_kit::{
 use std::path::PathBuf;
 use tokio::{runtime::Handle, task::AbortHandle};
 use yss_application::runtime::ApplicationStartupError;
+use yss_ui::lifecycle::LogReleased;
 
 enum State {
     Loading {
@@ -98,7 +99,7 @@ impl Startup {
                             _ => recent_failed = true,
                         }
                     }
-                    let _ = view.update_in(cx, |view, window, cx| {
+                    view.update_in(cx, |view, window, cx| {
                         if recent_failed {
                             window.push_notification(
                                 Notification::error(text::translate(
@@ -113,13 +114,15 @@ impl Startup {
                             cx.new(|cx| Workbench::new(services, project, resource, window, cx)),
                         );
                         cx.notify();
-                    });
+                    })
+                    .log_released();
                 }
                 Err(error) => {
-                    let _ = view.update_in(cx, |view, _, cx| {
+                    view.update_in(cx, |view, _, cx| {
                         view.state = State::Failed(error);
                         cx.notify();
-                    });
+                    })
+                    .log_released();
                 }
             }
         });

@@ -18,6 +18,7 @@ use gpui_kit::{
 use std::sync::Arc;
 use yss_desktop_services::ApplicationTasks;
 use yss_project::docs::DocSnapshot;
+use yss_ui::lifecycle::LogReleased;
 
 actions!(native_documents, [SaveDocument, ToggleDocumentPreview]);
 
@@ -82,7 +83,8 @@ impl DocumentEditor {
                             .timer(std::time::Duration::from_millis(200));
                         view.preview_task = Some(cx.spawn(async move |view, cx| {
                             timer.await;
-                            let _ = view.update(cx, |view, cx| view.update_preview(cx));
+                            view.update(cx, |view, cx| view.update_preview(cx))
+                                .log_released();
                         }));
                     }
                     if was_dirty != view.dirty() {

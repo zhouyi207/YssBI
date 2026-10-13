@@ -4,6 +4,7 @@ use gpui_kit::{Context, Window};
 use yss_project::minds::MindCommand;
 use yss_project_identity::OperationId;
 use yss_project_model::mind::{MindDocument, MindEdit};
+use yss_ui::lifecycle::LogReleased;
 
 pub type MindSaveRequest = FileSaveRequest<MindDocument>;
 pub type MindSaveOutcome = FileSaveOutcome<MindDocument>;
@@ -66,7 +67,8 @@ impl MindCanvas {
                     snapshot: None,
                     failed: true,
                 });
-            let _ = view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx));
+            view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx))
+                .log_released();
         })
         .detach();
     }
@@ -105,7 +107,7 @@ impl MindCanvas {
         });
         cx.spawn_in(window, async move |view, cx| {
             let snapshot = job.await.ok().and_then(Result::ok).flatten();
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.busy = false;
                 if let Some(snapshot) = snapshot {
                     view.acknowledge_inputs(&submitted);
@@ -118,7 +120,8 @@ impl MindCanvas {
                     view.refresh(window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);
@@ -137,7 +140,7 @@ impl MindCanvas {
             .run(move |services| Ok(services.read_mind(project, path)?));
         cx.spawn_in(window, async move |view, cx| {
             let snapshot = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.refreshing = false;
                 match snapshot {
                     Some(snapshot) if snapshot.version == view.snapshot.version => {}
@@ -148,7 +151,8 @@ impl MindCanvas {
                     view.refresh(window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);

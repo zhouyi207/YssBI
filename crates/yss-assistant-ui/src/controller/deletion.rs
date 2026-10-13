@@ -4,6 +4,7 @@ use gpui_kit::{Context, Window};
 use yss_application::harness::HarnessSessionError;
 use yss_harness_contract::HarnessSessionId;
 use yss_harness_core::HarnessError;
+use yss_ui::lifecycle::LogReleased;
 
 impl AssistantController {
     pub fn delete_conversation(
@@ -37,11 +38,13 @@ impl AssistantController {
             window,
             cx,
             move |_, window, cx| {
-                let _ = owner.update(cx, |view, cx| {
-                    if view.epoch == lifecycle && !view.unavailable(cx) {
-                        view.commit_conversation_deletion(session.clone(), window, cx);
-                    }
-                });
+                owner
+                    .update(cx, |view, cx| {
+                        if view.epoch == lifecycle && !view.unavailable(cx) {
+                            view.commit_conversation_deletion(session.clone(), window, cx);
+                        }
+                    })
+                    .log_released();
                 true
             },
         );
@@ -67,7 +70,7 @@ impl AssistantController {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.epoch != lifecycle {
                     return;
                 }
@@ -107,7 +110,8 @@ impl AssistantController {
                 }
                 view.invalidate_directory(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

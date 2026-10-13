@@ -5,6 +5,7 @@ use yss_plugin_runtime::{
     PluginDiagnostic, PluginFailure, PluginManager, PluginStorageUsage, TaskHistoryPage,
     TaskSnapshot,
 };
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) struct PluginDetail {
     pub key: PluginKey,
@@ -62,7 +63,7 @@ impl PluginsPanel {
         let job = self.services.run(|services| Ok(services.plugins.list()));
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -81,7 +82,8 @@ impl PluginsPanel {
                     view.read_details(key, view.cursor_stack.last().cloned().flatten(), window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);
@@ -122,7 +124,7 @@ impl PluginsPanel {
             .run(move |services| Ok(read(&services.plugins, key, cursor)));
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation || view.selected.as_ref() != Some(&expected) {
                     return;
                 }
@@ -143,7 +145,8 @@ impl PluginsPanel {
                     view.reload(window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);

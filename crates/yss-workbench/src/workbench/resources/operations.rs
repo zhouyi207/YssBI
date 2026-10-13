@@ -5,6 +5,7 @@ use super::ResourceAction;
 use gpui_kit::{ClipboardItem, Context, Entity, Window};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 pub(super) struct GraphTarget {
@@ -92,16 +93,18 @@ impl Workbench {
                     window,
                     cx,
                     move |_, window, cx| {
-                        let _ = owner.update(cx, |view, cx| {
-                            view.mutate_graph_resource(
-                                target.clone(),
-                                action,
-                                None,
-                                None,
-                                window,
-                                cx,
-                            )
-                        });
+                        owner
+                            .update(cx, |view, cx| {
+                                view.mutate_graph_resource(
+                                    target.clone(),
+                                    action,
+                                    None,
+                                    None,
+                                    window,
+                                    cx,
+                                )
+                            })
+                            .log_released();
                         true
                     },
                 );
@@ -193,7 +196,7 @@ impl Workbench {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != target.lifecycle
                     || view
                         .project
@@ -223,7 +226,8 @@ impl Workbench {
                 }
                 view.persist_layout(cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

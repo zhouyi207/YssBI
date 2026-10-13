@@ -4,6 +4,7 @@ use yss_application::{database::DatabaseMutation, session::ApplicationState};
 use yss_database_contract::EditState;
 use yss_desktop_services::ApplicationTasks;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
+use yss_ui::lifecycle::LogReleased;
 
 pub struct DatabaseSaveRequest {
     project: ProjectInstanceId,
@@ -102,7 +103,8 @@ impl DatabaseEditor {
                     edit: None,
                     failed: true,
                 });
-            let _ = view.update_in(cx, |view, _, cx| view.finish_save(outcome, cx));
+            view.update_in(cx, |view, _, cx| view.finish_save(outcome, cx))
+                .log_released();
         })
         .detach();
     }
@@ -134,7 +136,7 @@ impl DatabaseEditor {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.mutating = false;
                 match result {
                     Some(edit) => {
@@ -150,7 +152,8 @@ impl DatabaseEditor {
                     view.reload(false, window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);
@@ -173,7 +176,7 @@ impl DatabaseEditor {
         let prompt = cx.prompt_for_new_path(&directory, Some(&name));
         cx.spawn_in(window, async move |view, cx| {
             let path = prompt.await.ok().and_then(Result::ok).flatten();
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -187,7 +190,8 @@ impl DatabaseEditor {
                     view.reload(true, window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
     }
@@ -214,7 +218,7 @@ impl DatabaseEditor {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.busy = false;
                 if result.is_none() {
                     view.error = Some(yss_ui::text::t("native.databases.exportFailed").into());
@@ -223,7 +227,8 @@ impl DatabaseEditor {
                     view.reload(true, window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);

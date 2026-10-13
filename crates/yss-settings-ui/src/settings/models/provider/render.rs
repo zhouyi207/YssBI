@@ -13,6 +13,7 @@ use gpui_kit::{Context, IntoElement, div, prelude::*};
 use yss_harness_contract::{
     LanguageModelAuthentication as Authentication, LanguageModelProtocol as Protocol,
 };
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::text::translate as t;
 
 impl SettingsPanel {
@@ -132,11 +133,13 @@ impl SettingsPanel {
                                 PopupMenuItem::new(protocol_label(protocol))
                                     .checked(selected == protocol)
                                     .on_click(move |_, window, cx| {
-                                        let _ = owner.update(cx, |view, cx| {
-                                            if view.epoch == epoch {
-                                                view.change_protocol(protocol, window, cx);
-                                            }
-                                        });
+                                        owner
+                                            .update(cx, |view, cx| {
+                                                if view.epoch == epoch {
+                                                    view.change_protocol(protocol, window, cx);
+                                                }
+                                            })
+                                            .log_released();
                                     }),
                             );
                         }
@@ -181,11 +184,13 @@ impl SettingsPanel {
                                     .checked(value == selected)
                                     .disabled(value == Authentication::None && !allow_none)
                                     .on_click(move |_, window, cx| {
-                                        let _ = owner.update(cx, |view, cx| {
-                                            if view.epoch == epoch {
-                                                view.change_authentication(value, window, cx);
-                                            }
-                                        });
+                                        owner
+                                            .update(cx, |view, cx| {
+                                                if view.epoch == epoch {
+                                                    view.change_authentication(value, window, cx);
+                                                }
+                                            })
+                                            .log_released();
                                     }),
                             );
                         }

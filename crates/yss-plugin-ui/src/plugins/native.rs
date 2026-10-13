@@ -10,6 +10,7 @@ use gpui_kit::{App, Context, EventEmitter, FocusHandle, Focusable, Window};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use yss_plugin_runtime::{NativeView, PluginFailure, PluginManifest, TaskSnapshot};
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 pub struct OpenNativeView {
@@ -195,28 +196,30 @@ impl PluginViewPanel {
                 .ok()
                 .and_then(Result::ok)
                 .unwrap_or_else(|| Err(PluginFailure::new("plugin_state_unavailable")));
-            let _ = panel.update_in(cx, |panel, window, cx| {
-                if panel.closed {
-                    return;
-                }
-                panel.busy = false;
-                match result {
-                    Ok(attachment) => {
-                        panel.key = Some(attachment.key);
-                        panel.manifest = Some(attachment.manifest);
-                        panel.title = attachment.title;
-                        if let Err(error) =
-                            panel.install_form(attachment.view, attachment.saved, window, cx)
-                        {
-                            panel.error = Some(error);
-                        } else {
-                            panel.lease = Some(attachment.lease);
-                        }
+            panel
+                .update_in(cx, |panel, window, cx| {
+                    if panel.closed {
+                        return;
                     }
-                    Err(error) => panel.error = Some(error),
-                }
-                cx.notify();
-            });
+                    panel.busy = false;
+                    match result {
+                        Ok(attachment) => {
+                            panel.key = Some(attachment.key);
+                            panel.manifest = Some(attachment.manifest);
+                            panel.title = attachment.title;
+                            if let Err(error) =
+                                panel.install_form(attachment.view, attachment.saved, window, cx)
+                            {
+                                panel.error = Some(error);
+                            } else {
+                                panel.lease = Some(attachment.lease);
+                            }
+                        }
+                        Err(error) => panel.error = Some(error),
+                    }
+                    cx.notify();
+                })
+                .log_released();
         })
         .detach();
     }

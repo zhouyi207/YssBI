@@ -5,6 +5,7 @@ use gpui_kit::component::{ActiveTheme, Icon, input, menu::PopupMenuItem};
 use gpui_kit::{Action, Context, MouseDownEvent, Pixels, Point, Window, div, prelude::*};
 use yss_graph_document::{GraphResourceKind, NodeId};
 use yss_graph_editor::EditorGraphMutation;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub(in crate::canvas) fn begin_node_menu(
@@ -97,15 +98,17 @@ impl GraphCanvas {
                 let owner = owner.clone();
                 let projection = projection.clone();
                 menu = menu.item(item.on_click(move |_, _, cx| {
-                    let _ = owner.update(cx, |view, cx| {
-                        if enabled
-                            && view.menu_is_current(menu_id, &projection, version, language)
-                            && view.selected.len() == 1
-                            && view.selected.contains(&id)
-                        {
-                            command.invoke(view, id, cx);
-                        }
-                    });
+                    owner
+                        .update(cx, |view, cx| {
+                            if enabled
+                                && view.menu_is_current(menu_id, &projection, version, language)
+                                && view.selected.len() == 1
+                                && view.selected.contains(&id)
+                            {
+                                command.invoke(view, id, cx);
+                            }
+                        })
+                        .log_released();
                 }));
             }
             menu

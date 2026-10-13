@@ -2,6 +2,7 @@ mod activity;
 mod assistant;
 mod charts;
 mod chrome;
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::name_form;
 mod resources;
 pub(crate) use chrome::{OpenProjectDirectory, OpenRecentProject, SaveAllGraphs, ShowSettings};
@@ -227,10 +228,14 @@ impl Workbench {
         cx.on_release(|view, cx| {
             view.close_result_windows(cx);
             if let Some(handle) = view.settings_window {
-                let _ = handle.update(cx, |_, window, _| window.remove_window());
+                handle
+                    .update(cx, |_, window, _| window.remove_window())
+                    .log_released();
             }
             if let Some(handle) = view.logs_window {
-                let _ = handle.update(cx, |_, window, _| window.remove_window());
+                handle
+                    .update(cx, |_, window, _| window.remove_window())
+                    .log_released();
             }
         })
         .detach();

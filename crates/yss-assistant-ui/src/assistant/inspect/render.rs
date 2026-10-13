@@ -10,6 +10,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{Context, IntoElement, Render, SharedString, Window, div, prelude::*, px};
 use serde_json::Value;
+use yss_ui::lifecycle::LogReleased;
 
 impl Render for Inspection {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -193,10 +194,10 @@ impl Inspection {
                     .icon(IconName::FileText)
                     .label(yss_ui::text::t("panel.assistantOpenResource"))
                     .on_click(cx.listener(move |view, _, _, cx| {
-                        let _ = view
-                            .card
+                        view.card
                             .owner
-                            .update(cx, |owner, cx| owner.open_reference(&resource, cx));
+                            .update(cx, |owner, cx| owner.open_reference(&resource, cx))
+                            .log_released();
                     })),
             );
         }

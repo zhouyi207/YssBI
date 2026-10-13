@@ -16,6 +16,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use yss_plugin_runtime::{PackageInspection, operation_id};
+use yss_ui::lifecycle::LogReleased;
 
 struct ApprovedPackage {
     path: PathBuf,
@@ -55,7 +56,7 @@ impl PackageInstaller {
                 .run(move |services| Ok(services.plugins.inspect(&path)));
             cx.spawn_in(window, async move |view, cx| {
                 let result = job.await.ok().and_then(Result::ok);
-                let _ = view.update(cx, |view, cx| {
+                view.update(cx, |view, cx| {
                     view.busy = false;
                     match result {
                         Some(Ok(inspection)) => view.inspection = Some(inspection),
@@ -66,7 +67,8 @@ impl PackageInstaller {
                         }
                     }
                     cx.notify();
-                });
+                })
+                .log_released();
             })
             .detach();
         });
@@ -134,11 +136,14 @@ impl PackageInstaller {
                 })
                 .unwrap_or(false);
             if !accepted {
-                let _ = failure.update(cx, |wizard, cx| {
-                    wizard.busy = false;
-                    wizard.error = Some(yss_ui::text::t("native.plugins.installationBusy").into());
-                    cx.notify();
-                });
+                failure
+                    .update(cx, |wizard, cx| {
+                        wizard.busy = false;
+                        wizard.error =
+                            Some(yss_ui::text::t("native.plugins.installationBusy").into());
+                        cx.notify();
+                    })
+                    .log_released();
             }
         });
         cx.notify();
@@ -326,7 +331,7 @@ impl PluginsPanel {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = prompt.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -362,7 +367,8 @@ impl PluginsPanel {
                     }
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);
@@ -394,7 +400,7 @@ impl PluginsPanel {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -422,11 +428,13 @@ impl PluginsPanel {
                     yss_ui::modal_window::close_child(window, cx);
                 } else if let Some(error) = error {
                     view.error = Some(error.clone());
-                    let _ = wizard.update(cx, |wizard, cx| {
-                        wizard.busy = false;
-                        wizard.error = Some(error);
-                        cx.notify();
-                    });
+                    wizard
+                        .update(cx, |wizard, cx| {
+                            wizard.busy = false;
+                            wizard.error = Some(error);
+                            cx.notify();
+                        })
+                        .log_released();
                 }
                 view.cursor_stack = vec![None];
                 if view.reload_again {
@@ -436,7 +444,8 @@ impl PluginsPanel {
                     view.read_details(key, None, window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);

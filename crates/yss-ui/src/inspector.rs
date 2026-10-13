@@ -93,6 +93,11 @@ pub fn property_row(
         )
 }
 
+/// Stacks read-only rows at one table rhythm, tighter than the gap between fields.
+pub fn property_list(rows: impl IntoIterator<Item = impl IntoElement>) -> Div {
+    div().min_w_0().flex().flex_col().gap_0p5().children(rows)
+}
+
 /// Select-style trigger for an owner-built dropdown menu: current choice leading, caret trailing.
 pub fn choice_trigger(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Button {
     Button::new(id)

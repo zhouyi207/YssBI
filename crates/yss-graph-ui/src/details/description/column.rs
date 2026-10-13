@@ -110,17 +110,13 @@ impl ColumnSummary {
                 fields.push(("unique", unique.to_string()))
             }
         }
-        div()
-            .flex()
-            .flex_col()
-            .gap_0p5()
-            .children(fields.into_iter().map(|(key, value)| {
-                inspector::property_row(
-                    translate(&format!("detail.description.fields.{key}")),
-                    value,
-                    cx,
-                )
-            }))
+        inspector::property_list(fields.into_iter().map(|(key, value)| {
+            inspector::property_row(
+                translate(&format!("detail.description.fields.{key}")),
+                value,
+                cx,
+            )
+        }))
     }
 
     fn frequencies(&self, cx: &mut Context<Self>) -> gpui_kit::AnyElement {

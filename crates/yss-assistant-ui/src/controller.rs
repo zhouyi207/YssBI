@@ -12,6 +12,7 @@ use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, Activ
 use yss_desktop_services::resources::ResourceCatalog;
 use yss_harness_contract::{HarnessSessionId, HarnessSessionRecord, ProjectResourceRef};
 use yss_project_identity::ProjectInstanceId;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DirectoryReadState {
@@ -204,7 +205,7 @@ impl AssistantController {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.epoch != epoch || view.generation != generation {
                     return;
                 }
@@ -228,7 +229,8 @@ impl AssistantController {
                     view.refresh_directory(window, cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -292,7 +294,7 @@ impl AssistantController {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.epoch != epoch {
                     return;
                 }
@@ -312,7 +314,8 @@ impl AssistantController {
                 }
                 view.invalidate_directory(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -338,7 +341,7 @@ impl AssistantController {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.epoch != epoch {
                     return;
                 }
@@ -358,7 +361,8 @@ impl AssistantController {
                 }
                 view.invalidate_directory(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

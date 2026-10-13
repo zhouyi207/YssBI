@@ -6,6 +6,7 @@ use gpui_kit::{AppContext, Context, Entity, Focusable, Window};
 use yss_application::graph::open::OpenGraphRequest;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_ui::OpenedGraph;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(in crate::workbench) fn create_graph_opening(
@@ -95,7 +96,7 @@ impl Workbench {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 let Some(opening) = target.upgrade() else {
                     return;
                 };
@@ -160,7 +161,8 @@ impl Workbench {
                     view.finish_intent(&intent, applied, window, cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         });
         opening.update(cx, |opening, cx| {
             opening.failed = false;

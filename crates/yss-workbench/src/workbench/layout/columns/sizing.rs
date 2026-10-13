@@ -3,6 +3,7 @@ use super::conversation_node;
 use gpui_kit::base::PANEL_MIN_SIZE;
 use gpui_kit::component::dock::{DockArea, DockPlacement, NodeId, PaneRef};
 use gpui_kit::{App, Axis, Pixels, WeakEntity, Window, px};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) fn default_width(dock: &DockArea, window: &Window) -> Pixels {
     let width = if dock.bounds().size.width > px(0.) {
@@ -35,11 +36,12 @@ pub(in crate::workbench) fn fit(
     // Base rescales its measured split sizes during prepaint. Apply the pixel
     // widths after it has measured the new container, before the settling frame.
     window.defer(cx, move |window, cx| {
-        let _ = area.update(cx, |dock, cx| {
+        area.update(cx, |dock, cx| {
             if let Some(sizes) = fitted_sizes(dock, node, width) {
                 dock.set_split_sizes(node, sizes, window, cx);
             }
-        });
+        })
+        .log_released();
     });
 }
 

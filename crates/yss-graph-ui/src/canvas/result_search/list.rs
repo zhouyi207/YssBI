@@ -8,6 +8,7 @@ use yss_graph_execution::{
     plan::PlanOutputRef,
     result::{ResultId, ResultReference},
 };
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) struct Source {
     pub reference: ResultReference,
@@ -145,11 +146,13 @@ impl ListDelegate for Results {
             return;
         };
         let address = &entry.address;
-        let _ = self.owner.update(cx, |canvas, cx| {
-            if canvas.can_edit() && Rc::ptr_eq(canvas.result_entries(), &self.catalog) {
-                canvas.inspect_port_result(address, cx);
-            }
-        });
+        self.owner
+            .update(cx, |canvas, cx| {
+                if canvas.can_edit() && Rc::ptr_eq(canvas.result_entries(), &self.catalog) {
+                    canvas.inspect_port_result(address, cx);
+                }
+            })
+            .log_released();
     }
 
     fn render_empty(

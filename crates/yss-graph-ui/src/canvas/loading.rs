@@ -4,6 +4,7 @@ use gpui_kit::Context;
 use yss_graph_document::GraphResourcePath;
 use yss_project::GraphEditVersion;
 use yss_project_identity::ResourceRevision;
+use yss_ui::lifecycle::LogReleased;
 
 #[cfg(test)]
 mod tests;
@@ -149,7 +150,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.refresh_task = None;
                 if view.resource_path() != &path {
                     return;
@@ -194,7 +195,8 @@ impl GraphCanvas {
                     view.refresh(cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
@@ -134,14 +135,15 @@ impl ReportPage {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.loading = false;
                 match result {
                     Ok((page, roots)) => view.install(page, roots, window, cx),
                     Err(_) => view.error = true,
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

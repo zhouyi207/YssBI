@@ -2,6 +2,7 @@ use super::{GraphProperties, constants::ConstantOverview, signature::SignatureDr
 use gpui_kit::{Context, Window};
 use yss_graph_document::GraphResourceKind;
 use yss_project_history::FunctionDocument;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphProperties {
     pub(super) fn read(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -57,7 +58,7 @@ impl GraphProperties {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -85,7 +86,8 @@ impl GraphProperties {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

@@ -1,4 +1,5 @@
 use super::*;
+use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
@@ -6,6 +7,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{IntoElement, Render, div, prelude::*};
 use yss_node_catalog::PortCountPolicy;
+use yss_ui::inspector::{self, InlineMessage, InspectorHeader, InspectorSection, PropertyField};
 use yss_ui::text::translate;
 
 impl Render for NodeCreationView {
@@ -17,13 +19,10 @@ impl Render for NodeCreationView {
             .min_h_0()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .text_sm()
-                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                    .child(self.target.title.clone()),
-            )
+            .child(InspectorHeader::new(
+                IconName::Workflow,
+                self.target.title.clone(),
+            ))
             .child(
                 div()
                     .id("node-creation-fields")
@@ -31,7 +30,10 @@ impl Render for NodeCreationView {
                     .min_h_0()
                     .overflow_y_scroll()
                     .when(self.form.is_none() && self.preparing.is_some(), |body| {
-                        body.child(translate("common.loading"))
+                        body.child(inspector::status_band(
+                            inspector::hint(translate("common.loading"), cx),
+                            cx,
+                        ))
                     })
                     .when(!self.ports.is_empty(), |body| {
                         body.child(self.render_counts(busy, cx))
@@ -40,20 +42,67 @@ impl Render for NodeCreationView {
                         body.child(self.parameters.clone())
                     }),
             )
-            .when(!self.current(cx), |body| {
-                body.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(translate("native.workbench.creationChanged")),
+            .child(self.render_footer(busy, cx))
+    }
+}
+
+impl NodeCreationView {
+    fn render_counts(&self, busy: bool, cx: &App) -> InspectorSection {
+        InspectorSection::new("port-counts", translate("canvas.nodePalette.pinCounts")).child(
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .children(self.ports.iter().enumerate().map(|(index, port)| {
+                    let control = match &port.input {
+                        Some(input) => Input::new(input)
+                            .small()
+                            .w_20()
+                            .disabled(busy)
+                            .into_any_element(),
+                        None => match port.policy {
+                            PortCountPolicy::Fixed => div().text_sm().child("1"),
+                            _ => div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(translate("canvas.nodePalette.derivedPins")),
+                        }
+                        .into_any_element(),
+                    };
+                    PropertyField::new(port.title.clone())
+                        .inline()
+                        .control(control)
+                        .when_some(port.error.as_ref(), |field, error| {
+                            field.message(
+                                InlineMessage::error(error.clone()).id(("port-count-error", index)),
+                            )
+                        })
+                })),
+        )
+    }
+
+    /// Commits and outcomes stay visible below the scrolling form.
+    fn render_footer(&self, busy: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        div()
+            .flex_shrink_0()
+            .px_3()
+            .py_2()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .border_t_1()
+            .border_color(cx.theme().border)
+            .when(!self.current(cx), |footer| {
+                footer.child(
+                    InlineMessage::error(translate("native.workbench.creationChanged"))
+                        .id("creation-changed"),
                 )
             })
-            .children(self.error.as_ref().map(|error| {
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().danger)
-                    .child(error.clone())
-            }))
+            .children(
+                self.error
+                    .as_ref()
+                    .map(|error| InlineMessage::error(error.clone()).id("creation-error")),
+            )
             .child(
                 div()
                     .flex()
@@ -71,8 +120,8 @@ impl Render for NodeCreationView {
                                 }
                             })),
                     )
-                    .when(self.form.is_none() && self.preparing.is_none(), |body| {
-                        body.child(
+                    .when(self.form.is_none() && self.preparing.is_none(), |row| {
+                        row.child(
                             Button::new("creation-retry")
                                 .small()
                                 .ghost()
@@ -92,57 +141,5 @@ impl Render for NodeCreationView {
                             .on_click(cx.listener(|view, _, window, cx| view.create(window, cx))),
                     ),
             )
-    }
-}
-
-impl NodeCreationView {
-    fn render_counts(&self, busy: bool, cx: &gpui_kit::App) -> gpui_kit::Div {
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .p_2()
-            .child(
-                div()
-                    .text_xs()
-                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                    .child(translate("canvas.nodePalette.pinCounts")),
-            )
-            .children(self.ports.iter().map(|port| {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .text_xs()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(div().flex_1().min_w_0().child(port.title.clone()))
-                            .when_some(port.input.as_ref(), |row, input| {
-                                row.child(
-                                    Input::new(input)
-                                        .small()
-                                        .w(gpui_kit::px(84.))
-                                        .disabled(busy),
-                                )
-                            })
-                            .when(port.input.is_none(), |row| {
-                                let value = match port.policy {
-                                    PortCountPolicy::Fixed => "1".to_owned(),
-                                    _ => translate("canvas.nodePalette.derivedPins"),
-                                };
-                                row.child(
-                                    div().text_color(cx.theme().muted_foreground).child(value),
-                                )
-                            }),
-                    )
-                    .children(
-                        port.error
-                            .as_ref()
-                            .map(|error| div().text_color(cx.theme().danger).child(error.clone())),
-                    )
-            }))
     }
 }

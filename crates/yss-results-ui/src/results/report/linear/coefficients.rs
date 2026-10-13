@@ -5,6 +5,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants},
 };
 use gpui_kit::{App, Div, IntoElement, Window, div, prelude::*, px, relative};
+use yss_ui::lifecycle::LogReleased;
 
 impl LinearReport {
     pub(super) fn load(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -23,7 +24,7 @@ impl LinearReport {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.loading = false;
                 match result {
                     Ok(page) => {
@@ -38,7 +39,8 @@ impl LinearReport {
                     Err(_) => view.error = true,
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

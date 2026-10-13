@@ -21,6 +21,7 @@ use yss_graph_editor::{
 };
 use yss_node_protocol::PortDirection;
 use yss_ui::inspector::{self, Pager};
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::text::translate;
 
 pub(super) use picker::ConnectionPicker;
@@ -144,7 +145,7 @@ impl GraphDetails {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if !view.accepts_input(epoch, cx)
                     || view
                         .connection_picker
@@ -160,7 +161,8 @@ impl GraphDetails {
                     cx.notify();
                 });
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
     }

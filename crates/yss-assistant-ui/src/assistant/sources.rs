@@ -11,6 +11,7 @@ use gpui_kit::{
     prelude::*, px,
 };
 use yss_harness_contract::{KnowledgeCitation, ProjectResourceRef};
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(IntoElement)]
 pub(super) struct SourceCard {
@@ -119,7 +120,7 @@ impl Source {
         });
         self.task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = job.await.unwrap_or(Err(()));
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 view.loading = false;
                 view.task = None;
                 let current = view.owner.upgrade().is_some_and(|owner| {
@@ -130,16 +131,19 @@ impl Source {
                     && current
                 {
                     if open_resource && let Some(resource) = &detail.resource {
-                        let _ = view.owner.update(cx, |_, cx| {
-                            cx.emit(ConversationEvent::OpenResource(resource.clone()));
-                        });
+                        view.owner
+                            .update(cx, |_, cx| {
+                                cx.emit(ConversationEvent::OpenResource(resource.clone()));
+                            })
+                            .log_released();
                     }
                     view.detail = Some(detail);
                 } else {
                     view.failed = true;
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

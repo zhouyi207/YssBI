@@ -7,6 +7,7 @@ use yss_data_ui::imports::{
     sample_import_failure,
 };
 use yss_project_identity::OperationId;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn import_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -46,7 +47,9 @@ impl Workbench {
                                 })
                                 .unwrap_or(false);
                             if !started {
-                                let _ = failure.update(cx, |view, cx| view.reject_submission(cx));
+                                failure
+                                    .update(cx, |view, cx| view.reject_submission(cx))
+                                    .log_released();
                             }
                         });
                     });
@@ -118,7 +121,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != expected.lifecycle()
                     || view
                         .project
@@ -141,11 +144,14 @@ impl Workbench {
                     }
                     Err(key) => view.error = Some(crate::text::translate(key)),
                 }
-                let _ = dialog.update(cx, |dialog, cx| {
-                    dialog.finished(imported.map(|_| ()), window, cx)
-                });
+                dialog
+                    .update(cx, |dialog, cx| {
+                        dialog.finished(imported.map(|_| ()), window, cx)
+                    })
+                    .log_released();
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

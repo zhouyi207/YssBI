@@ -10,6 +10,7 @@ use yss_application::ApplicationState;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_project::ProjectIndex;
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
+use yss_ui::lifecycle::LogReleased;
 
 pub struct ChartRead {
     pub(super) project: ProjectInstanceId,
@@ -118,7 +119,7 @@ impl ChartEditor {
                 .await
                 .ok()
                 .and_then(Result::ok);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if view.preview_generation != generation || view.preview_limit != max_points {
                     return;
                 }
@@ -138,7 +139,8 @@ impl ChartEditor {
                     }
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         }));
         self.changed(cx);
     }
@@ -158,7 +160,7 @@ impl ChartEditor {
             .run(move |services| read(services, project, path));
         cx.spawn_in(window, async move |view, cx| {
             let result = task.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.read_generation != generation {
                     return;
                 }
@@ -192,7 +194,8 @@ impl ChartEditor {
                     view.refresh(window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);

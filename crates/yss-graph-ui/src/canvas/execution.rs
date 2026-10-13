@@ -6,6 +6,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
+use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::Context;
 use yss_application::graph::run::{
@@ -251,7 +252,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.execution.submitting = None;
                 if view.graph.results.execution_session_id != execution_session_id {
                     view.resync_execution(cx);
@@ -273,7 +274,8 @@ impl GraphCanvas {
                 view.resync_execution(cx);
                 cx.emit(CanvasEvent::Execution);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.emit(CanvasEvent::Execution);
@@ -305,7 +307,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.execution.cancelling = false;
                 if result.is_err() {
                     view.error = Some(yss_ui::text::t("native.canvas.cancelFailed").into());
@@ -313,7 +315,8 @@ impl GraphCanvas {
                 view.resync_execution(cx);
                 cx.emit(CanvasEvent::Execution);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.emit(CanvasEvent::Execution);
@@ -365,7 +368,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 let buffered = view.execution.recovery.take().unwrap_or_default();
                 if view.execution.recover_again {
                     view.resync_execution(cx);
@@ -389,7 +392,8 @@ impl GraphCanvas {
                 view.refresh_presentation();
                 cx.emit(CanvasEvent::Execution);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.emit(CanvasEvent::Execution);

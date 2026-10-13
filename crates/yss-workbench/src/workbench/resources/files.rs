@@ -1,5 +1,6 @@
 //! Authored-file management captures the original version and uses Project's file commands.
 use super::super::name_form::NameForm;
+use yss_ui::lifecycle::LogReleased;
 mod panels;
 use super::{super::Workbench, AuthoredKind, ResourceAction};
 use crate::file_commands::NativeFile;
@@ -107,9 +108,11 @@ impl Workbench {
                     window,
                     cx,
                     move |_, window, cx| {
-                        let _ = owner.update(cx, |view, cx| {
-                            view.mutate_file(target.clone(), action, None, None, window, cx)
-                        });
+                        owner
+                            .update(cx, |view, cx| {
+                                view.mutate_file(target.clone(), action, None, None, window, cx)
+                            })
+                            .log_released();
                         true
                     },
                 );
@@ -173,7 +176,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != target.lifecycle
                     || view
                         .project
@@ -205,7 +208,8 @@ impl Workbench {
                 view.refresh_project(window, cx);
                 view.persist_layout(cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

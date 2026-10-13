@@ -20,6 +20,7 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum ProjectFormKind {
@@ -82,7 +83,7 @@ impl ProjectForm {
                 .run(|_| Ok(yss_project_registry::default_project_parent_directory()?));
             cx.spawn_in(window, async move |view, cx| {
                 let result = job.await.ok().and_then(Result::ok);
-                let _ = view.update_in(cx, |view, window, cx| {
+                view.update_in(cx, |view, window, cx| {
                     if !std::mem::take(&mut view.default_parent_pending) {
                         return;
                     }
@@ -99,7 +100,8 @@ impl ProjectForm {
                         }
                     }
                     cx.notify();
-                });
+                })
+                .log_released();
             })
             .detach();
         });
@@ -152,7 +154,7 @@ impl ProjectForm {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = prompt.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.busy = false;
                 match result {
                     Ok(Ok(Some(paths))) => {
@@ -170,7 +172,8 @@ impl ProjectForm {
                     _ => view.error = Some(crate::text::t("native.projects.pickerFailed").into()),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -224,11 +227,13 @@ impl ProjectForm {
                 })
                 .unwrap_or(false);
             if !accepted {
-                let _ = failure.update(cx, |form, cx| {
-                    form.busy = false;
-                    form.error = Some(crate::text::t("native.projects.busy").into());
-                    cx.notify();
-                });
+                failure
+                    .update(cx, |form, cx| {
+                        form.busy = false;
+                        form.error = Some(crate::text::t("native.projects.busy").into());
+                        cx.notify();
+                    })
+                    .log_released();
             }
         });
         cx.notify();
@@ -283,12 +288,13 @@ impl ProjectForm {
         );
         cx.spawn_in(window, async move |view, cx| {
             let discard = matches!(prompt.await, Ok(0));
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.confirming = false;
                 if discard {
                     crate::modal_window::close(window, cx);
                 }
-            });
+            })
+            .log_released();
         })
         .detach();
         false

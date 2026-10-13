@@ -7,6 +7,7 @@ use yss_harness_contract::{
     LanguageModelAuthentication, LanguageModelCatalog, LanguageModelProviderConfig,
     LanguageModelSelection, SecretCredential,
 };
+use yss_ui::lifecycle::LogReleased;
 
 pub struct SettingsSaveRequest {
     config: LanguageModelProviderConfig,
@@ -40,7 +41,7 @@ impl SettingsPanel {
         // The retained panel owns the read, so closing its window cannot strand loading state.
         cx.spawn(async move |view, cx| {
             let outcome = job.await.unwrap_or(Err(ModelSettingsError::Unavailable));
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -54,7 +55,8 @@ impl SettingsPanel {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -147,7 +149,8 @@ impl SettingsPanel {
                 .ok()
                 .and_then(Result::ok)
                 .unwrap_or(Err(ModelSettingsError::Unavailable));
-            let _ = view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx));
+            view.update_in(cx, |view, window, cx| view.finish_save(outcome, window, cx))
+                .log_released();
         })
         .detach();
     }
@@ -186,7 +189,7 @@ impl SettingsPanel {
             .spawn(async move { service.discover_models(config, credential).await });
         cx.spawn_in(window, async move |view, cx| {
             let outcome = job.await.unwrap_or(Err(ModelSettingsError::Unavailable));
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 if view.epoch != epoch {
                     return;
                 }
@@ -223,7 +226,8 @@ impl SettingsPanel {
                     Err(error) => view.report_error(failure(&error), false, cx),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -247,7 +251,7 @@ impl SettingsPanel {
             .spawn(async move { service.set_default(selection).await });
         cx.spawn_in(window, async move |view, cx| {
             let outcome = job.await.unwrap_or(Err(ModelSettingsError::Unavailable));
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 view.task = None;
                 match outcome {
                     Ok(catalog) => {
@@ -258,7 +262,8 @@ impl SettingsPanel {
                     Err(error) => view.report_error(failure(&error), false, cx),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -320,7 +325,7 @@ impl SettingsPanel {
             .spawn(async move { service.delete_provider(id).await });
         cx.spawn_in(window, async move |view, cx| {
             let outcome = job.await.unwrap_or(Err(ModelSettingsError::Unavailable));
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 if view.epoch != epoch {
                     return;
                 }
@@ -335,7 +340,8 @@ impl SettingsPanel {
                     Err(error) => view.report_error(failure(&error), false, cx),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
