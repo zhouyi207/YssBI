@@ -2,22 +2,16 @@
 use super::*;
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Default)]
-pub(super) struct WorkerContinuation {
-    pub history: Vec<AgentMessage>,
-    pub observations: ResourceObservations,
-}
-
 impl TurnOrchestrator {
     pub(super) async fn followup(
         self: &Arc<Self>,
-        input: model::AgentFollowupInput,
+        input: AgentFollowupInput,
         executor: &RunExecutor,
     ) -> Result<AgentTaskOutcome, CapabilityFailure> {
         let mut request = AgentFollowup {
             run_id: input.run_id,
             instruction: input.instruction,
-            resource_versions: Vec::new(),
+            bindings: Value::Null,
         };
         if request.instruction.trim().is_empty() {
             return Err(rejected("instruction_required"));
@@ -64,24 +58,25 @@ impl TurnOrchestrator {
         if !outcomes.contains_key(&request.run_id) {
             return Err(rejected("task_still_running"));
         }
-        let mut evidence = Evidence::for_task(&task);
-        let mut scope = AgentInvocationScope {
+        let hooks = self.ports.extension.start_run(RunStart {
             run_id: request.run_id.clone(),
-            role: task.worker,
-            task: Some(task.scope.clone()),
-        };
-        let mut continuation = WorkerContinuation::default();
+            role: task.worker.clone(),
+            task_scope: Some(task.scope.clone()),
+            project: self.session.project.clone(),
+        });
+        let mut evidence = RunEvidence::default();
+        let mut history = Vec::new();
         let mut compaction_checkpoint = None;
         let mut seen = BTreeSet::new();
         for envelope in events {
             let event = match envelope.event {
                 HarnessEvent::AgentRunResumed {
                     request: previous,
-                    scope: previous_scope,
+                    scope,
                     ..
                 } if previous.run_id == request.run_id => {
-                    scope.task = Some(previous_scope);
-                    continuation.history.push(AgentMessage::User {
+                    hooks.resume(&scope);
+                    history.push(AgentMessage::User {
                         content: previous.instruction,
                     });
                     continue;
@@ -96,20 +91,16 @@ impl TurnOrchestrator {
                 } => compaction_checkpoint = Some(checkpoint),
                 AgentEvent::ContextCompacted { summary } => {
                     compaction_checkpoint = None;
-                    continuation.history.clear();
-                    continuation.history.push(AgentMessage::Assistant {
+                    history.clear();
+                    history.push(AgentMessage::Assistant {
                         content: format!("[Continuation checkpoint]\n{summary}"),
                     });
                 }
                 AgentEvent::TextDelta { delta } => {
-                    crate::conversation::assistant_text(&mut continuation.history, delta)
+                    crate::conversation::assistant_text(&mut history, delta)
                 }
                 AgentEvent::TextRetracted { characters } => {
-                    crate::conversation::retract_text(&mut continuation.history, characters)
-                }
-                AgentEvent::PlanProposed { plan } => {
-                    evidence.plan = Some(plan.clone());
-                    continuation.history.push(AgentMessage::Plan { plan });
+                    crate::conversation::retract_text(&mut history, characters)
                 }
                 AgentEvent::ToolInvocationStarted { invocation_id, .. }
                 | AgentEvent::ToolInvocationCompleted { invocation_id, .. }
@@ -126,70 +117,38 @@ impl TurnOrchestrator {
                     if record.agent_run_id.as_ref() != Some(&request.run_id) {
                         return Err(persistence_failure());
                     }
-                    continuation
-                        .observations
-                        .replay(&record, &self.session.project);
+                    hooks.replay(&record, &self.session.project);
                     if record.state == ToolInvocationState::Running
                         || record.failure.as_ref().is_some_and(|failure| {
-                            failure.code == CapabilityFailureCode::OutcomeUnknown
+                            failure.code == CapabilityFailureCode::OUTCOME_UNKNOWN
                         })
                     {
                         return Err(
-                            CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown)
+                            CapabilityFailure::new(CapabilityFailureCode::OUTCOME_UNKNOWN)
                                 .with_detail("invocationId", invocation_id.to_string()),
                         );
                     }
                     evidence.invocations.push(invocation_id);
-                    if let (Some(request), Some(result)) = (record.request.bound(), &record.result)
-                    {
-                        record_receipt(request, result, &mut evidence, &mut scope);
-                    }
-                    continuation
-                        .history
-                        .push(crate::conversation::tool_call(&record));
-                    continuation.history.push(
-                        crate::conversation::tool_result(record)
+                    history.push(crate::conversation::tool_call(&record));
+                    history.push(
+                        crate::conversation::tool_result(self.ports.extension.as_ref(), record)
                             .map_err(|_| persistence_failure())?,
                     );
                 }
                 _ => {}
             }
         }
-        task.scope = scope.task.ok_or_else(persistence_failure)?;
-        for access in &mut task.scope.resources {
-            if let Some(version) = executor
-                .task_resource_version(&access.resource, false)
-                .await?
-            {
-                continuation.observations.refresh_from(
-                    &executor
-                        .observations
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner()),
-                    &access.resource,
-                );
-                access.version = Some(version.clone());
-                request.resource_versions.push(AgentResourceVersion {
-                    resource: access.resource.clone(),
-                    version,
-                });
-            } else if access.version.is_some()
-                && continuation.observations.version(&access.resource, true)? != access.version
-            {
-                return Err(
-                    CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
-                        .with_detail("reason", "resource_requires_current_read")
-                        .with_detail("resourceId", &access.resource.id),
-                );
-            }
-        }
-        continuation.history.push(AgentMessage::User {
+        let (scope, bindings) = executor
+            .hooks
+            .resume_task(hooks.as_ref(), executor)
+            .await?;
+        task.scope = scope;
+        request.bindings = bindings;
+        history.push(AgentMessage::User {
             content: request.instruction.clone(),
         });
         if let Some(checkpoint) = compaction_checkpoint {
-            continuation
-                .history
-                .push(AgentMessage::CompactionCheckpoint { checkpoint });
+            history.push(AgentMessage::CompactionCheckpoint { checkpoint });
         }
         let dependencies = task
             .depends_on
@@ -244,11 +203,11 @@ impl TurnOrchestrator {
         self.append(HarnessEvent::AgentRunResumed {
             request: request.clone(),
             scope: task.scope.clone(),
-            role: task.worker,
+            role: task.worker.clone(),
             objective: task.objective.clone(),
         })
         .await?;
-        self.execute_task(request.run_id, task, dependencies, evidence, continuation)
+        self.execute_task(request.run_id, task, dependencies, evidence, hooks, history)
             .await
     }
 }

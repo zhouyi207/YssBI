@@ -1,8 +1,9 @@
 use petgraph::{algo::toposort, graphmap::DiGraphMap};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use yss_harness_contract::{
-    HarnessSessionId, HarnessTurnId, ProjectSessionBinding, ToolEffect, UnixMillis,
+    HarnessExtension, HarnessSessionId, HarnessTurnId, ProjectSessionBinding, ToolEffect,
+    ToolSpec, UnixMillis,
     WorkflowDefinition, WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStep,
     WorkflowStepId, WorkflowStepRecord, WorkflowStepState,
 };
@@ -10,10 +11,14 @@ use yss_harness_contract::{
 #[derive(Clone, Debug)]
 pub struct CompiledWorkflow {
     definition: WorkflowDefinition,
+    tools: BTreeMap<WorkflowStepId, ToolSpec>,
 }
 
 impl CompiledWorkflow {
-    pub fn compile(definition: WorkflowDefinition) -> Result<Self, WorkflowCompileError> {
+    pub fn compile(
+        definition: WorkflowDefinition,
+        extension: &dyn HarnessExtension,
+    ) -> Result<Self, WorkflowCompileError> {
         if definition.steps.is_empty() {
             return Err(WorkflowCompileError::Empty);
         }
@@ -40,16 +45,27 @@ impl CompiledWorkflow {
             {
                 return Err(WorkflowCompileError::UnknownDependency);
             }
-            step.request
-                .validate()
+        }
+        let mut tools = BTreeMap::new();
+        for step in &definition.steps {
+            let spec = extension
+                .tool_spec(&step.tool)
+                .ok_or(WorkflowCompileError::InvalidCapabilityRequest)?;
+            extension
+                .validate_request(&step.tool, &step.request)
                 .map_err(|_| WorkflowCompileError::InvalidCapabilityRequest)?;
+            tools.insert(step.id.clone(), spec);
         }
         ensure_acyclic(&definition.steps)?;
-        Ok(Self { definition })
+        Ok(Self { definition, tools })
     }
 
     pub fn definition(&self) -> &WorkflowDefinition {
         &self.definition
+    }
+
+    pub(crate) fn tool(&self, step: &WorkflowStepId) -> Option<&ToolSpec> {
+        self.tools.get(step)
     }
 }
 
@@ -308,7 +324,7 @@ impl WorkflowRuntime {
                 continue;
             }
             record.state =
-                if step.request.capability_id().descriptor().effect == ToolEffect::Inspect {
+                if compiled.tool(&step.id).map(|spec| spec.effect) == Some(ToolEffect::Inspect) {
                     WorkflowStepState::Pending
                 } else {
                     // The operation may already have committed; only its ledger can
@@ -386,9 +402,8 @@ pub enum WorkflowRuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_harness_contract::{
-        AutomationCapabilityRequest, InspectGraphRequest, WorkflowId, WorkflowVersion,
-    };
+    use crate::test_support::{NoteExtension, READ_NOTE};
+    use yss_harness_contract::{WorkflowId, WorkflowVersion};
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
     fn step(id: &str, dependencies: &[&str]) -> WorkflowStep {
@@ -398,9 +413,8 @@ mod tests {
                 .iter()
                 .map(|dependency| WorkflowStepId::try_new(*dependency).unwrap())
                 .collect(),
-            request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest::overview(
-                "events/Main.yssbi-event".to_owned(),
-            )),
+            tool: READ_NOTE.into(),
+            request: serde_json::json!({"id": "a"}),
         }
     }
 
@@ -418,7 +432,7 @@ mod tests {
             step("independent", &[]),
             step("inspect", &["review"]),
             step("review", &["inspect"]),
-        ]))
+        ]), &NoteExtension::default())
         .unwrap_err();
 
         assert_eq!(error, WorkflowCompileError::Cycle);
@@ -432,7 +446,7 @@ mod tests {
             step("inspect", &[]),
             step("independent", &[]),
         ]);
-        let compiled = CompiledWorkflow::compile(definition.clone()).unwrap();
+        let compiled = CompiledWorkflow::compile(definition.clone(), &NoteExtension::default()).unwrap();
         assert_eq!(compiled.definition().steps, definition.steps);
 
         let mut invalid = definition;
@@ -440,7 +454,7 @@ mod tests {
             .depends_on
             .push(WorkflowStepId::try_new("missing").unwrap());
         assert_eq!(
-            CompiledWorkflow::compile(invalid).unwrap_err(),
+            CompiledWorkflow::compile(invalid, &NoteExtension::default()).unwrap_err(),
             WorkflowCompileError::UnknownDependency
         );
     }
@@ -450,7 +464,7 @@ mod tests {
         let compiled = CompiledWorkflow::compile(definition(vec![
             step("inspect", &[]),
             step("review", &["inspect"]),
-        ]))
+        ]), &NoteExtension::default())
         .unwrap();
         let mut run = WorkflowRuntime::plan(
             &compiled,

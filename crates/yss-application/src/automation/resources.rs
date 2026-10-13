@@ -4,6 +4,7 @@ use crate::events::CommittedResourceMutation;
 use crate::session::{ApplicationSession, ApplicationState};
 use yss_chart_document::ChartResourcePath;
 use yss_graph_document::{GraphResourceKind, GraphResourcePath};
+use yss_assistant_contract::*;
 use yss_harness_contract::*;
 use yss_project::file_resources::FileCommand;
 use yss_project_history::{ResourceDocumentPatch, ResourceKey, ResourceLifecycleKind};
@@ -48,7 +49,7 @@ impl ApplicationState {
             || session.project_session_id() != binding.project_session_id()
         {
             return Err(CapabilityFailure::new(
-                CapabilityFailureCode::ProjectSessionChanged,
+                CapabilityFailureCode::PROJECT_SESSION_CHANGED,
             ));
         }
         let index = read_index(&session)?;
@@ -85,13 +86,13 @@ impl ApplicationState {
 }
 
 fn invalid(field: &str) -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::InvalidRequest).with_detail("field", field)
+    CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST).with_detail("field", field)
 }
 fn conflict() -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
+    CapabilityFailure::new(CapabilityFailureCode::REVISION_CONFLICT)
 }
 fn unavailable() -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::ResourceUnavailable)
+    CapabilityFailure::new(CapabilityFailureCode::RESOURCE_UNAVAILABLE)
 }
 fn reference(kind: ProjectResourceKind, id: impl Into<String>) -> ProjectResourceRef {
     ProjectResourceRef {
@@ -262,7 +263,7 @@ fn mutation_receipt(mutation: &CommittedResourceMutation) -> Result<ResourceMuta
                     // A publication key is not a DatabaseId; the committed declaration owns the ID.
                     let ResourceDocumentPatch::Database(patch) = &delta.payload else {
                         return Err(CapabilityFailure::new(
-                            CapabilityFailureCode::OutcomeUnknown,
+                            CapabilityFailureCode::OUTCOME_UNKNOWN,
                         ));
                     };
                     let declaration =
@@ -271,7 +272,7 @@ fn mutation_receipt(mutation: &CommittedResourceMutation) -> Result<ResourceMuta
                             .as_ref()
                             .or(patch.before.as_ref())
                             .ok_or_else(|| {
-                                CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown)
+                                CapabilityFailure::new(CapabilityFailureCode::OUTCOME_UNKNOWN)
                             })?;
                     (
                         reference(ProjectResourceKind::Database, declaration.id.as_str()),
@@ -585,18 +586,18 @@ pub(super) fn manage_resource(
 fn project_error(error: yss_project::ProjectOperationError) -> CapabilityFailure {
     use yss_project::ProjectOperationError as E;
     let code = match &error {
-        E::StaleProjectLifecycle { .. } => CapabilityFailureCode::ProjectSessionChanged,
+        E::StaleProjectLifecycle { .. } => CapabilityFailureCode::PROJECT_SESSION_CHANGED,
         E::StaleResourceLifecycle { .. }
         | E::CatalogResourceStale { .. }
-        | E::ResourceRevisionConflict { .. } => CapabilityFailureCode::RevisionConflict,
+        | E::ResourceRevisionConflict { .. } => CapabilityFailureCode::REVISION_CONFLICT,
         E::ProjectLifecycleAdmissionClosed { .. } | E::ProjectRecoveryRequired { .. } => {
-            CapabilityFailureCode::ProjectSessionUnavailable
+            CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE
         }
-        E::ChartNotFound { .. } => CapabilityFailureCode::ResourceUnavailable,
+        E::ChartNotFound { .. } => CapabilityFailureCode::RESOURCE_UNAVAILABLE,
         E::TransactionCommitFailed { .. } | E::TransactionRollbackFailed { .. } => {
-            CapabilityFailureCode::OutcomeUnknown
+            CapabilityFailureCode::OUTCOME_UNKNOWN
         }
-        _ => CapabilityFailureCode::MutationRejected,
+        _ => CapabilityFailureCode::MUTATION_REJECTED,
     };
     CapabilityFailure::new(code).with_detail("reason", error.code())
 }
@@ -633,8 +634,8 @@ fn graph_error(
         E::Resource(yss_project_history::ProjectResourceMutationError::StaleRevision {
             ..
         }) => conflict(),
-        E::EditingBusy => CapabilityFailure::new(CapabilityFailureCode::InvocationConflict),
-        _ => CapabilityFailure::new(CapabilityFailureCode::MutationRejected),
+        E::EditingBusy => CapabilityFailure::new(CapabilityFailureCode::INVOCATION_CONFLICT),
+        _ => CapabilityFailure::new(CapabilityFailureCode::MUTATION_REJECTED),
     }
 }
 fn database_error(error: crate::database::DatabaseUseCaseError) -> CapabilityFailure {
@@ -645,13 +646,13 @@ fn database_error(error: crate::database::DatabaseUseCaseError) -> CapabilityFai
         E::Database(D::StaleRevision { .. }) => conflict(),
         E::Database(D::NotFound { .. }) => unavailable(),
         E::Database(D::Project { source, .. }) => project_error(source),
-        E::SessionRefresh(_) => CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown),
+        E::SessionRefresh(_) => CapabilityFailure::new(CapabilityFailureCode::OUTCOME_UNKNOWN),
         E::Database(D::Internal(error))
             if error.operation()
                 == crate::database::DatabaseApplicationOperation::ExportPublicationUncertain =>
         {
-            CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown)
+            CapabilityFailure::new(CapabilityFailureCode::OUTCOME_UNKNOWN)
         }
-        _ => CapabilityFailure::new(CapabilityFailureCode::MutationRejected),
+        _ => CapabilityFailure::new(CapabilityFailureCode::MUTATION_REJECTED),
     }
 }

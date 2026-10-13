@@ -1,9 +1,6 @@
 use super::*;
 use crate::graph::catalog::{LocalizedCatalogRequest, localized_node_catalog_in_session};
-use yss_harness_contract::{
-    BrowseNodesRequest, InspectNodeTypeRequest, InspectionPage, NodeCatalogMatch, NodeCatalogPage,
-    NodeTypeDefinition, NodeTypeInspection,
-};
+use yss_assistant_contract::{BrowseNodesRequest, InspectNodeTypeRequest, InspectionPage, NodeCatalogMatch, NodeCatalogPage, NodeTypeDefinition, NodeTypeInspection};
 use yss_node_catalog::LocalizedCatalogItem;
 use yss_node_protocol::NodeProtocol;
 
@@ -12,8 +9,8 @@ mod tests;
 
 pub(super) fn port_definitions(
     protocol: &NodeProtocol,
-) -> Vec<yss_harness_contract::NodeCreationPortDefinition> {
-    use yss_harness_contract::{NodeCreationPortDefinition, NodePortCountPolicy};
+) -> Vec<yss_assistant_contract::NodeCreationPortDefinition> {
+    use yss_assistant_contract::{NodeCreationPortDefinition, NodePortCountPolicy};
     yss_node_catalog::node_creation_ports(protocol)
         .into_vec()
         .into_iter()
@@ -153,18 +150,18 @@ pub(super) fn inspect_node_type(
             .iter()
             .find(|item| item.available && item.node_type_id.as_ref() == type_id)
             .ok_or_else(|| {
-                CapabilityFailure::new(CapabilityFailureCode::CatalogUnavailable)
+                CapabilityFailure::new(yss_assistant_contract::failure_code::CATALOG_UNAVAILABLE)
                     .with_detail("typeId", &type_id)
             })?;
         let protocol = captured
             .graph()
             .registry()
             .protocol(&type_id.parse().map_err(|_| {
-                CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
+                CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
                     .with_detail("field", "typeIds")
             })?)
             .ok_or_else(|| {
-                CapabilityFailure::new(CapabilityFailureCode::CatalogUnavailable)
+                CapabilityFailure::new(yss_assistant_contract::failure_code::CATALOG_UNAVAILABLE)
                     .with_detail("typeId", &type_id)
             })?;
         types.push(NodeTypeDefinition {

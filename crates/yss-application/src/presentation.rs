@@ -550,11 +550,8 @@ mod tests {
 
     #[test]
     fn gui_and_harness_inspect_the_same_intent_receipt() {
-        use yss_harness_contract::{
-            AutomationCapabilityRequest, AutomationCapabilityResult, CancellationToken,
-            CapabilityControl, CapabilityInvocationContext, CapabilityInvocationId,
-            HarnessSessionId, PrincipalId, ProjectSessionBinding,
-        };
+        use yss_harness_contract::{CancellationToken, CapabilityControl, CapabilityInvocationId, HarnessSessionId, PrincipalId, ProjectSessionBinding};
+        use yss_assistant_contract::{AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityInvocationContext};
         let (application, _, _) = crate::graph::results::report::tests::fixture(12);
         let session = application.capture_session().unwrap();
         let project = session.project_instance_id();

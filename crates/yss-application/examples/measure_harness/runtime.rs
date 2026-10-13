@@ -13,6 +13,7 @@ use yss_application::{
         models::{LanguageModelService, SystemModelCredentials},
     },
 };
+use yss_assistant_contract::*;
 use yss_harness_contract::*;
 use yss_harness_core::{HarnessHost, HarnessPorts};
 

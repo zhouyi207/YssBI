@@ -1,28 +1,66 @@
 //! Knowledge tool dispatch returns public content and a separate internal citation.
 
+use serde_json::Value;
 use yss_harness_contract::{
-    AutomationCapabilityRequest as Request, AutomationCapabilityResult as ResultValue,
     CapabilityControl, CapabilityFailure, CapabilityFailureCode, KnowledgeMatch, KnowledgePassage,
-    KnowledgePassageReference, KnowledgeSearchResult,
+    KnowledgePassageReference, KnowledgeSearchResult, READ_KNOWLEDGE_TOOL, ReadKnowledgeRequest,
+    SEARCH_KNOWLEDGE_TOOL, SearchKnowledgeRequest,
 };
 
 use super::*;
 
+pub(crate) enum KnowledgeRequest {
+    Search(SearchKnowledgeRequest),
+    Read(ReadKnowledgeRequest),
+}
+
+impl KnowledgeRequest {
+    pub(crate) fn decode(tool: &str, request: &Value) -> Result<Self, CapabilityFailure> {
+        let invalid = |_| {
+            CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
+                .with_detail("capabilityId", tool)
+        };
+        match tool {
+            SEARCH_KNOWLEDGE_TOOL => serde_json::from_value(request.clone())
+                .map(Self::Search)
+                .map_err(invalid),
+            READ_KNOWLEDGE_TOOL => serde_json::from_value(request.clone())
+                .map(Self::Read)
+                .map_err(invalid),
+            _ => Err(CapabilityFailure::new(
+                CapabilityFailureCode::INVALID_REQUEST,
+            )),
+        }
+    }
+
+    pub(crate) fn validate(&self, tool: &str) -> Result<(), CapabilityFailure> {
+        match self {
+            Self::Search(request) => request
+                .validate()
+                .map_err(|error| error.into_failure(tool, "limit")),
+            Self::Read(_) => Ok(()),
+        }
+    }
+}
+
 impl KnowledgeService {
     pub(crate) async fn invoke(
         &self,
-        request: Request,
+        tool: &str,
+        request: &Value,
         project: &ProjectSessionBinding,
         control: &CapabilityControl,
-    ) -> Result<(ResultValue, Option<KnowledgeCitation>), CapabilityFailure> {
+    ) -> Result<(Value, Option<KnowledgeCitation>), CapabilityFailure> {
+        let request = KnowledgeRequest::decode(tool, request)?;
+        request.validate(tool)?;
         control.check()?;
         tokio::select! {
             biased;
             _ = control.cancellation().cancelled() => {
-                Err(control.check().err().unwrap_or_else(|| CapabilityFailure::new(CapabilityFailureCode::Cancelled)))
+                Err(control.check().err().unwrap_or_else(|| CapabilityFailure::new(CapabilityFailureCode::CANCELLED)))
             }
             _ = tokio::time::sleep_until(control.deadline().into()) => {
-                Err(CapabilityFailure::new(CapabilityFailureCode::DeadlineElapsed))
+                Err(CapabilityFailure::new(CapabilityFailureCode::DEADLINE_ELAPSED))
             }
             result = self.dispatch(request, project) => result,
         }
@@ -30,11 +68,14 @@ impl KnowledgeService {
 
     async fn dispatch(
         &self,
-        request: Request,
+        request: KnowledgeRequest,
         project: &ProjectSessionBinding,
-    ) -> Result<(ResultValue, Option<KnowledgeCitation>), CapabilityFailure> {
+    ) -> Result<(Value, Option<KnowledgeCitation>), CapabilityFailure> {
+        let encode = |value: Result<Value, serde_json::Error>| {
+            value.map_err(|_| CapabilityFailure::new(CapabilityFailureCode::INTERNAL_FAILURE))
+        };
         match request {
-            Request::SearchKnowledge(request) => {
+            KnowledgeRequest::Search(request) => {
                 let matches = self
                     .search(KnowledgeQuery {
                         text: request.query,
@@ -57,17 +98,17 @@ impl KnowledgeService {
                     })
                     .collect();
                 Ok((
-                    ResultValue::KnowledgeSearch(KnowledgeSearchResult { matches }),
+                    encode(serde_json::to_value(KnowledgeSearchResult { matches }))?,
                     None,
                 ))
             }
-            Request::ReadKnowledge(request) => {
+            KnowledgeRequest::Read(request) => {
                 let (citation, text) = self
                     .read_passage(&request.reference, project)
                     .await
                     .map_err(failure)?
                     .ok_or_else(|| {
-                        CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable)
+                        CapabilityFailure::new(CapabilityFailureCode::RESULT_UNAVAILABLE)
                             .with_detail("reason", "knowledge_passage_unavailable")
                             .with_detail(
                                 "nextStep",
@@ -80,11 +121,8 @@ impl KnowledgeService {
                     title: citation.title.clone(),
                     text,
                 };
-                Ok((ResultValue::KnowledgePassage(passage), Some(citation)))
+                Ok((encode(serde_json::to_value(passage))?, Some(citation)))
             }
-            _ => Err(CapabilityFailure::new(
-                CapabilityFailureCode::InvalidRequest,
-            )),
         }
     }
 }
@@ -92,19 +130,19 @@ impl KnowledgeService {
 fn failure(error: KnowledgeError) -> CapabilityFailure {
     let (code, reason) = match error {
         KnowledgeError::InvalidQuery => (
-            CapabilityFailureCode::InvalidRequest,
+            CapabilityFailureCode::INVALID_REQUEST,
             "invalid_knowledge_query",
         ),
         KnowledgeError::SourceIntegrity => (
-            CapabilityFailureCode::ResultUnavailable,
+            CapabilityFailureCode::RESULT_UNAVAILABLE,
             "knowledge_source_unavailable",
         ),
         KnowledgeError::Persistence(_) => (
-            CapabilityFailureCode::ResultUnavailable,
+            CapabilityFailureCode::RESULT_UNAVAILABLE,
             "knowledge_store_unavailable",
         ),
         KnowledgeError::Index(_) => (
-            CapabilityFailureCode::ResultUnavailable,
+            CapabilityFailureCode::RESULT_UNAVAILABLE,
             "knowledge_search_unavailable",
         ),
     };

@@ -43,9 +43,8 @@ async fn populate(store: &SqliteHarnessStore, id: &str) -> HarnessSessionRecord 
         steps: vec![WorkflowStep {
             id: WorkflowStepId::try_new("inspect").unwrap(),
             depends_on: vec![],
-            request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest::overview(
-                "events/Main.yssbi-event",
-            )),
+            tool: "inspect_graph".into(),
+            request: serde_json::json!({"graph": "events/Main.yssbi-event"}),
         }],
     };
     store.save_definition(&definition).await.unwrap();
@@ -79,12 +78,14 @@ async fn populate(store: &SqliteHarnessStore, id: &str) -> HarnessSessionRecord 
             workflow_run_id: Some(run.id),
             workflow_step_id: Some(definition.steps[0].id.clone()),
             project: session.project.clone(),
-            capability_id: CapabilityId::InspectGraph,
-            request: definition.steps[0].request.clone().into(),
+            tool: definition.steps[0].tool.clone(),
+            effect: ToolEffect::Inspect,
+            arguments: definition.steps[0].request.clone(),
+            request: Some(definition.steps[0].request.clone()),
             state: ToolInvocationState::Failed,
             result: None,
             failure: Some(CapabilityFailure::new(
-                CapabilityFailureCode::InternalFailure,
+                CapabilityFailureCode::INTERNAL_FAILURE,
             )),
             started_at: now,
             deadline: now,
@@ -98,7 +99,7 @@ async fn populate(store: &SqliteHarnessStore, id: &str) -> HarnessSessionRecord 
             principal_id: session.principal_id.clone(),
             session_id: session.id.clone(),
             project: session.project.clone(),
-            capability_id: CapabilityId::InspectGraph,
+            tool: "inspect_graph".into(),
             request_fingerprint: SourceHash::try_new("0".repeat(64)).unwrap(),
             issued_at: now,
             expires_at: now,

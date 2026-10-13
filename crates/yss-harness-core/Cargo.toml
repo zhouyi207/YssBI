@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [features]
-test-support = []
+test-support = ["dep:yss-harness-tantivy", "dep:yss-project-identity"]
 
 [dependencies]
 hex.workspace = true
@@ -16,6 +16,8 @@ serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 yss-harness-contract = { path = "../yss-harness-contract" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
+yss-harness-tantivy = { path = "../yss-harness-tantivy", optional = true }
+yss-project-identity = { path = "../yss-project-identity", optional = true }
 
 [dev-dependencies]
 yss-harness-tantivy = { path = "../yss-harness-tantivy" }

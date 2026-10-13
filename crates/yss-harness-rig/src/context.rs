@@ -30,7 +30,7 @@ struct State {
 pub(crate) struct ContextHook {
     model: DynModel<Completion>,
     output: Arc<TurnOutput>,
-    capabilities: Arc<dyn ModelCapabilityExecutor>,
+    capabilities: Arc<dyn AgentToolExecutor>,
     cancellation: CancellationToken,
     max_output_tokens: Option<u32>,
     context_window: Option<u32>,
@@ -46,7 +46,7 @@ impl ContextHook {
         model: DynModel<Completion>,
         prepared: PreparedMessages,
         output: Arc<TurnOutput>,
-        capabilities: Arc<dyn ModelCapabilityExecutor>,
+        capabilities: Arc<dyn AgentToolExecutor>,
         cancellation: CancellationToken,
         context_window: Option<u32>,
         max_output_tokens: Option<u32>,

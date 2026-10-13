@@ -1,5 +1,5 @@
 use crate::test_support::{
-    FixedClock, InMemoryHarnessStore, MockAgentDriver, RejectingCapabilityGateway, SequentialIds,
+    FixedClock, InMemoryHarnessStore, MockAgentDriver, SequentialIds,
     model_identity,
 };
 use crate::{HarnessError, HarnessHost, HarnessPorts};
@@ -74,7 +74,7 @@ async fn cancelled_reference_lookup_cannot_start_a_model_or_block_the_next_turn(
         HarnessHost::new(HarnessPorts {
             models: models.clone(),
             resources: resources.clone(),
-            capability_gateway: Arc::new(RejectingCapabilityGateway),
+            extension: Arc::new(crate::test_support::NoteExtension::default()),
             sessions: store.clone(),
             events: store.clone(),
             event_sink: store.clone(),

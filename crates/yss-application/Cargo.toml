@@ -33,6 +33,8 @@ thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 yss-harness-contract = { path = "../yss-harness-contract" }
+yss-assistant-contract = { path = "../yss-assistant-contract" }
+yss-assistant-extension = { path = "../yss-assistant-extension" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-runtime = { path = "../yss-database-runtime" }
@@ -74,6 +76,7 @@ yss-chart-document = { path = "../yss-chart-document" }
 jsonschema.workspace = true
 tempfile = "3"
 yss-harness-core = { path = "../yss-harness-core", features = ["test-support"] }
+yss-assistant-extension = { path = "../yss-assistant-extension", features = ["test-support"] }
 yss-database-engine = { path = "../yss-database-engine" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-database-runtime = { path = "../yss-database-runtime", features = ["test-support"] }

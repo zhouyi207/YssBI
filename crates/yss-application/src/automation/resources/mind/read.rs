@@ -1,5 +1,5 @@
 use super::*;
-use yss_harness_contract::model::MindReadInput;
+use yss_assistant_contract::model::MindReadInput;
 
 pub(in crate::automation) fn read_mind(
     application: &ApplicationState,

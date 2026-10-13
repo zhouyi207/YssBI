@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use serde_json::Value;
 use yss_harness_contract::{
-    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, AutomationCapabilityRequest,
-    AutomationIdKind, ClockPort, HarnessSessionId, IdGeneratorPort, PersistenceFailure,
-    PrincipalId, ProjectSessionBinding, SourceHash,
+    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, AutomationIdKind, ClockPort,
+    HarnessSessionId, IdGeneratorPort, PersistenceFailure, PrincipalId, ProjectSessionBinding,
+    SourceHash, ToolEffect, ToolSpec,
 };
 
 pub struct ApprovalService {
@@ -26,13 +27,11 @@ impl ApprovalService {
         principal_id: PrincipalId,
         session_id: HarnessSessionId,
         project: ProjectSessionBinding,
-        request: &AutomationCapabilityRequest,
+        tool: &ToolSpec,
+        request: &Value,
         ttl_ms: u64,
     ) -> Result<ApprovalGrantRecord, ApprovalError> {
-        request
-            .validate()
-            .map_err(|_| ApprovalError::InvalidRequest)?;
-        if request.capability_id().descriptor().effect != yss_harness_contract::ToolEffect::Mutate {
+        if tool.effect != ToolEffect::Mutate {
             return Err(ApprovalError::NotRequired);
         }
         if ttl_ms == 0 || ttl_ms > 10 * 60 * 1_000 {
@@ -47,8 +46,8 @@ impl ApprovalService {
             principal_id,
             session_id,
             project,
-            capability_id: request.capability_id(),
-            request_fingerprint: request_fingerprint(request)?,
+            tool: tool.name.clone(),
+            request_fingerprint: request_fingerprint(&tool.name, request)?,
             issued_at,
             expires_at,
             consumed_at: None,
@@ -63,15 +62,16 @@ impl ApprovalService {
         principal_id: &PrincipalId,
         session_id: &HarnessSessionId,
         project: &ProjectSessionBinding,
-        request: &AutomationCapabilityRequest,
+        tool: &str,
+        request: &Value,
     ) -> Result<ApprovalGrantRecord, ApprovalError> {
         let mut record = self.store.load(id).await?.ok_or(ApprovalError::NotFound)?;
         let now = self.clock.now();
         if record.principal_id != *principal_id
             || record.session_id != *session_id
             || record.project != *project
-            || record.capability_id != request.capability_id()
-            || record.request_fingerprint != request_fingerprint(request)?
+            || record.tool != tool
+            || record.request_fingerprint != request_fingerprint(tool, request)?
         {
             return Err(ApprovalError::BindingMismatch);
         }
@@ -86,8 +86,8 @@ impl ApprovalService {
     }
 }
 
-fn request_fingerprint(request: &AutomationCapabilityRequest) -> Result<SourceHash, ApprovalError> {
-    let digest = yss_canonical_hash::hash_canonical("yssbi.approval.request.v1", request)
+fn request_fingerprint(tool: &str, request: &Value) -> Result<SourceHash, ApprovalError> {
+    let digest = yss_canonical_hash::hash_canonical("yssbi.approval.request.v1", &(tool, request))
         .map_err(|_| ApprovalError::Fingerprint)?;
     SourceHash::try_new(hex::encode(digest)).map_err(|_| ApprovalError::Fingerprint)
 }
@@ -100,8 +100,6 @@ pub enum ApprovalError {
     IdGeneration(#[from] yss_harness_contract::IdGenerationFailure),
     #[error("approval persistence failed")]
     Persistence(#[from] PersistenceFailure),
-    #[error("approval request is invalid")]
-    InvalidRequest,
     #[error("capability does not require approval")]
     NotRequired,
     #[error("approval expiry is invalid")]
@@ -121,9 +119,7 @@ pub enum ApprovalError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{FixedClock, InMemoryHarnessStore, SequentialIds};
-    use yss_harness_contract::{ApplyGraphEditRequest, GraphEditOperation, GraphEditPosition};
-    use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
+    use crate::test_support::{FixedClock, InMemoryHarnessStore, SequentialIds, note_specs};
 
     #[tokio::test]
     async fn approval_is_exactly_bound_and_consumed_once() {
@@ -135,42 +131,42 @@ mod tests {
         );
         let principal = PrincipalId::try_new("user-1").unwrap();
         let session = HarnessSessionId::try_new("session-1").unwrap();
-        let project = ProjectSessionBinding::new(
-            ProjectInstanceId::from_existing("project-1".into()),
-            ProjectSessionId::new("project-session-1"),
-        );
-        let request = AutomationCapabilityRequest::ApplyGraphEdit(ApplyGraphEditRequest {
-            graph_hash: "0".repeat(64),
-            graph_path: "events/Main.yssbi-event".to_owned(),
-            base_revision: 1,
-            client_key: "assistant-edit-1".to_owned(),
-            locale: "en-US".to_owned(),
-            operations: vec![GraphEditOperation::MoveNodes {
-                positions: vec![GraphEditPosition {
-                    node_id: "00000000-0000-0000-0000-000000000001".to_owned(),
-                    x: 10.0,
-                    y: 20.0,
-                }],
-            }],
-        });
+        let project = crate::test_support::project();
+        let specs = note_specs(true);
+        let write = specs.iter().find(|spec| spec.name == "write_note").unwrap();
+        let read = specs.iter().find(|spec| spec.name == "read_note").unwrap();
+        let request = serde_json::json!({"id": "a", "text": "approved"});
+        assert!(matches!(
+            service
+                .issue(principal.clone(), session.clone(), project.clone(), read, &request, 1_000)
+                .await,
+            Err(ApprovalError::NotRequired)
+        ));
         let grant = service
             .issue(
                 principal.clone(),
                 session.clone(),
                 project.clone(),
+                write,
                 &request,
                 1_000,
             )
             .await
             .unwrap();
-
+        let changed = serde_json::json!({"id": "a", "text": "changed"});
+        assert!(matches!(
+            service
+                .consume(&grant.id, &principal, &session, &project, &write.name, &changed)
+                .await,
+            Err(ApprovalError::BindingMismatch)
+        ));
         service
-            .consume(&grant.id, &principal, &session, &project, &request)
+            .consume(&grant.id, &principal, &session, &project, &write.name, &request)
             .await
             .unwrap();
         assert!(matches!(
             service
-                .consume(&grant.id, &principal, &session, &project, &request)
+                .consume(&grant.id, &principal, &session, &project, &write.name, &request)
                 .await,
             Err(ApprovalError::AlreadyConsumed)
         ));

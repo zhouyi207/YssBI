@@ -308,7 +308,7 @@ fn assistant_discovers_edits_and_saves_graphs_without_open_editor_panels() {
         },
     )
     .unwrap_err();
-    assert_eq!(missing.code, CapabilityFailureCode::GraphUnavailable);
+    assert_eq!(missing.code, yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE);
 
     let AutomationCapabilityResult::ProjectInspection(inspection) = f
         .application
@@ -436,7 +436,7 @@ fn assistant_autosave_failure_preserves_the_previous_document_history_and_file()
     captured.project().set_filesystem_fault(None);
     assert_eq!(
         failed.unwrap_err().code,
-        CapabilityFailureCode::PersistenceUnavailable
+        CapabilityFailureCode::PERSISTENCE_UNAVAILABLE
     );
     let after = captured
         .project()
@@ -627,7 +627,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let AutomationCapabilityResult::GraphExecution(run) = f
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
-                demand: yss_harness_contract::GraphExecutionDemand::Default,
+                demand: yss_assistant_contract::GraphExecutionDemand::Default,
                 graph: GraphResourceRef::for_path(f.path.clone()),
                 graph_hash: validated.graph_hash,
             },
@@ -701,7 +701,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     assert_eq!(source_run.status, "succeeded");
     let timing = source_run.timing.as_ref().expect("admitted run timing");
     assert!(timing.elapsed_ms >= timing.running_ms);
-    let public_run = yss_harness_contract::model::capability_result(
+    let public_run = yss_assistant_contract::model::capability_result(
         &AutomationCapabilityResult::GraphExecution(source_run.clone()),
     )
     .unwrap();
@@ -807,7 +807,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         f.action(AutomationCapabilityRequest::ReadResultTable(invalid_column))
             .unwrap_err()
             .code,
-        CapabilityFailureCode::InvalidRequest
+        CapabilityFailureCode::INVALID_REQUEST
     );
     let mut next = query;
     next.offset = 1;
@@ -1059,7 +1059,7 @@ fn agent_graph_execution_inherits_dependency_reads_and_preserves_explicit_versio
     }
     let context = fixture.context.clone();
     let run = AutomationCapabilityRequest::ExecuteGraph(ExecuteGraphRequest {
-        demand: yss_harness_contract::GraphExecutionDemand::Default,
+        demand: yss_assistant_contract::GraphExecutionDemand::Default,
         graph: GraphResourceRef::for_path(fixture.path.clone()),
         graph_hash: created.graph_hash,
     });
@@ -1309,9 +1309,9 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
             ExecuteGraphRequest {
                 graph: GraphResourceRef::for_path(fixture.path.clone()),
                 graph_hash: created.graph_hash.clone(),
-                demand: yss_harness_contract::GraphExecutionDemand::Node {
+                demand: yss_assistant_contract::GraphExecutionDemand::Node {
                     node_id: created.created_nodes["product"].clone(),
-                    mode: yss_harness_contract::NodeExecutionMode::CurrentInputs,
+                    mode: yss_assistant_contract::NodeExecutionMode::CurrentInputs,
                 },
             },
         ))
@@ -1327,7 +1327,7 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
                 ExecuteGraphRequest {
                     graph: GraphResourceRef::for_path(fixture.path.clone()),
                     graph_hash: created.graph_hash.clone(),
-                    demand: yss_harness_contract::GraphExecutionDemand::Node {
+                    demand: yss_assistant_contract::GraphExecutionDemand::Node {
                         node_id: created.created_nodes[alias].clone(),
                         mode,
                     },
@@ -1339,7 +1339,7 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
         };
         result
     };
-    use yss_harness_contract::NodeExecutionMode::{CurrentInputs, Dependencies};
+    use yss_assistant_contract::{NodeExecutionMode::{CurrentInputs, Dependencies}};
     let projected = run_node("project", Dependencies);
     assert_eq!(
         projected.status, "succeeded",
@@ -1625,7 +1625,7 @@ fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
     let AutomationCapabilityResult::GraphExecution(run) = f
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
-                demand: yss_harness_contract::GraphExecutionDemand::Default,
+                demand: yss_assistant_contract::GraphExecutionDemand::Default,
                 graph: GraphResourceRef::for_path(f.path.clone()),
                 graph_hash: created.graph_hash,
             },
@@ -1689,7 +1689,7 @@ fn execute_graph_reports_when_its_result_references_are_bounded() {
     let AutomationCapabilityResult::GraphExecution(run) = f
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
-                demand: yss_harness_contract::GraphExecutionDemand::Default,
+                demand: yss_assistant_contract::GraphExecutionDemand::Default,
                 graph: GraphResourceRef::for_path(f.path.clone()),
                 graph_hash: graph_hash(&f.document).unwrap(),
             },
@@ -1742,7 +1742,7 @@ fn graph_edit_receipts_admit_large_batches_and_reject_oversized_facts_before_com
     );
     assert_eq!(
         f.action(request.clone()).unwrap_err().code,
-        CapabilityFailureCode::ResultTooLarge
+        CapabilityFailureCode::RESULT_TOO_LARGE
     );
     assert_eq!(f.inspect(), before);
     assert_eq!(std::fs::read(&saved_path).unwrap(), before_file);
@@ -1772,7 +1772,7 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
         f.action(f.edit_request(vec![node("yssbi.debug.view", "rejected")]))
             .unwrap_err()
             .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     assert_eq!(
         f.document, unchanged,
@@ -1893,7 +1893,7 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
     }]);
     assert_eq!(
         f.action(stale).unwrap_err().code,
-        CapabilityFailureCode::GraphDraftChanged
+        yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED
     );
     f.edit(vec![GraphEditOperation::DeleteNodes {
         node_ids: vec![id.clone(), created.created_nodes["view"].clone()],

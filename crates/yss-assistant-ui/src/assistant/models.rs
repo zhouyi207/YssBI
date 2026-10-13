@@ -12,10 +12,7 @@ use gpui_kit::{
     div, prelude::*, px,
 };
 use std::sync::Arc;
-use yss_harness_contract::{
-    LanguageModelAuthentication, LanguageModelCatalog, LanguageModelConfig,
-    LanguageModelProviderStatus, LanguageModelSelection,
-};
+use yss_harness_contract::{LanguageModelAuthentication, LanguageModelCatalog, LanguageModelConfig, LanguageModelProviderStatus, LanguageModelSelection};
 use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]

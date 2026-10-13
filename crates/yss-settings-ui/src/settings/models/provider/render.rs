@@ -10,9 +10,7 @@ use gpui_kit::component::{
     setting::{SettingGroup, SettingItem},
 };
 use gpui_kit::{Context, IntoElement, div, prelude::*};
-use yss_harness_contract::{
-    LanguageModelAuthentication as Authentication, LanguageModelProtocol as Protocol,
-};
+use yss_harness_contract::{LanguageModelAuthentication as Authentication, LanguageModelProtocol as Protocol};
 use yss_ui::lifecycle::LogReleased;
 use yss_ui::text::translate as t;
 

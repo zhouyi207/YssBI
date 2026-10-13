@@ -106,7 +106,7 @@ fn catalog_pages_filter_before_projection_and_resolve_exact_type_batches() {
             },
         ))
         .unwrap_err();
-    assert_eq!(error.code, CapabilityFailureCode::CatalogUnavailable);
+    assert_eq!(error.code, yss_assistant_contract::failure_code::CATALOG_UNAVAILABLE);
 
     for query in ["to_numeric", "YSSBI.VALUE.TO_NUMERIC"] {
         let AutomationCapabilityResult::NodeCatalogPage(page) = f
@@ -674,7 +674,7 @@ fn conditional_graph_reads_bind_query_pages_and_current_edit_and_dependency_iden
         ))
         .unwrap_err()
         .code,
-        CapabilityFailureCode::InvalidRequest
+        CapabilityFailureCode::INVALID_REQUEST
     );
 
     // A dataset schema change leaves the graph document/version unchanged, but changes its semantics.

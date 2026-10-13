@@ -1,5 +1,5 @@
 use super::*;
-use yss_harness_contract::model::*;
+use yss_assistant_contract::model::*;
 
 fn command(f: &Fixture, input: GraphMutationInput) -> AutomationCapabilityRequest {
     AutomationCapabilityRequest::GraphMutation(GraphMutationRequest {
@@ -229,7 +229,7 @@ fn explicit_authoring_batches_keep_pin_order_connection_identity_and_atomic_hist
     let failure = f
         .action(command(&f, GraphMutationInput::CreateNodes(invalid)))
         .unwrap_err();
-    assert_eq!(failure.code, CapabilityFailureCode::MutationRejected);
+    assert_eq!(failure.code, CapabilityFailureCode::MUTATION_REJECTED);
     assert_eq!(f.inspect().nodes.len(), 0);
     assert_eq!(f.document, before);
     for (reference, reason) in [
@@ -241,7 +241,7 @@ fn explicit_authoring_batches_keep_pin_order_connection_identity_and_atomic_hist
         let failure = f
             .action(command(&f, GraphMutationInput::CreateNodes(invalid)))
             .unwrap_err();
-        assert_eq!(failure.code, CapabilityFailureCode::InvalidRequest);
+        assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
         assert_eq!(failure.details["reason"], reason);
         assert!(failure.details["nextStep"].contains("$clientId"));
         assert_eq!(f.document, before);

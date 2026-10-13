@@ -7,9 +7,8 @@ use super::{
 use gpui_kit::{App, Context, IntoElement, RenderOnce, SharedString, Task, WeakEntity, Window};
 use std::sync::Arc;
 use yss_desktop_services::resources::ResourceCatalog;
-use yss_harness_contract::{
-    AssistantToolIdentity, AssistantToolInspection, ProjectResourceRef, ToolInvocationId,
-};
+use yss_harness_contract::{ProjectResourceRef, ToolInvocationId};
+use yss_assistant_contract::{AssistantToolIdentity, AssistantToolInspection};
 use yss_ui::lifecycle::LogReleased;
 
 #[derive(IntoElement, Clone)]
@@ -124,7 +123,7 @@ impl Inspection {
         let session = owner.session.id.clone();
         let project = owner.session.project.clone();
         let generation = self.card.generation;
-        let kind = self.card.tool.kind;
+        let kind = self.card.tool.kind.clone();
         let requested_session = session.clone();
         self.loading = Loading::Reading;
         let job = services.tasks.executor().clone().spawn(async move {

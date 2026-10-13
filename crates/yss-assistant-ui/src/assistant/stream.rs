@@ -4,7 +4,8 @@ use gpui_kit::{Context, Window};
 use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
 use yss_desktop_services::DesktopEvent;
-use yss_harness_contract::{AssistantEvent, HarnessEvent, HarnessEventEnvelope};
+use yss_harness_contract::{HarnessEvent, HarnessEventEnvelope};
+use yss_assistant_contract::AssistantEvent;
 use yss_ui::lifecycle::LogReleased;
 
 impl ConversationPanel {
@@ -53,9 +54,9 @@ impl ConversationPanel {
         }
         self.accept_submission(&event);
         let directory_changed = matches!(event.event, HarnessEvent::TurnStarted { .. });
-        if self
-            .transcript
-            .accept(AssistantEvent::from(&event))
+        if AssistantEvent::try_from(&event)
+            .map_err(|_| ())
+            .and_then(|event| self.transcript.accept(event))
             .is_err()
         {
             self.recover(window, cx);
@@ -138,7 +139,10 @@ impl ConversationPanel {
                         let mut continuous = !view.overflow;
                         for event in events.iter().chain(view.buffered.iter()) {
                             if event.session_id != session.id
-                                || candidate.accept(AssistantEvent::from(event)).is_err()
+                                || AssistantEvent::try_from(event)
+                                    .map_err(|_| ())
+                                    .and_then(|event| candidate.accept(event))
+                                    .is_err()
                             {
                                 continuous = false;
                                 break;

@@ -10,7 +10,7 @@ use yss_graph_execution::{
     identity::ExecutionSessionId,
     result::{ResultId, ResultReference},
 };
-use yss_harness_contract::{AssistantResultReference, ResourceChange};
+use yss_assistant_contract::{AssistantResultReference, ResourceChange};
 use yss_ui::lifecycle::LogReleased;
 
 pub(super) fn cards(

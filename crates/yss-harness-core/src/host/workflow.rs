@@ -1,9 +1,9 @@
-use crate::tools::HarnessToolExecutor;
-use crate::{CompiledWorkflow, HarnessError, HarnessHost, ToolRegistry, WorkflowRuntime};
+use crate::tools::{HarnessToolExecutor, InvocationScope, ToolRegistry};
+use crate::{CompiledWorkflow, HarnessError, HarnessHost, WorkflowRuntime};
 use std::sync::{Arc, Mutex, Weak};
 use yss_harness_contract::{
-    AutomationIdKind, CancellationReason, CancellationToken, CapabilityFailureCode, HarnessEvent,
-    HarnessSessionId, HarnessSessionState, HarnessTurnId, WorkflowRunId, WorkflowRunRecord,
+    AutomationIdKind, CancellationReason, CancellationToken, HarnessEvent, HarnessSessionId,
+    HarnessSessionState, HarnessTurnId, PreparedToolCall, WorkflowRunId, WorkflowRunRecord,
     WorkflowRunState,
 };
 
@@ -108,7 +108,7 @@ impl HarnessHost {
             .load_definition(&run.definition_id, &run.definition_version)
             .await?
             .ok_or(HarnessError::WorkflowDefinitionNotFound)?;
-        let compiled = CompiledWorkflow::compile(definition)?;
+        let compiled = CompiledWorkflow::compile(definition, self.ports.extension.as_ref())?;
         let was_planned = run.state == WorkflowRunState::Planned;
         if matches!(
             run.state,
@@ -152,7 +152,10 @@ impl HarnessHost {
             .iter()
             .find(|step| step.id == step_id)
             .ok_or(HarnessError::WorkflowDefinitionNotFound)?;
-        let request = &step.request;
+        let spec = compiled
+            .tool(&step_id)
+            .cloned()
+            .ok_or(HarnessError::WorkflowDefinitionNotFound)?;
         let turn_id = run
             .turn_id
             .clone()
@@ -178,25 +181,32 @@ impl HarnessHost {
                 },
             )
             .await?;
-        let executor = HarnessToolExecutor::new_for_workflow(
-            ToolRegistry::for_capability(request.capability_id()),
-            Arc::clone(&self.ports.capability_gateway),
-            Arc::clone(&self.knowledge),
-            Arc::clone(&self.ports.tool_ledger),
-            Arc::clone(&self.ports.clock),
-            Arc::clone(&self.ports.ids),
-            session.principal_id,
-            run.session_id.clone(),
-            turn_id.clone(),
-            run.project.clone(),
+        let call = PreparedToolCall {
+            tool: step.tool.clone(),
+            arguments: self
+                .ports
+                .extension
+                .project_arguments(&step.tool, &step.request),
+            request: step.request.clone(),
+            idempotency_token: None,
+            internal: true,
+        };
+        let executor = HarnessToolExecutor::new(
+            ToolRegistry::new([spec]),
+            self.tool_services(),
+            InvocationScope {
+                principal_id: session.principal_id,
+                session_id: run.session_id.clone(),
+                turn_id: turn_id.clone(),
+                project: run.project.clone(),
+            },
             admission.cancellation.clone(),
-            run.id.clone(),
-            step_id.clone(),
-        );
+        )
+        .for_workflow(run.id.clone(), step_id.clone());
         // Pause/cancel can acquire the transition gate while the owner
         // waits on the capability. A second advance still cannot enter.
         drop(transition);
-        let outcome = executor.execute(request.clone(), None).await;
+        let outcome = executor.execute(call, executor.now()).await;
         let _completion = control.transitions.lock().await;
         let current = self
             .ports
@@ -258,7 +268,7 @@ impl HarnessHost {
                 }
             }
             Err(failure) => {
-                let retriable = workflow_failure_is_retriable(failure.code);
+                let retriable = self.ports.extension.failure_is_transient(&failure);
                 WorkflowRuntime::fail_step(&mut run, &step_id, retriable, self.ports.clock.now())?;
                 self.persist_workflow(&mut run).await?;
                 self.event_writer()
@@ -385,7 +395,7 @@ impl HarnessHost {
                 .load_definition(&run.definition_id, &run.definition_version)
                 .await?
                 .ok_or(HarnessError::WorkflowDefinitionNotFound)?;
-            let compiled = CompiledWorkflow::compile(definition)?;
+            let compiled = CompiledWorkflow::compile(definition, self.ports.extension.as_ref())?;
             WorkflowRuntime::recover_interrupted(&compiled, &mut run, self.ports.clock.now())?;
             if run.state != WorkflowRunState::Failed {
                 let current = self.ports.sessions.load_session(&run.session_id).await?;
@@ -429,21 +439,6 @@ impl HarnessHost {
             .await?;
         Ok(())
     }
-}
-
-fn workflow_failure_is_retriable(code: CapabilityFailureCode) -> bool {
-    matches!(
-        code,
-        CapabilityFailureCode::ProjectSessionUnavailable
-            | CapabilityFailureCode::ProjectSessionChanged
-            | CapabilityFailureCode::GraphUnavailable
-            | CapabilityFailureCode::DatabaseUnavailable
-            | CapabilityFailureCode::CatalogUnavailable
-            | CapabilityFailureCode::ResultUnavailable
-            | CapabilityFailureCode::DeadlineElapsed
-            | CapabilityFailureCode::PersistenceUnavailable
-            | CapabilityFailureCode::InternalFailure
-    )
 }
 
 #[derive(Default)]

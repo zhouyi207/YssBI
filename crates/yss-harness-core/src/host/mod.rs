@@ -1,13 +1,12 @@
 //! Session and turn entry points and their shared runtime state.
 
 use crate::events::EventWriter;
-use crate::skills::{STATISTICAL_REPORT_WRITING_ID, STATISTICAL_REPORT_WRITING_VERSION};
-use crate::{HarnessError, HarnessPorts, SkillRegistry};
+use crate::tools::ToolServices;
+use crate::{HarnessError, HarnessPorts};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 use yss_harness_contract::{
-    AgentDriverFailureCode, CancellationToken, HarnessEventEnvelope, HarnessSessionId, SkillId,
-    SkillPackage, SkillVersion, WorkflowRunId,
+    CancellationToken, HarnessEventEnvelope, HarnessSessionId, WorkflowRunId,
 };
 
 mod approval;
@@ -21,7 +20,6 @@ use workflow::WorkflowControl;
 pub struct HarnessHost {
     ports: HarnessPorts,
     knowledge: Arc<crate::KnowledgeService>,
-    report_writing_skill: SkillPackage,
     active_turns: Arc<Mutex<BTreeMap<HarnessSessionId, CancellationToken>>>,
     session_access: tokio::sync::Mutex<()>,
     event_publication: Arc<tokio::sync::Mutex<()>>,
@@ -57,29 +55,28 @@ impl HarnessHost {
     }
 
     pub fn new(ports: HarnessPorts) -> Result<Self, HarnessError> {
-        let report_writing_skill = SkillRegistry::with_builtins()
-            .and_then(|registry| {
-                registry
-                    .resolve_exact(
-                        &SkillId::try_new(STATISTICAL_REPORT_WRITING_ID)?,
-                        &SkillVersion::try_new(STATISTICAL_REPORT_WRITING_VERSION)?,
-                    )
-                    .cloned()
-            })
-            .map_err(|_| HarnessError::Agent(AgentDriverFailureCode::InternalFailure))?;
         Ok(Self {
             knowledge: Arc::new(crate::KnowledgeService::new(
                 ports.knowledge.clone(),
                 ports.knowledge_index.clone(),
             )),
             ports,
-            report_writing_skill,
             active_turns: Arc::new(Mutex::new(BTreeMap::new())),
             session_access: tokio::sync::Mutex::new(()),
             event_publication: Arc::new(tokio::sync::Mutex::new(())),
             workflow_controls: Mutex::new(BTreeMap::new()),
             agent_access: Arc::new(tokio::sync::RwLock::new(())),
         })
+    }
+
+    fn tool_services(&self) -> ToolServices {
+        ToolServices {
+            extension: Arc::clone(&self.ports.extension),
+            knowledge: Arc::clone(&self.knowledge),
+            ledger: Arc::clone(&self.ports.tool_ledger),
+            clock: Arc::clone(&self.ports.clock),
+            ids: Arc::clone(&self.ports.ids),
+        }
     }
 
     fn event_writer(&self) -> EventWriter {

@@ -42,6 +42,7 @@ yss-node-catalog = { path = "../yss-node-catalog" }
 yss-plugin-runtime = { path = "../yss-plugin-runtime" }
 yss-chart-document = { path = "../yss-chart-document" }
 yss-harness-contract = { path = "../yss-harness-contract" }
+yss-assistant-contract = { path = "../yss-assistant-contract" }
 yss-ui-contract = { path = "../yss-ui-contract" }
 yss-filesystem = { path = "../yss-filesystem" }
 yss-settings = { path = "../yss-settings" }

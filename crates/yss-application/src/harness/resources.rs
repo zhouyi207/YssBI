@@ -1,11 +1,7 @@
 //! Project-owned reference lookup on the blocking pool, under Core turn cancellation.
 
 use crate::session::ApplicationState;
-use yss_harness_contract::{
-    AgentFuture, CancellationToken, CapabilityFailure, CapabilityFailureCode,
-    HarnessResourceReference, HarnessResourceResolverPort, ProjectResourceRef,
-    ProjectSessionBinding,
-};
+use yss_harness_contract::{AgentFuture, CancellationToken, CapabilityFailure, CapabilityFailureCode, HarnessResourceReference, HarnessResourceResolverPort, ProjectResourceRef, ProjectSessionBinding};
 
 pub struct ApplicationResourceResolver(pub ApplicationState);
 
@@ -22,16 +18,16 @@ impl HarnessResourceResolverPort for ApplicationResourceResolver {
         Box::pin(async move {
             tokio::task::spawn_blocking(move || {
                 if cancellation.is_cancelled() {
-                    return Err(CapabilityFailure::new(CapabilityFailureCode::Cancelled));
+                    return Err(CapabilityFailure::new(CapabilityFailureCode::CANCELLED));
                 }
                 let result = application.resolve_harness_resources(&project, &resources);
                 if cancellation.is_cancelled() {
-                    return Err(CapabilityFailure::new(CapabilityFailureCode::Cancelled));
+                    return Err(CapabilityFailure::new(CapabilityFailureCode::CANCELLED));
                 }
                 result
             })
             .await
-            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?
+            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::INTERNAL_FAILURE))?
         })
     }
 }

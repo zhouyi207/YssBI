@@ -1,6 +1,6 @@
 //! Markdown tool adapters over the original document snapshot and File Edit/Save lifecycle.
 use super::*;
-use yss_harness_contract::model::{DocumentCharacterRange, DocumentSectionRef};
+use yss_assistant_contract::{model::{DocumentCharacterRange, DocumentSectionRef}};
 
 mod read;
 mod text;

@@ -31,7 +31,7 @@ pub(in crate::automation::graph) fn base(
         ),
     )
     .map(hex::encode)
-    .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?;
+    .map_err(|_| graph_failure(CapabilityFailureCode::INTERNAL_FAILURE))?;
     Ok(result)
 }
 

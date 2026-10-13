@@ -10,12 +10,9 @@ pub use resources::ApplicationResourceResolver;
 
 use std::sync::Arc;
 use thiserror::Error;
-use yss_harness_contract::{
-    HarnessSessionId, HarnessSessionRecord, PrincipalId, ProjectSessionBinding,
-};
-use yss_harness_core::{
-    HarnessError, HarnessHost, HarnessPorts, KnowledgeError, install_builtin_statistical_knowledge,
-};
+use yss_harness_contract::{HarnessSessionId, HarnessSessionRecord, PrincipalId, ProjectSessionBinding};
+use yss_assistant_extension::{KnowledgeError, install_builtin_statistical_knowledge};
+use yss_harness_core::{HarnessError, HarnessHost, HarnessPorts};
 
 use crate::session::{ApplicationSession, ApplicationState, SessionCaptureError};
 
@@ -235,10 +232,7 @@ mod concurrency_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_harness_contract::{
-        HarnessSessionState, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
-        HarnessTurnState, UnixMillis,
-    };
+    use yss_harness_contract::{HarnessSessionState, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord, HarnessTurnState, UnixMillis};
     use yss_harness_core::test_support::{
         FixedClock, InMemoryHarnessStore, MockAgentDriver, RejectingCapabilityGateway,
         SequentialIds,

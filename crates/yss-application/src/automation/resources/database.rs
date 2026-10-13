@@ -207,7 +207,7 @@ pub(super) fn edit_operation(edit: ResourceEdit) -> Result<(DatabaseMutation, us
         }
         _ => {
             return Err(CapabilityFailure::new(
-                CapabilityFailureCode::InvalidRequest,
+                CapabilityFailureCode::INVALID_REQUEST,
             ));
         }
     })

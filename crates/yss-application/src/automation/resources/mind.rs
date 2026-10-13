@@ -77,7 +77,7 @@ pub(super) fn edit_mind(
         > MAX_CAPABILITY_RESULT_BYTES - 65_536
     {
         return Err(
-            CapabilityFailure::new(CapabilityFailureCode::ResultTooLarge).with_detail(
+            CapabilityFailure::new(CapabilityFailureCode::RESULT_TOO_LARGE).with_detail(
                 "nextStep",
                 "Use a smaller subtree batch so the exact topic mapping fits in one receipt.",
             ),

@@ -1,22 +1,9 @@
-//! Provider message mapping and the shared live/replay tool-result encoding.
+//! Provider message mapping for replayed Harness history.
 
 use crate::error::invalid_response;
 use rig_core::completion::Message;
 use rig_core::completion::message::{AssistantContent, CallId, ToolCall, ToolFunction, ToolName};
-use yss_harness_contract::{
-    AgentDriverFailure, AgentDriverFailureCode, AgentMessage, CapabilityFailure,
-};
-
-pub(crate) fn tool_result_json(
-    outcome: Result<yss_harness_contract::AutomationCapabilityResult, CapabilityFailure>,
-) -> Result<serde_json::Value, serde_json::Error> {
-    match outcome {
-        Ok(result) => yss_harness_contract::model::capability_result(&result),
-        Err(failure) => Ok(
-            serde_json::json!({"state": "failed", "failure": yss_harness_contract::model::failure(&failure)}),
-        ),
-    }
-}
+use yss_harness_contract::{AgentDriverFailure, AgentMessage};
 
 #[derive(Clone)]
 pub(crate) struct PreparedMessages {
@@ -99,28 +86,6 @@ pub(crate) fn prepare_messages(
             AgentMessage::CompactionCheckpoint { checkpoint } => {
                 compaction_checkpoint = Some(checkpoint)
             }
-            AgentMessage::DelegationCall { run_id, task } => {
-                let call = ToolCall::new(
-                    CallId::from_wire(run_id.to_string()),
-                    ToolFunction::new(
-                        ToolName::new("delegate_task").map_err(|_| invalid_response())?,
-                        serde_json::to_value(yss_harness_contract::model::AgentTaskInput::from(
-                            &task,
-                        ))
-                        .map_err(|_| invalid_response())?,
-                    ),
-                );
-                pending.push_call(call)?;
-            }
-            AgentMessage::DelegationResult { outcome } => {
-                let id = outcome.run_id.to_string();
-                let result = Message::tool_result(
-                    CallId::from_wire(id.clone()),
-                    ToolName::new("delegate_task").map_err(|_| invalid_response())?,
-                    yss_harness_contract::model::task_outcome(&outcome).to_string(),
-                );
-                pending.resolve(&id, "delegate_task", result, &mut conversation)?;
-            }
             AgentMessage::System { content } => preamble.push(content),
             AgentMessage::User { content } => {
                 if !pending.calls.is_empty() {
@@ -133,14 +98,13 @@ pub(crate) fn prepare_messages(
             }
             AgentMessage::ToolCall {
                 invocation_id,
-                request,
+                tool,
+                arguments,
             } => {
-                let name = request.capability_id().as_str().to_owned();
-                let arguments = request.model_arguments().map_err(|_| invalid_response())?;
                 let call = ToolCall::new(
-                    CallId::from_wire(invocation_id.to_string()),
+                    CallId::from_wire(invocation_id),
                     ToolFunction::new(
-                        ToolName::new(name).map_err(|_| invalid_response())?,
+                        ToolName::new(tool).map_err(|_| invalid_response())?,
                         arguments,
                     ),
                 );
@@ -148,28 +112,15 @@ pub(crate) fn prepare_messages(
             }
             AgentMessage::ToolResult {
                 invocation_id,
-                capability_id,
-                outcome,
+                tool,
+                output,
             } => {
-                let result = tool_result_json(outcome).map_err(|_| {
-                    AgentDriverFailure::new(AgentDriverFailureCode::InternalFailure)
-                })?;
-                let id = invocation_id.to_string();
                 let result = Message::tool_result(
-                    CallId::from_wire(id.clone()),
-                    ToolName::new(capability_id.as_str()).map_err(|_| invalid_response())?,
-                    result.to_string(),
+                    CallId::from_wire(invocation_id.clone()),
+                    ToolName::new(tool.clone()).map_err(|_| invalid_response())?,
+                    output.to_string(),
                 );
-                pending.resolve(&id, capability_id.as_str(), result, &mut conversation)?;
-            }
-            AgentMessage::Plan { plan } => {
-                pending.push_assistant(
-                    Message::assistant(format!(
-                        "[Statistical plan]\n{}",
-                        serde_json::to_string(&plan).map_err(|_| invalid_response())?
-                    )),
-                    &mut conversation,
-                );
+                pending.resolve(&invocation_id, &tool, result, &mut conversation)?;
             }
         }
     }

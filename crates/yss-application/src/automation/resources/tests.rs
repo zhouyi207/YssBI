@@ -45,7 +45,7 @@ fn message_references_use_project_identity_and_reject_missing_or_foreign_resourc
             .resolve_harness_resources(&binding, &[doc.clone(), doc.clone()])
             .unwrap_err()
             .code,
-        CapabilityFailureCode::InvalidRequest
+        CapabilityFailureCode::INVALID_REQUEST
     );
     let foreign = ProjectSessionBinding::new(
         yss_project_identity::ProjectInstanceId::from_existing("other-project".into()),
@@ -56,7 +56,7 @@ fn message_references_use_project_identity_and_reject_missing_or_foreign_resourc
             .resolve_harness_resources(&foreign, std::slice::from_ref(&graph))
             .unwrap_err()
             .code,
-        CapabilityFailureCode::ProjectSessionChanged
+        CapabilityFailureCode::PROJECT_SESSION_CHANGED
     );
     let version = fixture.inspect(&doc).version;
     fixture.manage(ManageResourceRequest::Delete {
@@ -68,7 +68,7 @@ fn message_references_use_project_identity_and_reject_missing_or_foreign_resourc
             .resolve_harness_resources(&binding, &[doc])
             .unwrap_err()
             .code,
-        CapabilityFailureCode::ResourceUnavailable
+        CapabilityFailureCode::RESOURCE_UNAVAILABLE
     );
     assert_eq!(
         application
@@ -127,7 +127,7 @@ fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_at_gate
                 ManageResourceRequest::Save { resource, version },
             ))
             .unwrap_err();
-        assert_eq!(failure.code, CapabilityFailureCode::InvalidRequest);
+        assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
     }
     fixture
         .call(AutomationCapabilityRequest::ManageResource(
@@ -407,7 +407,7 @@ fn lifecycle_receipts_continue_at_the_committed_identity_without_content_reads()
             },
         ))
         .unwrap_err();
-    assert_eq!(failed.code, CapabilityFailureCode::MutationRejected);
+    assert_eq!(failed.code, CapabilityFailureCode::MUTATION_REJECTED);
     let saved = f.manage(ManageResourceRequest::Save {
         resource: copy.resource,
         version: copy.version,
@@ -585,7 +585,7 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
                 ))
                 .unwrap_err()
                 .code,
-                CapabilityFailureCode::ResourceUnavailable
+                CapabilityFailureCode::RESOURCE_UNAVAILABLE
             );
         }
     }
@@ -644,7 +644,7 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
         ))
         .unwrap_err()
         .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     let inserted = f.edit(
         &resource,
@@ -804,7 +804,7 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
         ))
         .unwrap_err()
         .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     assert_eq!(std::fs::read_to_string(&output).unwrap(), exported);
     let version = f.inspect(&resource).version;
@@ -898,7 +898,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         ))
         .unwrap_err()
         .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     let event = f.create(ResourceCreation::EventGraph {
         name: "Main".into(),

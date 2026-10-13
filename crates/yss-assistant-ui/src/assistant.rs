@@ -33,10 +33,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
-use yss_harness_contract::{
-    HarnessEventEnvelope, HarnessSessionRecord, HarnessTurnOptions, LanguageModelCatalog,
-    LanguageModelSelection, PrincipalId, ProjectResourceRef,
-};
+use yss_harness_contract::{HarnessEventEnvelope, HarnessSessionRecord, HarnessTurnOptions, LanguageModelCatalog, LanguageModelSelection, PrincipalId, ProjectResourceRef};
 
 actions!(native_assistant, [CancelResponse]);
 

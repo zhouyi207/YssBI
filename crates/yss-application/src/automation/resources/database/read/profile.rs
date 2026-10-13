@@ -1,6 +1,6 @@
 //! Explicit profile projection; runtime DTOs never enter the tool ledger directly.
 use yss_dataset_profile::{ColumnDistribution, ColumnStats};
-use yss_harness_contract::model::*;
+use yss_assistant_contract::model::*;
 
 pub(super) fn project(
     snapshot: yss_database_runtime::session_api::DatabaseProfileSnapshot,

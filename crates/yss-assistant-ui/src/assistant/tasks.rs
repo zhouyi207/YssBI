@@ -9,7 +9,8 @@ use gpui_kit::component::{
     text::TextView,
 };
 use gpui_kit::{AnyElement, Context, Empty, IntoElement, SharedString, div, prelude::*};
-use yss_harness_contract::{AgentRole, AgentRunState, AnalysisMode, StatisticalPlan};
+use yss_harness_contract::AgentRunState;
+use yss_assistant_contract::{AgentRole, AnalysisMode, StatisticalPlan};
 
 impl ConversationPanel {
     pub(super) fn task_card(

@@ -12811,6 +12811,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "yss-assistant-contract",
+ "yss-assistant-extension",
  "yss-canonical-hash",
  "yss-chart-document",
  "yss-data-contract",
@@ -12860,6 +12862,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-assistant-contract"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "yss-chart-document",
+ "yss-data-contract",
+ "yss-harness-contract",
+ "yss-project-identity",
+ "yss-ui-contract",
+]
+
+[[package]]
+name = "yss-assistant-extension"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "yss-assistant-contract",
+ "yss-canonical-hash",
+ "yss-harness-contract",
+ "yss-harness-core",
+ "yss-harness-tantivy",
+ "yss-project-identity",
+]
+
+[[package]]
 name = "yss-assistant-ui"
 version = "0.5.0"
 dependencies = [
@@ -12872,6 +12909,7 @@ dependencies = [
  "url",
  "uuid",
  "yss-application",
+ "yss-assistant-contract",
  "yss-desktop-services",
  "yss-graph-execution",
  "yss-harness-contract",
@@ -13069,6 +13107,7 @@ dependencies = [
  "tracing",
  "uuid",
  "yss-application",
+ "yss-assistant-contract",
  "yss-harness-contract",
  "yss-project",
  "yss-project-identity",
@@ -13283,15 +13322,12 @@ dependencies = [
 name = "yss-harness-contract"
 version = "0.1.0"
 dependencies = [
- "hex",
  "schemars",
  "serde",
  "serde_json",
+ "serde_path_to_error",
  "thiserror 2.0.20",
- "yss-chart-document",
- "yss-data-contract",
  "yss-project-identity",
- "yss-ui-contract",
 ]
 
 [[package]]
@@ -13817,6 +13853,7 @@ dependencies = [
  "tracing",
  "uuid",
  "yss-application",
+ "yss-assistant-contract",
  "yss-assistant-ui",
  "yss-chart-document",
  "yss-data-ui",

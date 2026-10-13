@@ -1,6 +1,6 @@
 //! Shared presentation of the workbench's accepted project index.
 use std::collections::BTreeMap;
-use yss_harness_contract::ResourceRevisionKind;
+use yss_assistant_contract::ResourceRevisionKind;
 use yss_project::ProjectIndex;
 use yss_project_identity::{
     ProjectInstanceId, ProjectResourceKind as Kind, ProjectResourceRef, ResourceRevision,

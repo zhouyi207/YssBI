@@ -11,6 +11,7 @@ use yss_graph_execution::{
     result::{ResultId, ResultReadSnapshot, ResultReference, StoredResultSnapshot},
     run_registry::RunId,
 };
+use yss_assistant_contract::*;
 use yss_harness_contract::*;
 use yss_node_kernel::RuntimeValue;
 
@@ -241,8 +242,10 @@ fn selected_columns(
         .map(|&i| schema[i].name.to_string())
         .collect::<Vec<_>>();
     if names.is_empty() && !schema.is_empty() {
-        return Err(CapabilityContractError::InvalidField("columnOffset")
-            .into_failure(CapabilityId::ReadResultTable));
+        return Err(contract_failure(
+            CapabilityContractError::InvalidField("columnOffset"),
+            CapabilityId::ReadResultTable,
+        ));
     }
     let page = InspectionPage::known(request.column_offset, names.len(), candidates.len());
     Ok((names, page))
@@ -272,7 +275,7 @@ pub(super) fn list_results(
     request: ListGraphResultsRequest,
 ) -> Result<GraphResults, CapabilityFailure> {
     let path = GraphResourcePath::new(&request.graph.id)
-        .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InvalidRequest))?;
+        .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST))?;
     let catalog = super::resources::read_index(captured)?;
     let resource = request.graph.resource();
     if GraphResourceRef::for_path(path.as_str()).kind != request.graph.kind
@@ -282,7 +285,7 @@ pub(super) fn list_results(
             .any(|entry| entry.resource == resource)
     {
         return Err(CapabilityFailure::new(
-            CapabilityFailureCode::GraphUnavailable,
+            yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE,
         ));
     }
     let nodes = request
@@ -291,8 +294,10 @@ pub(super) fn list_results(
         .map(|id| uuid::Uuid::parse_str(id).map(|id| id.to_string()))
         .collect::<Result<BTreeSet<_>, _>>()
         .map_err(|_| {
-            CapabilityContractError::InvalidField("nodeIds")
-                .into_failure(CapabilityId::ListGraphResults)
+            contract_failure(
+                CapabilityContractError::InvalidField("nodeIds"),
+                CapabilityId::ListGraphResults,
+            )
         })?;
     let outputs = request
         .outputs
@@ -357,7 +362,7 @@ pub(super) fn list_results(
 }
 
 fn unavailable(reason: &str) -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable).with_detail("reason", reason)
+    CapabilityFailure::new(CapabilityFailureCode::RESULT_UNAVAILABLE).with_detail("reason", reason)
 }
 fn query_error(error: ResultQueryApplicationError) -> CapabilityFailure {
     use yss_relational_contract::RelationError;
@@ -365,17 +370,17 @@ fn query_error(error: ResultQueryApplicationError) -> CapabilityFailure {
         ResultQueryApplicationError::SessionChanged => unavailable("reference_expired"),
         ResultQueryApplicationError::PageTooLarge
         | ResultQueryApplicationError::Relation(RelationError::MemoryLimitExceeded) => {
-            CapabilityFailure::new(CapabilityFailureCode::ResultTooLarge)
+            CapabilityFailure::new(CapabilityFailureCode::RESULT_TOO_LARGE)
         }
         ResultQueryApplicationError::InvalidPageRequest => {
-            CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
+            CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
                 .with_detail("reason", "invalid_table_selection")
         }
         ResultQueryApplicationError::Relation(RelationError::Cancelled) => {
-            CapabilityFailure::new(CapabilityFailureCode::Cancelled)
+            CapabilityFailure::new(CapabilityFailureCode::CANCELLED)
         }
         ResultQueryApplicationError::Relation(RelationError::DeadlineExceeded) => {
-            CapabilityFailure::new(CapabilityFailureCode::DeadlineElapsed)
+            CapabilityFailure::new(CapabilityFailureCode::DEADLINE_ELAPSED)
         }
         _ => unavailable("result_unavailable"),
     }

@@ -1,6 +1,6 @@
 use crate::test_support::{
     FixedClock, FixtureResourceResolver, InMemoryHarnessStore, MockAgentDriver,
-    RejectingCapabilityGateway, SequentialIds, fixed_model,
+    SequentialIds, fixed_model,
 };
 use crate::{CompiledWorkflow, HarnessError, HarnessHost, HarnessPorts};
 use std::sync::Arc;
@@ -13,7 +13,7 @@ async fn deletion_requires_the_owner_and_an_idle_session_and_prevents_reopening(
     let host = HarnessHost::new(HarnessPorts {
         resources: Arc::new(FixtureResourceResolver),
         models: fixed_model(Arc::new(MockAgentDriver::new("unused"))),
-        capability_gateway: Arc::new(RejectingCapabilityGateway),
+        extension: Arc::new(crate::test_support::NoteExtension::default()),
         sessions: store.clone(),
         events: store.clone(),
         event_sink: store.clone(),
@@ -61,19 +61,19 @@ async fn deletion_requires_the_owner_and_an_idle_session_and_prevents_reopening(
     ));
     drop(admission);
 
-    let workflow = CompiledWorkflow::compile(WorkflowDefinition {
-        id: WorkflowId::try_new("inspect").unwrap(),
-        version: WorkflowVersion::try_new("1.0.0").unwrap(),
-        steps: vec![WorkflowStep {
-            id: WorkflowStepId::try_new("schema").unwrap(),
-            depends_on: vec![],
-            request: AutomationCapabilityRequest::InspectDatasetSchema(
-                InspectDatasetSchemaRequest {
-                    database_id: "data".into(),
-                },
-            ),
-        }],
-    })
+    let workflow = CompiledWorkflow::compile(
+        WorkflowDefinition {
+            id: WorkflowId::try_new("inspect").unwrap(),
+            version: WorkflowVersion::try_new("1.0.0").unwrap(),
+            steps: vec![WorkflowStep {
+                id: WorkflowStepId::try_new("read").unwrap(),
+                depends_on: vec![],
+                tool: crate::test_support::READ_NOTE.into(),
+                request: serde_json::json!({"id": "data"}),
+            }],
+        },
+        &crate::test_support::NoteExtension::default(),
+    )
     .unwrap();
     let run = host
         .plan_workflow(&session.id, None, &workflow)

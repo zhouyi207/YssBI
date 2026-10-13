@@ -16,6 +16,7 @@ use yss_graph_document::{
 };
 use yss_graph_editor::projection::*;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
+use yss_assistant_contract::*;
 use yss_harness_contract::*;
 use yss_node_catalog::LocalizedCatalogItem;
 use yss_node_protocol::PortKey;
@@ -32,12 +33,9 @@ pub fn invoke_graph_capability(
     control: &CapabilityControl,
 ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
     control.check()?;
-    if let Some(agent) = context.agent() {
-        yss_harness_core::authorize_agent_capability(agent, &request)?;
-    }
     request
         .validate()
-        .map_err(|error| error.into_failure(request.capability_id()))?;
+        .map_err(|error| contract_failure(error, request.capability_id()))?;
     let requested_graph = match &request {
         AutomationCapabilityRequest::GraphMutation(value) => Some(value.input.graph().clone()),
         AutomationCapabilityRequest::ValidateGraph(value) => Some(value.graph.clone()),
@@ -58,9 +56,9 @@ pub fn invoke_graph_capability(
     ensure_project_binding(&captured, &context)?;
     let path = GraphResourcePath::new(
         graph_action_path(&request)
-            .ok_or_else(|| graph_failure(CapabilityFailureCode::InvalidRequest))?,
+            .ok_or_else(|| graph_failure(CapabilityFailureCode::INVALID_REQUEST))?,
     )
-    .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+    .map_err(|_| graph_failure(CapabilityFailureCode::INVALID_REQUEST))?;
     if let Some(graph) = requested_graph {
         inspection::validate_graph_reference(&graph, &path)?;
     }
@@ -73,7 +71,7 @@ pub fn invoke_graph_capability(
         Some(
             captured
                 .coordinate_graph_edit(&path)
-                .map_err(|_| graph_failure(CapabilityFailureCode::InvocationConflict))?,
+                .map_err(|_| graph_failure(CapabilityFailureCode::INVOCATION_CONFLICT))?,
         )
     } else {
         None
@@ -89,7 +87,7 @@ pub fn invoke_graph_capability(
     } else {
         application.open_graph(open_request)
     }
-    .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+    .map_err(|_| graph_failure(yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE))?;
     let current = opened.editing();
     let document = opened.document();
     let projection = opened.projection();
@@ -103,7 +101,7 @@ pub fn invoke_graph_capability(
                 current.version.session_id,
                 identity.0,
             )
-            .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
+            .map_err(|_| graph_failure(yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE))?
         {
             return graph_edit_replay(receipt, edit, identity.1)
                 .map(AutomationCapabilityResult::GraphEditReceipt);
@@ -121,13 +119,13 @@ pub fn invoke_graph_capability(
         _ => None,
     };
     if expected.is_some_and(|expected| expected != &hash) {
-        return Err(graph_failure(CapabilityFailureCode::GraphDraftChanged));
+        return Err(graph_failure(yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED));
     }
     if context
         .graph_observation()
         .is_some_and(|expected| expected != hex::encode(projection.basis.semantic_input_hash))
     {
-        return Err(graph_failure(CapabilityFailureCode::RevisionConflict)
+        return Err(graph_failure(CapabilityFailureCode::REVISION_CONFLICT)
             .with_detail("reason", "graph_inputs_changed"));
     }
     let read_only = request.capability_id().descriptor().effect == ToolEffect::Inspect;
@@ -164,7 +162,7 @@ pub fn invoke_graph_capability(
         )?,
         AutomationCapabilityRequest::ApplyGraphEdit(request) => {
             if request.base_revision != current.version.revision.get() {
-                return Err(graph_failure(CapabilityFailureCode::GraphDraftChanged));
+                return Err(graph_failure(yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED));
             }
             let (operation_id, fingerprint) = edit_identity.expect("edit identity was prepared");
             let mut operation = captured
@@ -176,7 +174,7 @@ pub fn invoke_graph_capability(
                     operation_id,
                     fingerprint,
                 )
-                .map_err(|_| graph_failure(CapabilityFailureCode::GraphDraftChanged))?;
+                .map_err(|_| graph_failure(yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED))?;
             let before = inspect_projection(
                 &path,
                 document,
@@ -215,19 +213,19 @@ pub fn invoke_graph_capability(
                         .map(|(alias, port)| Ok((alias.clone(), parse_edit_port(port.clone())?)))
                         .collect::<Result<_, CapabilityFailure>>()?,
                     result_facts: serde_json::to_value(&receipt.changes)
-                        .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?,
+                        .map_err(|_| graph_failure(CapabilityFailureCode::INTERNAL_FAILURE))?,
                 })
-                .map_err(|_| graph_failure(CapabilityFailureCode::ResultTooLarge))?;
+                .map_err(|_| graph_failure(CapabilityFailureCode::RESULT_TOO_LARGE))?;
             control.check()?;
             let committed = captured
                 .project()
                 .save_graph_edit(operation, transform.document, transform.patch)
                 .map_err(|error| match error {
                     yss_project::ProjectGraphSaveError::Filesystem(_) => {
-                        graph_failure(CapabilityFailureCode::PersistenceUnavailable)
+                        graph_failure(CapabilityFailureCode::PERSISTENCE_UNAVAILABLE)
                     }
                     yss_project::ProjectGraphSaveError::Commit(_) => {
-                        graph_failure(CapabilityFailureCode::GraphDraftChanged)
+                        graph_failure(yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED)
                     }
                 })?;
             captured
@@ -276,17 +274,17 @@ pub fn invoke_graph_capability(
                 projection.basis.semantic_input_hash,
             )
             .with_demand(match &request.demand {
-                yss_harness_contract::GraphExecutionDemand::Default => {
+                yss_assistant_contract::GraphExecutionDemand::Default => {
                     crate::graph::run::RunDemand::Default
                 }
-                yss_harness_contract::GraphExecutionDemand::Node { node_id, mode } => {
+                yss_assistant_contract::GraphExecutionDemand::Node { node_id, mode } => {
                     crate::graph::run::RunDemand::Node {
                         node_id: parse_node_id(node_id)?,
                         mode: match mode {
-                            yss_harness_contract::NodeExecutionMode::CurrentInputs => {
+                            yss_assistant_contract::NodeExecutionMode::CurrentInputs => {
                                 yss_graph_execution::plan::NodeExecutionMode::CurrentInputs
                             }
-                            yss_harness_contract::NodeExecutionMode::Dependencies => {
+                            yss_assistant_contract::NodeExecutionMode::Dependencies => {
                                 yss_graph_execution::plan::NodeExecutionMode::Dependencies
                             }
                         },
@@ -299,7 +297,7 @@ pub fn invoke_graph_capability(
                 let task = agent
                     .task
                     .as_ref()
-                    .ok_or_else(|| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+                    .ok_or_else(|| graph_failure(CapabilityFailureCode::INVALID_REQUEST))?;
                 let authorizations = task
                     .resources
                     .iter()
@@ -317,8 +315,8 @@ pub fn invoke_graph_capability(
                             resource: yss_project::execution_authority::ProjectResourceId::new(
                                 resource.into_boxed_str(),
                             )
-                            .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?,
-                            access: if yss_harness_core::authorize_agent_resource(
+                            .map_err(|_| graph_failure(CapabilityFailureCode::INVALID_REQUEST))?,
+                            access: if yss_assistant_extension::authorize_agent_resource(
                                 agent,
                                 &entry.resource,
                                 AgentResourceOperation::Edit,
@@ -427,7 +425,7 @@ pub fn invoke_graph_capability(
                 results,
             })
         }
-        _ => return Err(graph_failure(CapabilityFailureCode::InvalidRequest)),
+        _ => return Err(graph_failure(CapabilityFailureCode::INVALID_REQUEST)),
     };
     if let AutomationCapabilityResult::GraphInspectionPage(page) = &mut result
         && page.view == GraphInspectionView::Summary
@@ -516,10 +514,10 @@ fn graph_edit_identity(
             &request.client_key,
         ),
     )
-    .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+    .map_err(|_| graph_failure(CapabilityFailureCode::INVALID_REQUEST))?;
     let fingerprint =
         yss_canonical_hash::hash_canonical("yssbi.graph-capability-request.v1", request)
-            .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+            .map_err(|_| graph_failure(CapabilityFailureCode::INVALID_REQUEST))?;
     let mut bytes: [u8; 16] = digest[..16].try_into().expect("digest has sixteen bytes");
     bytes[6] = (bytes[6] & 0x0f) | 0x80;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -537,18 +535,18 @@ impl ApplicationState {
     ) -> Result<Option<GraphEditReceipt>, CapabilityFailure> {
         AutomationCapabilityRequest::ApplyGraphEdit(request.clone())
             .validate()
-            .map_err(|error| error.into_failure(CapabilityId::ApplyGraphEdit))?;
+            .map_err(|error| contract_failure(error, CapabilityId::ApplyGraphEdit))?;
         let captured = self.capture_session().map_err(map_session_capture_error)?;
         ensure_project_binding(&captured, &context)?;
         let path = GraphResourcePath::new(&request.graph_path)
-            .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+            .map_err(|_| graph_failure(CapabilityFailureCode::INVALID_REQUEST))?;
         let _editing = captured
             .coordinate_graph_edit(&path)
-            .map_err(|_| graph_failure(CapabilityFailureCode::InvocationConflict))?;
+            .map_err(|_| graph_failure(CapabilityFailureCode::INVOCATION_CONFLICT))?;
         let snapshot = captured
             .project()
             .read_graph_editing(captured.project_instance_id(), &path)
-            .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+            .map_err(|_| graph_failure(yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE))?;
         let (operation_id, fingerprint) = graph_edit_identity(&context, &request)?;
         let receipt = captured
             .project()
@@ -558,7 +556,7 @@ impl ApplicationState {
                 snapshot.state.version.session_id,
                 operation_id,
             )
-            .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+            .map_err(|_| graph_failure(yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE))?;
         self.revalidate_captured_session(&captured)
             .map_err(map_session_revalidation_error)?;
         receipt
@@ -575,11 +573,11 @@ fn graph_edit_replay(
     if receipt.fingerprint != fingerprint
         || receipt.request_version.revision.get() != request.base_revision
     {
-        return Err(graph_failure(CapabilityFailureCode::InvocationConflict));
+        return Err(graph_failure(CapabilityFailureCode::INVOCATION_CONFLICT));
     }
     let correlation = receipt
         .correlation
-        .ok_or_else(|| graph_failure(CapabilityFailureCode::InvocationConflict))?;
+        .ok_or_else(|| graph_failure(CapabilityFailureCode::INVOCATION_CONFLICT))?;
     Ok(GraphEditReceipt {
         created_constants: correlation
             .created_constants
@@ -602,7 +600,7 @@ fn graph_edit_replay(
             .map(|(alias, port)| (alias, edit_port(&port)))
             .collect(),
         changes: serde_json::from_value(correlation.result_facts)
-            .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?,
+            .map_err(|_| graph_failure(CapabilityFailureCode::INTERNAL_FAILURE))?,
     })
 }
 
@@ -631,7 +629,7 @@ fn transform_graph_edit(
     control: &CapabilityControl,
 ) -> Result<(GraphDocumentChange, GraphEditReceipt), CapabilityFailure> {
     let graph_path = GraphResourcePath::new(&request.graph_path)
-        .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+        .map_err(|_| graph_failure(CapabilityFailureCode::INVALID_REQUEST))?;
     let mut editor = GraphDocumentEditor::new(captured, &graph_path, &request.locale, original)
         .map_err(map_graph_error)?;
     let localized = editor.localized_catalog();
@@ -710,7 +708,7 @@ fn transform_graph_edit(
                     .port_bindings
                     .keys()
                     .find(|address| !before_ports.contains(*address))
-                    .ok_or_else(|| graph_failure(CapabilityFailureCode::MutationRejected))?;
+                    .ok_or_else(|| graph_failure(CapabilityFailureCode::MUTATION_REJECTED))?;
                 created_ports.insert(alias, edit_port(address));
             } else {
                 let id = editor
@@ -718,7 +716,7 @@ fn transform_graph_edit(
                     .nodes
                     .keys()
                     .find(|id| !before_nodes.contains(id))
-                    .ok_or_else(|| graph_failure(CapabilityFailureCode::MutationRejected))?;
+                    .ok_or_else(|| graph_failure(CapabilityFailureCode::MUTATION_REJECTED))?;
                 record_created_port_aliases(
                     editor.document(),
                     *id,
@@ -898,7 +896,7 @@ pub(super) fn editor_mutation(
                 })
                 .map(|item| item.creation.clone())
                 .ok_or_else(|| {
-                    CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
+                    CapabilityFailure::new(CapabilityFailureCode::MUTATION_REJECTED)
                         .with_detail("nodeTypeId", node_type_id)
                 })?;
             Ok(EditorGraphMutation::CreateNode {
@@ -1011,7 +1009,7 @@ pub(super) fn parse_edit_port(value: GraphEditPortRef) -> Result<PortAddress, Ca
 }
 
 fn invalid_edit_identity(field: &'static str) -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::InvalidRequest).with_detail("field", field)
+    CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST).with_detail("field", field)
 }
 
 fn inspect_projection(
@@ -1208,7 +1206,7 @@ fn diagnostics(projection: &EditorProjectionModel) -> Vec<GraphDiagnosticInspect
 pub fn graph_hash(document: &GraphDocument) -> Result<String, CapabilityFailure> {
     yss_canonical_hash::hash_canonical("yssbi.assistant.graph-draft.v1", document)
         .map(hex::encode)
-        .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))
+        .map_err(|_| graph_failure(CapabilityFailureCode::INTERNAL_FAILURE))
 }
 
 fn graph_failure(code: CapabilityFailureCode) -> CapabilityFailure {
@@ -1219,10 +1217,10 @@ fn map_graph_error(
 ) -> CapabilityFailure {
     match error.into() {
         crate::graph::resources::ResourceMutationApplicationError::Mutation(error) => {
-            graph_failure(CapabilityFailureCode::MutationRejected)
+            graph_failure(CapabilityFailureCode::MUTATION_REJECTED)
                 .with_detail("reason", error.code())
         }
-        _ => graph_failure(CapabilityFailureCode::GraphUnavailable),
+        _ => graph_failure(yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE),
     }
 }
 

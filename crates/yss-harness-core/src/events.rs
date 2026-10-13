@@ -1,4 +1,4 @@
-use crate::{HarnessError, MethodRegistry, StatisticalPlanner};
+use crate::HarnessError;
 use std::sync::Arc;
 use yss_harness_contract::{
     AgentEvent, AgentEventOutput, AgentOutputFailure, ClockPort, HarnessEvent,
@@ -59,15 +59,6 @@ impl AgentEventOutput for PersistingAgentOutput {
         event: AgentEvent,
     ) -> yss_harness_contract::AgentFuture<'a, Result<(), AgentOutputFailure>> {
         Box::pin(async move {
-            if let AgentEvent::PlanProposed { plan } = &event {
-                let methods = MethodRegistry::builtins().map_err(|_| AgentOutputFailure::Closed)?;
-                StatisticalPlanner::validate(plan, &methods).map_err(|error| {
-                    AgentOutputFailure::PolicyRejected {
-                        reason: error.to_string(),
-                        available_methods: methods.cards(),
-                    }
-                })?;
-            }
             self.writer
                 .append(
                     &self.session_id,

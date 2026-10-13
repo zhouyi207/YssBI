@@ -1,5 +1,5 @@
 use super::*;
-use yss_harness_contract::model::DocumentReadInput;
+use yss_assistant_contract::model::DocumentReadInput;
 use yss_project_model::doc::DocView;
 
 pub(in crate::automation) fn read_document(
@@ -132,7 +132,7 @@ fn fit_result(value: DocumentReadResult) -> Result<DocumentReadResult> {
         let DocumentReadContent::Search { matches, page } = &mut value.content else {
             return Err(error);
         };
-        if error.code != CapabilityFailureCode::ResultTooLarge || matches.len() <= 1 {
+        if error.code != CapabilityFailureCode::RESULT_TOO_LARGE || matches.len() <= 1 {
             return Err(error);
         }
         matches.truncate(matches.len() / 2);

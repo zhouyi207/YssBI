@@ -10,8 +10,8 @@ pub enum HarnessMode {
 }
 
 impl HarnessMode {
-    pub fn allows(self, capability: crate::CapabilityId) -> bool {
-        self == Self::Write || capability.descriptor().effect == crate::ToolEffect::Inspect
+    pub fn allows(self, effect: crate::ToolEffect) -> bool {
+        self == Self::Write || effect == crate::ToolEffect::Inspect
     }
 }
 

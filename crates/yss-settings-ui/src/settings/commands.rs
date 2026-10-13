@@ -3,10 +3,7 @@ use super::{SettingsPanel, models::provider_name};
 use crate::SettingsServices;
 use gpui_kit::{Context, Window};
 use yss_application::harness::models::{CredentialChange, ModelSettingsError};
-use yss_harness_contract::{
-    LanguageModelAuthentication, LanguageModelCatalog, LanguageModelProviderConfig,
-    LanguageModelSelection, SecretCredential,
-};
+use yss_harness_contract::{LanguageModelAuthentication, LanguageModelCatalog, LanguageModelProviderConfig, LanguageModelSelection, SecretCredential};
 use yss_ui::lifecycle::LogReleased;
 
 pub struct SettingsSaveRequest {

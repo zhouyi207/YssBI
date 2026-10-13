@@ -5,12 +5,9 @@ edition = "2024"
 publish = false
 
 [dependencies]
-hex.workspace = true
-yss-data-contract = { path = "../yss-data-contract" }
-yss-chart-document = { path = "../yss-chart-document" }
-yss-ui-contract = { path = "../yss-ui-contract" }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_path_to_error = "0.1.20"
 thiserror.workspace = true
 yss-project-identity = { path = "../yss-project-identity" }

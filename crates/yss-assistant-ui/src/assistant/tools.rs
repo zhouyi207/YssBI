@@ -26,7 +26,7 @@ impl ConversationPanel {
             count += 1;
             if tool.running() {
                 pending += 1;
-                current.get_or_insert(tool.kind);
+                current.get_or_insert_with(|| tool.kind.clone());
             } else if tool.state.failed() {
                 failed += 1;
             }
@@ -78,7 +78,7 @@ impl ConversationPanel {
                 div()
                     .min_w_0()
                     .truncate()
-                    .child(super::activity::tool_name(kind)),
+                    .child(super::activity::tool_name(&kind)),
             );
         }
         let mut body = div().min_w_0().flex().flex_col().gap_1();

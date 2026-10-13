@@ -306,7 +306,14 @@ async fn chinese_queries_cite_the_matching_passage_and_reject_changed_content() 
     );
     assert!(service.search(query).await.unwrap().is_empty());
 
-    install_builtin_statistical_knowledge(store, UnixMillis::from_existing(2))
+    let (mut source, mut document) = fixture("ols-diagnostics");
+    source.source_hash = SourceHash::try_new("bilingual").unwrap();
+    document.source_hash = source.source_hash.clone();
+    document.title = "OLS assumptions and diagnostics / 线性回归假设与诊断".into();
+    document.body = "Pair estimates with residual checks and diagnostics.".into();
+    document.tags = vec!["回归 残差 诊断 不确定性 稳健性".into()];
+    store
+        .replace_source(&source, std::slice::from_ref(&document))
         .await
         .unwrap();
     let chinese = service

@@ -15,7 +15,7 @@ use yss_ui::lifecycle::LogReleased;
 impl Render for Inspection {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let tool = &self.card.tool;
-        let title = crate::assistant::activity::tool_name(tool.kind);
+        let title = crate::assistant::activity::tool_name(&tool.kind);
         let failed = tool.state.failed();
         let active = tool.running() && self.card.connected;
         let mut row = div()

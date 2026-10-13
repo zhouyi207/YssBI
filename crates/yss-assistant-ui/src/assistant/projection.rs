@@ -4,10 +4,8 @@ mod tool;
 pub(super) mod usage;
 pub(super) use output::{Compaction, Content, Output, Part, Usage};
 pub(super) use tool::{Tool, ToolState};
-use yss_harness_contract::{
-    AgentRole, AgentRunState, AssistantEvent, AssistantEventKind as Event,
-    AssistantResultReference, HarnessResourceReference, HarnessTurnOptions, LanguageModelIdentity,
-};
+use yss_harness_contract::{AgentRunState, HarnessResourceReference, HarnessTurnOptions, LanguageModelIdentity};
+use yss_assistant_contract::{AgentRole, AssistantEvent, AssistantEventKind as Event, AssistantResultReference};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Timing {
@@ -50,7 +48,7 @@ pub(super) struct Task {
     pub error: Option<String>,
     pub blocked_reason: Option<String>,
     pub warnings: Vec<String>,
-    pub artifacts: Vec<yss_harness_contract::ResourceChange>,
+    pub artifacts: Vec<yss_assistant_contract::ResourceChange>,
     pub results: Vec<AssistantResultReference>,
     pub output: Output,
 }

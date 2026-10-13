@@ -4,10 +4,37 @@ use std::sync::{Arc, Mutex};
 use yss_harness_contract::*;
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
-use crate::test_support::{
-    FixedClock, InMemoryHarnessStore, RejectingCapabilityGateway, SequentialIds,
-};
-use crate::{HarnessError, HarnessHost, HarnessPorts, install_builtin_statistical_knowledge};
+use crate::test_support::{FixedClock, InMemoryHarnessStore, NoteExtension, SequentialIds};
+use crate::{HarnessError, HarnessHost, HarnessPorts};
+use serde_json::{Value, json};
+
+/// One public methods source whose passage mentions regression diagnostics.
+async fn install_guidance(store: &InMemoryHarnessStore) {
+    let source = KnowledgeSourceRecord {
+        id: KnowledgeSourceId::try_new("methods").unwrap(),
+        title: "Methods".into(),
+        version: "1.0.0".into(),
+        license: "Test notes".into(),
+        source_hash: SourceHash::try_new("methods-v1").unwrap(),
+        status: KnowledgeSourceStatus::Active,
+        sensitivity: SensitivityClass::Public,
+        project: None,
+        origin: None,
+        updated_at: UnixMillis::from_existing(1),
+    };
+    let document = KnowledgeDocumentRecord {
+        id: KnowledgeDocumentId::try_new("ols-diagnostics").unwrap(),
+        source_id: source.id.clone(),
+        title: "Regression diagnostics".into(),
+        body: "Regression reporting pairs estimates with residual checks and diagnostics.".into(),
+        scopes: vec!["methods.regression".into()],
+        tags: vec!["regression".into(), "diagnostics".into()],
+        source_hash: source.source_hash.clone(),
+        project: None,
+        sensitivity: SensitivityClass::Public,
+    };
+    store.replace_source(&source, &[document]).await.unwrap();
+}
 
 #[derive(Default)]
 struct ObservedIndex {
@@ -44,60 +71,35 @@ impl AgentDriverPort for KnowledgeDriver {
     fn run_turn<'a>(
         &'a self,
         request: AgentTurnRequest,
-        tools: Arc<dyn ModelCapabilityExecutor>,
+        tools: Arc<dyn AgentToolExecutor>,
         _output: Arc<dyn AgentEventOutput>,
         _cancellation: CancellationToken,
     ) -> AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
         Box::pin(async move {
             self.requests.lock().unwrap().push(request.clone());
-            assert!(
-                request
-                    .tools
-                    .iter()
-                    .any(|tool| tool.capability_id == CapabilityId::SearchKnowledge)
-            );
-            assert!(
-                request
-                    .tools
-                    .iter()
-                    .any(|tool| tool.capability_id == CapabilityId::ReadKnowledge)
-            );
+            for name in [SEARCH_KNOWLEDGE_TOOL, READ_KNOWLEDGE_TOOL] {
+                assert!(request.tools.iter().any(|tool| tool.name == name));
+            }
             match self.step.fetch_add(1, Ordering::Relaxed) {
                 0 => {}
                 1 => {
-                    let search = tools
-                        .execute(ModelCapabilityRequest {
-                            request: (AutomationCapabilityRequest::SearchKnowledge(
-                                SearchKnowledgeRequest {
-                                    query: "regression diagnostics".into(),
-                                    scopes: vec![],
-                                    limit: 1,
-                                },
-                            ))
-                            .into(),
-                        })
-                        .await
-                        .map_err(driver_failure)?;
-                    assert_public(&serde_json::to_value(&search.result).unwrap());
-                    let AutomationCapabilityResult::KnowledgeSearch(result) = search.result else {
-                        panic!("search result")
-                    };
+                    let search = call(
+                        tools.as_ref(),
+                        SEARCH_KNOWLEDGE_TOOL,
+                        json!({"query": "regression diagnostics", "limit": 1}),
+                    )
+                    .await?;
+                    assert_public(&search);
+                    let result: KnowledgeSearchResult = serde_json::from_value(search).unwrap();
                     assert_eq!(result.matches.len(), 1);
-                    let read = tools
-                        .execute(ModelCapabilityRequest {
-                            request: (AutomationCapabilityRequest::ReadKnowledge(
-                                ReadKnowledgeRequest {
-                                    reference: result.matches[0].reference.clone(),
-                                },
-                            ))
-                            .into(),
-                        })
-                        .await
-                        .map_err(driver_failure)?;
-                    assert_public(&serde_json::to_value(&read.result).unwrap());
-                    let AutomationCapabilityResult::KnowledgePassage(passage) = read.result else {
-                        panic!("passage result")
-                    };
+                    let read = call(
+                        tools.as_ref(),
+                        READ_KNOWLEDGE_TOOL,
+                        json!({"reference": result.matches[0].reference}),
+                    )
+                    .await?;
+                    assert_public(&read);
+                    let passage: KnowledgePassage = serde_json::from_value(read).unwrap();
                     assert!(passage.text.contains("residual checks"));
                 }
                 2 => {
@@ -106,23 +108,22 @@ impl AgentDriverPort for KnowledgeDriver {
                         .messages
                         .iter()
                         .find_map(|message| match message {
-                            AgentMessage::ToolResult {
-                                outcome: Ok(AutomationCapabilityResult::KnowledgePassage(passage)),
-                                ..
-                            } => Some(passage.reference.clone()),
+                            AgentMessage::ToolResult { tool, output, .. }
+                                if tool == READ_KNOWLEDGE_TOOL =>
+                            {
+                                Some(output["reference"].clone())
+                            }
                             _ => None,
                         })
                         .expect("persisted passage result");
                     let failure = tools
-                        .execute(ModelCapabilityRequest {
-                            request: (AutomationCapabilityRequest::ReadKnowledge(
-                                ReadKnowledgeRequest { reference },
-                            ))
-                            .into(),
+                        .call(ToolCall {
+                            name: READ_KNOWLEDGE_TOOL.into(),
+                            arguments: json!({"reference": reference}),
                         })
-                        .await
-                        .unwrap_err();
-                    assert_eq!(failure.code, CapabilityFailureCode::ResultUnavailable);
+                        .await;
+                    assert_eq!(failure.output["state"], "failed");
+                    assert_eq!(failure.output["failure"]["code"], "result_unavailable");
                 }
                 _ => panic!("unexpected model call"),
             }
@@ -133,12 +134,23 @@ impl AgentDriverPort for KnowledgeDriver {
     }
 }
 
-fn driver_failure(failure: CapabilityFailure) -> AgentDriverFailure {
-    AgentDriverFailure::new(if failure.code == CapabilityFailureCode::Cancelled {
-        AgentDriverFailureCode::Cancelled
-    } else {
-        AgentDriverFailureCode::InternalFailure
-    })
+/// A successful call's model output; a fatal outcome ends the scripted run like a driver would.
+async fn call(
+    tools: &dyn AgentToolExecutor,
+    name: &str,
+    arguments: Value,
+) -> Result<Value, AgentDriverFailure> {
+    let outcome = tools
+        .call(ToolCall {
+            name: name.into(),
+            arguments,
+        })
+        .await;
+    if let Some(code) = outcome.fatal {
+        return Err(AgentDriverFailure::new(code));
+    }
+    assert_ne!(outcome.output["state"], "failed", "{}", outcome.output);
+    Ok(outcome.output)
 }
 
 fn assert_public(value: &serde_json::Value) {
@@ -165,7 +177,7 @@ fn ports(
     HarnessPorts {
         models: crate::test_support::fixed_model(driver),
         resources: Arc::new(crate::test_support::FixtureResourceResolver),
-        capability_gateway: Arc::new(RejectingCapabilityGateway),
+        extension: Arc::new(NoteExtension::default()),
         sessions: store.clone(),
         events: store.clone(),
         event_sink: store.clone(),
@@ -189,9 +201,7 @@ fn project() -> ProjectSessionBinding {
 #[tokio::test]
 async fn knowledge_is_requested_by_tools_and_replays_without_internal_fields() {
     let store = Arc::new(InMemoryHarnessStore::default());
-    install_builtin_statistical_knowledge(store.clone(), UnixMillis::from_existing(1))
-        .await
-        .unwrap();
+    install_guidance(&store).await;
     let driver = Arc::new(KnowledgeDriver::default());
     let index = Arc::new(ObservedIndex::default());
     let ports = ports(store.clone(), driver.clone(), index.clone());
@@ -313,9 +323,7 @@ async fn knowledge_is_requested_by_tools_and_replays_without_internal_fields() {
 #[tokio::test]
 async fn cancelling_knowledge_search_closes_the_ledger_without_a_late_citation() {
     let store = Arc::new(InMemoryHarnessStore::default());
-    install_builtin_statistical_knowledge(store.clone(), UnixMillis::from_existing(1))
-        .await
-        .unwrap();
+    install_guidance(&store).await;
     let driver = Arc::new(KnowledgeDriver {
         step: AtomicUsize::new(1),
         ..Default::default()
@@ -358,7 +366,7 @@ async fn cancelling_knowledge_search_closes_the_ledger_without_a_late_citation()
     assert_eq!(records[0].state, ToolInvocationState::Failed);
     assert_eq!(
         records[0].failure.as_ref().unwrap().code,
-        CapabilityFailureCode::Cancelled
+        CapabilityFailureCode::CANCELLED
     );
     assert!(records[0].finished_at.is_some());
     assert!(store.load_running_invocations().await.unwrap().is_empty());

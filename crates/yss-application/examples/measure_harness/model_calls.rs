@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use serde::Serialize;
+use yss_assistant_contract::*;
 use yss_harness_contract::*;
 
 pub type CallLog = Arc<Mutex<Vec<CallMeasurement>>>;

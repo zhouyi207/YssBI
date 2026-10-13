@@ -302,7 +302,7 @@ pub(super) fn create(
             .nodes
             .keys()
             .find(|id| !before.contains(id))
-            .ok_or_else(|| graph_failure(CapabilityFailureCode::MutationRejected))?;
+            .ok_or_else(|| graph_failure(CapabilityFailureCode::MUTATION_REJECTED))?;
         if let Some(label) = node.label {
             let _ = editor
                 .apply(EditorGraphMutation::SetNodeLabel {

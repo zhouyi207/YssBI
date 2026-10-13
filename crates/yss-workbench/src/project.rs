@@ -208,7 +208,7 @@ mod tests {
                 .resources
                 .get(&resource)
                 .unwrap()
-                .revision(yss_harness_contract::ResourceRevisionKind::Resource),
+                .revision(yss_assistant_contract::ResourceRevisionKind::Resource),
             Some(saved.version.revision.get())
         );
         assert!(

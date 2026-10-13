@@ -1,5 +1,5 @@
 use super::*;
-use yss_harness_contract::model::{ChartResourceRef, ChartSettingsUpdate};
+use yss_assistant_contract::{model::{ChartResourceRef, ChartSettingsUpdate}};
 
 fn read(f: &mut Fixture, resource: &ProjectResourceRef) -> ChartInspection {
     let AutomationCapabilityResult::ChartInspection(value) = f
@@ -55,7 +55,7 @@ fn chart_updates_preserve_omitted_settings_clear_axes_and_persist_at_the_read_ba
             },
         ))
         .unwrap_err();
-    assert_eq!(stale.code, CapabilityFailureCode::RevisionConflict);
+    assert_eq!(stale.code, CapabilityFailureCode::REVISION_CONFLICT);
     assert_eq!(f.publications.len(), published);
     assert_eq!(read(&mut f, &resource), after);
 

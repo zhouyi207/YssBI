@@ -312,8 +312,9 @@ pub(super) fn markdown(
 }
 
 /// Localize status events at presentation time, preserving all authored/model text verbatim.
-pub(super) fn status_text(event: &yss_harness_contract::AssistantEventKind) -> String {
-    use yss_harness_contract::{AgentRuntimePhase, AssistantEventKind as Event};
+pub(super) fn status_text(event: &yss_assistant_contract::AssistantEventKind) -> String {
+    use yss_harness_contract::AgentRuntimePhase;
+    use yss_assistant_contract::AssistantEventKind as Event;
     use yss_ui::text::{format, t};
     let (key, run_id, step_id, retriable) = match event {
         Event::RuntimeStatus { phase, attempt } => {
