@@ -12,15 +12,17 @@ use gpui_kit::component::{
     text::{TextView, TextViewState},
 };
 use gpui_kit::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Subscription, Window,
-    actions,
+    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, Pixels, Subscription,
+    Window, actions,
 };
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use yss_desktop_services::ApplicationTasks;
 use yss_project::docs::DocSnapshot;
 use yss_ui::lifecycle::LogReleased;
 
 actions!(native_documents, [SaveDocument, ToggleDocumentPreview]);
+
+const PREVIEW_RESIZE_SETTLE: Duration = Duration::from_millis(120);
 
 pub enum DocumentEvent {
     Activated,
@@ -35,6 +37,9 @@ pub struct DocumentEditor {
     _subscriptions: [Subscription; 3],
     preview_visible: bool,
     preview_task: Option<gpui_kit::Task<()>>,
+    preview_width: Option<Pixels>,
+    pending_preview_width: Option<Pixels>,
+    preview_resize_task: Option<gpui_kit::Task<()>>,
     autosave: autosave::AutosaveState,
     autosave_task: Option<gpui_kit::Task<()>>,
     _save_task: Option<gpui_kit::Task<()>>,
@@ -114,6 +119,9 @@ impl DocumentEditor {
             _subscriptions: [subscription, preferences, activation],
             preview_visible: settings.open_in_preview,
             preview_task: None,
+            preview_width: None,
+            pending_preview_width: None,
+            preview_resize_task: None,
             autosave: autosave::AutosaveState::new(settings),
             autosave_task: None,
             _save_task: None,
@@ -161,9 +169,41 @@ impl DocumentEditor {
             .update(cx, |preview, cx| preview.set_text(&source, cx));
     }
 
+    /// The preview's virtualized list measures every block again whenever its
+    /// width changes, so following a dock drag frame by frame laid out the whole
+    /// document on each frame. The preview keeps its settled width until the
+    /// resize pauses.
+    fn observe_preview_width(&mut self, width: Pixels, cx: &mut Context<Self>) {
+        if self.preview_width.is_none_or(|settled| settled == width) {
+            self.preview_width = Some(width);
+            self.pending_preview_width = None;
+            self.preview_resize_task = None;
+            return;
+        }
+        if self.pending_preview_width == Some(width) {
+            return;
+        }
+        self.pending_preview_width = Some(width);
+        let timer = cx.background_executor().timer(PREVIEW_RESIZE_SETTLE);
+        self.preview_resize_task = Some(cx.spawn(async move |view, cx| {
+            timer.await;
+            view.update(cx, |view, cx| {
+                if let Some(width) = view.pending_preview_width.take() {
+                    view.preview_width = Some(width);
+                    cx.notify();
+                }
+            })
+            .log_released();
+        }));
+    }
+
     fn toggle_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.preview_visible = !self.preview_visible;
         if self.preview_visible {
+            // The hidden preview may have missed resizes; take the current width at once.
+            self.preview_width = None;
+            self.pending_preview_width = None;
+            self.preview_resize_task = None;
             self.update_preview(cx);
         }
         self.focus_editor(window, cx);

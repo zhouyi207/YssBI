@@ -4,10 +4,14 @@ use super::super::{
     layout::columns,
     status_bar::{ColumnStatusBar, STATUS_BAR_HEIGHT, StatusColumn},
 };
-use gpui_kit::component::dock::{DockArea, NodeId};
+use gpui_kit::component::{
+    ActiveTheme,
+    dock::{DockArea, NodeId},
+};
 use gpui_kit::{
     AnyElement, App, AvailableSpace, Bounds, Element, ElementId, GlobalElementId,
-    InspectorElementId, IntoElement, LayoutId, Pixels, WeakEntity, Window, div, prelude::*, px,
+    InspectorElementId, IntoElement, LayoutId, Pixels, WeakEntity, Window, div, fill, point,
+    prelude::*, px, size,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -73,6 +77,7 @@ pub(super) struct RegionContent {
     area: WeakEntity<DockArea>,
     owner: WeakEntity<Workbench>,
     measurements: Rc<Measurements>,
+    divider: Option<Bounds<Pixels>>,
 }
 
 impl RegionContent {
@@ -89,6 +94,7 @@ impl RegionContent {
             area,
             owner,
             measurements,
+            divider: None,
         }
     }
 
@@ -104,6 +110,7 @@ impl RegionContent {
             area,
             owner,
             measurements,
+            divider: None,
         }
     }
 }
@@ -119,6 +126,7 @@ pub(super) fn conversation_surface(
         area,
         owner,
         measurements,
+        divider: None,
     })
 }
 
@@ -139,6 +147,7 @@ pub(super) fn status_bars(
                     area: area.clone(),
                     owner: owner.clone(),
                     measurements: measurements.clone(),
+                    divider: None,
                 })
             }),
         )
@@ -218,6 +227,7 @@ impl Element for RegionContent {
             return;
         }
         let mut target = bounds;
+        self.divider = None;
         if let Some(area) = self.area.upgrade() {
             let area = area.read(cx);
             match self.region {
@@ -237,8 +247,18 @@ impl Element for RegionContent {
                         .editor_left
                         .get()
                         .clamp(bounds.left(), bounds.right());
-                    target.origin.x = left;
-                    target.size.width = bounds.right() - left;
+                    // The full-height conversation covers the split's hairline below the
+                    // editor, so the bottom dock draws that boundary itself.
+                    if left > bounds.left() {
+                        self.divider = Some(Bounds::new(
+                            point(left, bounds.top()),
+                            size(px(1.), bounds.size.height),
+                        ));
+                        target.origin.x = left + px(1.);
+                    } else {
+                        target.origin.x = left;
+                    }
+                    target.size.width = bounds.right() - target.origin.x;
                 }
                 Region::Status(column, bottom) => {
                     if area.is_zoomed() {
@@ -303,6 +323,9 @@ impl Element for RegionContent {
     ) {
         if let Some(child) = self.child.as_mut() {
             child.paint(window, cx);
+        }
+        if let Some(divider) = self.divider {
+            window.paint_quad(fill(divider, cx.theme().border));
         }
     }
 }

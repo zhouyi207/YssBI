@@ -35,7 +35,6 @@ pub(super) fn render(
         return Empty.into_any_element();
     };
     let title = panel.read(cx).display_title();
-    let mode = panel.update(cx, |panel, cx| panel.read_only_button(cx));
     let locked = area.upgrade().is_none_or(|area| area.read(cx).is_locked());
     let busy = workbench
         .upgrade()
@@ -68,7 +67,6 @@ pub(super) fn render(
                 })
                 .child(title),
         )
-        .child(mode)
         .child(
             Button::new("conversation-new")
                 .xsmall()

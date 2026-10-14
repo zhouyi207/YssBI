@@ -75,7 +75,6 @@ pub struct ConversationPanel {
     unsent: Option<DraftMessage>,
     queue: VecDeque<DraftMessage>,
     queue_paused: bool,
-    input_expanded: bool,
     selecting: bool,
     ready: bool,
     refreshing: bool,
@@ -100,7 +99,7 @@ impl ConversationPanel {
     ) -> Self {
         let input = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .auto_grow(3, 10)
+                .auto_grow(2, 12)
                 .submit_on_enter(true)
                 .placeholder(yss_ui::text::t("native.assistant.prompt"))
         });
@@ -146,7 +145,6 @@ impl ConversationPanel {
             unsent: None,
             queue: VecDeque::new(),
             queue_paused: true,
-            input_expanded: false,
             selecting: false,
             ready: false,
             refreshing: false,
@@ -162,6 +160,7 @@ impl ConversationPanel {
             error: None,
             stream_error: None,
         };
+        panel.observe_scroll(cx);
         panel.connect(window, cx);
         panel.reload(false, window, cx);
         panel
@@ -225,6 +224,22 @@ impl ConversationPanel {
         }
     }
 }
+// YSS-DEBUG-BEGIN
+fn debug_turns(transcript: &mut projection::Transcript, count: u64) {
+    use yss_assistant_contract::{AssistantEvent, AssistantEventKind as E};
+    let body = std::fs::read_to_string(std::env::var("YSS_DEBUG_MARKDOWN").unwrap_or_default()).unwrap_or_else(|_| "Hello **world**".into());
+    let mut seq = transcript.sequence;
+    let model = yss_harness_contract::LanguageModelIdentity { selection: LanguageModelSelection { provider_id: "p".into(), model_id: "m".into() }, provider_name: "Provider".into(), model_name: "Model".into() };
+    for i in 0..count {
+        let turn = format!("debug-turn-{i}");
+        let events = [E::TurnStarted { user_message: format!("请分析数据集并给出第 {i} 份报告，包括统计摘要和图表建议。"), model: model.clone(), resources: vec![] }, E::TextDelta { delta: body.clone() }, E::TurnCompleted { final_text: body.clone() }];
+        for event in events {
+            seq += 1;
+            transcript.accept(AssistantEvent { sequence: seq, session_id: String::new(), turn_id: Some(turn.clone()), occurred_at: 1_700_000_000_000 + seq * 1000, event }).ok();
+        }
+    }
+}
+// YSS-DEBUG-END
 pub fn principal() -> PrincipalId {
     PrincipalId::try_new("local-user").expect("fixed desktop principal")
 }

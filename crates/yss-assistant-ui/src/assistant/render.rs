@@ -39,39 +39,36 @@ impl Render for ConversationPanel {
 impl ConversationPanel {
     pub(super) fn render_turn(&self, turn: &Turn, cx: &mut Context<Self>) -> AnyElement {
         let id = &turn.id;
-        let user =
-            Message::new()
-                .id(SharedString::from(format!("user-message-{id}")))
-                .role(Role::ListItem)
-                .p_3()
-                .rounded(cx.theme().radius)
-                .bg(cx.theme().muted)
-                .header(
-                    MessageHeader::new()
-                        .content_inset(false)
-                        .w_full()
-                        .child(Icon::new(IconName::User).small())
-                        .child(div().flex_1().child(yss_ui::text::t("panel.assistantYou")))
-                        .when(!turn.user.is_empty(), |header| {
-                            header.child(self.copy_action(turn, true, cx))
-                        }),
-                )
-                .content(
-                    MessageContent::new()
-                        .child(plain::PlainText::new(
-                            SharedString::from(format!("user-{id}")),
-                            turn.user.clone(),
-                            "panel.assistantYou",
-                        ))
-                        .child(self.reference_chips(
-                            format!("history-references-{id}"),
-                            turn.resources.iter().map(|reference| {
-                                (&reference.resource, Some(reference.name.as_str()))
-                            }),
-                            false,
-                            cx,
-                        )),
-                );
+        let user = div()
+            .id(SharedString::from(format!("user-message-{id}")))
+            .role(Role::ListItem)
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(
+                div()
+                    .min_w_0()
+                    .px_3()
+                    .py_2()
+                    .rounded_lg()
+                    .bg(cx.theme().muted)
+                    .child(plain::PlainText::new(
+                        SharedString::from(format!("user-{id}")),
+                        turn.user.clone(),
+                        "panel.assistantYou",
+                    )),
+            )
+            .when(!turn.resources.is_empty(), |user| {
+                user.child(self.reference_chips(
+                    format!("history-references-{id}"),
+                    turn.resources
+                        .iter()
+                        .map(|reference| (&reference.resource, Some(reference.name.as_str()))),
+                    false,
+                    cx,
+                ))
+            });
         let active = turn.state == TurnState::Running && self.timing_connected();
         let mut footer = MessageFooter::new()
             .content_inset(false)
@@ -103,13 +100,13 @@ impl ConversationPanel {
             );
         }
         if turn.state != TurnState::Running && turn.output.has_text() {
-            footer = footer.child(self.copy_action(turn, false, cx));
+            footer = footer.child(self.copy_action(turn, cx));
         }
         div()
             .min_w_0()
             .flex()
             .flex_col()
-            .gap_4()
+            .gap_3()
             .child(user)
             .child(
                 Message::new()
@@ -137,17 +134,12 @@ impl ConversationPanel {
             .into_any_element()
     }
 
-    fn copy_action(&self, turn: &Turn, user: bool, cx: &Context<Self>) -> Clipboard {
+    fn copy_action(&self, turn: &Turn, cx: &Context<Self>) -> Clipboard {
         let owner = cx.entity().downgrade();
         let id = turn.id.clone();
-        let label = yss_ui::text::t(if user {
-            "native.assistant.copyMessage"
-        } else {
-            "panel.assistantCopy"
-        });
-        Clipboard::new(SharedString::from(format!("copy-{user}-{id}")))
+        Clipboard::new(SharedString::from(format!("copy-{id}")))
             .xsmall()
-            .accessibility_label(label)
+            .accessibility_label(yss_ui::text::t("panel.assistantCopy"))
             .value_fn(move |_, cx| {
                 owner
                     .upgrade()
@@ -158,13 +150,7 @@ impl ConversationPanel {
                             .turns
                             .iter()
                             .find(|turn| turn.id == id)
-                            .map(|turn| {
-                                if user {
-                                    turn.user.clone()
-                                } else {
-                                    turn.output.text()
-                                }
-                            })
+                            .map(|turn| turn.output.text())
                     })
                     .unwrap_or_default()
                     .into()

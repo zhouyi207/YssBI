@@ -1,14 +1,12 @@
 use super::*;
 use crate::assistant::references::Picker;
-use gpui_kit::component::input::Textarea;
+use gpui_kit::component::{Icon, input::Textarea};
 use gpui_kit::{Entity, EntityInputHandler, Focusable, FontWeight, KeyDownEvent};
 
 impl ConversationPanel {
-    pub(super) fn render_starters(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.running() || !self.input.read(cx).value().is_empty() {
-            return gpui_kit::Empty.into_any_element();
-        }
-        let mut prompts = div().flex().flex_wrap().gap_2();
+    pub(in crate::assistant) fn render_welcome(&self, cx: &mut Context<Self>) -> AnyElement {
+        let show_prompts = !self.running() && self.input.read(cx).value().is_empty();
+        let mut prompts = div().flex().flex_col().items_stretch().gap_1().w_full();
         for (id, label, prompt) in [
             (
                 "assistant-starter-question",
@@ -28,8 +26,10 @@ impl ConversationPanel {
         ] {
             prompts = prompts.child(
                 Button::new(id)
-                    .small()
                     .outline()
+                    .w_full()
+                    .justify_start()
+                    .icon(IconName::ArrowRight)
                     .label(yss_ui::text::t(label))
                     .on_click(cx.listener(move |view, _, window, cx| {
                         // A starter never replaces authored text or submits a request.
@@ -44,31 +44,44 @@ impl ConversationPanel {
         }
         div()
             .id("assistant-start-guide")
+            .flex_1()
+            .min_h_0()
+            .min_w_0()
+            .overflow_y_scroll()
             .flex()
             .flex_col()
-            .flex_shrink_0()
-            .min_w_0()
-            .gap_2()
-            .py_3()
+            .items_center()
+            .justify_center()
+            .px_6()
+            .py_6()
             .child(
                 div()
-                    .text_lg()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child(yss_ui::text::t("panel.assistantStartTitle")),
+                    .w_full()
+                    .max_w(rems(26.))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap_3()
+                    .text_center()
+                    .child(
+                        Icon::new(IconName::Sparkles)
+                            .size_8()
+                            .text_color(cx.theme().muted_foreground),
+                    )
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(yss_ui::text::t("panel.assistantStartTitle")),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(yss_ui::text::t("panel.assistantEmptyDescription")),
+                    )
+                    .when(show_prompts, |guide| guide.child(div().pt_2().w_full().child(prompts))),
             )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::t("panel.assistantEmptyDescription")),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::t("panel.assistantStarterHint")),
-            )
-            .child(prompts)
             .into_any_element()
     }
 
@@ -85,72 +98,21 @@ impl ConversationPanel {
         }
     }
 
-    pub(super) fn render_input(
-        &self,
-        empty: bool,
-        picker: Entity<Picker>,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let label = yss_ui::text::t(if self.input_expanded {
-            "panel.assistantCollapseInput"
-        } else {
-            "panel.assistantExpandInput"
-        });
+    pub(super) fn render_input(&self, picker: Entity<Picker>, cx: &mut Context<Self>) -> AnyElement {
         div()
-            .flex()
-            .flex_col()
             .min_h_0()
             .min_w_0()
-            .when(empty, |input| input.flex_1())
+            .px_2()
+            .pt_1()
             .capture_key_down(cx.listener(move |view, event, window, cx| {
                 view.reference_key(event, &picker, window, cx)
             }))
             .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(yss_ui::text::t("panel.assistantComposerLabel")),
-                    )
-                    .when(!empty, |header| {
-                        header.child(
-                            Button::new("assistant-expand-input")
-                                .small()
-                                .ghost()
-                                .icon(if self.input_expanded {
-                                    IconName::Minimize
-                                } else {
-                                    IconName::Maximize
-                                })
-                                .tooltip(label.clone())
-                                .accessibility_label(label)
-                                .on_click(cx.listener(|view, _, window, cx| {
-                                    view.input_expanded = !view.input_expanded;
-                                    view.input.update(cx, |input, cx| {
-                                        input.set_auto_grow(
-                                            if view.input_expanded { 10 } else { 3 },
-                                            if view.input_expanded { 20 } else { 10 },
-                                            cx,
-                                        )
-                                    });
-                                    view.input.focus_handle(cx).focus(window, cx);
-                                    cx.notify();
-                                })),
-                        )
-                    }),
-            )
-            .child(
                 Textarea::new(&self.input)
                     .bordered(false)
                     .appearance(false)
-                    .aria_label(yss_ui::text::t("panel.assistantComposerLabel"))
-                    .when(empty, |input| input.h(relative(1.)).flex_1().min_h_0()),
+                    .p_0()
+                    .aria_label(yss_ui::text::t("panel.assistantComposerLabel")),
             )
             .into_any_element()
     }

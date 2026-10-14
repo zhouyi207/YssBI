@@ -80,7 +80,7 @@ impl ConversationPanel {
                     .when(self.stream_error.is_some(), |actions| {
                         actions.child(
                             Button::new("assistant-reconnect")
-                                .small()
+                                .xsmall()
                                 .label(yss_ui::text::t("panel.assistantReloadConversations"))
                                 .disabled(self.refreshing)
                                 .on_click(
@@ -91,7 +91,7 @@ impl ConversationPanel {
                     .when(self.interrupted(), |actions| {
                         actions.child(
                             Button::new("assistant-continue")
-                                .small()
+                                .xsmall()
                                 .label(yss_ui::text::t("panel.assistantContinueTask"))
                                 .disabled(!self.can_send())
                                 .on_click(cx.listener(|view, _, window, cx| {
@@ -101,7 +101,7 @@ impl ConversationPanel {
                     })
                     .child(
                         Button::new("assistant-recovery-settings")
-                            .small()
+                            .xsmall()
                             .ghost()
                             .label(yss_ui::text::t("panel.assistantOpenSettings"))
                             .on_click(

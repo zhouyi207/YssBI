@@ -157,6 +157,15 @@ impl ConversationPanel {
                                 view.accept_submission(event);
                             }
                             view.transcript = candidate;
+                            // YSS-DEBUG-BEGIN
+                            if let Some(count) = std::env::var("YSS_DEBUG_TURNS").ok().and_then(|v| v.parse::<u64>().ok()) {
+                                super::debug_turns(&mut view.transcript, count);
+                            }
+                            // YSS-DEBUG-END
+                            view.viewport.reset(
+                                view.transcript.turns.len(),
+                                !view.transcript.session_output.parts.is_empty(),
+                            );
                             view.catalog = Some(Arc::new(catalog));
                             view.update_session(session);
                             view.ready = true;
@@ -169,7 +178,9 @@ impl ConversationPanel {
                                 Some(yss_ui::text::t("native.assistant.historyGap").into());
                         }
                     }
-                    Err(error) => view.stream_error = Some(error),
+                    // YSS-DEBUG-BEGIN
+                    Err(error) => { view.stream_error = Some(error); if let Some(count) = std::env::var("YSS_DEBUG_TURNS").ok().and_then(|v| v.parse::<u64>().ok()) { super::debug_turns(&mut view.transcript, count); } }
+                    // YSS-DEBUG-END
                 }
                 view.buffered.clear();
                 view.advance_queue(window, cx);

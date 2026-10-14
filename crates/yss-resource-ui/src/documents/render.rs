@@ -1,10 +1,11 @@
 use super::{DocumentEditor, SaveDocument, ToggleDocumentPreview};
 use gpui_kit::component::{
-    ActiveTheme, Sizable,
+    ActiveTheme, ElementExt, Sizable,
     button::{Button, ButtonVariants},
     input::Editor,
 };
 use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*};
+use yss_ui::lifecycle::LogReleased;
 
 impl Render for DocumentEditor {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -55,7 +56,27 @@ impl Render for DocumentEditor {
             )
             .child(div().flex_1().min_w_0().min_h_0().overflow_hidden().child(
                 if self.preview_visible {
-                    self.preview_view.clone().px_6().py_4().into_any_element()
+                    let owner = cx.entity().downgrade();
+                    div()
+                        .size_full()
+                        .overflow_hidden()
+                        .on_prepaint(move |bounds, _, cx| {
+                            owner
+                                .update(cx, |view, cx| {
+                                    view.observe_preview_width(bounds.size.width, cx)
+                                })
+                                .log_released();
+                        })
+                        .child(
+                            div()
+                                .h_full()
+                                .map(|preview| match self.preview_width {
+                                    Some(width) => preview.w(width),
+                                    None => preview.w_full(),
+                                })
+                                .child(self.preview_view.clone().px_6().py_4()),
+                        )
+                        .into_any_element()
                 } else {
                     Editor::new(&self.input)
                         .size_full()
