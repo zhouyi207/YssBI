@@ -124,8 +124,9 @@ async fn main() -> Result<(), Error> {
             "injectDatabaseConflict": config.inject_database_conflict,
             "schemaMetric": "Compact UTF-8 JSON input schemas per AgentDriver admission; excludes tool descriptions and provider envelopes. Not cumulative request bytes.",
             "resultMetric": "Compact JSON of the public capability result or failure projection; Unicode scalar characters and UTF-8 bytes. Control outcomes are recorded separately.",
-            "duplicateMetric": "Successful inspect calls with identical public arguments and identical public results within one task; retries are repeated arguments after a failed invocation.",
-            "timingMetric": "Turn wall time and ledger start/end include binding and scheduling. Tool totals may overlap; the difference is not pure model time."
+            "duplicateMetric": "Successful inspect calls with identical normalized public arguments and identical public results within one task; retries are repeated arguments after a failed invocation. Undecodable arguments have no model argument hash.",
+            "timingMetric": "Turn wall time and ledger start/end include binding and scheduling. Tool totals may overlap; the difference is not pure model time.",
+            "modelBusinessMetric": "Only business calls issued through the model's AgentToolExecutor. Excludes delegation, continuation, statistical plan proposals and internal baseline reads; ledger business totals include baseline reads.",
         }))?,
     )?;
     let mut session: Option<HarnessSessionRecord> = None;

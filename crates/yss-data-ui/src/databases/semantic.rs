@@ -26,6 +26,7 @@ struct SemanticDialog {
     values_ready: bool,
     saving: bool,
     error: Option<&'static str>,
+    notifications: yss_ui::notifications::Notifications,
 }
 impl DatabaseEditor {
     pub(super) fn semantic_dialog(
@@ -82,6 +83,7 @@ impl DatabaseEditor {
                     ),
                     saving: false,
                     error: None,
+                    notifications: yss_ui::notifications::Notifications::new(window),
                 });
                 if matches!(
                     kind,
@@ -106,6 +108,21 @@ impl DatabaseEditor {
     }
 }
 impl SemanticDialog {
+    fn set_error(&mut self, error: Option<&'static str>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            if *error == "detail.data.mappingLoadFailed" {
+                self.notifications.error_with_retry(
+                    yss_ui::text::translate(error),
+                    cx,
+                    |view, window, cx| view.read_values(window, cx),
+                );
+            } else {
+                self.notifications.error(yss_ui::text::translate(error), cx);
+            }
+        }
+        self.error = error;
+    }
+
     fn domain(&self) -> bool {
         matches!(
             self.draft.kind,
@@ -117,7 +134,7 @@ impl SemanticDialog {
             return;
         }
         if !self.current(cx) {
-            self.error = Some("detail.data.settingsStale");
+            self.set_error(Some("detail.data.settingsStale"), cx);
             cx.notify();
             return;
         }
@@ -140,7 +157,7 @@ impl SemanticDialog {
             view.update_in(cx, |view, _, cx| {
                 view.loading = false;
                 if !view.current(cx) {
-                    view.error = Some("detail.data.settingsStale");
+                    view.set_error(Some("detail.data.settingsStale"), cx);
                 } else if let Some(values) = result {
                     view.values_ready = true;
                     let mut known = view
@@ -158,7 +175,7 @@ impl SemanticDialog {
                         }
                     }
                 } else {
-                    view.error = Some("detail.data.mappingLoadFailed");
+                    view.set_error(Some("detail.data.mappingLoadFailed"), cx);
                 }
                 cx.notify();
             })
@@ -182,26 +199,29 @@ impl SemanticDialog {
             return;
         }
         if !self.current(cx) {
-            self.error = Some("detail.data.settingsStale");
+            self.set_error(Some("detail.data.settingsStale"), cx);
             cx.notify();
             return;
         }
         self.flush_inputs(cx);
         let mut seen = HashSet::new();
-        self.error = if self.draft.kind == SemanticType::Binary && self.draft.values.len() != 2 {
-            Some("detail.data.binaryCount")
-        } else if self.draft.values.len() > ConversionDomain::MAX_VALUES {
-            Some("detail.data.tooManyValues")
-        } else if self
-            .draft
-            .values
-            .iter()
-            .any(|entry| !seen.insert(entry.value.as_str()))
-        {
-            Some("conversion.duplicateValues")
-        } else {
-            None
-        };
+        self.set_error(
+            if self.draft.kind == SemanticType::Binary && self.draft.values.len() != 2 {
+                Some("detail.data.binaryCount")
+            } else if self.draft.values.len() > ConversionDomain::MAX_VALUES {
+                Some("detail.data.tooManyValues")
+            } else if self
+                .draft
+                .values
+                .iter()
+                .any(|entry| !seen.insert(entry.value.as_str()))
+            {
+                Some("conversion.duplicateValues")
+            } else {
+                None
+            },
+            cx,
+        );
         if self.error.is_some() {
             cx.notify();
             return;
@@ -268,11 +288,14 @@ impl SemanticDialog {
                 .update_in(cx, |dialog, window, cx| {
                     dialog.saving = false;
                     if failed {
-                        dialog.error = Some(if dialog.current(cx) {
-                            "detail.data.updateFailed"
-                        } else {
-                            "detail.data.settingsStale"
-                        });
+                        dialog.set_error(
+                            Some(if dialog.current(cx) {
+                                "detail.data.updateFailed"
+                            } else {
+                                "detail.data.settingsStale"
+                            }),
+                            cx,
+                        );
                     } else {
                         yss_ui::modal_window::close_child(window, cx);
                     }

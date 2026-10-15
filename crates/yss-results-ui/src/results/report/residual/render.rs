@@ -1,9 +1,5 @@
 use super::*;
 use crate::plots::cartesian::CartesianPlot;
-use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
-};
 use gpui_kit::{IntoElement, Render, div, prelude::*, px};
 
 impl Render for ResidualView {
@@ -59,28 +55,6 @@ impl Render for ResidualView {
             })
             .when(self.loading, |body| {
                 body.child(yss_ui::text::translate("common.loading"))
-            })
-            .when(self.error, |body| {
-                body.child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap_2()
-                        .items_center()
-                        .child(
-                            div()
-                                .text_color(cx.theme().danger)
-                                .child(yss_ui::text::translate("native.reports.analysisFailed")),
-                        )
-                        .child(
-                            Button::new("retry-residuals")
-                                .small()
-                                .ghost()
-                                .disabled(self.loading)
-                                .label(yss_ui::text::translate("common.retry"))
-                                .on_click(cx.listener(|view, _, window, cx| view.load(window, cx))),
-                        ),
-                )
             })
     }
 }

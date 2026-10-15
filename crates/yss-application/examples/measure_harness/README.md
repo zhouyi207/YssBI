@@ -50,22 +50,28 @@ delete the desktop's retired credentials. `model` optionally uses the ordinary
 The optional task duration requests ordinary Harness cancellation, then waits for
 admitted operations to finish their ledger and commit handoff.
 
-`runtime.rs` composes the real adapters and observes schemas at driver admission.
+`runtime.rs` composes the real Application gateway through `AssistantExtension`,
+injected as `HarnessPorts.extension`, and observes the admitted `ToolSpec` schemas.
 `measurement.rs` derives metrics from persisted events and ledger records; it does
 not maintain a second business state. Each numbered task directory contains the
 prompt, response, summary, public invocation details and provider usage reports.
 The normal SQLite ledger remains in `db/` for inspection.
 
-`model_calls.rs` observes the existing executor boundary without changing its
-outcomes. `modelBusiness` and `model-calls.json` count model-facing business calls;
-the ledger totals also contain Core's automatic baseline reads. Keep those two
-counts separate. Agent outcomes include failed admissions and continuations, so
-zero business-tool failures must not be reported as zero agent failures.
+`model_calls.rs` observes `AgentToolExecutor::call` without changing its outcomes.
+`modelBusiness` and `model-calls.json` count model-facing business calls; the ledger
+totals also contain the extension's internal baseline reads. Keep those counts separate.
+Call-local started events correlate failed calls with their ledger identities, including
+concurrent calls to the same tool; successful calls use the executor's returned identity.
+Normalized public arguments and original failure codes come from that ledger, not raw
+provider JSON or internal bound requests. `effect` comes from the admitted tool and
+`fatal` retains a fatal executor outcome. Agent outcomes include failed admissions and
+continuations, so zero business-tool failures must not be reported as zero agent failures.
 
-`controlCalls` records the Core event identities and start/end times for every
-delegation, continuation and plan call, including rejected calls. It is separate
-from business-call metrics and from accepted `AgentRun` / plan events. Its elapsed
-time includes waiting for workers; do not add it to nested business times.
+`controlCalls` records delegation and continuation from Core control events, and
+statistical plan proposals from the extension's ledger. Rejected calls are included;
+`controlToolCalls` counts all these controls. They are separate from business-call
+metrics and accepted `AgentRun` / plan events. Control elapsed time includes waiting
+for workers; do not add it to nested business times.
 
 Metric definitions:
 
@@ -75,12 +81,13 @@ Metric definitions:
 - Result size counts the existing Contract public success/failure projection,
   both UTF-8 bytes and Unicode scalar characters. Failure envelopes and control
   tool results are excluded. Accepted control events are listed separately.
-- Duplicate reads require equal public arguments and equal successful public
-  output within the task. Same-argument retries require a preceding failed call;
-  a retry with corrected arguments remains visible in invocation details. Use
-  `modelBusiness` for this comparison: malformed arguments are not retained and
-  have no argument hash, so their repeat count is unknown rather than inferred
-  from the ledger's empty replay arguments.
+- Duplicate reads require equal normalized public arguments and equal successful
+  public output within the task. Same-argument retries require a preceding failed
+  call; a retry with corrected arguments remains visible in invocation details.
+  Use `modelBusiness` for this comparison: malformed or unregistered arguments are
+  not retained and have no argument hash. A binding failure after successful decoding
+  retains its normalized argument hash. Empty replay arguments from a rejection
+  must not be interpreted as valid provider input.
 - Token sums include reported samples only. Missing fields stay null with zero
   reporting calls; they are not estimated. Input already includes cached tokens,
   and output already includes reasoning tokens.

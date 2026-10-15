@@ -80,7 +80,8 @@ impl ApplicationServices {
 mod tests {
     use super::*;
     use yss_harness_contract::{PrincipalId, ProjectSessionBinding};
-    use yss_harness_core::test_support::{InMemoryHarnessStore, RejectingCapabilityGateway};
+    use yss_assistant_extension::test_support::RejectingCapabilityGateway;
+    use yss_harness_core::test_support::InMemoryHarnessStore;
 
     struct TestDirectory(PathBuf);
 

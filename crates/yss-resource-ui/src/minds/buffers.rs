@@ -105,7 +105,10 @@ impl MindCanvas {
             .values()
             .any(|buffer| buffer.dirty && buffer.version != self.snapshot.version)
         {
-            self.error = Some(yss_ui::text::t("native.minds.topicChanged").into());
+            self.set_error(
+                Some(yss_ui::text::t("native.minds.topicChanged").into()),
+                cx,
+            );
             self.changed(cx);
             return None;
         }

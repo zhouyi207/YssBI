@@ -282,10 +282,8 @@ impl Workbench {
                         view.output.update(cx, |output, cx| {
                             output.set_graph(Some(canvas.downgrade()), cx)
                         });
-                        view.results.update(cx, |results, cx| {
-                            results.set_graph(Some(canvas.read(cx)));
-                            cx.notify();
-                        });
+                        view.results
+                            .update(cx, |results, cx| results.set_graph(Some(canvas), cx));
                     }
                     CanvasEvent::RevealNodeDetails => {
                         if view
@@ -311,10 +309,8 @@ impl Workbench {
                             .graph(cx)
                             .is_some_and(|graph| graph.entity_id() == canvas.entity_id())
                         {
-                            view.results.update(cx, |results, cx| {
-                                results.set_graph(Some(canvas.read(cx)));
-                                cx.notify();
-                            });
+                            view.results
+                                .update(cx, |results, cx| results.set_graph(Some(canvas), cx));
                         }
                     }
                     CanvasEvent::ShowOutput => {

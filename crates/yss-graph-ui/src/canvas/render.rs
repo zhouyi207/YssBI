@@ -1,6 +1,6 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
-use gpui_kit::component::{ActiveTheme, Disableable, Sizable};
+use gpui_kit::component::{ActiveTheme, Sizable};
 use gpui_kit::{
     Bounds, Context, IntoElement, MouseButton, Pixels, Render, Window, canvas, div, point,
     prelude::*, px,
@@ -55,10 +55,6 @@ impl Render for GraphCanvas {
             })
             .collect::<Vec<_>>();
         self.prepare_port_inputs(&visible_nodes, window, cx);
-        let nodes = visible_nodes
-            .into_iter()
-            .map(|node| self.render_node(node, cx))
-            .collect::<Vec<_>>();
 
         let surface = div()
             .id("graph-canvas")
@@ -210,7 +206,11 @@ impl Render for GraphCanvas {
                 .size_full(),
             )
             .children(activity)
-            .children(nodes)
+            .children(
+                visible_nodes
+                    .into_iter()
+                    .map(|node| self.render_node(node, cx)),
+            )
             .children(feedback)
             .when_some(label, |view, label| {
                 view.tooltip(move |window, cx| {
@@ -265,54 +265,6 @@ impl Render for GraphCanvas {
                     )
                 },
             )
-            .when(self.refresh_failed, |view| {
-                view.child(
-                    div()
-                        .absolute()
-                        .top_2()
-                        .left_2()
-                        .right_2()
-                        .p_2()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .rounded_md()
-                        .bg(cx.theme().background)
-                        .border_1()
-                        .border_color(cx.theme().danger)
-                        .text_color(cx.theme().danger)
-                        .text_sm()
-                        .occlude()
-                        .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-                        .child(
-                            div()
-                                .flex_1()
-                                .child(yss_ui::text::t("native.canvas.refreshFailed")),
-                        )
-                        .child(
-                            Button::new("retry-graph-refresh")
-                                .small()
-                                .label(yss_ui::text::t("common.retry"))
-                                .disabled(self.refresh_task.is_some() || self.busy)
-                                .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
-                        ),
-                )
-            })
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .absolute()
-                        .bottom_8()
-                        .left_2()
-                        .right_2()
-                        .p_2()
-                        .rounded_md()
-                        .bg(cx.theme().danger.opacity(0.15))
-                        .text_color(cx.theme().danger)
-                        .text_sm()
-                        .child(error),
-                )
-            })
             .when(self.palette.is_some(), |view| {
                 view.child(self.render_palette(window, cx))
             });

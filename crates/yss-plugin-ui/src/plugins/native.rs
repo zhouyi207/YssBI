@@ -67,12 +67,15 @@ pub struct PluginViewPanel {
     form_generation: u64,
     busy: bool,
     closed: bool,
-    error: Option<PluginFailure>,
-    message: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     task: Option<TaskSnapshot>,
 }
 
 impl PluginViewPanel {
+    fn show_error(&self, error: PluginFailure, cx: &mut Context<Self>) {
+        self.notifications.error(super::failure(&error), cx);
+    }
+
     pub fn new(
         services: Arc<PluginServices>,
         plugin_id: String,
@@ -100,8 +103,7 @@ impl PluginViewPanel {
             busy: true,
             closed: false,
             form_generation: 0,
-            error: None,
-            message: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             task: None,
         }
     }
@@ -210,12 +212,12 @@ impl PluginViewPanel {
                             if let Err(error) =
                                 panel.install_form(attachment.view, attachment.saved, window, cx)
                             {
-                                panel.error = Some(error);
+                                panel.show_error(error, cx);
                             } else {
                                 panel.lease = Some(attachment.lease);
                             }
                         }
-                        Err(error) => panel.error = Some(error),
+                        Err(error) => panel.show_error(error, cx),
                     }
                     cx.notify();
                 })

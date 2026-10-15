@@ -25,7 +25,7 @@ impl NodeCreationView {
             field,
             create,
         } = request;
-        self.error = None;
+
         self.language = yss_ui::text::locale();
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
@@ -84,8 +84,9 @@ impl NodeCreationView {
                             view.parameters.update(cx, |parameters, cx| {
                                 parameters.set_error(key, message.clone(), cx)
                             });
+                        } else {
+                            view.notifications.error(message, cx);
                         }
-                        view.error = Some(message);
                     }
                 }
                 cx.notify();

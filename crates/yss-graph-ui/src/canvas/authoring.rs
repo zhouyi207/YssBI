@@ -82,7 +82,8 @@ impl GraphCanvas {
             view.update(cx, |view, cx| {
                 view.busy = false;
                 if result.is_err() {
-                    view.error = Some(yss_ui::text::t("native.canvas.signatureFailed").into());
+                    view.notifications
+                        .error(yss_ui::text::t("native.canvas.signatureFailed"), cx);
                     tracing::warn!(
                         code = "native_signature_update_failed",
                         "Native signature command failed"

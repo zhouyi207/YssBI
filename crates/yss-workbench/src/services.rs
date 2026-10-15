@@ -55,7 +55,10 @@ impl NativeServices {
         let loaded = executor.spawn_blocking(move || reader.load()).await?;
         let preference_load_failed = loaded.is_err();
         crate::text::set_locale(preferences.snapshot().language.locale());
-        let layouts = Arc::new(LayoutStore::new(&paths.application.app_data_dir));
+        let layouts = Arc::new(LayoutStore::new(
+            &paths.application.app_data_dir,
+            executor.clone(),
+        ));
         let settings = preferences.snapshot();
         let retention = yss_logging::LogRetentionPolicy::new(
             settings.logs.retention_days,

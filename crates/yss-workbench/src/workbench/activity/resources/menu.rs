@@ -71,15 +71,7 @@ pub(super) fn resource_menu(
         if matches!(action, ResourceAction::Delete) {
             menu = menu.separator();
         }
-        let item = if matches!(action, ResourceAction::Delete) {
-            PopupMenuItem::element(move |_, cx| {
-                div()
-                    .text_color(cx.theme().danger)
-                    .child(crate::text::translate(label))
-            })
-        } else {
-            PopupMenuItem::new(crate::text::translate(label))
-        };
+        let item = PopupMenuItem::new(crate::text::translate(label));
         menu = menu.item(item.icon(icon).on_click(move |_, _, cx| {
             owner
                 .update(cx, |view, cx| {

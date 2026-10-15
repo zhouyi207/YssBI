@@ -216,6 +216,15 @@ impl AssistantController {
                 } else {
                     view.read_state =
                         DirectoryReadState::Failed("native.workbench.assistantDirectoryFailed");
+                    yss_ui::notifications::Notifications::new(window).error_with_retry(
+                        yss_ui::text::t("native.workbench.assistantDirectoryFailed"),
+                        cx,
+                        move |view, window, cx| {
+                            if view.epoch == epoch {
+                                view.refresh_directory(window, cx);
+                            }
+                        },
+                    );
                     view.emit(AssistantEventKind::DirectoryChanged, cx);
                     if std::mem::take(&mut view.reopen) && !view.unavailable(cx) {
                         view.emit(AssistantEventKind::PresentDirectory, cx);

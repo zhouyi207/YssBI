@@ -19,3 +19,7 @@ yss-database-schema = { path = "../yss-database-schema" }
 yss-desktop-services = { path = "../yss-desktop-services" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-ui = { path = "../yss-ui" }
+
+[dev-dependencies]
+gpui-kit = { workspace = true, features = ["test-support"] }
+tokio.workspace = true

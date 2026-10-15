@@ -46,9 +46,10 @@ pub(crate) struct NodeCreationView {
     creating: bool,
     language: &'static str,
     generation: u64,
-    error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     task: Option<Task<()>>,
     _parameter_subscription: Subscription,
+    _target_subscription: Option<Subscription>,
 }
 
 impl NodeCreationView {
@@ -58,7 +59,7 @@ impl NodeCreationView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let properties = cx.new(|_| GraphProperties::new(services.clone()));
+        let properties = cx.new(|_| GraphProperties::new(services.clone(), window));
         let host = cx.entity();
         let owner = host.downgrade();
         let parameters = cx.new(|cx| {
@@ -70,6 +71,7 @@ impl NodeCreationView {
                         .upgrade()
                         .is_some_and(|owner| owner.read(cx).can_edit(cx))
                 },
+                window,
                 cx,
             )
         });
@@ -97,6 +99,18 @@ impl NodeCreationView {
                 );
             },
         );
+        let target_subscription = target.graph.upgrade().map(|graph| {
+            let mut current = true;
+            cx.observe(&graph, move |view: &mut Self, _, cx| {
+                let next = view.current(cx);
+                if current && !next && !view.creating {
+                    view.notifications
+                        .error(yss_ui::text::t("native.workbench.creationChanged"), cx);
+                }
+                current = next;
+                cx.notify();
+            })
+        });
         let mut view = Self {
             services,
             target,
@@ -108,9 +122,10 @@ impl NodeCreationView {
             creating: false,
             language: yss_ui::text::locale(),
             generation: 0,
-            error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             task: None,
             _parameter_subscription: subscription,
+            _target_subscription: target_subscription,
         };
         view.query(Preparation::default(), window, cx);
         view
@@ -155,7 +170,6 @@ impl NodeCreationView {
 
     pub(crate) fn creation_failed(&mut self, cx: &mut Context<Self>) {
         self.creating = false;
-        self.error = Some(yss_ui::text::translate("canvas.nodePalette.createFailed"));
         cx.notify();
     }
 

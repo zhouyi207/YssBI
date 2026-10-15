@@ -66,10 +66,10 @@ impl Workbench {
         let lifecycle = self.lifecycle;
         window.focus(&self.focus, cx);
         let owner = self.services.clone();
-        let task = self.services.run(move |services| {
+        let task = self.services.run(move |_| {
             Ok(requests
                 .into_iter()
-                .map(|request| request.commit(services, &owner))
+                .map(|request| request.commit(&owner))
                 .collect::<Vec<_>>())
         });
         cx.spawn_in(window, async move |view, cx| {
@@ -116,7 +116,8 @@ impl Workbench {
         cx.notify();
     }
     pub(super) fn reset_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.details = cx.new(|cx| super::DetailsPanel::new(self.services.graph.clone(), cx));
+        self.details =
+            cx.new(|cx| super::DetailsPanel::new(self.services.graph.clone(), window, cx));
         self.problems = cx.new(super::ProblemsPanel::new);
         self.output = cx.new(super::OutputPanel::new);
         self.results = cx.new(super::ResultsPanel::new);

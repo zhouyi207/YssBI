@@ -57,13 +57,16 @@ impl DocumentEditor {
             self.draft_dirty = self.input.read(cx).text() != self.snapshot.content.0.as_str();
         }
         if outcome.failed {
-            self.error = Some(
-                yss_ui::text::t(if was_autosave {
-                    "preferences.documents.autosaveFailed"
-                } else {
-                    "native.documents.saveFailed"
-                })
-                .into(),
+            self.set_error(
+                Some(
+                    yss_ui::text::t(if was_autosave {
+                        "preferences.documents.autosaveFailed"
+                    } else {
+                        "native.documents.saveFailed"
+                    })
+                    .into(),
+                ),
+                cx,
             );
             self.autosave.failed();
             self.autosave_task = None;
@@ -93,9 +96,7 @@ impl DocumentEditor {
         // Autosaves capture a revision without interrupting continued typing.
         self.autosave_in_flight = automatic;
         let owner = self.services.clone();
-        let job = self
-            .services
-            .run(move |services| Ok(request.commit(services, &owner)));
+        let job = self.services.run(move |_| Ok(request.commit(&owner)));
         self._save_task = Some(cx.spawn_in(window, async move |view, cx| {
             let outcome = job
                 .await
@@ -142,12 +143,17 @@ impl DocumentEditor {
                         }
                     }
                     Some(_) => {
-                        view.error =
-                            Some(yss_ui::text::t("native.documents.externalChange").into());
+                        view.set_error(
+                            Some(yss_ui::text::t("native.documents.externalChange").into()),
+                            cx,
+                        );
                         view.autosave.failed();
                     }
                     None => {
-                        view.error = Some(yss_ui::text::t("native.documents.readFailed").into());
+                        view.set_error(
+                            Some(yss_ui::text::t("native.documents.readFailed").into()),
+                            cx,
+                        );
                         view.autosave.failed();
                     }
                 }

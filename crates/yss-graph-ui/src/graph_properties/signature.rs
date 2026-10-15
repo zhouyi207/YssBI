@@ -113,7 +113,8 @@ impl GraphProperties {
         let after = match draft.value(cx) {
             Ok(value) => value,
             Err(_) => {
-                self.error = Some(yss_ui::text::t("native.workbench.invalidType").into());
+                self.notifications
+                    .error(yss_ui::text::t("native.workbench.invalidType"), cx);
                 cx.notify();
                 return;
             }
@@ -127,7 +128,7 @@ impl GraphProperties {
             OperationId::new(),
             FunctionDocumentPatch::new(draft.baseline.signature.clone(), after),
         );
-        self.error = None;
+
         graph.update(cx, |graph, cx| graph.submit_signature(request, version, cx));
         cx.notify();
     }
@@ -158,7 +159,7 @@ impl GraphProperties {
                     && let Some(draft) = &view.signature
                 {
                     view.signature = Some(SignatureDraft::new(draft.baseline.clone(), window, cx));
-                    view.error = None;
+
                     cx.notify();
                 }
             })),

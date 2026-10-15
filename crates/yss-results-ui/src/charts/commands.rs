@@ -1,7 +1,6 @@
 //! GUI save submits the full captured draft to the existing chart writer.
 use super::ChartEditor;
 use gpui_kit::{Context, Window};
-use yss_application::ApplicationState;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_desktop_services::ApplicationTasks;
 use yss_project_identity::{OperationId, ProjectInstanceId};
@@ -28,8 +27,8 @@ impl ChartSaveOutcome {
     }
 }
 impl ChartSaveRequest {
-    pub fn commit(self, services: &ApplicationState, owner: &ApplicationTasks) -> ChartSaveOutcome {
-        match services.save_chart_resource(
+    pub fn commit(self, owner: &ApplicationTasks) -> ChartSaveOutcome {
+        match owner.application().save_chart_resource(
             self.project,
             OperationId::new(),
             self.path,
@@ -76,7 +75,7 @@ impl ChartEditor {
             cx.defer_in(window, |view, window, cx| view.refresh(window, cx));
         }
         if outcome.failed {
-            self.error = Some(yss_ui::text::t("native.charts.saveFailed").into());
+            self.set_error(Some(yss_ui::text::t("native.charts.saveFailed").into()), cx);
         }
         cx.emit(gpui_kit::component::dock::PanelEvent::LayoutChanged);
         self.changed(cx);
@@ -97,9 +96,7 @@ impl ChartEditor {
             return;
         };
         let owner = self.services.clone();
-        let job = self
-            .services
-            .run(move |services| Ok(request.commit(services, &owner)));
+        let job = self.services.run(move |_| Ok(request.commit(&owner)));
         cx.spawn_in(window, async move |view, cx| {
             let outcome = job
                 .await

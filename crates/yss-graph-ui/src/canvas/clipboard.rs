@@ -53,7 +53,8 @@ impl GraphCanvas {
                             code = "native_graph_copy_failed",
                             "Graph clipboard export failed"
                         );
-                        view.error = Some(yss_ui::text::translate("panel.assistantCopyFailed"));
+                        view.notifications
+                            .error(yss_ui::text::translate("panel.assistantCopyFailed"), cx);
                     }
                 }
                 cx.notify();
@@ -86,9 +87,9 @@ impl GraphCanvas {
                     Some(source) => {
                         view.submit(GraphCommand::Paste { source, anchor }, Some(version), cx)
                     }
-                    None => {
-                        view.error = Some(yss_ui::text::translate("native.canvas.commandFailed"))
-                    }
+                    None => view
+                        .notifications
+                        .error(yss_ui::text::translate("native.canvas.commandFailed"), cx),
                 }
                 cx.notify();
             })

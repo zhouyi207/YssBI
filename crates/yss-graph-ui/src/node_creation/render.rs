@@ -7,7 +7,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{IntoElement, Render, div, prelude::*};
 use yss_node_catalog::PortCountPolicy;
-use yss_ui::inspector::{self, InlineMessage, InspectorHeader, InspectorSection, PropertyField};
+use yss_ui::inspector::{self, InspectorHeader, InspectorSection, PropertyField};
 use yss_ui::text::translate;
 
 impl Render for NodeCreationView {
@@ -53,7 +53,7 @@ impl NodeCreationView {
                 .flex()
                 .flex_col()
                 .gap_2()
-                .children(self.ports.iter().enumerate().map(|(index, port)| {
+                .children(self.ports.iter().map(|port| {
                     let control = match &port.input {
                         Some(input) => Input::new(input)
                             .small()
@@ -72,11 +72,6 @@ impl NodeCreationView {
                     PropertyField::new(port.title.clone())
                         .inline()
                         .control(control)
-                        .when_some(port.error.as_ref(), |field, error| {
-                            field.message(
-                                InlineMessage::error(error.clone()).id(("port-count-error", index)),
-                            )
-                        })
                 })),
         )
     }
@@ -92,17 +87,6 @@ impl NodeCreationView {
             .gap_2()
             .border_t_1()
             .border_color(cx.theme().border)
-            .when(!self.current(cx), |footer| {
-                footer.child(
-                    InlineMessage::error(translate("native.workbench.creationChanged"))
-                        .id("creation-changed"),
-                )
-            })
-            .children(
-                self.error
-                    .as_ref()
-                    .map(|error| InlineMessage::error(error.clone()).id("creation-error")),
-            )
             .child(
                 div()
                     .flex()

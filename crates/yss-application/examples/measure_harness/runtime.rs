@@ -13,7 +13,7 @@ use yss_application::{
         models::{LanguageModelService, SystemModelCredentials},
     },
 };
-use yss_assistant_contract::*;
+use yss_assistant_contract::CapabilityGatewayPort;
 use yss_harness_contract::*;
 use yss_harness_core::{HarnessHost, HarnessPorts};
 
@@ -25,7 +25,7 @@ pub type SchemaLog = Arc<Mutex<Vec<SchemaMeasurement>>>;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SchemaMeasurement {
-    role: AgentRole,
+    role: AgentRoleId,
     tools: BTreeMap<String, usize>,
     total_bytes: usize,
 }
@@ -63,7 +63,7 @@ pub async fn initialize(
         .initialize_harness(HarnessPorts {
             models,
             resources: Arc::new(ApplicationResourceResolver(application.clone())),
-            capability_gateway: gateway,
+            extension: Arc::new(yss_assistant_extension::AssistantExtension::new(gateway)?),
             sessions: store.clone(),
             events: store.clone(),
             event_sink: Arc::new(Progress),
@@ -105,6 +105,7 @@ impl HarnessEventSinkPort for Progress {
         &'a self,
         envelope: &'a HarnessEventEnvelope,
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
+        super::model_calls::observe_event(&envelope.event);
         match &envelope.event {
             HarnessEvent::AgentRunStarted { role, .. } => println!("Agent started: {role:?}"),
             HarnessEvent::AgentRunFinished { outcome } => {
@@ -112,14 +113,14 @@ impl HarnessEventSinkPort for Progress {
             }
             HarnessEvent::Agent(event) | HarnessEvent::AgentRunOutput { event, .. } => {
                 match event {
-                    AgentEvent::ToolInvocationStarted { capability_id, .. } => {
-                        println!("Tool started: {}", capability_id.as_str())
+                    AgentEvent::ToolInvocationStarted { tool, .. } => {
+                        println!("Tool started: {tool}")
                     }
                     AgentEvent::ToolInvocationFailed {
-                        capability_id,
+                        tool,
                         failure_code,
                         ..
-                    } => println!("Tool failed: {} ({failure_code})", capability_id.as_str()),
+                    } => println!("Tool failed: {tool} ({failure_code})"),
                     AgentEvent::RuntimeStatus { phase, attempt } => {
                         println!("Agent status: {phase:?} ({attempt})")
                     }
@@ -165,7 +166,7 @@ impl AgentDriverPort for MeasuredDriver {
     fn run_turn<'a>(
         &'a self,
         request: AgentTurnRequest,
-        capabilities: Arc<dyn ModelCapabilityExecutor>,
+        capabilities: Arc<dyn AgentToolExecutor>,
         output: Arc<dyn AgentEventOutput>,
         cancellation: CancellationToken,
     ) -> AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
@@ -176,13 +177,19 @@ impl AgentDriverPort for MeasuredDriver {
                 .lock()
                 .unwrap_or_else(|error| error.into_inner())
                 .push(measured);
-            let role = request.role;
+            let role = request.role.clone();
+            let effects = request
+                .tools
+                .iter()
+                .map(|tool| (tool.name.clone(), tool.effect))
+                .collect();
             self.driver
                 .run_turn(
                     request,
                     Arc::new(ObservedExecutor {
                         inner: capabilities,
                         role,
+                        effects,
                         calls: self.calls.clone(),
                     }),
                     output,
@@ -197,22 +204,12 @@ fn measure_schemas(request: &AgentTurnRequest) -> Result<SchemaMeasurement, serd
     let mut tools = BTreeMap::new();
     for tool in &request.tools {
         tools.insert(
-            tool.capability_id.as_str().to_owned(),
+            tool.name.clone(),
             serde_json::to_vec(&tool.input_schema)?.len(),
         );
     }
-    for tool in &request.control_tools {
-        let (name, schema) = match tool {
-            AgentControlTool::DelegateTask => ("delegate_task", agent_task_schema()),
-            AgentControlTool::FollowupTask => ("followup_task", agent_followup_schema()),
-            AgentControlTool::ProposeStatisticalPlan => {
-                ("propose_statistical_plan", statistical_plan_schema())
-            }
-        };
-        tools.insert(name.to_owned(), serde_json::to_vec(&schema)?.len());
-    }
     Ok(SchemaMeasurement {
-        role: request.role,
+        role: request.role.clone(),
         total_bytes: tools.values().sum(),
         tools,
     })

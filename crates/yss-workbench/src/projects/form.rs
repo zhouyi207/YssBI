@@ -49,11 +49,19 @@ pub(crate) struct ProjectForm {
     pub(crate) busy: bool,
     progress: Option<Entity<ProjectProgress>>,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     recovery: Option<PathBuf>,
     confirming: bool,
     _subscriptions: Vec<Subscription>,
 }
 impl ProjectForm {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     pub(crate) fn new(
         services: Arc<NativeServices>,
         owner: WeakEntity<Workbench>,
@@ -93,11 +101,12 @@ impl ProjectForm {
                             view.parent
                                 .update(cx, |input, cx| input.set_value(path, window, cx));
                         }
-                        None => {
-                            view.error = Some(crate::text::translate(
+                        None => view.set_error(
+                            Some(crate::text::translate(
                                 "native.projects.defaultParentFailed",
-                            ))
-                        }
+                            )),
+                            cx,
+                        ),
                     }
                     cx.notify();
                 })
@@ -118,6 +127,7 @@ impl ProjectForm {
             busy: false,
             progress: None,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             recovery: None,
             confirming: false,
             _subscriptions: subscriptions,
@@ -164,12 +174,17 @@ impl ProjectForm {
                                 input.set_value(path.to_owned(), window, cx)
                             });
                         } else {
-                            view.error =
-                                Some(crate::text::t("native.projects.invalidDirectory").into());
+                            view.set_error(
+                                Some(crate::text::t("native.projects.invalidDirectory").into()),
+                                cx,
+                            );
                         }
                     }
                     Ok(Ok(None)) => {}
-                    _ => view.error = Some(crate::text::t("native.projects.pickerFailed").into()),
+                    _ => view.set_error(
+                        Some(crate::text::t("native.projects.pickerFailed").into()),
+                        cx,
+                    ),
                 }
                 cx.notify();
             })
@@ -194,7 +209,7 @@ impl ProjectForm {
             let (name, destination) = match self.destination(cx) {
                 Ok(value) => value,
                 Err(error) => {
-                    self.error = Some(error.into());
+                    self.set_error(Some(error.into()), cx);
                     cx.notify();
                     return;
                 }
@@ -230,7 +245,7 @@ impl ProjectForm {
                 failure
                     .update(cx, |form, cx| {
                         form.busy = false;
-                        form.error = Some(crate::text::t("native.projects.busy").into());
+                        form.set_error(Some(crate::text::t("native.projects.busy").into()), cx);
                         cx.notify();
                     })
                     .log_released();
@@ -249,7 +264,7 @@ impl ProjectForm {
         self.lifecycle = lifecycle;
         self.busy = false;
         self.progress = None;
-        self.error = error;
+        self.set_error(error, cx);
         if recovery.is_some() || self.error.is_none() {
             self.recovery = recovery;
         }
@@ -368,9 +383,6 @@ impl Render for ProjectForm {
                             }),
                     ),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(div().text_sm().text_color(cx.theme().danger).child(error))
-            })
             .when_some(self.recovery.as_deref(), |view, path| {
                 view.child(super::feedback::recovery_target(path, cx))
             })

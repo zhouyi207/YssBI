@@ -24,7 +24,7 @@ mod viewport;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     rc::Rc,
     sync::Arc,
 };
@@ -98,7 +98,7 @@ pub struct GraphCanvas {
     viewport_root: Option<String>,
     gesture: Option<Gesture>,
     _activation: gpui_kit::Subscription,
-    preview: BTreeMap<NodeId, NodePosition>,
+    preview: geometry::NodeMovement,
     connection_layer: Rc<RefCell<connections::ConnectionLayer>>,
     presentation: Rc<presentation::Presentation>,
     node_contents: nodes::summary::Contents,
@@ -112,7 +112,7 @@ pub struct GraphCanvas {
     refresh_failed: bool,
     refresh_pending: bool,
     resource_move: Option<loading::ResourceMove>,
-    error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     execution: execution::ExecutionView,
 }
 
@@ -188,7 +188,7 @@ impl GraphCanvas {
                     cx.notify();
                 }
             }),
-            preview: BTreeMap::new(),
+            preview: Default::default(),
             connection_layer,
             presentation: Rc::default(),
             node_contents: Default::default(),
@@ -202,7 +202,7 @@ impl GraphCanvas {
             refresh_failed: false,
             refresh_pending: false,
             resource_move: None,
-            error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             execution: Default::default(),
         };
         view.refresh_presentation();
@@ -219,10 +219,6 @@ impl GraphCanvas {
 
     pub fn path(&self) -> &str {
         self.resource_path().as_str()
-    }
-
-    pub(crate) fn command_error(&self) -> Option<&str> {
-        self.error.as_deref()
     }
 
     pub fn dirty(&self) -> bool {

@@ -170,7 +170,7 @@ impl Workbench {
             let language = crate::text::locale();
             let index = services
                 .application
-                .query_project_index(request.project.clone(), language, true)
+                .query_project_presentation(request.project.clone(), language)
                 .ok()
                 .map(|snapshot| DesktopProject::new(request.project, snapshot, language));
             Ok((success, created, index))

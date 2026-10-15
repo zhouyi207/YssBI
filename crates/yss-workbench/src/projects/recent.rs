@@ -30,14 +30,16 @@ pub(crate) struct RecentProjects {
     services: Arc<NativeServices>,
     snapshot: RecentSnapshot,
     again: bool,
+    notifications: yss_ui::notifications::Notifications,
 }
 
 impl RecentProjects {
-    pub(crate) fn new(services: Arc<NativeServices>) -> Self {
+    pub(crate) fn new(services: Arc<NativeServices>, window: &gpui_kit::Window) -> Self {
         Self {
             services,
             snapshot: Default::default(),
             again: false,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
 
@@ -82,6 +84,11 @@ impl RecentProjects {
                         .collect();
                 } else {
                     view.snapshot.error = Some("native.projects.loadFailed");
+                    view.notifications.error_with_retry(
+                        crate::text::t("native.projects.loadFailed"),
+                        cx,
+                        |view, _, cx| view.reload(cx),
+                    );
                 }
                 if std::mem::take(&mut view.again) {
                     view.reload(cx);

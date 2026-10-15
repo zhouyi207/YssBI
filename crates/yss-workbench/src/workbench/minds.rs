@@ -96,7 +96,7 @@ impl Workbench {
     ) -> gpui_kit::Entity<MindCanvas> {
         let path = snapshot.path.as_str().to_owned();
         let services = self.services.tasks.clone();
-        let mind = cx.new(|cx| MindCanvas::new(services, snapshot, cx));
+        let mind = cx.new(|cx| MindCanvas::new(services, snapshot, window, cx));
         let mut status = (mind.read(cx).dirty(), mind.read(cx).busy());
         self.subscriptions
             .push(cx.observe(&mind, move |_, mind, cx| {

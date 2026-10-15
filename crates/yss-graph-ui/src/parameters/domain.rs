@@ -13,7 +13,7 @@ use gpui_kit::component::{ActiveTheme, Disableable, Sizable, input::Input};
 use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use yss_data_contract::ConversionDomain;
 use yss_ui::appearance::HEADER_BUTTON_SIZE;
-use yss_ui::inspector::{self, InlineMessage, Pager};
+use yss_ui::inspector::{self, Pager};
 use yss_ui::text::translate;
 
 impl ParameterForm {
@@ -27,7 +27,6 @@ impl ParameterForm {
     ) -> AnyElement {
         let epoch = self.epoch;
         let len = draft.len();
-        let duplicates = draft.has_duplicates(cx);
         let mut rows = div()
             .id(("domain-values", index))
             .max_h_64()
@@ -105,15 +104,6 @@ impl ParameterForm {
             .when(len > 0, |content| {
                 content.child(div().flex().flex_col().gap_1().child(columns).child(rows))
             })
-            .when(
-                duplicates && self.fields[index].error.is_none(),
-                |content| {
-                    content.child(
-                        InlineMessage::error(translate("conversion.duplicateValues"))
-                            .id(("domain-duplicates", index)),
-                    )
-                },
-            )
             .child(self.domain_positive(index, draft, busy, cx))
             .child(
                 div()
@@ -159,7 +149,7 @@ impl ParameterForm {
                         inspector::commit_button(
                             ("domain-apply", index),
                             translate("native.workbench.applyMapping"),
-                            busy || duplicates,
+                            busy,
                         )
                         .on_click(cx.listener(move |view, _, _, cx| {
                             if view.accepts_input(epoch, cx) {

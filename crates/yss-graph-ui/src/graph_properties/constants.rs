@@ -280,10 +280,9 @@ impl GraphProperties {
                         field.original_input = Some(source.clone());
                         field.input = Some(input_state(source, &field.data_type, window, cx));
                     }
-                    Err(_) => {
-                        view.error =
-                            Some(yss_ui::text::t("native.workbench.constantReadFailed").into())
-                    }
+                    Err(_) => view
+                        .notifications
+                        .error(yss_ui::text::t("native.workbench.constantReadFailed"), cx),
                 }
                 cx.notify();
             })

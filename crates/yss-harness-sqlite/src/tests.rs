@@ -27,7 +27,7 @@ async fn connect_preserves_literal_percent_encoded_directory_names() {
     let database = std::path::Path::new("db").join("statistical-harness.sqlite");
     let literal_exists = literal.join(&database).is_file();
     let decoded_exists = decoded.join(&database).exists();
-    store.pool.close().await;
+    store.close().await;
     std::fs::remove_dir_all(directory).unwrap();
 
     assert!(

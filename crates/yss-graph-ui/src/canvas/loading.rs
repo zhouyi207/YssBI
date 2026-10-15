@@ -185,6 +185,11 @@ impl GraphCanvas {
                                 "Native graph refresh failed"
                             );
                             view.refresh_failed = true;
+                            view.notifications.error_with_retry(
+                                yss_ui::text::t("native.canvas.refreshFailed"),
+                                cx,
+                                |view, _, cx| view.refresh(cx),
+                            );
                             view.palette = None;
                             view.cancel_gesture();
                             view.emit_selection(cx);
@@ -245,8 +250,9 @@ impl GraphCanvas {
         if self.graph.language != yss_ui::text::locale() {
             self.refresh(cx);
         }
-        *self.connection_layer.borrow_mut() =
-            super::connections::ConnectionLayer::new(&self.graph.projection);
+        self.connection_layer
+            .borrow_mut()
+            .install(&self.graph.projection);
         self.refresh_presentation();
         if let (Some(base), Some(previous_ports)) = (draft_base, previous_ports) {
             self.rebind_moved_port_inputs(base, &previous_ports);

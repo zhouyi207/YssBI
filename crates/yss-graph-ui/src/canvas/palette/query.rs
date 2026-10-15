@@ -84,7 +84,7 @@ impl NodePalette {
                             code = "native_node_palette_query_failed",
                             "Node palette query failed"
                         );
-                        view.error = Some("native.canvas.catalogFailed");
+                        view.set_error(Some("native.canvas.catalogFailed"), cx);
                     }
                 }
                 cx.notify();

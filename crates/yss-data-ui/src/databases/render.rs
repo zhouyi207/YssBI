@@ -57,15 +57,5 @@ impl Render for DatabaseEditor {
                     }),
             )
             .child(self.render_toolbar(cx))
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .px_3()
-                        .py_2()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(error),
-                )
-            })
     }
 }

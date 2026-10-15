@@ -27,6 +27,7 @@ enum DocumentationState {
 
 pub(super) struct NodeDocumentation {
     services: Arc<GraphServices>,
+    notifications: yss_ui::notifications::Notifications,
     target: Option<DocumentationTarget>,
     state: DocumentationState,
     expanded: bool,
@@ -35,9 +36,10 @@ pub(super) struct NodeDocumentation {
 }
 
 impl NodeDocumentation {
-    pub(super) fn new(services: Arc<GraphServices>) -> Self {
+    pub(super) fn new(services: Arc<GraphServices>, window: &gpui_kit::Window) -> Self {
         Self {
             services,
+            notifications: yss_ui::notifications::Notifications::new(window),
             target: None,
             state: DocumentationState::Missing,
             expanded: true,
@@ -97,7 +99,19 @@ impl NodeDocumentation {
                         cx.new(|cx| TextViewState::markdown(&markdown, cx).selectable(true)),
                     ),
                     Ok(None) => DocumentationState::Missing,
-                    Err(_) => DocumentationState::Failed,
+                    Err(_) => {
+                        let target = target.clone();
+                        view.notifications.error_with_retry(
+                            yss_ui::text::t("native.workbench.nodeDocumentationFailed"),
+                            cx,
+                            move |view, _, cx| {
+                                if view.target.as_ref() == Some(&target) {
+                                    view.read(cx);
+                                }
+                            },
+                        );
+                        DocumentationState::Failed
+                    }
                 };
                 cx.notify();
             })

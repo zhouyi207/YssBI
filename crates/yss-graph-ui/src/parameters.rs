@@ -28,6 +28,7 @@ pub(super) struct ParameterForm {
     groups: Vec<Group>,
     diagnostics: Vec<EditorDiagnosticModel>,
     epoch: u64,
+    notifications: yss_ui::notifications::Notifications,
     reveal: Option<reveal::Reveal>,
     can_edit: Box<dyn Fn(&App) -> bool>,
     properties: Entity<GraphProperties>,
@@ -40,6 +41,7 @@ impl ParameterForm {
         properties: Entity<GraphProperties>,
         host: &Entity<T>,
         can_edit: impl Fn(&App) -> bool + 'static,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let observer = cx.observe(&properties, |_, _, cx| cx.notify());
@@ -49,6 +51,7 @@ impl ParameterForm {
             groups: vec![],
             diagnostics: vec![],
             epoch: 0,
+            notifications: yss_ui::notifications::Notifications::new(window),
             reveal: None,
             can_edit: Box::new(can_edit),
             properties,
@@ -116,6 +119,11 @@ impl ParameterForm {
 
     pub fn set_error(&mut self, key: &ParameterKey, error: String, cx: &mut Context<Self>) {
         if let Some(field) = self.fields.iter_mut().find(|field| &field.model.key == key) {
+            self.notifications.push(
+                gpui_kit::component::notification::Notification::error(error.clone())
+                    .title(field.model.display.title.to_string()),
+                cx,
+            );
             field.error = Some(error);
             cx.notify();
         }
@@ -124,7 +132,7 @@ impl ParameterForm {
     /// Include unsubmitted inputs when creating, while leaving unchanged defaults implicit.
     pub fn changes(&mut self, cx: &mut Context<Self>) -> Option<ParameterValues> {
         let mut changes = ParameterValues::new();
-        let mut valid = true;
+        let mut first_error = None;
         for field in &mut self.fields {
             if !field.dirty {
                 continue;
@@ -143,13 +151,21 @@ impl ParameterForm {
                     }
                 }
                 Err(error) => {
+                    first_error.get_or_insert_with(|| {
+                        gpui_kit::component::notification::Notification::error(error.clone())
+                            .title(field.model.display.title.to_string())
+                    });
                     field.error = Some(error);
-                    valid = false;
                 }
             }
         }
         cx.notify();
-        valid.then_some(changes)
+        if let Some(error) = first_error {
+            self.notifications.push(error, cx);
+            None
+        } else {
+            Some(changes)
+        }
     }
 
     fn accepts_input(&self, epoch: u64, cx: &App) -> bool {
@@ -160,6 +176,11 @@ impl ParameterForm {
         match self.fields[index].value(cx) {
             Ok(value) => self.commit_parameter(index, value, cx),
             Err(error) => {
+                self.notifications.push(
+                    gpui_kit::component::notification::Notification::error(error.clone())
+                        .title(self.fields[index].model.display.title.to_string()),
+                    cx,
+                );
                 self.fields[index].error = Some(error);
                 cx.notify();
             }

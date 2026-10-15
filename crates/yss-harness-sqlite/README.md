@@ -14,10 +14,15 @@ panels, model execution, resource authorization or a second workflow state machi
 
 `connect` opens `db/statistical-harness.sqlite` below the supplied app directory using
 SQLx's native path API, with WAL and foreign keys. Each store has one pooled connection.
-The store and pool follow their Arc owner lifetime in Application. Test support can use
-an in-memory database. The adapter creates its complete current schema in one transaction
-when the database is empty; an existing schema must match exactly. It rejects incompatible
-schema or records instead of rewriting history or introducing migration/version machinery.
+The store is shared through Arc owners in Application. Dropping the last owner starts
+asynchronous pool shutdown; it is not a filesystem-release barrier. After draining
+Harness work, await `store.close()` before a full database reopen or directory removal,
+especially on Windows. Closing applies to every owner sharing that store.
+
+Test support can use an in-memory database. The adapter creates its complete current
+schema in one transaction when the database is empty; an existing schema must match
+exactly. It rejects incompatible schema or records instead of rewriting history or
+introducing migration/version machinery.
 
 JSON contains the Harness record; indexed identity/state columns are derived write values.
 Invocation completion must match stored idempotency key, invocation ID and session ID.

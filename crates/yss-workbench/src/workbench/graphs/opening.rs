@@ -1,7 +1,6 @@
 //! A graph tab before its first projection; it never invents an editable document.
 use gpui_kit::component::{
     ActiveTheme, Sizable,
-    button::Button,
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
     spinner::Spinner,
 };
@@ -107,21 +106,7 @@ impl Render for Opening {
             .text_color(cx.theme().muted_foreground)
             .child(div().text_sm().child(self.path.as_str().to_owned()))
             .child(if self.failed {
-                div()
-                    .id("graph-open-error")
-                    .role(gpui_kit::accesskit::Role::Alert)
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap_3()
-                    .child(crate::text::t("native.canvas.openFailed"))
-                    .child(
-                        Button::new("retry-open-graph")
-                            .small()
-                            .label(crate::text::t("common.retry"))
-                            .on_click(cx.listener(|_, _, _, cx| cx.emit(OpeningEvent::Retry))),
-                    )
-                    .into_any_element()
+                div().into_any_element()
             } else {
                 div()
                     .id("graph-opening")

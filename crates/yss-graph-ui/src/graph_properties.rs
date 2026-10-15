@@ -14,7 +14,7 @@ use gpui_kit::{
 use signature::SignatureDraft;
 use std::sync::Arc;
 use yss_project::GraphEditVersion;
-use yss_ui::inspector::{self, InlineMessage, InspectorHeader};
+use yss_ui::inspector::{self, InspectorHeader};
 
 pub(super) struct GraphProperties {
     services: Arc<GraphServices>,
@@ -27,12 +27,12 @@ pub(super) struct GraphProperties {
     constants_page: usize,
     constants_open: bool,
     signature: Option<SignatureDraft>,
-    error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     graph_observer: Option<Subscription>,
 }
 
 impl GraphProperties {
-    pub fn new(services: Arc<GraphServices>) -> Self {
+    pub fn new(services: Arc<GraphServices>, window: &Window) -> Self {
         Self {
             services,
             graph: None,
@@ -44,7 +44,7 @@ impl GraphProperties {
             constants_page: 0,
             constants_open: true,
             signature: None,
-            error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             graph_observer: None,
         }
     }
@@ -70,7 +70,7 @@ impl GraphProperties {
         self.generation = self.generation.wrapping_add(1);
         self.loading = false;
         self.ready = false;
-        self.error = None;
+
         cx.notify();
     }
 
@@ -88,7 +88,27 @@ impl GraphProperties {
         if !same {
             self.clear(cx);
             if let Some(entity) = graph.upgrade() {
-                self.graph_observer = Some(cx.observe(&entity, |_, _, cx| cx.notify()));
+                let canvas = entity.read(cx);
+                let mut display = (
+                    canvas.can_edit(),
+                    canvas.dirty(),
+                    canvas.graph.editing.version,
+                );
+                let mut projection = canvas.graph.projection.clone();
+                self.graph_observer = Some(cx.observe(&entity, move |_, entity, cx| {
+                    let canvas = entity.read(cx);
+                    let next = (
+                        canvas.can_edit(),
+                        canvas.dirty(),
+                        canvas.graph.editing.version,
+                    );
+                    if display == next && Arc::ptr_eq(&projection, &canvas.graph.projection) {
+                        return;
+                    }
+                    display = next;
+                    projection = canvas.graph.projection.clone();
+                    cx.notify();
+                }));
             }
             self.graph = Some(graph);
         }
@@ -145,10 +165,6 @@ impl Render for GraphProperties {
             }
         }
         let busy = !self.accepts_input(self.generation, cx);
-        let error = self.error.clone().or_else(|| {
-            self.graph()
-                .and_then(|graph| graph.read(cx).command_error().map(str::to_owned))
-        });
         let title = self
             .graph()
             .map(|graph| graph.read(cx).title_text())
@@ -185,9 +201,6 @@ impl Render for GraphProperties {
                     cx,
                 ))
             })
-            .children(error.map(|error| {
-                inspector::status_band(InlineMessage::error(error).id("graph-properties-error"), cx)
-            }))
             .children(
                 self.signature
                     .as_ref()

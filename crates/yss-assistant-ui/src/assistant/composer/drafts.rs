@@ -1,27 +1,13 @@
 use super::*;
 use crate::assistant::ConversationEvent;
-use gpui_kit::component::alert::Alert;
 use gpui_kit::{Empty, FontWeight, SharedString, rems};
 
 impl ConversationPanel {
     pub(super) fn render_drafts(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.unsent.is_none()
-            && self.queue.is_empty()
-            && !self.interrupted()
-            && self.error.is_none()
-            && self.stream_error.is_none()
-        {
+        if self.unsent.is_none() && self.queue.is_empty() && !self.interrupted() {
             return Empty.into_any_element();
         }
         let mut drafts = div().flex().flex_col().gap_2().flex_shrink_0().min_w_0();
-        if let Some(error) = &self.stream_error {
-            drafts = drafts.child(Alert::error("assistant-stream-error", error.clone()).small());
-        }
-        if let Some(error) = &self.error
-            && self.stream_error.as_ref() != Some(error)
-        {
-            drafts = drafts.child(Alert::error("assistant-request-error", error.clone()).small());
-        }
         if !self.running()
             && let Some(message) = &self.unsent
         {

@@ -223,26 +223,29 @@ fn dataset_reads_bind_owner_resource_versions_and_reject_a_changed_runtime() {
         },
     };
     let mut observations = ResourceObservations::default();
-    observations.record(&AutomationCapabilityResult::DatasetSchemaInspection(
-        schema(12),
-    ));
+    observations.record(
+        &AutomationCapabilityResult::DatasetSchemaInspection(schema(12)),
+        true,
+    );
     assert!(observations.version(&resource, false).unwrap().is_none());
     assert!(observations.needs_database_binding(&resource));
     assert_eq!(
         observations.bind(&inspection(12, 800)).unwrap().revision,
         800
     );
-    observations.record(&AutomationCapabilityResult::DatasetSchemaInspection(
-        schema(13),
-    ));
+    observations.record(
+        &AutomationCapabilityResult::DatasetSchemaInspection(schema(13)),
+        true,
+    );
     assert_eq!(
         observations.bind(&inspection(14, 802)).unwrap_err().code,
         CapabilityFailureCode::REVISION_CONFLICT
     );
     assert!(observations.version(&resource, false).unwrap().is_none());
-    observations.record(&AutomationCapabilityResult::ResourceInspection(inspection(
-        14, 802,
-    )));
+    observations.record(
+        &AutomationCapabilityResult::ResourceInspection(inspection(14, 802)),
+        true,
+    );
     assert_eq!(
         observations
             .version(&resource, false)
@@ -358,22 +361,13 @@ impl AgentDriverPort for ObservedDriver {
 async fn compacted_reads_survive_reopen_and_stale_delegation_cannot_write_until_reinspected() {
     let driver = Arc::new(ObservedDriver::default());
     let store = Arc::new(InMemoryHarnessStore::default());
+    driver.store.set(store.clone());
     let gateway = Arc::new(Gateway(AtomicU64::new(1), false));
-    let ports = HarnessPorts {
-        resources: Arc::new(yss_harness_core::test_support::FixtureResourceResolver),
-        models: yss_harness_core::test_support::fixed_model(driver.clone()),
-        capability_gateway: gateway.clone(),
-        sessions: store.clone(),
-        events: store.clone(),
-        event_sink: store.clone(),
-        workflows: store.clone(),
-        tool_ledger: store.clone(),
-        knowledge: store.clone(),
-        knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-        approvals: store.clone(),
-        clock: Arc::new(FixedClock::new(1000)),
-        ids: Arc::new(SequentialIds::default()),
-    };
+    let ports = ports(
+        store.clone(),
+        yss_harness_core::test_support::fixed_model(driver.clone()),
+        gateway.clone(),
+    );
     let host = HarnessHost::new(ports.clone()).unwrap();
     let session = host
         .create_session(
@@ -410,17 +404,27 @@ async fn compacted_reads_survive_reopen_and_stale_delegation_cannot_write_until_
     let records = store.tool_invocations();
     let replaced =
         ProjectSessionBinding::new(ProjectInstanceId::new(), ProjectSessionId::new("reopened"));
-    let mut observations = ResourceObservations::default();
+    let replay = TestRun::new(
+        gateway,
+        store,
+        Arc::new(SequentialIds::default()),
+        AgentInvocationScope {
+            run_id: AgentRunId::try_new("replayed-manager").unwrap(),
+            role: AgentRole::Manager,
+            task: None,
+        },
+    );
     for record in &records {
-        observations.replay(record, &replaced);
+        replay.hooks.replay(record, &replaced);
     }
+    let observations = replay.state().observations.lock().unwrap();
     assert!(observations.version(&document(), false).is_err());
     assert!(observations.version(&document(), true).is_err());
     assert_eq!(
         records
             .iter()
             .filter(|record| matches!(
-                record.request.bound(),
+                record.request.as_ref().map(decode_request).transpose().unwrap(),
                 Some(AutomationCapabilityRequest::ManageResource(
                     ManageResourceRequest::Save { .. }
                 ))

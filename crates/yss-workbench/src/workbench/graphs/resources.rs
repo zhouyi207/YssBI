@@ -312,10 +312,8 @@ impl Workbench {
             self.problems.update(cx, |problems, cx| problems.clear(cx));
             self.output
                 .update(cx, |output, cx| output.set_graph(None, cx));
-            self.results.update(cx, |results, cx| {
-                results.set_graph(None);
-                cx.notify();
-            });
+            self.results
+                .update(cx, |results, cx| results.set_graph(None, cx));
         }
         self.dock
             .update(cx, |dock, cx| dock.remove_panel(canvas, window, cx));

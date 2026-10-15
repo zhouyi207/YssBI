@@ -36,8 +36,16 @@ struct PackageInstaller {
     signer_approved: bool,
     busy: bool,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
 }
 impl PackageInstaller {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     fn new(
         services: Arc<PluginServices>,
         owner: WeakEntity<PluginsPanel>,
@@ -61,11 +69,11 @@ impl PackageInstaller {
                     view.busy = false;
                     match result {
                         Some(Ok(inspection)) => view.inspection = Some(inspection),
-                        Some(Err(error)) => view.error = Some(failure(&error)),
-                        None => {
-                            view.error =
-                                Some(yss_ui::text::t("native.plugins.packageReadFailed").into())
-                        }
+                        Some(Err(error)) => view.set_error(Some(failure(&error)), cx),
+                        None => view.set_error(
+                            Some(yss_ui::text::t("native.plugins.packageReadFailed").into()),
+                            cx,
+                        ),
                     }
                     cx.notify();
                 })
@@ -83,6 +91,7 @@ impl PackageInstaller {
             signer_approved: false,
             busy: true,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
     fn signer_changed(&self) -> bool {
@@ -101,7 +110,10 @@ impl PackageInstaller {
             return;
         };
         let Some(operation) = self.operation.clone() else {
-            self.error = Some(yss_ui::text::t("native.plugins.confirmationFailed").into());
+            self.set_error(
+                Some(yss_ui::text::t("native.plugins.confirmationFailed").into()),
+                cx,
+            );
             cx.notify();
             return;
         };
@@ -140,8 +152,10 @@ impl PackageInstaller {
                 failure
                     .update(cx, |wizard, cx| {
                         wizard.busy = false;
-                        wizard.error =
-                            Some(yss_ui::text::t("native.plugins.installationBusy").into());
+                        wizard.set_error(
+                            Some(yss_ui::text::t("native.plugins.installationBusy").into()),
+                            cx,
+                        );
                         cx.notify();
                     })
                     .log_released();
@@ -288,9 +302,6 @@ impl Render for PackageInstaller {
                     .max_h(px(520.))
                     .overflow_y_scroll(),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(div().text_sm().text_color(cx.theme().danger).child(error))
-            })
             .child(
                 div()
                     .flex()
@@ -430,7 +441,7 @@ impl PluginsPanel {
                     wizard
                         .update(cx, |wizard, cx| {
                             wizard.busy = false;
-                            wizard.error = Some(error);
+                            wizard.set_error(Some(error), cx);
                             cx.notify();
                         })
                         .log_released();

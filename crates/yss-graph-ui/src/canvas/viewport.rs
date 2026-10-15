@@ -29,12 +29,11 @@ impl GraphCanvas {
             return;
         };
         let snapshot = self.viewport_snapshot();
-        let Some(job) = self.services.layouts.update_viewport(
-            root,
-            self.path(),
-            snapshot,
-            self.services.tasks.executor(),
-        ) else {
+        let Some(job) = self
+            .services
+            .layouts
+            .update_viewport(root, self.path(), snapshot)
+        else {
             return;
         };
         let path = self.path().to_owned();
@@ -42,8 +41,10 @@ impl GraphCanvas {
             if !matches!(job.await, Ok(Ok(()))) {
                 view.update(cx, |view, cx| {
                     if view.path() == path && view.viewport_snapshot() == snapshot {
-                        view.error =
-                            Some(yss_ui::text::translate("native.canvas.viewportSaveFailed"));
+                        view.notifications.error(
+                            yss_ui::text::translate("native.canvas.viewportSaveFailed"),
+                            cx,
+                        );
                         cx.notify();
                     }
                 })

@@ -3,7 +3,7 @@ use super::DocumentEditor;
 use gpui_kit::assets::IconName;
 use gpui_kit::{App, IntoElement, div, prelude::*};
 use std::borrow::Cow;
-use yss_ui::inspector::{self, InlineMessage, InspectorHeader, InspectorSection};
+use yss_ui::inspector::{self, InspectorHeader, InspectorSection};
 use yss_ui::text::translate;
 
 /// Borrowed inspector fields; retain an owned copy only after the display changes.
@@ -53,12 +53,6 @@ impl DocumentEditor {
                 InspectorHeader::new(IconName::FileText, self.snapshot.path.name().to_owned())
                     .detail(translate("native.workbench.markdownDocument")),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(inspector::status_band(
-                    InlineMessage::error(error).id("document-error"),
-                    cx,
-                ))
-            })
             .child(
                 InspectorSection::new("document-info", translate("detail.sections.info")).child(
                     inspector::property_list([

@@ -26,6 +26,8 @@ All GUI crates inherit the same workspace `gpui-kit` dependency. They do not int
 
 The readonly `ResourceCatalog` lives in `yss-desktop-services::resources`. Workbench builds it from the accepted ProjectIndex and shares the same `Arc` with AssistantController and cached conversations. It preserves project identity, resource/signature revisions and search indexes without introducing a second query, mutable model or GPUI dependency.
 
+`query_project_index` returns the raw `ProjectIndex`; only `query_project_presentation` builds localized activity panels. Both use one captured session/publication and reject stale delivery after projection. Consuming read receipts transfers owned graph projections and database schema columns instead of deep-cloning them.
+
 `NativeServices` is private to Workbench's composition layer. Features receive narrow handles for their actual capabilities, not that aggregate. `ApplicationTasks` reuses the process Tokio handle for blocking use cases; it does not start a second runtime or own models, plugins, preferences and logging. Typed events and callbacks carry cross-feature requests, including import submission and resource/result navigation.
 
 `yss-application::runtime` remains the concrete adapter composition root. There is no separate bootstrap crate without a second host or other demonstrated isolation need. Project's operation admission/replay ledger is now its private `project_operation` module; Application's display-name allocator is its private `display_naming` module. Shared identity, layout, schema and scientific contracts remain separate crates.
@@ -61,11 +63,23 @@ Workbench retains feature entities and coordinates their placement; it does not 
 
 Workbench's controller subscription and observation survive replacement of project-bound subscriptions. Layout factories hold a weak controller handle rather than a second strong cache. DockArea remains the only topology owner; the controller never keeps an alternate selected panel or group tree.
 
+High-frequency state does not flow through a single Workbench notification. `GraphStatistics` owns the viewport readout; the command observer reacts only to busy, dirty and undo/redo changes. `GraphProperties` relays editing-state/version or projection-identity changes, not every pan or zoom. `ResultsPanel` notifies only when its shared result catalog changes.
+
+Unbound-port diagnostics are static: a repeating animation schedules new frames and invalidates its owning canvas even when the user is idle. The grid coarsens at low zoom while retaining world alignment. Keep caching at the existing DockSkin panel and toolbar boundaries, not around the entire Workbench or DockArea; nested cache misses can force child rebuilds, and conversation rendering has frame-local prepaint transfers.
+
+Assistant history reduction and acknowledgement analysis run on a blocking worker, with session/generation and live-event ordering guards on delivery. Composer predicates borrow the input Rope. Collapsed cell previews and column details do not synchronize or build hidden bodies; reopening uses the latest selection.
+
+`LayoutStore` binds the process runtime handle once and updates existing viewport entries in place. Its 250 ms debounce rejects superseded stamps before dispatching a blocking write and revalidates at persistence. Window close flushes the latest window and viewport state rather than waiting for a timer.
+
 Read generations, project identities and resource versions still reject stale delivery. Dropping a view task does not imply that an already-started blocking write was cancelled; save receipts continue to be accepted through the original owners.
 
 ## Editing, saving and execution
 
 Manual graph edits update Project's current graph and its semantic projection. **Save** persists the current graph independently. Undo, redo and execution do not implicitly save the graph body. Assistant edit batches persist the complete current graph atomically and retain undo history, without requiring an editor panel.
+
+Node dragging retains shared original positions plus a displacement. Pointer moves do not rebuild the selected-position map; release submits one version-checked move, while cancellation and no-op gestures submit none. Connection geometry survives projection refreshes by connection identity, with endpoint and port-order changes invalidating the relevant cache entries.
+
+Captured file, database and chart saves use their `ApplicationTasks` owner; Workbench save requests use its private `NativeServices`. They do not accept a second Application instance or runtime handle. Operation identities, session/version checks and edited snapshots on persistence failure remain part of the save contract.
 
 Analysis graphs express data ports and dependencies. Control flow, effects and sequencing belong to Workflow owners. Execution captures the document and semantic identity, prepares a matching immutable plan internally, and returns run facts and result references. Plan caches are backend details, not a second frontend lifecycle.
 

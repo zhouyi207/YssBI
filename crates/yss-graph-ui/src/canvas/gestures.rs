@@ -1,14 +1,14 @@
 //! Pointer gestures belong to one canvas; only a completed node drag edits the graph.
 mod update;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::{
     Context, DispatchPhase, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
     Point, WeakEntity, Window,
 };
-use yss_graph_document::{ConnectionId, NodeId, NodePosition};
+use yss_graph_document::{ConnectionId, NodeId};
 use yss_project::GraphEditVersion;
 
 use super::{GraphCanvas, connections, geometry};
@@ -23,7 +23,6 @@ pub(super) enum Gesture {
     },
     Nodes {
         press: Point<Pixels>,
-        positions: BTreeMap<NodeId, NodePosition>,
         version: GraphEditVersion,
         reveal: Option<NodeId>,
         moved: bool,
@@ -115,9 +114,9 @@ impl GraphCanvas {
             })
             .map(|node| (node.node_id, node.position))
             .collect();
+        self.preview = geometry::NodeMovement::new(positions);
         self.gesture = Some(Gesture::Nodes {
             press: event.position,
-            positions,
             version: self.graph.editing.version,
             reveal: (!additive).then_some(id),
             moved: false,

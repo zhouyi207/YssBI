@@ -5,7 +5,7 @@ use gpui_kit::component::{Disableable, Sizable, switch::Switch};
 use std::collections::BTreeMap;
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_editor::projection::EditorDiagnosticModel;
-use yss_ui::inspector::{self, InlineMessage, InspectorSection, PropertyField};
+use yss_ui::inspector::{self, InspectorSection, PropertyField};
 use yss_ui::text::translate;
 
 impl ParameterForm {
@@ -153,10 +153,7 @@ impl ParameterForm {
         for diagnostic in diagnostics {
             property = property.message(crate::feedback::diagnostic_message(diagnostic));
         }
-        if let Some(error) = &field.error {
-            property = property
-                .message(InlineMessage::error(error.clone()).id(("parameter-error", index)));
-        }
+
         let content = div()
             .on_action(cx.listener(
                 move |view, _: &gpui_kit::component::input::Escape, window, cx| {

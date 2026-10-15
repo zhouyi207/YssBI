@@ -1,11 +1,9 @@
-//! Type glyphs use native paths; cached tessellation is independent of hover and animation.
-use std::time::Duration;
-
+//! Type glyphs use native paths; cached tessellation is independent of hover.
 use gpui_kit::base::plot::{PathCaches, ShapeKey};
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::{
-    Animation, AnimationExt, AnyElement, App, Bounds, Hsla, IntoElement, Path, PathBuilder, Pixels,
-    canvas, div, fill, point, prelude::*, px, size,
+    AnyElement, Bounds, Hsla, IntoElement, Path, PathBuilder, Pixels, canvas, div, fill, point,
+    prelude::*, px, size,
 };
 use yss_data_contract::ValueType;
 use yss_graph_editor::projection::EditorPortTypeState;
@@ -48,81 +46,75 @@ impl Glyph {
         diameter: Pixels,
         color: Hsla,
         connected: bool,
-        pulse: bool,
-        cx: &App,
+        emphasized: bool,
     ) -> AnyElement {
-        let view = div().id("glyph").size(diameter).child(
-            canvas(
-                |_, _, _| (),
-                move |bounds, _, window, cx| {
-                    let caches = PathCaches::for_paint("port-shape", window, cx);
-                    caches.update(cx, |caches, cx| {
-                        let scale = bounds.size.width / px(12.);
-                        for (slot, fill) in [true, false].into_iter().enumerate() {
-                            let key = ShapeKey::new((self.shape, self.dashed, fill))
-                                .f32(scale)
-                                .finish();
-                            if let Some(path) = caches
-                                .slot(slot)
-                                .get(key, bounds.origin, || self.path(scale, fill))
-                            {
-                                let ink = if fill {
-                                    color.opacity(if connected { 1. } else { 0.05 })
-                                } else if connected || pulse {
-                                    color
+        div()
+            .id("glyph")
+            .size(diameter)
+            .child(
+                canvas(
+                    |_, _, _| (),
+                    move |bounds, _, window, cx| {
+                        let caches = PathCaches::for_paint("port-shape", window, cx);
+                        caches.update(cx, |caches, cx| {
+                            let scale = bounds.size.width / px(12.);
+                            for (slot, fill) in [true, false].into_iter().enumerate() {
+                                let key = ShapeKey::new((self.shape, self.dashed, fill))
+                                    .f32(scale)
+                                    .finish();
+                                if let Some(path) =
+                                    caches
+                                        .slot(slot)
+                                        .get(key, bounds.origin, || self.path(scale, fill))
+                                {
+                                    let ink = if fill {
+                                        color.opacity(if connected { 1. } else { 0.05 })
+                                    } else if connected || emphasized {
+                                        color
+                                    } else {
+                                        cx.theme().muted_foreground
+                                    };
+                                    window.paint_path(path, ink);
+                                }
+                            }
+                            if matches!(self.shape, Shape::Frame) {
+                                let ink = if connected {
+                                    cx.theme().table
                                 } else {
                                     cx.theme().muted_foreground
                                 };
-                                window.paint_path(path, ink);
+                                let unit = px(scale);
+                                for (x, y, width, height) in
+                                    [(1.5, 4.1, 9., 0.8), (4.6, 1.5, 0.8, 9.)]
+                                {
+                                    window.paint_quad(fill(
+                                        Bounds::new(
+                                            bounds.origin + point(unit * x, unit * y),
+                                            size(unit * width, unit * height),
+                                        ),
+                                        ink,
+                                    ));
+                                }
                             }
-                        }
-                        if matches!(self.shape, Shape::Frame) {
-                            let ink = if connected {
-                                cx.theme().table
-                            } else {
-                                cx.theme().muted_foreground
-                            };
-                            let unit = px(scale);
-                            for (x, y, width, height) in [(1.5, 4.1, 9., 0.8), (4.6, 1.5, 0.8, 9.)]
-                            {
-                                window.paint_quad(fill(
-                                    Bounds::new(
-                                        bounds.origin + point(unit * x, unit * y),
-                                        size(unit * width, unit * height),
-                                    ),
-                                    ink,
-                                ));
+                            if connected {
+                                let diameter = bounds.size.width;
+                                window.paint_quad(
+                                    fill(
+                                        Bounds::new(
+                                            bounds.origin + point(diameter * 0.4, diameter * 0.4),
+                                            size(diameter * 0.2, diameter * 0.2),
+                                        ),
+                                        cx.theme().table,
+                                    )
+                                    .corner_radii(diameter * 0.1),
+                                );
                             }
-                        }
-                    });
-                },
-            )
-            .size_full(),
-        );
-        let view = view.when(connected, |view| {
-            view.relative().child(
-                div()
-                    .absolute()
-                    .left(diameter * 0.4)
-                    .top(diameter * 0.4)
-                    .size(diameter * 0.2)
-                    .rounded_full()
-                    .bg(cx.theme().table),
-            )
-        });
-        if pulse {
-            // The static diagnostic ring remains visible with reduced motion.
-            view.with_animation(
-                "unbound-input",
-                Animation::new(Duration::from_millis(1200)).repeat(),
-                |view, progress| {
-                    view.opacity(0.65 + 0.35 * (progress * std::f32::consts::PI).sin())
-                },
+                        });
+                    },
+                )
+                .size_full(),
             )
             .into_any_element()
-        } else {
-            view.into_any_element()
-        }
     }
 
     fn path(self, scale: f32, fill: bool) -> Option<Path<Pixels>> {

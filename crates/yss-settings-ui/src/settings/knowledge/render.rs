@@ -18,33 +18,6 @@ impl SettingsPanel {
     pub(in crate::settings) fn knowledge_status(&self, cx: &mut Context<Self>) -> AnyElement {
         let mut content = div().flex_shrink_0().flex().flex_col().gap_2();
         if self.knowledge.scope.is_some() {
-            if let Some(failure) = self.knowledge.failure {
-                content = content.child(
-                    div()
-                        .py_2()
-                        .flex()
-                        .items_center()
-                        .gap_3()
-                        .text_sm()
-                        .text_color(cx.theme().danger)
-                        .child(div().flex_1().child(t(match failure {
-                            Failure::Load => "settings.knowledge.loadFailed",
-                            Failure::Mutation => "settings.knowledge.failed",
-                        })))
-                        .when(failure == Failure::Load, |view| {
-                            view.child(
-                                Button::new("knowledge-retry")
-                                    .small()
-                                    .ghost()
-                                    .label(t("common.retry"))
-                                    .disabled(self.knowledge_busy())
-                                    .on_click(
-                                        cx.listener(|view, _, _, cx| view.refresh_knowledge(cx)),
-                                    ),
-                            )
-                        }),
-                );
-            }
             if self.knowledge.pending || self.knowledge.loading {
                 content =
                     content.child(div().py_2().text_sm().child(t(if self.knowledge.pending {

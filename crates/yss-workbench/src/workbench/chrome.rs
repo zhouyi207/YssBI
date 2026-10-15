@@ -10,7 +10,7 @@ use crate::{
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     shimmer::ShimmerText,
 };
@@ -96,24 +96,6 @@ impl Workbench {
                     .gap_2()
                     .w_full()
                     .min_w_0()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_shrink_0()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::Workflow)
-                                    .size_4()
-                                    .text_color(cx.theme().primary),
-                            )
-                            .child(
-                                div()
-                                    .text_size(rems(13. / 14.))
-                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                    .child("YssBI"),
-                            ),
-                    )
                     .when(!cfg!(target_os = "macos"), |view| {
                         view.child(
                             div()

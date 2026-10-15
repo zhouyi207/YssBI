@@ -25,7 +25,6 @@ impl Render for ResultPanel {
             .flex_col()
             .bg(cx.theme().background)
             .child(self.toolbar(cx))
-            .child(self.read_feedback(cx))
             .child(
                 div()
                     .flex_1()

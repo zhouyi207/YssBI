@@ -32,9 +32,7 @@ pub fn read(
     project: ProjectInstanceId,
     path: ChartResourcePath,
 ) -> anyhow::Result<ChartRead> {
-    let catalog = services
-        .query_project_index(project.clone(), yss_ui::text::locale(), true)?
-        .index;
+    let catalog = services.query_project_index(project.clone())?;
     let revision = catalog
         .charts
         .iter()
@@ -138,6 +136,18 @@ impl ChartEditor {
                         view.preview = Some(Arc::new(PreviewData::Failed(PreviewFailure::Read)))
                     }
                 }
+                if let Some(PreviewData::Failed(failure)) = view.preview.as_deref() {
+                    tracing::warn!(code = failure.code(), "Chart preview failed");
+                    view.notifications.error_with_retry(
+                        failure.summary(),
+                        cx,
+                        |view, window, cx| {
+                            if view.available {
+                                view.refresh(window, cx);
+                            }
+                        },
+                    );
+                }
                 view.changed(cx);
             })
             .log_released();
@@ -170,9 +180,18 @@ impl ChartEditor {
                         view.refresh_again = view.available;
                     } else {
                         let dirty = view.dirty();
+                        let external_change = view.external_change;
                         view.external_change = dirty
                             && view.draft != read.document
                             && (view.external_change || read.document != view.saved);
+                        if view.external_change && !external_change {
+                            view.notifications.push(
+                                gpui_kit::component::notification::Notification::warning(
+                                    yss_ui::text::t("native.charts.externalChange"),
+                                ),
+                                cx,
+                            );
+                        }
                         view.revision = read.revision;
                         if view.catalog_details_changed(&read.catalog) {
                             view.draft_epoch = view.draft_epoch.wrapping_add(1);
@@ -187,7 +206,7 @@ impl ChartEditor {
                         view.schedule_preview(window, cx);
                     }
                 } else {
-                    view.error = Some(yss_ui::text::t("native.charts.readFailed").into());
+                    view.set_error(Some(yss_ui::text::t("native.charts.readFailed").into()), cx);
                 }
                 if view.refresh_again {
                     view.refresh_again = false;
@@ -236,7 +255,7 @@ impl ChartEditor {
             self.preview_task = None;
             self.preview_loading = false;
             self.preview = None;
-            self.error = Some(yss_ui::text::t("native.charts.removed").into());
+            self.set_error(Some(yss_ui::text::t("native.charts.removed").into()), cx);
             self.changed(cx);
             return;
         };

@@ -34,7 +34,7 @@ fn read_project(
             let language = crate::text::locale();
             let project = services
                 .application
-                .query_project_index(identity.clone(), language, true)
+                .query_project_presentation(identity.clone(), language)
                 .map(|index| Some(DesktopProject::new(identity.clone(), index, language)))
                 .map_err(anyhow::Error::from);
             (Some(identity), project)
@@ -256,7 +256,7 @@ impl Workbench {
             );
             if let Some(path) = observation.opened_path.take()
                 && !matches!(
-                    executor.block_on(watcher.layouts.remember_project(path, &executor)),
+                    executor.block_on(watcher.layouts.remember_project(path)),
                     Ok(Ok(()))
                 )
             {
@@ -320,12 +320,14 @@ impl Workbench {
                 if let Some(dialog) = &dialog {
                     if error.is_none() {
                         crate::modal_window::close_child(window, cx);
-                    } else {
-                        dialog
-                            .update(cx, |form, cx| {
-                                form.finish(lifecycle, error.clone(), recovery, cx)
-                            })
-                            .log_released();
+                    } else if dialog
+                        .update(cx, |form, cx| {
+                            form.finish(lifecycle, error.clone(), recovery, cx)
+                        })
+                        .log_released()
+                        .is_some()
+                    {
+                        error = None;
                     }
                 }
                 view.error = error.take();
@@ -390,52 +392,118 @@ impl Workbench {
         // YSS-DEBUG-BEGIN
         if std::env::var_os("YSS_DEBUG_CONVERSATION").is_some() {
             cx.spawn_in(window, async move |view, cx| {
-                cx.background_executor().timer(std::time::Duration::from_secs(4)).await;
-                view.update_in(cx, |view, window, cx| view.new_conversation(window, cx)).ok();
-            }).detach();
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(4))
+                    .await;
+                view.update_in(cx, |view, window, cx| view.new_conversation(window, cx))
+                    .ok();
+            })
+            .detach();
         }
         // YSS-DEBUG-END
         // YSS-DEBUG-BEGIN
         if let Ok(spec) = std::env::var("YSS_DEBUG_BENCH") {
             cx.spawn_in(window, async move |_, cx| {
-                use gpui_kit::{point, px, PlatformInput, ScrollWheelEvent, ScrollDelta, MouseMoveEvent, MouseDownEvent, MouseUpEvent, MouseButton};
-                cx.background_executor().timer(std::time::Duration::from_secs(14)).await;
+                use gpui_kit::{
+                    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PlatformInput,
+                    ScrollDelta, ScrollWheelEvent, point, px,
+                };
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(14))
+                    .await;
                 let parts: Vec<&str> = spec.split(':').collect();
                 let mode = parts[0].to_string();
                 let x: f32 = parts[1].parse().unwrap_or(0.);
                 let y: f32 = parts[2].parse().unwrap_or(0.);
                 if mode == "drag" {
                     cx.update(|window, cx| {
-                        window.dispatch_event(PlatformInput::MouseMove(MouseMoveEvent { position: point(px(x), px(y)), pressed_button: None, modifiers: Default::default() }), cx);
+                        window.dispatch_event(
+                            PlatformInput::MouseMove(MouseMoveEvent {
+                                position: point(px(x), px(y)),
+                                pressed_button: None,
+                                modifiers: Default::default(),
+                            }),
+                            cx,
+                        );
                         window.draw(cx).clear(cx);
-                        window.dispatch_event(PlatformInput::MouseDown(MouseDownEvent { button: MouseButton::Left, position: point(px(x), px(y)), modifiers: Default::default(), click_count: 1, first_mouse: false }), cx);
+                        window.dispatch_event(
+                            PlatformInput::MouseDown(MouseDownEvent {
+                                button: MouseButton::Left,
+                                position: point(px(x), px(y)),
+                                modifiers: Default::default(),
+                                click_count: 1,
+                                first_mouse: false,
+                            }),
+                            cx,
+                        );
                         window.draw(cx).clear(cx);
-                    }).ok();
+                    })
+                    .ok();
                 }
                 let mut samples = Vec::new();
                 for i in 0..80u32 {
                     let elapsed = cx.update(|window, cx| {
-                        let wave = if (i / 20) % 2 == 0 { (i % 20) as f32 } else { (20 - i % 20) as f32 }; let wave = if i == 79 { 20. } else { wave };
-                        let event = if mode == "drag" {
-                            PlatformInput::MouseMove(MouseMoveEvent { position: point(px(x + wave * 8.), px(y)), pressed_button: Some(MouseButton::Left), modifiers: Default::default() })
+                        let wave = if (i / 20) % 2 == 0 {
+                            (i % 20) as f32
                         } else {
-                            PlatformInput::ScrollWheel(ScrollWheelEvent { position: point(px(x), px(y)), delta: ScrollDelta::Pixels(point(px(0.), px(if (i / 40) % 2 == 0 { 60. } else { -60. }))), modifiers: Default::default(), touch_phase: Default::default() })
+                            (20 - i % 20) as f32
+                        };
+                        let wave = if i == 79 { 20. } else { wave };
+                        let event = if mode == "drag" {
+                            PlatformInput::MouseMove(MouseMoveEvent {
+                                position: point(px(x + wave * 8.), px(y)),
+                                pressed_button: Some(MouseButton::Left),
+                                modifiers: Default::default(),
+                            })
+                        } else {
+                            PlatformInput::ScrollWheel(ScrollWheelEvent {
+                                position: point(px(x), px(y)),
+                                delta: ScrollDelta::Pixels(point(
+                                    px(0.),
+                                    px(if (i / 40) % 2 == 0 { 60. } else { -60. }),
+                                )),
+                                modifiers: Default::default(),
+                                touch_phase: Default::default(),
+                            })
                         };
                         window.dispatch_event(event, cx);
                         let start = std::time::Instant::now();
                         window.draw(cx).clear(cx);
                         start.elapsed()
                     });
-                    if let Ok(elapsed) = elapsed { samples.push(elapsed); }
-                    cx.background_executor().timer(std::time::Duration::from_millis(16)).await;
+                    if let Ok(elapsed) = elapsed {
+                        samples.push(elapsed);
+                    }
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(16))
+                        .await;
                 }
                 if mode == "drag" {
-                    cx.update(|window, cx| { window.dispatch_event(PlatformInput::MouseUp(MouseUpEvent { button: MouseButton::Left, position: point(px(x), px(y)), modifiers: Default::default(), click_count: 1 }), cx); }).ok();
+                    cx.update(|window, cx| {
+                        window.dispatch_event(
+                            PlatformInput::MouseUp(MouseUpEvent {
+                                button: MouseButton::Left,
+                                position: point(px(x), px(y)),
+                                modifiers: Default::default(),
+                                click_count: 1,
+                            }),
+                            cx,
+                        );
+                    })
+                    .ok();
                 }
                 samples.sort();
                 let total: std::time::Duration = samples.iter().sum();
-                eprintln!("YSS-BENCH {mode} n={} mean={:?} median={:?} p90={:?} max={:?}", samples.len(), total / samples.len().max(1) as u32, samples[samples.len() / 2], samples[samples.len() * 9 / 10], samples[samples.len() - 1]);
-            }).detach();
+                eprintln!(
+                    "YSS-BENCH {mode} n={} mean={:?} median={:?} p90={:?} max={:?}",
+                    samples.len(),
+                    total / samples.len().max(1) as u32,
+                    samples[samples.len() / 2],
+                    samples[samples.len() * 9 / 10],
+                    samples[samples.len() - 1]
+                );
+            })
+            .detach();
         }
         // YSS-DEBUG-END
         if self

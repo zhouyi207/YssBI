@@ -77,6 +77,7 @@ pub struct Workbench {
     assistant_intent: Option<String>,
     dock: Entity<DockArea>,
     dock_renderer: std::rc::Rc<dock::WorkbenchDock>,
+    graph_statistics: Entity<status_bar::GraphStatistics>,
     details: Entity<DetailsPanel>,
     problems: Entity<ProblemsPanel>,
     logs: Entity<LogsPanel>,
@@ -124,12 +125,14 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> Self {
         let (dock, dock_renderer) = dock::create(cx.weak_entity(), window, cx);
-        let details = cx.new(|cx| DetailsPanel::new(services.graph.clone(), cx));
+        let owner = cx.weak_entity();
+        let graph_statistics = cx.new(|_| status_bar::GraphStatistics::new(owner));
+        let details = cx.new(|cx| DetailsPanel::new(services.graph.clone(), window, cx));
         let problems = cx.new(ProblemsPanel::new);
         let logs = cx.new(|cx| LogsPanel::new(services.clone(), window, cx));
         let output = cx.new(OutputPanel::new);
         let results = cx.new(ResultsPanel::new);
-        let recent = cx.new(|_| crate::projects::RecentProjects::new(services.clone()));
+        let recent = cx.new(|_| crate::projects::RecentProjects::new(services.clone(), window));
         let plugins =
             cx.new(|cx| crate::plugins::PluginsPanel::new(services.plugins.clone(), window, cx));
         let plugins_sidebar = cx.new(|cx| crate::plugins::PluginsSidebar::new(plugins.clone(), cx));
@@ -167,6 +170,7 @@ impl Workbench {
             assistant_intent: None,
             dock,
             dock_renderer,
+            graph_statistics,
             details,
             problems,
             logs,
@@ -421,10 +425,8 @@ impl Workbench {
         self.problems.update(cx, |problems, cx| problems.clear(cx));
         self.output
             .update(cx, |output, cx| output.set_graph(None, cx));
-        self.results.update(cx, |results, cx| {
-            results.set_graph(None);
-            cx.notify();
-        });
+        self.results
+            .update(cx, |results, cx| results.set_graph(None, cx));
         self.mark_project_resource(Some(&path), cx);
     }
 

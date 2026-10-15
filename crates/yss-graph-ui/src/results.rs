@@ -7,7 +7,7 @@ use gpui_kit::component::{
     dock::{BasePanel, Panel, PanelEvent},
 };
 use gpui_kit::{
-    App, Context, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window, div,
+    App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render, Window, div,
     prelude::*, uniform_list,
 };
 use std::rc::Rc;
@@ -28,10 +28,20 @@ impl ResultsPanel {
             entries: Rc::default(),
         }
     }
-    pub fn set_graph(&mut self, canvas: Option<&GraphCanvas>) {
-        self.entries = canvas
-            .map(|canvas| canvas.result_entries().clone())
-            .unwrap_or_default();
+    pub fn set_graph(&mut self, canvas: Option<&Entity<GraphCanvas>>, cx: &mut Context<Self>) {
+        if let Some(canvas) = canvas {
+            let entries = canvas.read(cx).result_entries();
+            if Rc::ptr_eq(&self.entries, entries) {
+                return;
+            }
+            self.entries = entries.clone();
+        } else {
+            if self.entries.is_empty() {
+                return;
+            }
+            self.entries = Rc::default();
+        }
+        cx.notify();
     }
 }
 impl Render for ResultsPanel {

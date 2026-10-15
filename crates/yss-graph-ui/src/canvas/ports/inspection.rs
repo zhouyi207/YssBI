@@ -68,7 +68,7 @@ impl GraphCanvas {
             })
             .collect::<Vec<_>>();
         self.cancel_gesture();
-        self.error = None;
+
         let projection = self.graph.projection.clone();
         let project = self.graph.project.clone();
         let version = self.graph.editing.version;
@@ -135,13 +135,13 @@ impl GraphCanvas {
                         if current {
                             cx.emit(CanvasEvent::InspectResult(lease));
                         } else {
-                            view.error =
-                                Some(yss_ui::text::translate("native.results.unavailable"));
+                            view.notifications
+                                .error(yss_ui::text::translate("native.results.unavailable"), cx);
                         }
                     }
-                    Ok(None) | Err(_) => {
-                        view.error = Some(yss_ui::text::translate("native.results.unavailable"))
-                    }
+                    Ok(None) | Err(_) => view
+                        .notifications
+                        .error(yss_ui::text::translate("native.results.unavailable"), cx),
                 }
                 cx.notify();
             })

@@ -48,7 +48,7 @@ fn chart_callbacks_track_dataset_dependencies_not_unrelated_publications(cx: &mu
     let (window, editor) = cx.update(|cx| {
         gpui_kit::init(cx);
         yss_ui::init(cx);
-        gpui_kit::open_window(WindowOptions::default(), cx, |_, cx| {
+        gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
             cx.new(|cx| {
                 ChartEditor::new(
                     tasks,
@@ -59,6 +59,7 @@ fn chart_callbacks_track_dataset_dependencies_not_unrelated_publications(cx: &mu
                         catalog: Arc::new(catalog.clone()),
                         document: ChartDocument::new("data"),
                     },
+                    window,
                     cx,
                 )
             })

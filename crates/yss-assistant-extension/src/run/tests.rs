@@ -1,4 +1,4 @@
-use super::support::{StoreSlot, TaskOutcome, TestRun, Tools, ports, test_project};
+use crate::tests::support::{StoreSlot, TaskOutcome, TestRun, Tools, ports};
 use crate::run::observations::ResourceObservations;
 use crate::contract::*;
 use std::collections::BTreeMap;
@@ -171,12 +171,12 @@ impl AgentDriverPort for Driver {
             self.requests.lock().unwrap().push(request.clone());
             if request.role != AgentRole::Manager.id() {
                 self.worker_calls.fetch_add(1, Ordering::AcqRel);
-                assert!(
-                    capabilities
-                        .delegate(task("forbidden", AgentRole::Review, false))
-                        .await
-                        .is_err()
-                );
+                let failure = capabilities
+                    .delegate(task("forbidden", AgentRole::Review, false))
+                    .await
+                    .unwrap_err();
+                assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
+                assert_eq!(failure.details["reason"], "workers_cannot_delegate");
                 if matches!(self.scenario, Scenario::Parallel) {
                     self.barrier.wait().await;
                 }
@@ -762,7 +762,11 @@ async fn long_turns_can_finish_more_than_twenty_four_tasks_and_256_tools() {
             .iter()
             .all(|record| record.tool == CapabilityId::SaveResource.as_str()
                 && record.request.is_none()
-                && record.failure.as_ref().unwrap().details["reason"] == "agent_scope_denied")
+                && record.failure.as_ref().is_some_and(|failure| {
+                    failure.code == CapabilityFailureCode::INVALID_REQUEST
+                        && failure.details.get("capabilityId").map(String::as_str)
+                            == Some(CapabilityId::SaveResource.as_str())
+                }))
     );
 }
 

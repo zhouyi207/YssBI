@@ -37,7 +37,7 @@ fn capture_editor_context(
     let index = captured
         .project()
         .read_project_index(captured.project_instance_id())?;
-    let project = super::catalog::localized_project_facts_from_index(captured, index)
+    let project = super::catalog::localized_project_facts_from_index(captured, &index)
         .map_err(ResourceMutationApplicationError::Catalog)?;
     let catalog = project
         .resources()
@@ -279,7 +279,7 @@ impl ApplicationState {
             .read_project_index(captured.project_instance_id())?;
         let publication_revision = index.publication_revision;
         let authority_generation = index.authority_generation();
-        let project = super::catalog::localized_project_facts_from_index(&captured, index)
+        let project = super::catalog::localized_project_facts_from_index(&captured, &index)
             .map_err(ResourceMutationApplicationError::Catalog)?;
         let catalog = project
             .resources()

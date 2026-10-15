@@ -18,9 +18,7 @@ pub fn regression_graph(application: &ApplicationState, database_id: &str) -> Re
         "Harness Regression".into(),
         OperationId::new(),
     )?;
-    let index = application
-        .query_project_index(captured.project_instance_id().clone(), "en-US", false)?
-        .index;
+    let index = application.query_project_index(captured.project_instance_id().clone())?;
     let path = &index
         .event_graphs
         .iter()

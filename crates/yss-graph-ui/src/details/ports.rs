@@ -117,7 +117,14 @@ impl GraphDetails {
                 }),
                 cx,
             ),
-            Err(error) => self.ports[index].error = Some(error),
+            Err(error) => {
+                self.notifications.push(
+                    gpui_kit::component::notification::Notification::error(error.clone())
+                        .title(self.ports[index].model.display.label.to_string()),
+                    cx,
+                );
+                self.ports[index].error = Some(error);
+            }
         }
         cx.notify();
     }
@@ -260,9 +267,7 @@ impl GraphDetails {
                 inspector::hint(translate("detail.nodeDoc.unconnected"), cx).into_any_element(),
             );
         }
-        if let Some(error) = &field.error {
-            details.push(InlineMessage::error(error.clone()).into_any_element());
-        }
+
         div()
             .min_w_0()
             .flex()

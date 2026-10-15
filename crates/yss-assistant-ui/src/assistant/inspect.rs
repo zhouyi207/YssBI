@@ -6,9 +6,9 @@ use super::{
 };
 use gpui_kit::{App, Context, IntoElement, RenderOnce, SharedString, Task, WeakEntity, Window};
 use std::sync::Arc;
+use yss_assistant_contract::{AssistantToolIdentity, AssistantToolInspection};
 use yss_desktop_services::resources::ResourceCatalog;
 use yss_harness_contract::{ProjectResourceRef, ToolInvocationId};
-use yss_assistant_contract::{AssistantToolIdentity, AssistantToolInspection};
 use yss_ui::lifecycle::LogReleased;
 
 #[derive(IntoElement, Clone)]
@@ -115,6 +115,8 @@ impl Inspection {
         }
         let Ok(invocation) = ToolInvocationId::try_new(self.card.tool.id.clone()) else {
             self.loading = Loading::Failed;
+            yss_ui::notifications::Notifications::new(window)
+                .error(yss_ui::text::t("panel.assistantDetailsFailed"), cx);
             cx.notify();
             return;
         };
@@ -159,7 +161,7 @@ impl Inspection {
         });
         self.task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = job.await.unwrap_or(Err(()));
-            view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.query != query {
                     return;
                 }
@@ -170,14 +172,20 @@ impl Inspection {
                         && owner.session.id == session
                         && owner.session.project == project
                 });
-                if let Ok(detail) = result
-                    && current
-                {
+                if !current {
+                    return;
+                }
+                if let Ok(detail) = result {
                     view.detail = Some(detail);
                     view.loading = Loading::Ready;
                 } else {
                     view.detail = None;
                     view.loading = Loading::Failed;
+                    yss_ui::notifications::Notifications::new(window).error_with_retry(
+                        yss_ui::text::t("panel.assistantDetailsFailed"),
+                        cx,
+                        |view, window, cx| view.load(window, cx),
+                    );
                 }
                 view.technical = None;
                 view.copied = None;

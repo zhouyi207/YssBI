@@ -151,7 +151,7 @@ pub struct ImportDialog {
     infer_rows: Entity<InputState>,
     has_header: bool,
     connection: inputs::ConnectionInputs,
-    error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     confirming_close: bool,
 }
 impl ImportDialog {
@@ -176,7 +176,7 @@ impl ImportDialog {
             infer_rows: cx.new(|cx| InputState::new(window, cx).default_value("1000")),
             has_header: true,
             connection: inputs::ConnectionInputs::new(window, cx),
-            error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             confirming_close: false,
         }
     }
@@ -187,7 +187,7 @@ impl ImportDialog {
         if self.busy() {
             return;
         }
-        self.error = None;
+
         if kind.remote() {
             self.connection.select_kind(kind, window, cx);
             self.stage = ImportStage::Connection(kind);
@@ -217,7 +217,7 @@ impl ImportDialog {
             }
             _ => ImportStage::Sources,
         };
-        self.error = None;
+
         cx.notify();
     }
     fn optional_name(&self, cx: &gpui_kit::App) -> Option<String> {
@@ -235,7 +235,7 @@ impl ImportDialog {
             ImportKind::Csv => match self.csv_source(path.clone(), cx) {
                 Ok(source) => source,
                 Err(error) => {
-                    self.error = Some(error);
+                    self.notifications.error(error, cx);
                     cx.notify();
                     return;
                 }
@@ -292,7 +292,7 @@ impl ImportDialog {
             ImportRequest::Sample { id, .. } => ImportTask::ImportSample(id.clone()),
             ImportRequest::Source { .. } => ImportTask::Import,
         });
-        self.error = None;
+
         cx.emit(ImportSubmission {
             scope: self.scope.clone(),
             request,
@@ -302,7 +302,8 @@ impl ImportDialog {
 
     pub fn reject_submission(&mut self, cx: &mut Context<Self>) {
         self.task = None;
-        self.error = Some(yss_ui::text::t("native.imports.busy").into());
+        self.notifications
+            .error(yss_ui::text::t("native.imports.busy"), cx);
         cx.notify();
     }
 
@@ -314,7 +315,7 @@ impl ImportDialog {
     ) {
         self.task = None;
         match outcome {
-            Err(key) => self.error = Some(yss_ui::text::translate(key)),
+            Err(key) => self.notifications.error(yss_ui::text::translate(key), cx),
             Ok(()) => yss_ui::modal_window::close_child(window, cx),
         }
         cx.notify();

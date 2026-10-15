@@ -164,12 +164,12 @@ impl ListDelegate for Results {
             .p_3()
             .text_xs()
             .text_color(cx.theme().muted_foreground)
-            .child(yss_ui::text::t(if self.failed {
-                "native.results.unavailable"
-            } else if self.query.trim().is_empty() {
-                "canvas.pinResultSearch.empty"
-            } else {
-                "canvas.pinResultSearch.noMatches"
-            }))
+            .when(!self.failed, |view| {
+                view.child(yss_ui::text::t(if self.query.trim().is_empty() {
+                    "canvas.pinResultSearch.empty"
+                } else {
+                    "canvas.pinResultSearch.noMatches"
+                }))
+            })
     }
 }

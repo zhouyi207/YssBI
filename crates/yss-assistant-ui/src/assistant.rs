@@ -33,7 +33,10 @@ use std::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
-use yss_harness_contract::{HarnessEventEnvelope, HarnessSessionRecord, HarnessTurnOptions, LanguageModelCatalog, LanguageModelSelection, PrincipalId, ProjectResourceRef};
+use yss_harness_contract::{
+    HarnessEventEnvelope, HarnessSessionRecord, HarnessTurnOptions, LanguageModelCatalog,
+    LanguageModelSelection, PrincipalId, ProjectResourceRef,
+};
 
 actions!(native_assistant, [CancelResponse]);
 
@@ -88,9 +91,25 @@ pub struct ConversationPanel {
     event_task: Option<gpui_kit::Task<()>>,
     expanded: BTreeMap<String, bool>,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     stream_error: Option<String>,
 }
 impl ConversationPanel {
+    fn set_error(&mut self, error: String, cx: &mut Context<Self>) {
+        self.notifications.error(error.clone(), cx);
+        self.error = Some(error);
+    }
+
+    fn set_stream_error(&mut self, error: String, cx: &mut Context<Self>) {
+        if self.stream_error.as_ref() != Some(&error) {
+            self.notifications
+                .error_with_retry(error.clone(), cx, |view, window, cx| {
+                    view.reload(false, window, cx);
+                });
+        }
+        self.stream_error = Some(error);
+    }
+
     pub fn new(
         services: Arc<AssistantServices>,
         session: HarnessSessionRecord,
@@ -158,6 +177,7 @@ impl ConversationPanel {
             event_task: None,
             expanded: BTreeMap::new(),
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             stream_error: None,
         };
         panel.observe_scroll(cx);
@@ -227,15 +247,43 @@ impl ConversationPanel {
 // YSS-DEBUG-BEGIN
 fn debug_turns(transcript: &mut projection::Transcript, count: u64) {
     use yss_assistant_contract::{AssistantEvent, AssistantEventKind as E};
-    let body = std::fs::read_to_string(std::env::var("YSS_DEBUG_MARKDOWN").unwrap_or_default()).unwrap_or_else(|_| "Hello **world**".into());
+    let body = std::fs::read_to_string(std::env::var("YSS_DEBUG_MARKDOWN").unwrap_or_default())
+        .unwrap_or_else(|_| "Hello **world**".into());
     let mut seq = transcript.sequence;
-    let model = yss_harness_contract::LanguageModelIdentity { selection: LanguageModelSelection { provider_id: "p".into(), model_id: "m".into() }, provider_name: "Provider".into(), model_name: "Model".into() };
+    let model = yss_harness_contract::LanguageModelIdentity {
+        selection: LanguageModelSelection {
+            provider_id: "p".into(),
+            model_id: "m".into(),
+        },
+        provider_name: "Provider".into(),
+        model_name: "Model".into(),
+    };
     for i in 0..count {
         let turn = format!("debug-turn-{i}");
-        let events = [E::TurnStarted { user_message: format!("请分析数据集并给出第 {i} 份报告，包括统计摘要和图表建议。"), model: model.clone(), resources: vec![] }, E::TextDelta { delta: body.clone() }, E::TurnCompleted { final_text: body.clone() }];
+        let events = [
+            E::TurnStarted {
+                user_message: format!("请分析数据集并给出第 {i} 份报告，包括统计摘要和图表建议。"),
+                model: model.clone(),
+                resources: vec![],
+            },
+            E::TextDelta {
+                delta: body.clone(),
+            },
+            E::TurnCompleted {
+                final_text: body.clone(),
+            },
+        ];
         for event in events {
             seq += 1;
-            transcript.accept(AssistantEvent { sequence: seq, session_id: String::new(), turn_id: Some(turn.clone()), occurred_at: 1_700_000_000_000 + seq * 1000, event }).ok();
+            transcript
+                .accept(AssistantEvent {
+                    sequence: seq,
+                    session_id: String::new(),
+                    turn_id: Some(turn.clone()),
+                    occurred_at: 1_700_000_000_000 + seq * 1000,
+                    event,
+                })
+                .ok();
         }
     }
 }

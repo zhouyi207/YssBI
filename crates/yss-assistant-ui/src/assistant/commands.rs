@@ -95,7 +95,7 @@ impl ConversationPanel {
                 }
                 if let Err(error) = result {
                     view.queue_paused = true;
-                    view.error = Some(error);
+                    view.set_error(error, cx);
                     if !pending.accepted && !accepted {
                         view.unsent = Some(pending.message);
                     }
@@ -156,7 +156,7 @@ impl ConversationPanel {
                         view.update_session(session);
                         view.error = None;
                     }
-                    Err(error) => view.error = Some(error),
+                    Err(error) => view.set_error(error, cx),
                 }
                 cx.notify();
             })

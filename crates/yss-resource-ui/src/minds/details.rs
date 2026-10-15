@@ -12,7 +12,7 @@ use gpui_kit::component::{
 use gpui_kit::{Anchor, App, ClickEvent, Context, IntoElement, Window, div, prelude::*};
 use std::borrow::Cow;
 use yss_project_model::file::FileVersion;
-use yss_ui::inspector::{self, InlineMessage, InspectorHeader, InspectorSection, PropertyField};
+use yss_ui::inspector::{self, InspectorHeader, InspectorSection, PropertyField};
 use yss_ui::text::translate;
 
 /// Read-only inspector identity and controls, excluding editable topic text.
@@ -102,12 +102,6 @@ impl MindCanvas {
                 InspectorHeader::new(IconName::Network, self.snapshot.path.name().to_owned())
                     .detail(translate("detail.itemTypes.mind")),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(inspector::status_band(
-                    InlineMessage::error(error).id("mind-details-error"),
-                    cx,
-                ))
-            })
             .child(topic)
             .child(
                 InspectorSection::new("mind-info", translate("detail.sections.info")).child(

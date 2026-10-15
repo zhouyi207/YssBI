@@ -82,11 +82,8 @@ impl<T: FileContent> FileSaveOutcome<T> {
 }
 
 impl<T: NativeFile> FileSaveRequest<T> {
-    pub fn commit(
-        self,
-        services: &ApplicationState,
-        owner: &ApplicationTasks,
-    ) -> FileSaveOutcome<T> {
+    pub fn commit(self, owner: &ApplicationTasks) -> FileSaveOutcome<T> {
+        let services = owner.application();
         let mut version = self.version;
         let mut snapshot = None;
         if !self.edits.is_empty() {

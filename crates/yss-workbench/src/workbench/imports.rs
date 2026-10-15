@@ -114,7 +114,7 @@ impl Workbench {
             });
             let language = crate::text::locale();
             let project = application
-                .query_project_index(scope.project().clone(), language, true)
+                .query_project_presentation(scope.project().clone(), language)
                 .ok()
                 .map(|snapshot| DesktopProject::new(scope.project().clone(), snapshot, language));
             Ok((imported, project))
@@ -137,18 +137,24 @@ impl Workbench {
                 }
                 // Import can commit before a failed session refresh; re-query the actual owners in either case.
                 view.rebind_session(window, cx);
-                match &imported {
-                    Ok(id) => {
-                        view.expand_project_category("project.data", cx);
-                        view.open_database(id.clone(), None, window, cx);
-                    }
-                    Err(key) => view.error = Some(crate::text::translate(key)),
+                if let Ok(id) = &imported {
+                    view.expand_project_category("project.data", cx);
+                    view.open_database(id.clone(), None, window, cx);
                 }
-                dialog
+                let error = imported
+                    .as_ref()
+                    .err()
+                    .map(|key| crate::text::translate(key));
+                if dialog
                     .update(cx, |dialog, cx| {
                         dialog.finished(imported.map(|_| ()), window, cx)
                     })
-                    .log_released();
+                    .log_released()
+                    .is_none()
+                    && let Some(error) = error
+                {
+                    view.error = Some(error);
+                }
                 cx.notify();
             })
             .log_released();

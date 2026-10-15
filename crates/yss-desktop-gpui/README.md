@@ -13,7 +13,7 @@ GPUI Pre 0.3.8、Base/Component/Assets 0.7.1 仍是必要的传递依赖，根 C
 平台 feature 由 Kit 管理，包含 font-kit、Wayland、X11 和仅影响 macOS 的 `runtime_shaders`。
 窗口及画布由 GPU 原生绘制，窗口手势由项目的 `window_chrome` 统一处理，依赖直接使用 crates.io 发布版。
 
-基础界面优先复用 `gpui_kit::component`：标题区域使用原窗口图标与主题，菜单使用 `AppMenuBar`，工作台使用 `DockSkin` 与根 `DockArea`，
+基础界面优先复用 `gpui_kit::component`：标题区域复用共享窗口装饰与主题，菜单使用 `AppMenuBar`，工作台使用 `DockSkin` 与根 `DockArea`，
 数据库及结果使用 `Table`，设置使用 `Settings / SettingPage / SettingGroup / SettingItem / SettingField`，输入、菜单、按钮、
 Markdown 与常规表单使用对应原生控件。主题由 `appearance` 统一设置，不另建基础组件或布局模型。
 图、Mind 画布与专用预览由各功能 crate 保留绘制和交互；业务状态、校验及异步提交仍归现有 owner。
@@ -566,7 +566,8 @@ Details 只保留当前目标的一份订阅，比较借用的显示投影；正
 - `workbench/input`：按单行或多行字段选择原生 Input / Textarea，只保存未提交控件状态。
 - `workbench/lifecycle`：显式逐文件保存及其后续项目操作、窗口关闭；保存失败保留输入和窗口，
   已成功的保存分别接收回执，剩余待保存内容阻止后续切换。
-- `workbench/chrome`：共享 window_chrome 的标题区域中组合品牌、AppMenuBar 及设置快捷按钮；
+- `workbench/chrome`：共享 window_chrome 的标题区域中组合 AppMenuBar 及设置快捷按钮；
+  左侧不显示品牌图标与名称，也不保留品牌占位；应用菜单从标题区域的左侧内边距开始排列。
   顶栏不再显示保存全部与插件按钮；保存全部快捷键、设置窗口保存和退出/项目切换的保存检查继续复用原 lifecycle。
   Linux/Windows 呈现应用菜单，macOS 使用系统菜单。窗口选项沿用 TitleBar 提供的拖动与双击配置。
   客户端窗口关闭、菜单退出和系统关闭都进入 lifecycle 的同一判断与保存确认，不能绕过未保存保护。

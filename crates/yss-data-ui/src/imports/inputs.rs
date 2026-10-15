@@ -56,8 +56,8 @@ impl ConnectionInputs {
                 .into_iter()
                 .any(|input| !input.read(cx).value().is_empty())
     }
-    pub fn url(&self, kind: ImportKind, cx: &App) -> Result<String, String> {
-        let scheme = if kind == ImportKind::Postgres {
+    pub fn url(&self, cx: &App) -> Result<String, String> {
+        let scheme = if self.kind == ImportKind::Postgres {
             "postgres"
         } else {
             "mysql"
@@ -67,7 +67,7 @@ impl ConnectionInputs {
             let url = url::Url::parse(&value)
                 .map_err(|_| yss_ui::text::t("native.imports.invalidConnectionString"))?;
             if !(url.scheme() == scheme
-                || kind == ImportKind::Postgres && url.scheme() == "postgresql")
+                || self.kind == ImportKind::Postgres && url.scheme() == "postgresql")
                 || url.host_str().is_none()
             {
                 return Err(yss_ui::text::t("native.imports.connectionTypeMismatch").into());

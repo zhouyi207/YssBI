@@ -54,20 +54,8 @@ pub struct DatabaseMetaSnapshot {
 }
 
 impl DatabaseMetaSnapshot {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn schema(&self) -> &DatabaseSchemaFact {
-        &self.schema
-    }
-
-    pub const fn row_count(&self) -> usize {
-        self.row_count
-    }
-
-    pub const fn data_revision(&self) -> u64 {
-        self.data_revision
+    pub fn into_parts(self) -> (Box<str>, DatabaseSchemaFact, usize, u64) {
+        (self.name, self.schema, self.row_count, self.data_revision)
     }
 }
 
@@ -1006,10 +994,10 @@ mod tests {
         committed.confirm();
         physical.confirm().unwrap();
 
-        let metadata = metadata_snapshot(&session, database).unwrap();
-        assert_eq!(metadata.schema().runtime_revision().get(), 1);
-        assert_eq!(metadata.schema().schema_revision().get(), 1);
-        assert_eq!(metadata.schema().columns().len(), 2);
+        let (_, schema, _, _) = metadata_snapshot(&session, database).unwrap().into_parts();
+        assert_eq!(schema.runtime_revision().get(), 1);
+        assert_eq!(schema.schema_revision().get(), 1);
+        assert_eq!(schema.columns().len(), 2);
         assert_eq!(before.data_schema().unwrap().columns().len(), 1);
         assert!(!before.edit_state().can_undo);
     }

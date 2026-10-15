@@ -15,10 +15,11 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
-use yss_graph_document::{ConnectionId, NodeId, NodePosition, PortAddress};
+use yss_graph_document::{ConnectionId, NodeId, PortAddress};
 use yss_graph_editor::projection::EditorProjectionModel;
 use yss_node_protocol::PortDirection;
 
+use super::geometry::NodeMovement;
 use super::presentation::{Presentation, State};
 use super::{geometry, ports};
 use curve::Curve;
@@ -35,10 +36,10 @@ struct PortAnchor {
 }
 
 impl PortAnchor {
-    fn position(&self, preview: &BTreeMap<NodeId, NodePosition>) -> Point<Pixels> {
+    fn position(&self, preview: &NodeMovement) -> Point<Pixels> {
         self.offset
             + preview
-                .get(&self.node_id)
+                .position(self.node_id)
                 .map_or(self.node_position, |position| {
                     point(px(position.x as f32), px(position.y as f32))
                 })
@@ -59,7 +60,7 @@ impl Connection {
         &self,
         offset: Point<Pixels>,
         zoom: f32,
-        preview: &BTreeMap<NodeId, NodePosition>,
+        preview: &NodeMovement,
     ) -> (Point<Pixels>, Curve) {
         let output = self.output.position(preview) * zoom;
         (
@@ -88,6 +89,17 @@ pub(super) struct ConnectionLayer {
 
 impl ConnectionLayer {
     pub fn new(projection: &EditorProjectionModel) -> Self {
+        let mut layer = Self {
+            anchors: BTreeMap::new(),
+            connections: Vec::new(),
+            pending: PathCache::default(),
+            grid: PathCache::default(),
+        };
+        layer.install(projection);
+        layer
+    }
+
+    pub fn install(&mut self, projection: &EditorProjectionModel) {
         let anchors = projection
             .nodes
             .iter()
@@ -112,34 +124,40 @@ impl ConnectionLayer {
                 )
             })
             .collect::<BTreeMap<_, _>>();
-        let connections = projection
+        let mut previous = std::mem::take(&mut self.connections)
+            .into_iter()
+            .map(|connection| (connection.id, connection))
+            .collect::<BTreeMap<_, _>>();
+        self.connections = projection
             .connections
             .iter()
             .filter_map(|connection| {
                 let output = anchors.get(&connection.output)?.clone();
                 let input = anchors.get(&connection.input)?.clone();
-                Some(Connection {
-                    id: connection.connection_id,
-                    output,
-                    input,
-                    path: PathCache::default(),
-                    highlight: PathCache::default(),
-                    hit: hit::HitPath::default(),
+                Some(match previous.remove(&connection.connection_id) {
+                    Some(mut retained) => {
+                        retained.output = output;
+                        retained.input = input;
+                        retained
+                    }
+                    None => Connection {
+                        id: connection.connection_id,
+                        output,
+                        input,
+                        path: PathCache::default(),
+                        highlight: PathCache::default(),
+                        hit: hit::HitPath::default(),
+                    },
                 })
             })
             .collect();
-        Self {
-            anchors,
-            connections,
-            pending: PathCache::default(),
-            grid: PathCache::default(),
-        }
+        self.anchors = anchors;
     }
 
     pub fn port_position(
         &self,
         address: &PortAddress,
-        preview: &BTreeMap<NodeId, NodePosition>,
+        preview: &NodeMovement,
     ) -> Option<Point<Pixels>> {
         self.anchors
             .get(address)
@@ -160,7 +178,7 @@ impl ConnectionLayer {
         &mut self,
         bounds: Bounds<Pixels>,
         (offset, zoom): (Point<Pixels>, f32),
-        preview: &BTreeMap<NodeId, NodePosition>,
+        preview: &NodeMovement,
         interaction: Interaction<'_>,
         window: &mut Window,
         cx: &App,
@@ -226,7 +244,7 @@ impl ConnectionLayer {
         &mut self,
         point: Point<Pixels>,
         zoom: f32,
-        preview: &BTreeMap<NodeId, NodePosition>,
+        preview: &NodeMovement,
     ) -> Option<ConnectionId> {
         self.connections.iter_mut().rev().find_map(|connection| {
             let (origin, curve) = connection.geometry(Point::default(), zoom, preview);
@@ -264,7 +282,7 @@ impl ConnectionLayer {
         bounds: Bounds<Pixels>,
         offset: Point<Pixels>,
         zoom: f32,
-        preview: &BTreeMap<NodeId, NodePosition>,
+        preview: &NodeMovement,
     ) -> bool {
         self.connections
             .iter()
@@ -279,7 +297,7 @@ impl ConnectionLayer {
         &self,
         bounds: Bounds<Pixels>,
         (offset, zoom): (Point<Pixels>, f32),
-        preview: &BTreeMap<NodeId, NodePosition>,
+        preview: &NodeMovement,
         (presentation, progress): (&Presentation, f32),
         window: &mut Window,
         cx: &App,
@@ -315,7 +333,7 @@ impl ConnectionLayer {
         window: &mut Window,
         cx: &App,
     ) {
-        let spacing = px(40. * zoom);
+        let spacing = grid_spacing(zoom);
         let phase = point(
             px(f32::from(offset.x).rem_euclid(spacing.into())),
             px(f32::from(offset.y).rem_euclid(spacing.into())),
@@ -357,6 +375,18 @@ impl ConnectionLayer {
     }
 }
 
+const GRID_WORLD_SPACING: f32 = 40.;
+const GRID_MIN_SCREEN_SPACING: f32 = 20.;
+
+fn grid_spacing(zoom: f32) -> Pixels {
+    let mut spacing = GRID_WORLD_SPACING * zoom;
+    // Coarser world-aligned levels keep dots legible and bound low-zoom mesh work.
+    while spacing < GRID_MIN_SCREEN_SPACING {
+        spacing *= 2.;
+    }
+    px(spacing)
+}
+
 fn visible(curve: Curve, origin: Point<Pixels>, bounds: Bounds<Pixels>) -> bool {
     let mut curve_bounds = curve.bounds().dilate(px(8.));
     curve_bounds.origin += origin;
@@ -377,5 +407,31 @@ fn paint_connection(
         .finish();
     if let Some(path) = cache.get(key, origin, || curve.build(width, state.dashes())) {
         window.paint_path(path, color);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn low_zoom_grid_keeps_world_alignment_and_bounded_screen_density() {
+        let threshold = GRID_MIN_SCREEN_SPACING / GRID_WORLD_SPACING;
+        let at_threshold = grid_spacing(threshold);
+        assert_eq!(at_threshold, px(GRID_MIN_SCREEN_SPACING));
+        assert_eq!(grid_spacing(threshold / 2.), at_threshold);
+
+        let zoom = threshold / 5.;
+        let spacing = f32::from(grid_spacing(zoom));
+        assert!(spacing >= GRID_MIN_SCREEN_SPACING);
+        assert!(spacing < 2. * GRID_MIN_SCREEN_SPACING);
+        let world_steps = spacing / (GRID_WORLD_SPACING * zoom);
+        assert_eq!(world_steps.fract(), 0.);
+        assert!((world_steps as u32).is_power_of_two());
+
+        let offset = -113_f32;
+        let phase = offset.rem_euclid(spacing);
+        let world_grid_index = (phase - offset) / zoom / GRID_WORLD_SPACING;
+        assert_eq!(world_grid_index.fract(), 0.);
     }
 }

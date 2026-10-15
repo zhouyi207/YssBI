@@ -76,7 +76,10 @@ fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<InspectorWindow>) {
         ));
         let graph = Arc::new(GraphServices::new(
             tasks.clone(),
-            Arc::new(yss_ui::layout_store::LayoutStore::new(&std::env::temp_dir())),
+            Arc::new(yss_ui::layout_store::LayoutStore::new(
+                &std::env::temp_dir(),
+                runtime.handle().clone(),
+            )),
         ));
         gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
             cx.new(|cx| {
@@ -96,7 +99,7 @@ fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<InspectorWindow>) {
                         cx,
                     )
                 });
-                let details = cx.new(|cx| DetailsPanel::new(graph, cx));
+                let details = cx.new(|cx| DetailsPanel::new(graph, window, cx));
                 details.update(cx, |details, cx| {
                     details.set_document(document.downgrade(), cx)
                 });

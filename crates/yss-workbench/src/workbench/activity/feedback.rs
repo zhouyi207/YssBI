@@ -21,7 +21,7 @@ impl ActivityPanel {
         cx: &mut Context<Self>,
     ) {
         if state == ReadState::Loading && self.document.is_some() {
-            // Keep a useful snapshot and any previous failure visible until the read settles.
+            // Keep a useful snapshot until the read settles.
             return;
         }
         if self.read_state != state {
@@ -86,31 +86,7 @@ impl ActivityPanel {
                     .child(crate::text::translate("common.loading"))
                     .into_any_element(),
             ),
-            ReadState::Failed(key) => Some(
-                div()
-                    .id("activity-error")
-                    .role(gpui_kit::accesskit::Role::Alert)
-                    .px_3()
-                    .py_2()
-                    .flex()
-                    .items_start()
-                    .gap_1()
-                    .text_xs()
-                    .text_color(cx.theme().danger)
-                    .child(div().min_w_0().flex_1().child(crate::text::translate(key)))
-                    .child(
-                        Button::new("activity-retry")
-                            .ghost()
-                            .small()
-                            .size_5()
-                            .icon(IconName::RefreshCw)
-                            .tooltip(crate::text::translate("common.retry"))
-                            .on_click(
-                                cx.listener(|_, _, _, cx| cx.emit(ActivityEvent::RefreshResources)),
-                            ),
-                    )
-                    .into_any_element(),
-            ),
+            ReadState::Failed(_) => None,
             _ if self.rows.is_empty() => {
                 let document = self.document.as_ref()?;
                 let (title, description) = document.empty_state.as_ref()?;

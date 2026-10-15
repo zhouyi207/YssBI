@@ -100,6 +100,11 @@ impl SettingsPanel {
                         .filter(|selected| view.knowledge.can_add(selected));
                 } else {
                     view.knowledge.failure = Some(Failure::Load);
+                    view.notifications.error_with_retry(
+                        yss_ui::text::t("settings.knowledge.loadFailed"),
+                        cx,
+                        |view, _, cx| view.refresh_knowledge(cx),
+                    );
                 }
                 cx.notify();
             })
@@ -173,6 +178,9 @@ impl SettingsPanel {
                 }
                 view.knowledge.pending = false;
                 view.knowledge.failure = (!success).then_some(Failure::Mutation);
+                if !success {
+                    view.report_error(yss_ui::text::t("settings.knowledge.failed"), false, cx);
+                }
                 // Also re-read after failure: a completed store write may precede a stale-session error.
                 view.refresh_knowledge(cx);
                 cx.notify();

@@ -19,7 +19,7 @@ enum State {
         worker: AbortHandle,
         _delivery: Task<()>,
     },
-    Failed(anyhow::Error),
+    Failed,
     Ready(Entity<Workbench>),
 }
 
@@ -118,8 +118,25 @@ impl Startup {
                     .log_released();
                 }
                 Err(error) => {
-                    view.update_in(cx, |view, _, cx| {
-                        view.state = State::Failed(error);
+                    view.update_in(cx, |view, window, cx| {
+                        tracing::error!(%error, "Application startup failed");
+                        let mut message = text::translate(failure_key(&error));
+                        if let Some(failure) = error.chain().find_map(|cause| {
+                            cause.downcast_ref::<yss_harness_contract::PersistenceFailure>()
+                        }) {
+                            message.push('\n');
+                            message.push_str(&text::format(
+                                "native.startup.failureCode",
+                                &[("code", failure.code.to_string())],
+                            ));
+                        }
+                        window.push_notification(
+                            Notification::error(message)
+                                .title(text::translate("native.startup.failed"))
+                                .autohide(false),
+                            cx,
+                        );
+                        view.state = State::Failed;
                         cx.notify();
                     })
                     .log_released();
@@ -160,7 +177,7 @@ impl Render for Startup {
         if let State::Ready(workbench) = &self.state {
             return workbench.clone().into_any_element();
         }
-        let failed = matches!(self.state, State::Failed(_));
+        let failed = matches!(self.state, State::Failed);
         let label = text::translate(if failed {
             "native.startup.failed"
         } else {
@@ -168,34 +185,17 @@ impl Render for Startup {
         });
         let mut content = div()
             .id("startup-status")
-            .role(if failed {
-                gpui_kit::accesskit::Role::Alert
-            } else {
-                gpui_kit::accesskit::Role::Status
-            })
+            .role(gpui_kit::accesskit::Role::Status)
             .aria_label(label.clone())
             .w_full()
             .max_w(px(420.))
             .flex()
             .flex_col()
             .gap_3()
-            .child(div().text_sm().child(label.clone()));
-        if let State::Failed(error) = &self.state {
-            content = content.child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(text::translate(failure_key(error))),
-            );
-            if let Some(failure) = error
-                .chain()
-                .find_map(|cause| cause.downcast_ref::<yss_harness_contract::PersistenceFailure>())
-            {
-                content = content.child(div().text_xs().child(text::format(
-                    "native.startup.failureCode",
-                    &[("code", failure.code.to_string())],
-                )));
-            }
+            .when(!failed, |content| {
+                content.child(div().text_sm().child(label.clone()))
+            });
+        if failed {
             content = content.child(
                 Button::new("close-startup")
                     .primary()

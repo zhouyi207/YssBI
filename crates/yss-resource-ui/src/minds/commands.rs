@@ -43,7 +43,7 @@ impl MindCanvas {
             self.install_snapshot(snapshot, window, cx);
         }
         if outcome.failed {
-            self.error = Some(yss_ui::text::t("native.minds.saveFailed").into());
+            self.set_error(Some(yss_ui::text::t("native.minds.saveFailed").into()), cx);
         }
         if self.refresh_again {
             self.refresh(window, cx);
@@ -55,9 +55,7 @@ impl MindCanvas {
             return;
         };
         let owner = self.services.clone();
-        let job = self
-            .services
-            .run(move |services| Ok(request.commit(services, &owner)));
+        let job = self.services.run(move |_| Ok(request.commit(&owner)));
         cx.spawn_in(window, async move |view, cx| {
             let outcome = job
                 .await
@@ -114,7 +112,10 @@ impl MindCanvas {
                     view.follow_selection(selection);
                     view.install_snapshot(snapshot, window, cx);
                 } else {
-                    view.error = Some(yss_ui::text::t("native.minds.topicSubmitFailed").into());
+                    view.set_error(
+                        Some(yss_ui::text::t("native.minds.topicSubmitFailed").into()),
+                        cx,
+                    );
                 }
                 if view.refresh_again {
                     view.refresh(window, cx);
@@ -145,7 +146,9 @@ impl MindCanvas {
                 match snapshot {
                     Some(snapshot) if snapshot.version == view.snapshot.version => {}
                     Some(snapshot) => view.install_snapshot(snapshot, window, cx),
-                    None => view.error = Some(yss_ui::text::t("native.minds.readFailed").into()),
+                    None => {
+                        view.set_error(Some(yss_ui::text::t("native.minds.readFailed").into()), cx)
+                    }
                 }
                 if view.refresh_again {
                     view.refresh(window, cx);

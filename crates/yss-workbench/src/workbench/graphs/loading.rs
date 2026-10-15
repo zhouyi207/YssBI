@@ -153,6 +153,15 @@ impl Workbench {
                     );
                     opening.update(cx, |opening, cx| {
                         opening.failed = true;
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            crate::text::t("native.canvas.openFailed"),
+                            cx,
+                            |opening, _, cx| {
+                                if !opening.removed && opening.failed {
+                                    cx.emit(OpeningEvent::Retry);
+                                }
+                            },
+                        );
                         cx.notify();
                     });
                     false

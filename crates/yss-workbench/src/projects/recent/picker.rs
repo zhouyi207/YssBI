@@ -2,8 +2,7 @@
 use super::{RecentProjectEvent, RecentProjects, RecentSnapshot};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Icon, IndexPath, Sizable,
-    button::{Button, ButtonVariants},
+    ActiveTheme, Icon, IndexPath,
     list::{ListDelegate, ListItem, ListState},
 };
 use gpui_kit::{App, Context, Entity, IntoElement, Task, Window, div, prelude::*, px};
@@ -71,12 +70,7 @@ impl ListDelegate for RecentDelegate {
     }
 
     fn items_count(&self, _: usize, _: &App) -> usize {
-        // Keep the accepted records for a retry, but show the error even when they are nonempty.
-        if self.snapshot.error.is_some() {
-            0
-        } else {
-            self.matches.len()
-        }
+        self.matches.len()
     }
 
     fn render_item(
@@ -173,20 +167,10 @@ impl ListDelegate for RecentDelegate {
             .p_4()
             .text_sm()
             .text_color(cx.theme().muted_foreground)
-            .child(crate::text::translate(
-                self.snapshot
-                    .error
-                    .unwrap_or("native.projects.noMatchingRecentProjects"),
-            ))
-            .when(self.snapshot.error.is_some(), |view| {
-                let owner = self.owner.clone();
-                view.child(
-                    Button::new("recent-projects-retry")
-                        .small()
-                        .ghost()
-                        .label(crate::text::translate("common.retry"))
-                        .on_click(move |_, _, cx| owner.update(cx, |recent, cx| recent.reload(cx))),
-                )
+            .when(self.snapshot.error.is_none(), |view| {
+                view.child(crate::text::translate(
+                    "native.projects.noMatchingRecentProjects",
+                ))
             })
     }
 }

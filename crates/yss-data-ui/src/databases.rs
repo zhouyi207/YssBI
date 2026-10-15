@@ -64,8 +64,16 @@ pub struct DatabaseEditor {
     read_failed: bool,
     refresh_again: bool,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
 }
 impl DatabaseEditor {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     pub fn new(
         services: Arc<ApplicationTasks>,
         project: ProjectInstanceId,
@@ -117,6 +125,7 @@ impl DatabaseEditor {
             read_failed: false,
             refresh_again: false,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
     pub fn project(&self) -> &ProjectInstanceId {
@@ -146,7 +155,12 @@ impl DatabaseEditor {
     pub fn fail_read(&mut self, cx: &mut Context<Self>) {
         self.ready = false;
         self.read_failed = true;
-        self.error = Some(yss_ui::text::translate("native.databases.readFailed"));
+        let message = yss_ui::text::translate("native.databases.readFailed");
+        self.notifications
+            .error_with_retry(message.clone(), cx, |view, window, cx| {
+                view.reload(true, window, cx)
+            });
+        self.error = Some(message);
         self.changed(cx);
     }
     pub fn focus_table(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -213,7 +227,10 @@ impl DatabaseEditor {
         self.edit = None;
         self.read_failed = true;
         self.busy = false;
-        self.error = Some(yss_ui::text::t("native.databases.unavailable").into());
+        self.set_error(
+            Some(yss_ui::text::t("native.databases.unavailable").into()),
+            cx,
+        );
         self.changed(cx);
     }
 }

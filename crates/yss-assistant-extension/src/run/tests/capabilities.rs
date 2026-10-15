@@ -300,11 +300,22 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
         .code,
         CapabilityFailureCode::INVALID_REQUEST
     );
+    let model::CapabilityInput::MoveNodes(mut unauthorized) = edit() else {
+        panic!("graph edit input")
+    };
+    let unauthorized_path = "functions/unassigned.yssbi-function";
+    unauthorized.graph = GraphResourceRef::for_path(unauthorized_path.to_owned());
+    let failure = run
+        .execute(model::CapabilityInput::MoveNodes(unauthorized))
+        .await
+        .unwrap_err();
+    assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
+    assert_eq!(failure.details["reason"], "agent_scope_denied");
     let rejected = store.tool_invocations().pop().unwrap();
     assert_eq!(rejected.state, ToolInvocationState::Failed);
-    assert_eq!(rejected.tool, CapabilityId::WriteDocument.as_str());
+    assert_eq!(rejected.tool, CapabilityId::MoveNodes.as_str());
     assert!(rejected.request.is_none());
-    assert_eq!(rejected.arguments["document"]["id"], graph_resource().id);
+    assert_eq!(rejected.arguments["graph"]["id"], unauthorized_path);
     assert!(rejected.finished_at.is_some());
     assert!(run.state().evidence.lock().unwrap().invocations.is_empty());
     assert_eq!(gateway.0.lock().unwrap().writes, 0);

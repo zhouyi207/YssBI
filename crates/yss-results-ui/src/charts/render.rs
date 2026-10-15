@@ -1,8 +1,4 @@
-use super::{
-    ChartEditor, SaveChart,
-    details::chart_type_label,
-    query::{PreviewData, PreviewFailure},
-};
+use super::{ChartEditor, SaveChart, details::chart_type_label, query::PreviewData};
 use crate::plots::{cartesian::CartesianPlot, histogram};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
@@ -69,64 +65,9 @@ impl Render for ChartEditor {
                     .relative()
                     .child(self.render_preview(cx)),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .px_3()
-                        .py_2()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(error),
-                )
-            })
     }
 }
 impl ChartEditor {
-    fn render_preview_failure(
-        &self,
-        failure: &PreviewFailure,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        div()
-            .id("chart-preview-error")
-            .size_full()
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .gap_3()
-            .p_4()
-            .role(gpui_kit::Role::Alert)
-            .child(
-                Icon::new(IconName::TriangleAlert)
-                    .size_6()
-                    .text_color(cx.theme().danger),
-            )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().danger)
-                    .child(failure.summary()),
-            )
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::translate("common.errorCode"))
-                    .child(failure.code()),
-            )
-            .child(
-                Button::new("chart-preview-retry")
-                    .small()
-                    .outline()
-                    .label(yss_ui::text::translate("common.retry"))
-                    .disabled(self.busy() || !self.available)
-                    .on_click(cx.listener(|view, _, window, cx| view.refresh(window, cx))),
-            )
-            .into_any_element()
-    }
     fn render_preview(&self, cx: &mut Context<Self>) -> AnyElement {
         if self.preview_loading || self.reading {
             return appearance::empty_state(
@@ -154,7 +95,7 @@ impl ChartEditor {
                 cx,
             )
             .into_any_element(),
-            PreviewData::Failed(failure) => self.render_preview_failure(failure, cx),
+            PreviewData::Failed(_) => div().into_any_element(),
             PreviewData::Histogram {
                 bins,
                 column,

@@ -47,11 +47,20 @@ pub struct ChartEditor {
     external_change: bool,
     available: bool,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
 }
 impl ChartEditor {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     pub fn new(
         services: Arc<ApplicationTasks>,
         read: query::ChartRead,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Self {
         Self {
@@ -80,6 +89,7 @@ impl ChartEditor {
             external_change: false,
             available: true,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
     pub fn project(&self) -> &ProjectInstanceId {

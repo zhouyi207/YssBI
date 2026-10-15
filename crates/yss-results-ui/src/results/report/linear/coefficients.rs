@@ -36,7 +36,14 @@ impl LinearReport {
                         view.coefficients = Some(Arc::new(page));
                         view.refresh_tables(window, cx);
                     }
-                    Err(_) => view.error = true,
+                    Err(_) => {
+                        view.error = true;
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            yss_ui::text::t("native.reports.pageFailed"),
+                            cx,
+                            |view, window, cx| view.load(view.requested_offset, window, cx),
+                        );
+                    }
                 }
                 cx.notify();
             })
@@ -118,23 +125,6 @@ impl LinearReport {
             .text_xs()
             .when(self.loading, |bar| {
                 bar.child(yss_ui::text::translate("dataOperation.reading"))
-            })
-            .when(self.error, |bar| {
-                bar.child(
-                    div()
-                        .text_color(cx.theme().danger)
-                        .child(yss_ui::text::translate("native.reports.pageFailed")),
-                )
-                .child(
-                    Button::new("retry-coefficients")
-                        .small()
-                        .ghost()
-                        .label(yss_ui::text::translate("common.retry"))
-                        .disabled(self.loading)
-                        .on_click(cx.listener(|view, _, window, cx| {
-                            view.load(view.requested_offset, window, cx)
-                        })),
-                )
             })
             .when_some(self.coefficients.as_ref(), |bar, page| {
                 let offset = page.offset;

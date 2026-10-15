@@ -1,6 +1,6 @@
 use super::{DatabaseEditor, DatabaseEvent};
 use gpui_kit::{Context, Window};
-use yss_application::{database::DatabaseMutation, session::ApplicationState};
+use yss_application::database::DatabaseMutation;
 use yss_database_contract::EditState;
 use yss_desktop_services::ApplicationTasks;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -27,12 +27,8 @@ impl DatabaseSaveOutcome {
     }
 }
 impl DatabaseSaveRequest {
-    pub fn commit(
-        self,
-        services: &ApplicationState,
-        owner: &ApplicationTasks,
-    ) -> DatabaseSaveOutcome {
-        match services.save_database_for_application(
+    pub fn commit(self, owner: &ApplicationTasks) -> DatabaseSaveOutcome {
+        match owner.application().save_database_for_application(
             self.project,
             self.id,
             self.revision,
@@ -80,7 +76,10 @@ impl DatabaseEditor {
         }
         self.ready = false;
         if outcome.failed {
-            self.error = Some(yss_ui::text::t("native.databases.saveFailed").into());
+            self.set_error(
+                Some(yss_ui::text::t("native.databases.saveFailed").into()),
+                cx,
+            );
         }
         // Checkpoint/import can replace the Application session; the host must reattach its bindings.
         cx.emit(DatabaseEvent::SessionChanged);
@@ -91,9 +90,7 @@ impl DatabaseEditor {
             return;
         };
         let owner = self.services.clone();
-        let job = self
-            .services
-            .run(move |services| Ok(request.commit(services, &owner)));
+        let job = self.services.run(move |_| Ok(request.commit(&owner)));
         cx.spawn_in(window, async move |view, cx| {
             let outcome = job
                 .await
@@ -144,8 +141,10 @@ impl DatabaseEditor {
                         view.ready = false;
                     }
                     None => {
-                        view.error =
-                            Some(yss_ui::text::t("native.databases.columnUpdateFailed").into());
+                        view.set_error(
+                            Some(yss_ui::text::t("native.databases.columnUpdateFailed").into()),
+                            cx,
+                        );
                     }
                 }
                 if view.refresh_again {
@@ -221,7 +220,10 @@ impl DatabaseEditor {
             view.update_in(cx, |view, window, cx| {
                 view.busy = false;
                 if result.is_none() {
-                    view.error = Some(yss_ui::text::t("native.databases.exportFailed").into());
+                    view.set_error(
+                        Some(yss_ui::text::t("native.databases.exportFailed").into()),
+                        cx,
+                    );
                 }
                 if view.refresh_again {
                     view.reload(true, window, cx);

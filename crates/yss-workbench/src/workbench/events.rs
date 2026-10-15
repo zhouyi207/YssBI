@@ -307,7 +307,7 @@ impl Workbench {
                 query.clone(),
                 services
                     .application
-                    .query_project_index(query, language, true)?,
+                    .query_project_presentation(query, language)?,
                 language,
             ))
         });
@@ -338,6 +338,16 @@ impl Workbench {
                             &["project", "nodes"],
                             ReadState::Failed("native.workbench.activityLoadFailed"),
                             cx,
+                        );
+                        let lifecycle = view.lifecycle;
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            crate::text::translate("native.workbench.activityLoadFailed"),
+                            cx,
+                            move |view, window, cx| {
+                                if view.lifecycle == lifecycle {
+                                    view.refresh_project(window, cx);
+                                }
+                            },
                         );
                         tracing::warn!(
                             code = "native_activity_refresh_failed",

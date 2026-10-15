@@ -4,12 +4,17 @@ mod input;
 
 use super::ConversationPanel;
 use gpui_kit::assets::IconName;
+use gpui_kit::base::input::Rope;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Enter,
 };
 use gpui_kit::{AnyElement, Context, IntoElement, Window, div, prelude::*, relative, rems};
+
+fn draft_is_blank(text: &Rope) -> bool {
+    text.chars().all(char::is_whitespace)
+}
 
 impl ConversationPanel {
     pub(super) fn render_composer(
@@ -74,7 +79,7 @@ impl ConversationPanel {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let running = self.running();
-        let empty = self.input.read(cx).value().trim().is_empty();
+        let empty = draft_is_blank(self.input.read(cx).text());
         div()
             .flex()
             .flex_wrap()

@@ -182,7 +182,7 @@ impl Workbench {
         let job = self
             .services
             .layouts
-            .save(root.clone(), snapshot, &self.services.executor);
+            .save(root.clone(), snapshot);
         cx.spawn(async move |view, cx| {
             let failed = !matches!(job.await, Ok(Ok(())));
             if failed {

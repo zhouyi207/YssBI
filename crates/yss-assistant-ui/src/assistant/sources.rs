@@ -120,16 +120,17 @@ impl Source {
         });
         self.task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = job.await.unwrap_or(Err(()));
-            view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.loading = false;
                 view.task = None;
                 let current = view.owner.upgrade().is_some_and(|owner| {
                     let owner = owner.read(cx);
                     owner.session.id == session && owner.session.project == project
                 });
-                if let Ok(detail) = result
-                    && current
-                {
+                if !current {
+                    return;
+                }
+                if let Ok(detail) = result {
                     if open_resource && let Some(resource) = &detail.resource {
                         view.owner
                             .update(cx, |_, cx| {
@@ -140,6 +141,11 @@ impl Source {
                     view.detail = Some(detail);
                 } else {
                     view.failed = true;
+                    yss_ui::notifications::Notifications::new(window).error_with_retry(
+                        yss_ui::text::t("panel.assistantCitationUnavailable"),
+                        cx,
+                        |view, window, cx| view.load(false, window, cx),
+                    );
                 }
                 cx.notify();
             })
@@ -158,23 +164,6 @@ impl Render for Source {
                     .text_xs()
                     .child(yss_ui::text::t("panel.assistantLoadingDetails")),
             );
-        }
-        if self.failed {
-            content = content
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(yss_ui::text::t("panel.assistantCitationUnavailable")),
-                )
-                .child(
-                    Button::new("retry-source")
-                        .self_start()
-                        .small()
-                        .ghost()
-                        .label(yss_ui::text::t("panel.assistantRetryDetails"))
-                        .on_click(cx.listener(|view, _, window, cx| view.load(false, window, cx))),
-                );
         }
         if let Some(detail) = &self.detail {
             if detail.resource.is_some() {

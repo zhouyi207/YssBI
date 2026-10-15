@@ -1,7 +1,7 @@
 use super::{PluginViewPanel, fields::Draft};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
+    Disableable, Sizable,
     button::Button,
     checkbox::Checkbox,
     input::{Input, Textarea},
@@ -156,16 +156,6 @@ impl Render for PluginViewPanel {
         }
         if self.busy {
             content = content.child(yss_ui::text::t("common.loading"));
-        }
-        if let Some(message) = &self.message {
-            content = content.child(message.clone());
-        }
-        if let Some(error) = &self.error {
-            content = content.child(
-                div()
-                    .text_color(cx.theme().danger)
-                    .child(super::super::failure(error)),
-            );
         }
         content
     }

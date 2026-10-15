@@ -1,8 +1,8 @@
 //! Node actions reuse the same selection, clipboard, edit and execution entry points.
 use crate::canvas::{GraphCanvas, GraphCommand, commands::*};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme, Icon, input, menu::PopupMenuItem};
-use gpui_kit::{Action, Context, MouseDownEvent, Pixels, Point, Window, div, prelude::*};
+use gpui_kit::component::{input, menu::PopupMenuItem};
+use gpui_kit::{Action, Context, MouseDownEvent, Pixels, Point, Window, prelude::*};
 use yss_graph_document::{GraphResourceKind, NodeId};
 use yss_graph_editor::EditorGraphMutation;
 use yss_ui::lifecycle::LogReleased;
@@ -75,26 +75,10 @@ impl GraphCanvas {
                     menu = menu.separator();
                 }
                 let (label, icon, action) = command.presentation();
-                let item = if matches!(command, NodeAction::Delete) {
-                    PopupMenuItem::element(move |_, cx| {
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .text_color(if enabled {
-                                cx.theme().danger
-                            } else {
-                                cx.theme().muted_foreground
-                            })
-                            .child(Icon::new(icon).size_4())
-                            .child(div().flex_1().child(yss_ui::text::t(label)))
-                            .child("Del")
-                    })
-                } else {
-                    PopupMenuItem::new(yss_ui::text::t(label)).icon(icon)
-                }
-                .disabled(!enabled)
-                .when_some(action, |item, action| item.action(action));
+                let item = PopupMenuItem::new(yss_ui::text::t(label))
+                    .icon(icon)
+                    .disabled(!enabled)
+                    .when_some(action, |item, action| item.action(action));
                 let owner = owner.clone();
                 let projection = projection.clone();
                 menu = menu.item(item.on_click(move |_, _, cx| {

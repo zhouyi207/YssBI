@@ -3,7 +3,7 @@ use super::GraphDetails;
 use gpui_kit::assets::IconName;
 use gpui_kit::{Context, IntoElement, div, prelude::*};
 use yss_graph_editor::projection::EditorNodeModel;
-use yss_ui::inspector::{self, InlineMessage, InspectorHeader};
+use yss_ui::inspector::InspectorHeader;
 
 impl GraphDetails {
     /// Problems lead because they explain why the configuration below cannot run yet.
@@ -23,17 +23,11 @@ impl GraphDetails {
                 .detail(node.display.title.to_string()),
             None => InspectorHeader::new(IconName::Workflow, node.display.title.to_string()),
         };
-        let command_error = self
-            .graph()
-            .and_then(|graph| graph.read(cx).command_error().map(str::to_owned));
         div()
             .min_w_0()
             .flex()
             .flex_col()
             .child(header)
-            .children(command_error.map(|error| {
-                inspector::status_band(InlineMessage::error(error).id("node-command-error"), cx)
-            }))
             .child(self.render_diagnostics(node, cx))
             .child(self.parameters.clone())
             .child(self.description.clone())

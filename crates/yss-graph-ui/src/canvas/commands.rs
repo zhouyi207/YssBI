@@ -74,6 +74,8 @@ impl GraphCanvas {
         let creation = self.palette.as_ref().map(|palette| palette.view.clone());
         if !self.can_edit() {
             if let Some(creation) = creation {
+                self.notifications
+                    .error(yss_ui::text::t("canvas.nodePalette.createFailed"), cx);
                 creation.update(cx, |creation, cx| creation.creation_failed(cx));
             }
             return;
@@ -94,6 +96,8 @@ impl GraphCanvas {
     ) -> Option<gpui_kit::Task<Option<GraphEditVersion>>> {
         let Some(request) = self.capture_command(command, version, cx) else {
             if let Some(creation) = creation {
+                self.notifications
+                    .error(yss_ui::text::t("canvas.nodePalette.createFailed"), cx);
                 creation.update(cx, |creation, cx| creation.creation_failed(cx));
             }
             return None;
@@ -219,7 +223,7 @@ impl GraphCanvas {
             self.emit_selection(cx);
         }
         self.busy = true;
-        self.error = None;
+
         cx.notify();
     }
 
@@ -245,11 +249,14 @@ impl GraphCanvas {
                 code = "native_graph_command_failed",
                 "Native graph command failed"
             );
-            self.error = Some(yss_ui::text::translate(
-                error
-                    .downcast_ref::<yss_ui::constant_values::InputError>()
-                    .map_or("native.canvas.commandFailed", |error| error.key()),
-            ));
+            self.notifications.error(
+                yss_ui::text::translate(
+                    error
+                        .downcast_ref::<yss_ui::constant_values::InputError>()
+                        .map_or("native.canvas.commandFailed", |error| error.key()),
+                ),
+                cx,
+            );
         }
         if !completed {
             self.preview.clear();
@@ -292,14 +299,16 @@ impl GraphCanvas {
             return false;
         }
         if let Err(_error) = self.graph.install_edit(response, language) {
-            self.error = Some(yss_ui::text::t("native.canvas.updateFailed").into());
+            self.notifications
+                .error(yss_ui::text::t("native.canvas.updateFailed"), cx);
             return false;
         }
         self.refresh_pending |= self.graph.language != yss_ui::text::locale();
         self.refresh_task = None;
         self.refresh_failed = false;
-        *self.connection_layer.borrow_mut() =
-            super::connections::ConnectionLayer::new(&self.graph.projection);
+        self.connection_layer
+            .borrow_mut()
+            .install(&self.graph.projection);
         self.refresh_presentation();
         self.retain_located();
         self.selected.retain(|id| {

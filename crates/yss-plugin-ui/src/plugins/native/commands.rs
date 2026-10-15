@@ -30,7 +30,7 @@ impl PluginViewPanel {
             match self.values(cx) {
                 Ok(value) => value,
                 Err(error) => {
-                    self.error = Some(error);
+                    self.show_error(error, cx);
                     cx.notify();
                     return;
                 }
@@ -49,7 +49,7 @@ impl PluginViewPanel {
                     .ok()
                     .and_then(|now| operation_id(now, &uuid::Uuid::new_v4().to_string()).ok());
                 let Some(id) = id else {
-                    self.error = Some(PluginFailure::new("plugin_operation_invalid"));
+                    self.show_error(PluginFailure::new("plugin_operation_invalid"), cx);
                     cx.notify();
                     return;
                 };
@@ -67,7 +67,7 @@ impl PluginViewPanel {
         match self.values(cx) {
             Ok(value) => self.request("views.set_state", value, window, cx),
             Err(error) => {
-                self.error = Some(error);
+                self.show_error(error, cx);
                 cx.notify();
             }
         }
@@ -93,8 +93,6 @@ impl PluginViewPanel {
             return;
         };
         self.busy = true;
-        self.error = None;
-        self.message = None;
         let session = lease.session_id.clone();
         let binding = lease.window.clone();
         let job = self.services.run(move |services| {
@@ -126,12 +124,17 @@ impl PluginViewPanel {
                     panel.busy = false;
                     match result {
                         Ok(Reply::Command(reply)) => {
-                            panel.message = Some(reply.message);
+                            panel.notifications.push(
+                                gpui_kit::component::notification::Notification::info(
+                                    reply.message,
+                                ),
+                                cx,
+                            );
                             if let Some(form) = reply.view
                                 && let Err(error) =
                                     panel.install_form(form, Value::Null, window, cx)
                             {
-                                panel.error = Some(error);
+                                panel.show_error(error, cx);
                             }
                         }
                         Ok(Reply::Task(task)) => {
@@ -147,7 +150,7 @@ impl PluginViewPanel {
                             }
                         }
                         Ok(Reply::Saved) => {}
-                        Err(error) => panel.error = Some(error),
+                        Err(error) => panel.show_error(error, cx),
                     }
                     cx.notify();
                 })
@@ -209,7 +212,7 @@ impl PluginViewPanel {
                             panel.task = Some(task);
                             panel.poll_task(window, cx);
                         }
-                        Err(error) => panel.error = Some(error),
+                        Err(error) => panel.show_error(error, cx),
                     }
                     cx.notify();
                 })

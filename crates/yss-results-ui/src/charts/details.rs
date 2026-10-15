@@ -119,9 +119,7 @@ impl ChartEditor {
                 })
                 .unwrap_or_else(|| translate("native.charts.removedDataset"))
         };
-        let status = if self.external_change {
-            InlineMessage::warning(translate("native.charts.externalChange")).into_any_element()
-        } else if self.dirty() {
+        let status = if self.dirty() {
             InlineMessage::new(
                 Severity::Information,
                 translate("native.charts.unsavedConfiguration"),

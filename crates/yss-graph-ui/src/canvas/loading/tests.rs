@@ -141,52 +141,8 @@ fn unchanged_refresh_preserves_gesture_and_projection_but_real_edit_replaces_the
 ) {
     let fixture = Fixture::new();
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let tasks = Arc::new(yss_desktop_services::ApplicationTasks::new(
-        fixture.application.clone(),
-        runtime.handle().clone(),
-        Default::default(),
-    ));
-    let services = Arc::new(GraphServices::new(
-        tasks,
-        Arc::new(yss_ui::layout_store::LayoutStore::new(
-            fixture.directory.path(),
-        )),
-    ));
-    let graph = fixture.open();
+    let (window, canvas) = fixture.canvas(&runtime, cx);
     let same = fixture.open();
-    let catalog = Arc::new(
-        fixture
-            .application
-            .query_project_index(
-                fixture.request.project_instance_id().clone(),
-                fixture.request.locale(),
-                true,
-            )
-            .unwrap()
-            .activity_panels
-            .into_iter()
-            .find(|panel| panel.panel_id == "nodes")
-            .unwrap(),
-    );
-    cx.update(|cx| {
-        gpui_kit::init(cx);
-        yss_ui::preferences::init(cx);
-    });
-    let (window, canvas) = cx.update(|cx| {
-        gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
-            cx.new(|cx| {
-                GraphCanvas::new(
-                    services,
-                    graph,
-                    catalog,
-                    yss_ui::text::locale().into(),
-                    window,
-                    cx,
-                )
-            })
-        })
-        .unwrap()
-    });
     cx.update_window(window, |_, window, cx| {
         canvas.update(cx, |canvas, cx| {
             canvas.begin_pan(
@@ -257,4 +213,468 @@ fn refresh_identity_includes_locale_runtime_and_resolver_basis() {
         .basis
         .registry_fingerprint = [42; 32];
     assert!(!original.same_projection(&incoming));
+}
+
+impl Fixture {
+    fn canvas(
+        &self,
+        runtime: &tokio::runtime::Runtime,
+        cx: &mut TestAppContext,
+    ) -> (gpui_kit::AnyWindowHandle, gpui_kit::Entity<GraphCanvas>) {
+        // Commands use real Tokio workers; do not jump GPUI's virtual clock past their work.
+        cx.executor().allow_parking();
+        let tasks = Arc::new(yss_desktop_services::ApplicationTasks::new(
+            self.application.clone(),
+            runtime.handle().clone(),
+            Default::default(),
+        ));
+        let services = Arc::new(GraphServices::new(
+            tasks,
+            Arc::new(yss_ui::layout_store::LayoutStore::new(
+                self.directory.path(),
+                runtime.handle().clone(),
+            )),
+        ));
+        let catalog = Arc::new(
+            self.application
+                .query_project_presentation(
+                    self.request.project_instance_id().clone(),
+                    self.request.locale(),
+                )
+                .unwrap()
+                .activity_panels
+                .into_iter()
+                .find(|panel| panel.panel_id == "nodes")
+                .unwrap(),
+        );
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            yss_ui::preferences::init(cx);
+        });
+        let (window, canvas) = cx.update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+                cx.new(|cx| {
+                    GraphCanvas::new(
+                        services,
+                        self.open(),
+                        catalog,
+                        self.request.locale().into(),
+                        window,
+                        cx,
+                    )
+                })
+            })
+            .unwrap()
+        });
+        (window.into(), canvas)
+    }
+}
+
+#[gpui_kit::test]
+async fn node_drag_keeps_release_preview_and_commits_one_undoable_move(cx: &mut TestAppContext) {
+    use crate::canvas::{GraphCommand, geometry};
+    use gpui_kit::{MouseMoveEvent, MouseUpEvent};
+
+    let fixture = Fixture::new();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (window, canvas) = fixture.canvas(&runtime, cx);
+    cx.update_window(window, |_, window, cx| {
+        canvas.update(cx, |canvas, cx| {
+            canvas.zoom = 2.;
+            canvas.selected = canvas
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .map(|node| node.node_id)
+                .collect();
+            let press = point(px(40.), px(40.));
+            canvas.begin_node(
+                fixture.source,
+                &MouseDownEvent {
+                    button: MouseButton::Left,
+                    position: press,
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            canvas.pointer_move(
+                &MouseMoveEvent {
+                    position: point(px(80.), px(60.)),
+                    pressed_button: Some(MouseButton::Left),
+                    ..Default::default()
+                },
+                cx,
+            );
+            let frame = canvas.preview.clone();
+            assert_eq!(
+                frame.position(fixture.source),
+                Some(NodePosition { x: 20., y: 10. })
+            );
+            canvas.pointer_move(
+                &MouseMoveEvent {
+                    position: point(px(90.), px(80.)),
+                    pressed_button: Some(MouseButton::Left),
+                    ..Default::default()
+                },
+                cx,
+            );
+            assert_eq!(
+                frame.position(fixture.source),
+                Some(NodePosition { x: 20., y: 10. })
+            );
+            canvas.bounds.set(gpui_kit::Bounds::new(
+                point(px(0.), px(0.)),
+                gpui_kit::size(px(10.), px(10.)),
+            ));
+            canvas.pointer_up(
+                &MouseUpEvent {
+                    button: MouseButton::Left,
+                    position: point(px(100.), px(100.)),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            assert!(canvas.gesture.is_none());
+            assert!(canvas.busy);
+            canvas.cancel_gesture();
+            for node in &canvas.graph.projection.nodes {
+                assert_eq!(node.position, NodePosition { x: 0., y: 0. });
+                assert_eq!(
+                    geometry::position(node, &canvas.preview),
+                    NodePosition { x: 30., y: 30. }
+                );
+            }
+        });
+    })
+    .unwrap();
+    cx.condition(&canvas, |canvas, _| !canvas.busy).await;
+    canvas.update(cx, |canvas, cx| {
+        assert!(
+            canvas
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .all(|node| { node.position == NodePosition { x: 30., y: 30. } })
+        );
+        assert!(canvas.preview.position(fixture.source).is_none());
+        assert!(canvas.graph.editing.can_undo);
+        canvas.submit(GraphCommand::Undo, None, cx);
+    });
+    cx.condition(&canvas, |canvas, _| !canvas.busy).await;
+    canvas.update(cx, |canvas, cx| {
+        assert!(
+            canvas
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .all(|node| { node.position == NodePosition { x: 0., y: 0. } })
+        );
+        assert!(
+            !canvas.graph.editing.can_undo,
+            "one release must create only one undo entry"
+        );
+        canvas.submit(GraphCommand::Redo, None, cx);
+    });
+    cx.condition(&canvas, |canvas, _| !canvas.busy).await;
+    canvas.update(cx, |canvas, _| {
+        assert!(
+            canvas
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .all(|node| { node.position == NodePosition { x: 30., y: 30. } })
+        );
+    });
+}
+
+#[gpui_kit::test]
+fn node_drag_return_to_origin_and_cancellation_do_not_edit(cx: &mut TestAppContext) {
+    use gpui_kit::{MouseMoveEvent, MouseUpEvent};
+
+    let fixture = Fixture::new();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (window, canvas) = fixture.canvas(&runtime, cx);
+    cx.update_window(window, |_, window, cx| {
+        canvas.update(cx, |canvas, cx| {
+            canvas.zoom = 1.;
+            let version = canvas.graph.editing.version;
+            canvas.selected = canvas
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .map(|node| node.node_id)
+                .collect();
+            let selected = canvas.selected.clone();
+            let press = point(px(40.), px(40.));
+            let down = MouseDownEvent {
+                button: MouseButton::Left,
+                position: press,
+                ..Default::default()
+            };
+            let moving = MouseMoveEvent {
+                position: point(px(100.), px(100.)),
+                pressed_button: Some(MouseButton::Left),
+                ..Default::default()
+            };
+            canvas.begin_node(fixture.source, &down, window, cx);
+            canvas.pointer_move(&moving, cx);
+            canvas.pointer_up(
+                &MouseUpEvent {
+                    button: MouseButton::Left,
+                    position: press,
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            assert!(!canvas.busy);
+            assert_eq!(
+                canvas.selected, selected,
+                "out-and-back must not reveal/collapse selection"
+            );
+            assert_eq!(canvas.graph.editing.version, version);
+            assert!(!canvas.graph.editing.can_undo);
+            assert!(canvas.preview.position(fixture.source).is_none());
+
+            let managed = canvas
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .find(|node| node.node_id != fixture.source)
+                .unwrap()
+                .node_id;
+            Arc::make_mut(&mut canvas.graph.projection)
+                .nodes
+                .iter_mut()
+                .find(|node| node.node_id == managed)
+                .unwrap()
+                .capabilities
+                .managed = true;
+            canvas.begin_node(fixture.source, &down, window, cx);
+            canvas.pointer_move(&moving, cx);
+            assert_eq!(canvas.preview.mutations().len(), 1);
+            assert!(canvas.preview.position(managed).is_none());
+            canvas.cancel_gesture();
+            assert!(canvas.gesture.is_none());
+            assert!(canvas.preview.position(fixture.source).is_none());
+            assert_eq!(canvas.graph.editing.version, version);
+
+            canvas.begin_node(managed, &down, window, cx);
+            canvas.pointer_move(&moving, cx);
+            assert!(canvas.preview.mutations().is_empty());
+            canvas.pointer_move(&MouseMoveEvent::default(), cx);
+            assert!(canvas.gesture.is_none());
+            assert!(canvas.preview.position(fixture.source).is_none());
+        });
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+async fn node_drag_rejects_press_time_version_after_external_edit(cx: &mut TestAppContext) {
+    use gpui_kit::MouseUpEvent;
+
+    let fixture = Fixture::new();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (window, canvas) = fixture.canvas(&runtime, cx);
+    cx.update_window(window, |_, window, cx| {
+        canvas.update(cx, |canvas, cx| {
+            canvas.begin_node(
+                fixture.source,
+                &MouseDownEvent {
+                    button: MouseButton::Left,
+                    position: point(px(40.), px(40.)),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            fixture.edit(
+                &canvas.graph,
+                EditorGraphMutation::SetNodeLabel {
+                    node_id: fixture.source,
+                    label: Some("External edit".into()),
+                },
+            );
+            canvas.pointer_up(
+                &MouseUpEvent {
+                    button: MouseButton::Left,
+                    position: point(px(100.), px(100.)),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            assert!(canvas.busy);
+            assert!(canvas.preview.position(fixture.source).is_some());
+        });
+    })
+    .unwrap();
+    cx.condition(&canvas, |canvas, _| {
+        !canvas.busy && canvas.refresh_task.is_none()
+    })
+    .await;
+    canvas.update(cx, |canvas, _| {
+        assert!(canvas.preview.position(fixture.source).is_none());
+        assert!(canvas.gesture.is_none());
+        let node = canvas
+            .graph
+            .projection
+            .nodes
+            .iter()
+            .find(|node| node.node_id == fixture.source)
+            .unwrap();
+        assert_eq!(node.position, NodePosition { x: 0., y: 0. });
+        assert_eq!(node.display.user_label.as_deref(), Some("External edit"));
+    });
+}
+
+#[test]
+fn connection_install_tracks_move_reconnect_port_reorder_delete_and_restore() {
+    use crate::canvas::{connections::ConnectionLayer, geometry::NodeMovement};
+    use yss_graph_document::{ConnectionId, PortAddress};
+    use yss_graph_editor::projection::EditorConnectionModel;
+    use yss_node_protocol::PortDirection;
+
+    let fixture = Fixture::new();
+    let mut projection = fixture.open().projection.as_ref().clone();
+    let mut source = projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id == fixture.source)
+        .unwrap()
+        .clone();
+    let mut output = source
+        .ports
+        .iter()
+        .find(|port| port.direction == PortDirection::Output)
+        .unwrap()
+        .clone();
+    output.address = PortAddress::declared(source.node_id, "output".parse().unwrap());
+    source.ports = vec![output.clone()].into_boxed_slice();
+    let mut target = source.clone();
+    target.node_id = NodeId::new();
+    target.position = NodePosition { x: 600., y: 0. };
+    let mut input = output.clone();
+    input.direction = PortDirection::Input;
+    input.address = PortAddress::declared(target.node_id, "input".parse().unwrap());
+    target.ports = vec![input.clone()].into_boxed_slice();
+    projection.nodes = vec![source, target].into_boxed_slice();
+    let connection = ConnectionId::new();
+    projection.connections = vec![EditorConnectionModel {
+        connection_id: connection,
+        output: output.address.clone(),
+        input: input.address.clone(),
+        order: None,
+    }]
+    .into_boxed_slice();
+    let idle = NodeMovement::default();
+    let midpoint = |layer: &ConnectionLayer, input: &PortAddress, movement: &NodeMovement| {
+        (layer.port_position(&output.address, movement).unwrap()
+            + layer.port_position(input, movement).unwrap())
+            / 2.
+    };
+    let mut layer = ConnectionLayer::new(&projection);
+    let original = midpoint(&layer, &input.address, &idle);
+    assert_eq!(layer.hit_test(original, 1., &idle), Some(connection));
+    layer.install(&projection);
+    assert_eq!(layer.hit_test(original, 1., &idle), Some(connection));
+
+    projection.nodes[1].position.y = 200.;
+    layer.install(&projection);
+    let moved = midpoint(&layer, &input.address, &idle);
+    assert_eq!(layer.hit_test(moved, 1., &idle), Some(connection));
+    assert_eq!(layer.hit_test(original, 1., &idle), None);
+
+    for node in &mut projection.nodes {
+        node.position.x += 50.;
+        node.position.y += 200.;
+    }
+    layer.install(&projection);
+    let translated = midpoint(&layer, &input.address, &idle);
+    assert_eq!(layer.hit_test(translated, 1., &idle), Some(connection));
+    assert_eq!(layer.hit_test(moved, 1., &idle), None);
+
+    let mut movement = NodeMovement::new(
+        projection
+            .nodes
+            .iter()
+            .map(|node| (node.node_id, node.position))
+            .collect(),
+    );
+    movement.set_displacement(point(px(80.), px(-50.)));
+    let previewed = midpoint(&layer, &input.address, &movement);
+    assert_eq!(previewed, translated + point(px(80.), px(-50.)));
+    assert_eq!(layer.hit_test(previewed, 1., &movement), Some(connection));
+    for node in &mut projection.nodes {
+        node.position = movement.position(node.node_id).unwrap();
+    }
+    layer.install(&projection);
+    assert_eq!(layer.hit_test(previewed, 1., &idle), Some(connection));
+
+    let mut replacement = projection.nodes[1].clone();
+    replacement.node_id = NodeId::new();
+    replacement.position.y = 900.;
+    let replacement_address = PortAddress::declared(replacement.node_id, "input".parse().unwrap());
+    replacement.ports[0].address = replacement_address.clone();
+    let mut nodes = projection.nodes.into_vec();
+    nodes.push(replacement);
+    projection.nodes = nodes.into_boxed_slice();
+    projection.connections[0].input = replacement_address.clone();
+    layer.install(&projection);
+    let reconnected = midpoint(&layer, &replacement_address, &idle);
+    assert_eq!(layer.hit_test(reconnected, 1., &idle), Some(connection));
+    assert_eq!(layer.hit_test(previewed, 1., &idle), None);
+
+    let before_reorder = layer.port_position(&replacement_address, &idle).unwrap();
+    let mut earlier = projection.nodes[2].ports[0].clone();
+    earlier.address =
+        PortAddress::declared(projection.nodes[2].node_id, "earlier".parse().unwrap());
+    projection.nodes[2].ports =
+        vec![earlier, projection.nodes[2].ports[0].clone()].into_boxed_slice();
+    layer.install(&projection);
+    assert_eq!(
+        layer.port_position(&replacement_address, &idle).unwrap(),
+        before_reorder + point(px(0.), px(crate::canvas::geometry::PORT_HEIGHT))
+    );
+    let reordered = midpoint(&layer, &replacement_address, &idle);
+    assert_eq!(layer.hit_test(reordered, 1., &idle), Some(connection));
+
+    projection.nodes[0].ports[0].direction = PortDirection::Input;
+    layer.install(&projection);
+    assert_eq!(
+        layer.port_direction(&output.address),
+        Some(PortDirection::Input)
+    );
+    let reordered = midpoint(&layer, &replacement_address, &idle);
+    assert_eq!(layer.hit_test(reordered, 1., &idle), Some(connection));
+
+    let restored = projection.clone();
+    projection.connections = Box::new([]);
+    layer.install(&projection);
+    assert_eq!(layer.hit_test(reordered, 1., &idle), None);
+    layer.install(&restored);
+    assert_eq!(layer.hit_test(reordered, 1., &idle), Some(connection));
+
+    projection = restored.clone();
+    projection.nodes = projection
+        .nodes
+        .into_vec()
+        .into_iter()
+        .filter(|node| node.node_id != replacement_address.node_id)
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    layer.install(&projection);
+    assert_eq!(layer.port_position(&replacement_address, &idle), None);
+    assert_eq!(layer.hit_test(reordered, 1., &idle), None);
+    layer.install(&restored);
+    assert_eq!(layer.hit_test(reordered, 1., &idle), Some(connection));
 }

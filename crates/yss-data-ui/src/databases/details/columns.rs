@@ -60,6 +60,18 @@ impl DatabaseEditor {
         meta: &DatabaseMetaResult,
         cx: &mut Context<Self>,
     ) -> InspectorSection {
+        let section = InspectorSection::new("database-columns", t("detail.fields.columns"))
+            .count(meta.columns.len())
+            .collapsible(
+                self.details.columns_open,
+                cx.listener(|view, open: &bool, _, cx| {
+                    view.details.columns_open = *open;
+                    view.changed(cx);
+                }),
+            );
+        if !self.details.columns_open {
+            return section;
+        }
         let page = self.details.columns_page;
         let pages = meta.columns.len().div_ceil(PAGE_COLUMNS).max(1);
         let mut list = div().min_w_0().flex().flex_col();
@@ -97,33 +109,19 @@ impl DatabaseEditor {
                     }),
             );
         }
-        InspectorSection::new("database-columns", t("detail.fields.columns"))
-            .count(meta.columns.len())
-            .collapsible(
-                self.details.columns_open,
-                cx.listener(|view, open: &bool, _, cx| {
-                    view.details.columns_open = *open;
-                    view.changed(cx);
-                }),
-            )
-            .child(
-                div()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(list)
-                    .when(pages > 1, |body| {
-                        body.child(div().flex().justify_end().child(
-                            Pager::new("columns-pager", page, pages).on_change(cx.listener(
-                                |view, page: &usize, _, cx| {
-                                    view.details.columns_page = *page;
-                                    view.changed(cx);
-                                },
-                            )),
-                        ))
-                    }),
-            )
+        section.child(div().min_w_0().flex().flex_col().gap_1().child(list).when(
+            pages > 1,
+            |body| {
+                body.child(div().flex().justify_end().child(
+                    Pager::new("columns-pager", page, pages).on_change(cx.listener(
+                        |view, page: &usize, _, cx| {
+                            view.details.columns_page = *page;
+                            view.changed(cx);
+                        },
+                    )),
+                ))
+            },
+        ))
     }
 
     fn column_settings(

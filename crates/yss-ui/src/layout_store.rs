@@ -19,15 +19,17 @@ use yss_filesystem::{
 
 pub struct LayoutStore {
     directory: PathBuf,
+    executor: tokio::runtime::Handle,
     coordinator: FilesystemCoordinator,
     writes: Mutex<BTreeMap<String, Arc<AtomicU64>>>,
     viewports: Mutex<BTreeMap<String, BTreeMap<String, Viewport>>>,
 }
 
 impl LayoutStore {
-    pub fn new(app_data: &Path) -> Self {
+    pub fn new(app_data: &Path, executor: tokio::runtime::Handle) -> Self {
         Self {
             directory: app_data.join("workbench-layouts"),
+            executor,
             coordinator: FilesystemCoordinator::default(),
             writes: Mutex::new(BTreeMap::new()),
             viewports: Mutex::new(BTreeMap::new()),
@@ -42,13 +44,11 @@ impl LayoutStore {
         self: &Arc<Self>,
         size: gpui_kit::Size<gpui_kit::Pixels>,
         debounce: bool,
-        executor: &tokio::runtime::Handle,
     ) -> tokio::task::JoinHandle<Result<()>> {
         self.queue_write(
             Ok("main-window.json".into()),
             move || Ok(serde_json::to_vec(&size)?),
             debounce,
-            executor,
         )
     }
 
@@ -72,16 +72,11 @@ impl LayoutStore {
             .map(PathBuf::from))
     }
 
-    pub fn remember_project(
-        self: &Arc<Self>,
-        path: String,
-        executor: &tokio::runtime::Handle,
-    ) -> tokio::task::JoinHandle<Result<()>> {
+    pub fn remember_project(self: &Arc<Self>, path: String) -> tokio::task::JoinHandle<Result<()>> {
         self.queue_write(
             Ok("last-project.json".into()),
             move || Ok(serde_json::to_vec(&path)?),
             false,
-            executor,
         )
     }
 
@@ -103,18 +98,16 @@ impl LayoutStore {
         self: &Arc<Self>,
         project_root: String,
         state: DockAreaState,
-        executor: &tokio::runtime::Handle,
     ) -> tokio::task::JoinHandle<Result<()>> {
         let layout = self.queue_write(
             Self::file_name(&project_root),
             move || Ok(serde_json::to_vec_pretty(&persistent_layout(state))?),
             false,
-            executor,
         );
         // Closing a window must start its final write before the Tokio runtime
         // shuts down; a pending debounce alone would be cancelled on exit.
-        let viewports = self.save_viewports(project_root, false, executor);
-        executor.spawn(async move {
+        let viewports = self.save_viewports(project_root, false);
+        self.executor.spawn(async move {
             layout.await??;
             if let Some(viewports) = viewports {
                 viewports.await??;
@@ -128,11 +121,10 @@ impl LayoutStore {
         file_name: Result<String>,
         contents: impl FnOnce() -> Result<Vec<u8>> + Send + 'static,
         debounce: bool,
-        executor: &tokio::runtime::Handle,
     ) -> tokio::task::JoinHandle<Result<()>> {
         let file_name = match file_name {
             Ok(file_name) => file_name,
-            Err(error) => return executor.spawn(async move { Err(error) }),
+            Err(error) => return self.executor.spawn(async move { Err(error) }),
         };
         let stamp = self
             .writes
@@ -142,6 +134,7 @@ impl LayoutStore {
             .or_insert_with(|| Arc::new(AtomicU64::new(0)))
             .clone();
         let sequence = stamp.fetch_add(1, Ordering::SeqCst) + 1;
+        let pending = debounce.then(|| stamp.clone());
         let store = self.clone();
         let write = move || {
             let current = || stamp.load(Ordering::SeqCst) == sequence;
@@ -157,14 +150,17 @@ impl LayoutStore {
             }
             result
         };
-        if debounce {
-            let blocking = executor.clone();
-            executor.spawn(async move {
+        if let Some(stamp) = pending {
+            let executor = self.executor.clone();
+            self.executor.spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                blocking.spawn_blocking(write).await?
+                if stamp.load(Ordering::SeqCst) != sequence {
+                    return Ok(());
+                }
+                executor.spawn_blocking(write).await?
             })
         } else {
-            executor.spawn_blocking(write)
+            self.executor.spawn_blocking(write)
         }
     }
 
@@ -297,24 +293,18 @@ mod tests {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
-        let store = Arc::new(LayoutStore::new(&directory));
+        let store = Arc::new(LayoutStore::new(&directory, runtime.handle().clone()));
         let final_size = gpui_kit::size(px(1120.), px(760.));
         runtime.block_on(async {
-            let pending = store.save_window_bounds(
-                gpui_kit::size(px(1280.), px(800.)),
-                true,
-                runtime.handle(),
-            );
-            store
-                .save_window_bounds(final_size, false, runtime.handle())
-                .await??;
+            let pending = store.save_window_bounds(gpui_kit::size(px(1280.), px(800.)), true);
+            store.save_window_bounds(final_size, false).await??;
             assert_eq!(
-                LayoutStore::new(&directory).window_bounds()?,
+                LayoutStore::new(&directory, runtime.handle().clone()).window_bounds()?,
                 Some(final_size)
             );
             pending.await??;
             assert_eq!(
-                LayoutStore::new(&directory).window_bounds()?,
+                LayoutStore::new(&directory, runtime.handle().clone()).window_bounds()?,
                 Some(final_size)
             );
             anyhow::Ok(())

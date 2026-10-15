@@ -30,7 +30,7 @@ impl AgentDriverPort for OptionsDriver {
                     request
                         .tools
                         .iter()
-                        .all(|tool| tool.capability_id.descriptor().effect == ToolEffect::Inspect)
+                        .all(|tool| tool.effect == ToolEffect::Inspect)
                 );
                 if request.role == AgentRole::Manager.id() {
                     inspect_resource(&capabilities, document()).await;

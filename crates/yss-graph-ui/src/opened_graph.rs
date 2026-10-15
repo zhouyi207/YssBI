@@ -37,7 +37,6 @@ impl OpenedGraph {
         Self {
             project: receipt.project_instance_id().clone(),
             language: language.to_owned(),
-            projection: Arc::new(receipt.projection().clone()),
             editing: receipt.editing().clone(),
             results: receipt.result_state().clone(),
             dependencies: receipt
@@ -45,6 +44,7 @@ impl OpenedGraph {
                 .semantic_snapshot()
                 .dependencies()
                 .clone(),
+            projection: Arc::new(receipt.into_projection()),
         }
     }
 

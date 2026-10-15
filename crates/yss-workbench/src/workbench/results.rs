@@ -138,9 +138,7 @@ impl Workbench {
         self.problems.update(cx, |panel, cx| panel.clear(cx));
         self.output
             .update(cx, |panel, cx| panel.set_graph(None, cx));
-        self.results.update(cx, |panel, cx| {
-            panel.set_graph(None);
-            cx.notify();
-        });
+        self.results
+            .update(cx, |panel, cx| panel.set_graph(None, cx));
     }
 }

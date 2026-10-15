@@ -11,8 +11,6 @@ use crate::{
 };
 use gpui_kit::component::Root;
 use gpui_kit::{App, Context, Entity, Window, WindowHandle};
-use std::sync::Arc;
-use yss_application::runtime::ApplicationServices;
 use yss_ui::lifecycle::LogReleased;
 
 pub(super) enum SaveTarget {
@@ -40,27 +38,19 @@ pub(super) enum SaveOutcome {
     Settings(SettingsSaveOutcome),
 }
 impl SaveRequest {
-    pub fn commit(
-        self,
-        services: &ApplicationServices,
-        owner: &Arc<NativeServices>,
-    ) -> SaveOutcome {
+    pub fn commit(self, owner: &NativeServices) -> SaveOutcome {
         match self {
             Self::Graph(request) => {
-                SaveOutcome::Graph(Box::new(request.commit(&services.application)))
+                SaveOutcome::Graph(Box::new(request.commit(&owner.application.application)))
             }
             Self::Document(request) => {
-                SaveOutcome::Document(request.commit(&services.application, &owner.tasks))
+                SaveOutcome::Document(request.commit(&owner.tasks))
             }
-            Self::Mind(request) => {
-                SaveOutcome::Mind(request.commit(&services.application, &owner.tasks))
-            }
+            Self::Mind(request) => SaveOutcome::Mind(request.commit(&owner.tasks)),
             Self::Database(request) => {
-                SaveOutcome::Database(request.commit(&services.application, &owner.tasks))
+                SaveOutcome::Database(request.commit(&owner.tasks))
             }
-            Self::Chart(request) => {
-                SaveOutcome::Chart(request.commit(&services.application, &owner.tasks))
-            }
+            Self::Chart(request) => SaveOutcome::Chart(request.commit(&owner.tasks)),
             Self::Settings(request) => SaveOutcome::Settings(request.commit(&owner.settings)),
         }
     }

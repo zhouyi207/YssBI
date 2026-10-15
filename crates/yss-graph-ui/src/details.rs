@@ -51,13 +51,15 @@ pub struct GraphDetails {
     _parameter_subscription: gpui_kit::Subscription,
     ports: Vec<PortField>,
     epoch: u64,
+    notifications: yss_ui::notifications::Notifications,
 }
 
 impl GraphDetails {
-    pub fn new(services: Arc<GraphServices>, cx: &mut Context<Self>) -> Self {
+    pub fn new(services: Arc<GraphServices>, window: &Window, cx: &mut Context<Self>) -> Self {
         let properties =
-            cx.new(|_| super::graph_properties::GraphProperties::new(services.clone()));
-        let documentation = cx.new(|_| documentation::NodeDocumentation::new(services.clone()));
+            cx.new(|_| super::graph_properties::GraphProperties::new(services.clone(), window));
+        let documentation =
+            cx.new(|_| documentation::NodeDocumentation::new(services.clone(), window));
         let description = cx.new(|_| description::NodeDescription::new(services.clone()));
         let properties_observer = cx.observe(&properties, |_, _, cx| cx.notify());
         let host = cx.entity();
@@ -72,6 +74,7 @@ impl GraphDetails {
                         view.accepts_input(view.epoch, cx)
                     })
                 },
+                window,
                 cx,
             )
         });
@@ -114,6 +117,7 @@ impl GraphDetails {
             _parameter_subscription: parameter_subscription,
             ports: vec![],
             epoch: 0,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
 

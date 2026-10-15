@@ -35,8 +35,8 @@ pub struct DetailsPanel {
 }
 
 impl DetailsPanel {
-    pub fn new(services: Arc<GraphServices>, cx: &mut Context<Self>) -> Self {
-        let graph = cx.new(|cx| GraphDetails::new(services, cx));
+    pub fn new(services: Arc<GraphServices>, window: &Window, cx: &mut Context<Self>) -> Self {
+        let graph = cx.new(|cx| GraphDetails::new(services, window, cx));
         let observer = cx.observe(&graph, |view: &mut Self, _, cx| {
             if view.graph_visible(cx) {
                 cx.notify();

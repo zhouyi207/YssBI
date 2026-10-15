@@ -139,7 +139,14 @@ impl ReportPage {
                 view.loading = false;
                 match result {
                     Ok((page, roots)) => view.install(page, roots, window, cx),
-                    Err(_) => view.error = true,
+                    Err(_) => {
+                        view.error = true;
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            yss_ui::text::t("native.reports.pageFailed"),
+                            cx,
+                            |view, window, cx| view.load(view.requested_offset, window, cx),
+                        );
+                    }
                 }
                 cx.notify();
             })
@@ -234,23 +241,6 @@ impl Render for ReportPage {
                 .text_xs()
                 .when(self.loading, |bar| {
                     bar.child(yss_ui::text::translate("dataOperation.reading"))
-                })
-                .when(self.error, |bar| {
-                    bar.child(
-                        div()
-                            .text_color(cx.theme().danger)
-                            .child(yss_ui::text::translate("native.reports.pageFailed")),
-                    )
-                    .child(
-                        Button::new("report-retry")
-                            .small()
-                            .ghost()
-                            .label(yss_ui::text::translate("common.retry"))
-                            .disabled(self.loading)
-                            .on_click(cx.listener(|view, _, window, cx| {
-                                view.load(view.requested_offset, window, cx)
-                            })),
-                    )
                 })
                 .when(self.content.is_some(), |bar| {
                     bar.child(format!(

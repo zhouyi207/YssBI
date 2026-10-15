@@ -172,6 +172,10 @@ impl OpenGraphApplicationReceipt {
         &self.projection
     }
 
+    pub fn into_projection(self) -> EditorProjectionModel {
+        self.projection
+    }
+
     pub fn editing(&self) -> &yss_project::GraphEditingState {
         &self.editing
     }

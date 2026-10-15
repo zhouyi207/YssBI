@@ -27,6 +27,18 @@ impl ReadFailure {
 }
 
 impl ResultPanel {
+    fn fail_read(&mut self, error: ReadFailure, window: &Window, cx: &mut Context<Self>) {
+        let notifications = yss_ui::notifications::Notifications::new(window);
+        let message = yss_ui::text::translate(error.message());
+        if error.retryable() {
+            notifications
+                .error_with_retry(message, cx, |view, window, cx| view.retry_read(window, cx));
+        } else {
+            notifications.error(message, cx);
+        }
+        self.error = Some(error);
+    }
+
     pub fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.load_retained(None, window, cx);
     }
@@ -64,7 +76,7 @@ impl ResultPanel {
                 view.loading = false;
                 match result {
                     Ok((lease, content)) => view.install_content(lease, content, window, cx),
-                    Err(_) => view.error = Some(ReadFailure::Open),
+                    Err(_) => view.fail_read(ReadFailure::Open, window, cx),
                 }
                 cx.emit(ResultEvent::Loaded(view.loaded()));
                 cx.notify();
@@ -92,7 +104,7 @@ impl ResultPanel {
         self.rows.clear();
         self.tables = false;
         match content {
-            ResultContent::InvalidPlot => self.error = Some(ReadFailure::InvalidPlot),
+            ResultContent::InvalidPlot => self.fail_read(ReadFailure::InvalidPlot, window, cx),
             ResultContent::Plot(data) => self.plot = Some(cx.new(|_| plot::PlotView::new(data))),
             ResultContent::Page(page) => self.install_page(page, window, cx),
             ResultContent::Value {
@@ -171,7 +183,7 @@ impl ResultPanel {
                         view.part = part;
                         view.install_page(page, window, cx);
                     }
-                    Err(_) => view.error = Some(ReadFailure::Page { part, offset }),
+                    Err(_) => view.fail_read(ReadFailure::Page { part, offset }, window, cx),
                 }
                 cx.notify();
             })

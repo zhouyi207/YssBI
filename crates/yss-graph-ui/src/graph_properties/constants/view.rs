@@ -206,7 +206,6 @@ impl GraphProperties {
                                         view.constants.iter_mut().find(|field| field.model.id == id)
                                 {
                                     *field = ConstantDraft::new(field.model.clone());
-                                    view.error = None;
                                     cx.notify();
                                 }
                             },

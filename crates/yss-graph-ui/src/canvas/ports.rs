@@ -48,7 +48,6 @@ pub(crate) fn port_glyph(port: &EditorPortModel, diameter: Pixels, cx: &App) -> 
         port_color(port, cx),
         port.connections.current > 0,
         false,
-        cx,
     )
 }
 
@@ -115,7 +114,7 @@ impl GraphCanvas {
             .port_details
             .as_ref()
             .and_then(|details| details.diagnostic(&port.address));
-        let pulse = !port.orphan
+        let emphasized = !port.orphan
             && !active
             && port.connections.current == 0
             && port.direction == PortDirection::Input
@@ -169,8 +168,7 @@ impl GraphCanvas {
                     px(diameter * self.zoom),
                     color,
                     port.connections.current > 0 || active,
-                    pulse,
-                    cx,
+                    emphasized,
                 ))
         };
         let tooltip_address = port.address.clone();

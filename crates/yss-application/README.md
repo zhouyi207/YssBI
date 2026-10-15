@@ -49,6 +49,11 @@ Mind/Markdown 的 Application 用例分别位于 `src/minds.rs` 和 `src/docs.rs
 Harness 与界面意图共用 `ProjectResourceRef`；提交通过 Harness gateway 的中立发布回调交付给
 现有 Project 事件流，Application 不依赖事件传输来确定写操作是否成功。
 
+Agent 的角色与任务授权由 `yss-assistant-extension` 拥有；Harness Core 按角色注册的工具集合
+执行准入，再交给 extension 绑定业务请求。Application 与资源 owner 继续负责会话、版本和提交校验，
+不重复实现角色策略。权限集成测试经过真实 `AssistantExtension → ApplicationCapabilityGateway → owner`
+链路，分别验证授权写入和拒绝后的 owner、磁盘及发布状态。
+
 ## 主要职责与源码入口
 
 | 工作                 | Application 负责的部分                                                           | 源码入口                                                                                                                                                   |

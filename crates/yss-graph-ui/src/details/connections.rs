@@ -154,6 +154,22 @@ impl GraphDetails {
                 {
                     return;
                 }
+                if result.is_err() {
+                    view.notifications.error_with_retry(
+                        translate("detail.nodeDoc.connectionFailed"),
+                        cx,
+                        move |view, window, cx| {
+                            if view.accepts_input(epoch, cx)
+                                && view
+                                    .connection_picker
+                                    .as_ref()
+                                    .is_some_and(|(_, picker)| picker.entity_id() == picker_id)
+                            {
+                                view.load_connection_picker(window, cx);
+                            }
+                        },
+                    );
+                }
                 picker.update(cx, |list, cx| {
                     list.delegate_mut().install(result);
                     let selected = (!list.delegate().is_empty()).then_some(IndexPath::default());

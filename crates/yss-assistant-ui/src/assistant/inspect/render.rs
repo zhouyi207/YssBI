@@ -156,22 +156,6 @@ impl Inspection {
         if self.loading == Loading::Reading {
             body = body.child(yss_ui::text::t("panel.assistantLoadingDetails"));
         }
-        if self.loading == Loading::Failed {
-            body = body
-                .child(
-                    div()
-                        .text_color(cx.theme().danger)
-                        .child(yss_ui::text::t("panel.assistantDetailsFailed")),
-                )
-                .child(
-                    Button::new("retry-tool")
-                        .small()
-                        .ghost()
-                        .self_start()
-                        .label(yss_ui::text::t("panel.assistantRetryDetails"))
-                        .on_click(cx.listener(|view, _, window, cx| view.load(window, cx))),
-                );
-        }
         let Some(detail) = &self.detail else {
             return body;
         };

@@ -1,9 +1,68 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, rc::Rc};
 
 use gpui_kit::{Bounds, Pixels, Point, point, px, size};
 use yss_graph_document::{NodeId, NodePosition, PortAddress};
+use yss_graph_editor::NodePositionMutation;
 use yss_graph_editor::projection::{EditorNodeModel, EditorParameterModel};
 use yss_node_protocol::{ParameterPresentation, PortDirection};
+
+// Paint snapshots share the press-time positions; displacement stays local to each frame.
+#[derive(Clone, Default)]
+pub struct NodeMovement {
+    originals: Option<Rc<BTreeMap<NodeId, NodePosition>>>,
+    displacement: Point<Pixels>,
+}
+
+impl NodeMovement {
+    pub fn new(positions: BTreeMap<NodeId, NodePosition>) -> Self {
+        Self {
+            originals: (!positions.is_empty()).then(|| Rc::new(positions)),
+            displacement: Point::default(),
+        }
+    }
+
+    pub fn set_displacement(&mut self, displacement: Point<Pixels>) {
+        self.displacement = displacement;
+    }
+
+    pub fn position(&self, id: NodeId) -> Option<NodePosition> {
+        self.originals
+            .as_ref()?
+            .get(&id)
+            .map(|position| self.translate(*position))
+    }
+
+    fn translate(&self, position: NodePosition) -> NodePosition {
+        NodePosition {
+            x: position.x + f32::from(self.displacement.x) as f64,
+            y: position.y + f32::from(self.displacement.y) as f64,
+        }
+    }
+
+    pub fn mutations(&self) -> Vec<NodePositionMutation> {
+        if self.displacement == Point::default() {
+            return Vec::new();
+        }
+        let Some(originals) = &self.originals else {
+            return Vec::new();
+        };
+        let mut mutations = Vec::with_capacity(originals.len());
+        for (node_id, original) in originals.iter() {
+            let position = self.translate(*original);
+            if position != *original {
+                mutations.push(NodePositionMutation {
+                    node_id: *node_id,
+                    position,
+                });
+            }
+        }
+        mutations
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+}
 
 pub const NODE_WIDTH: f32 = 280.;
 pub const TITLE_HEIGHT: f32 = 44.;
@@ -60,8 +119,8 @@ pub fn inline_parameters(node: &EditorNodeModel) -> impl Iterator<Item = &Editor
         .filter(|parameter| parameter.presentation == ParameterPresentation::InlineAndDetail)
 }
 
-pub fn position(node: &EditorNodeModel, preview: &BTreeMap<NodeId, NodePosition>) -> NodePosition {
-    preview.get(&node.node_id).copied().unwrap_or(node.position)
+pub fn position(node: &EditorNodeModel, preview: &NodeMovement) -> NodePosition {
+    preview.position(node.node_id).unwrap_or(node.position)
 }
 
 pub fn node_bounds(node: &EditorNodeModel, position: NodePosition) -> Bounds<Pixels> {

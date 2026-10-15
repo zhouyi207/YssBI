@@ -4,7 +4,7 @@ use yss_desktop_services::resources;
 use std::sync::Arc;
 
 use yss_application::{
-    activity_panel::ActivityPanelDocument, project::query::ProjectIndexSnapshot,
+    activity_panel::ActivityPanelDocument, project::query::ProjectPresentationSnapshot,
 };
 use yss_project_identity::ProjectInstanceId;
 
@@ -19,7 +19,7 @@ pub struct DesktopProject {
 impl DesktopProject {
     pub fn new(
         identity: ProjectInstanceId,
-        snapshot: ProjectIndexSnapshot,
+        snapshot: ProjectPresentationSnapshot,
         language: &str,
     ) -> Self {
         let resources = Arc::new(resources::ResourceCatalog::new(
@@ -166,7 +166,7 @@ mod tests {
         let mut project = DesktopProject::new(
             identity.clone(),
             application
-                .query_project_index(identity.clone(), "en", true)
+                .query_project_presentation(identity.clone(), "en")
                 .unwrap(),
             "en",
         );

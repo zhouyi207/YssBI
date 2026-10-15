@@ -217,7 +217,7 @@ impl GraphCanvas {
             .runs
             .last_key_value()
             .map(|(_, projection)| projection.event.identity().clone());
-        self.error = None;
+
         self.refresh_presentation();
         let task = self.services.run(move |services| {
             let application = services;
@@ -268,7 +268,7 @@ impl GraphCanvas {
                             code = "native_run_request_rejected",
                             "Native run request rejected"
                         );
-                        view.error = Some(run_rejection(&error));
+                        view.notifications.error(run_rejection(&error), cx);
                     }
                 }
                 view.resync_execution(cx);
@@ -310,7 +310,8 @@ impl GraphCanvas {
             view.update(cx, |view, cx| {
                 view.execution.cancelling = false;
                 if result.is_err() {
-                    view.error = Some(yss_ui::text::t("native.canvas.cancelFailed").into());
+                    view.notifications
+                        .error(yss_ui::text::t("native.canvas.cancelFailed"), cx);
                 }
                 view.resync_execution(cx);
                 cx.emit(CanvasEvent::Execution);

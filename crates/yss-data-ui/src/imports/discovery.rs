@@ -37,17 +37,19 @@ impl ImportDialog {
             view.update_in(cx, |view, window, cx| {
                 view.task = None;
                 if failed {
-                    view.error = Some(yss_ui::text::t("native.imports.pickerFailed").into());
+                    view.notifications
+                        .error(yss_ui::text::t("native.imports.pickerFailed"), cx);
                 }
                 if let Some(path) = path {
                     if let Some(path) = path.to_str() {
                         view.stage = ImportStage::File(kind, path.to_owned());
-                        view.error = None;
+
                         if matches!(kind, ImportKind::Excel | ImportKind::Sqlite) {
                             view.discover_file(window, cx);
                         }
                     } else {
-                        view.error = Some(yss_ui::text::t("native.imports.invalidFilePath").into());
+                        view.notifications
+                            .error(yss_ui::text::t("native.imports.invalidFilePath"), cx);
                     }
                 }
                 cx.notify();
@@ -78,10 +80,10 @@ impl ImportDialog {
         let ImportStage::Connection(kind) = self.stage else {
             return;
         };
-        match self.connection.url(kind, cx) {
+        match self.connection.url(cx) {
             Ok(connection) => self.discover(SourceLocation::Sql { kind, connection }, window, cx),
             Err(error) => {
-                self.error = Some(error);
+                self.notifications.error(error, cx);
                 cx.notify();
             }
         }
@@ -91,7 +93,7 @@ impl ImportDialog {
             return;
         }
         self.task = Some(ImportTask::Discovery);
-        self.error = None;
+
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
         let query = source.clone();
@@ -126,8 +128,12 @@ impl ImportDialog {
                     Some(choices) if !choices.is_empty() => {
                         view.stage = ImportStage::Selection { source, choices };
                     }
-                    Some(_) => view.error = Some(yss_ui::text::t("native.imports.noTables").into()),
-                    None => view.error = Some(yss_ui::text::t("native.imports.readFailed").into()),
+                    Some(_) => view
+                        .notifications
+                        .error(yss_ui::text::t("native.imports.noTables"), cx),
+                    None => view
+                        .notifications
+                        .error(yss_ui::text::t("native.imports.readFailed"), cx),
                 }
                 cx.notify();
             })
@@ -141,7 +147,7 @@ impl ImportDialog {
             return;
         }
         self.task = Some(ImportTask::Discovery);
-        self.error = None;
+
         self.stage = ImportStage::Samples {
             entries: vec![],
             load_failed: false,
@@ -170,7 +176,7 @@ impl ImportDialog {
                             entries: vec![],
                             load_failed: true,
                         };
-                        view.error = Some(yss_ui::text::translate(key));
+                        view.notifications.error(yss_ui::text::translate(key), cx);
                     }
                 }
                 cx.notify();

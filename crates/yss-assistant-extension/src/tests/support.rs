@@ -116,17 +116,23 @@ impl Tools<'_> {
             })
             .await;
         let events = self.store.published_events();
-        if outcome.output.get("failure").is_some() || outcome.fatal.is_some() {
+        if outcome.invocation_id.is_none() {
             return Err(events
                 .into_iter()
                 .rev()
-                .find_map(|event| match event.event {
-                    HarnessEvent::Agent(AgentEvent::ControlToolFinished {
+                .filter_map(|envelope| match envelope.event {
+                    HarnessEvent::Agent(event) | HarnessEvent::AgentRunOutput { event, .. } => {
+                        Some(event)
+                    }
+                    _ => None,
+                })
+                .find_map(|event| match event {
+                    AgentEvent::ControlToolFinished {
                         tool,
                         failure_code: Some(code),
                         failure_details,
                         ..
-                    }) if tool == name => Some(CapabilityFailure {
+                    } if tool == name => Some(CapabilityFailure {
                         code,
                         details: failure_details.unwrap_or_default(),
                     }),

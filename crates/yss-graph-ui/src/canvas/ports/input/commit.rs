@@ -122,6 +122,8 @@ impl GraphCanvas {
             }
             if field.version != version || version != self.graph.editing.version {
                 field.error = Some(InputError::Conflict);
+                self.notifications
+                    .error(yss_ui::text::t("native.canvas.commandFailed"), cx);
                 cx.notify();
                 return None;
             }
@@ -133,10 +135,14 @@ impl GraphCanvas {
             } else {
                 yss_ui::input::number(&text)
             };
-            let Ok(value) = value else {
-                field.error = Some(InputError::Number);
-                cx.notify();
-                return None;
+            let value = match value {
+                Ok(value) => value,
+                Err(error) => {
+                    field.error = Some(InputError::Number);
+                    self.notifications.error(error, cx);
+                    cx.notify();
+                    return None;
+                }
             };
             edits.push(PortEdit {
                 address: address.clone(),

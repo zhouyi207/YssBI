@@ -13,6 +13,9 @@ mod delegation;
 pub(crate) mod observations;
 mod receipts;
 
+#[cfg(test)]
+mod tests;
+
 use observations::ResourceObservations;
 use receipts::{Evidence, record_receipt};
 

@@ -180,8 +180,8 @@ async fn concurrent_event_append_with_an_insert_failure_keeps_a_contiguous_durab
         .execute(&first.pool)
         .await
         .unwrap();
-    first.pool.close().await;
-    second.pool.close().await;
+    first.close().await;
+    second.close().await;
     let reopened = SqliteHarnessStore::connect(directory.clone())
         .await
         .unwrap();
@@ -198,7 +198,7 @@ async fn concurrent_event_append_with_an_insert_failure_keeps_a_contiguous_durab
             .sequence,
         12
     );
-    reopened.pool.close().await;
+    reopened.close().await;
     std::fs::remove_dir_all(directory).unwrap();
 }
 

@@ -50,9 +50,17 @@ pub struct DocumentEditor {
     refreshing: bool,
     refresh_again: bool,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
 }
 
 impl DocumentEditor {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     pub fn new(
         services: Arc<ApplicationTasks>,
         snapshot: DocSnapshot,
@@ -132,6 +140,7 @@ impl DocumentEditor {
             refreshing: false,
             refresh_again: false,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
 

@@ -77,12 +77,21 @@ pub struct MindCanvas {
     refreshing: bool,
     refresh_again: bool,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
 }
 
 impl MindCanvas {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     pub fn new(
         services: Arc<ApplicationTasks>,
         snapshot: MindSnapshot,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let layout = MindLayout::new(&snapshot.content, &BTreeSet::new());
@@ -122,6 +131,7 @@ impl MindCanvas {
             refreshing: false,
             refresh_again: false,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
     pub fn snapshot(&self) -> &MindSnapshot {

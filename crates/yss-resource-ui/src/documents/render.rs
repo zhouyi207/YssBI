@@ -86,21 +86,5 @@ impl Render for DocumentEditor {
                         .into_any_element()
                 },
             ))
-            .when_some(self.error.as_ref(), |view, error| {
-                view.child(
-                    div()
-                        .id("document-save-error")
-                        .role(gpui_kit::accesskit::Role::Alert)
-                        .flex_shrink_0()
-                        .px_3()
-                        .py_2()
-                        .border_t_1()
-                        .border_color(cx.theme().border)
-                        .bg(cx.theme().muted)
-                        .text_color(cx.theme().danger)
-                        .text_xs()
-                        .child(error.clone()),
-                )
-            })
     }
 }

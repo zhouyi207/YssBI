@@ -309,29 +309,5 @@ impl Render for SemanticDialog {
         view.when(self.loading || self.saving, |view| {
             view.child(div().text_xs().child(t("common.loading")))
         })
-        .when_some(self.error, |view, key| {
-            view.child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().danger)
-                    .child(yss_ui::text::format(
-                        key,
-                        &[("count", self.draft.values.len().to_string())],
-                    )),
-            )
-        })
-        .when(
-            self.error == Some("detail.data.mappingLoadFailed"),
-            |view| {
-                view.child(
-                    Button::new("semantic-retry")
-                        .small()
-                        .outline()
-                        .label(t("common.retry"))
-                        .disabled(self.loading || self.saving)
-                        .on_click(cx.listener(|view, _, window, cx| view.read_values(window, cx))),
-                )
-            },
-        )
     }
 }

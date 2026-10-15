@@ -105,7 +105,7 @@ impl Workbench {
             })
             .map(|project| project.index.clone())
             .unwrap_or_else(|| read.catalog().clone());
-        let chart = cx.new(|cx| ChartEditor::new(services, read, cx));
+        let chart = cx.new(|cx| ChartEditor::new(services, read, window, cx));
         let mut status = (chart.read(cx).dirty(), chart.read(cx).busy());
         self.subscriptions
             .push(cx.observe(&chart, move |_, chart, cx| {

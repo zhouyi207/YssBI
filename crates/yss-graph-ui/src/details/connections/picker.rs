@@ -2,7 +2,6 @@
 use super::*;
 use gpui_kit::component::{
     ActiveTheme,
-    button::{Button, ButtonVariants},
     list::{ListDelegate, ListItem},
 };
 use gpui_kit::{App, Task, WeakEntity, px};
@@ -221,11 +220,8 @@ impl ListDelegate for ConnectionPicker {
     fn render_empty(
         &mut self,
         _: &mut Window,
-        cx: &mut Context<ListState<Self>>,
+        _cx: &mut Context<ListState<Self>>,
     ) -> impl IntoElement {
-        let owner = self.owner.clone();
-        let epoch = self.epoch;
-        let picker_id = cx.entity_id();
         div()
             .size_full()
             .flex()
@@ -235,31 +231,8 @@ impl ListDelegate for ConnectionPicker {
             .justify_center()
             .p_3()
             .text_sm()
-            .child(translate(if self.failed {
-                "detail.nodeDoc.connectionFailed"
-            } else {
-                "canvas.nodePalette.noMatches"
-            }))
-            .when(self.failed, |view| {
-                view.child(
-                    Button::new("retry-connections")
-                        .small()
-                        .ghost()
-                        .label(translate("common.retry"))
-                        .on_click(move |_, window, cx| {
-                            owner
-                                .update(cx, |view, cx| {
-                                    if view.accepts_input(epoch, cx)
-                                        && view.connection_picker.as_ref().is_some_and(
-                                            |(_, picker)| picker.entity_id() == picker_id,
-                                        )
-                                    {
-                                        view.load_connection_picker(window, cx);
-                                    }
-                                })
-                                .log_released();
-                        }),
-                )
+            .when(!self.failed, |view| {
+                view.child(translate("canvas.nodePalette.noMatches"))
             })
     }
 }

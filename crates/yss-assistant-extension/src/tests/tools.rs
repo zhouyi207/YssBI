@@ -1,4 +1,5 @@
 use crate::contract::*;
+use crate::contract::model::CapabilityInput;
 use crate::tools::decode_input as decode_request;
 use serde_json::{Value, json};
 
@@ -108,13 +109,25 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
         let schema =
             serde_json::to_value(crate::contract::capability_input_schema(capability))
                 .unwrap();
-        let request = decode_request(capability, arguments.clone(), &schema).unwrap();
-
-        assert_eq!(request.capability_id(), capability);
+        let decode = |arguments| match capability {
+            CapabilityId::SearchKnowledge => {
+                decode_arguments::<SearchKnowledgeRequest>(arguments, &schema)
+                    .map(|request| serde_json::to_value(request).unwrap())
+            }
+            CapabilityId::ReadKnowledge => {
+                decode_arguments::<ReadKnowledgeRequest>(arguments, &schema)
+                    .map(|request| serde_json::to_value(request).unwrap())
+            }
+            _ => unreachable!(),
+        };
+        let request = decode(arguments.clone()).unwrap();
+        for (field, value) in arguments.as_object().unwrap() {
+            assert_eq!(&request[field], value);
+        }
         for field in ["project", "revision", "sourceHash", "version"] {
             let mut invalid = arguments.clone();
             invalid[field] = json!("internal");
-            assert!(decode_request(capability, invalid, &schema).is_err());
+            assert!(decode(invalid).is_err());
         }
     }
     let schema = serde_json::to_value(crate::contract::capability_input_schema(

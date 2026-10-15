@@ -144,21 +144,6 @@ impl Render for MindCanvas {
                         .bg(cx.theme().primary.opacity(0.1)),
                 )
             })
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .absolute()
-                        .bottom_2()
-                        .left_3()
-                        .right_3()
-                        .p_2()
-                        .rounded_md()
-                        .bg(cx.theme().muted)
-                        .text_color(cx.theme().danger)
-                        .text_xs()
-                        .child(error),
-                )
-            })
     }
 }
 

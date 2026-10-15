@@ -5,6 +5,7 @@ pub(super) use ranges::PageSelection;
 use super::{DatabaseEditor, grid::DatabaseGrid};
 use gpui_kit::component::table::{TableEvent, TableSelection, TableState};
 use gpui_kit::{ClipboardItem, Context, Focusable, Modifiers, Window};
+use std::borrow::Cow;
 use yss_data_contract::TabularScalar;
 
 impl DatabaseEditor {
@@ -92,19 +93,23 @@ impl DatabaseEditor {
         });
     }
     pub(super) fn update_selection_preview(&self, window: &mut Window, cx: &mut Context<Self>) {
-        let table = self.grid.read(cx);
-        let grid = table.delegate();
-        let value = grid
-            .selection
-            .primary_cell(grid.data_selection(table.selection()))
-            .and_then(|(row, column)| grid.value(row, column));
-        let text = value
-            .filter(|value| !matches!(value, TabularScalar::Null))
-            .map(super::grid::display)
-            .unwrap_or_default();
+        if !self.selection_preview_open {
+            return;
+        }
         self.selection_preview.update(cx, |input, cx| {
-            if input.value() != text {
-                input.set_value(text, window, cx);
+            let table = self.grid.read(cx);
+            let grid = table.delegate();
+            let value = grid
+                .selection
+                .primary_cell(grid.data_selection(table.selection()))
+                .and_then(|(row, column)| grid.value(row, column));
+            let text = match value {
+                None | Some(TabularScalar::Null) => Cow::Borrowed(""),
+                Some(TabularScalar::String(value)) => Cow::Borrowed(value.as_ref()),
+                Some(value) => Cow::Owned(super::grid::display(value)),
+            };
+            if input.text() != text.as_ref() {
+                input.set_value(text.into_owned(), window, cx);
             }
         });
     }

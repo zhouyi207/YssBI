@@ -161,4 +161,8 @@ impl DatabaseSchemaFact {
     pub fn columns(&self) -> &[DatabaseColumnFact] {
         &self.columns
     }
+
+    pub fn into_columns(self) -> Box<[DatabaseColumnFact]> {
+        self.columns
+    }
 }

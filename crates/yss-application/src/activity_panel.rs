@@ -3,10 +3,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use yss_node_catalog::{LocalizedCatalog, NodeCreation};
 use yss_plugin_protocol::InstalledPlugin;
-use yss_project_identity::ProjectInstanceId;
-
-use crate::graph::catalog::{CatalogQueryApplicationError, LocalizedCatalogRequest};
-use crate::session::ApplicationState;
 
 mod assistant;
 
@@ -312,25 +308,6 @@ pub fn nodes_activity_panel_from_catalog(
             .push(message("nodes.empty", 0, "sidebar.noNodes"));
     }
     document
-}
-
-impl ApplicationState {
-    pub fn nodes_activity_panel(
-        &self,
-        project: Option<ProjectInstanceId>,
-        locale: String,
-    ) -> Result<ActivityPanelDocument, CatalogQueryApplicationError> {
-        if let Some(project) = project {
-            return self
-                .localized_node_catalog(LocalizedCatalogRequest::new(project, locale))
-                .map(nodes_activity_panel_from_catalog);
-        }
-        let mut document = ActivityPanelDocument::new("nodes", "activityBar.nodes");
-        document
-            .rows
-            .push(message("nodes.empty", 0, "sidebar.noNodes"));
-        Ok(document)
-    }
 }
 
 fn message(id: &str, depth: usize, label: &'static str) -> ActivityRow {

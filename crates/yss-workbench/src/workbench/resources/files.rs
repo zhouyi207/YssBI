@@ -5,6 +5,7 @@ mod panels;
 use super::{super::Workbench, AuthoredKind, ResourceAction};
 use crate::file_commands::NativeFile;
 use gpui_kit::{ClipboardItem, Context, Entity, Window};
+use yss_desktop_services::ApplicationTasks;
 use yss_project::file_resources::{FileCommand, FileSnapshot};
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::{
@@ -162,14 +163,14 @@ impl Workbench {
         self.busy = true;
         self.error = None;
         let request = target.clone();
-        let publisher = self.services.clone();
-        let job = self.services.run(move |services| match request.kind {
+        let owner = self.services.tasks.clone();
+        let job = self.services.run(move |_| match request.kind {
             AuthoredKind::Document => {
-                mutate::<DocDocument>(services, &publisher, request, action, name)
+                mutate::<DocDocument>(&owner, request, action, name)
                     .map(FileResult::Document)
             }
             AuthoredKind::Mind => {
-                mutate::<MindDocument>(services, &publisher, request, action, name)
+                mutate::<MindDocument>(&owner, request, action, name)
                     .map(FileResult::Mind)
             }
             AuthoredKind::Chart => unreachable!("chart management has its own owner"),
@@ -217,17 +218,17 @@ impl Workbench {
 }
 
 fn mutate<T: NativeFile>(
-    services: &yss_application::runtime::ApplicationServices,
-    publisher: &crate::services::NativeServices,
+    owner: &ApplicationTasks,
     target: FileTarget,
     action: ResourceAction,
     name: Option<String>,
 ) -> anyhow::Result<Option<FileSnapshot<T>>> {
+    let services = owner.application();
     let path = FilePath::<T>::parse(&target.path).map_err(anyhow::Error::msg)?;
     let version = match target.version {
         Some(version) => version,
         None => {
-            let snapshot = T::read(&services.application, target.project.clone(), path.clone())?;
+            let snapshot = T::read(services, target.project.clone(), path.clone())?;
             anyhow::ensure!(
                 snapshot.version.revision == target.revision,
                 "file version changed"
@@ -249,7 +250,7 @@ fn mutate<T: NativeFile>(
         ResourceAction::Delete => FileCommand::Delete { path, version },
         ResourceAction::CopyPath => unreachable!("copy does not mutate a file"),
     };
-    let receipt = T::apply_command(&services.application, target.project, command)?;
-    publisher.publish_resource(receipt.mutation);
+    let receipt = T::apply_command(services, target.project, command)?;
+    owner.publish_resource(receipt.mutation);
     Ok(receipt.snapshot)
 }

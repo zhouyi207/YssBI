@@ -259,11 +259,7 @@ fn decision_nodes_execute_all_rankings_and_reuse_generated_weights_on_independen
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    let control = yss_relational_contract::RelationControl {
-        cancellation: Arc::new(AtomicBool::new(false)),
-        deadline: Instant::now() + Duration::from_secs(10),
-        max_input_bytes: 4 * 1024 * 1024,
-    };
+    let cancellation = Arc::new(AtomicBool::new(false));
     for case in f["cases"].as_array().unwrap() {
         let method = case["method"].as_str().unwrap();
         let kind = format!(
@@ -321,6 +317,12 @@ fn decision_nodes_execute_all_rankings_and_reuse_generated_weights_on_independen
         let RuntimeValue::Relation(scores) = execute(&document, "yssbi.dataframe.limit").unwrap()
         else {
             panic!("scores relation")
+        };
+        // Each page has its own deadline; earlier ranking calculations do not consume it.
+        let control = yss_relational_contract::RelationControl {
+            cancellation: cancellation.clone(),
+            deadline: Instant::now() + Duration::from_secs(10),
+            max_input_bytes: 4 * 1024 * 1024,
         };
         let page = scores.page(632, 10, &control).unwrap();
         let values = serde_json::to_value(page.data.columns()[1].values()).unwrap();

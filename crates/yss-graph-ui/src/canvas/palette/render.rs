@@ -112,40 +112,6 @@ impl NodePalette {
             .when(self.loading, |body| {
                 body.child(div().text_xs().child(translate("common.loading")))
             })
-            .when(!self.current(cx), |body| {
-                body.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(translate("native.workbench.creationChanged")),
-                )
-            })
-            .when_some(self.error, |body, error| {
-                body.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_xs()
-                                .text_color(cx.theme().danger)
-                                .child(translate(error)),
-                        )
-                        .when(error == "native.canvas.catalogFailed", |body| {
-                            body.child(
-                                Button::new("palette-retry")
-                                    .ghost()
-                                    .small()
-                                    .label(translate("common.retry"))
-                                    .disabled(self.loading || !self.current(cx))
-                                    .on_click(cx.listener(|view, _, _, cx| view.query(cx))),
-                            )
-                        }),
-                )
-            })
             .when(
                 self.browser.visible.is_empty() && !self.loading && self.error.is_none(),
                 |body| {

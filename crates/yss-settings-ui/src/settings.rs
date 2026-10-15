@@ -43,6 +43,7 @@ pub struct SettingsPanel {
     focus: FocusHandle,
     catalog: Option<Arc<LanguageModelCatalog>>,
     knowledge: knowledge::KnowledgeSettings,
+    notifications: yss_ui::notifications::Notifications,
     page: Page,
     initial_page: gpui_kit::component::setting::SelectIndex,
     editor: Option<models::ProviderDraft>,
@@ -64,7 +65,7 @@ pub struct SettingsPanel {
 impl SettingsPanel {
     pub fn new(
         services: Arc<SettingsServices>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let preference_error = services
@@ -75,6 +76,7 @@ impl SettingsPanel {
             focus: cx.focus_handle(),
             catalog: None,
             knowledge: knowledge::KnowledgeSettings::default(),
+            notifications: yss_ui::notifications::Notifications::new(window),
             page: Page::Overview,
             initial_page: Default::default(),
             editor: None,

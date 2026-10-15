@@ -136,14 +136,6 @@ impl AdditionForm {
                         .text_sm()
                         .child(yss_ui::text::translate("reportSummary.pending")),
                 )
-            })
-            .when_some(self.error, |body, error| {
-                body.child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().danger)
-                        .child(yss_ui::text::translate(error)),
-                )
             });
         div()
             .w_full()

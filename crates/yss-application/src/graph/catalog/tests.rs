@@ -862,7 +862,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     ));
     let snapshot = session
         .application
-        .query_project_index(project_instance_id.clone(), "zh-CN", true)
+        .query_project_presentation(project_instance_id.clone(), "zh-CN")
         .unwrap();
     assert_eq!(snapshot.activity_panels.len(), 2);
     for id in [
@@ -933,7 +933,7 @@ fn all_non_deferred_builtin_nodes_are_available_in_catalog_and_sidebar() {
         .unwrap();
     let snapshot = session
         .application
-        .query_project_index(project_instance_id, "zh-CN", true)
+        .query_project_presentation(project_instance_id, "zh-CN")
         .unwrap();
     // Scope exceptions are reviewed in the catalog owner's document, not inferred
     // from missing kernels. Implementing an exception must also remove its record.
@@ -1412,8 +1412,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
             "en-US",
         ))
         .unwrap()
-        .projection()
-        .clone();
+        .into_projection();
     let edit_request = || crate::graph::editing::GraphEditRequest {
         project_instance_id: instance.clone(),
         graph_path: graph.clone(),

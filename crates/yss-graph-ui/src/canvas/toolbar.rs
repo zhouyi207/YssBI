@@ -362,7 +362,7 @@ mod tests {
         );
         let catalog = Arc::new(
             application
-                .query_project_index(project, locale, true)
+                .query_project_presentation(project, locale)
                 .unwrap()
                 .activity_panels
                 .into_iter()
@@ -377,7 +377,10 @@ mod tests {
         ));
         let services = Arc::new(crate::GraphServices::new(
             tasks,
-            Arc::new(yss_ui::layout_store::LayoutStore::new(directory.path())),
+            Arc::new(yss_ui::layout_store::LayoutStore::new(
+                directory.path(),
+                runtime.handle().clone(),
+            )),
         ));
         cx.update(|cx| {
             gpui_kit::init(cx);
@@ -390,7 +393,10 @@ mod tests {
                         GraphCanvas::new(services, graph, catalog, locale.into(), window, cx);
                     canvas.selected.insert(node);
                     let idle = Display::new(&canvas);
-                    canvas.preview.insert(node, NodePosition { x: 30., y: 40. });
+                    canvas.preview = super::super::geometry::NodeMovement::new(
+                        [(node, NodePosition { x: 0., y: 0. })].into(),
+                    );
+                    canvas.preview.set_displacement(point(px(30.), px(40.)));
                     canvas.offset = point(px(20.), px(10.));
                     canvas.zoom *= 1.25;
                     assert!(idle.matches(&canvas));

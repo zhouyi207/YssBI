@@ -116,7 +116,7 @@ impl GraphCanvas {
         self.selected_connections.clear();
         self.connection_click = None;
         self.palette = None;
-        self.error = None;
+
         window.focus(&self.focus, cx);
         if event.modifiers.alt {
             self.submit(
@@ -182,9 +182,10 @@ impl GraphCanvas {
             return;
         }
         if let Some(ConnectionDecision::Invalid { reason }) = drag.decision(&target) {
-            self.error = Some(yss_ui::text::translate(&format!(
-                "canvas.connection.errors.{reason}"
-            )));
+            self.notifications.error(
+                yss_ui::text::translate(&format!("canvas.connection.errors.{reason}")),
+                cx,
+            );
         } else {
             // Missing preview decisions are neutral, including failed reads.
             // The mutation still validates the captured version and connection.

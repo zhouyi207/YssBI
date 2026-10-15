@@ -2,13 +2,12 @@
 use super::{DocumentationState, NodeDocumentation};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Sizable,
-    button::{Button, ButtonVariants},
+    ActiveTheme,
     text::{TextView, TextViewStyle},
 };
 use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*, rems};
 use yss_node_protocol::NodeTypeId;
-use yss_ui::inspector::{self, InlineMessage, InspectorHeader, InspectorSection};
+use yss_ui::inspector::{self, InspectorHeader, InspectorSection};
 use yss_ui::text::translate;
 
 impl Render for NodeDocumentation {
@@ -77,17 +76,7 @@ impl NodeDocumentation {
                     )
                     .into_any_element()
             }
-            DocumentationState::Failed => {
-                InlineMessage::error(translate("native.workbench.nodeDocumentationFailed"))
-                    .action(
-                        Button::new("retry-node-documentation")
-                            .small()
-                            .ghost()
-                            .label(translate("common.retry"))
-                            .on_click(cx.listener(|view, _, _, cx| view.read(cx))),
-                    )
-                    .into_any_element()
-            }
+            DocumentationState::Failed => div().into_any_element(),
         }
     }
 }

@@ -180,6 +180,17 @@ impl Picker {
                         return;
                     }
                     picker.task = None;
+                    if result.is_err() {
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            yss_ui::text::t("native.results.unavailable"),
+                            cx,
+                            |picker, window, cx| {
+                                if picker.open && picker.task.is_none() {
+                                    picker.read_sources(window, cx);
+                                }
+                            },
+                        );
+                    }
                     let refresh = picker.list.update(cx, |list, cx| {
                         let delegate = list.delegate_mut();
                         delegate.loading = false;

@@ -53,6 +53,12 @@ impl SqliteHarnessStore {
         self.path.as_deref()
     }
 
+    /// Waits for all pooled connections to close before the database is reopened or removed.
+    /// Call after draining Harness work; closing affects every owner sharing this store.
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
+
     async fn connect_with_options(
         options: SqliteConnectOptions,
         path: Option<PathBuf>,

@@ -1,10 +1,6 @@
 use super::{Content, NodeDescription};
-use gpui_kit::component::{
-    Sizable,
-    button::{Button, ButtonVariants},
-};
 use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*, rems};
-use yss_ui::inspector::{self, InlineMessage, InspectorSection, Pager};
+use yss_ui::inspector::{self, InspectorSection, Pager};
 use yss_ui::text::translate;
 
 const PAGE_COLUMNS: usize = 50;
@@ -78,15 +74,7 @@ impl NodeDescription {
                     })
                     .into_any_element()
             }
-            Content::Failed => InlineMessage::error(translate("native.results.unavailable"))
-                .action(
-                    Button::new("description-retry")
-                        .small()
-                        .ghost()
-                        .label(translate("common.retry"))
-                        .on_click(cx.listener(|view, _, window, cx| view.read(window, cx))),
-                )
-                .into_any_element(),
+            Content::Failed => div().into_any_element(),
             state => inspector::hint(
                 translate(match state {
                     Content::Loading | Content::Unloaded => "common.loading",
