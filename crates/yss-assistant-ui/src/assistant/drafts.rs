@@ -104,8 +104,7 @@ impl ConversationPanel {
                     self.reconcile_effort();
                 }
             } else {
-                self.error =
-                    Some(yss_ui::text::t("panel.assistantStatusProviderUnavailable").into());
+                self.error = Some(yss_ui::text::t("native.assistant.configureModelHint").into());
             }
         }
         self.input.focus_handle(cx).focus(window, cx);

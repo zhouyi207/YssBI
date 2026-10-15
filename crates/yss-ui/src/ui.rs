@@ -10,6 +10,7 @@ pub mod markdown;
 pub mod modal_window;
 pub mod name_form;
 pub mod preferences;
+pub mod sidebar;
 pub mod table;
 pub mod text;
 pub mod tool_panel;

@@ -12,7 +12,10 @@ use gpui_kit::{
     div, prelude::*, px,
 };
 use std::sync::Arc;
-use yss_harness_contract::{LanguageModelAuthentication, LanguageModelCatalog, LanguageModelConfig, LanguageModelProviderStatus, LanguageModelSelection};
+use yss_harness_contract::{
+    LanguageModelAuthentication, LanguageModelCatalog, LanguageModelConfig,
+    LanguageModelProviderStatus, LanguageModelSelection,
+};
 use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
@@ -256,7 +259,7 @@ impl ConversationPanel {
                     .xsmall()
                     .ghost()
                     .w_full()
-                    .label(yss_ui::text::t("settings.models.manage"))
+                    .label(yss_ui::text::t("panel.assistantOpenSettings"))
                     .on_click(move |_, window, cx| {
                         owner
                             .update(cx, |view, cx| {

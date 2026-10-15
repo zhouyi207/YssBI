@@ -1,5 +1,6 @@
 //! Each selected-plugin read checks the original installation identity before and after I/O.
 use super::{PluginKey, PluginsEvent, PluginsPanel, failure};
+use gpui_kit::component::{WindowExt, notification::Notification};
 use gpui_kit::{Context, Window};
 use yss_plugin_runtime::{
     PluginDiagnostic, PluginFailure, PluginManager, PluginStorageUsage, TaskHistoryPage,
@@ -58,8 +59,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some(yss_ui::text::t("native.plugins.loadingCatalog"));
-        self.error = None;
+        self.busy = true;
         let job = self.services.run(|services| Ok(services.plugins.list()));
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
@@ -67,13 +67,16 @@ impl PluginsPanel {
                 if view.generation != generation {
                     return;
                 }
-                view.task = None;
+                view.busy = false;
                 match result {
                     Some(Ok(entries)) => view.install_entries(entries),
-                    Some(Err(error)) => view.error = Some(failure(&error)),
-                    None => {
-                        view.error = Some(yss_ui::text::t("native.plugins.catalogFailed").into())
+                    Some(Err(error)) => {
+                        window.push_notification(Notification::error(failure(&error)), cx);
                     }
+                    None => window.push_notification(
+                        Notification::error(yss_ui::text::t("native.plugins.catalogFailed")),
+                        cx,
+                    ),
                 }
                 if view.reload_again {
                     view.reload_again = false;
@@ -100,8 +103,6 @@ impl PluginsPanel {
         self.selected = Some(key.clone());
         self.detail = None;
         self.cursor_stack = vec![None];
-        self.error = None;
-        self.feedback = None;
         self.read_details(key, None, window, cx);
         cx.emit(PluginsEvent::OpenDetails);
     }
@@ -117,7 +118,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some(yss_ui::text::t("native.plugins.loadingDetails"));
+        self.busy = true;
         let expected = key.clone();
         let job = self
             .services
@@ -128,16 +129,19 @@ impl PluginsPanel {
                 if view.generation != generation || view.selected.as_ref() != Some(&expected) {
                     return;
                 }
-                view.task = None;
+                view.busy = false;
                 match result {
                     Some(Ok(detail)) => view.detail = Some(detail),
                     Some(Err(error)) => {
                         view.detail = None;
-                        view.error = Some(failure(&error));
+                        window.push_notification(Notification::error(failure(&error)), cx);
                     }
                     None => {
                         view.detail = None;
-                        view.error = Some(yss_ui::text::t("native.plugins.detailsFailed").into());
+                        window.push_notification(
+                            Notification::error(yss_ui::text::t("native.plugins.detailsFailed")),
+                            cx,
+                        );
                     }
                 }
                 if view.reload_again {
@@ -169,7 +173,6 @@ impl PluginsPanel {
         } else {
             return;
         }
-        self.error = None;
         self.read_details(key, self.cursor_stack.last().cloned().flatten(), window, cx);
     }
 }

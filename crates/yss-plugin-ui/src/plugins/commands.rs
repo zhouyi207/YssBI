@@ -1,5 +1,6 @@
 //! Mutations capture the selected installation; completion rereads manager-owned facts.
 use super::{PluginKey, PluginsPanel, failure};
+use gpui_kit::component::{WindowExt, notification::Notification};
 use gpui_kit::{Context, Window};
 use yss_ui::lifecycle::LogReleased;
 #[derive(Clone, Copy)]
@@ -88,9 +89,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some(yss_ui::text::t("native.plugins.updating"));
-        self.error = None;
-        self.feedback = None;
+        self.busy = true;
         let job = self.services.run(move |services| {
             let manager = &services.plugins;
             let result = (|| {
@@ -98,36 +97,16 @@ impl PluginsPanel {
                     key.validate(manager)?;
                 }
                 if matches!(action, PluginAction::CollectPackages) {
-                    return manager.collect_garbage().map(|count| {
-                        yss_ui::text::format(
-                            "native.plugins.packagesCollected",
-                            &[("count", count.to_string())],
-                        )
-                    });
+                    return manager.collect_garbage().map(|_| ());
                 }
                 let key = key.ok_or_else(|| {
                     yss_plugin_runtime::PluginFailure::new("plugin_stale_context")
                 })?;
                 match action {
-                    PluginAction::Enable(enabled) => {
-                        manager.set_enabled(&key.id, enabled).map(|_| {
-                            if enabled {
-                                yss_ui::text::t("native.plugins.enabledFeedback")
-                            } else {
-                                yss_ui::text::t("native.plugins.disabledFeedback")
-                            }
-                            .into()
-                        })
-                    }
-                    PluginAction::Uninstall => manager
-                        .uninstall(&key.id)
-                        .map(|_| yss_ui::text::t("native.plugins.uninstalled").into()),
-                    PluginAction::ClearCache => manager
-                        .clear_private_cache(&key.id)
-                        .map(|_| yss_ui::text::t("native.plugins.cacheCleared").into()),
-                    PluginAction::ClearHistory => manager
-                        .clear_task_history(&key.id)
-                        .map(|_| yss_ui::text::t("native.plugins.resultsCleared").into()),
+                    PluginAction::Enable(enabled) => manager.set_enabled(&key.id, enabled),
+                    PluginAction::Uninstall => manager.uninstall(&key.id),
+                    PluginAction::ClearCache => manager.clear_private_cache(&key.id).map(|_| ()),
+                    PluginAction::ClearHistory => manager.clear_task_history(&key.id),
                     PluginAction::CollectPackages => unreachable!(),
                 }
             })();
@@ -139,18 +118,21 @@ impl PluginsPanel {
                 if view.generation != generation {
                     return;
                 }
-                view.task = None;
-                if let Some((result, entries)) = result {
-                    match entries {
-                        Ok(entries) => view.install_entries(entries),
-                        Err(error) => view.error = Some(failure(&error)),
-                    }
-                    match result {
-                        Ok(feedback) => view.feedback = Some(feedback),
-                        Err(error) => view.error = Some(failure(&error)),
-                    }
+                view.busy = false;
+                let error = if let Some((result, entries)) = result {
+                    let refresh_error = match entries {
+                        Ok(entries) => {
+                            view.install_entries(entries);
+                            None
+                        }
+                        Err(error) => Some(error),
+                    };
+                    result.err().or(refresh_error).map(|error| failure(&error))
                 } else {
-                    view.error = Some(yss_ui::text::t("native.plugins.taskFailed").into());
+                    Some(yss_ui::text::t("native.plugins.taskFailed").into())
+                };
+                if let Some(error) = error {
+                    window.push_notification(Notification::error(error), cx);
                 }
                 view.cursor_stack = vec![None];
                 if view.reload_again {

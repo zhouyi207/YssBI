@@ -2,9 +2,10 @@
 use super::{PluginKey, PluginsPanel, failure};
 use crate::PluginServices;
 use gpui_kit::component::{
-    ActiveTheme, Disableable,
+    ActiveTheme, Disableable, WindowExt,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
+    notification::Notification,
 };
 use gpui_kit::{
     AppContext, Context, IntoElement, PathPromptOptions, Render, WeakEntity, Window, div,
@@ -320,7 +321,7 @@ impl PluginsPanel {
         if self.busy() {
             return;
         }
-        self.task = Some(yss_ui::text::t("native.plugins.choosingPackage"));
+        self.busy = true;
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
         let prompt = cx.prompt_for_paths(PathPromptOptions {
@@ -335,7 +336,7 @@ impl PluginsPanel {
                 if view.generation != generation {
                     return;
                 }
-                view.task = None;
+                view.busy = false;
                 match result {
                     Ok(Ok(Some(paths))) => {
                         if let Some(path) = paths.into_iter().next() {
@@ -361,10 +362,10 @@ impl PluginsPanel {
                         }
                     }
                     Ok(Ok(None)) => {}
-                    _ => {
-                        view.error =
-                            Some(yss_ui::text::t("native.plugins.packagePickerFailed").into())
-                    }
+                    _ => window.push_notification(
+                        Notification::error(yss_ui::text::t("native.plugins.packagePickerFailed")),
+                        cx,
+                    ),
                 }
                 view.changed(cx);
             })
@@ -385,9 +386,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some(yss_ui::text::t("native.plugins.installing"));
-        self.error = None;
-        self.feedback = None;
+        self.busy = true;
         let job = self.services.run(move |services| {
             let result = services.plugins.install(
                 &package.path,
@@ -404,11 +403,13 @@ impl PluginsPanel {
                 if view.generation != generation {
                     return;
                 }
-                view.task = None;
+                view.busy = false;
                 let (installed, error) = if let Some((result, entries)) = result {
                     match entries {
                         Ok(entries) => view.install_entries(entries),
-                        Err(error) => view.error = Some(failure(&error)),
+                        Err(error) => {
+                            window.push_notification(Notification::error(failure(&error)), cx);
+                        }
                     }
                     match result {
                         Ok(plugin) => {
@@ -424,10 +425,8 @@ impl PluginsPanel {
                     )
                 };
                 if installed {
-                    view.feedback = Some(yss_ui::text::t("native.plugins.installed").into());
                     yss_ui::modal_window::close_child(window, cx);
                 } else if let Some(error) = error {
-                    view.error = Some(error.clone());
                     wizard
                         .update(cx, |wizard, cx| {
                             wizard.busy = false;

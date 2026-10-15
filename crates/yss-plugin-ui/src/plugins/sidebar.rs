@@ -5,17 +5,16 @@ use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     dock::{BasePanel, Panel, PanelEvent},
-    input::Input,
     menu::{DropdownMenu, PopupMenuItem},
 };
 use gpui_kit::{
     AnyElement, App, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
-    Subscription, Window, div, prelude::*, px, uniform_list,
+    Subscription, Window, div, prelude::*, uniform_list,
 };
 use std::sync::Arc;
 use yss_application::activity_panel::{ActivityItem, ActivityRowContent, plugins_activity_panel};
-use yss_ui::appearance;
 use yss_ui::lifecycle::LogReleased;
+use yss_ui::{appearance, sidebar};
 
 pub struct PluginsSidebar {
     owner: Entity<PluginsPanel>,
@@ -58,7 +57,7 @@ impl BasePanel for PluginsSidebar {
 }
 impl Panel for PluginsSidebar {
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        yss_ui::text::t("activityBar.plugins")
+        yss_ui::text::t("native.plugins.listTitle")
     }
     fn inner_padding(&self, _: &App) -> bool {
         false
@@ -87,27 +86,14 @@ impl PluginsPanel {
             .flex_col()
             .bg(cx.theme().sidebar)
             .child(self.render_directory_toolbar(cx))
-            .child(div().p_2().child(Input::new(&self.search).small()))
+            .child(sidebar::search(&self.search))
             .child(div().flex_1().min_h_0().child(self.render_directory(cx)))
-            .child(self.render_status(cx))
     }
 
     fn render_directory_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let busy = self.busy();
         let owner = cx.entity().downgrade();
-        div()
-            .h(appearance::HEADER_HEIGHT)
-            .flex_shrink_0()
-            .flex()
-            .items_center()
-            .gap_1()
-            .px_2()
-            .child(
-                div()
-                    .flex_1()
-                    .text_sm()
-                    .child(yss_ui::text::t("activityBar.plugins")),
-            )
+        sidebar::header(yss_ui::text::t("native.plugins.listTitle"))
             .child(
                 Button::new("plugins-install")
                     .small()
@@ -208,55 +194,31 @@ impl PluginsPanel {
                     .map(|(key, name, description, publisher, enabled)| {
                         let key = key.clone();
                         let selected = view.selected.as_ref() == Some(&key);
-                        div()
-                            .id(gpui_kit::SharedString::from(key.id.clone()))
-                            .h(px(88.))
-                            .px_3()
-                            .py_2()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .bg(if selected {
-                                cx.theme().accent
-                            } else {
-                                cx.theme().background
-                            })
-                            .hover(|style| style.bg(cx.theme().muted))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                    .truncate()
-                                    .child(name.clone()),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .truncate()
-                                    .child(description.clone()),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .truncate()
-                                    .child(format!(
-                                        "{} · {}",
-                                        publisher,
-                                        if *enabled {
-                                            yss_ui::text::t("native.plugins.enabled")
-                                        } else {
-                                            yss_ui::text::t("native.plugins.disabled")
-                                        }
-                                    )),
-                            )
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                if view.generation == generation {
-                                    view.select(key.clone(), window, cx);
+                        sidebar::list_item(
+                            div().id(gpui_kit::SharedString::from(key.id.clone())),
+                            selected,
+                            cx,
+                        )
+                        .child(sidebar::item_title(name.clone()))
+                        .child(sidebar::item_detail(description.clone(), cx))
+                        .child(sidebar::item_detail(
+                            format!(
+                                "{} · {}",
+                                publisher,
+                                if *enabled {
+                                    yss_ui::text::t("native.plugins.enabled")
+                                } else {
+                                    yss_ui::text::t("native.plugins.disabled")
                                 }
-                            }))
-                            .into_any_element()
+                            ),
+                            cx,
+                        ))
+                        .on_click(cx.listener(move |view, _, window, cx| {
+                            if view.generation == generation {
+                                view.select(key.clone(), window, cx);
+                            }
+                        }))
+                        .into_any_element()
                     })
                     .collect()
             }),

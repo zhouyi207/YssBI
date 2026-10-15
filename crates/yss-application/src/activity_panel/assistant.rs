@@ -49,8 +49,8 @@ impl ApplicationState {
             })
             .collect();
         document.empty_state = Some((
-            ActivityText::Key("panel.assistantConversations"),
             ActivityText::Key("panel.assistantNoConversations"),
+            ActivityText::Key("panel.assistantConversationHint"),
         ));
         Ok(document)
     }

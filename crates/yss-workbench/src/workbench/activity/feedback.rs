@@ -117,7 +117,28 @@ impl ActivityPanel {
                 let filtered = self
                     .search
                     .as_ref()
-                    .is_some_and(|search| !search.read(cx).value().is_empty());
+                    .is_some_and(|search| !search.read(cx).value().is_empty())
+                    && !document.rows.is_empty();
+                if self.panel_id == "assistant" {
+                    return Some(
+                        div()
+                            .id("activity-empty")
+                            .role(gpui_kit::accesskit::Role::Status)
+                            .flex_1()
+                            .min_h_0()
+                            .child(yss_ui::appearance::empty_state(
+                                IconName::MessageSquareText,
+                                if filtered {
+                                    crate::text::translate("panel.assistantNoMatchingConversations")
+                                } else {
+                                    title.resolve_with(translate)
+                                },
+                                description.resolve_with(translate),
+                                cx,
+                            ))
+                            .into_any_element(),
+                    );
+                }
                 Some(
                     div()
                         .id("activity-empty")
