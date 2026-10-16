@@ -109,6 +109,7 @@ impl Workbench {
         self.subscriptions
             .push(cx.subscribe(&mind, |view, mind, event, cx| {
                 if matches!(event, MindEvent::Activated) {
+                    view.active_editor = Some(mind.entity_id().into());
                     view.details
                         .update(cx, |details, cx| details.set_mind(mind.downgrade(), cx));
                     view.activate_file(mind.read(cx).path().to_owned(), cx);

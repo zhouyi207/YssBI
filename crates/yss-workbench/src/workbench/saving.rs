@@ -43,13 +43,9 @@ impl SaveRequest {
             Self::Graph(request) => {
                 SaveOutcome::Graph(Box::new(request.commit(&owner.application.application)))
             }
-            Self::Document(request) => {
-                SaveOutcome::Document(request.commit(&owner.tasks))
-            }
+            Self::Document(request) => SaveOutcome::Document(request.commit(&owner.tasks)),
             Self::Mind(request) => SaveOutcome::Mind(request.commit(&owner.tasks)),
-            Self::Database(request) => {
-                SaveOutcome::Database(request.commit(&owner.tasks))
-            }
+            Self::Database(request) => SaveOutcome::Database(request.commit(&owner.tasks)),
             Self::Chart(request) => SaveOutcome::Chart(request.commit(&owner.tasks)),
             Self::Settings(request) => SaveOutcome::Settings(request.commit(&owner.settings)),
         }
@@ -191,7 +187,7 @@ impl Workbench {
             .graphs
             .values()
             .filter_map(gpui_kit::WeakEntity::upgrade)
-            .filter(|view| view.read(cx).dirty())
+            .filter(|view| view.read(cx).dirty(cx))
             .map(SaveTarget::Graph)
             .chain(
                 self.documents

@@ -235,10 +235,19 @@ impl GraphCanvas {
 
     pub(super) fn node_at(&self, screen: Point<Pixels>) -> Option<NodeId> {
         let world = (screen - self.bounds.get().origin - self.offset) / self.zoom;
-        self.graph.projection.nodes.iter().rev().find_map(|node| {
-            geometry::node_bounds(node, geometry::position(node, &self.preview))
-                .contains(&world)
-                .then_some(node.node_id)
-        })
+        let layer = self.connection_layer.borrow();
+        self.graph
+            .projection
+            .nodes
+            .iter()
+            .zip(layer.nodes())
+            .rev()
+            .find_map(|(node, geometry)| {
+                geometry
+                    .layout
+                    .bounds(geometry::position(node, &self.preview))
+                    .contains(&world)
+                    .then_some(node.node_id)
+            })
     }
 }

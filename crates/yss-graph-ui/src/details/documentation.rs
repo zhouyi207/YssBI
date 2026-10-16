@@ -42,7 +42,7 @@ impl NodeDocumentation {
             notifications: yss_ui::notifications::Notifications::new(window),
             target: None,
             state: DocumentationState::Missing,
-            expanded: true,
+            expanded: false,
             generation: 0,
             task: None,
         }
@@ -51,16 +51,6 @@ impl NodeDocumentation {
     fn set_target(&mut self, target: Option<DocumentationTarget>, cx: &mut Context<Self>) {
         if self.target == target {
             return;
-        }
-        if self
-            .target
-            .as_ref()
-            .zip(target.as_ref())
-            .is_none_or(|(old, next)| {
-                old.project != next.project || old.node_type != next.node_type
-            })
-        {
-            self.expanded = true;
         }
         self.task = None;
         self.target = target;
@@ -141,6 +131,8 @@ impl super::GraphDetails {
                 }),
                 cx,
             );
+            documentation.expanded = true;
+            cx.notify();
         });
         cx.notify();
     }

@@ -91,7 +91,22 @@ impl ParameterForm {
                 .flex()
                 .items_start()
                 .gap_1()
-                .child(input.render(busy))
+                .child(match input {
+                    TextField::Single(input) => gpui_kit::component::input::Input::new(input)
+                        .small()
+                        .flex_1()
+                        .min_w_0()
+                        .disabled(busy)
+                        .aria_label(title.clone())
+                        .into_any_element(),
+                    TextField::Multiline(input) => gpui_kit::component::input::Textarea::new(input)
+                        .small()
+                        .flex_1()
+                        .min_w_0()
+                        .disabled(busy)
+                        .aria_label(title.clone())
+                        .into_any_element(),
+                })
                 .child(
                     inspector::apply_button(("parameter-apply", index), busy).on_click(
                         cx.listener(move |view, _, _, cx| {
@@ -152,6 +167,17 @@ impl ParameterForm {
             );
         for diagnostic in diagnostics {
             property = property.message(crate::feedback::diagnostic_message(diagnostic));
+        }
+        if let Some(error) = &field.error {
+            property = property.message(inspector::InlineMessage::new(
+                inspector::Severity::Error,
+                error.clone(),
+            ));
+        } else if field.dirty {
+            property = property.message(inspector::InlineMessage::new(
+                inspector::Severity::Information,
+                translate("native.workbench.unappliedChanges"),
+            ));
         }
 
         let content = div()

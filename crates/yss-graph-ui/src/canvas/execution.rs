@@ -138,10 +138,10 @@ impl GraphCanvas {
         }
     }
 
-    pub(super) fn graph_run_unavailable_reason(&self) -> Option<&'static str> {
+    pub(super) fn graph_run_unavailable_reason(&self, cx: &gpui_kit::App) -> Option<&'static str> {
         self.execution_unavailable_reason().or_else(|| {
-            // Pending port input may fix the problem; recheck after its transaction.
-            (self.presentation.graph_blocked && !self.has_dirty_port_inputs())
+            // Pending inputs may fix the problem; recheck after their transaction.
+            (self.presentation.graph_blocked && !self.has_dirty_inputs(cx))
                 .then_some("canvas.problemsBlockExecution")
         })
     }
@@ -194,14 +194,14 @@ impl GraphCanvas {
     }
 
     pub fn run_graph(&mut self, demand: RunDemand, cx: &mut Context<Self>) {
-        if !self.can_run()
-            || (matches!(demand, RunDemand::Default)
-                && self.graph_run_unavailable_reason().is_some())
-        {
+        if !self.can_run() {
             return;
         }
-        if self.has_dirty_port_inputs() {
-            self.submit(super::GraphCommand::RunAfterPortInputs(demand), None, cx);
+        if self.has_dirty_inputs(cx) {
+            self.submit(super::GraphCommand::RunAfterInputs(demand), None, cx);
+            return;
+        }
+        if matches!(demand, RunDemand::Default) && self.graph_run_unavailable_reason(cx).is_some() {
             return;
         }
         self.context_menu = None;

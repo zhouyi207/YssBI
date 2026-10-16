@@ -166,12 +166,6 @@ impl GraphEditingMetadata {
         }
     }
 
-    pub(crate) fn mark_saved(&mut self) {
-        self.saved_hash = self.current_hash;
-        self.undo.clear();
-        self.redo.clear();
-    }
-
     pub(super) fn record_command(
         &mut self,
         command: PreparedGraphCommand,
@@ -223,7 +217,11 @@ impl GraphEditingMetadata {
                 }
             }
             GraphHistoryAction::Saved => {
-                self.mark_saved();
+                if change.before_hash != change.after_hash {
+                    self.undo.clear();
+                    self.redo.clear();
+                }
+                self.saved_hash = self.current_hash;
             }
         }
         if saved_edit {
@@ -798,7 +796,7 @@ mod tests {
         let saved = state
             .save_graph_candidate(capture, snapshot.document)
             .unwrap();
-        assert!(!saved.editing.dirty && !saved.editing.can_undo && !saved.editing.can_redo);
+        assert!(!saved.editing.dirty && saved.editing.can_undo && !saved.editing.can_redo);
         assert_ne!(std::fs::read(&file).unwrap(), original_file);
         let receipt = state
             .graph_edit_command_receipt(
@@ -813,6 +811,83 @@ mod tests {
         assert_eq!(receipt.kind, GraphEditCommandKind::Save);
         assert_eq!(receipt.request_version, snapshot.state.version);
         assert!(saved.to_revision > snapshot.state.version.revision);
+    }
+
+    #[test]
+    fn saving_after_undo_retains_redo_but_overwriting_discards_stale_history() {
+        let (fixture, path, node) = fixture();
+        let state = fixture.state();
+        let project = state.capture_project_session().unwrap().instance_id;
+        let capture = |snapshot: &GraphEditingSnapshot| {
+            state
+                .capture_graph_edit(
+                    &project,
+                    &path,
+                    snapshot.state.version,
+                    OperationId::new(),
+                    [0; 32],
+                )
+                .unwrap()
+        };
+        move_node(state, &project, &path, node);
+        let snapshot = state.read_graph_editing(&project, &path).unwrap();
+        let inverse = state
+            .graph_history_patch(&project, &path, snapshot.state.version, false)
+            .unwrap()
+            .unwrap();
+        let mut document = snapshot.document.as_ref().clone();
+        apply_graph_document_patch(&mut document, &inverse).unwrap();
+        state
+            .commit_graph_edit(
+                capture(&snapshot),
+                Arc::new(document),
+                GraphHistoryAction::Undo,
+            )
+            .unwrap();
+
+        let snapshot = state.read_graph_editing(&project, &path).unwrap();
+        let saved = state
+            .save_graph_candidate(capture(&snapshot), snapshot.document.clone())
+            .unwrap();
+        assert!(!saved.editing.dirty && !saved.editing.can_undo && saved.editing.can_redo);
+        let snapshot = state.read_graph_editing(&project, &path).unwrap();
+        let redo = state
+            .graph_history_patch(&project, &path, snapshot.state.version, true)
+            .unwrap()
+            .unwrap();
+        let mut document = snapshot.document.as_ref().clone();
+        apply_graph_document_patch(&mut document, &redo).unwrap();
+        assert_eq!(document.nodes[&node].position.x, 42.);
+        let restored = state
+            .commit_graph_edit(
+                capture(&snapshot),
+                Arc::new(document),
+                GraphHistoryAction::Redo,
+            )
+            .unwrap();
+        assert!(restored.editing.dirty && restored.editing.can_undo);
+
+        let snapshot = state.read_graph_editing(&project, &path).unwrap();
+        let mut replacement = snapshot.document.as_ref().clone();
+        replacement.nodes.get_mut(&node).unwrap().position.x = 99.;
+        let overwritten = state
+            .save_graph_candidate(capture(&snapshot), Arc::new(replacement))
+            .unwrap();
+        assert!(
+            !overwritten.editing.dirty
+                && !overwritten.editing.can_undo
+                && !overwritten.editing.can_redo
+        );
+        assert_eq!(
+            state
+                .read_graph_editing(&project, &path)
+                .unwrap()
+                .document
+                .nodes[&node]
+                .position
+                .x,
+            99.
+        );
     }
 
     #[test]

@@ -73,6 +73,7 @@ impl NodePalette {
                     .gap_1()
                     .child(
                         Input::new(&self.search)
+                            .aria_label(translate("canvas.nodePalette.searchPlaceholder"))
                             .small()
                             .w_full()
                             .prefix(gpui_kit::component::Icon::new(IconName::Search).size_3()),
@@ -87,6 +88,7 @@ impl NodePalette {
                                 IconName::ChevronsUpDown
                             })
                             .tooltip(translate(toggle_label))
+                            .accessibility_label(translate(toggle_label))
                             .disabled(
                                 self.browser.searching()
                                     || self.browser.visible.is_empty()

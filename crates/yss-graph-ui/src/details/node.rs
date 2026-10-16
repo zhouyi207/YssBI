@@ -6,7 +6,6 @@ use yss_graph_editor::projection::EditorNodeModel;
 use yss_ui::inspector::InspectorHeader;
 
 impl GraphDetails {
-    /// Problems lead because they explain why the configuration below cannot run yet.
     pub(super) fn render_node_details(
         &self,
         node: &EditorNodeModel,
@@ -28,10 +27,12 @@ impl GraphDetails {
             .flex()
             .flex_col()
             .child(header)
-            .child(self.render_diagnostics(node, cx))
+            .child(self.render_diagnostic_summary(node, cx))
             .child(self.parameters.clone())
-            .child(self.description.clone())
             .child(self.render_ports(disabled, cx))
+            .child(self.render_diagnostics(node, cx))
+            .child(self.description.clone())
             .child(self.documentation.clone())
+            .child(self.render_technical_details(node, cx))
     }
 }

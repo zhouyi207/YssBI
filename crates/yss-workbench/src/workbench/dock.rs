@@ -22,7 +22,7 @@ use gpui_kit::{
 };
 use std::{any::TypeId, cell::Cell, rc::Rc, sync::Arc};
 
-pub(super) use yss_ui::appearance::{HEADER_BUTTON_SIZE, HEADER_HEIGHT};
+pub(super) use yss_ui::appearance::HEADER_HEIGHT;
 
 pub(super) fn create(
     workbench: WeakEntity<Workbench>,
@@ -104,11 +104,17 @@ fn is_tool_panel(panel: &Arc<dyn BasePanelView>) -> bool {
 
 impl DockAreaRenderer for WorkbenchDock {
     fn frame(&self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
-        self.skin.frame(window, cx).child(zoom_sidebar::Sidebar {
-            area: self.area.clone(),
-            workbench: self.workbench.clone(),
-            navigation_headers: self.navigation_headers.clone(),
-        })
+        let owner = self.workbench.clone();
+        self.skin
+            .frame(window, cx)
+            .on_prepaint(move |bounds, window, cx| {
+                super::layout::fit_window(&owner, bounds.size.width, window, cx);
+            })
+            .child(zoom_sidebar::Sidebar {
+                area: self.area.clone(),
+                workbench: self.workbench.clone(),
+                navigation_headers: self.navigation_headers.clone(),
+            })
     }
 
     fn center_frame(&self, window: &mut Window, cx: &mut App) -> Stateful<Div> {

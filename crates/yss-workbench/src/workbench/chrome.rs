@@ -58,20 +58,22 @@ impl Workbench {
             .on_action(cx.listener(|view, _: &OpenRecentProject, window, cx| {
                 view.open_recent_projects(window, cx);
             }))
-            .on_action(cx.listener(|view, _: &RunWholeGraph, _, cx| {
+            .on_action(cx.listener(|view, _: &RunWholeGraph, window, cx| {
                 if !view.busy
                     && !view.closing
-                    && let Some(graph) = view.details.read(cx).graph(cx)
+                    && view.editor_command_panel(window, cx).is_some()
+                    && let Some(graph) = view.active_graph(cx)
                 {
                     graph.update(cx, |graph, cx| {
                         graph.run_graph(yss_application::graph::run::RunDemand::Default, cx)
                     });
                 }
             }))
-            .on_action(cx.listener(|view, _: &CancelRun, _, cx| {
+            .on_action(cx.listener(|view, _: &CancelRun, window, cx| {
                 if !view.busy
                     && !view.closing
-                    && let Some(graph) = view.details.read(cx).graph(cx)
+                    && view.editor_command_panel(window, cx).is_some()
+                    && let Some(graph) = view.active_graph(cx)
                 {
                     graph.update(cx, |graph, cx| graph.cancel_run(cx));
                 }
@@ -123,6 +125,9 @@ impl Workbench {
                                     .ghost()
                                     .icon(IconName::Settings)
                                     .tooltip(crate::text::t("native.workbench.settingsShortcut"))
+                                    .accessibility_label(crate::text::t(
+                                        "native.workbench.settingsShortcut",
+                                    ))
                                     .disabled(self.is_closing(cx))
                                     .on_click(cx.listener(|view, _, window, cx| {
                                         view.show_settings(window, cx)

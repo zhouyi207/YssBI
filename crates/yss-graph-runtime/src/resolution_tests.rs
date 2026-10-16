@@ -582,7 +582,9 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
             ConnectionIntent::Connect,
             &catalog,
             &analysis,
+            &|| false,
         )
+        .unwrap()
         .unwrap();
     let decision = |address| {
         candidates
@@ -607,6 +609,29 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
         }
     );
     assert_eq!(document, original, "a preview cannot mutate or claim ports");
+    let checkpoints = std::cell::Cell::new(0);
+    let cancelled = runtime
+        .connection_candidates(
+            &graph(),
+            &document,
+            &output,
+            ConnectionIntent::Connect,
+            &catalog,
+            &analysis,
+            &|| {
+                checkpoints.set(checkpoints.get() + 1);
+                checkpoints.get() > 2
+            },
+        )
+        .unwrap();
+    assert!(
+        cancelled.is_none(),
+        "a superseded preview must not return partial candidates"
+    );
+    assert_eq!(
+        document, original,
+        "cancelling a preview must not mutate the document"
+    );
     let input_candidates = runtime
         .connection_candidates(
             &graph(),
@@ -615,7 +640,9 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
             ConnectionIntent::Connect,
             &catalog,
             &analysis,
+            &|| false,
         )
+        .unwrap()
         .unwrap();
     for output in [port(source, "value"), port(incumbent, "value")] {
         assert_eq!(
@@ -670,7 +697,9 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
             ConnectionIntent::Connect,
             &catalog,
             &analysis,
+            &|| false,
         )
+        .unwrap()
         .unwrap();
     assert_eq!(
         model_candidates
@@ -742,7 +771,9 @@ fn connection_candidates_for_moves_exclude_moved_links_from_replacement_preview(
             ConnectionIntent::MoveConnections,
             &catalog,
             &analysis,
+            &|| false,
         )
+        .unwrap()
         .unwrap();
     assert_eq!(
         candidates
@@ -1421,6 +1452,56 @@ fn document_only_mutations_do_not_request_semantics() {
     let mut moved = document;
     apply_graph_document_patch(&mut moved, &patch).unwrap();
     assert_eq!(moved.nodes[&node].position.x, 20.0);
+}
+
+#[test]
+fn staged_mutations_preserve_the_source_and_reject_without_changing_the_candidate() {
+    let runtime = runtime();
+    let (document, node, _) = constant_document();
+    let original = Arc::new(document);
+    let mut candidate = Arc::clone(&original);
+    let catalog = CatalogMutationValidationSnapshot {
+        resources: BTreeMap::new(),
+    };
+    let move_to = |node_id, x| EditorGraphMutation::MoveNodes {
+        positions: vec![NodePositionMutation {
+            node_id,
+            position: NodePosition { x, y: 0.0 },
+        }],
+    };
+    let first = runtime
+        .apply_editor_mutation(
+            &graph(),
+            &mut candidate,
+            move_to(node, 20.0),
+            &catalog,
+            |_| panic!("move must not resolve"),
+        )
+        .unwrap();
+    let second = runtime
+        .apply_editor_mutation(
+            &graph(),
+            &mut candidate,
+            move_to(node, 40.0),
+            &catalog,
+            |_| panic!("move must not resolve"),
+        )
+        .unwrap();
+    assert_eq!(candidate.nodes[&node].position.x, 40.0);
+    assert_eq!(original.nodes[&node].position.x, 0.0);
+    let failure = runtime.apply_editor_mutation(
+        &graph(),
+        &mut candidate,
+        move_to(NodeId::new(), 80.0),
+        &catalog,
+        |_| panic!("move must not resolve"),
+    );
+    assert!(failure.is_err());
+    assert_eq!(candidate.nodes[&node].position.x, 40.0);
+    let mut replayed = original.as_ref().clone();
+    apply_graph_document_patch(&mut replayed, &first).unwrap();
+    apply_graph_document_patch(&mut replayed, &second).unwrap();
+    assert_eq!(&replayed, candidate.as_ref());
 }
 
 #[test]

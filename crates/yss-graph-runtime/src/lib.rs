@@ -238,6 +238,26 @@ impl GraphRuntimeState {
         .plan(mutation)
     }
 
+    /// Apply one mutation to a private transaction candidate, retaining its validated patch.
+    pub fn apply_editor_mutation(
+        &self,
+        graph_path: &GraphResourcePath,
+        document: &mut Arc<GraphDocument>,
+        mutation: EditorGraphMutation,
+        catalog: &CatalogMutationValidationSnapshot,
+        resolve: impl FnOnce(&Arc<GraphDocument>) -> GraphAnalysis,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
+        let analysis = (!mutation.referenced_ports(document).is_empty()).then(|| resolve(document));
+        mutations::EditorMutationPlanner::in_place(
+            graph_path,
+            document,
+            self.registry(),
+            catalog,
+            analysis.as_ref(),
+        )
+        .apply(mutation)
+    }
+
     pub fn export_subgraph(
         &self,
         document: &GraphDocument,

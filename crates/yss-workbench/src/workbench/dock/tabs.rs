@@ -119,8 +119,9 @@ impl Tabs {
                         }
                         let id = panel.panel_id(cx);
                         let handle = PanelHandle::of(panel);
+                        let tab_name = handle.and_then(|handle| handle.tab_name(cx));
                         let title = match handle {
-                            Some(handle) => match handle.tab_name(cx) {
+                            Some(handle) => match tab_name.clone() {
                                 Some(name) => div().child(name).into_any_element(),
                                 None => handle.title(window, cx),
                             },
@@ -134,6 +135,7 @@ impl Tabs {
                             .flatten();
                         Some(
                             Tab::new()
+                                .aria_label(tab_name.unwrap_or_else(|| panel.panel_name(cx).into()))
                                 // Tab applies its size-tier height during render.
                                 .min_h(super::HEADER_HEIGHT)
                                 .max_h(super::HEADER_HEIGHT)
@@ -154,6 +156,7 @@ impl Tabs {
                                             .mr_2()
                                             .tab_stop(false)
                                             .tooltip(crate::text::t("common.close"))
+                                            .accessibility_label(crate::text::t("common.close"))
                                             .on_click({
                                                 let area = area.clone();
                                                 let group = group.clone();
@@ -175,12 +178,12 @@ impl Tabs {
                                 .when_some(drag, |tab, drag| {
                                     tab.on_drag(drag, {
                                         let panel = panel.clone();
-                                        move |drag, offset, _, cx| {
+                                        move |drag, offset, window, cx| {
                                             cx.stop_propagation();
                                             drag.set_drag_offset(offset);
                                             drag.set_preview_size(size(
                                                 px(96.),
-                                                super::HEADER_HEIGHT,
+                                                super::HEADER_HEIGHT.to_pixels(window.rem_size()),
                                             ));
                                             cx.new(|_| TabPreview {
                                                 panel: panel.clone(),
@@ -281,6 +284,11 @@ impl Tabs {
                                 .xsmall()
                                 .ghost()
                                 .tab_stop(false)
+                                .accessibility_label(if zoomed {
+                                    crate::text::t("native.workbench.restoreLayout")
+                                } else {
+                                    crate::text::t("native.workbench.zoomPanel")
+                                })
                                 .tooltip(if zoomed {
                                     crate::text::t("native.workbench.restoreLayout")
                                 } else {
@@ -298,6 +306,7 @@ impl Tabs {
                             .xsmall()
                             .ghost()
                             .tab_stop(false)
+                            .accessibility_label(crate::text::t("native.canvas.moreActions"))
                             .dropdown_menu(move |menu, window, cx| {
                                 menu.when_some(presentation.clone(), |menu, panel| {
                                     panel.dropdown_menu(menu, window, cx)

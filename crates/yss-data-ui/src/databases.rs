@@ -260,8 +260,11 @@ impl BasePanel for DatabaseEditor {
     }
 }
 impl Panel for DatabaseEditor {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
-        format!("{}{}", self.name, if self.dirty() { " *" } else { "" })
+    fn tab_name(&self, _: &App) -> Option<gpui_kit::SharedString> {
+        Some(format!("{}{}", self.name, if self.dirty() { " *" } else { "" }).into())
+    }
+    fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui_kit::IntoElement {
+        self.tab_name(cx).unwrap_or_default()
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

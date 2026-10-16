@@ -4,14 +4,14 @@ use std::collections::HashMap;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Theme, ThemeMode};
 use gpui_kit::{
-    Anchor, App, Global, Hsla, IntoElement, Pixels, SharedString, Subscription, Window,
-    WindowAppearance, WindowId, div, prelude::*, px, rgb,
+    Anchor, App, Global, Hsla, IntoElement, Rems, SharedString, Subscription, Window,
+    WindowAppearance, WindowId, div, prelude::*, px, rems, rgb,
 };
 use yss_settings::AppearanceSettings;
 
-// Keep dock tabs, panel titles and toolbars aligned independently of the UI font size.
-pub const HEADER_HEIGHT: Pixels = px(28.);
-pub const HEADER_BUTTON_SIZE: Pixels = px(20.);
+// Chrome and its controls share the same UI-font scale as their labels.
+pub const HEADER_HEIGHT: Rems = rems(2.);
+pub const HEADER_BUTTON_SIZE: Rems = rems(1.5);
 
 struct Appearance {
     system: WindowAppearance,

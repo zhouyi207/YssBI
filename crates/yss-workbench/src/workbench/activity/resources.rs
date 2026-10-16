@@ -178,6 +178,13 @@ impl ActivityPanel {
                 item,
                 ActivityItem::FunctionGraph { .. } | ActivityItem::Database { .. }
             );
+        let open_label: gpui_kit::SharedString =
+            crate::text::translate(if matches!(item, ActivityItem::Database { .. }) {
+                "sidebar.viewInDatabaseEditor"
+            } else {
+                "sidebar.open"
+            })
+            .into();
         let row = row
             .group("activity-resource")
             .aria_selected(selected)
@@ -209,13 +216,8 @@ impl ActivityPanel {
                     .ghost()
                     .size_5()
                     .icon(IconName::ChevronRight)
-                    .tooltip(crate::text::translate(
-                        if matches!(item, ActivityItem::Database { .. }) {
-                            "sidebar.viewInDatabaseEditor"
-                        } else {
-                            "sidebar.open"
-                        },
-                    ))
+                    .accessibility_label(open_label.clone())
+                    .tooltip(open_label)
                     .opacity(0.)
                     .group_hover("activity-resource", |style| style.opacity(1.))
                     .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {

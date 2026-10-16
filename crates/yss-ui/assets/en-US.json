@@ -132,6 +132,7 @@
         "SaveDocument": "Save document",
         "ToggleDocumentPreview": "Toggle document preview",
         "SaveGraph": "Save",
+        "OpenNodePalette": "Add node…",
         "UndoGraph": "Undo graph change",
         "RedoGraph": "Redo graph change",
         "SelectAll": "Select all nodes",
@@ -2142,6 +2143,17 @@
       "parameters": "Parameters",
       "topic": "Topic"
     },
+    "diagnosticSummary": {
+      "counts": "%{errors} errors · %{warnings} warnings · %{information} notes · %{blocking} blocking",
+      "connectInputs": "Connect the required inputs below, or enter a value where available.",
+      "configureParameters": "Complete the highlighted parameters below before running.",
+      "review": "Review the problems below and correct the affected configuration or connections.",
+      "technical": "Technical details",
+      "nodeId": "Node ID",
+      "nodeType": "Node type",
+      "copy": "Copy technical report",
+      "copyHint": "Includes node and port IDs, every original diagnostic, severity, blocking status, arguments, and related locations."
+    },
     "parameterEditor": {
       "column": "Column",
       "enterColumn": "Enter one column name",
@@ -2547,6 +2559,9 @@
       "layoutSaveFailed": "Could not save the workbench layout. Check the application data directory.",
       "layoutRestoreFailed": "Could not restore the workbench. Open resources from the project explorer.",
       "applyChanges": "Apply changes",
+      "parameterDraftConflict": "This field changed while you were editing. Restore the current value before applying your change.",
+      "pendingInputsInvalid": "Correct the invalid input or resolve the field conflict in Details before saving or running. Your input is preserved.",
+      "unappliedChanges": "Unapplied changes",
       "integerOutOfRange": "Enter a valid integer within the supported range",
       "finiteNumberRequired": "Enter a finite number",
       "settingsShortcut": "Settings · Ctrl+,",
@@ -2864,6 +2879,8 @@
       "readFailed": "The document could not be read. Your input is preserved. Check the project directory."
     },
     "canvas": {
+      "emptyGraph": "Start with a node",
+      "addNode": "Add node…",
       "catalogFailed": "Unable to load the node catalog. Try again.",
       "resetViewShortcut": "Reset view · Home",
       "loadingCompatibleNodes": "Loading compatible nodes…",

@@ -217,9 +217,7 @@ impl Workbench {
                                 .remove(&target.id)
                                 .and_then(|editor| editor.upgrade())
                             {
-                                if view.details.read(cx).database().is_some_and(|current| {
-                                    current.entity_id() == editor.entity_id()
-                                }) {
+                                if view.active_editor == Some(editor.entity_id().into()) {
                                     view.clear_graph_context(cx);
                                 }
                                 view.dock

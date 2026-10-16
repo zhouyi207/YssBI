@@ -132,6 +132,7 @@
         "SaveDocument": "保存文档",
         "ToggleDocumentPreview": "切换文档预览",
         "SaveGraph": "保存",
+        "OpenNodePalette": "添加节点…",
         "UndoGraph": "撤销图编辑",
         "RedoGraph": "重做图编辑",
         "SelectAll": "选择所有节点",
@@ -2142,6 +2143,17 @@
       "parameters": "参数",
       "topic": "主题"
     },
+    "diagnosticSummary": {
+      "counts": "%{errors} 个错误 · %{warnings} 个警告 · %{information} 个提示 · %{blocking} 项阻止运行",
+      "connectInputs": "连接下方必需的输入；支持直接输入的端口也可填写值。",
+      "configureParameters": "先完善下方标出问题的参数，再运行。",
+      "review": "展开下方问题列表，修正对应的配置或连接。",
+      "technical": "技术详情",
+      "nodeId": "节点 ID",
+      "nodeType": "节点类型",
+      "copy": "复制技术报告",
+      "copyHint": "包含节点和端口 ID、全部原始诊断、严重程度、运行阻断状态、参数及关联位置。"
+    },
     "parameterEditor": {
       "column": "列",
       "enterColumn": "输入一个列名",
@@ -2547,6 +2559,9 @@
       "layoutSaveFailed": "工作台布局未能保存，请检查应用数据目录。",
       "layoutRestoreFailed": "工作台恢复失败，可以从项目目录打开资源。",
       "applyChanges": "应用修改",
+      "parameterDraftConflict": "编辑期间此字段已更改。请先恢复当前值，再重新修改。",
+      "pendingInputsInvalid": "请先在属性面板中修正无效输入或处理字段冲突，再保存或运行。输入已保留。",
+      "unappliedChanges": "尚未应用的修改",
       "integerOutOfRange": "请输入有效的整数，数值超出支持范围",
       "finiteNumberRequired": "请输入有限的数字",
       "settingsShortcut": "设置 · Ctrl+,",
@@ -2864,6 +2879,8 @@
       "readFailed": "文档暂不可读取。当前输入已保留，请检查项目目录。"
     },
     "canvas": {
+      "emptyGraph": "从节点开始",
+      "addNode": "添加节点…",
       "catalogFailed": "无法读取节点目录，请重试。",
       "resetViewShortcut": "重置视图 · Home",
       "loadingCompatibleNodes": "加载兼容节点…",

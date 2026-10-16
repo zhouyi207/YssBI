@@ -9,6 +9,7 @@ use crate::graph::run::{RunApplicationEventKind, RunGraphRequest, run_graph_with
 use crate::session::{ApplicationSession, ApplicationState};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+use yss_assistant_contract::*;
 use yss_graph_document::GraphDocument;
 use yss_graph_document::{
     ConnectionId, GraphResourcePath, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
@@ -16,7 +17,6 @@ use yss_graph_document::{
 };
 use yss_graph_editor::projection::*;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
-use yss_assistant_contract::*;
 use yss_harness_contract::*;
 use yss_node_catalog::LocalizedCatalogItem;
 use yss_node_protocol::PortKey;
@@ -119,7 +119,9 @@ pub fn invoke_graph_capability(
         _ => None,
     };
     if expected.is_some_and(|expected| expected != &hash) {
-        return Err(graph_failure(yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED));
+        return Err(graph_failure(
+            yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED,
+        ));
     }
     if context
         .graph_observation()
@@ -162,7 +164,9 @@ pub fn invoke_graph_capability(
         )?,
         AutomationCapabilityRequest::ApplyGraphEdit(request) => {
             if request.base_revision != current.version.revision.get() {
-                return Err(graph_failure(yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED));
+                return Err(graph_failure(
+                    yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED,
+                ));
             }
             let (operation_id, fingerprint) = edit_identity.expect("edit identity was prepared");
             let mut operation = captured
@@ -174,7 +178,9 @@ pub fn invoke_graph_capability(
                     operation_id,
                     fingerprint,
                 )
-                .map_err(|_| graph_failure(yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED))?;
+                .map_err(|_| {
+                    graph_failure(yss_assistant_contract::failure_code::GRAPH_DRAFT_CHANGED)
+                })?;
             let before = inspect_projection(
                 &path,
                 document,
@@ -234,6 +240,7 @@ pub fn invoke_graph_capability(
             captured.publish_graph_activity(GraphActivity::Changed {
                 graph_path: path.as_str().into(),
                 editing: committed.editing.clone(),
+                cause: crate::graph::editing::GraphChangeCause::Edit { operation_id },
             });
             receipt.from_revision = committed.from_revision.get();
             receipt.to_revision = committed.to_revision.get();

@@ -14,25 +14,121 @@ use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use yss_graph_document::GraphResourcePath;
 use yss_ui::lifecycle::LogReleased;
 
+#[derive(Default)]
+pub(super) struct ResponsiveLayout {
+    narrow: bool,
+    // Only visibility is temporary. Native DockArea retains topology and sizes.
+    restore_open: [bool; 2],
+}
+
+impl ResponsiveLayout {
+    fn target(&self, width: gpui_kit::Pixels, rem: gpui_kit::Pixels) -> bool {
+        width < rem * if self.narrow { 78. } else { 72. }
+    }
+
+    fn preserve_preferences(&self, state: &mut DockAreaState) {
+        for (restore, dock) in self
+            .restore_open
+            .iter()
+            .zip([&mut state.left_dock, &mut state.right_dock])
+        {
+            if *restore && let Some(dock) = dock {
+                *dock = gpui_kit::component::dock::DockState::new(
+                    dock.panel().clone(),
+                    dock.placement(),
+                    dock.size(),
+                    true,
+                );
+            }
+        }
+    }
+}
+
+pub(super) fn fit_window(
+    owner: &WeakEntity<Workbench>,
+    width: gpui_kit::Pixels,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let rem = window.rem_size();
+    let Some(view) = owner.upgrade() else { return };
+    let state = view.read(cx);
+    let narrow = state.responsive_layout.target(width, rem);
+    if state.restoring_layout
+        || state.project.is_none()
+        || state.dock.read(cx).is_zoomed()
+        || state.dock.read(cx).is_locked()
+        || narrow == state.responsive_layout.narrow
+    {
+        return;
+    }
+    let owner = owner.clone();
+    window.defer(cx, move |window, cx| {
+        owner
+            .update(cx, |view, cx| view.adapt_window(width, window, cx))
+            .log_released();
+    });
+}
+
 impl Workbench {
+    fn adapt_window(
+        &mut self,
+        width: gpui_kit::Pixels,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.restoring_layout
+            || self.project.is_none()
+            || self.dock.read(cx).is_zoomed()
+            || self.dock.read(cx).is_locked()
+        {
+            return;
+        }
+        let narrow = self.responsive_layout.target(width, window.rem_size());
+        if narrow == self.responsive_layout.narrow {
+            return;
+        }
+        self.responsive_layout.narrow = narrow;
+        let editor_placement = self
+            .active_editor
+            .and_then(|id| self.panel_placement(id, cx));
+        for (index, placement) in [DockPlacement::Left, DockPlacement::Right]
+            .into_iter()
+            .enumerate()
+        {
+            if narrow && editor_placement == Some(placement) {
+                continue;
+            }
+            let open = self.dock.read(cx).is_dock_open(placement);
+            let toggle = if narrow {
+                self.responsive_layout.restore_open[index] = open;
+                open
+            } else {
+                let restore = std::mem::take(&mut self.responsive_layout.restore_open[index]);
+                restore && !open
+            };
+            if toggle {
+                self.dock
+                    .update(cx, |dock, cx| dock.toggle_dock(placement, window, cx));
+            }
+        }
+        cx.notify();
+    }
+
     pub(in crate::workbench) fn active_editor_panel(
         &self,
         cx: &App,
     ) -> Option<Arc<dyn BasePanelView>> {
-        let details = self.details.read(cx);
-        let panel = if let Some(document) = details.document() {
-            panel_handle(document)
-        } else if let Some(mind) = details.mind() {
-            panel_handle(mind)
-        } else if let Some(database) = details.database() {
-            panel_handle(database)
-        } else if let Some(chart) = details.chart() {
-            panel_handle(chart)
-        } else {
-            panel_handle(details.graph(cx)?)
-        };
-        self.displayed_panel_placement(panel.panel_id(cx), cx)?;
-        Some(panel)
+        let id = self.active_editor?;
+        self.displayed_panel_placement(id, cx)?;
+        self.dock.read(cx).panel(id).cloned()
+    }
+
+    pub(super) fn active_graph(
+        &self,
+        cx: &App,
+    ) -> Option<gpui_kit::Entity<crate::canvas::GraphCanvas>> {
+        self.active_editor_panel(cx)?.view().downcast().ok()
     }
 
     pub(super) fn panel_placement(&self, id: PanelId, cx: &App) -> Option<DockPlacement> {
@@ -114,6 +210,8 @@ impl Workbench {
     }
 
     pub(super) fn install_default_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.responsive_layout = ResponsiveLayout::default();
+        self.active_editor = None;
         let defaults = &crate::preferences::current(cx).workspace;
         let show_details = defaults.show_details;
         let show_bottom = defaults.show_bottom_panel;
@@ -148,6 +246,15 @@ impl Workbench {
             if view.restoring_layout {
                 return;
             }
+            for (index, placement) in [DockPlacement::Left, DockPlacement::Right]
+                .into_iter()
+                .enumerate()
+            {
+                if view.dock.read(cx).is_dock_open(placement) {
+                    // A user or explicit show-panel command reopened it while narrow.
+                    view.responsive_layout.restore_open[index] = false;
+                }
+            }
             let lifecycle = view.lifecycle;
             // Closing the last editor first inserts its watermark, then emits a
             // native close event. Reconcile after both, so the insertion event
@@ -178,11 +285,9 @@ impl Workbench {
         let Some(root) = self.layout_root.clone() else {
             return;
         };
-        let snapshot = self.dock.read(cx).dump(cx);
-        let job = self
-            .services
-            .layouts
-            .save(root.clone(), snapshot);
+        let mut snapshot = self.dock.read(cx).dump(cx);
+        self.responsive_layout.preserve_preferences(&mut snapshot);
+        let job = self.services.layouts.save(root.clone(), snapshot);
         cx.spawn(async move |view, cx| {
             let failed = !matches!(job.await, Ok(Ok(())));
             if failed {
@@ -216,6 +321,7 @@ impl Workbench {
         let page_size = crate::preferences::current(cx).tables.page_size;
         self.busy = true;
         self.restoring_layout = true;
+        self.responsive_layout = ResponsiveLayout::default();
         self.layout_root = None;
         let owner = self.services.clone();
         let job = self.services.run(move |services| {
@@ -631,4 +737,78 @@ fn resource_paths(state: &DockAreaState, panel_name: &str, path_key: &str) -> BT
         collect(dock.panel(), panel_name, path_key, &mut paths);
     }
     paths
+}
+
+#[cfg(test)]
+mod responsive_tests {
+    use super::*;
+    use gpui_kit::component::dock::DockState;
+    use gpui_kit::px;
+
+    #[test]
+    fn narrow_policy_scales_with_font_and_has_restore_hysteresis() {
+        let mut policy = ResponsiveLayout::default();
+        assert!(policy.target(px(900.), px(14.)));
+        assert!(!policy.target(px(1100.), px(14.)));
+        assert!(policy.target(px(1100.), px(18.)));
+        policy.narrow = true;
+        assert!(policy.target(px(1050.), px(14.)));
+        assert!(!policy.target(px(1100.), px(14.)));
+    }
+
+    #[test]
+    fn temporary_collapse_never_changes_persisted_topology_sizes_or_preference() {
+        let left = DockState::new(
+            PanelState::new("project"),
+            DockPlacement::Left,
+            px(240.),
+            true,
+        );
+        let right = DockState::new(
+            PanelState::new("details"),
+            DockPlacement::Right,
+            px(300.),
+            true,
+        );
+        let mut preferred = DockAreaState::default();
+        preferred.left_dock = Some(left.clone());
+        preferred.right_dock = Some(right.clone());
+        let mut visible = preferred.clone();
+        visible.left_dock = Some(DockState::new(
+            left.panel().clone(),
+            left.placement(),
+            left.size(),
+            false,
+        ));
+        visible.right_dock = Some(DockState::new(
+            right.panel().clone(),
+            right.placement(),
+            right.size(),
+            false,
+        ));
+        let policy = ResponsiveLayout {
+            narrow: true,
+            restore_open: [true, true],
+        };
+        policy.preserve_preferences(&mut visible);
+        assert_eq!(visible, preferred);
+    }
+
+    #[test]
+    fn user_visibility_override_is_persisted_instead_of_previous_preference() {
+        let mut state = DockAreaState::default();
+        state.right_dock = Some(DockState::new(
+            PanelState::new("details"),
+            DockPlacement::Right,
+            px(350.),
+            false,
+        ));
+        let expected = state.clone();
+        let policy = ResponsiveLayout {
+            narrow: true,
+            restore_open: [true, false],
+        };
+        policy.preserve_preferences(&mut state);
+        assert_eq!(state, expected);
+    }
 }

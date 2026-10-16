@@ -22,6 +22,8 @@ pub(super) struct ParameterField {
     pub draft: ParameterDraft,
     pub error: Option<String>,
     pub dirty: bool,
+    pub latest: Option<EditorParameterModel>,
+    pub identity_conflict: bool,
     _input_subscription: Option<Subscription>,
 }
 
@@ -167,6 +169,8 @@ impl ParameterField {
             draft,
             error: None,
             dirty: false,
+            latest: None,
+            identity_conflict: false,
             _input_subscription: input_subscription,
         }
     }
@@ -295,6 +299,11 @@ impl ParameterForm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(model) = self.fields[index].latest.take() {
+            self.fields[index] = ParameterField::new(model, window, cx);
+            cx.notify();
+            return;
+        }
         let model = self.fields[index].model.clone();
         if let ParameterDraft::Text { input, format } = &self.fields[index].draft {
             let value = model
@@ -308,6 +317,8 @@ impl ParameterForm {
             input.set_value(value, window, cx);
             self.fields[index].error = None;
             self.fields[index].dirty = false;
+            self.fields[index].identity_conflict = false;
+            self.fields[index].model = model;
         } else {
             self.fields[index] = ParameterField::new(model, window, cx);
         }

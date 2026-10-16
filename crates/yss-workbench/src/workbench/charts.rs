@@ -118,6 +118,7 @@ impl Workbench {
         self.subscriptions
             .push(cx.subscribe(&chart, |view, chart, event, cx| {
                 if matches!(event, ChartEvent::Activated) {
+                    view.active_editor = Some(chart.entity_id().into());
                     view.details
                         .update(cx, |details, cx| details.set_chart(chart.downgrade(), cx));
                     view.activate_file(chart.read(cx).path().as_str().to_owned(), cx);

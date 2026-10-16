@@ -41,6 +41,7 @@ pub(crate) fn bind_keys(cx: &mut App) {
             ("shift-s", MenuCommand::SaveProjectAs),
             ("z", MenuCommand::Edit(EditCommand::Undo)),
             ("y", MenuCommand::Edit(EditCommand::Redo)),
+            ("shift-z", MenuCommand::Edit(EditCommand::Redo)),
             ("x", MenuCommand::Edit(EditCommand::Cut)),
             ("c", MenuCommand::Edit(EditCommand::Copy)),
             ("v", MenuCommand::Edit(EditCommand::Paste)),

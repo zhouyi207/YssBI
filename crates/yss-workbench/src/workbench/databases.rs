@@ -177,6 +177,7 @@ impl Workbench {
                 }
                 match event {
                     DatabaseEvent::Activated => {
+                        view.active_editor = Some(editor.entity_id().into());
                         view.details.update(cx, |details, cx| {
                             details.set_database(editor.downgrade(), cx)
                         });

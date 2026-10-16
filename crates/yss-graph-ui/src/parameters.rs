@@ -3,6 +3,8 @@ mod domain;
 mod field;
 mod relational;
 mod reveal;
+#[cfg(test)]
+mod tests;
 
 use super::graph_properties::GraphProperties;
 use field::{ParameterDraft, ParameterField};
@@ -16,6 +18,7 @@ use yss_node_protocol::{ParameterKey, ParameterValues};
 pub(super) struct ParameterChange {
     pub key: ParameterKey,
     pub value: serde_json::Value,
+    pub base: yss_graph_editor::projection::EditorParameterModel,
 }
 
 struct Group {
@@ -27,6 +30,7 @@ pub(super) struct ParameterForm {
     fields: Vec<ParameterField>,
     groups: Vec<Group>,
     diagnostics: Vec<EditorDiagnosticModel>,
+    session: Option<yss_project::GraphEditVersion>,
     epoch: u64,
     notifications: yss_ui::notifications::Notifications,
     reveal: Option<reveal::Reveal>,
@@ -50,6 +54,7 @@ impl ParameterForm {
             fields: vec![],
             groups: vec![],
             diagnostics: vec![],
+            session: None,
             epoch: 0,
             notifications: yss_ui::notifications::Notifications::new(window),
             reveal: None,
@@ -58,15 +63,6 @@ impl ParameterForm {
             _properties_observer: observer,
             _host_observer: host_observer,
         }
-    }
-
-    pub fn clear(&mut self, cx: &mut Context<Self>) {
-        self.reveal = None;
-        self.fields.clear();
-        self.groups.clear();
-        self.diagnostics.clear();
-        self.epoch = self.epoch.wrapping_add(1);
-        cx.notify();
     }
 
     pub fn install(
@@ -90,15 +86,29 @@ impl ParameterForm {
         self.groups.clear();
         self.diagnostics = diagnostics;
         self.epoch = self.epoch.wrapping_add(1);
+        let creation = self.session.is_none();
         for group in groups {
             let start = self.fields.len();
             self.fields.extend(group.parameters.iter().map(|model| {
-                if let Some(mut field) = previous
-                    .remove(&model.key)
-                    .filter(|field| field.accepts_projection(model))
-                {
-                    field.model = model.clone();
-                    field
+                if let Some(mut field) = previous.remove(&model.key) {
+                    if creation
+                        && field.dirty
+                        && field
+                            .value(cx)
+                            .is_ok_and(|value| model.value.as_ref() == Some(&value))
+                    {
+                        field.dirty = false;
+                    }
+                    if field.accepts_projection(model) {
+                        field.model = model.clone();
+                        field.latest = None;
+                        field
+                    } else if field.dirty {
+                        field.latest = Some(model.clone());
+                        field
+                    } else {
+                        ParameterField::new(model.clone(), window, cx)
+                    }
                 } else {
                     ParameterField::new(model.clone(), window, cx)
                 }
@@ -107,6 +117,14 @@ impl ParameterForm {
                 display: group.display.clone(),
                 fields: start..self.fields.len(),
             });
+        }
+        for (_, field) in previous.into_iter().filter(|(_, field)| field.dirty) {
+            let start = self.fields.len();
+            self.groups.push(Group {
+                display: field.model.display.clone(),
+                fields: start..start + 1,
+            });
+            self.fields.push(field);
         }
         cx.notify();
     }
@@ -168,6 +186,74 @@ impl ParameterForm {
         }
     }
 
+    pub(crate) fn dirty(&self) -> bool {
+        self.fields.iter().any(|field| field.dirty)
+    }
+
+    pub(crate) fn bind_session(&mut self, version: yss_project::GraphEditVersion) {
+        if self
+            .session
+            .is_some_and(|base| base.session_id != version.session_id)
+        {
+            for field in self.fields.iter_mut().filter(|field| field.dirty) {
+                field.identity_conflict = true;
+            }
+        }
+        self.session = Some(version);
+    }
+
+    pub(crate) fn prepare(
+        &mut self,
+        node: Option<&yss_graph_editor::projection::EditorNodeModel>,
+        cx: &mut Context<Self>,
+    ) -> Option<ParameterValues> {
+        let mut values = ParameterValues::new();
+        let mut valid = true;
+        for field in self.fields.iter_mut().filter(|field| field.dirty) {
+            let current = node
+                .into_iter()
+                .flat_map(|node| node.parameter_groups.iter())
+                .flat_map(|group| group.parameters.iter())
+                .find(|model| model.key == field.model.key);
+            let value = if !field.identity_conflict
+                && current.is_some_and(|model| field.accepts_projection(model))
+            {
+                field.value(cx)
+            } else {
+                Err(yss_ui::text::translate(
+                    "native.workbench.parameterDraftConflict",
+                ))
+            };
+            match value {
+                Ok(value) => {
+                    field.error = None;
+                    values.insert(field.model.key.clone(), value);
+                }
+                Err(error) => {
+                    field.error = Some(error);
+                    valid = false;
+                }
+            }
+        }
+        cx.notify();
+        valid.then_some(values)
+    }
+
+    pub(crate) fn accept(&mut self, values: &ParameterValues, cx: &mut Context<Self>) {
+        for field in &mut self.fields {
+            if let Some(value) = values.get(&field.model.key)
+                && field
+                    .value(cx)
+                    .as_ref()
+                    .is_ok_and(|current| current == value)
+            {
+                field.dirty = false;
+                field.error = None;
+            }
+        }
+        cx.notify();
+    }
+
     fn accepts_input(&self, epoch: u64, cx: &App) -> bool {
         epoch == self.epoch && (self.can_edit)(cx)
     }
@@ -188,13 +274,25 @@ impl ParameterForm {
     }
 
     fn commit_parameter(&mut self, index: usize, value: serde_json::Value, cx: &mut Context<Self>) {
+        if self.fields[index].identity_conflict || self.fields[index].latest.is_some() {
+            self.set_error(
+                &self.fields[index].model.key.clone(),
+                yss_ui::text::translate("native.workbench.parameterDraftConflict"),
+                cx,
+            );
+            return;
+        }
         let field = &mut self.fields[index];
         field.error = None;
         if field.model.value.as_ref() != Some(&value) || value.is_null() {
             cx.emit(ParameterChange {
                 key: field.model.key.clone(),
                 value,
+                base: field.model.clone(),
             });
+        } else {
+            field.dirty = false;
+            field.error = None;
         }
         cx.notify();
     }

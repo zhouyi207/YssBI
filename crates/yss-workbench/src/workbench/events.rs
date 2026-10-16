@@ -101,16 +101,19 @@ impl Workbench {
                     graph.update(cx, |graph, cx| graph.accept_execution(event, cx));
                 }
             }
-            DesktopEvent::Graph(identity, GraphActivity::Changed { graph_path, .. })
+            DesktopEvent::Graph(identity, GraphActivity::Changed { graph_path, cause, .. })
                 if identity == project.identity =>
             {
                 let resource = GraphResourcePath::new(graph_path.clone()).ok()
                     .map(yss_project_history::ResourceKey::Graph);
                 for graph in self.graphs.values().filter_map(gpui_kit::WeakEntity::upgrade) {
                     let canvas = graph.read(cx);
-                    let affected = canvas.path() == graph_path
-                        || resource.as_ref().is_some_and(|resource| canvas.graph().depends_on_resource(resource));
-                    if affected {
+                    let own_graph = canvas.path() == graph_path;
+                    let dependency = resource.as_ref()
+                        .is_some_and(|resource| canvas.graph().depends_on_resource(resource));
+                    if own_graph {
+                        graph.update(cx, |graph, cx| graph.accept_graph_change(&cause, cx));
+                    } else if dependency {
                         graph.update(cx, |graph, cx| graph.refresh(cx));
                     }
                 }

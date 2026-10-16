@@ -76,6 +76,7 @@ impl GraphCanvas {
         } else {
             let field = field?;
             Input::new(&field.input)
+                .id(field.element_id.clone())
                 .small()
                 .aria_label(label)
                 .w(field.width * self.zoom)

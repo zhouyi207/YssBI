@@ -76,6 +76,8 @@ pub struct Workbench {
     assistant_observation: Option<gpui_kit::Subscription>,
     assistant_intent: Option<String>,
     dock: Entity<DockArea>,
+    active_editor: Option<gpui_kit::component::dock::PanelId>,
+    responsive_layout: layout::ResponsiveLayout,
     dock_renderer: std::rc::Rc<dock::WorkbenchDock>,
     graph_statistics: Entity<status_bar::GraphStatistics>,
     details: Entity<DetailsPanel>,
@@ -169,6 +171,8 @@ impl Workbench {
             assistant_observation: None,
             assistant_intent: None,
             dock,
+            active_editor: None,
+            responsive_layout: layout::ResponsiveLayout::default(),
             dock_renderer,
             graph_statistics,
             details,
@@ -225,7 +229,6 @@ impl Workbench {
                 // Menu labels and shortcut hints are retained; workspace defaults
                 // intentionally do not mutate the live user-arranged DockArea.
                 view.menu_context = None;
-                view.prepare_menus(cx);
                 cx.notify();
             },
         ));
@@ -291,7 +294,7 @@ impl Workbench {
         self.subscriptions.push(
             cx.subscribe_in(&self.results, window, |view, _, event, _, cx| {
                 let ResultsEvent::Open(reference) = event;
-                if let Some(canvas) = view.details.read(cx).graph(cx) {
+                if let Some(canvas) = view.active_graph(cx) {
                     canvas.update(cx, |canvas, cx| canvas.inspect_result(*reference, cx));
                 }
             }),
@@ -400,7 +403,7 @@ impl Workbench {
                         if view.is_closing(cx) {
                             return;
                         }
-                        if let Some(graph) = view.details.read(cx).graph(cx) {
+                        if let Some(graph) = view.active_graph(cx) {
                             view.details.update(cx, |details, cx| {
                                 details.show_node_properties(cx);
                             });
@@ -428,6 +431,7 @@ impl Workbench {
         self.results
             .update(cx, |results, cx| results.set_graph(None, cx));
         self.mark_project_resource(Some(&path), cx);
+        cx.notify();
     }
 
     fn mark_project_resource(&self, path: Option<&str>, cx: &mut Context<Self>) {
@@ -454,7 +458,7 @@ impl Workbench {
         self.graphs
             .values()
             .filter_map(WeakEntity::upgrade)
-            .any(|graph| graph.read(cx).dirty())
+            .any(|graph| graph.read(cx).dirty(cx))
             || self
                 .documents
                 .values()
@@ -519,7 +523,7 @@ impl Render for Workbench {
             });
         }
         self.dock_renderer.update_style(self.dock.read(cx), cx);
-        self.prepare_menus(cx);
+        self.prepare_menus(window, cx);
         self.render_chrome(window, cx)
     }
 }

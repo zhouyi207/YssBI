@@ -91,7 +91,7 @@ impl GraphProperties {
                 let canvas = entity.read(cx);
                 let mut display = (
                     canvas.can_edit(),
-                    canvas.dirty(),
+                    canvas.dirty(cx),
                     canvas.graph.editing.version,
                 );
                 let mut projection = canvas.graph.projection.clone();
@@ -99,7 +99,7 @@ impl GraphProperties {
                     let canvas = entity.read(cx);
                     let next = (
                         canvas.can_edit(),
-                        canvas.dirty(),
+                        canvas.dirty(cx),
                         canvas.graph.editing.version,
                     );
                     if display == next && Arc::ptr_eq(&projection, &canvas.graph.projection) {
@@ -167,7 +167,7 @@ impl Render for GraphProperties {
         let busy = !self.accepts_input(self.generation, cx);
         let title = self
             .graph()
-            .map(|graph| graph.read(cx).title_text())
+            .map(|graph| graph.read(cx).title_text(cx))
             .unwrap_or_default();
         let header = InspectorHeader::new(IconName::Workflow, title)
             .when(self.signature.is_some(), |header| {

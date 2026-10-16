@@ -115,7 +115,7 @@ fn title_bar_with_controls(
         .flex()
         .items_center()
         .flex_shrink_0()
-        .h(TITLE_BAR_HEIGHT)
+        .h(TITLE_BAR_HEIGHT.max(crate::appearance::HEADER_HEIGHT.to_pixels(window.rem_size())))
         .bg(cx.theme().title_bar)
         .border_b_1()
         .border_color(cx.theme().title_bar_border)
@@ -134,7 +134,7 @@ fn title_bar_with_controls(
                 .pl(if cfg!(target_os = "macos") && !window.is_fullscreen() {
                     px(80.)
                 } else {
-                    px(12.)
+                    gpui_kit::rems(0.75).to_pixels(window.rem_size())
                 })
                 .window_control_area(WindowControlArea::Drag)
                 .on_mouse_down(

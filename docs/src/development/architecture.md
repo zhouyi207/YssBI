@@ -51,21 +51,29 @@ Generic filesystem primitives are a foundation for Project and Application. `yss
 
 Do not create a second graph draft, undo stack or saved-content identity in the frontend. Replace graph projections from their owner in one direction. Other resource-specific drafts keep their documented owners.
 
-Compatible-node queries pass graph identity, editing version and source port, not a caller-owned graph document. Application reads the shared resident document and checks its version before and after computation. Worker tasks and concurrent edits still require these checks even without IPC.
+Compatible-node queries pass graph identity, editing version and source port, not a caller-owned graph document. Application reads the shared resident document and checks its version before and after computation. Superseded read-only queries cooperatively stop between preparation stages and candidate scans; cancellation returns no partial candidate list and never cancels a committed edit.
 
 Project instances, resource paths, graph sessions, nodes, ports, runs, results and panels have different identities. A late read or callback cannot install data into a different project, graph or view. Graph constants belong to their graph document, not to a separate global resource store.
 
 ## Retained desktop state
 
-Workbench retains feature entities and coordinates their placement; it does not own their internal editing workflows. `GraphDetails` retains graph-specific forms. Settings drafts remain in the same `SettingsPanel` when its independent window closes. Import forms emit `ImportSubmission`; they do not retain or depend on a concrete Workbench.
+Workbench retains feature entities and coordinates their placement; it does not own their internal editing workflows. Each `GraphCanvas` retains its nodes' parameter forms and inline input drafts; `GraphDetails` mounts the selected form rather than replacing its owner. Settings drafts remain in the same `SettingsPanel` when its independent window closes. Import forms emit `ImportSubmission`; they do not retain or depend on a concrete Workbench.
 
 `AssistantController` owns the strong conversation cache, directory projection, refresh generations and conversation mutations. Each cached `ConversationPanel` owns its transient input. Hiding the conversation column removes panels from DockArea but preserves the cache and subscriptions. Beginning a project transition invalidates pending delivery; only an accepted project identity change resets the old cache. A failed activation does not discard its drafts.
 
-Workbench's controller subscription and observation survive replacement of project-bound subscriptions. Layout factories hold a weak controller handle rather than a second strong cache. DockArea remains the only topology owner; the controller never keeps an alternate selected panel or group tree.
+Workbench's controller subscription and observation survive replacement of project-bound subscriptions. Layout factories hold a weak controller handle rather than a second strong cache. DockArea remains the only topology owner. Workbench retains one active editor identity for command targeting, validates it against live Dock placement, and does not derive it from the current Details inspection. This identity is not another selected-panel or group tree.
 
-High-frequency state does not flow through a single Workbench notification. `GraphStatistics` owns the viewport readout; the command observer reacts only to busy, dirty and undo/redo changes. `GraphProperties` relays editing-state/version or projection-identity changes, not every pan or zoom. `ResultsPanel` notifies only when its shared result catalog changes.
+Menus project command availability rather than owning another editor state. Keep the originating input focus and availability together while AppMenuBar owns focus. Text edit commands restore that input after menu dismissal; unavailable text actions never fall through to graph commands. Menu actions retain the same identities as keyboard bindings so shortcut hints and customization stay consistent.
+
+High-frequency state does not flow through a single Workbench notification. `GraphStatistics` owns the viewport readout; the command observer reacts to busy, dirty, undo/redo and editing-command availability, not viewport coordinates. `GraphProperties` relays editing-state/version or projection-identity changes, not every pan or zoom. `ResultsPanel` notifies only when its shared result catalog changes.
+
+Graph edit notifications carry the originating operation identity. A canvas acknowledges its own installed command receipts without scheduling a duplicate read, regardless of event/receipt ordering. Unrelated edits, dependency changes and result changes still invalidate it, including changes at the same document revision. A failed command acknowledges only its successfully committed prefix.
 
 Unbound-port diagnostics are static: a repeating animation schedules new frames and invalidates its owning canvas even when the user is idle. The grid coarsens at low zoom while retaining world alignment. Keep caching at the existing DockSkin panel and toolbar boundaries, not around the entire Workbench or DockArea; nested cache misses can force child rebuilds, and conversation rendering has frame-local prepaint transfers.
+
+The existing connection layer also retains node layouts, port indexes and anchors. Pure position changes reuse presentation only while language, results and non-position projection content still match. Viewport size changes schedule a settling frame so newly visible nodes are mounted without another pointer event. Inline controls reconcile on projection, visible-node set or language changes; clean offscreen retention is bounded, while focused, dirty, pending and invalid controls remain available. Text measurement is keyed by content, font family and size.
+
+The repository pins a narrow `gpui-pre` 0.3.8 patch through Cargo's registry patch mechanism. Cached prepaint semantics and cached accessibility action listeners are replayed alongside visual content; caching is not disabled to make controls discoverable. Upstream package provenance and modified source paths are recorded in the vendor manifest.
 
 Assistant history reduction and acknowledgement analysis run on a blocking worker, with session/generation and live-event ordering guards on delivery. Composer predicates borrow the input Rope. Collapsed cell previews and column details do not synchronize or build hidden bodies; reopening uses the latest selection.
 
@@ -75,7 +83,9 @@ Read generations, project identities and resource versions still reject stale de
 
 ## Editing, saving and execution
 
-Manual graph edits update Project's current graph and its semantic projection. **Save** persists the current graph independently. Undo, redo and execution do not implicitly save the graph body. Assistant edit batches persist the complete current graph atomically and retain undo history, without requiring an editor panel.
+Manual graph edits update Project's current graph and its semantic projection. **Save** persists the current graph independently and preserves undo/redo history; replacing it with a different complete body discards history that no longer applies. Undo, redo and execution do not implicitly save the graph body. Assistant edit batches persist the complete current graph atomically and retain undo history, without requiring an editor panel.
+
+Save and run capture pending parameter and port input through the canvas owner. Invalid text or a changed field base blocks the operation without losing the draft. A native mutation batch reuses one private document candidate, builds one final projection and records one undo entry. Persisting or starting execution follows that accepted edit; failures keep the committed edit and remaining drafts visible rather than pretending the whole workflow was rolled back.
 
 Node dragging retains shared original positions plus a displacement. Pointer moves do not rebuild the selected-position map; release submits one version-checked move, while cancellation and no-op gestures submit none. Connection geometry survives projection refreshes by connection identity, with endpoint and port-order changes invalidating the relevant cache entries.
 

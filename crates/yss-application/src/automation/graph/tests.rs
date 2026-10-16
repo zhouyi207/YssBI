@@ -308,7 +308,10 @@ fn assistant_discovers_edits_and_saves_graphs_without_open_editor_panels() {
         },
     )
     .unwrap_err();
-    assert_eq!(missing.code, yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE);
+    assert_eq!(
+        missing.code,
+        yss_assistant_contract::failure_code::GRAPH_UNAVAILABLE
+    );
 
     let AutomationCapabilityResult::ProjectInspection(inspection) = f
         .application
@@ -837,7 +840,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     assert_eq!(saved.graph_hash, hash);
     assert_eq!(saved.from_revision, before_save_revision);
     assert_eq!(saved.resource_revision, f.revision);
-    assert!(!saved.dirty && !saved.can_undo && !saved.can_redo);
+    assert!(!saved.dirty && saved.can_undo && !saved.can_redo);
     let serialized = std::fs::read_to_string(f.directory.join("project").join(&f.path)).unwrap();
     assert!(serialized.contains(&created.created_nodes["product"]));
     let before_form = f.inspect();
@@ -1339,7 +1342,7 @@ fn selected_output_runs_its_dependencies_without_unrelated_readiness_or_resource
         };
         result
     };
-    use yss_assistant_contract::{NodeExecutionMode::{CurrentInputs, Dependencies}};
+    use yss_assistant_contract::NodeExecutionMode::{CurrentInputs, Dependencies};
     let projected = run_node("project", Dependencies);
     assert_eq!(
         projected.status, "succeeded",
@@ -1941,6 +1944,168 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
 }
 
 #[test]
+fn native_edit_batches_are_atomic_idempotent_and_one_history_entry() {
+    use crate::graph::editing::GraphChangeCause;
+    let mut fixture = Fixture::new();
+    fixture.inspect();
+    let application = fixture.application.as_ref().unwrap();
+    let captured = application.capture_session().unwrap();
+    let project = captured.project_instance_id().clone();
+    let path = GraphResourcePath::new(&fixture.path).unwrap();
+    let initial = captured
+        .project()
+        .read_graph_editing(&project, &path)
+        .unwrap();
+    let request = GraphEditRequest {
+        project_instance_id: project.clone(),
+        graph_path: path.clone(),
+        version: initial.state.version,
+        operation_id: OperationId::new(),
+        locale: "en-US".into(),
+    };
+    let (events, observed) = std::sync::mpsc::channel();
+    let _subscription = application
+        .subscribe_graph_activity(
+            &project,
+            Arc::new(move |activity| {
+                if let GraphActivity::Changed { editing, cause, .. } = activity {
+                    events.send((editing.version, cause)).unwrap();
+                }
+            }),
+        )
+        .unwrap();
+    let create = EditorGraphMutation::CreateNode {
+        port_counts: Default::default(),
+        parameters: Default::default(),
+        descriptor: yss_node_catalog::NodeCreation::Static {
+            node_type_id: "yssbi.numeric.multiply".parse().unwrap(),
+        },
+        position: NodePosition { x: 0., y: 0. },
+        user_label: None,
+        connect_from: None,
+    };
+    let mutations = vec![create.clone(), create.clone()];
+    let created = application
+        .edit_graph_batch(request.clone(), mutations.clone())
+        .unwrap();
+    assert_eq!(created.operation_id, request.operation_id);
+    assert_eq!(created.update.document.nodes.len(), 2);
+    assert_eq!(
+        observed.try_recv().unwrap(),
+        (
+            created.editing.version,
+            GraphChangeCause::Edit {
+                operation_id: request.operation_id
+            },
+        )
+    );
+    let replay = application
+        .edit_graph_batch(request.clone(), mutations.clone())
+        .unwrap();
+    assert_eq!(replay.operation_id, request.operation_id);
+    assert_eq!(replay.editing, created.editing);
+    assert_eq!(replay.update.document, created.update.document);
+    assert!(observed.try_recv().is_err());
+    assert!(
+        application
+            .edit_graph_batch(request.clone(), vec![create.clone()])
+            .is_err()
+    );
+    assert!(
+        application
+            .edit_graph_batch(
+                GraphEditRequest {
+                    operation_id: OperationId::new(),
+                    ..request.clone()
+                },
+                vec![create.clone()]
+            )
+            .is_err()
+    );
+
+    let invalid_request = GraphEditRequest {
+        version: created.editing.version,
+        operation_id: OperationId::new(),
+        ..request.clone()
+    };
+    assert!(
+        application
+            .edit_graph_batch(
+                invalid_request,
+                vec![
+                    create,
+                    EditorGraphMutation::MoveNodes {
+                        positions: vec![NodePositionMutation {
+                            node_id: NodeId::new(),
+                            position: NodePosition { x: 50., y: 50. },
+                        }],
+                    },
+                ]
+            )
+            .is_err()
+    );
+    let unchanged = captured
+        .project()
+        .read_graph_editing(&project, &path)
+        .unwrap();
+    assert_eq!(unchanged.document, created.update.document);
+    assert_eq!(unchanged.state, created.editing);
+    assert!(observed.try_recv().is_err());
+
+    let id = *created.update.document.nodes.keys().next().unwrap();
+    let move_to = |x| EditorGraphMutation::MoveNodes {
+        positions: vec![NodePositionMutation {
+            node_id: id,
+            position: NodePosition { x, y: 0. },
+        }],
+    };
+    let no_op = application
+        .edit_graph_batch(
+            GraphEditRequest {
+                version: created.editing.version,
+                operation_id: OperationId::new(),
+                ..request.clone()
+            },
+            vec![move_to(100.), move_to(0.)],
+        )
+        .unwrap();
+    assert!(!no_op.update.changed);
+    assert_eq!(no_op.update.document, created.update.document);
+    assert_eq!(no_op.editing.dirty, created.editing.dirty);
+    assert_ne!(no_op.editing.version, created.editing.version);
+    let undone = application
+        .change_graph_history(
+            GraphEditRequest {
+                version: no_op.editing.version,
+                operation_id: OperationId::new(),
+                ..request.clone()
+            },
+            false,
+        )
+        .unwrap();
+    assert_eq!(undone.update.document, initial.document);
+    assert!(!undone.editing.can_undo);
+    assert!(undone.editing.can_redo);
+    let redone = application
+        .change_graph_history(
+            GraphEditRequest {
+                version: undone.editing.version,
+                operation_id: OperationId::new(),
+                ..request.clone()
+            },
+            true,
+        )
+        .unwrap();
+    assert_eq!(redone.update.document, created.update.document);
+    let late_replay = application
+        .edit_graph_batch(request.clone(), mutations)
+        .unwrap();
+    assert_eq!(late_replay.operation_id, request.operation_id);
+    assert_eq!(late_replay.editing, redone.editing);
+    assert_eq!(late_replay.update.document, redone.update.document);
+}
+
+#[test]
 fn gui_and_harness_retries_recover_original_commits_without_overwriting_later_edits() {
     let mut f = Fixture::new();
     f.inspect();
@@ -1977,6 +2142,12 @@ fn gui_and_harness_retries_recover_original_commits_without_overwriting_later_ed
         .edit_graph(gui_request.clone(), create.clone())
         .unwrap();
     assert_eq!(created.update.document.nodes.len(), 2);
+    let batched_replay = application
+        .edit_graph_batch(gui_request.clone(), vec![create.clone()])
+        .unwrap();
+    assert_eq!(batched_replay.operation_id, gui_request.operation_id);
+    assert_eq!(batched_replay.editing, created.editing);
+    assert_eq!(batched_replay.update.document, created.update.document);
     let commit = captured
         .project()
         .graph_edit_command_receipt(

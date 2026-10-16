@@ -127,13 +127,16 @@ impl GraphDetails {
             cx.notify();
         });
         let job = self.services.run(move |services| {
-            let candidates = services.graph_connection_candidates(
-                &project,
-                &path,
-                version,
-                &source,
-                ConnectionIntent::Connect,
-            )?;
+            let candidates = services
+                .graph_connection_candidates(
+                    &project,
+                    &path,
+                    version,
+                    &source,
+                    ConnectionIntent::Connect,
+                    &|| false,
+                )?
+                .ok_or_else(|| anyhow::anyhow!("connection preview cancelled"))?;
             anyhow::ensure!(
                 candidates.semantic_input_hash == projection.basis.semantic_input_hash,
                 "connection projection changed"

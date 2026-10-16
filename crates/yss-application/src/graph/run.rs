@@ -513,6 +513,7 @@ where
         captured.publish_graph_activity(super::editing::GraphActivity::Changed {
             graph_path: request.graph_path.as_str().into(),
             editing: editing.state,
+            cause: super::editing::GraphChangeCause::Results,
         });
     }
     outcome

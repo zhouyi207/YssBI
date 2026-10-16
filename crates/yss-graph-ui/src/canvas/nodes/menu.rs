@@ -1,5 +1,5 @@
 //! Node actions reuse the same selection, clipboard, edit and execution entry points.
-use crate::canvas::{GraphCanvas, GraphCommand, commands::*};
+use crate::canvas::{GraphCanvas, GraphCommand, GraphEditCommand, commands::*};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{input, menu::PopupMenuItem};
 use gpui_kit::{Action, Context, MouseDownEvent, Pixels, Point, Window, prelude::*};
@@ -49,6 +49,9 @@ impl GraphCanvas {
         self.selected_connections.clear();
         self.located_port = None;
         self.emit_selection(cx);
+        let copy = self.is_edit_command_enabled(GraphEditCommand::Copy);
+        let cut = self.is_edit_command_enabled(GraphEditCommand::Cut);
+        let delete = self.is_edit_command_enabled(GraphEditCommand::Delete);
         let projection = self.graph.projection.clone();
         let version = self.graph.editing.version;
         let language = yss_ui::text::locale();
@@ -58,12 +61,12 @@ impl GraphCanvas {
             for (index, (command, enabled)) in [
                 (NodeAction::Run, run),
                 (NodeAction::RunTo, run),
-                (NodeAction::Copy, modify),
-                (NodeAction::Cut, modify),
+                (NodeAction::Copy, copy),
+                (NodeAction::Cut, cut),
                 (NodeAction::Duplicate, modify),
                 (NodeAction::Disconnect, links),
                 (NodeAction::SelectLinked, links),
-                (NodeAction::Delete, modify),
+                (NodeAction::Delete, delete),
             ]
             .into_iter()
             .enumerate()
@@ -155,8 +158,8 @@ impl NodeAction {
         match self {
             Self::Run => view.run_selected(NodeExecutionMode::CurrentInputs, cx),
             Self::RunTo => view.run_selected(NodeExecutionMode::Dependencies, cx),
-            Self::Copy => view.copy_selection(false, cx),
-            Self::Cut => view.copy_selection(true, cx),
+            Self::Copy => view.edit(GraphEditCommand::Copy, cx),
+            Self::Cut => view.edit(GraphEditCommand::Cut, cx),
             Self::Duplicate => view.duplicate_selection(cx),
             Self::Disconnect => view.submit(
                 GraphCommand::Edit(EditorGraphMutation::DisconnectNode { node_id: id }),
@@ -164,7 +167,7 @@ impl NodeAction {
                 cx,
             ),
             Self::SelectLinked => view.select_linked_nodes(id, cx),
-            Self::Delete => view.delete_selection(cx),
+            Self::Delete => view.edit(GraphEditCommand::Delete, cx),
         }
     }
 }

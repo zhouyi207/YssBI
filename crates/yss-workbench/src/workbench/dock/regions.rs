@@ -237,8 +237,10 @@ impl Element for RegionContent {
                         owner.busy || owner.closing
                     });
                     if !blocked {
-                        target.size.height =
-                            (area.bounds().bottom() - STATUS_BAR_HEIGHT - bounds.top()).max(px(0.));
+                        target.size.height = (area.bounds().bottom()
+                            - STATUS_BAR_HEIGHT.to_pixels(window.rem_size())
+                            - bounds.top())
+                        .max(px(0.));
                     }
                 }
                 Region::Bottom if columns::conversation_edge(area).is_some() => {
@@ -268,8 +270,9 @@ impl Element for RegionContent {
                     // This sibling follows DockArea's prepaint, so the split boundary
                     // is current without deferring chrome above Root's overlays.
                     target = self.measurements.center.get();
-                    target.origin.y = target.bottom() - bottom - STATUS_BAR_HEIGHT;
-                    target.size.height = STATUS_BAR_HEIGHT;
+                    let status_height = STATUS_BAR_HEIGHT.to_pixels(window.rem_size());
+                    target.origin.y = target.bottom() - bottom - status_height;
+                    target.size.height = status_height;
                     let edge = if columns::conversation_edge(area).is_some() {
                         self.measurements
                             .editor_left

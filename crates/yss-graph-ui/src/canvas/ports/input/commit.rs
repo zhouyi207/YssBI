@@ -120,7 +120,16 @@ impl GraphCanvas {
             if !field.dirty {
                 continue;
             }
-            if field.version != version || version != self.graph.editing.version {
+            let current = self
+                .port_details
+                .as_ref()
+                .and_then(|ports| ports.port(address));
+            if version != self.graph.editing.version
+                || field.version.session_id != version.session_id
+                || !current.is_some_and(|port| {
+                    eligible(port) == Some(field.kind) && port.input == field.base
+                })
+            {
                 field.error = Some(InputError::Conflict);
                 self.notifications
                     .error(yss_ui::text::t("native.canvas.commandFailed"), cx);
@@ -130,8 +139,6 @@ impl GraphCanvas {
             let text = field.input.read(cx).value();
             let value = if field.kind == SemanticType::Text {
                 Ok(Value::String(text.to_string()))
-            } else if matches!(text.as_ref(), "" | "-" | "." | "-.") {
-                Ok(Value::from(0))
             } else {
                 yss_ui::input::number(&text)
             };
@@ -171,6 +178,12 @@ impl GraphCanvas {
                 field.dirty = false;
                 field.pending = None;
                 field.error = None;
+                field.version = self.graph.editing.version;
+                field.base = self
+                    .port_details
+                    .as_ref()
+                    .and_then(|ports| ports.port(&edit.address))
+                    .and_then(|port| port.input.clone());
             }
         }
     }

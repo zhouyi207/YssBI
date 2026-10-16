@@ -203,6 +203,7 @@ pub(super) fn render_header(
                     .ghost()
                     .icon(IconName::ChevronDown)
                     .tooltip(crate::text::t("native.workbench.switchPanel"))
+                    .accessibility_label(crate::text::t("native.workbench.switchPanel"))
                     .dropdown_menu({
                         let area = area.clone();
                         move |mut menu, _, cx| {
@@ -255,6 +256,7 @@ pub(super) fn render_header(
                     .ghost()
                     .icon(IconName::Minimize)
                     .tooltip(crate::text::t("native.workbench.restoreLayout"))
+                    .accessibility_label(crate::text::t("native.workbench.restoreLayout"))
                     .on_click({
                         let area = area.clone();
                         move |_, window, cx| {
@@ -319,7 +321,7 @@ fn render_navigation(view: &Navigation) -> AnyElement {
     .map(|((id, icon, title, panel), (active, disabled))| {
         Button::new(id)
             .ghost()
-            .with_size(super::dock::HEADER_BUTTON_SIZE)
+            .xsmall()
             .w(NAVIGATION_BUTTON_WIDTH)
             .h_full()
             .icon(icon)

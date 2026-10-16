@@ -81,6 +81,8 @@ pub(super) struct Interaction<'a> {
 }
 
 pub(super) struct ConnectionLayer {
+    nodes: Vec<geometry::NodeGeometry>,
+    node_indices: BTreeMap<NodeId, usize>,
     anchors: BTreeMap<PortAddress, PortAnchor>,
     connections: Vec<Connection>,
     pending: PathCache,
@@ -90,6 +92,8 @@ pub(super) struct ConnectionLayer {
 impl ConnectionLayer {
     pub fn new(projection: &EditorProjectionModel) -> Self {
         let mut layer = Self {
+            nodes: Vec::new(),
+            node_indices: BTreeMap::new(),
             anchors: BTreeMap::new(),
             connections: Vec::new(),
             pending: PathCache::default(),
@@ -100,30 +104,42 @@ impl ConnectionLayer {
     }
 
     pub fn install(&mut self, projection: &EditorProjectionModel) {
-        let anchors = projection
+        let mut nodes = self
             .nodes
-            .iter()
-            .flat_map(|node| {
-                geometry::port_offsets(node).zip(node.ports.iter()).map(
-                    |((address, offset), port)| {
-                        (
-                            address.clone(),
-                            PortAnchor {
-                                node_id: node.node_id,
-                                node_position: point(
-                                    px(node.position.x as f32),
-                                    px(node.position.y as f32),
-                                ),
-                                offset,
-                                key: address.to_string().into(),
-                                direction: port.direction,
-                                color: ports::type_color(port),
-                            },
-                        )
-                    },
-                )
-            })
+            .drain(..)
+            .map(|geometry| (geometry.node_id, geometry))
             .collect::<BTreeMap<_, _>>();
+        self.nodes.reserve(projection.nodes.len());
+        self.node_indices.clear();
+        let mut anchors = std::mem::take(&mut self.anchors);
+        for node in &projection.nodes {
+            let retained = nodes
+                .remove(&node.node_id)
+                .filter(|geometry| geometry.matches(node));
+            let geometry = retained.unwrap_or_else(|| geometry::NodeGeometry::new(node));
+            for (output, indices) in [(false, &geometry.inputs), (true, &geometry.outputs)] {
+                for (row, index) in indices.iter().enumerate() {
+                    let port = &node.ports[*index];
+                    let offset = geometry.layout.port_offset(output, row);
+                    let mut anchor = anchors.remove(&port.address).unwrap_or_else(|| PortAnchor {
+                        node_id: node.node_id,
+                        node_position: Point::default(),
+                        offset,
+                        key: port.address.to_string().into(),
+                        direction: port.direction,
+                        color: ports::type_color(port),
+                    });
+                    anchor.node_position =
+                        point(px(node.position.x as f32), px(node.position.y as f32));
+                    anchor.offset = offset;
+                    anchor.direction = port.direction;
+                    anchor.color = ports::type_color(port);
+                    self.anchors.insert(port.address.clone(), anchor);
+                }
+            }
+            self.node_indices.insert(node.node_id, self.nodes.len());
+            self.nodes.push(geometry);
+        }
         let mut previous = std::mem::take(&mut self.connections)
             .into_iter()
             .map(|connection| (connection.id, connection))
@@ -132,8 +148,8 @@ impl ConnectionLayer {
             .connections
             .iter()
             .filter_map(|connection| {
-                let output = anchors.get(&connection.output)?.clone();
-                let input = anchors.get(&connection.input)?.clone();
+                let output = self.anchors.get(&connection.output)?.clone();
+                let input = self.anchors.get(&connection.input)?.clone();
                 Some(match previous.remove(&connection.connection_id) {
                     Some(mut retained) => {
                         retained.output = output;
@@ -151,7 +167,14 @@ impl ConnectionLayer {
                 })
             })
             .collect();
-        self.anchors = anchors;
+    }
+
+    pub fn node(&self, id: NodeId) -> Option<&geometry::NodeGeometry> {
+        self.nodes.get(*self.node_indices.get(&id)?)
+    }
+
+    pub fn nodes(&self) -> &[geometry::NodeGeometry] {
+        &self.nodes
     }
 
     pub fn port_position(

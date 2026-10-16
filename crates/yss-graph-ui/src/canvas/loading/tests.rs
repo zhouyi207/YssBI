@@ -13,6 +13,35 @@ use yss_project_history::{
 };
 use yss_project_identity::OperationId;
 
+#[test]
+fn own_change_events_do_not_refresh_before_or_after_the_command_receipt() {
+    let mut delivery = ChangeDelivery::default();
+    let edit = OperationId::new();
+    let save = OperationId::new();
+    assert!(!delivery.receive(edit, true));
+    assert!(!delivery.finish(&[edit, save]));
+    assert!(!delivery.receive(save, false));
+}
+
+#[test]
+fn unrelated_changes_survive_acknowledging_a_successful_command_prefix() {
+    let mut delivery = ChangeDelivery::default();
+    let edit = OperationId::new();
+    let external = OperationId::new();
+    assert!(!delivery.receive(edit, true));
+    assert!(!delivery.receive(external, true));
+    assert!(delivery.finish(&[edit]));
+    assert!(!delivery.finish(&[]));
+    assert!(delivery.receive(OperationId::new(), false));
+}
+
+#[test]
+fn cancelled_preparation_keeps_external_invalidation() {
+    let mut delivery = ChangeDelivery::default();
+    assert!(!delivery.receive(OperationId::new(), true));
+    assert!(delivery.finish(&[]));
+}
+
 struct Fixture {
     directory: tempfile::TempDir,
     application: ApplicationState,
@@ -677,4 +706,249 @@ fn connection_install_tracks_move_reconnect_port_reorder_delete_and_restore() {
     assert_eq!(layer.hit_test(reordered, 1., &idle), None);
     layer.install(&restored);
     assert_eq!(layer.hit_test(reordered, 1., &idle), Some(connection));
+}
+
+#[test]
+fn cached_node_geometry_tracks_inline_parameters_ports_and_compact_style() {
+    use crate::canvas::{connections::ConnectionLayer, geometry::NodeMovement, presentation};
+    use yss_graph_document::PortAddress;
+    use yss_node_protocol::ParameterPresentation;
+
+    let fixture = Fixture::new();
+    let mut projection = fixture.open().projection.as_ref().clone();
+    let mut node = projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id == fixture.source)
+        .unwrap()
+        .clone();
+    node.ports = vec![node.ports.first().unwrap().clone()].into_boxed_slice();
+    for parameter in node
+        .parameter_groups
+        .iter_mut()
+        .flat_map(|group| group.parameters.iter_mut())
+    {
+        parameter.presentation = ParameterPresentation::DetailPanel;
+    }
+    projection.nodes = vec![node].into_boxed_slice();
+    projection.connections = Box::new([]);
+    let mut layer = ConnectionLayer::new(&projection);
+    let idle = NodeMovement::default();
+    let original = projection.clone();
+    let original_height = layer.node(fixture.source).unwrap().layout.height;
+    let output = projection.nodes[0].ports[0].address.clone();
+    let anchor = layer.port_position(&output, &idle).unwrap();
+
+    projection.nodes[0].position = NodePosition { x: 100., y: 70. };
+    assert!(presentation::same_content(&original, &projection));
+    layer.install(&projection);
+    assert_eq!(
+        layer.node(fixture.source).unwrap().layout.height,
+        original_height
+    );
+    assert_eq!(
+        layer.port_position(&output, &idle),
+        Some(anchor + point(px(100.), px(70.)))
+    );
+
+    projection.nodes[0]
+        .parameter_groups
+        .iter_mut()
+        .flat_map(|group| group.parameters.iter_mut())
+        .next()
+        .unwrap()
+        .presentation = ParameterPresentation::InlineAndDetail;
+    assert!(!presentation::same_content(&original, &projection));
+    layer.install(&projection);
+    assert_eq!(
+        layer.node(fixture.source).unwrap().layout.height,
+        original_height + 36.
+    );
+    assert_eq!(
+        layer.port_position(&output, &idle).unwrap().y,
+        anchor.y + px(106.)
+    );
+
+    let mut extra = projection.nodes[0].ports[0].clone();
+    extra.address = PortAddress::declared(fixture.source, "additional".parse().unwrap());
+    let extra_address = extra.address.clone();
+    let mut ports = projection.nodes[0].ports.to_vec();
+    ports.push(extra);
+    projection.nodes[0].ports = ports.into_boxed_slice();
+    layer.install(&projection);
+    assert_eq!(
+        layer.port_position(&extra_address, &idle).unwrap().y,
+        layer.port_position(&output, &idle).unwrap().y + px(28.)
+    );
+    let bounds = layer
+        .node(fixture.source)
+        .unwrap()
+        .layout
+        .bounds(projection.nodes[0].position);
+    let extra_anchor = layer.port_position(&extra_address, &idle).unwrap();
+    assert_eq!(bounds.right(), extra_anchor.x);
+    assert!(extra_anchor.y > bounds.top() && extra_anchor.y < bounds.bottom());
+    projection.nodes[0].display.style_id = Some("builtin.reroute".into());
+    layer.install(&projection);
+    let layout = layer.node(fixture.source).unwrap().layout;
+    assert_eq!((layout.width, layout.height), (32., 40.));
+    assert_eq!(
+        layer.port_position(&extra_address, &idle),
+        Some(point(px(132.), px(100.)))
+    );
+}
+
+#[gpui_kit::test]
+async fn inline_draft_keeps_focus_across_viewport_and_commits_on_return(cx: &mut TestAppContext) {
+    use gpui_kit::test::TestWindowExt;
+    let fixture = Fixture::new();
+    let graph = fixture.open();
+    fixture.edit(
+        &graph,
+        EditorGraphMutation::DeleteNodes {
+            node_ids: graph
+                .projection
+                .nodes
+                .iter()
+                .map(|node| node.node_id)
+                .collect(),
+        },
+    );
+    fixture.edit(
+        &fixture.open(),
+        EditorGraphMutation::CreateNode {
+            descriptor: yss_node_catalog::NodeCreation::Static {
+                node_type_id: "yssbi.numeric.subtract".parse().unwrap(),
+            },
+            position: NodePosition { x: 40., y: 40. },
+            connect_from: None,
+            parameters: Default::default(),
+            port_counts: Default::default(),
+            user_label: None,
+        },
+    );
+    let graph = fixture.open();
+    for address in graph
+        .projection
+        .nodes
+        .iter()
+        .flat_map(|node| node.ports.iter())
+        .filter(|port| port.direction == yss_node_protocol::PortDirection::Input)
+        .map(|port| port.address.clone())
+    {
+        fixture.edit(
+            &fixture.open(),
+            EditorGraphMutation::SetLiteral {
+                address,
+                literal: Some(serde_json::json!(0)),
+            },
+        );
+    }
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (window, canvas) = fixture.canvas(&runtime, cx);
+    let address = canvas.read_with(cx, |canvas, _| {
+        canvas
+            .graph
+            .projection
+            .nodes
+            .iter()
+            .flat_map(|node| node.ports.iter())
+            .find(|port| {
+                crate::canvas::scalar_input_type(port)
+                    == Some(yss_data_contract::SemanticType::Numeric)
+            })
+            .unwrap()
+            .address
+            .clone()
+    });
+    let id = gpui_kit::SharedString::from(format!("port-value-{address}"));
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click(id.clone(), cx);
+        window.press("ctrl-a", cx);
+        window.input("42", cx);
+        assert_eq!(window.find(id.clone()).value(), Some("42"));
+        canvas.update(cx, |canvas, cx| {
+            canvas.offset = point(px(-10_000.), px(-10_000.));
+            cx.notify();
+        });
+        window.render_frame(cx);
+        assert_eq!(window.find(id.clone()).focused(), Some(true));
+        assert_eq!(window.find(id.clone()).value(), Some("42"));
+        canvas.update(cx, |canvas, cx| {
+            canvas.offset = point(px(0.), px(0.));
+            cx.notify();
+        });
+        window.render_frame(cx);
+        assert_eq!(window.find(id.clone()).focused(), Some(true));
+        window.press("enter", cx);
+    })
+    .unwrap();
+    cx.condition(&canvas, |canvas, _| {
+        !canvas.busy && canvas.refresh_task.is_none()
+    })
+    .await;
+    canvas.read_with(cx, |canvas, _| {
+        let port = canvas
+            .port_details
+            .as_ref()
+            .unwrap()
+            .port(&address)
+            .unwrap();
+        assert_eq!(
+            port.input.as_ref().unwrap().literal_override,
+            Some(serde_json::json!(42))
+        );
+        assert!(!canvas.has_dirty_port_inputs());
+    });
+}
+
+#[gpui_kit::test]
+fn empty_canvas_button_and_keyboard_open_palette_and_restore_focus(cx: &mut TestAppContext) {
+    use gpui_kit::{KeyBinding, test::TestWindowExt};
+    let fixture = Fixture::new();
+    let graph = fixture.open();
+    fixture.edit(
+        &graph,
+        EditorGraphMutation::DeleteNodes {
+            node_ids: graph
+                .projection
+                .nodes
+                .iter()
+                .map(|node| node.node_id)
+                .collect(),
+        },
+    );
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (window, canvas) = fixture.canvas(&runtime, cx);
+    cx.update(|cx| {
+        cx.bind_keys([KeyBinding::new(
+            "ctrl-space",
+            crate::canvas::OpenNodePalette,
+            Some("GraphCanvas && !Input"),
+        )])
+    });
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("add-first-node", cx);
+        assert!(canvas.read(cx).palette.is_some());
+        window.press("escape", cx);
+    })
+    .unwrap();
+    cx.update_window(window, |_, window, cx| {
+        assert!(canvas.read(cx).palette.is_none());
+        let focus = canvas.read(cx).focus.clone();
+        window.focus(&focus, cx);
+        window.render_frame(cx);
+        window.press("ctrl-space", cx);
+        assert!(canvas.read(cx).palette.is_some());
+        assert!(!canvas.read(cx).focus.is_focused(window));
+        window.press("escape", cx);
+    })
+    .unwrap();
+    cx.update_window(window, |_, window, cx| {
+        assert!(canvas.read(cx).palette.is_none());
+        assert!(canvas.read(cx).focus.is_focused(window));
+    })
+    .unwrap();
 }

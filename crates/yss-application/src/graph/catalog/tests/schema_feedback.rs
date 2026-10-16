@@ -114,11 +114,13 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
     assert!(output_columns(before.projection()).is_empty());
     let changes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let counter = Arc::clone(&changes);
+    let (event_sender, observed_events) = std::sync::mpsc::channel();
     let _subscription = app
         .subscribe_graph_activity(
             &instance,
             Arc::new(move |event| {
-                if matches!(event, GraphActivity::Changed { .. }) {
+                if let GraphActivity::Changed { editing, cause, .. } = event {
+                    event_sender.send((editing.version, cause)).unwrap();
                     counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
             }),
@@ -145,6 +147,13 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         changes.load(std::sync::atomic::Ordering::Relaxed),
         1,
         "run requests projection refresh without editing the document"
+    );
+    assert_eq!(
+        observed_events.try_recv().unwrap(),
+        (
+            before.editing().version,
+            crate::graph::editing::GraphChangeCause::Results,
+        )
     );
     let evaluated = resolve();
     assert_eq!(before.editing(), evaluated.editing());

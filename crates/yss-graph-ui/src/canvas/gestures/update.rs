@@ -1,5 +1,5 @@
 use super::{Gesture, GraphCanvas};
-use crate::canvas::{CanvasEvent, GraphCommand, geometry};
+use crate::canvas::{CanvasEvent, GraphCommand};
 use gpui_kit::{
     Context, MouseButton, MouseMoveEvent, MouseUpEvent, PinchEvent, Pixels, Point,
     ScrollWheelEvent, Window, px,
@@ -61,15 +61,16 @@ impl GraphCanvas {
                     .projection
                     .nodes
                     .iter()
-                    .filter(|node| {
-                        let rect = geometry::node_bounds(node, node.position);
+                    .zip(self.connection_layer.borrow().nodes())
+                    .filter(|(node, geometry)| {
+                        let rect = geometry.layout.bounds(node.position);
                         !node.capabilities.managed
                             && rect.right() >= px(a.x.min(b.x) as f32)
                             && rect.left() <= px(a.x.max(b.x) as f32)
                             && rect.bottom() >= px(a.y.min(b.y) as f32)
                             && rect.top() <= px(a.y.max(b.y) as f32)
                     })
-                    .map(|node| node.node_id)
+                    .map(|(node, _)| node.node_id)
                     .collect::<BTreeSet<_>>();
                 if *additive {
                     selected.extend(previous.iter().copied());

@@ -249,13 +249,15 @@ impl Workbench {
                             view.refresh_resource_rows(cx);
                         }
                         if matches!(event, CanvasEvent::Projection { .. })
-                            && view
-                                .details
-                                .read(cx)
-                                .graph(cx)
-                                .is_none_or(|current| current.entity_id() != canvas.entity_id())
+                            && view.active_editor != Some(canvas.entity_id().into())
                         {
                             return;
+                        }
+                        if matches!(event, CanvasEvent::Selection { .. })
+                            && view.active_editor != Some(canvas.entity_id().into())
+                        {
+                            view.active_editor = Some(canvas.entity_id().into());
+                            cx.notify();
                         }
                         let version = canvas.read(cx).graph().editing().version;
                         let path = canvas.read(cx).path().to_owned();

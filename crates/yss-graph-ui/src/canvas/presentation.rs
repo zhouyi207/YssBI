@@ -44,6 +44,32 @@ impl Presentation {
     }
 }
 
+pub(super) fn same_content(
+    previous: &yss_graph_editor::projection::EditorProjectionModel,
+    next: &yss_graph_editor::projection::EditorProjectionModel,
+) -> bool {
+    previous.basis == next.basis
+        && previous.graph_path == next.graph_path
+        && previous.outcome == next.outcome
+        && previous.connections == next.connections
+        && previous.diagnostics == next.diagnostics
+        && previous.nodes.len() == next.nodes.len()
+        && previous
+            .nodes
+            .iter()
+            .zip(next.nodes.iter())
+            .all(|(previous, next)| {
+                previous.node_id == next.node_id
+                    && previous.node_type == next.node_type
+                    && previous.display == next.display
+                    && previous.ports == next.ports
+                    && previous.port_instance_additions == next.port_instance_additions
+                    && previous.parameter_groups == next.parameter_groups
+                    && previous.capabilities == next.capabilities
+                    && previous.diagnostics == next.diagnostics
+            })
+}
+
 impl GraphCanvas {
     pub(super) fn refresh_presentation(&mut self) {
         self.node_contents.refresh(&self.graph.projection);

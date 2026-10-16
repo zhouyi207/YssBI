@@ -100,6 +100,7 @@ impl ActivityPanel {
             .children(tools.iter().map(|tool| {
                 let tool_id = tool.id.to_owned();
                 let expected = document.clone();
+                let label: gpui_kit::SharedString = tool.label.resolve_with(translate).into();
                 Button::new(gpui_kit::SharedString::from(format!(
                     "category-tool-{}-{tool_id}",
                     row.id
@@ -108,7 +109,8 @@ impl ActivityPanel {
                 .ghost()
                 .size_5()
                 .icon(feedback::tool_icon(tool.icon))
-                .tooltip(tool.label.resolve_with(translate))
+                .accessibility_label(label.clone())
+                .tooltip(label)
                 .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
                     cx.stop_propagation()
                 })

@@ -24,7 +24,7 @@ mod viewport;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     rc::Rc,
     sync::Arc,
 };
@@ -43,6 +43,7 @@ use yss_graph_editor::projection::EditorProjectionModel;
 
 use crate::{GraphServices, OpenedGraph};
 pub use authoring::ConstantValueInput;
+pub use clipboard::GraphEditCommand;
 pub use commands::*;
 pub(crate) use constant_drag::ConstantDrag;
 pub(crate) use ports::{port_glyph, scalar_input_type};
@@ -103,6 +104,13 @@ pub struct GraphCanvas {
     presentation: Rc<presentation::Presentation>,
     node_contents: nodes::summary::Contents,
     port_inputs: ports::input::Inputs,
+    parameter_forms: BTreeMap<
+        NodeId,
+        (
+            gpui_kit::Entity<crate::parameters::ParameterForm>,
+            gpui_kit::Subscription,
+        ),
+    >,
     port_details: Option<Rc<ports::details::Details>>,
     selected: BTreeSet<NodeId>,
     bounds: Rc<Cell<Bounds<Pixels>>>,
@@ -112,6 +120,7 @@ pub struct GraphCanvas {
     refresh_failed: bool,
     refresh_pending: bool,
     resource_move: Option<loading::ResourceMove>,
+    change_delivery: loading::ChangeDelivery,
     notifications: yss_ui::notifications::Notifications,
     execution: execution::ExecutionView,
 }
@@ -193,6 +202,7 @@ impl GraphCanvas {
             presentation: Rc::default(),
             node_contents: Default::default(),
             port_inputs: Default::default(),
+            parameter_forms: BTreeMap::new(),
             port_details: None,
             selected: BTreeSet::new(),
             bounds: Rc::new(Cell::new(Bounds::default())),
@@ -202,12 +212,13 @@ impl GraphCanvas {
             refresh_failed: false,
             refresh_pending: false,
             resource_move: None,
+            change_delivery: Default::default(),
             notifications: yss_ui::notifications::Notifications::new(window),
             execution: Default::default(),
         };
         view.refresh_presentation();
         view.toolbar
-            .update(cx, |toolbar, _| toolbar.initialize(&view));
+            .update(cx, |toolbar, cx| toolbar.initialize(&view, cx));
         cx.defer_in(window, |view, _, cx| {
             view.resync_execution(cx);
             if view.graph.language != yss_ui::text::locale() {
@@ -221,8 +232,44 @@ impl GraphCanvas {
         self.resource_path().as_str()
     }
 
-    pub fn dirty(&self) -> bool {
-        self.graph.editing.dirty || self.has_dirty_port_inputs()
+    pub fn dirty(&self, cx: &App) -> bool {
+        self.graph.editing.dirty || self.has_dirty_inputs(cx)
+    }
+
+    fn has_dirty_inputs(&self, cx: &App) -> bool {
+        self.has_dirty_port_inputs()
+            || self
+                .parameter_forms
+                .values()
+                .any(|(form, _)| form.read(cx).dirty())
+    }
+
+    pub(crate) fn parameter_form(
+        &self,
+        node: NodeId,
+    ) -> Option<gpui_kit::Entity<crate::parameters::ParameterForm>> {
+        self.parameter_forms
+            .get(&node)
+            .map(|(form, _)| form.clone())
+    }
+
+    pub(crate) fn retain_parameter_form(
+        &mut self,
+        node: NodeId,
+        form: gpui_kit::Entity<crate::parameters::ParameterForm>,
+        cx: &mut Context<Self>,
+    ) {
+        let mut dirty = form.read(cx).dirty();
+        let observer = cx.observe(&form, move |_, form, cx| {
+            let next = form.read(cx).dirty();
+            if dirty == next {
+                return;
+            }
+            dirty = next;
+            cx.emit(PanelEvent::LayoutChanged);
+            cx.notify();
+        });
+        self.parameter_forms.insert(node, (form, observer));
     }
 
     pub(crate) fn can_edit(&self) -> bool {
@@ -299,7 +346,7 @@ impl GraphCanvas {
         true
     }
 
-    pub fn title_text(&self) -> String {
+    pub fn title_text(&self, cx: &App) -> String {
         format!(
             "{}{}",
             self.path()
@@ -308,7 +355,7 @@ impl GraphCanvas {
                 .unwrap_or(self.path())
                 .trim_end_matches(".yssbi-event")
                 .trim_end_matches(".yssbi-function"),
-            if self.dirty() { " *" } else { "" }
+            if self.dirty(cx) { " *" } else { "" }
         )
     }
 
@@ -339,8 +386,8 @@ impl BasePanel for GraphCanvas {
     fn panel_name(&self) -> &'static str {
         "graph-editor"
     }
-    fn closable(&self, _: &App) -> bool {
-        !self.dirty() && !self.busy && !self.execution.running()
+    fn closable(&self, cx: &App) -> bool {
+        !self.dirty(cx) && !self.busy && !self.execution.running()
     }
     fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
         if active {
@@ -362,8 +409,11 @@ impl BasePanel for GraphCanvas {
 }
 
 impl Panel for GraphCanvas {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
-        self.title_text()
+    fn tab_name(&self, cx: &App) -> Option<gpui_kit::SharedString> {
+        Some(self.title_text(cx).into())
+    }
+    fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui_kit::IntoElement {
+        self.title_text(cx)
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

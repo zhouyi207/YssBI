@@ -11,11 +11,11 @@ use gpui_kit::component::{
     tooltip::Tooltip,
 };
 use gpui_kit::{
-    App, Context, Entity, IntoElement, Pixels, Render, RenderOnce, Subscription, WeakEntity,
-    Window, div, prelude::*, px,
+    App, Context, Entity, IntoElement, Rems, Render, RenderOnce, Subscription, WeakEntity, Window,
+    div, prelude::*,
 };
 
-pub(super) const STATUS_BAR_HEIGHT: Pixels = px(28.);
+pub(super) const STATUS_BAR_HEIGHT: Rems = yss_ui::appearance::HEADER_HEIGHT;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum StatusColumn {
@@ -94,7 +94,7 @@ impl GraphStatistics {
 
 impl Render for GraphStatistics {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Dock remains the active-editor owner; never retain a second selection or viewport.
+        // Resolve shell routing through live Dock visibility; never retain selection or viewport.
         self.owner
             .upgrade()
             .and_then(|owner| owner.read(cx).status_graph(cx))
@@ -255,6 +255,7 @@ impl Workbench {
             .ghost()
             .icon(Icon::new(gpui_kit::assets::IconName::MessageSquareText).size_3())
             .tooltip(crate::text::translate(label))
+            .accessibility_label(crate::text::translate(label))
             .selected(open)
             .disabled(
                 self.project.is_none()
@@ -280,6 +281,7 @@ impl Workbench {
             .compact()
             .ghost()
             .icon(Icon::new(icon).size_3())
+            .accessibility_label(tooltip.clone())
             .tooltip(tooltip)
             .selected(
                 self.project.is_some()
@@ -306,6 +308,7 @@ impl Workbench {
             .compact()
             .ghost()
             .icon(Icon::new(icon).size_3())
+            .accessibility_label(tooltip.clone())
             .tooltip(tooltip)
             .selected(
                 self.project.is_some()
@@ -347,9 +350,9 @@ fn observe_graph_commands<T: 'static>(
     canvas: &Entity<GraphCanvas>,
     cx: &mut Context<T>,
 ) -> Subscription {
-    let mut status = graph_command_status(canvas.read(cx));
+    let mut status = graph_command_status(canvas.read(cx), cx);
     cx.observe(canvas, move |_, canvas, cx| {
-        let next = graph_command_status(canvas.read(cx));
+        let next = graph_command_status(canvas.read(cx), cx);
         // Viewport and counts belong to GraphStatistics, not workbench chrome.
         if next != status {
             status = next;
@@ -358,13 +361,13 @@ fn observe_graph_commands<T: 'static>(
     })
 }
 
-fn graph_command_status(canvas: &GraphCanvas) -> (bool, bool, bool, bool) {
-    let editing = canvas.graph().editing();
+fn graph_command_status(canvas: &GraphCanvas, cx: &App) -> (bool, bool, [bool; 6]) {
+    use crate::canvas::GraphEditCommand::*;
     (
         canvas.busy(),
-        canvas.dirty(),
-        editing.can_undo,
-        editing.can_redo,
+        canvas.dirty(cx),
+        [Undo, Redo, Cut, Copy, Paste, Delete]
+            .map(|command| canvas.is_edit_command_enabled(command)),
     )
 }
 
@@ -476,7 +479,7 @@ fn status_item(
 mod tests {
     use super::*;
     use gpui_kit::test::TestWindowExt;
-    use gpui_kit::{AppContext, TestAppContext, WindowOptions};
+    use gpui_kit::{AppContext, InputEvent as _, TestAppContext, WindowOptions};
     use std::{cell::Cell, rc::Rc, sync::Arc};
     use yss_application::{graph::open::OpenGraphRequest, session::ApplicationState};
     use yss_graph_document::{
@@ -495,8 +498,15 @@ mod tests {
     impl Render for Readout {
         fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             div()
-                .h(STATUS_BAR_HEIGHT)
-                .child(GraphStatus::read(self.canvas.read(cx)).render())
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(self.canvas.clone())
+                .child(
+                    div()
+                        .h(STATUS_BAR_HEIGHT)
+                        .child(GraphStatus::read(self.canvas.read(cx)).render()),
+                )
         }
     }
 
@@ -581,6 +591,7 @@ mod tests {
             .unwrap()
         });
         let canvas = cx.update(|cx| readout.read(cx).canvas.clone());
+        let initial = cx.update(|cx| GraphStatus::read(canvas.read(cx)));
         // Exercise the exact subscription used by Workbench, independently of the readout.
         let commands = cx.update(|cx| {
             cx.new(|cx| CommandChrome {
@@ -595,22 +606,50 @@ mod tests {
             window.render_frame(cx);
             assert_eq!(window.find("status-graph-nodes").label(), Some("1"));
             assert_eq!(window.find("status-graph-connections").label(), Some("0"));
-            canvas.update(cx, |canvas, cx| {
-                assert!(canvas.focus_node(Some(&node.to_string()), window, cx));
-            });
+            let size = window.viewport_size();
+            let start = gpui_kit::point(size.width / 2., size.height / 2.);
+            let end = start + gpui_kit::point(gpui_kit::px(80.), gpui_kit::px(40.));
+            window.dispatch_event(
+                gpui_kit::MouseDownEvent {
+                    button: gpui_kit::MouseButton::Middle,
+                    position: start,
+                    ..Default::default()
+                }
+                .to_platform_input(),
+                cx,
+            );
+            window.render_frame(cx);
+            window.dispatch_event(
+                gpui_kit::MouseMoveEvent {
+                    position: end,
+                    pressed_button: Some(gpui_kit::MouseButton::Middle),
+                    ..Default::default()
+                }
+                .to_platform_input(),
+                cx,
+            );
+            window.render_frame(cx);
+            window.dispatch_event(
+                gpui_kit::MouseUpEvent {
+                    button: gpui_kit::MouseButton::Middle,
+                    position: end,
+                    ..Default::default()
+                }
+                .to_platform_input(),
+                cx,
+            );
         })
         .unwrap();
         assert_eq!(notifications.replace(0), 0);
         cx.update_window(window.into(), |_, window, cx| {
             window.render_frame(cx);
-            let status = GraphStatus::read(canvas.read(cx));
             assert_eq!(
                 window.find("status-graph-position").label(),
-                Some(format!("X {} Y {}", status.offset_x, status.offset_y).as_str()),
+                Some(format!("X {} Y {}", initial.offset_x + 80, initial.offset_y + 40).as_str()),
             );
             assert_eq!(
                 window.find("status-graph-zoom").label(),
-                Some(format!("{}%", status.zoom_percent).as_str()),
+                Some(format!("{}%", initial.zoom_percent).as_str()),
             );
             canvas.update(cx, |canvas, cx| assert!(canvas.prepare_save(cx).is_some()));
         })

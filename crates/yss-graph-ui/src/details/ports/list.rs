@@ -1,4 +1,4 @@
-//! Input and output groups mirror the reference panel's initially collapsed sections.
+//! Input and output groups keep disclosure state with the inspector owner.
 use super::*;
 use yss_graph_editor::projection::EditorNodeModel;
 use yss_node_protocol::PortDirection;

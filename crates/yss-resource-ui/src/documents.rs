@@ -252,12 +252,18 @@ impl BasePanel for DocumentEditor {
     }
 }
 impl Panel for DocumentEditor {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
-        format!(
-            "{}{}",
-            self.snapshot.path.name(),
-            if self.dirty() { " *" } else { "" }
+    fn tab_name(&self, _: &App) -> Option<gpui_kit::SharedString> {
+        Some(
+            format!(
+                "{}{}",
+                self.snapshot.path.name(),
+                if self.dirty() { " *" } else { "" }
+            )
+            .into(),
         )
+    }
+    fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui_kit::IntoElement {
+        self.tab_name(cx).unwrap_or_default()
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

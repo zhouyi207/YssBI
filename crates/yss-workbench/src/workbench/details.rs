@@ -306,6 +306,9 @@ impl BasePanel for DetailsPanel {
     }
 }
 impl Panel for DetailsPanel {
+    fn tab_name(&self, _: &App) -> Option<gpui_kit::SharedString> {
+        Some(yss_ui::text::t("native.workbench.properties").into())
+    }
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()

@@ -117,6 +117,7 @@ impl Workbench {
         self.subscriptions
             .push(cx.subscribe(&document, |view, document, event, cx| {
                 if matches!(event, DocumentEvent::Activated) {
+                    view.active_editor = Some(document.entity_id().into());
                     view.details.update(cx, |details, cx| {
                         details.set_document(document.downgrade(), cx)
                     });

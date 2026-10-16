@@ -23,7 +23,7 @@ pub(super) fn render(
     };
     let label = location::label(&diagnostic.location, projection, None)
         .unwrap_or_else(|| projection.graph_path.to_string());
-    let message = crate::feedback::graph_diagnostic(diagnostic);
+    let message = crate::feedback::diagnostic_description(diagnostic, projection, None);
     let source = projection.clone();
     div()
         .id(("problem-row", index))

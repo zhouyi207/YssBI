@@ -6,11 +6,13 @@ Graphs describe how data moves between analysis nodes. Edit an Event graph to bu
 
 1. Open a project and import the data you need. Work on a project copy when experimenting.
 2. Create an Event graph from the File menu, or open an existing graph from the project sidebar.
-3. Add nodes from the Nodes directory or the canvas menu. Search by a node's name or technical term. Unavailable nodes remain disabled in the desktop catalog.
-4. Select a node to configure it in Details. Apply fields with their explicit controls; leaving a parameter field does not implicitly apply it. Some supported scalar inputs can also be entered directly on ports.
+3. Add nodes from the Nodes directory, the canvas menu, or **Add node** on an empty graph. With the canvas focused, Ctrl+Space (Cmd+Space on macOS) opens node search; Escape dismisses it and restores canvas focus. Search by a node's name or technical term. Unavailable nodes remain disabled in the desktop catalog.
+4. Select a node to configure it in Details. Apply a field explicitly, or leave it pending for Save or Run to validate and apply. Leaving a parameter field does not implicitly apply it; switching nodes or graph tabs preserves its draft. Some supported scalar inputs can also be entered directly on ports.
 5. Drag between compatible ports to connect nodes. Check Problems for missing resources, invalid parameters, incompatible types, or unresolved ports.
 
 Input ports are on the left and output ports on the right. Pan with the right or middle mouse button, zoom around the pointer, press Home to fit the graph, and press F to locate the selected nodes. Use Undo/Redo for graph edits.
+
+Details places a diagnostic summary and editable parameters before the full problem list. Expand Documentation for node help and Technical details for identities or a complete diagnostic report. Narrow windows temporarily collapse sidebars to preserve editing space; reopen them from the status bar. Widening the window restores automatically collapsed sidebars without replacing your saved layout.
 
 Function graphs define reusable computations and signatures. They are not standalone Event graphs: use them through the relevant calling nodes rather than expecting the full-graph run control to execute a Function graph directly.
 
@@ -30,11 +32,13 @@ A node appearing in the catalog does not guarantee that your configured instance
 
 ## Save and execute separately
 
-Ordinary graph edits update the project's current in-memory graph. **Save writes the graph body; Execute computes results. Neither is a substitute for the other.** Undo and redo restore graph edits, not discarded execution results.
+Ordinary graph edits update the project's current in-memory graph. **Save writes the graph body; Execute computes results. Neither is a substitute for the other.** Saving preserves undo and redo. Undo and redo restore graph edits, not discarded execution results.
 
 Use the graph toolbar for full-graph execution. Local execution supports a single node using current inputs, or computing its dependencies first. The latter is useful when upstream values are missing. Local readiness is checked for the requested dependency scope; an unrelated unfinished branch need not block it.
 
-The run controls apply pending port input before preparing execution. A blocked or busy run control explains why execution is unavailable. Use Cancel to request cancellation, then inspect the reported terminal state rather than assuming that clicking it immediately stopped every operation.
+Save and Run first validate pending parameter and port inputs, then commit them together as one undoable edit. Invalid input blocks the operation and remains available for correction. If the underlying field changed, review the conflict and use its restore control to adopt the current value before editing again. Pending input counts as unsaved work for closing protection.
+
+A blocked or busy run control explains why execution is unavailable. Use Cancel to request cancellation, then inspect the reported terminal state rather than assuming that clicking it immediately stopped every operation.
 
 Editing relevant inputs discards affected results. Once a run is admitted, outputs being recomputed and their dependent results are removed; failure or cancellation does not restore previous values. Unaffected valid inputs remain available for local execution. Inspecting an existing output does not run its node automatically.
 

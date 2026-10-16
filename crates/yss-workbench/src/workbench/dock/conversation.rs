@@ -73,6 +73,7 @@ pub(super) fn render(
                 .ghost()
                 .icon(IconName::Plus)
                 .tooltip(crate::text::t("native.workbench.newConversation"))
+                .accessibility_label(crate::text::t("native.workbench.newConversation"))
                 .disabled(busy)
                 .on_click({
                     let workbench = workbench.clone();
@@ -94,6 +95,11 @@ pub(super) fn render(
                 })
                 .selected(group.is_zoomed())
                 .disabled(locked)
+                .accessibility_label(if group.is_zoomed() {
+                    crate::text::t("native.workbench.restoreLayout")
+                } else {
+                    crate::text::t("native.workbench.expandConversation")
+                })
                 .tooltip(if group.is_zoomed() {
                     crate::text::t("native.workbench.restoreLayout")
                 } else {
@@ -120,6 +126,7 @@ fn options(
         .ghost()
         .icon(IconName::Ellipsis)
         .tooltip(crate::text::t("native.workbench.conversationOptions"))
+        .accessibility_label(crate::text::t("native.workbench.conversationOptions"))
         .dropdown_menu(move |menu, _, cx| {
             let id = panel.read(cx).session_id().to_string();
             let title = panel

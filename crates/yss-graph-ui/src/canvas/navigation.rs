@@ -1,5 +1,5 @@
 //! Graph and diagnostic navigation change only canvas selection and viewport state.
-use super::{GraphCanvas, geometry};
+use super::GraphCanvas;
 use gpui_kit::{Bounds, Context, Window, point, px};
 use std::collections::BTreeSet;
 use yss_graph_document::{ConnectionId, NodeId, PortAddress};
@@ -113,8 +113,9 @@ impl GraphCanvas {
             .projection
             .nodes
             .iter()
-            .filter(|node| ids.is_none_or(|ids| ids.contains(&node.node_id)))
-            .map(|node| geometry::node_bounds(node, node.position))
+            .zip(self.connection_layer.borrow().nodes())
+            .filter(|(node, _)| ids.is_none_or(|ids| ids.contains(&node.node_id)))
+            .map(|(node, geometry)| geometry.layout.bounds(node.position))
             .reduce(|a, b| {
                 Bounds::from_corners(
                     point(a.left().min(b.left()), a.top().min(b.top())),
