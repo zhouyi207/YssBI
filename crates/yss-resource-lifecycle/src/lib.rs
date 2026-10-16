@@ -227,22 +227,6 @@ impl ResourceLifecycleRegistry {
         self.boundary().validate(owner)
     }
 
-    pub fn clear_for_project(&self, project_instance_id: &ProjectInstanceId) {
-        let mut state = self.lock_state();
-        state
-            .owners
-            .retain(|key, _| &key.project_instance_id != project_instance_id);
-        state
-            .client_tokens
-            .retain(|key, _| &key.project_instance_id != project_instance_id);
-        state
-            .issued_internal_tokens
-            .retain(|key, _| &key.project_instance_id != project_instance_id);
-        state.registrations.retain(|_, registration| {
-            &registration.owner.project_instance_id != project_instance_id
-        });
-    }
-
     pub fn boundary(&self) -> ResourceLifecycleBoundary<'_> {
         self.boundary_recovering().0
     }
@@ -561,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn clearing_project_removes_graph_and_chart_lifecycle_ownership() {
+    fn retirement_removes_graph_and_chart_lifecycle_ownership() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = project("clear-shared-lifecycle");
         let graph = super::LifecycleResourcePath::Graph(
@@ -577,7 +561,7 @@ mod tests {
             .register(&session, &chart, 1, super::ResourceLifecycleIntent::Rename)
             .unwrap();
 
-        registry.clear_for_project(&session);
+        drop(registry.boundary_recovering().0.take_state());
 
         assert_eq!(registry.entry_count(), 0);
         assert_stale(registry.validate(graph_guard.owner()).unwrap_err());
@@ -786,7 +770,7 @@ mod tests {
     }
 
     #[test]
-    fn clearing_project_resets_client_and_internal_token_watermarks() {
+    fn retirement_resets_client_and_internal_token_watermarks() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = project("clear-token-watermark-domains");
         let graph_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
@@ -806,7 +790,7 @@ mod tests {
         drop(client);
         drop(internal);
 
-        registry.clear_for_project(&session);
+        drop(registry.boundary_recovering().0.take_state());
 
         let reset_internal = registry
             .allocate_and_register(&session, &graph_path, super::ResourceLifecycleIntent::Load)
@@ -957,7 +941,7 @@ mod tests {
             .map(|guard| guard.owner().clone())
             .collect::<Vec<_>>();
 
-        registry.clear_for_project(&old);
+        drop(registry.boundary_recovering().0.take_state());
         let replacement_guards = paths
             .iter()
             .zip(intents)

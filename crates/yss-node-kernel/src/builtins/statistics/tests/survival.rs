@@ -98,7 +98,7 @@ fn survival_predictions_from_mixed_inputs_retain_pairing_for_evaluation() {
                     control: &control,
                 },
             )
-            .unwrap();
+            .unwrap_or_else(|error| panic!("{method}: {error:?}"));
         let RuntimeValue::Relation(predictions) = &result[1] else {
             panic!("predictions must retain a relation")
         };

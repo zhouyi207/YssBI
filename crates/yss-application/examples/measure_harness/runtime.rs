@@ -117,9 +117,7 @@ impl HarnessEventSinkPort for Progress {
                         println!("Tool started: {tool}")
                     }
                     AgentEvent::ToolInvocationFailed {
-                        tool,
-                        failure_code,
-                        ..
+                        tool, failure_code, ..
                     } => println!("Tool failed: {tool} ({failure_code})"),
                     AgentEvent::RuntimeStatus { phase, attempt } => {
                         println!("Agent status: {phase:?} ({attempt})")

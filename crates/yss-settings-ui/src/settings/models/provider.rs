@@ -8,7 +8,10 @@ use gpui_kit::component::{
     searchable_list::{SearchableListItem, SearchableVec},
 };
 use gpui_kit::{AppContext, Context, Entity, SharedString, Window};
-use yss_harness_contract::{LanguageModelAuthentication, LanguageModelProtocol, LanguageModelProviderConfig, LanguageModelProviderStatus};
+use yss_harness_contract::{
+    LanguageModelAuthentication, LanguageModelProtocol, LanguageModelProviderConfig,
+    LanguageModelProviderStatus,
+};
 
 #[derive(Clone)]
 pub(in crate::settings) struct ProviderChoice {

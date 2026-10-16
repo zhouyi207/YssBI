@@ -197,13 +197,19 @@ async fn rejected_calls_keep_only_decoded_arguments_and_their_timing() {
         assert!(record.request.is_none());
         assert_eq!(record.arguments, retained);
         assert_eq!(record.effect, ToolEffect::Mutate);
-        assert_eq!(record.finished_at.unwrap().get() - record.started_at.get(), 37);
+        assert_eq!(
+            record.finished_at.unwrap().get() - record.started_at.get(),
+            37
+        );
     }
 
     let fixture = setup(NoteExtension::default());
     let failure = fixture
         .executor
-        .execute(call("unregistered", json!({"id": "a"})), fixture.executor.now())
+        .execute(
+            call("unregistered", json!({"id": "a"})),
+            fixture.executor.now(),
+        )
         .await
         .unwrap_err();
     assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);

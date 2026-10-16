@@ -1,6 +1,6 @@
 use super::*;
-use serde_json::json;
 use crate::contract::model::*;
+use serde_json::json;
 
 struct MindGateway(AtomicU64);
 
@@ -104,17 +104,17 @@ async fn mind_only_report_binds_topic_tools_replays_receipts_and_requires_a_fina
     let gateway = Arc::new(MindGateway(AtomicU64::new(7)));
     let store = Arc::new(InMemoryHarnessStore::default());
     let task_scope = AgentTaskScope {
-            creations: vec![AgentCreationAccess {
-                specification: ResourceCreation::Mind {
-                    name: "Plan".into(),
-                },
-                operations: vec![
-                    AgentResourceOperation::Inspect,
-                    AgentResourceOperation::Edit,
-                    AgentResourceOperation::Save,
-                ],
-            }],
-            ..Default::default()
+        creations: vec![AgentCreationAccess {
+            specification: ResourceCreation::Mind {
+                name: "Plan".into(),
+            },
+            operations: vec![
+                AgentResourceOperation::Inspect,
+                AgentResourceOperation::Edit,
+                AgentResourceOperation::Save,
+            ],
+        }],
+        ..Default::default()
     };
     let scope = AgentInvocationScope {
         run_id: AgentRunId::try_new("report-mind").unwrap(),
@@ -130,8 +130,8 @@ async fn mind_only_report_binds_topic_tools_replays_receipts_and_requires_a_fina
     );
     assert!(run.state().evidence.lock().unwrap().delivery_pending());
     run.execute(CapabilityInput::CreateResource(CreateResourceInput::Mind {
-            name: "Plan".into(),
-        }))
+        name: "Plan".into(),
+    }))
     .await
     .unwrap();
     assert!(run.state().evidence.lock().unwrap().delivery_pending());
@@ -148,10 +148,7 @@ async fn mind_only_report_binds_topic_tools_replays_receipts_and_requires_a_fina
     ];
     let mut replay = ResourceObservations::default();
     for input in &inputs {
-        let outcome = run
-            .execute(input.clone())
-            .await
-            .unwrap();
+        let outcome = run.execute(input.clone()).await.unwrap();
         let record = store
             .load_invocation(
                 &HarnessSessionId::try_new("session").unwrap(),
@@ -161,7 +158,10 @@ async fn mind_only_report_binds_topic_tools_replays_receipts_and_requires_a_fina
             .unwrap()
             .unwrap();
         assert_eq!(record.tool, input.capability_id().as_str());
-        assert_eq!(record.arguments, serde_json::to_value(&input).unwrap()["payload"]);
+        assert_eq!(
+            record.arguments,
+            serde_json::to_value(input).unwrap()["payload"]
+        );
         assert_eq!(record.state, ToolInvocationState::Succeeded);
         let visible = model::capability_result(&outcome.result)
             .unwrap()
@@ -181,9 +181,7 @@ async fn mind_only_report_binds_topic_tools_replays_receipts_and_requires_a_fina
     let save = CapabilityInput::SaveResource(ResourceTargetInput {
         resource: mind_resource(),
     });
-    run.execute(save)
-        .await
-        .unwrap();
+    run.execute(save).await.unwrap();
     assert!(!run.state().evidence.lock().unwrap().delivery_pending());
     let finish = run.hooks.finish();
     assert!(finish.blocked_reason.is_none());
@@ -194,25 +192,36 @@ async fn mind_only_report_binds_topic_tools_replays_receipts_and_requires_a_fina
             .iter()
             .all(|artifact| artifact.resource.kind == ProjectResourceKind::Mind)
     );
-    run.execute(inputs[4].clone())
-    .await
-    .unwrap();
+    run.execute(inputs[4].clone()).await.unwrap();
     assert!(run.state().evidence.lock().unwrap().delivery_pending());
-    let before = run.state().scope.lock().unwrap().task.as_ref().unwrap().resources[0]
+    let before = run
+        .state()
+        .scope
+        .lock()
+        .unwrap()
+        .task
+        .as_ref()
+        .unwrap()
+        .resources[0]
         .version
         .clone();
     gateway.0.fetch_add(1, Ordering::AcqRel);
     for input in [inputs[0].clone(), inputs[4].clone()] {
         assert_eq!(
-            run.execute(input)
-                .await
-                .unwrap_err()
-                .code,
+            run.execute(input).await.unwrap_err().code,
             CapabilityFailureCode::REVISION_CONFLICT
         );
     }
     assert_eq!(
-        run.state().scope.lock().unwrap().task.as_ref().unwrap().resources[0].version,
+        run.state()
+            .scope
+            .lock()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .resources[0]
+            .version,
         before
     );
     let mut unauthorized = run.state().scope.lock().unwrap().clone();

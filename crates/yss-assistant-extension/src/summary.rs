@@ -55,7 +55,6 @@ fn project_graph(value: &mut Value) {
     ));
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

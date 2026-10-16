@@ -4,6 +4,7 @@ use crate::graph::results::{
 };
 use crate::{ApplicationState, session::ApplicationSession};
 use std::{collections::BTreeSet, sync::Arc};
+use yss_assistant_contract::*;
 use yss_data_contract::TabularScalar;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_execution::{
@@ -11,7 +12,6 @@ use yss_graph_execution::{
     result::{ResultId, ResultReadSnapshot, ResultReference, StoredResultSnapshot},
     run_registry::RunId,
 };
-use yss_assistant_contract::*;
 use yss_harness_contract::*;
 use yss_node_kernel::RuntimeValue;
 

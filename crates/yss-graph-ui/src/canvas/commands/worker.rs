@@ -26,22 +26,34 @@ pub struct GraphCommandOutcome {
     pub(super) error: Option<anyhow::Error>,
 }
 
-pub struct GraphCommandRequest {
+pub(super) struct GraphCommandRequest {
     pub(super) request: GraphEditRequest,
     pub(super) inputs: Vec<PortEdit>,
     pub(super) parameters: Vec<ParameterEdit>,
-    pub(super) command: GraphCommand,
+}
+
+/// A save carries captured drafts, not the payload of an unrelated edit command.
+pub struct GraphSaveRequest(pub(super) GraphCommandRequest);
+
+impl GraphSaveRequest {
+    pub fn commit(self, application: &ApplicationState) -> GraphCommandOutcome {
+        self.0.commit(application, GraphCommand::Save)
+    }
 }
 
 impl GraphCommandRequest {
-    pub fn commit(self, application: &ApplicationState) -> GraphCommandOutcome {
+    pub(super) fn commit(
+        self,
+        application: &ApplicationState,
+        command: GraphCommand,
+    ) -> GraphCommandOutcome {
         let mut outcome = GraphCommandOutcome {
             inputs: self.inputs,
             parameters: self.parameters,
             language: self.request.locale.clone(),
             ..Default::default()
         };
-        if let Err(error) = apply(application, self.request, self.command, &mut outcome) {
+        if let Err(error) = apply(application, self.request, command, &mut outcome) {
             outcome.error = Some(error);
         }
         outcome

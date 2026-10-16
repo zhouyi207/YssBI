@@ -59,7 +59,9 @@ impl StoreSlot {
     }
 
     pub fn get(&self) -> &InMemoryHarnessStore {
-        self.0.get().expect("test store is set before the first turn")
+        self.0
+            .get()
+            .expect("test store is set before the first turn")
     }
 }
 
@@ -107,7 +109,11 @@ impl Tools<'_> {
         Err(record.failure.unwrap())
     }
 
-    async fn control(&self, name: &str, arguments: Value) -> Result<TaskOutcome, CapabilityFailure> {
+    async fn control(
+        &self,
+        name: &str,
+        arguments: Value,
+    ) -> Result<TaskOutcome, CapabilityFailure> {
         let outcome = self
             .executor
             .call(ToolCall {

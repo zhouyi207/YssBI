@@ -245,9 +245,6 @@ fn data_port(
             literal_policy: LiteralPolicy::Forbidden,
             default_value: None,
         }),
-        consumption: None,
-        production: (direction == PortDirection::Output)
-            .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
     })

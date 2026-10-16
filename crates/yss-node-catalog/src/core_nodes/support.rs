@@ -135,10 +135,6 @@ pub(crate) fn data_port_with_cardinality(
             literal_policy: LiteralPolicy::Allowed,
             default_value: None,
         }),
-        consumption: (direction == PortDirection::Input)
-            .then_some(InputConsumption::FullyMaterialized),
-        production: (direction == PortDirection::Output)
-            .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
     })

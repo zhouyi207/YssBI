@@ -10,12 +10,6 @@ pub struct LogCollection {
 }
 
 impl LogCollection {
-    pub fn initialize(
-        directory: Option<PathBuf>,
-    ) -> Result<Self, LogCollectionInitializationError> {
-        Self::initialize_with_retention(directory, LogRetentionPolicy::default())
-    }
-
     /// Applies retention before history becomes available to the host.
     pub fn initialize_with_retention(
         directory: Option<PathBuf>,

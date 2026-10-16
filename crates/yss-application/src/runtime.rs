@@ -59,8 +59,7 @@ impl ApplicationServices {
         )
         .await
         .map_err(|error| ApplicationStartupError::ProjectRegistry(Box::new(error)))?;
-        let registry_path = store.path().to_path_buf();
-        let projects = ProjectManagement::new(Arc::new(store), registry_path);
+        let projects = ProjectManagement::new(Arc::new(store));
         let plugins = PluginManager::initialize(
             &paths.app_data_dir,
             Arc::new(PluginHostServices::new(application.clone())),
@@ -79,8 +78,8 @@ impl ApplicationServices {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_harness_contract::{PrincipalId, ProjectSessionBinding};
     use yss_assistant_extension::test_support::RejectingCapabilityGateway;
+    use yss_harness_contract::{PrincipalId, ProjectSessionBinding};
     use yss_harness_core::test_support::InMemoryHarnessStore;
 
     struct TestDirectory(PathBuf);
@@ -184,7 +183,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(services.projects.path().is_file());
+        assert!(directory.0.join("db").join("projects.sqlite").is_file());
         assert!(services.projects.list_projects().await.unwrap().is_empty());
         assert!(services.plugins.list().unwrap().is_empty());
         assert!(services.harness.models.catalog().await.is_err());

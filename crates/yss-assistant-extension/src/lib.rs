@@ -114,7 +114,9 @@ impl Shared {
 }
 
 /// Encode an owner receipt and publish its domain execution status.
-pub(crate) fn execution(result: AutomationCapabilityResult) -> Result<ToolExecution, CapabilityFailure> {
+pub(crate) fn execution(
+    result: AutomationCapabilityResult,
+) -> Result<ToolExecution, CapabilityFailure> {
     let mut notices = Vec::new();
     if let AutomationCapabilityResult::GraphExecution(execution) = &result {
         notices.push(AgentNotice {
@@ -183,21 +185,12 @@ impl HarnessExtension for AssistantExtension {
         }
         Some(AgentProfile {
             role: role.id(),
-            name: role.name().to_owned(),
             instructions,
             tools: tools::role_specs(definition),
             tool_concurrency: definition.tool_concurrency(),
             delegates: definition.delegates(),
             output_mode: definition.output_mode(),
         })
-    }
-
-    fn worker_roles(&self) -> Vec<AgentRoleId> {
-        AgentRole::ALL
-            .into_iter()
-            .filter(|role| *role != AgentRole::Manager)
-            .map(AgentRole::id)
-            .collect()
     }
 
     fn mode_instructions(&self, mode: HarnessMode) -> Option<String> {
@@ -222,7 +215,8 @@ impl HarnessExtension for AssistantExtension {
     }
 
     fn validate_task(&self, task: &AgentTask) -> Result<(), CapabilityFailure> {
-        let role = AgentRole::from_id(&task.worker).ok_or_else(|| rejected("invalid field 'task'"))?;
+        let role =
+            AgentRole::from_id(&task.worker).ok_or_else(|| rejected("invalid field 'task'"))?;
         Self::decode_scope(&task.scope)?
             .validate(role)
             .map_err(|error| rejected(&error.to_string()))
@@ -329,8 +323,10 @@ impl HarnessExtension for AssistantExtension {
         })?;
         let capability = request.capability_id();
         if capability.as_str() != tool {
-            return Err(CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
-                .with_detail("capabilityId", tool));
+            return Err(
+                CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
+                    .with_detail("capabilityId", tool),
+            );
         }
         request
             .validate()

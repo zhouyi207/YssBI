@@ -118,8 +118,15 @@ async fn identical_delegations_run_once_and_return_receipt_facts() {
         .find(|request| request.role.as_str() == "helper")
         .unwrap();
     assert!(helper.tools.iter().any(|tool| tool.name == WRITE_NOTE));
-    assert!(!helper.tools.iter().any(|tool| tool.name == DELEGATE_TASK_TOOL));
-    assert!(matches!(&helper.messages[1], AgentMessage::System { content } if content.starts_with("Return a concise final message")));
+    assert!(
+        !helper
+            .tools
+            .iter()
+            .any(|tool| tool.name == DELEGATE_TASK_TOOL)
+    );
+    assert!(
+        matches!(&helper.messages[1], AgentMessage::System { content } if content.starts_with("Return a concise final message"))
+    );
 }
 
 #[tokio::test]
@@ -133,7 +140,10 @@ async fn writes_invalidate_completed_readers_and_their_dependents() {
                     ScriptedStep::Call(DELEGATE_TASK_TOOL, task("helper", &["a"], true)),
                 ],
             )
-            .script("reader", vec![ScriptedStep::Call(READ_NOTE, json!({"id": "a"}))])
+            .script(
+                "reader",
+                vec![ScriptedStep::Call(READ_NOTE, json!({"id": "a"}))],
+            )
             .script(
                 "helper",
                 vec![ScriptedStep::Call(
@@ -175,7 +185,10 @@ async fn dependencies_must_be_completed_in_the_turn() {
     .await;
     let output = &outcomes(&driver, DELEGATE_TASK_TOOL)[0];
     assert_eq!(output["state"], "failed");
-    assert_eq!(output["failure"]["details"]["reason"], "dependency_not_completed");
+    assert_eq!(
+        output["failure"]["details"]["reason"],
+        "dependency_not_completed"
+    );
 }
 
 #[tokio::test]
@@ -209,7 +222,10 @@ async fn ask_mode_rejects_write_tasks_and_filters_mutating_tools() {
     )
     .await;
     let delegations = outcomes(&driver, DELEGATE_TASK_TOOL);
-    assert_eq!(delegations[0]["failure"]["details"]["reason"], "ask_mode_read_only");
+    assert_eq!(
+        delegations[0]["failure"]["details"]["reason"],
+        "ask_mode_read_only"
+    );
     assert_eq!(delegations[1]["state"], "completed");
     let requests = driver.requests();
     let helper = requests
@@ -217,7 +233,9 @@ async fn ask_mode_rejects_write_tasks_and_filters_mutating_tools() {
         .find(|request| request.role.as_str() == "helper")
         .unwrap();
     assert!(!helper.tools.iter().any(|tool| tool.name == WRITE_NOTE));
-    assert!(matches!(&helper.messages[0], AgentMessage::System { content } if content == "Ask mode."));
+    assert!(
+        matches!(&helper.messages[0], AgentMessage::System { content } if content == "Ask mode.")
+    );
     let rejected = outcomes(&driver, WRITE_NOTE);
     assert_eq!(rejected[0]["state"], "failed");
     assert_eq!(extension.executions(), 0);
@@ -252,7 +270,10 @@ async fn workers_cannot_delegate_and_out_of_scope_calls_keep_only_decoded_argume
     )
     .await;
     let nested = &outcomes(&driver, DELEGATE_TASK_TOOL)[0];
-    assert_eq!(nested["failure"]["details"]["reason"], "workers_cannot_delegate");
+    assert_eq!(
+        nested["failure"]["details"]["reason"],
+        "workers_cannot_delegate"
+    );
     let writes = outcomes(&driver, WRITE_NOTE);
     assert_eq!(writes[0]["failure"]["details"]["reason"], "scope_denied");
     assert_eq!(writes[1]["state"], "failed");
@@ -293,7 +314,9 @@ async fn idempotent_calls_reuse_receipts_and_recover_unknown_outcomes() {
             ),
     );
     let extension = NoteExtension::default().with_note("a", "alpha");
-    extension.fail_next(CapabilityFailure::new(CapabilityFailureCode::OUTCOME_UNKNOWN));
+    extension.fail_next(CapabilityFailure::new(
+        CapabilityFailureCode::OUTCOME_UNKNOWN,
+    ));
     extension.recover_with(ToolRecovery::Committed(json!({"id": "a", "revision": 7})));
     run(
         extension.clone(),
@@ -382,9 +405,15 @@ async fn followup_resumes_the_same_worker_with_its_history_and_receipts() {
         .nth(1)
         .unwrap();
     assert!(resumed.messages.iter().any(|message| matches!(message, AgentMessage::ToolCall { tool, arguments, .. } if tool == WRITE_NOTE && arguments["text"] == "draft")));
-    assert!(resumed.messages.iter().any(|message| matches!(message, AgentMessage::Assistant { content } if content == "Started.")));
-    assert!(resumed.messages.iter().any(|message| matches!(message, AgentMessage::User { content } if content == "Finish the note")));
-    assert!(matches!(resumed.messages.last(), Some(AgentMessage::User { content }) if content.contains("\"task\"")));
+    assert!(resumed.messages.iter().any(
+        |message| matches!(message, AgentMessage::Assistant { content } if content == "Started.")
+    ));
+    assert!(resumed.messages.iter().any(
+        |message| matches!(message, AgentMessage::User { content } if content == "Finish the note")
+    ));
+    assert!(
+        matches!(resumed.messages.last(), Some(AgentMessage::User { content }) if content.contains("\"task\""))
+    );
     let lead = requests
         .iter()
         .filter(|request| request.role.as_str() == "lead")
@@ -399,13 +428,7 @@ async fn followup_resumes_the_same_worker_with_its_history_and_receipts() {
 async fn startup_recovery_finishes_unsettled_runs_from_their_receipts() {
     let driver = Arc::new(ScriptedDriver::default());
     let extension = NoteExtension::default().with_note("a", "alpha");
-    let (host, store, session) = run(
-        extension.clone(),
-        driver,
-        &[],
-        Default::default(),
-    )
-    .await;
+    let (host, store, session) = run(extension.clone(), driver, &[], Default::default()).await;
     let turn = HarnessTurnRecord {
         id: HarnessTurnId::try_new("turn-interrupted").unwrap(),
         session_id: session.id.clone(),
@@ -448,7 +471,12 @@ async fn startup_recovery_finishes_unsettled_runs_from_their_receipts() {
         },
     ] {
         store
-            .append_event(&session.id, Some(&turn.id), UnixMillis::from_existing(100), event)
+            .append_event(
+                &session.id,
+                Some(&turn.id),
+                UnixMillis::from_existing(100),
+                event,
+            )
             .await
             .unwrap();
     }
@@ -484,7 +512,10 @@ async fn startup_recovery_finishes_unsettled_runs_from_their_receipts() {
     assert_eq!(worker.state, AgentRunState::Interrupted);
     assert_eq!(worker.facts, json!({"changed": ["a"]}));
     assert_eq!(worker.evidence.len(), 1);
-    assert_eq!(worker.report.as_ref().unwrap().blocked_reason.as_deref(), Some("interrupted"));
+    assert_eq!(
+        worker.report.as_ref().unwrap().blocked_reason.as_deref(),
+        Some("interrupted")
+    );
     let root = outcomes
         .iter()
         .find(|outcome| outcome.run_id.as_str() == "agent-root")
@@ -520,9 +551,10 @@ async fn control_calls_close_after_decode_and_admission_failures() {
     let mut finishes = Vec::new();
     for event in store.published_events() {
         match event.event {
-            HarnessEvent::Agent(AgentEvent::ControlToolStarted { invocation_id, tool }) => {
-                started.push((invocation_id, tool))
-            }
+            HarnessEvent::Agent(AgentEvent::ControlToolStarted {
+                invocation_id,
+                tool,
+            }) => started.push((invocation_id, tool)),
             HarnessEvent::Agent(AgentEvent::ControlToolFinished {
                 invocation_id,
                 tool,

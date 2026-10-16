@@ -1,5 +1,5 @@
-use crate::contract::*;
 use crate::contract::model::CapabilityInput;
+use crate::contract::*;
 use crate::tools::decode_input as decode_request;
 use serde_json::{Value, json};
 
@@ -11,7 +11,10 @@ fn extension() -> crate::AssistantExtension {
 }
 
 /// The single live and replayed model projection of a recorded result.
-fn tool_result_json(tool: &str, outcome: Result<AutomationCapabilityResult, CapabilityFailure>) -> Value {
+fn tool_result_json(
+    tool: &str,
+    outcome: Result<AutomationCapabilityResult, CapabilityFailure>,
+) -> Value {
     let extension = extension();
     match outcome {
         Ok(result) => extension
@@ -107,8 +110,7 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
         ),
     ] {
         let schema =
-            serde_json::to_value(crate::contract::capability_input_schema(capability))
-                .unwrap();
+            serde_json::to_value(crate::contract::capability_input_schema(capability)).unwrap();
         let decode = |arguments| match capability {
             CapabilityId::SearchKnowledge => {
                 decode_arguments::<SearchKnowledgeRequest>(arguments, &schema)
@@ -187,9 +189,7 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
     .unwrap();
     assert!(matches!(
         request,
-        CapabilityInput::CreateResource(
-            crate::contract::model::CreateResourceInput::Doc { .. }
-        )
+        CapabilityInput::CreateResource(crate::contract::model::CreateResourceInput::Doc { .. })
     ));
 
     let schema = serde_json::to_value(crate::contract::capability_input_schema(
@@ -476,9 +476,11 @@ created_constants: Default::default(),
     }
     let failure = tool_result_json(
         "apply_graph_edit",
-        Err(CapabilityFailure::new(CapabilityFailureCode::REVISION_CONFLICT)
-            .with_detail("expectedRevision", "21")
-            .with_detail("actualRevision", "23")),
+        Err(
+            CapabilityFailure::new(CapabilityFailureCode::REVISION_CONFLICT)
+                .with_detail("expectedRevision", "21")
+                .with_detail("actualRevision", "23"),
+        ),
     );
     assert!(
         failure["failure"]["details"]

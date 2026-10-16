@@ -133,7 +133,7 @@ impl Fixture {
             _directory: directory,
             _runtime: runtime,
             application,
-            window: window.into(),
+            window,
             graphs,
             details,
             nodes,

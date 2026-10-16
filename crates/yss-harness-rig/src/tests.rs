@@ -147,7 +147,12 @@ pub(crate) fn schema_tool() -> ToolSpec {
 }
 
 pub(crate) fn tool(name: &str, schema: Value) -> ToolSpec {
-    ToolSpec::new(name, format!("Fixture {name}."), schema, ToolEffect::Inspect)
+    ToolSpec::new(
+        name,
+        format!("Fixture {name}."),
+        schema,
+        ToolEffect::Inspect,
+    )
 }
 
 fn plan_tool() -> ToolSpec {
@@ -189,7 +194,10 @@ fn fatal(code: AgentDriverFailureCode) -> ToolCallOutcome {
 pub(crate) struct StaticExecutor;
 
 impl AgentToolExecutor for StaticExecutor {
-    fn call<'a>(&'a self, call: yss_harness_contract::ToolCall) -> AgentFuture<'a, ToolCallOutcome> {
+    fn call<'a>(
+        &'a self,
+        call: yss_harness_contract::ToolCall,
+    ) -> AgentFuture<'a, ToolCallOutcome> {
         Box::pin(async move {
             if call.name == SCHEMA_TOOL {
                 assert_eq!(call.arguments["database"]["id"], "database-1");
@@ -565,8 +573,7 @@ async fn parallel_history_groups_tool_and_delegation_results_before_continuing()
     let failure: Value =
         serde_json::from_str(wire[batch + 2]["content"].as_str().unwrap()).unwrap();
     assert_eq!(failure["failure"]["code"], "database_unavailable");
-    let review: Value =
-        serde_json::from_str(wire[batch + 3]["content"].as_str().unwrap()).unwrap();
+    let review: Value = serde_json::from_str(wire[batch + 3]["content"].as_str().unwrap()).unwrap();
     assert_eq!(review["report"]["summary"], "Reviewed");
     assert_eq!(review["artifacts"][0]["resource"]["id"], "docs/report.md");
     assert_eq!(wire[batch + 4]["role"], "assistant");
@@ -1606,9 +1613,10 @@ async fn native_provider_protocols_preserve_routes_auth_tools_and_streaming() {
                     _ => &tool["function"]["parameters"],
                 };
                 assert_eq!(parameters["type"], "object", "{protocol:?}: {tool}");
-                if let Some(spec) = specs.iter().find(|spec| {
-                    tool["name"] == spec.name || tool["function"]["name"] == spec.name
-                }) {
+                if let Some(spec) = specs
+                    .iter()
+                    .find(|spec| tool["name"] == spec.name || tool["function"]["name"] == spec.name)
+                {
                     assert_eq!(*parameters, spec.input_schema);
                 }
             }
@@ -1717,7 +1725,10 @@ async fn configured_https_provider_attempts_a_tls_handshake() {
 #[derive(Default)]
 struct WritingExecutor(std::sync::atomic::AtomicUsize, bool);
 impl AgentToolExecutor for WritingExecutor {
-    fn call<'a>(&'a self, call: yss_harness_contract::ToolCall) -> AgentFuture<'a, ToolCallOutcome> {
+    fn call<'a>(
+        &'a self,
+        call: yss_harness_contract::ToolCall,
+    ) -> AgentFuture<'a, ToolCallOutcome> {
         Box::pin(async move {
             assert_eq!(call.name, "create_resource");
             self.0.fetch_add(1, std::sync::atomic::Ordering::AcqRel);

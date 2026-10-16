@@ -126,7 +126,6 @@ pub struct AgentTaskOutcome {
 #[derive(Clone, Debug, PartialEq)]
 pub struct AgentProfile {
     pub role: AgentRoleId,
-    pub name: String,
     pub instructions: Vec<String>,
     pub tools: Vec<crate::ToolSpec>,
     pub tool_concurrency: usize,

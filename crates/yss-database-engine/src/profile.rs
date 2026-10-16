@@ -187,7 +187,6 @@ impl DatasetQuery {
         let std = number(&batch, 6)?;
         Ok(ColumnStats::Numeric(NumericColumnStats {
             column_name: field.name().clone(),
-            column_type: yss_database_arrow::data_type_name(field.data_type()),
             count,
             null_count: count
                 .checked_sub(integer(&batch, 1, 0)?)
@@ -286,7 +285,6 @@ impl DatasetQuery {
         let mode = self.top_categories(field, 1, control)?.pop();
         Ok(ColumnStats::String(StringColumnStats {
             column_name: field.name().clone(),
-            column_type: yss_database_arrow::data_type_name(field.data_type()),
             count,
             null_count: count
                 .checked_sub(non_null)

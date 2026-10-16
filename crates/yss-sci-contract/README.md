@@ -163,7 +163,7 @@ the borrowed model contract.
 - `descriptive`: empirical `GiniResult`, Dagum group/pair/component statistics. Group labels are generic so the node adapter can replace
   numerical group IDs with original scalar labels without changing statistics.
 - `distribution`: probability distribution parameters and typed samples.
-- `observation`: observation metadata, missing-value policy and category roles,
+- `observation`: observation metadata and missing-value policy,
   exported from the crate root for all domains.
 - `error`: stable operation and scientific error vocabulary.
 

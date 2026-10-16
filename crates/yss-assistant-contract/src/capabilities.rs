@@ -4,14 +4,14 @@ use crate::graph::{validate_graph_hash, validate_graph_request};
 
 use crate::{
     ApplyGraphEditRequest, BrowseNodesRequest, CapabilityContractError, CapabilityFailure,
-    CapabilityFailureCode, ToolEffect, DatabaseExported, DatasetProfileInspection,
-    DatasetSchemaInspection, EditResourceRequest, ExecuteGraphRequest, ExportDatabaseRequest,
-    GraphEditReceipt, GraphExecution, GraphInspection, GraphInspectionPage, GraphResults,
-    GraphSaved, GraphValidation, InspectDatasetProfileRequest, InspectDatasetSchemaRequest,
+    CapabilityFailureCode, DatabaseExported, DatasetProfileInspection, DatasetSchemaInspection,
+    EditResourceRequest, ExecuteGraphRequest, ExportDatabaseRequest, GraphEditReceipt,
+    GraphExecution, GraphInspection, GraphInspectionPage, GraphResults, GraphSaved,
+    GraphValidation, InspectDatasetProfileRequest, InspectDatasetSchemaRequest,
     InspectGraphRequest, InspectResourceRequest, InspectResultRequest, ListGraphResultsRequest,
     ListResourcesRequest, MAX_CATALOG_QUERY_BYTES, MAX_CATALOG_RESULTS, MAX_LOCALE_BYTES,
     ManageResourceRequest, NodeCatalogPage, ProjectInspection, ResourceInspection,
-    ResourceMutationReceipt, ResultInspection, ResultValueInspection, SaveGraphRequest,
+    ResourceMutationReceipt, ResultInspection, ResultValueInspection, SaveGraphRequest, ToolEffect,
     ValidateGraphRequest, validate_graph_edit_operation, validate_resource_id,
 };
 use schemars::JsonSchema;
@@ -516,7 +516,10 @@ impl AutomationCapabilityRequest {
 }
 
 /// Report a contract violation against the capability that received it.
-pub fn contract_failure(error: CapabilityContractError, capability: CapabilityId) -> CapabilityFailure {
+pub fn contract_failure(
+    error: CapabilityContractError,
+    capability: CapabilityId,
+) -> CapabilityFailure {
     let limit_field = match capability {
         CapabilityId::ApplyGraphEdit | CapabilityId::EditResource => "operations",
         _ => "limit",

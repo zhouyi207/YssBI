@@ -32,6 +32,11 @@ row buffer. The index requires linear row storage within the admitted workspace.
 Cox baselines are centered Breslow estimates; AFT covariance includes log(scale).
 `tests/survival_category.rs` checks independently generated statsmodels/SciPy
 references and risk-set, interval, prediction and cancellation conventions.
+The shared BFGS line search accounts for objective rounding at machine precision
+and rejects trials that cannot change the parameter vector. Success still requires
+the requested gradient tolerance; a rounded-away objective decrease is not itself
+convergence. The precise-decimal Weibull regression preserves fixture number tokens
+until correctly rounded conversion, independently of dependency JSON features.
 The `survival` example generates production plot payloads. Native plot rendering and
 manual acceptance belong to the [GPUI host](../yss-desktop-gpui/README.md), not this numerical crate.
 
@@ -489,8 +494,7 @@ intercept and fitted values; residuals and fitted values have distinct argument
 roles in both the OLS and WLS dispatch paths.
 
 Panel first differences take entity IDs and original time values; they do not
-require a second time-ID vector. First-stage IV summaries derive dimensions from
-their matrices and receive covariance/estimator choices through `FirstStageOptions`.
+require a second time-ID vector.
 FE and RE share the one-way group-centering calculation in `panel::data` for entity
 and time effects. It retains observation order and the existing NaN handling;
 each estimator keeps its own input admission and fitting workflow.

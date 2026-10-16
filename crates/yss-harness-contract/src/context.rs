@@ -44,7 +44,6 @@ macro_rules! string_identity {
     };
 }
 
-
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, JsonSchema)]
 #[serde(transparent)]
 #[schemars(transparent)]

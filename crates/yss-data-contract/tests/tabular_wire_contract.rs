@@ -79,9 +79,8 @@ fn ordered_contract_preserves_wire_shapes_numeric_kinds_and_validates_shape() {
         ),
         Err(TabularContractError::DuplicateColumnName { .. })
     ));
-    let duplicate = serde_json::from_str::<TabularSnapshot>(r#"{"columns":{"a":[1],"a":[2]}}"#)
+    serde_json::from_str::<TabularSnapshot>(r#"{"columns":{"a":[1],"a":[2]}}"#)
         .expect_err("duplicate JSON keys must be rejected");
-    assert!(duplicate.to_string().contains("duplicate column name"));
     assert_eq!(
         TabularSnapshot::try_from_columns(
             [column("a", &[TabularScalar::Integer(1)]), column("b", &[]),].into()

@@ -9,8 +9,8 @@ use serde_json::Value;
 
 use crate::{
     AgentDriverFailure, AgentFuture, AgentProfile, AgentRoleId, AgentRunId, AgentTask,
-    AgentTaskInput, AgentTaskOutcome, CapabilityControl, CapabilityFailure,
-    HarnessMode, ProjectSessionBinding, ToolCall, ToolInvocationContext, ToolInvocationOutcome,
+    AgentTaskInput, AgentTaskOutcome, CapabilityControl, CapabilityFailure, HarnessMode,
+    ProjectSessionBinding, ToolCall, ToolInvocationContext, ToolInvocationOutcome,
     ToolInvocationRecord, ToolSpec,
 };
 
@@ -193,8 +193,6 @@ pub trait HarnessExtension: Send + Sync {
     fn root_role(&self) -> AgentRoleId;
 
     fn profile(&self, role: &AgentRoleId) -> Option<AgentProfile>;
-
-    fn worker_roles(&self) -> Vec<AgentRoleId>;
 
     /// Extra instructions for the selected mode, prepended to every run.
     fn mode_instructions(&self, _mode: HarnessMode) -> Option<String> {

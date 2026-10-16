@@ -1,5 +1,6 @@
 mod worker;
-pub use worker::{GraphCommandOutcome, GraphCommandRequest};
+use worker::GraphCommandRequest;
+pub use worker::{GraphCommandOutcome, GraphSaveRequest};
 
 use gpui_kit::{Context, actions};
 use yss_application::graph::editing::{GraphEditRequest, GraphEditResponse};
@@ -96,7 +97,7 @@ impl GraphCanvas {
         creation: Option<gpui_kit::Entity<super::palette::NodePalette>>,
         cx: &mut Context<Self>,
     ) -> Option<gpui_kit::Task<Option<GraphEditVersion>>> {
-        let Some(request) = self.capture_command(command, version, cx) else {
+        let Some(request) = self.capture_command(&command, version, cx) else {
             if let Some(creation) = creation {
                 self.notifications
                     .error(yss_ui::text::t("canvas.nodePalette.createFailed"), cx);
@@ -105,7 +106,7 @@ impl GraphCanvas {
             return None;
         };
         let reroute_selection = if matches!(
-            &request.command,
+            &command,
             GraphCommand::Edit(EditorGraphMutation::InsertReroute { .. })
         ) {
             self.connection_click.take()
@@ -114,7 +115,7 @@ impl GraphCanvas {
             None
         };
         let insertion_selection = matches!(
-            &request.command,
+            &command,
             GraphCommand::Paste { .. }
                 | GraphCommand::Edit(EditorGraphMutation::DuplicateSubgraph { .. })
         )
@@ -123,14 +124,14 @@ impl GraphCanvas {
             self.palette = None;
         }
         self.begin_command(cx);
-        let run_after = if let GraphCommand::RunAfterInputs(demand) = &request.command {
+        let run_after = if let GraphCommand::RunAfterInputs(demand) = &command {
             Some(demand.clone())
         } else {
             None
         };
         let task = self
             .services
-            .run(move |services| Ok(request.commit(services)));
+            .run(move |services| Ok(request.commit(services, command)));
         let task = cx.spawn(async move |view, cx| {
             let result = task
                 .await
@@ -189,7 +190,7 @@ impl GraphCanvas {
 
     fn capture_command(
         &mut self,
-        command: GraphCommand,
+        command: &GraphCommand,
         version: Option<GraphEditVersion>,
         cx: &mut Context<Self>,
     ) -> Option<GraphCommandRequest> {
@@ -232,7 +233,7 @@ impl GraphCanvas {
             key,
             value,
             base,
-        } = &command
+        } = command
         {
             let current = self
                 .graph
@@ -275,7 +276,6 @@ impl GraphCanvas {
             },
             inputs,
             parameters,
-            command,
         })
     }
 
@@ -295,12 +295,12 @@ impl GraphCanvas {
         cx.notify();
     }
 
-    pub fn prepare_save(&mut self, cx: &mut Context<Self>) -> Option<GraphCommandRequest> {
-        let request = self.capture_command(GraphCommand::Save, None, cx)?;
+    pub fn prepare_save(&mut self, cx: &mut Context<Self>) -> Option<GraphSaveRequest> {
+        let request = self.capture_command(&GraphCommand::Save, None, cx)?;
         self.palette = None;
         self.connection_click = None;
         self.begin_command(cx);
-        Some(request)
+        Some(GraphSaveRequest(request))
     }
 
     pub fn finish_command(

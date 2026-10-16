@@ -2,11 +2,7 @@
 //! so only turns near the viewport are laid out on each frame.
 use super::ConversationPanel;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    Sizable,
-    button::Button,
-    scroll::Scrollbar,
-};
+use gpui_kit::component::{Sizable, button::Button, scroll::Scrollbar};
 use gpui_kit::{
     AnyElement, Context, FollowMode, ListAlignment, ListScrollEvent, ListState, Window, div, list,
     prelude::*, px, rems,
@@ -111,18 +107,25 @@ impl ConversationPanel {
             )
             .when(show_latest, |view| {
                 view.child(
-                    div().absolute().bottom_3().left_0().right_0().flex().justify_center().child(
-                        Button::new("assistant-latest")
-                            .small()
-                            .outline()
-                            .rounded_full()
-                            .icon(IconName::ArrowDown)
-                            .label(yss_ui::text::t("panel.assistantScrollToBottom"))
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.viewport.jump_to_latest();
-                                cx.notify();
-                            })),
-                    ),
+                    div()
+                        .absolute()
+                        .bottom_3()
+                        .left_0()
+                        .right_0()
+                        .flex()
+                        .justify_center()
+                        .child(
+                            Button::new("assistant-latest")
+                                .small()
+                                .outline()
+                                .rounded_full()
+                                .icon(IconName::ArrowDown)
+                                .label(yss_ui::text::t("panel.assistantScrollToBottom"))
+                                .on_click(cx.listener(|view, _, _, cx| {
+                                    view.viewport.jump_to_latest();
+                                    cx.notify();
+                                })),
+                        ),
                 )
             })
             .into_any_element()

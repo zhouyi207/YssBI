@@ -15,6 +15,11 @@ redirected metadata and directory trees. Cleanup retains a record only when its 
 still matches and its metadata entry is a valid existing file. Cleanup removes registration
 records and leaves project files with their lifecycle owner.
 
+Discovery tests use real directory and metadata-file symlinks on Unix. Windows tests
+use junctions for redirected roots/subtrees and a metadata file with a private GUID
+reparse point; neither fixture requires symbolic-link privileges. The file fixture
+removes its reparse tag through the original handle before assertions and cleanup.
+
 Path normalization returns `ProjectRegistryError::InvalidPath`; default parent lookup returns
 the standard environment error. Host adapters own localized messages. Listing sorts favorites,
 numeric Unix timestamps and names; individual lookups do not invoke the presentation sort.

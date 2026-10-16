@@ -602,7 +602,7 @@ mod tests {
         let count = notifications.clone();
         let _observation =
             cx.update(|cx| cx.observe(&commands, move |_, _| count.set(count.get() + 1)));
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert_eq!(window.find("status-graph-nodes").label(), Some("1"));
             assert_eq!(window.find("status-graph-connections").label(), Some("0"));
@@ -641,7 +641,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(notifications.replace(0), 0);
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert_eq!(
                 window.find("status-graph-position").label(),
@@ -655,14 +655,14 @@ mod tests {
         })
         .unwrap();
         assert!(notifications.replace(0) > 0, "busy disables commands");
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert!(window.find("status-graph-busy").visible());
             canvas.update(cx, |canvas, cx| canvas.cancel_prepared_save(cx));
         })
         .unwrap();
         assert!(notifications.replace(0) > 0, "idle restores commands");
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert!(window.try_find("status-graph-busy").is_none());
             canvas.update(cx, |_, cx| cx.notify());

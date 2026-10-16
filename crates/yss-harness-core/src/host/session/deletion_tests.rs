@@ -1,6 +1,6 @@
 use crate::test_support::{
-    FixedClock, FixtureResourceResolver, InMemoryHarnessStore, MockAgentDriver,
-    SequentialIds, fixed_model,
+    FixedClock, FixtureResourceResolver, InMemoryHarnessStore, MockAgentDriver, SequentialIds,
+    fixed_model,
 };
 use crate::{CompiledWorkflow, HarnessError, HarnessHost, HarnessPorts};
 use std::sync::Arc;

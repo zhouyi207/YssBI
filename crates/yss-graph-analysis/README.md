@@ -88,8 +88,6 @@ flowchart LR
   RES[Captured resource facts] --> RESOLVE
   RESOLVE --> SNAPSHOT[GraphSemanticSnapshot]
   SNAPSHOT --> VIEW[Editor Projection]
-  SNAPSHOT --> READY[ReadyGraphSemanticSnapshot]
-  READY --> PREPARE[Execution plan preparation]
 ```
 
 `ConcreteGraphInterface` 是 snapshot 内端口事实的借用视图，不存第二份端口表。类型使用 `Exact / Constrained / Unknown / Conflict`；`TypeExpr` 只描述声明 pattern。Add、Reroute 和七个 To 节点分别使用 NumericFold、Identity、ShapePreservingConversion 规则，coercion 和 kernel specialization 与类型结果一起交付。

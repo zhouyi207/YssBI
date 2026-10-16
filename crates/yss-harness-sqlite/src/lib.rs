@@ -15,14 +15,13 @@ use codec::{invalid_record, unavailable};
 use schema::SCHEMA;
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 #[cfg(any(test, feature = "test-support"))]
 use std::str::FromStr;
 use yss_harness_contract::PersistenceFailure;
 
 pub struct SqliteHarnessStore {
     pool: SqlitePool,
-    path: Option<PathBuf>,
     knowledge_generation: std::sync::atomic::AtomicU64,
 }
 
@@ -38,7 +37,7 @@ impl SqliteHarnessStore {
             .foreign_keys(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal);
-        Self::connect_with_options(options, Some(path)).await
+        Self::connect_with_options(options).await
     }
 
     #[cfg(any(test, feature = "test-support"))]
@@ -46,11 +45,7 @@ impl SqliteHarnessStore {
         let options = SqliteConnectOptions::from_str("sqlite::memory:")
             .map_err(|_| unavailable())?
             .foreign_keys(true);
-        Self::connect_with_options(options, None).await
-    }
-
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
+        Self::connect_with_options(options).await
     }
 
     /// Waits for all pooled connections to close before the database is reopened or removed.
@@ -61,7 +56,6 @@ impl SqliteHarnessStore {
 
     async fn connect_with_options(
         options: SqliteConnectOptions,
-        path: Option<PathBuf>,
     ) -> Result<Self, PersistenceFailure> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
@@ -70,7 +64,6 @@ impl SqliteHarnessStore {
             .map_err(|_| unavailable())?;
         let store = Self {
             pool,
-            path,
             knowledge_generation: Default::default(),
         };
         store.ensure_schema().await?;

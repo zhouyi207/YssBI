@@ -80,9 +80,8 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
             zh_aliases: &["转换", "类型转换", "语义转换"],
         })?;
         let parameters = conversion_parameters(fragment, id, target)?;
-        let mut input = data_port("input", "Input", PortDirection::Input, input_types.clone())?;
-        input.consumption = Some(InputConsumption::Streaming);
-        let mut output = data_port(
+        let input = data_port("input", "Input", PortDirection::Input, input_types.clone())?;
+        let output = data_port(
             "output",
             "Output",
             PortDirection::Output,
@@ -91,7 +90,6 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
                 data_series(target.type_id())?,
             ]),
         )?;
-        output.production = Some(OutputProduction::Streaming);
         let mut protocol = protocol(
             id,
             "conversion",

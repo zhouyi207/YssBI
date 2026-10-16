@@ -1,6 +1,9 @@
 use super::*;
 use crate::graph::catalog::{LocalizedCatalogRequest, localized_node_catalog_in_session};
-use yss_assistant_contract::{BrowseNodesRequest, InspectNodeTypeRequest, InspectionPage, NodeCatalogMatch, NodeCatalogPage, NodeTypeDefinition, NodeTypeInspection};
+use yss_assistant_contract::{
+    BrowseNodesRequest, InspectNodeTypeRequest, InspectionPage, NodeCatalogMatch, NodeCatalogPage,
+    NodeTypeDefinition, NodeTypeInspection,
+};
 use yss_node_catalog::LocalizedCatalogItem;
 use yss_node_protocol::NodeProtocol;
 

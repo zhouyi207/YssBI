@@ -18,7 +18,9 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use serde_json::json;
 use yss_application::ApplicationState;
-use yss_harness_contract::{HarnessSessionRecord, HarnessTurnOptions, LanguageModelSelection, PrincipalId};
+use yss_harness_contract::{
+    HarnessSessionRecord, HarnessTurnOptions, LanguageModelSelection, PrincipalId,
+};
 use yss_project_identity::OperationId;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;

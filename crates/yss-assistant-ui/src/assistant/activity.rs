@@ -1,6 +1,6 @@
 //! Current activity is an event projection; presentation reads the current locale.
-use yss_harness_contract::AgentRuntimePhase;
 use yss_assistant_contract::{AssistantEventKind as Event, AssistantToolIdentity};
+use yss_harness_contract::AgentRuntimePhase;
 
 #[derive(Clone)]
 pub(super) enum Activity {

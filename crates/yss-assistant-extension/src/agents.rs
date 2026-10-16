@@ -1,7 +1,7 @@
 //! Built-in YssBI role definitions, tool sets, concurrency and compiled prompts.
 
-use yss_assistant_contract::{AgentRole, CapabilityId as Cap};
 use crate::contract::AgentOutputMode;
+use yss_assistant_contract::{AgentRole, CapabilityId as Cap};
 
 pub use policy::{authorize_agent_capability, authorize_agent_resource};
 pub(crate) use policy::{

@@ -100,9 +100,15 @@ async fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_a
             .await;
         assert!(outcome.fatal.is_none(), "{outcome:?}");
         if let Some(id) = outcome.invocation_id {
-            let record = store.tool_invocations().into_iter().find(|record| record.id == id).unwrap();
+            let record = store
+                .tool_invocations()
+                .into_iter()
+                .find(|record| record.id == id)
+                .unwrap();
             assert!(record.failure.is_none());
-            return Ok(yss_assistant_contract::decode_result(record.result.as_ref().unwrap()).unwrap());
+            return Ok(
+                yss_assistant_contract::decode_result(record.result.as_ref().unwrap()).unwrap(),
+            );
         }
         Err(serde_json::from_value(outcome.output["failure"].clone()).unwrap())
     }
@@ -204,9 +210,12 @@ async fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_a
     else {
         panic!("resource save receipt")
     };
-    assert!(receipt.changes.iter().any(|change| {
-        change.resource == doc && !change.deleted
-    }));
+    assert!(
+        receipt
+            .changes
+            .iter()
+            .any(|change| { change.resource == doc && !change.deleted })
+    );
     let saved = fixture.inspect(&doc);
     assert!(!saved.dirty);
     assert_eq!(

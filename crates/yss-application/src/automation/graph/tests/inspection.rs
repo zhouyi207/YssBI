@@ -106,7 +106,10 @@ fn catalog_pages_filter_before_projection_and_resolve_exact_type_batches() {
             },
         ))
         .unwrap_err();
-    assert_eq!(error.code, yss_assistant_contract::failure_code::CATALOG_UNAVAILABLE);
+    assert_eq!(
+        error.code,
+        yss_assistant_contract::failure_code::CATALOG_UNAVAILABLE
+    );
 
     for query in ["to_numeric", "YSSBI.VALUE.TO_NUMERIC"] {
         let AutomationCapabilityResult::NodeCatalogPage(page) = f

@@ -1,6 +1,6 @@
 use super::*;
-use serde_json::json;
 use crate::contract::model::*;
+use serde_json::json;
 
 struct DocumentGateway(AtomicU64);
 impl CapabilityGatewayPort for DocumentGateway {
@@ -145,10 +145,7 @@ async fn document_sections_keep_their_original_read_baseline_through_writes_and_
     let text = CapabilityInput::ReadDocument(
         serde_json::from_value(json!({"document":document,"section":section})).unwrap(),
     );
-    let unread = run
-        .execute(text.clone())
-        .await
-        .unwrap_err();
+    let unread = run.execute(text.clone()).await.unwrap_err();
     let visible = model::failure(&unread);
     assert_eq!(visible["code"], "resource_read_required");
     assert_eq!(visible["details"]["resourceId"], document.id);
@@ -185,10 +182,7 @@ async fn document_sections_keep_their_original_read_baseline_through_writes_and_
     ];
     let mut replay = ResourceObservations::default();
     for input in inputs {
-        let outcome = run
-            .execute(input.clone())
-            .await
-            .unwrap();
+        let outcome = run.execute(input.clone()).await.unwrap();
         let record = store
             .load_invocation(
                 &HarnessSessionId::try_new("session").unwrap(),
@@ -198,17 +192,30 @@ async fn document_sections_keep_their_original_read_baseline_through_writes_and_
             .unwrap()
             .unwrap();
         assert_eq!(record.tool, input.capability_id().as_str());
-        assert_eq!(record.arguments, serde_json::to_value(&input).unwrap()["payload"]);
+        assert_eq!(
+            record.arguments,
+            serde_json::to_value(&input).unwrap()["payload"]
+        );
         assert!(
             !model::capability_result(&outcome.result)
                 .unwrap()
                 .to_string()
                 .contains("revision")
         );
-        replay.record(&decode_result(record.result.as_ref().unwrap()).unwrap(), true);
+        replay.record(
+            &decode_result(record.result.as_ref().unwrap()).unwrap(),
+            true,
+        );
     }
     assert_eq!(
-        run.state().scope.lock().unwrap().task.as_ref().unwrap().resources[0]
+        run.state()
+            .scope
+            .lock()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .resources[0]
             .version
             .as_ref()
             .unwrap()
@@ -230,10 +237,7 @@ async fn document_sections_keep_their_original_read_baseline_through_writes_and_
         run.state().scope.lock().unwrap().clone(),
         replay,
     );
-    let stale = restored
-        .execute(text.clone())
-        .await
-        .unwrap_err();
+    let stale = restored.execute(text.clone()).await.unwrap_err();
     assert_eq!(stale.code, CapabilityFailureCode::REVISION_CONFLICT);
     assert_eq!(stale.details["reason"], "document_section_changed");
     let visible = model::failure(&stale);
@@ -244,25 +248,23 @@ async fn document_sections_keep_their_original_read_baseline_through_writes_and_
             .unwrap()
             .contains("outline")
     );
-    restored
-        .execute(outline)
-        .await
-        .unwrap();
-    restored
-        .execute(text.clone())
-        .await
-        .unwrap();
+    restored.execute(outline).await.unwrap();
+    restored.execute(text.clone()).await.unwrap();
     gateway.0.fetch_add(1, Ordering::AcqRel);
     assert_eq!(
-        restored
-            .execute(text)
-            .await
-            .unwrap_err()
-            .code,
+        restored.execute(text).await.unwrap_err().code,
         CapabilityFailureCode::REVISION_CONFLICT
     );
     assert_eq!(
-        restored.state().scope.lock().unwrap().task.as_ref().unwrap().resources[0]
+        restored
+            .state()
+            .scope
+            .lock()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .resources[0]
             .version
             .as_ref()
             .unwrap()

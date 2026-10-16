@@ -305,14 +305,14 @@ mod tests {
             .unwrap()
         });
         let input = cx.update(|cx| host.read(cx).input.clone());
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             input.read(cx).focus_handle(cx).focus(window, cx);
             window.render_frame(cx);
             window.dispatch_action(Box::new(input::SelectAll), cx);
         })
         .unwrap();
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert!(window.is_action_available(&input::Copy, cx));
             window
@@ -321,7 +321,7 @@ mod tests {
                 .click("menu", cx);
         })
         .unwrap();
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert!(
                 window
@@ -334,7 +334,7 @@ mod tests {
             window.press("escape", cx);
         })
         .unwrap();
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert!(input.read(cx).focus_handle(cx).is_focused(window));
             // Keyboard/accessibility activation focuses the trigger before opening it.
@@ -362,14 +362,14 @@ mod tests {
             window.press("enter", cx);
         })
         .unwrap();
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             window.press("down", cx);
             window.press("down", cx);
             window.press("enter", cx);
         })
         .unwrap();
-        cx.update_window(window.into(), |_, window, cx| {
+        cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert_eq!(
                 cx.read_from_clipboard()

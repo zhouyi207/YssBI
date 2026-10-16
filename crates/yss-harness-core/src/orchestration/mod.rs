@@ -6,12 +6,12 @@ use tokio::sync::{RwLock, Semaphore};
 use tracing::Instrument;
 use yss_harness_contract::*;
 
+use crate::HarnessPorts;
 use crate::events::{EventWriter, PersistingAgentOutput};
 use crate::tools::{
     HarnessToolExecutor, InvocationScope, ToolRegistry, ToolServices, contain_tool_failure,
     is_knowledge_tool,
 };
-use crate::HarnessPorts;
 
 struct TaskEntry {
     task: AgentTask,
@@ -44,8 +44,7 @@ pub(crate) struct TurnOrchestrator {
 
 impl TurnOrchestrator {
     fn check_task_mode(&self, scope: &Value) -> Result<(), CapabilityFailure> {
-        if self.options.mode == HarnessMode::Ask
-            && !self.ports.extension.scope_is_read_only(scope)
+        if self.options.mode == HarnessMode::Ask && !self.ports.extension.scope_is_read_only(scope)
         {
             return Err(rejected("ask_mode_read_only"));
         }
@@ -635,9 +634,11 @@ impl RunExecutor {
 
     async fn prepare(&self, call: ToolCall) -> Result<PreparedToolCall, RejectedToolCall> {
         if self.tools.registry().get(&call.name).is_none() {
-            return Err(CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
-                .with_detail("capabilityId", &call.name)
-                .into());
+            return Err(
+                CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
+                    .with_detail("capabilityId", &call.name)
+                    .into(),
+            );
         }
         if is_knowledge_tool(&call.name) {
             return prepare_knowledge(call, &self.tools);
@@ -698,7 +699,11 @@ impl RunExecutor {
         let outcome = contain_tool_failure(self.control(call)).await;
         if let Err(failure) = self
             .tools
-            .finish_control(invocation_id.clone(), &tool, outcome.as_ref().err().cloned())
+            .finish_control(
+                invocation_id.clone(),
+                &tool,
+                outcome.as_ref().err().cloned(),
+            )
             .await
         {
             return self.failed(&failure);
@@ -816,7 +821,10 @@ fn fatal(code: AgentDriverFailureCode) -> ToolCallOutcome {
     }
 }
 
-pub(crate) fn failed_output(extension: &dyn HarnessExtension, failure: &CapabilityFailure) -> Value {
+pub(crate) fn failed_output(
+    extension: &dyn HarnessExtension,
+    failure: &CapabilityFailure,
+) -> Value {
     serde_json::json!({"state": "failed", "failure": extension.project_failure(failure)})
 }
 

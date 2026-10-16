@@ -2,14 +2,22 @@
 
 use std::sync::Arc;
 
+use yss_assistant_contract::{
+    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityId,
+    CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection,
+    DatasetSchemaInspection, GraphPortInspection, InspectDatasetProfileRequest,
+    InspectDatasetSchemaRequest, ResultCategoryInspection,
+};
+#[cfg(test)]
+use yss_assistant_contract::{
+    InspectResultRequest, ReadResultTableRequest, ResultInspection, ResultRef, ResultValidity,
+    ResultValueInspection, TableRef,
+};
 use yss_database_contract::DatabaseId;
 use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_snapshot};
 use yss_graph_document::{PortAddress, PortRef};
 use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
 use yss_harness_contract::{CapabilityControl, CapabilityFailure, CapabilityFailureCode};
-use yss_assistant_contract::{AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityId, CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection, DatasetSchemaInspection, GraphPortInspection, InspectDatasetProfileRequest, InspectDatasetSchemaRequest, ResultCategoryInspection};
-#[cfg(test)]
-use yss_assistant_contract::{InspectResultRequest, ReadResultTableRequest, ResultInspection, ResultRef, ResultValidity, ResultValueInspection, TableRef};
 #[cfg(test)]
 use yss_node_kernel::RuntimeValue;
 
@@ -46,9 +54,9 @@ fn invoke_capability(
     control.check()?;
     let read_only =
         request.capability_id().descriptor().effect == yss_harness_contract::ToolEffect::Inspect;
-    request
-        .validate()
-        .map_err(|error| yss_assistant_contract::contract_failure(error, request.capability_id()))?;
+    request.validate().map_err(|error| {
+        yss_assistant_contract::contract_failure(error, request.capability_id())
+    })?;
     let captured = application
         .capture_session()
         .map_err(map_session_capture_error)?;
@@ -439,10 +447,10 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
 mod tests {
     use super::graph::editor_mutation;
     use super::*;
+    use yss_assistant_contract::GraphEditOperation;
     use yss_data_contract::TabularScalar;
     use yss_graph_document::{NodeId, NodePosition};
     use yss_graph_editor::EditorGraphMutation;
-    use yss_assistant_contract::GraphEditOperation;
 
     #[test]
     fn new_plot_kind_labels_follow_the_execution_enum_wire() {

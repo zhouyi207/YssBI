@@ -584,8 +584,6 @@ fn data_port(
         cardinality: PortCardinality::Declared,
         connections: crate::data_connections(PortDirection::Output),
         input_binding: None,
-        consumption: None,
-        production: Some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
     })

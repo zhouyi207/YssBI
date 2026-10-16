@@ -496,8 +496,7 @@ impl AssistantToolInspection {
         let Some(result) = &record.result else {
             return;
         };
-        if let Ok(result) = serde_json::from_value::<crate::KnowledgeSearchResult>(result.clone())
-        {
+        if let Ok(result) = serde_json::from_value::<crate::KnowledgeSearchResult>(result.clone()) {
             self.parameters
                 .insert("resultCount".into(), json!(result.matches.len()));
         } else if let Ok(passage) =
@@ -547,7 +546,8 @@ mod tests {
                 "expectedRevision":"private-version"
             }},
             "startedAt":1000, "deadline":31000, "finishedAt":1037
-        })).unwrap();
+        }))
+        .unwrap();
         for input in [None, Some(input)] {
             let mut record = base.clone();
             let has_input = input.is_some();

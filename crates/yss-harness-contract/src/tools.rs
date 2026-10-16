@@ -9,8 +9,6 @@ use serde_json::Value;
 
 use crate::ToolInvocationId;
 
-pub const MAX_TOOL_NAME_BYTES: usize = 64;
-
 pub const MAX_CAPABILITY_RESULT_BYTES: usize = 1_048_576;
 
 #[derive(Clone, Copy, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -61,14 +59,6 @@ impl ToolSpec {
     }
 }
 
-pub fn validate_tool_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= MAX_TOOL_NAME_BYTES
-        && name
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-}
-
 /// A provider tool call. The executor owns validation, durable identity and the model projection.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -95,7 +85,9 @@ pub struct ToolInvocationOutcome {
 }
 
 /// Stable failure classification. Harness codes are declared here; extensions add their own codes.
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize, Deserialize,
+)]
 #[serde(transparent)]
 #[schemars(transparent)]
 pub struct CapabilityFailureCode(Cow<'static, str>);
@@ -107,7 +99,6 @@ impl CapabilityFailureCode {
     pub const PROJECT_SESSION_CHANGED: Self = Self::from_static("project_session_changed");
     pub const RESOURCE_UNAVAILABLE: Self = Self::from_static("resource_unavailable");
     pub const RESULT_UNAVAILABLE: Self = Self::from_static("result_unavailable");
-    pub const APPROVAL_REQUIRED: Self = Self::from_static("approval_required");
     pub const REVISION_CONFLICT: Self = Self::from_static("revision_conflict");
     pub const MUTATION_REJECTED: Self = Self::from_static("mutation_rejected");
     pub const RESULT_TOO_LARGE: Self = Self::from_static("result_too_large");

@@ -290,6 +290,76 @@ fn cox_and_counting_process_risk_sets_match_phreg() {
 }
 
 #[test]
+fn precisely_parsed_weibull_fit_does_not_stall_at_objective_roundoff() {
+    use serde_json::value::RawValue;
+
+    #[derive(serde::Deserialize)]
+    struct Data<'a> {
+        #[serde(borrow)]
+        time: Vec<&'a RawValue>,
+        #[serde(borrow)]
+        event: Vec<&'a RawValue>,
+        #[serde(borrow)]
+        predictors: Vec<Vec<&'a RawValue>>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Fixture<'a> {
+        #[serde(borrow)]
+        data: Data<'a>,
+    }
+    fn numbers(values: Vec<&RawValue>) -> Vec<f64> {
+        values
+            .into_iter()
+            .map(|value| value.get().parse().unwrap())
+            .collect()
+    }
+
+    // Preserve decimal tokens until Rust's correctly rounded parser: dependency
+    // feature unification must not decide whether this numerical regression runs.
+    let precise: Fixture<'_> =
+        serde_json::from_str(include_str!("fixtures/survival_category_reference.json")).unwrap();
+    let time = numbers(precise.data.time);
+    let event = numbers(precise.data.event);
+    let predictors = precise
+        .data
+        .predictors
+        .into_iter()
+        .map(numbers)
+        .collect::<Vec<_>>();
+    let result = parametric::fit(
+        &time,
+        &event,
+        &predictors,
+        AftOptions {
+            distribution: AftDistribution::Weibull,
+            iteration: IterationOptions {
+                max_iterations: 1000,
+                tolerance: 1e-8,
+            },
+            horizon: 2.0,
+        },
+        &control(),
+    )
+    .unwrap();
+    let reference = fixture();
+    let expected = &reference["aft"]["weibull"];
+    compare(
+        &result
+            .coefficients
+            .iter()
+            .map(|coefficient| coefficient.estimate)
+            .collect::<Vec<_>>(),
+        &vector(&expected["coefficients"]),
+        1e-6,
+    );
+    let expected_risk = vector(&expected["risk"]);
+    assert_eq!(result.event_probabilities.len(), expected_risk.len());
+    for (&actual, expected) in result.event_probabilities.iter().zip(expected_risk) {
+        assert!((actual - expected).abs() < 1e-6, "{actual} != {expected}");
+    }
+}
+
+#[test]
 fn all_parametric_likelihoods_and_full_information_match_scipy() {
     let f = fixture();
     let d = &f["data"];

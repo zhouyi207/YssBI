@@ -576,12 +576,14 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
     };
     let candidates = runtime
         .connection_candidates(
-            &graph(),
-            &document,
-            &output,
-            ConnectionIntent::Connect,
-            &catalog,
-            &analysis,
+            ConnectionCandidatesInput {
+                graph: &graph(),
+                document: &document,
+                source: &output,
+                intent: ConnectionIntent::Connect,
+                catalog: &catalog,
+                analysis: &analysis,
+            },
             &|| false,
         )
         .unwrap()
@@ -612,12 +614,14 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
     let checkpoints = std::cell::Cell::new(0);
     let cancelled = runtime
         .connection_candidates(
-            &graph(),
-            &document,
-            &output,
-            ConnectionIntent::Connect,
-            &catalog,
-            &analysis,
+            ConnectionCandidatesInput {
+                graph: &graph(),
+                document: &document,
+                source: &output,
+                intent: ConnectionIntent::Connect,
+                catalog: &catalog,
+                analysis: &analysis,
+            },
             &|| {
                 checkpoints.set(checkpoints.get() + 1);
                 checkpoints.get() > 2
@@ -634,12 +638,14 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
     );
     let input_candidates = runtime
         .connection_candidates(
-            &graph(),
-            &document,
-            &port(target, "right"),
-            ConnectionIntent::Connect,
-            &catalog,
-            &analysis,
+            ConnectionCandidatesInput {
+                graph: &graph(),
+                document: &document,
+                source: &port(target, "right"),
+                intent: ConnectionIntent::Connect,
+                catalog: &catalog,
+                analysis: &analysis,
+            },
             &|| false,
         )
         .unwrap()
@@ -691,12 +697,14 @@ fn connection_candidates_match_append_replace_and_type_rejections_without_editin
     let model_output = port(model, "result");
     let model_candidates = runtime
         .connection_candidates(
-            &graph(),
-            &document,
-            &model_output,
-            ConnectionIntent::Connect,
-            &catalog,
-            &analysis,
+            ConnectionCandidatesInput {
+                graph: &graph(),
+                document: &document,
+                source: &model_output,
+                intent: ConnectionIntent::Connect,
+                catalog: &catalog,
+                analysis: &analysis,
+            },
             &|| false,
         )
         .unwrap()
@@ -765,12 +773,14 @@ fn connection_candidates_for_moves_exclude_moved_links_from_replacement_preview(
     };
     let candidates = runtime
         .connection_candidates(
-            &graph(),
-            &document,
-            &left,
-            ConnectionIntent::MoveConnections,
-            &catalog,
-            &analysis,
+            ConnectionCandidatesInput {
+                graph: &graph(),
+                document: &document,
+                source: &left,
+                intent: ConnectionIntent::MoveConnections,
+                catalog: &catalog,
+                analysis: &analysis,
+            },
             &|| false,
         )
         .unwrap()

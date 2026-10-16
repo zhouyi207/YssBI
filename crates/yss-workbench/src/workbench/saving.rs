@@ -1,7 +1,7 @@
 //! Native save capture and receipt installation; each domain owner commits its own file.
 use super::Workbench;
 use crate::{
-    canvas::{GraphCanvas, GraphCommandOutcome, GraphCommandRequest},
+    canvas::{GraphCanvas, GraphCommandOutcome, GraphSaveRequest},
     charts::{ChartEditor, ChartSaveOutcome, ChartSaveRequest},
     databases::{DatabaseEditor, DatabaseSaveOutcome, DatabaseSaveRequest},
     documents::{DocumentEditor, DocumentSaveOutcome, DocumentSaveRequest},
@@ -22,7 +22,7 @@ pub(super) enum SaveTarget {
     Settings(Entity<SettingsPanel>, Option<WindowHandle<Root>>),
 }
 pub(super) enum SaveRequest {
-    Graph(GraphCommandRequest),
+    Graph(GraphSaveRequest),
     Document(DocumentSaveRequest),
     Mind(MindSaveRequest),
     Database(DatabaseSaveRequest),

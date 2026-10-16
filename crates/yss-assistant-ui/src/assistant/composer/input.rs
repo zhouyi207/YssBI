@@ -86,7 +86,9 @@ impl ConversationPanel {
                             .text_color(cx.theme().muted_foreground)
                             .child(yss_ui::text::t("panel.assistantEmptyDescription")),
                     )
-                    .when(show_prompts, |guide| guide.child(div().pt_2().w_full().child(prompts))),
+                    .when(show_prompts, |guide| {
+                        guide.child(div().pt_2().w_full().child(prompts))
+                    }),
             )
             .into_any_element()
     }
@@ -104,7 +106,11 @@ impl ConversationPanel {
         }
     }
 
-    pub(super) fn render_input(&self, picker: Entity<Picker>, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_input(
+        &self,
+        picker: Entity<Picker>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         div()
             .min_h_0()
             .min_w_0()

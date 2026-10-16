@@ -119,10 +119,7 @@ async fn chart_tools_bind_versions_preserve_public_identity_and_authorize_source
     });
     let mut records = Vec::new();
     for input in [read.clone(), update.clone(), update.clone()] {
-        let outcome = run
-            .execute(input.clone())
-            .await
-            .unwrap();
+        let outcome = run.execute(input.clone()).await.unwrap();
         let record = store
             .load_invocation(
                 &HarnessSessionId::try_new("session").unwrap(),
@@ -132,7 +129,10 @@ async fn chart_tools_bind_versions_preserve_public_identity_and_authorize_source
             .unwrap()
             .unwrap();
         assert_eq!(record.tool, input.capability_id().as_str());
-        assert_eq!(record.arguments, serde_json::to_value(&input).unwrap()["payload"]);
+        assert_eq!(
+            record.arguments,
+            serde_json::to_value(&input).unwrap()["payload"]
+        );
         assert!(
             !model::capability_result(&outcome.result)
                 .unwrap()
@@ -151,10 +151,7 @@ async fn chart_tools_bind_versions_preserve_public_identity_and_authorize_source
     for record in &records {
         restored.hooks.replay(record, &record.project);
     }
-    restored
-        .execute(update.clone())
-        .await
-        .unwrap();
+    restored.execute(update.clone()).await.unwrap();
     let source_change = CapabilityInput::UpdateChart(UpdateChartInput {
         chart: chart(),
         settings: ChartSettingsUpdate {
@@ -162,32 +159,26 @@ async fn chart_tools_bind_versions_preserve_public_identity_and_authorize_source
             ..Default::default()
         },
     });
-    assert!(
-        restored
-            .execute(source_change)
-            .await
-            .is_err()
-    );
+    assert!(restored.execute(source_change).await.is_err());
     assert_eq!(gateway.0.load(Ordering::Acquire), 4);
     restored.state().scope.lock().unwrap().role = AgentRole::Report;
-    assert!(
-        restored
-            .execute(update)
-            .await
-            .is_err()
-    );
+    assert!(restored.execute(update).await.is_err());
     restored.state().scope.lock().unwrap().role = AgentRole::Plot;
     gateway.0.store(5, Ordering::Release);
     assert_eq!(
-        restored
-            .execute(read)
-            .await
-            .unwrap_err()
-            .code,
+        restored.execute(read).await.unwrap_err().code,
         CapabilityFailureCode::REVISION_CONFLICT
     );
     assert_eq!(
-        restored.state().scope.lock().unwrap().task.as_ref().unwrap().resources[0]
+        restored
+            .state()
+            .scope
+            .lock()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .resources[0]
             .version
             .as_ref()
             .unwrap()

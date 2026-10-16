@@ -32,7 +32,10 @@ struct DelegationInput {
 }
 
 impl AgentToolExecutor for Delegation {
-    fn call<'a>(&'a self, call: yss_harness_contract::ToolCall) -> AgentFuture<'a, ToolCallOutcome> {
+    fn call<'a>(
+        &'a self,
+        call: yss_harness_contract::ToolCall,
+    ) -> AgentFuture<'a, ToolCallOutcome> {
         Box::pin(async move {
             assert_eq!(call.name, DELEGATE_TASK_TOOL);
             if let Err(failure) =

@@ -2,9 +2,9 @@ use yss_harness_contract::*;
 
 use super::*;
 use yss_harness_contract::{
-    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, 
-    HarnessEvent, HarnessSessionState, IdempotencyKey, PrincipalId,
-    ProjectSessionBinding, SourceHash, ToolInvocationId, ToolInvocationState, UnixMillis,
+    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, HarnessEvent, HarnessSessionState,
+    IdempotencyKey, PrincipalId, ProjectSessionBinding, SourceHash, ToolInvocationId,
+    ToolInvocationState, UnixMillis,
 };
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
@@ -84,7 +84,6 @@ async fn rejects_incompatible_schema_without_rewriting_records() {
         .unwrap();
     let store = SqliteHarnessStore {
         pool,
-        path: None,
         knowledge_generation: Default::default(),
     };
     assert_eq!(
@@ -186,7 +185,9 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
         tool: "inspect_graph".into(),
         effect: yss_harness_contract::ToolEffect::Inspect,
         arguments: serde_json::json!({"graph": {"kind": "event_graph", "id": "events/Main.yssbi-event"}}),
-        request: Some(serde_json::json!({"graph": "events/Main.yssbi-event", "detail": "overview"})),
+        request: Some(
+            serde_json::json!({"graph": "events/Main.yssbi-event", "detail": "overview"}),
+        ),
         state: ToolInvocationState::Running,
         result: None,
         failure: None,

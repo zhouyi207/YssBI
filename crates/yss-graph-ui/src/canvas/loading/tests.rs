@@ -295,7 +295,7 @@ impl Fixture {
             })
             .unwrap()
         });
-        (window.into(), canvas)
+        (window, canvas)
     }
 }
 

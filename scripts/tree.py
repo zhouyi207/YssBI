@@ -58,8 +58,6 @@ class GitignoreRule:
         
         # 处理包含 / 的模式
         if '/' in pattern:
-            if fnmatch.fnmatch(rel_path_str, pattern):
-                return True
             # 尝试匹配路径的任意后缀
             for i in range(len(parts)):
                 sub_path = '/'.join(parts[i:])
@@ -145,10 +143,6 @@ class GitignoreManager:
                 current = parent
             except:
                 break
-        
-        # 检查根目录的规则
-        if self.root_path in self.rules_by_dir:
-            applicable_rules.extend(self.rules_by_dir[self.root_path])
         
         # 应用规则（后面的规则优先级更高）
         should_ignore = False

@@ -8,7 +8,9 @@ use crate::{
     ResourceChange, ResourceCreation, ResourceVersion, StatisticalPlan,
 };
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentRole {
     Manager,
@@ -40,23 +42,14 @@ impl AgentRole {
         }
     }
 
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Manager => "ManagerAgent",
-            Self::Data => "DataAgent",
-            Self::Stats => "StatsAgent",
-            Self::Plot => "PlotAgent",
-            Self::Report => "ReportAgent",
-            Self::Review => "ReviewAgent",
-        }
-    }
-
     pub fn id(self) -> AgentRoleId {
         AgentRoleId::try_new(self.as_str()).expect("built-in role ids are valid")
     }
 
     pub fn from_id(id: &AgentRoleId) -> Option<Self> {
-        Self::ALL.into_iter().find(|role| role.as_str() == id.as_str())
+        Self::ALL
+            .into_iter()
+            .find(|role| role.as_str() == id.as_str())
     }
 }
 

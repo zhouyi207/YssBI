@@ -87,14 +87,6 @@ pub struct DidPlaceboFakeGroupBlock {
     pub perm_coef_std: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComputeDidFakeGroupRequest {
-    #[serde(flatten)]
-    pub payload: DidFakeGroupEnginePayload,
-    pub n_perm: usize,
-    pub rng_seed: u64,
-}
-
 pub struct DidRandomizationInput {
     pub constant: bool,
     pub covariance: String,

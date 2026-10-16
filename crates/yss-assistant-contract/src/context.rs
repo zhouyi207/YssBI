@@ -52,15 +52,6 @@ impl CapabilityInvocationContext {
         &self.project
     }
 
-    pub fn with_approval(mut self, approval_grant_id: ApprovalGrantId) -> Self {
-        self.approval_grant_id = Some(approval_grant_id);
-        self
-    }
-
-    pub fn approval_grant_id(&self) -> Option<&ApprovalGrantId> {
-        self.approval_grant_id.as_ref()
-    }
-
     pub fn with_agent(mut self, agent: AgentInvocationScope) -> Self {
         self.agent = Some(agent);
         self

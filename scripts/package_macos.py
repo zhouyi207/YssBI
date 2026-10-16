@@ -21,7 +21,6 @@ TARGETS = {
     "x86_64-apple-darwin": ("x86_64", "10.15.7"),
     "aarch64-apple-darwin": ("arm64", "11.0"),
 }
-# gpui-pre-apple 0.3.8 build.rs compiles Metal for macOS 10.15.7.
 # Apple Silicon itself requires macOS 11.0.
 SEMVER = re.compile(
     r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"

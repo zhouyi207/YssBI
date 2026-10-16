@@ -356,7 +356,7 @@ fn multiple_proportions(
     let mut counts = vec![0.0; values.len()];
     let mut total = 0.0;
     let mut successes = 0.0;
-    for (i, pair) in values.chunks_exact(2).enumerate() {
+    for (i, pair) in values.as_chunks::<2>().0.iter().enumerate() {
         checkpoint(control, i)?;
         if pair.iter().any(|v| !v.is_finite()) {
             return Err(invalid(Violation::NonFiniteInput));

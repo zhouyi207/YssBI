@@ -200,8 +200,14 @@ impl AssistantRun {
                 version: self.resource_version(&value.resource)?,
                 resource: value.resource,
             }),
-            Input::UndoResource(value) => self.bind_resource_history(value.resource, false, runner).await?,
-            Input::RedoResource(value) => self.bind_resource_history(value.resource, true, runner).await?,
+            Input::UndoResource(value) => {
+                self.bind_resource_history(value.resource, false, runner)
+                    .await?
+            }
+            Input::RedoResource(value) => {
+                self.bind_resource_history(value.resource, true, runner)
+                    .await?
+            }
             Input::InsertRows(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::InsertRows {
@@ -301,16 +307,25 @@ impl AssistantRun {
                     .await?
             }
             Input::CreateConnections(value) => {
-                self.bind_graph_mutation(model::GraphMutationInput::CreateConnections(value), runner)
-                    .await?
+                self.bind_graph_mutation(
+                    model::GraphMutationInput::CreateConnections(value),
+                    runner,
+                )
+                .await?
             }
             Input::UpdateConnections(value) => {
-                self.bind_graph_mutation(model::GraphMutationInput::UpdateConnections(value), runner)
-                    .await?
+                self.bind_graph_mutation(
+                    model::GraphMutationInput::UpdateConnections(value),
+                    runner,
+                )
+                .await?
             }
             Input::DeleteConnections(value) => {
-                self.bind_graph_mutation(model::GraphMutationInput::DeleteConnections(value), runner)
-                    .await?
+                self.bind_graph_mutation(
+                    model::GraphMutationInput::DeleteConnections(value),
+                    runner,
+                )
+                .await?
             }
             Input::ApplyGraphEdit(_) | Input::SaveGraph(_) => {
                 return Err(CapabilityFailure::new(

@@ -133,10 +133,7 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
         offset: 0,
         limit: 1,
     });
-    let first = run
-        .execute(read.clone())
-        .await
-        .unwrap();
+    let first = run.execute(read.clone()).await.unwrap();
     let record = store
         .load_invocation(
             &HarnessSessionId::try_new("session").unwrap(),
@@ -145,7 +142,10 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(record.arguments, serde_json::to_value(&read).unwrap()["payload"]);
+    assert_eq!(
+        record.arguments,
+        serde_json::to_value(&read).unwrap()["payload"]
+    );
     assert_eq!(
         run.state()
             .observations
@@ -187,10 +187,7 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
         model::CapabilityInput::SetColumnSemantics(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"column":"x","semantic":{"kind":"Identifier","values":[],"positiveValue":null,"numeric":null}}]})).unwrap()),
     ];
     for input in &inputs {
-        let outcome = run
-            .execute(input.clone())
-            .await
-            .unwrap();
+        let outcome = run.execute(input.clone()).await.unwrap();
         let record = store
             .load_invocation(
                 &HarnessSessionId::try_new("session").unwrap(),
@@ -200,7 +197,10 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
             .unwrap()
             .unwrap();
         assert_eq!(record.tool, input.capability_id().as_str());
-        assert_eq!(record.arguments, serde_json::to_value(&input).unwrap()["payload"]);
+        assert_eq!(
+            record.arguments,
+            serde_json::to_value(input).unwrap()["payload"]
+        );
         assert_eq!(record.state, ToolInvocationState::Succeeded);
         let visible = model::capability_result(&outcome.result).unwrap();
         assert!(!visible.to_string().contains("revision"));
@@ -212,7 +212,14 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
         }
     }
     assert_eq!(
-        run.state().scope.lock().unwrap().task.as_ref().unwrap().resources[0]
+        run.state()
+            .scope
+            .lock()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .resources[0]
             .version
             .as_ref()
             .unwrap()
@@ -221,14 +228,18 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
     );
     gateway.0.lock().unwrap().0 += 1;
     assert_eq!(
-        run.execute(read)
-            .await
-            .unwrap_err()
-            .code,
+        run.execute(read).await.unwrap_err().code,
         CapabilityFailureCode::REVISION_CONFLICT
     );
     assert_eq!(
-        run.state().scope.lock().unwrap().task.as_ref().unwrap().resources[0]
+        run.state()
+            .scope
+            .lock()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .resources[0]
             .version
             .as_ref()
             .unwrap()
@@ -236,21 +247,22 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
         7 + inputs.len() as u64
     );
     assert_eq!(
-        run.execute(inputs[1].clone())
-        .await
-        .unwrap_err()
-        .code,
+        run.execute(inputs[1].clone()).await.unwrap_err().code,
         CapabilityFailureCode::REVISION_CONFLICT
     );
     assert_eq!(gateway.0.lock().unwrap().1, inputs.len());
-    run.state().scope.lock().unwrap().task.as_mut().unwrap().resources[0]
+    run.state()
+        .scope
+        .lock()
+        .unwrap()
+        .task
+        .as_mut()
+        .unwrap()
+        .resources[0]
         .operations
         .clear();
     assert_eq!(
-        run.execute(inputs[0].clone())
-        .await
-        .unwrap_err()
-        .code,
+        run.execute(inputs[0].clone()).await.unwrap_err().code,
         CapabilityFailureCode::INVALID_REQUEST
     );
     assert_eq!(gateway.0.lock().unwrap().1, inputs.len());

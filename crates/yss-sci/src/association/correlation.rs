@@ -239,7 +239,7 @@ fn prefix(tree: &[u64], mut i: usize) -> u64 {
 fn add(tree: &mut [u64], mut i: usize) {
     while i < tree.len() {
         tree[i] += 1;
-        i += i & i.wrapping_neg();
+        i += i.isolate_lowest_one();
     }
 }
 fn kendall_counts(x: &[f64], y: &[f64], control: &Control) -> Result<(u64, u64), Error> {

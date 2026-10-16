@@ -1,6 +1,5 @@
 use crate::test_support::{
-    FixedClock, InMemoryHarnessStore, MockAgentDriver, SequentialIds,
-    model_identity,
+    FixedClock, InMemoryHarnessStore, MockAgentDriver, SequentialIds, model_identity,
 };
 use crate::{HarnessError, HarnessHost, HarnessPorts};
 use std::sync::Arc;

@@ -36,6 +36,7 @@ mod connections;
 mod mutations;
 mod parameters;
 mod semantic_cache;
+pub use connections::ConnectionCandidatesInput;
 pub use parameters::NodeCreationForm;
 use semantic_cache::{CachedGraphAnalysis, GraphResolutionCache, GraphResolutionCaches};
 

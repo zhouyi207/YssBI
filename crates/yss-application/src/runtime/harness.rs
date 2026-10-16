@@ -2,8 +2,11 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use yss_harness_contract::{AutomationIdKind, ClockPort, HarnessEventSinkPort, IdGenerationFailure, IdGeneratorPort, UnixMillis};
 use yss_assistant_contract::CapabilityGatewayPort;
+use yss_harness_contract::{
+    AutomationIdKind, ClockPort, HarnessEventSinkPort, IdGenerationFailure, IdGeneratorPort,
+    UnixMillis,
+};
 use yss_harness_core::{HarnessHost, HarnessPorts};
 
 use crate::session::ApplicationState;

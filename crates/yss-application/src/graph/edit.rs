@@ -265,7 +265,15 @@ impl ApplicationState {
         let candidates = captured
             .graph()
             .connection_candidates(
-                graph, &document, source, intent, &catalog, &analysis, cancelled,
+                yss_graph_runtime::ConnectionCandidatesInput {
+                    graph,
+                    document: &document,
+                    source,
+                    intent,
+                    catalog: &catalog,
+                    analysis: &analysis,
+                },
+                cancelled,
             )
             .map_err(ResourceMutationApplicationError::Mutation)?;
         if candidates.is_none() || cancelled() {

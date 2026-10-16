@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Default)]
 struct OptionsDriver {
-        store: StoreSlot,
+    store: StoreSlot,
     writable_run: Mutex<Option<AgentRunId>>,
     calls: AtomicUsize,
 }
@@ -16,10 +16,10 @@ impl AgentDriverPort for OptionsDriver {
         _: CancellationToken,
     ) -> AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
         Box::pin(async move {
-                let capabilities = Tools {
-                    executor: executor.as_ref(),
-                    store: self.store.get(),
-                };
+            let capabilities = Tools {
+                executor: executor.as_ref(),
+                store: self.store.get(),
+            };
             self.calls.fetch_add(1, Ordering::Relaxed);
             assert_eq!(
                 request.options.reasoning_effort,
@@ -79,10 +79,10 @@ impl AgentDriverPort for OptionsDriver {
                     assert!(
                         capabilities
                             .execute(model::CapabilityInput::SaveResource(
-                                    model::ResourceTargetInput {
-                                        resource: document()
-                                    }
-                                ))
+                                model::ResourceTargetInput {
+                                    resource: document()
+                                }
+                            ))
                             .await
                             .is_err()
                     );
@@ -97,9 +97,11 @@ impl AgentDriverPort for OptionsDriver {
             } else {
                 inspect_resource(&capabilities, document()).await;
                 capabilities
-                    .execute(model::CapabilityInput::SaveResource(model::ResourceTargetInput {
+                    .execute(model::CapabilityInput::SaveResource(
+                        model::ResourceTargetInput {
                             resource: document(),
-                        }))
+                        },
+                    ))
                     .await
                     .unwrap();
             }
@@ -113,8 +115,11 @@ impl AgentDriverPort for OptionsDriver {
 #[tokio::test]
 async fn ask_mode_constrains_manager_workers_and_restored_tasks_and_preserves_turn_options() {
     let driver = Arc::new(OptionsDriver::default());
-    let (host, store, session) =
-        setup_models(yss_harness_core::test_support::fixed_model(driver.clone()), false).await;
+    let (host, store, session) = setup_models(
+        yss_harness_core::test_support::fixed_model(driver.clone()),
+        false,
+    )
+    .await;
     driver.store.set(store.clone());
     for mode in [HarnessMode::Write, HarnessMode::Ask] {
         let options = HarnessTurnOptions {

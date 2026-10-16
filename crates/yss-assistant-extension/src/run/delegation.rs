@@ -82,11 +82,7 @@ impl AssistantRun {
                 );
             }
         }
-        worker
-            .scope
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .task = Some(scope.clone());
+        worker.scope.lock().unwrap_or_else(|e| e.into_inner()).task = Some(scope.clone());
         Ok((
             serde_json::to_value(scope).map_err(|_| internal_failure())?,
             serde_json::to_value(AgentFollowupBindings { resource_versions })

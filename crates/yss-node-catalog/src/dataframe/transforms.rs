@@ -480,7 +480,6 @@ pub(super) fn window_context() -> Result<PortSpec, BuiltinAssemblyError> {
         min: 0,
         max: Some(1),
     };
-    context.consumption = Some(InputConsumption::Streaming);
     Ok(context)
 }
 pub(super) fn window_parameters() -> Result<Vec<Parameter>, BuiltinAssemblyError> {
@@ -570,7 +569,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
             _ => (numeric_series_type(), numeric_series_type()),
         };
         vec![
-            streaming_input(
+            data_input(
                 if matches!(kind, Choose) {
                     "condition"
                 } else {
@@ -579,7 +578,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
                 "Series",
                 input,
             )?,
-            streaming_output(
+            data_output(
                 "result",
                 "Result",
                 output,
@@ -631,13 +630,13 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
             ];
         }
         SetColumn => {
-            ports.insert(1, streaming_input("series", "Series", generic_series)?);
+            ports.insert(1, data_input("series", "Series", generic_series)?);
             parameters = vec![text_value("name", "computed")?];
         }
         Mask => {
             ports.insert(
                 1,
-                streaming_input("mask", "Mask", data_series_type(concrete("core.binary")?))?,
+                data_input("mask", "Mask", data_series_type(concrete("core.binary")?))?,
             );
             parameters = vec![toggle("drop_matches", false)?];
         }
@@ -684,18 +683,12 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         Choose => {
             ports.insert(
                 1,
-                streaming_input("when_true", "When True", mixed(element.clone()))?,
+                data_input("when_true", "When True", mixed(element.clone()))?,
             );
-            ports.insert(
-                2,
-                streaming_input("when_false", "When False", mixed(element))?,
-            );
+            ports.insert(2, data_input("when_false", "When False", mixed(element))?);
         }
         Fill => {
-            ports.insert(
-                1,
-                streaming_input("replacement", "Replacement", mixed(element))?,
-            );
+            ports.insert(1, data_input("replacement", "Replacement", mixed(element))?);
         }
         Map => {
             parameters = vec![
@@ -715,7 +708,6 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         }
         Concatenate => {
             ports[0] = user_input("parts", "Text", mixed(concrete("core.text")?), 2)?;
-            ports[0].consumption = Some(InputConsumption::Streaming);
             parameters = vec![text_value("separator", "")?];
         }
         DatePart => {
@@ -761,7 +753,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
         DateDifference => {
             ports.insert(
                 1,
-                streaming_input("other", "Other", mixed(concrete("core.datetime")?))?,
+                data_input("other", "Other", mixed(concrete("core.datetime")?))?,
             );
             parameters = vec![choice_parameter(
                 "unit",

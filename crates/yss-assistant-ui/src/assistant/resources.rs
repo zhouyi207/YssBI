@@ -6,11 +6,11 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants},
 };
 use gpui_kit::{AnyElement, App, IntoElement, SharedString, WeakEntity, div, prelude::*};
+use yss_assistant_contract::{AssistantResultReference, ResourceChange};
 use yss_graph_execution::{
     identity::ExecutionSessionId,
     result::{ResultId, ResultReference},
 };
-use yss_assistant_contract::{AssistantResultReference, ResourceChange};
 use yss_ui::lifecycle::LogReleased;
 
 pub(super) fn cards(

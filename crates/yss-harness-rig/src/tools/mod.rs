@@ -31,36 +31,40 @@ pub(crate) fn dynamic_tool(
     tool_failure: tokio::sync::watch::Sender<Option<AgentDriverFailure>>,
 ) -> DynamicTool {
     let name = spec.name.clone();
-    DynamicTool::new(spec.name, spec.description, spec.input_schema, move |arguments| {
-        let name = name.clone();
-        let executor = Arc::clone(&executor);
-        let tasks = Arc::clone(&tasks);
-        let tool_failure = tool_failure.clone();
-        Box::pin(async move {
-            let (sender, receiver) = tokio::sync::oneshot::channel();
-            // The Harness settles every accepted call, including after the model stream ends.
-            let task = tokio::spawn(async move {
-                let outcome = executor.call(ToolCall { name, arguments }).await;
-                if sender.send(outcome).is_err() {
-                    tracing::debug!(
-                        domain = "Harness",
-                        event = "harness_tool_result_unobserved",
-                        "Rig stopped waiting for a settled tool call"
-                    );
+    DynamicTool::new(
+        spec.name,
+        spec.description,
+        spec.input_schema,
+        move |arguments| {
+            let name = name.clone();
+            let executor = Arc::clone(&executor);
+            let tasks = Arc::clone(&tasks);
+            let tool_failure = tool_failure.clone();
+            Box::pin(async move {
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                // The Harness settles every accepted call, including after the model stream ends.
+                let task = tokio::spawn(async move {
+                    let outcome = executor.call(ToolCall { name, arguments }).await;
+                    if sender.send(outcome).is_err() {
+                        tracing::debug!(
+                            domain = "Harness",
+                            event = "harness_tool_result_unobserved",
+                            "Rig stopped waiting for a settled tool call"
+                        );
+                    }
+                });
+                tasks
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .push(task);
+                let outcome = receiver.await.map_err(|_| {
+                    runtime_tool_failure(&tool_failure, AgentDriverFailureCode::InternalFailure)
+                })?;
+                if let Some(code) = outcome.fatal {
+                    return Err(runtime_tool_failure(&tool_failure, code));
                 }
-            });
-            tasks
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .push(task);
-            let outcome = receiver.await.map_err(|_| {
-                runtime_tool_failure(&tool_failure, AgentDriverFailureCode::InternalFailure)
-            })?;
-            if let Some(code) = outcome.fatal {
-                return Err(runtime_tool_failure(&tool_failure, code));
-            }
-            Ok(ToolOutput::json(outcome.output))
-        })
-    })
+                Ok(ToolOutput::json(outcome.output))
+            })
+        },
+    )
 }
-

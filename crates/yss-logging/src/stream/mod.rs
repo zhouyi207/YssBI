@@ -2,15 +2,13 @@ mod dispatcher;
 mod dto;
 mod runtime;
 mod rust_projection;
-mod validation;
 mod worker;
 
 pub use dispatcher::LogsUnavailable;
 pub use dto::{
-    FrontendLogEntryDto, LogBatchDto, LogDomain, LogOrigin, LogRecordDto, LogStreamFailure,
-    LogSubscriptionDto,
+    LogBatchDto, LogDomain, LogOrigin, LogRecordDto, LogStreamFailure, LogSubscriptionDto,
 };
-pub use runtime::{LogInitializationError, LogRuntime, SubmitFrontendLogsError};
+pub use runtime::{LogInitializationError, LogRuntime};
 
 fn local_timestamp_now() -> String {
     chrono::Local::now()

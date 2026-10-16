@@ -46,12 +46,12 @@ pub(super) fn interface(
     };
     Ok((
         vec![
-            streaming_input(
+            data_input(
                 input,
                 if series { "DataSeries" } else { "Source" },
                 value_type,
             )?,
-            streaming_output(
+            data_output(
                 "result",
                 "Result",
                 dataframe_type()?,

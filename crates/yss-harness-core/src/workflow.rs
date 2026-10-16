@@ -2,10 +2,9 @@ use petgraph::{algo::toposort, graphmap::DiGraphMap};
 use std::collections::{BTreeMap, BTreeSet};
 
 use yss_harness_contract::{
-    HarnessExtension, HarnessSessionId, HarnessTurnId, ProjectSessionBinding, ToolEffect,
-    ToolSpec, UnixMillis,
-    WorkflowDefinition, WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStep,
-    WorkflowStepId, WorkflowStepRecord, WorkflowStepState,
+    HarnessExtension, HarnessSessionId, HarnessTurnId, ProjectSessionBinding, ToolEffect, ToolSpec,
+    UnixMillis, WorkflowDefinition, WorkflowRunId, WorkflowRunRecord, WorkflowRunState,
+    WorkflowStep, WorkflowStepId, WorkflowStepRecord, WorkflowStepState,
 };
 
 #[derive(Clone, Debug)]
@@ -428,11 +427,14 @@ mod tests {
 
     #[test]
     fn compiler_rejects_cycles() {
-        let error = CompiledWorkflow::compile(definition(vec![
-            step("independent", &[]),
-            step("inspect", &["review"]),
-            step("review", &["inspect"]),
-        ]), &NoteExtension::default())
+        let error = CompiledWorkflow::compile(
+            definition(vec![
+                step("independent", &[]),
+                step("inspect", &["review"]),
+                step("review", &["inspect"]),
+            ]),
+            &NoteExtension::default(),
+        )
         .unwrap_err();
 
         assert_eq!(error, WorkflowCompileError::Cycle);
@@ -446,7 +448,8 @@ mod tests {
             step("inspect", &[]),
             step("independent", &[]),
         ]);
-        let compiled = CompiledWorkflow::compile(definition.clone(), &NoteExtension::default()).unwrap();
+        let compiled =
+            CompiledWorkflow::compile(definition.clone(), &NoteExtension::default()).unwrap();
         assert_eq!(compiled.definition().steps, definition.steps);
 
         let mut invalid = definition;
@@ -461,10 +464,10 @@ mod tests {
 
     #[test]
     fn runtime_orders_dependencies_and_recovers_read_only_interruption() {
-        let compiled = CompiledWorkflow::compile(definition(vec![
-            step("inspect", &[]),
-            step("review", &["inspect"]),
-        ]), &NoteExtension::default())
+        let compiled = CompiledWorkflow::compile(
+            definition(vec![step("inspect", &[]), step("review", &["inspect"])]),
+            &NoteExtension::default(),
+        )
         .unwrap();
         let mut run = WorkflowRuntime::plan(
             &compiled,

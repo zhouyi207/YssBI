@@ -259,28 +259,28 @@ impl TryFrom<&HarnessEvent> for AssistantEventKind {
                 let facts = AgentTaskFacts::from_value(&outcome.facts)
                     .map_err(|_| AssistantProjectionError::Malformed("task facts"))?;
                 Self::AgentRunFinished {
-                run_id: outcome.run_id.to_string(),
-                role: self::role(&outcome.role)?,
-                state: outcome.state,
-                failure_code: outcome.failure_code,
-                summary: outcome.report.as_ref().map(|report| report.summary.clone()),
-                blocked_reason: outcome
-                    .report
-                    .as_ref()
-                    .and_then(|report| report.blocked_reason.clone()),
-                warnings: outcome
-                    .report
-                    .as_ref()
-                    .map(|report| report.warnings.clone())
-                    .unwrap_or_default(),
-                evidence_count: outcome.evidence.len(),
-                artifacts: facts.artifacts,
-                results: facts
-                    .results
-                    .into_iter()
-                    .map(AssistantResultReference::from)
-                    .collect(),
-            }
+                    run_id: outcome.run_id.to_string(),
+                    role: self::role(&outcome.role)?,
+                    state: outcome.state,
+                    failure_code: outcome.failure_code,
+                    summary: outcome.report.as_ref().map(|report| report.summary.clone()),
+                    blocked_reason: outcome
+                        .report
+                        .as_ref()
+                        .and_then(|report| report.blocked_reason.clone()),
+                    warnings: outcome
+                        .report
+                        .as_ref()
+                        .map(|report| report.warnings.clone())
+                        .unwrap_or_default(),
+                    evidence_count: outcome.evidence.len(),
+                    artifacts: facts.artifacts,
+                    results: facts
+                        .results
+                        .into_iter()
+                        .map(AssistantResultReference::from)
+                        .collect(),
+                }
             }
             HarnessEvent::SessionCreated => Self::SessionCreated,
             HarnessEvent::TurnConfigured { options } => Self::TurnConfigured { options: *options },
@@ -567,7 +567,8 @@ mod tests {
             let replay: AgentEvent =
                 serde_json::from_value(serde_json::to_value(&business).unwrap()).unwrap();
             assert_eq!(business, replay);
-            let business_wire = serde_json::to_value(AssistantEventKind::try_from(&replay).unwrap()).unwrap();
+            let business_wire =
+                serde_json::to_value(AssistantEventKind::try_from(&replay).unwrap()).unwrap();
             assert_eq!(business_wire["payload"]["failureCode"], expected);
             let finished = AgentEvent::ControlToolFinished {
                 invocation_id: invocation_id.clone(),
@@ -575,7 +576,8 @@ mod tests {
                 failure_code: Some(code.clone()),
                 failure_details: Some(details),
             };
-            let wire = serde_json::to_value(AssistantEventKind::try_from(&finished).unwrap()).unwrap();
+            let wire =
+                serde_json::to_value(AssistantEventKind::try_from(&finished).unwrap()).unwrap();
             assert_eq!(wire["payload"]["failureCode"], expected);
             let events = [
                 AgentEvent::ControlToolStarted {

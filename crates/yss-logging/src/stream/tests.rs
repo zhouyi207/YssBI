@@ -2,41 +2,20 @@ use std::collections::BTreeMap;
 use std::sync::mpsc;
 use std::time::Duration;
 
+use crate::collector::CapturedLog;
 use chrono::NaiveDateTime;
 use serde_json::json;
 
-use super::dispatcher::{
-    LIVE_BATCH_INTERVAL, LIVE_BATCH_MAX_RECORDS, LogHub, PendingLog, RECENT_LOG_CAPACITY,
-};
-use super::dto::{
-    FrontendLogEntryDto, LogBatchDto, LogDomain, LogLevel, LogOrigin, LogRecordDto,
-    LogSubscriptionDto,
-};
-use super::validation::{MAX_FRONTEND_LOG_BATCH, validate_frontend_batch};
+use super::dispatcher::{LIVE_BATCH_INTERVAL, LIVE_BATCH_MAX_RECORDS, LogHub, RECENT_LOG_CAPACITY};
+use super::dto::{LogBatchDto, LogDomain, LogLevel, LogOrigin, LogRecordDto, LogSubscriptionDto};
 
-fn pending(message: impl Into<String>) -> PendingLog {
-    PendingLog {
-        timestamp: super::local_timestamp_now(),
+fn captured(message: impl Into<String>) -> CapturedLog {
+    CapturedLog {
+        timestamp: chrono::Local::now().naive_local(),
         level: LogLevel::Info,
-        origin: LogOrigin::Rust,
-        domain: LogDomain::Application,
         target: "yssbi::test".into(),
-        event: None,
         message: message.into(),
-        source: None,
         fields: BTreeMap::new(),
-    }
-}
-
-fn frontend_entry() -> FrontendLogEntryDto {
-    FrontendLogEntryDto {
-        level: LogLevel::Warn,
-        domain: LogDomain::Ui,
-        target: "editor.canvas".into(),
-        event: Some("dropRejected".into()),
-        message: "Drop was rejected".into(),
-        source: Some("main-window".into()),
-        fields: BTreeMap::from([("nodeCount".into(), json!(3))]),
     }
 }
 
@@ -68,25 +47,6 @@ fn log_record_serializes_strict_camel_case_contract() {
     assert!(value.get("source").is_none());
     NaiveDateTime::parse_from_str(value["timestamp"].as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%.f")
         .unwrap();
-}
-
-#[test]
-fn frontend_batches_are_bounded_and_validate_text_and_fields() {
-    assert!(validate_frontend_batch(vec![frontend_entry()]).is_ok());
-    assert!(validate_frontend_batch(Vec::new()).is_err());
-    assert!(validate_frontend_batch(vec![frontend_entry(); MAX_FRONTEND_LOG_BATCH + 1]).is_err());
-
-    let mut invalid_target = frontend_entry();
-    invalid_target.target = "editor\0canvas".into();
-    assert!(validate_frontend_batch(vec![invalid_target]).is_err());
-
-    let mut too_deep = json!("leaf");
-    for _ in 0..9 {
-        too_deep = json!({ "nested": too_deep });
-    }
-    let mut invalid_fields = frontend_entry();
-    invalid_fields.fields.insert("deep".into(), too_deep);
-    assert!(validate_frontend_batch(vec![invalid_fields]).is_err());
 }
 
 #[test]
@@ -145,38 +105,12 @@ fn log_domains_serialize_to_the_six_lowercase_values() {
 }
 
 #[test]
-fn frontend_entry_deserialization_rejects_contract_drift() {
-    let mut unknown_field = serde_json::to_value(frontend_entry()).unwrap();
-    unknown_field
-        .as_object_mut()
-        .unwrap()
-        .insert("unknown".into(), json!(true));
-    assert!(serde_json::from_value::<FrontendLogEntryDto>(unknown_field).is_err());
-
-    let mut missing_fields = serde_json::to_value(frontend_entry()).unwrap();
-    missing_fields.as_object_mut().unwrap().remove("fields");
-    assert!(serde_json::from_value::<FrontendLogEntryDto>(missing_fields).is_err());
-    assert!(
-        serde_json::from_value::<FrontendLogEntryDto>(json!({
-            "level": "info",
-            "domain": "notify",
-            "target": "frontend.notify",
-            "message": "legacy domain",
-            "fields": {}
-        }))
-        .is_err()
-    );
-}
-
-#[test]
 fn recent_ring_keeps_5000_records_with_rust_owned_monotonic_sequences() {
     let (hub, _guard) = LogHub::start_for_test(RECENT_LOG_CAPACITY + 2, 8);
-    hub.publish(
-        (0..=RECENT_LOG_CAPACITY)
-            .map(|index| pending(format!("record-{index}")))
-            .collect(),
-    )
-    .unwrap();
+    for index in 0..=RECENT_LOG_CAPACITY {
+        hub.publish_rust(captured(format!("record-{index}")), None)
+            .unwrap();
+    }
 
     let subscription = hub.subscribe(|_| true).unwrap();
     assert_eq!(subscription.entries.len(), RECENT_LOG_CAPACITY);
@@ -202,14 +136,14 @@ fn recent_ring_keeps_5000_records_with_rust_owned_monotonic_sequences() {
 #[test]
 fn subscription_snapshot_and_live_batches_have_one_ordered_boundary() {
     let (hub, _guard) = LogHub::start();
-    hub.publish(vec![pending("snapshot")]).unwrap();
+    hub.publish_rust(captured("snapshot"), None).unwrap();
     let (batch_sender, batch_receiver) = mpsc::channel();
     let subscription = hub
         .subscribe(move |batch| batch_sender.send(batch).is_ok())
         .unwrap();
 
-    hub.publish(vec![pending("live-1"), pending("live-2")])
-        .unwrap();
+    hub.publish_rust(captured("live-1"), None).unwrap();
+    hub.publish_rust(captured("live-2"), None).unwrap();
     let live = batch_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
 
     assert_eq!(
@@ -235,7 +169,8 @@ fn subscription_snapshot_and_live_batches_have_one_ordered_boundary() {
     }));
 
     hub.unsubscribe(subscription.subscription_id).unwrap();
-    hub.publish(vec![pending("after-unsubscribe")]).unwrap();
+    hub.publish_rust(captured("after-unsubscribe"), None)
+        .unwrap();
     assert!(
         batch_receiver
             .recv_timeout(Duration::from_millis(50))
@@ -272,7 +207,7 @@ fn overflowing_subscriber_stops_without_delivering_queued_batches() {
         })
         .unwrap();
 
-    hub.publish(vec![pending("in-flight")]).unwrap();
+    hub.publish_rust(captured("in-flight"), None).unwrap();
     started_receiver
         .recv_timeout(Duration::from_secs(1))
         .unwrap();
@@ -281,7 +216,7 @@ fn overflowing_subscriber_stops_without_delivering_queued_batches() {
         .unwrap();
 
     for (sequence, message) in [(2, "queued"), (3, "overflow")] {
-        hub.publish(vec![pending(message)]).unwrap();
+        hub.publish_rust(captured(message), None).unwrap();
         let batch = healthy_receiver
             .recv_timeout(Duration::from_secs(1))
             .unwrap();
@@ -325,12 +260,10 @@ fn live_batches_preserve_order_and_flush_by_size_or_time() {
         .unwrap();
 
     let started = std::time::Instant::now();
-    hub.publish(
-        (0..LIVE_BATCH_MAX_RECORDS + 1)
-            .map(|index| pending(format!("batch-{index}")))
-            .collect(),
-    )
-    .unwrap();
+    for index in 0..LIVE_BATCH_MAX_RECORDS + 1 {
+        hub.publish_rust(captured(format!("batch-{index}")), None)
+            .unwrap();
+    }
 
     let size_batch = batch_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
     assert_eq!(size_batch.entries.len(), LIVE_BATCH_MAX_RECORDS);
@@ -357,11 +290,11 @@ fn live_batches_preserve_order_and_flush_by_size_or_time() {
 fn bounded_ingress_reports_exact_drop_count_on_recovery() {
     let (hub, _guard, release_dispatcher) = LogHub::start_paused_for_test(2);
 
-    hub.publish(vec![pending("first"), pending("queued")])
-        .unwrap();
+    hub.publish_rust(captured("first"), None).unwrap();
+    hub.publish_rust(captured("queued"), None).unwrap();
     let overflow_started = std::time::Instant::now();
-    hub.publish(vec![pending("dropped-1"), pending("dropped-2")])
-        .unwrap();
+    hub.publish_rust(captured("dropped-1"), None).unwrap();
+    hub.publish_rust(captured("dropped-2"), None).unwrap();
     assert!(overflow_started.elapsed() < Duration::from_millis(100));
     release_dispatcher.send(()).unwrap();
 
@@ -402,8 +335,8 @@ fn bounded_ingress_reports_exact_drop_count_on_recovery() {
 #[test]
 fn shutdown_does_not_wait_for_full_ingress() {
     let (hub, guard, _release_dispatcher) = LogHub::start_paused_for_test(1);
-    hub.publish(vec![pending("queued")]).unwrap();
-    hub.publish(vec![pending("dropped")]).unwrap();
+    hub.publish_rust(captured("queued"), None).unwrap();
+    hub.publish_rust(captured("dropped"), None).unwrap();
     let started = std::time::Instant::now();
     drop(guard);
     assert!(started.elapsed() < Duration::from_millis(500));

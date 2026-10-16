@@ -1,6 +1,6 @@
 //! Provider-reported consumption for one turn, independent of its rendered history.
-use yss_harness_contract::ModelCallPurpose;
 use yss_assistant_contract::AssistantEventKind as Event;
+use yss_harness_contract::ModelCallPurpose;
 
 #[derive(Clone, Default)]
 pub(in crate::assistant) struct TurnUsage {

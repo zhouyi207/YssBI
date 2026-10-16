@@ -4,8 +4,11 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::task::Poll;
 use tokio::sync::Notify;
-use yss_harness_contract::{HarnessSessionState, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord, PersistenceFailure, PersistenceFuture};
 use yss_assistant_extension::{AssistantExtension, test_support::RejectingCapabilityGateway};
+use yss_harness_contract::{
+    HarnessSessionState, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
+    PersistenceFailure, PersistenceFuture,
+};
 use yss_harness_core::test_support::{
     FixedClock, InMemoryHarnessStore, MockAgentDriver, SequentialIds,
 };

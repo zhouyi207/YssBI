@@ -238,24 +238,6 @@ impl std::fmt::Display for ProjectRegistryFailure {
 
 impl std::error::Error for ProjectRegistryFailure {}
 
-pub fn load_project(
-    state: &ProjectState,
-    path: &str,
-) -> Result<ProjectActivation, ProjectLifecycleError> {
-    let path = normalize_existing_path(path).map_err(|_| ProjectLifecycleError::InvalidPath)?;
-    let session = state
-        .activate_project_from_path(Path::new(&path))
-        .map_err(ProjectLifecycleError::LoadFailed)?;
-    state
-        .get_data()
-        .map_err(ProjectLifecycleError::LoadFailed)?;
-
-    Ok(ProjectActivation {
-        path,
-        project_instance_id: session.instance_id,
-    })
-}
-
 pub fn clear_project(state: &ProjectState) -> Result<(), ProjectLifecycleError> {
     state
         .clear_project()

@@ -5,7 +5,11 @@ mod render;
 use super::{Page, SettingsPanel};
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
 use gpui_kit::{App, Context, Entity, Window};
-use yss_harness_contract::{LanguageModelAuthentication, LanguageModelConfig, LanguageModelProtocol, LanguageModelProviderConfig, LanguageModelProviderPreset, LanguageModelProviderStatus, ReasoningEffort};
+use yss_harness_contract::{
+    LanguageModelAuthentication, LanguageModelConfig, LanguageModelProtocol,
+    LanguageModelProviderConfig, LanguageModelProviderPreset, LanguageModelProviderStatus,
+    ReasoningEffort,
+};
 
 pub(super) struct ProviderDraft {
     pub id: String,

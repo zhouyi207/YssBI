@@ -41,11 +41,7 @@ impl AssistantRun {
         Self {
             shared,
             worker: role != AgentRole::Manager,
-            scope: Mutex::new(AgentInvocationScope {
-                run_id,
-                role,
-                task,
-            }),
+            scope: Mutex::new(AgentInvocationScope { run_id, role, task }),
             evidence: Mutex::new(evidence),
             observations: Mutex::new(ResourceObservations::default()),
         }
@@ -65,12 +61,7 @@ impl AssistantRun {
 
     fn record_plan(&self, result: &Value) {
         match serde_json::from_value::<StatisticalPlan>(result["plan"].clone()) {
-            Ok(plan) => {
-                self.evidence
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .plan = Some(plan)
-            }
+            Ok(plan) => self.evidence.lock().unwrap_or_else(|e| e.into_inner()).plan = Some(plan),
             Err(error) => tracing::warn!(
                 domain = "Assistant",
                 event = "assistant_plan_receipt_unreadable",
@@ -205,12 +196,7 @@ impl AgentRunHooks for AssistantRun {
 
     fn resume(&self, scope: &Value) {
         match serde_json::from_value::<AgentTaskScope>(scope.clone()) {
-            Ok(scope) => {
-                self.scope
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .task = Some(scope)
-            }
+            Ok(scope) => self.scope.lock().unwrap_or_else(|e| e.into_inner()).task = Some(scope),
             Err(error) => tracing::warn!(
                 domain = "Assistant",
                 event = "assistant_resumed_scope_unreadable",
@@ -241,10 +227,8 @@ impl AgentRunHooks for AssistantRun {
     ) -> AgentFuture<'a, Result<PreparedToolCall, RejectedToolCall>> {
         Box::pin(async move {
             if call.name == PROPOSE_STATISTICAL_PLAN_TOOL {
-                let plan: StatisticalPlan = decode_arguments(
-                    call.arguments,
-                    &Value::from(statistical_plan_schema()),
-                )?;
+                let plan: StatisticalPlan =
+                    decode_arguments(call.arguments, &Value::from(statistical_plan_schema()))?;
                 let plan = serde_json::to_value(plan).map_err(|_| internal_failure())?;
                 return Ok(PreparedToolCall {
                     tool: call.name,

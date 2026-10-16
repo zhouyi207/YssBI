@@ -70,7 +70,8 @@ pub fn run_executor(
         yss_harness_contract::CancellationToken::default(),
     )
     .with_run(run.run_id, hooks.clone());
-    let executor = crate::orchestration::RunExecutor::standalone(executor, hooks.clone(), extension);
+    let executor =
+        crate::orchestration::RunExecutor::standalone(executor, hooks.clone(), extension);
     (hooks, std::sync::Arc::new(executor))
 }
 
@@ -145,15 +146,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput,
-    AgentTurnRequest, AgentTurnResult, ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort,
-    AutomationIdKind, CapabilityFailure, ClockPort, HarnessEvent,
+    AgentToolExecutor, AgentTurnRequest, AgentTurnResult, ApprovalGrantId, ApprovalGrantRecord,
+    ApprovalStorePort, AutomationIdKind, CapabilityFailure, ClockPort, HarnessEvent,
     HarnessEventEnvelope, HarnessEventSinkPort, HarnessEventStorePort, HarnessSessionId,
     HarnessSessionRecord, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
     IdGeneratorPort, KnowledgeDocumentRecord, KnowledgeSourceId, KnowledgeSourceRecord,
-    KnowledgeSourceStatus, KnowledgeSourceStorePort, AgentToolExecutor, PersistenceFailure,
-    PersistenceFailureCode, PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort,
-    ToolInvocationRecord, UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId,
-    WorkflowRunRecord, WorkflowRunState, WorkflowStorePort, WorkflowVersion,
+    KnowledgeSourceStatus, KnowledgeSourceStorePort, PersistenceFailure, PersistenceFailureCode,
+    PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort, ToolInvocationRecord,
+    UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId, WorkflowRunRecord, WorkflowRunState,
+    WorkflowStorePort, WorkflowVersion,
 };
 
 pub struct FixedClock {

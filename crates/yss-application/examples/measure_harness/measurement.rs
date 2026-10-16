@@ -135,7 +135,10 @@ pub async fn write(
         // Rejection stores {} when decoding failed, not the provider payload.
         // Decoded Assistant inputs retain their fields even when binding fails.
         if record.request.is_some()
-            || record.arguments.as_object().is_some_and(|arguments| !arguments.is_empty())
+            || record
+                .arguments
+                .as_object()
+                .is_some_and(|arguments| !arguments.is_empty())
         {
             call.argument_hash = fingerprint(&record.arguments);
         }

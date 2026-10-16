@@ -166,12 +166,10 @@ impl Workbench {
         let owner = self.services.tasks.clone();
         let job = self.services.run(move |_| match request.kind {
             AuthoredKind::Document => {
-                mutate::<DocDocument>(&owner, request, action, name)
-                    .map(FileResult::Document)
+                mutate::<DocDocument>(&owner, request, action, name).map(FileResult::Document)
             }
             AuthoredKind::Mind => {
-                mutate::<MindDocument>(&owner, request, action, name)
-                    .map(FileResult::Mind)
+                mutate::<MindDocument>(&owner, request, action, name).map(FileResult::Mind)
             }
             AuthoredKind::Chart => unreachable!("chart management has its own owner"),
         });

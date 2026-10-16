@@ -138,7 +138,14 @@ mod tests {
         let request = serde_json::json!({"id": "a", "text": "approved"});
         assert!(matches!(
             service
-                .issue(principal.clone(), session.clone(), project.clone(), read, &request, 1_000)
+                .issue(
+                    principal.clone(),
+                    session.clone(),
+                    project.clone(),
+                    read,
+                    &request,
+                    1_000
+                )
                 .await,
             Err(ApprovalError::NotRequired)
         ));
@@ -156,17 +163,38 @@ mod tests {
         let changed = serde_json::json!({"id": "a", "text": "changed"});
         assert!(matches!(
             service
-                .consume(&grant.id, &principal, &session, &project, &write.name, &changed)
+                .consume(
+                    &grant.id,
+                    &principal,
+                    &session,
+                    &project,
+                    &write.name,
+                    &changed
+                )
                 .await,
             Err(ApprovalError::BindingMismatch)
         ));
         service
-            .consume(&grant.id, &principal, &session, &project, &write.name, &request)
+            .consume(
+                &grant.id,
+                &principal,
+                &session,
+                &project,
+                &write.name,
+                &request,
+            )
             .await
             .unwrap();
         assert!(matches!(
             service
-                .consume(&grant.id, &principal, &session, &project, &write.name, &request)
+                .consume(
+                    &grant.id,
+                    &principal,
+                    &session,
+                    &project,
+                    &write.name,
+                    &request
+                )
                 .await,
             Err(ApprovalError::AlreadyConsumed)
         ));

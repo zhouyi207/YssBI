@@ -801,9 +801,6 @@
     "problemsEmpty": "No problems were reported for the current graph",
     "problemsLocateNode": "Locate problem node"
   },
-  "resultSource": {
-    "readFailed": "The result could not be read"
-  },
   "runFailure": {
     "title": "Execution failed",
     "unknown": "The run could not finish. Check the logs using the error code and diagnostic reference.",
@@ -1749,37 +1746,6 @@
       "noMatches": "No matches found"
     }
   },
-  "editorDropPreview": {
-    "openResource": "Open %{name}",
-    "mergeIntoGroup": "Move to this group",
-    "splitLeft": "Split Left",
-    "splitRight": "Split Right",
-    "splitTop": "Split Up",
-    "splitBottom": "Split Down"
-  },
-  "tabBar": {
-    "toolbar": {
-      "maximizeGroup": "Maximize Group",
-      "restoreGroup": "Restore Group",
-      "moreTabs": "More Tabs",
-      "dragToDock": "Drag to Dock Floating Window",
-      "floatWindowActions": "Floating Window Actions"
-    },
-    "contextMenu": {
-      "close": "Close",
-      "hideContent": "Hide Content",
-      "floatTab": "Float Tab",
-      "floatGroup": "Float Group",
-      "detachTab": "Move Tab to New Floating Window",
-      "detachGroup": "Move Group to New Floating Window",
-      "dockFloat": "Dock Floating Window in Main Workspace",
-      "closeFloat": "Close All Tabs in Floating Window",
-      "expandContent": "Expand Content",
-      "closeOthers": "Close Others",
-      "closeSaved": "Close Saved",
-      "closeAll": "Close All"
-    }
-  },
   "activityBar": {
     "plugins": "Plugins",
     "project": "Project",
@@ -1895,12 +1861,6 @@
     "renameColumn": "Rename Column",
     "addColumn": "Add Column",
     "deleteColumn": "Delete Column \"%{name}\""
-  },
-  "resultState": {
-    "pending": "Result pending (%{completed}/%{total})",
-    "executionFailed": "Result computation failed",
-    "upstreamFailed": "An upstream result failed",
-    "cancelled": "Result computation was cancelled"
   },
   "sourceInspector": {
     "inspectRows": "Inspect data (%{count} rows)",

@@ -1,7 +1,7 @@
 //! Read baselines projected from receipts, independent of model context compaction.
 
-use std::collections::{BTreeMap, BTreeSet};
 use crate::contract::*;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone)]
 enum Observation {

@@ -197,8 +197,6 @@ pub struct PortSpec {
     pub cardinality: PortCardinality,
     pub connections: ConnectionsPerPort,
     pub input_binding: Option<InputBindingSpec>,
-    pub consumption: Option<InputConsumption>,
-    pub production: Option<OutputProduction>,
     pub editor: PortEditorSpec,
     pub schema: Option<SchemaExpr>,
 }
@@ -232,22 +230,6 @@ pub struct InputBindingSpec {
 pub enum LiteralPolicy {
     Forbidden,
     Allowed,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum InputConsumption {
-    Streaming,
-    SinglePassBatches,
-    RewindableBatches,
-    RandomAccess,
-    FullyMaterialized,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum OutputProduction {
-    Streaming,
-    Batches,
-    FullyMaterialized,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -411,18 +393,6 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
             "only input ports may declare literal/default bindings",
         ));
     }
-    if port.consumption.is_some() && !is_input {
-        return Err(invalid_port(
-            &port.key,
-            "only input ports may declare consumption",
-        ));
-    }
-    if port.production.is_some() && !is_output {
-        return Err(invalid_port(
-            &port.key,
-            "only output ports may declare production",
-        ));
-    }
     if port.schema.is_some() && !is_output {
         return Err(invalid_port(
             &port.key,
@@ -485,8 +455,6 @@ mod tests {
                     value: DataValue::Integer(1),
                 }),
             }),
-            consumption: Some(InputConsumption::FullyMaterialized),
-            production: None,
             editor: PortEditorSpec::InlineLiteral,
             schema: None,
         }
@@ -502,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_bindings_and_consumption_on_output() {
+    fn rejects_bindings_on_output() {
         let mut port = data_input();
         port.direction = PortDirection::Output;
         assert!(matches!(

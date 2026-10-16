@@ -16,8 +16,7 @@ allocation and for owned text as it is written. Dictionary labels are formatted 
 expanding the entire dictionary column first; logical null values remain null. Exceeding the
 projection budget returns `TabularArrowError::MemoryLimitExceeded`.
 
-`json_to_array` admits edited values against an explicit physical field; `to_record_batch`
-materializes ordered document literals. Neither projection replaces the source schema.
+`json_to_array` admits edited values against an explicit physical field.
 Semantic conversion, category domains and schema metadata reuse the shared contracts.
 Domain-code and numeric-bound validation reuse one lazily prepared physical field per
 validation or cast. It retains the original field attributes and other metadata while

@@ -138,10 +138,7 @@ impl TurnOrchestrator {
                 _ => {}
             }
         }
-        let (scope, bindings) = executor
-            .hooks
-            .resume_task(hooks.as_ref(), executor)
-            .await?;
+        let (scope, bindings) = executor.hooks.resume_task(hooks.as_ref(), executor).await?;
         task.scope = scope;
         request.bindings = bindings;
         history.push(AgentMessage::User {

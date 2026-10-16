@@ -97,7 +97,9 @@ impl NoteState {
                     }],
                 })
             }
-            _ => Err(CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)),
+            _ => Err(CapabilityFailure::new(
+                CapabilityFailureCode::INVALID_REQUEST,
+            )),
         }
     }
 }
@@ -229,17 +231,12 @@ impl HarnessExtension for NoteExtension {
         };
         Some(AgentProfile {
             role: id.clone(),
-            name: format!("{id}Agent"),
             instructions: vec![format!("You are the {id}.")],
             tools: note_specs(write),
             tool_concurrency: if delegates { 4 } else { 1 },
             delegates,
             output_mode,
         })
-    }
-
-    fn worker_roles(&self) -> Vec<AgentRoleId> {
-        vec![role("helper"), role("reader")]
     }
 
     fn mode_instructions(&self, mode: HarnessMode) -> Option<String> {
@@ -302,7 +299,9 @@ impl HarnessExtension for NoteExtension {
         if request["id"].as_str().is_some_and(|id| !id.is_empty()) {
             Ok(())
         } else {
-            Err(CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST))
+            Err(CapabilityFailure::new(
+                CapabilityFailureCode::INVALID_REQUEST,
+            ))
         }
     }
 
@@ -404,7 +403,9 @@ impl AgentRunHooks for NoteRun {
             let scope = self.scope.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if call.name == WRITE_NOTE
                 && (scope["write"] != true
-                    || !scope_notes(&scope).iter().any(|note| call.arguments["id"] == **note))
+                    || !scope_notes(&scope)
+                        .iter()
+                        .any(|note| call.arguments["id"] == **note))
             {
                 return Err(RejectedToolCall {
                     failure: CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)

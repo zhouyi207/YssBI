@@ -1,4 +1,6 @@
-use crate::{CapabilityContractError, ProjectResourceKind, ProjectResourceRef, validate_resource_id};
+use crate::{
+    CapabilityContractError, ProjectResourceKind, ProjectResourceRef, validate_resource_id,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

@@ -195,15 +195,6 @@ fn register_arithmetic_operator(
         PortDirection::Output,
         result_type,
     )?);
-    if matches!(spec.operation, "power" | "log") {
-        for port in &mut ports {
-            if port.direction == PortDirection::Input {
-                port.consumption = Some(InputConsumption::Streaming);
-            } else {
-                port.production = Some(OutputProduction::Streaming);
-            }
-        }
-    }
     let mut protocol = protocol(&id, "numeric", ports, vec![], vec![], pure())?;
     protocol.typing = NodeTypingSpec::NumericFold {
         inputs: if spec.operation == "add" {
@@ -258,13 +249,6 @@ fn register_unary(
         input: semantic("input", PortKey::new)?,
         output: semantic("result", PortKey::new)?,
     };
-    for port in &mut protocol.interface.ports {
-        if port.direction == PortDirection::Input {
-            port.consumption = Some(InputConsumption::Streaming);
-        } else {
-            port.production = Some(OutputProduction::Streaming);
-        }
-    }
     fragment.nodes.push(leaf(protocol, &id));
     Ok(())
 }

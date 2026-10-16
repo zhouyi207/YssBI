@@ -10,7 +10,9 @@ use yss_application::{
     harness::ApplicationCapabilityGateway,
     runtime::{ApplicationServices, HarnessTransportPorts},
 };
-use yss_harness_contract::{HarnessEventEnvelope, HarnessEventSinkPort, PersistenceFailure, PersistenceFuture};
+use yss_harness_contract::{
+    HarnessEventEnvelope, HarnessEventSinkPort, PersistenceFailure, PersistenceFuture,
+};
 
 use yss_desktop_services::{ApplicationTasks, DesktopEvent, DesktopEvents};
 

@@ -173,8 +173,7 @@ fn append_description(fragment: &mut ProviderFragment) -> Result<(), BuiltinAsse
             input_types.push(data_series_type(concrete(kind.type_id())?));
         }
     }
-    let mut source = data_input("source", "Data", TypeExpr::Union(input_types))?;
-    source.consumption = Some(InputConsumption::Streaming);
+    let source = data_input("source", "Data", TypeExpr::Union(input_types))?;
     let result = data_output("result", "Result", report_type()?)?;
     fragment.nodes.push(leaf(
         NodeProtocol {

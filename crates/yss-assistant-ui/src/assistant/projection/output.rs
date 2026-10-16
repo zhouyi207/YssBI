@@ -1,8 +1,10 @@
 //! Ordered output shared by the manager, workers and context-summary calls.
 use super::Tool;
 use crate::assistant::activity::Activity;
-use yss_harness_contract::{AgentRuntimePhase, KnowledgeCitation, ModelCallPurpose, ModelTokenUsage};
 use yss_assistant_contract::{AssistantEventKind as Event, AssistantToolIdentity, StatisticalPlan};
+use yss_harness_contract::{
+    AgentRuntimePhase, KnowledgeCitation, ModelCallPurpose, ModelTokenUsage,
+};
 
 #[derive(Clone)]
 pub(in crate::assistant) struct Text {
@@ -253,7 +255,9 @@ impl Output {
                 .iter()
                 .rev()
                 .find_map(|part| match &part.content {
-                    Content::Tool(tool) if tool.running() => Some(Activity::Tool(tool.kind.clone())),
+                    Content::Tool(tool) if tool.running() => {
+                        Some(Activity::Tool(tool.kind.clone()))
+                    }
                     _ => None,
                 });
         }

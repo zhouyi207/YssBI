@@ -1,6 +1,11 @@
 use crate::session::ApplicationState;
-use yss_harness_contract::{CapabilityControl, CapabilityFailure, CapabilityFailureCode, ToolEffect};
-use yss_assistant_contract::{AutomationCapabilityRequest, CapabilityFuture, CapabilityGatewayPort, CapabilityInvocationContext};
+use yss_assistant_contract::{
+    AutomationCapabilityRequest, CapabilityFuture, CapabilityGatewayPort,
+    CapabilityInvocationContext,
+};
+use yss_harness_contract::{
+    CapabilityControl, CapabilityFailure, CapabilityFailureCode, ToolEffect,
+};
 
 /// Scheduling adapter for the synchronous Application capability boundary.
 pub struct ApplicationCapabilityGateway {
@@ -108,8 +113,11 @@ mod tests {
     use super::*;
     use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
     use std::{sync::Arc, time::Duration};
-    use yss_harness_contract::{CancellationToken, CapabilityInvocationId, HarnessSessionId, PrincipalId, ProjectSessionBinding};
     use yss_assistant_contract::{AutomationCapabilityResult, InspectDatasetProfileRequest};
+    use yss_harness_contract::{
+        CancellationToken, CapabilityInvocationId, HarnessSessionId, PrincipalId,
+        ProjectSessionBinding,
+    };
     use yss_project_identity::OperationId;
 
     #[tokio::test]

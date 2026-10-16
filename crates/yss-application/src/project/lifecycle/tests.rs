@@ -112,8 +112,7 @@ async fn initialize_registry(directory: &TestDirectory) -> ProjectRegistry {
     )
     .await
     .unwrap();
-    let path = store.path().to_path_buf();
-    ProjectRegistry::new(Arc::new(store), path)
+    ProjectRegistry::new(Arc::new(store))
 }
 
 async fn initialize_registry_with_remove_failure(directory: &TestDirectory) -> ProjectRegistry {
@@ -122,11 +121,7 @@ async fn initialize_registry_with_remove_failure(directory: &TestDirectory) -> P
     )
     .await
     .unwrap();
-    let path = store.path().to_path_buf();
-    ProjectRegistry::new(
-        Arc::new(FailingRemoveProjectRegistryStore { inner: store }),
-        path,
-    )
+    ProjectRegistry::new(Arc::new(FailingRemoveProjectRegistryStore { inner: store }))
 }
 
 async fn register_root(registry: &ProjectRegistry, root: &Path, name: &str) -> ProjectRecord {

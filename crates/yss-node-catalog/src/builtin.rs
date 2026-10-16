@@ -637,13 +637,6 @@ fn binary_predicate_protocol(
         right: sid("right", PortKey::new)?,
         output: sid("result", PortKey::new)?,
     };
-    for port in &mut protocol.interface.ports {
-        if port.direction == PortDirection::Input {
-            port.consumption = Some(InputConsumption::Streaming);
-        } else {
-            port.production = Some(OutputProduction::Streaming);
-        }
-    }
     Ok(protocol)
 }
 
@@ -668,13 +661,6 @@ fn boolean_protocol(id: &str, unary: bool) -> Result<NodeProtocol, BuiltinAssemb
         input: sid("input", PortKey::new)?,
         output: sid("result", PortKey::new)?,
     };
-    for port in &mut protocol.interface.ports {
-        if port.direction == PortDirection::Input {
-            port.consumption = Some(InputConsumption::Streaming);
-        } else {
-            port.production = Some(OutputProduction::Streaming);
-        }
-    }
     Ok(protocol)
 }
 
@@ -723,9 +709,6 @@ fn data_port_expr(
             literal_policy: LiteralPolicy::Allowed,
             default_value: None,
         }),
-        consumption: None,
-        production: (direction == PortDirection::Output)
-            .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
     })

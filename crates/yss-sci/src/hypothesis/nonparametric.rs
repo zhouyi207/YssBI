@@ -641,7 +641,7 @@ fn mann_kendall(
         let mut index = rank;
         while index < tree.len() {
             tree[index] += 1;
-            index += index & index.wrapping_neg();
+            index += index.isolate_lowest_one();
         }
     }
     let total_n = n as f64;

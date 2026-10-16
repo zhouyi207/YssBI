@@ -60,14 +60,16 @@ impl ConversationPanel {
                     )),
             )
             .when(!turn.resources.is_empty(), |user| {
-                user.child(self.reference_chips(
-                    format!("history-references-{id}"),
-                    turn.resources
-                        .iter()
-                        .map(|reference| (&reference.resource, Some(reference.name.as_str()))),
-                    false,
-                    cx,
-                ))
+                user.child(
+                    self.reference_chips(
+                        format!("history-references-{id}"),
+                        turn.resources
+                            .iter()
+                            .map(|reference| (&reference.resource, Some(reference.name.as_str()))),
+                        false,
+                        cx,
+                    ),
+                )
             });
         let active = turn.state == TurnState::Running && self.timing_connected();
         let mut footer = MessageFooter::new()

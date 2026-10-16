@@ -4,23 +4,36 @@ use yss_graph_editor::projection::{
     ConnectionCandidate, ConnectionCandidates, ConnectionDecision, ConnectionIntent,
 };
 
+/// Borrowed graph and validation inputs captured for one connection preview.
+pub struct ConnectionCandidatesInput<'a> {
+    pub graph: &'a GraphResourcePath,
+    pub document: &'a GraphDocument,
+    pub source: &'a PortAddress,
+    pub intent: ConnectionIntent,
+    pub catalog: &'a CatalogMutationValidationSnapshot,
+    pub analysis: &'a GraphAnalysis,
+}
+
 impl GraphRuntimeState {
     /// Preview the same mutation planner used by commits, including derived-port
     /// claims. Resolve once for the entire gesture's candidate set.
     /// Returns `None` when superseded; cancellation is checked between candidate plans.
     pub fn connection_candidates(
         &self,
-        graph: &GraphResourcePath,
-        document: &GraphDocument,
-        source: &PortAddress,
-        intent: ConnectionIntent,
-        catalog: &CatalogMutationValidationSnapshot,
-        analysis: &GraphAnalysis,
+        input: ConnectionCandidatesInput<'_>,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<ConnectionCandidates>, MutationConflict> {
         if cancelled() {
             return Ok(None);
         }
+        let ConnectionCandidatesInput {
+            graph,
+            document,
+            source,
+            intent,
+            catalog,
+            analysis,
+        } = input;
         let semantics = analysis.semantic_snapshot();
         let source_port = semantics.concrete_interface().port(source).ok_or_else(|| {
             MutationConflict::Editor(yss_graph_editor::EditorMutationError {

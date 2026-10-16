@@ -49,10 +49,10 @@ async fn resumed_workers_use_current_receipts_but_cannot_reuse_them_after_anothe
                 } else {
                     capabilities
                         .execute(model::CapabilityInput::SaveResource(
-                                model::ResourceTargetInput {
-                                    resource: document(),
-                                },
-                            ))
+                            model::ResourceTargetInput {
+                                resource: document(),
+                            },
+                        ))
                         .await
                         .unwrap();
                 }
@@ -63,8 +63,11 @@ async fn resumed_workers_use_current_receipts_but_cannot_reuse_them_after_anothe
         }
     }
     let driver = Arc::new(ResumeDriver::default());
-    let (host, store, mut session) =
-        setup_models(yss_harness_core::test_support::fixed_model(driver.clone()), false).await;
+    let (host, store, mut session) = setup_models(
+        yss_harness_core::test_support::fixed_model(driver.clone()),
+        false,
+    )
+    .await;
     driver.store.set(store.clone());
     for turn in 0..4 {
         if matches!(turn, 1 | 3) {
@@ -166,8 +169,11 @@ async fn project_rebind_warns_before_delegation_and_requires_fresh_reads() {
         }
     }
     let driver = Arc::new(ReboundDriver::default());
-    let (host, store, mut session) =
-        setup_models(yss_harness_core::test_support::fixed_model(driver.clone()), false).await;
+    let (host, store, mut session) = setup_models(
+        yss_harness_core::test_support::fixed_model(driver.clone()),
+        false,
+    )
+    .await;
     driver.store.set(store.clone());
     host.submit_turn(
         &session.id,
@@ -266,7 +272,7 @@ fn dataset_reads_bind_owner_resource_versions_and_reject_a_changed_runtime() {
 
 #[derive(Default)]
 struct ObservedDriver {
-        store: StoreSlot,
+    store: StoreSlot,
     turns: AtomicUsize,
     writes: AtomicUsize,
 }
@@ -280,10 +286,10 @@ impl AgentDriverPort for ObservedDriver {
         _cancellation: CancellationToken,
     ) -> AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
         Box::pin(async move {
-                let capabilities = Tools {
-                    executor: executor.as_ref(),
-                    store: self.store.get(),
-                };
+            let capabilities = Tools {
+                executor: executor.as_ref(),
+                store: self.store.get(),
+            };
             if request.role == AgentRole::Report.id() {
                 let input = request
                     .messages
@@ -304,11 +310,11 @@ impl AgentDriverPort for ObservedDriver {
                 );
                 capabilities
                     .execute(AutomationCapabilityRequest::ManageResource(
-                            ManageResourceRequest::Save {
-                                resource: document(),
-                                version: version(2),
-                            },
-                        ))
+                        ManageResourceRequest::Save {
+                            resource: document(),
+                            version: version(2),
+                        },
+                    ))
                     .await
                     .unwrap();
                 self.writes.fetch_add(1, Ordering::Relaxed);
@@ -424,7 +430,12 @@ async fn compacted_reads_survive_reopen_and_stale_delegation_cannot_write_until_
         records
             .iter()
             .filter(|record| matches!(
-                record.request.as_ref().map(decode_request).transpose().unwrap(),
+                record
+                    .request
+                    .as_ref()
+                    .map(decode_request)
+                    .transpose()
+                    .unwrap(),
                 Some(AutomationCapabilityRequest::ManageResource(
                     ManageResourceRequest::Save { .. }
                 ))

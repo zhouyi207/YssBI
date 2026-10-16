@@ -28,12 +28,6 @@ impl From<&tracing::Level> for LogLevel {
     }
 }
 
-impl LogLevel {
-    pub(crate) const fn enabled_by_default(self) -> bool {
-        matches!(self, Self::Info | Self::Warn | Self::Error)
-    }
-}
-
 /// Owned, size-limited event data awaiting processing by the dispatcher.
 pub(crate) struct CapturedLog {
     pub timestamp: chrono::NaiveDateTime,

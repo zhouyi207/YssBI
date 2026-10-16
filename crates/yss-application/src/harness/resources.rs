@@ -1,7 +1,11 @@
 //! Project-owned reference lookup on the blocking pool, under Core turn cancellation.
 
 use crate::session::ApplicationState;
-use yss_harness_contract::{AgentFuture, CancellationToken, CapabilityFailure, CapabilityFailureCode, HarnessResourceReference, HarnessResourceResolverPort, ProjectResourceRef, ProjectSessionBinding};
+use yss_harness_contract::{
+    AgentFuture, CancellationToken, CapabilityFailure, CapabilityFailureCode,
+    HarnessResourceReference, HarnessResourceResolverPort, ProjectResourceRef,
+    ProjectSessionBinding,
+};
 
 pub struct ApplicationResourceResolver(pub ApplicationState);
 

@@ -1,6 +1,5 @@
 //! Process-wide project registration and picker-task lifecycle.
 
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use yss_project_progress::{
     ProjectProgressSink, ProjectTaskCancellation, ProjectTaskCancellationRegistry,
@@ -16,15 +15,11 @@ pub struct ProjectManagement {
 }
 
 impl ProjectManagement {
-    pub fn new(store: Arc<dyn ProjectRegistryStore>, path: PathBuf) -> Self {
+    pub fn new(store: Arc<dyn ProjectRegistryStore>) -> Self {
         Self {
-            registry: ProjectRegistry::new(store, path),
+            registry: ProjectRegistry::new(store),
             tasks: ProjectTaskCancellationRegistry::new(),
         }
-    }
-
-    pub fn path(&self) -> &Path {
-        self.registry.path()
     }
 
     pub async fn list_projects(&self) -> Result<Vec<ProjectRecord>, ProjectRegistryError> {
@@ -160,7 +155,7 @@ mod tests {
     #[test]
     fn picker_cancellation_targets_current_task_after_an_old_future_is_dropped() {
         let store = Arc::new(PausedStore::default());
-        let projects = ProjectManagement::new(store.clone(), PathBuf::from("unused.sqlite"));
+        let projects = ProjectManagement::new(store.clone());
         let mut context = Context::from_waker(Waker::noop());
         let mut old = Box::pin(projects.cleanup_invalid_projects(&Progress));
         assert!(old.as_mut().poll(&mut context).is_pending());

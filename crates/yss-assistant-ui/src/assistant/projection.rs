@@ -4,8 +4,12 @@ mod tool;
 pub(super) mod usage;
 pub(super) use output::{Compaction, Content, Output, Part, Usage};
 pub(super) use tool::{Tool, ToolState};
-use yss_harness_contract::{AgentRunState, HarnessResourceReference, HarnessTurnOptions, LanguageModelIdentity};
-use yss_assistant_contract::{AgentRole, AssistantEvent, AssistantEventKind as Event, AssistantResultReference};
+use yss_assistant_contract::{
+    AgentRole, AssistantEvent, AssistantEventKind as Event, AssistantResultReference,
+};
+use yss_harness_contract::{
+    AgentRunState, HarnessResourceReference, HarnessTurnOptions, LanguageModelIdentity,
+};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Timing {

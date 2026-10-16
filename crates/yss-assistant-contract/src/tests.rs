@@ -217,8 +217,7 @@ fn argument_diagnostics_use_business_schema_paths_without_echoing_values() {
             "integer",
         ),
     ] {
-        let failure =
-            decode_arguments::<BrowseNodesRequest>(arguments, &schema).unwrap_err();
+        let failure = decode_arguments::<BrowseNodesRequest>(arguments, &schema).unwrap_err();
         assert_eq!(failure.details["category"], category);
         assert_eq!(failure.details["path"], path);
         assert!(failure.details["expected"].contains(expected));

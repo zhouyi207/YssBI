@@ -2,11 +2,11 @@
 
 use crate::orchestration::{failed_output, task_input, task_outcome};
 use yss_harness_contract::{
-    AgentEvent, AgentMessage, AgentRoleId, AgentRunHooks, CapabilityFailure,
-    CapabilityFailureCode, DELEGATE_TASK_TOOL, HarnessEvent, HarnessEventStorePort,
-    HarnessExtension, HarnessResourceReference, HarnessSessionId, HarnessTurnId,
-    PersistenceFailure, PersistenceFailureCode, ProjectSessionBinding, ToolInvocationId,
-    ToolInvocationLedgerPort, ToolInvocationRecord, ToolInvocationState,
+    AgentEvent, AgentMessage, AgentRoleId, AgentRunHooks, CapabilityFailure, CapabilityFailureCode,
+    DELEGATE_TASK_TOOL, HarnessEvent, HarnessEventStorePort, HarnessExtension,
+    HarnessResourceReference, HarnessSessionId, HarnessTurnId, PersistenceFailure,
+    PersistenceFailureCode, ProjectSessionBinding, ToolInvocationId, ToolInvocationLedgerPort,
+    ToolInvocationRecord, ToolInvocationState,
 };
 
 /// The stores and extension needed to replay one session's history.

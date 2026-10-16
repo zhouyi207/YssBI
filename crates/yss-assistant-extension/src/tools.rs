@@ -5,8 +5,8 @@ use serde_json::Value;
 use crate::agents::AgentDefinition;
 use crate::contract::{
     CapabilityFailure, CapabilityFailureCode, CapabilityId, PROPOSE_STATISTICAL_PLAN_TOOL,
-    READ_KNOWLEDGE_TOOL, SEARCH_KNOWLEDGE_TOOL, ToolEffect, ToolSpec, capability_input_schema, decode_arguments, model::CapabilityInput,
-    statistical_plan_schema,
+    READ_KNOWLEDGE_TOOL, SEARCH_KNOWLEDGE_TOOL, ToolEffect, ToolSpec, capability_input_schema,
+    decode_arguments, model::CapabilityInput, statistical_plan_schema,
 };
 
 pub(crate) const PLAN_TOOL_DESCRIPTION: &str = "Propose a complete typed statistical plan for Harness policy validation before analytical execution. Returns accepted and the exact plan recorded by Harness after validation and persistence.";

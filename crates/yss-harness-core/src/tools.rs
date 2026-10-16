@@ -225,7 +225,9 @@ impl HarnessToolExecutor {
         started_at: UnixMillis,
     ) -> Result<ToolInvocationOutcome, CapabilityFailure> {
         let spec = self.registry.get(&tool).cloned();
-        let effect = spec.as_ref().map_or(ToolEffect::Inspect, |spec| spec.effect);
+        let effect = spec
+            .as_ref()
+            .map_or(ToolEffect::Inspect, |spec| spec.effect);
         let timeout_ms = spec
             .as_ref()
             .map_or(effect.default_timeout_ms(), |spec| spec.timeout_ms);
@@ -265,9 +267,9 @@ impl HarnessToolExecutor {
         } else {
             IdempotencyKey::try_new(raw_invocation_id).map_err(|_| persistence_unavailable())?
         };
-        let deadline = started_at.checked_add(timeout_ms).ok_or_else(|| {
-            CapabilityFailure::new(CapabilityFailureCode::DEADLINE_ELAPSED)
-        })?;
+        let deadline = started_at
+            .checked_add(timeout_ms)
+            .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::DEADLINE_ELAPSED))?;
         let mut record = ToolInvocationRecord {
             id: invocation_id.clone(),
             idempotency_key,
@@ -313,7 +315,11 @@ impl HarnessToolExecutor {
         let context = self.invocation_context(&record.idempotency_key)?;
         let control = CapabilityControl::new(
             self.cancellation.clone(),
-            Duration::from_millis(deadline.get().saturating_sub(self.services.clock.now().get())),
+            Duration::from_millis(
+                deadline
+                    .get()
+                    .saturating_sub(self.services.clock.now().get()),
+            ),
         );
         let started = self
             .emit(AgentEvent::ToolInvocationStarted {

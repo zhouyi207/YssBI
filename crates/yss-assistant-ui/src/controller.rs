@@ -101,9 +101,6 @@ impl AssistantController {
     pub fn is_reopening(&self) -> bool {
         self.reopen
     }
-    pub fn is_reading(&self) -> bool {
-        self.reading
-    }
     pub fn read_state(&self) -> DirectoryReadState {
         self.read_state
     }

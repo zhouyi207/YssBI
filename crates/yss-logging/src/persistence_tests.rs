@@ -4,30 +4,37 @@ use crate::collector::LogLayer;
 use sqlx::{ConnectOptions, Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 use tracing_subscriber::prelude::*;
 
-use crate::{FrontendLogEntryDto, LogDomain, LogLevel, LogOrigin, LogQuery, LogRuntime};
-
-fn frontend(message: &str) -> FrontendLogEntryDto {
-    FrontendLogEntryDto {
-        level: LogLevel::Info,
-        domain: LogDomain::Ui,
-        target: "frontend.test".into(),
-        event: None,
-        message: message.into(),
-        source: None,
-        fields: BTreeMap::new(),
-    }
-}
+use crate::{LogDomain, LogLevel, LogOrigin, LogQuery, LogRecordDto, LogRuntime};
 
 #[test]
 fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join(crate::LOG_DATABASE_NAME);
+    let mut store = crate::store::LogStore::open(&path).unwrap();
+    let stream_id = store.snapshot(1).unwrap().stream_id;
+    store
+        .append(&[LogRecordDto {
+            stream_id,
+            sequence: 1,
+            timestamp: "2026-10-10T12:00:00.000".into(),
+            level: LogLevel::Info,
+            origin: LogOrigin::Frontend,
+            domain: LogDomain::Ui,
+            target: "frontend.test".into(),
+            event: Some("dropRejected".into()),
+            message: "Drop was rejected".into(),
+            source: None,
+            fields: BTreeMap::from([("nodeCount".into(), serde_json::json!(3))]),
+        }])
+        .unwrap();
+    drop(store);
     let logs = LogRuntime::open(path.clone()).unwrap();
     let (sender, receiver) = mpsc::channel();
     let snapshot = logs
         .subscribe_batches(move |batch| sender.send(batch).is_ok())
         .unwrap();
-    assert!(snapshot.entries.is_empty());
+    assert_eq!(snapshot.entries.len(), 1);
+    assert_eq!(snapshot.entries[0].origin, LogOrigin::Frontend);
     let subscriber = tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(None)));
     let dispatch = tracing::Dispatch::new(subscriber);
     tracing::dispatcher::with_default(&dispatch, || {
@@ -39,14 +46,8 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
             "Dataset contains missing values"
         );
     });
-    let mut view_issue = frontend("Drop was rejected");
-    view_issue.event = Some("dropRejected".into());
-    view_issue
-        .fields
-        .insert("nodeCount".into(), serde_json::json!(3));
-    logs.submit_frontend(vec![view_issue]).unwrap();
     let mut delivered = Vec::new();
-    while delivered.len() < 2 {
+    while delivered.is_empty() {
         let batch = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
         assert!(batch.failure.is_none());
         delivered.extend(batch.entries);
@@ -70,22 +71,22 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
         .unwrap();
         assert_eq!(
             rows.len(),
-            delivered.len(),
-            "channel only announces committed rows"
+            snapshot.entries.len() + delivered.len(),
+            "snapshot and channel only announce committed rows"
         );
-        assert_eq!(rows[0].get::<String, _>("origin"), "rust");
-        assert_eq!(rows[1].get::<String, _>("origin"), "frontend");
-        assert_eq!(rows[0].get::<String, _>("domain"), "data");
-        assert_eq!(rows[0].get::<String, _>("event"), "missingValues");
-        assert_eq!(rows[1].get::<String, _>("domain"), "ui");
-        assert_eq!(rows[1].get::<String, _>("event"), "dropRejected");
+        assert_eq!(rows[0].get::<String, _>("origin"), "frontend");
+        assert_eq!(rows[1].get::<String, _>("origin"), "rust");
+        assert_eq!(rows[1].get::<String, _>("domain"), "data");
+        assert_eq!(rows[1].get::<String, _>("event"), "missingValues");
+        assert_eq!(rows[0].get::<String, _>("domain"), "ui");
+        assert_eq!(rows[0].get::<String, _>("event"), "dropRejected");
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&rows[0].get::<String, _>("fields")).unwrap()
+            serde_json::from_str::<serde_json::Value>(&rows[1].get::<String, _>("fields")).unwrap()
                 ["missing_count"],
             3
         );
         assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&rows[1].get::<String, _>("fields")).unwrap()
+            serde_json::from_str::<serde_json::Value>(&rows[0].get::<String, _>("fields")).unwrap()
                 ["nodeCount"],
             3
         );
@@ -101,9 +102,9 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
     let restored = reopened.subscribe_batches(|_| true).unwrap();
     assert_eq!(restored.stream_id, snapshot.stream_id);
     assert_eq!(restored.latest_sequence, 3);
-    assert_eq!(restored.entries[0].event.as_deref(), Some("missingValues"));
-    assert_eq!(restored.entries[0].fields["missing_count"], 3);
-    assert_eq!(restored.entries[1].event.as_deref(), Some("dropRejected"));
+    assert_eq!(restored.entries[1].event.as_deref(), Some("missingValues"));
+    assert_eq!(restored.entries[1].fields["missing_count"], 3);
+    assert_eq!(restored.entries[0].event.as_deref(), Some("dropRejected"));
     assert_eq!(restored.entries[2].message, "Last before exit");
     let page = reopened
         .query(LogQuery {
@@ -171,8 +172,10 @@ fn failed_sqlite_write_sends_a_terminal_failure_without_publishing_uncommitted_l
             .execute(&mut connection).await.unwrap();
         connection.close().await.unwrap();
     });
-    logs.submit_frontend(vec![frontend("Cannot commit")])
-        .unwrap();
+    let subscriber = tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(None)));
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::info!("Cannot commit");
+    });
     let failure = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
     assert_eq!(
         serde_json::to_value(failure.failure).unwrap(),
@@ -185,10 +188,6 @@ fn failed_sqlite_write_sends_a_terminal_failure_without_publishing_uncommitted_l
     ));
     assert!(logs.query(LogQuery::default()).is_err());
     assert!(logs.subscribe_batches(|_| true).is_err());
-    assert!(
-        logs.submit_frontend(vec![frontend("Rejected after failure")])
-            .is_err()
-    );
     let (console_sender, console_receiver) = mpsc::channel();
     let (console, _console_guard) = crate::collector::spawn_output(
         "storage-failure-test",
@@ -206,4 +205,6 @@ fn failed_sqlite_write_sends_a_terminal_failure_without_publishing_uncommitted_l
         .unwrap();
     assert!(!record.message.contains("secret"));
     assert_eq!(record.fields["password"], "[REDACTED]");
+    let mut storage = crate::store::LogStore::open(path).unwrap();
+    assert_eq!(storage.statistics().unwrap().total, 0);
 }

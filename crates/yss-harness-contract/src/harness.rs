@@ -520,7 +520,10 @@ mod tests {
             lock_free: Arc<AtomicU8>,
         }
         impl Wake for ReentrantDrop {
-            fn wake(self: Arc<Self>) {}
+            fn wake(self: Arc<Self>) {
+                // Releasing the last Arc runs the reentrant callback under test.
+                drop(self);
+            }
         }
         impl Drop for ReentrantDrop {
             fn drop(&mut self) {

@@ -1,6 +1,6 @@
-use crate::tests::support::{StoreSlot, TaskOutcome, TestRun, Tools, ports};
-use crate::run::observations::ResourceObservations;
 use crate::contract::*;
+use crate::run::observations::ResourceObservations;
+use crate::tests::support::{StoreSlot, TaskOutcome, TestRun, Tools, ports};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -52,14 +52,11 @@ fn task(label: &str, worker: AgentRole, write: bool) -> model::AgentTaskInput {
     }
 }
 
-async fn inspect_resource(
-    capabilities: &Tools<'_>,
-    resource: ProjectResourceRef,
-) {
+async fn inspect_resource(capabilities: &Tools<'_>, resource: ProjectResourceRef) {
     capabilities
-        .execute(AutomationCapabilityRequest::InspectResource(InspectResourceRequest {
-                resource,
-            }))
+        .execute(AutomationCapabilityRequest::InspectResource(
+            InspectResourceRequest { resource },
+        ))
         .await
         .unwrap();
 }
@@ -86,10 +83,7 @@ enum ReportDelivery {
     EditedAfterSave,
 }
 
-async fn report_document_operations(
-    capabilities: &Tools<'_>,
-    delivery: ReportDelivery,
-) {
+async fn report_document_operations(capabilities: &Tools<'_>, delivery: ReportDelivery) {
     if matches!(
         delivery,
         ReportDelivery::TextOnly | ReportDelivery::TextOnlyExistingDocument
@@ -97,23 +91,29 @@ async fn report_document_operations(
         return;
     }
     capabilities
-        .execute(model::CapabilityInput::CreateResource(model::CreateResourceInput::Doc {
+        .execute(model::CapabilityInput::CreateResource(
+            model::CreateResourceInput::Doc {
                 name: "Report".into(),
-            }))
+            },
+        ))
         .await
         .unwrap();
-    let edit = || model::CapabilityInput::WriteDocument(model::WriteDocumentInput {
+    let edit = || {
+        model::CapabilityInput::WriteDocument(model::WriteDocumentInput {
             document: model::DocumentResourceRef::new(document().id),
             markdown: "# Analysis report\n\nVerified findings and limitations.".into(),
-        });
+        })
+    };
     capabilities.execute(edit()).await.unwrap();
     if delivery == ReportDelivery::Unsaved {
         return;
     }
     let saved = capabilities
-        .execute(model::CapabilityInput::SaveResource(model::ResourceTargetInput {
+        .execute(model::CapabilityInput::SaveResource(
+            model::ResourceTargetInput {
                 resource: document(),
-            }))
+            },
+        ))
         .await;
     if delivery == ReportDelivery::FailedSave {
         assert_eq!(
@@ -189,11 +189,11 @@ impl AgentDriverPort for Driver {
                     assert!(
                         capabilities
                             .execute(AutomationCapabilityRequest::ManageResource(
-                                    ManageResourceRequest::Save {
-                                        resource: document(),
-                                        version: version(1)
-                                    }
-                                ))
+                                ManageResourceRequest::Save {
+                                    resource: document(),
+                                    version: version(1)
+                                }
+                            ))
                             .await
                             .is_err()
                     );
@@ -207,11 +207,11 @@ impl AgentDriverPort for Driver {
                     }
                     capabilities
                         .execute(AutomationCapabilityRequest::ManageResource(
-                                ManageResourceRequest::Save {
-                                    resource: document(),
-                                    version: version(1),
-                                },
-                            ))
+                            ManageResourceRequest::Save {
+                                resource: document(),
+                                version: version(1),
+                            },
+                        ))
                         .await
                         .unwrap();
                 }
@@ -224,8 +224,7 @@ impl AgentDriverPort for Driver {
                             })
                             .await
                             .unwrap();
-                        report_document_operations(&capabilities, ReportDelivery::Unsaved)
-                            .await;
+                        report_document_operations(&capabilities, ReportDelivery::Unsaved).await;
                         output
                             .emit(AgentEvent::ContextCompactionProgress {
                                 completed_bytes: 10,
@@ -242,13 +241,13 @@ impl AgentDriverPort for Driver {
                         assert!(
                             capabilities
                                 .execute(AutomationCapabilityRequest::InspectResource(
-                                        InspectResourceRequest {
-                                            resource: ProjectResourceRef {
-                                                kind: ProjectResourceKind::Doc,
-                                                id: "docs/foreign.md".into()
-                                            },
-                                        }
-                                    ))
+                                    InspectResourceRequest {
+                                        resource: ProjectResourceRef {
+                                            kind: ProjectResourceKind::Doc,
+                                            id: "docs/foreign.md".into()
+                                        },
+                                    }
+                                ))
                                 .await
                                 .is_err()
                         );
@@ -262,11 +261,11 @@ impl AgentDriverPort for Driver {
                         )));
                         capabilities
                             .execute(AutomationCapabilityRequest::ManageResource(
-                                    ManageResourceRequest::Save {
-                                        resource: document(),
-                                        version: version(3),
-                                    },
-                                ))
+                                ManageResourceRequest::Save {
+                                    resource: document(),
+                                    version: version(3),
+                                },
+                            ))
                             .await
                             .unwrap();
                     }
@@ -278,10 +277,10 @@ impl AgentDriverPort for Driver {
                     for _ in 0..10 {
                         capabilities
                             .execute(AutomationCapabilityRequest::InspectResource(
-                                    InspectResourceRequest {
-                                        resource: document(),
-                                    },
-                                ))
+                                InspectResourceRequest {
+                                    resource: document(),
+                                },
+                            ))
                             .await
                             .unwrap();
                     }
@@ -623,7 +622,9 @@ async fn a_turn_freezes_its_model_for_all_workers_and_records_the_executed_ident
                     } else {
                         identity.selection.model_id = "next-model".into();
                         identity.model_name = "Next model".into();
-                        Arc::new(yss_harness_core::test_support::MockAgentDriver::new("Next reply"))
+                        Arc::new(yss_harness_core::test_support::MockAgentDriver::new(
+                            "Next reply",
+                        ))
                     };
                 Ok(ResolvedLanguageModel { identity, driver })
             })
@@ -1036,23 +1037,25 @@ async fn recovery_preserves_committed_worker_receipts_without_repeating_the_task
     store.begin(&record).await.unwrap();
     record.state = ToolInvocationState::Succeeded;
     record.finished_at = Some(UnixMillis::from_existing(1100));
-    record.result = Some(encode_result(&AutomationCapabilityResult::ResourceManaged(
-        ResourceMutationReceipt {
-            database_edit: None,
-            publication_revision: Some(2),
-            changes: vec![ResourceChange {
-                resource: document(),
-                revision: 2,
-                revision_kind: ResourceRevisionKind::Resource,
-                deleted: false,
-            }],
-            moves: vec![],
-            mind_edit: None,
-            document_edit: None,
-            resources: Vec::new(),
-        },
-    ))
-    .unwrap());
+    record.result = Some(
+        encode_result(&AutomationCapabilityResult::ResourceManaged(
+            ResourceMutationReceipt {
+                database_edit: None,
+                publication_revision: Some(2),
+                changes: vec![ResourceChange {
+                    resource: document(),
+                    revision: 2,
+                    revision_kind: ResourceRevisionKind::Resource,
+                    deleted: false,
+                }],
+                moves: vec![],
+                mind_edit: None,
+                document_edit: None,
+                resources: Vec::new(),
+            },
+        ))
+        .unwrap(),
+    );
     store.finish(&record).await.unwrap();
     let events = [
         HarnessEvent::TurnStarted {
@@ -1129,7 +1132,9 @@ async fn recovery_preserves_committed_worker_receipts_without_repeating_the_task
     let outcomes = events
         .iter()
         .filter_map(|event| match &event.event {
-            HarnessEvent::AgentRunFinished { outcome } => Some(TaskOutcome::from((**outcome).clone())),
+            HarnessEvent::AgentRunFinished { outcome } => {
+                Some(TaskOutcome::from((**outcome).clone()))
+            }
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -1178,7 +1183,10 @@ async fn followup_restores_a_worker_across_turns_without_repeating_committed_wri
         records
             .iter()
             .filter(|record| matches!(
-                record.request.as_ref().map(|request| decode_request(request).unwrap()),
+                record
+                    .request
+                    .as_ref()
+                    .map(|request| decode_request(request).unwrap()),
                 Some(AutomationCapabilityRequest::ManageResource(
                     ManageResourceRequest::Create { .. }
                 ))
@@ -1190,7 +1198,10 @@ async fn followup_restores_a_worker_across_turns_without_repeating_committed_wri
         records
             .iter()
             .filter(|record| matches!(
-                record.request.as_ref().map(|request| decode_request(request).unwrap()),
+                record
+                    .request
+                    .as_ref()
+                    .map(|request| decode_request(request).unwrap()),
                 Some(AutomationCapabilityRequest::EditResource(_))
             ))
             .count(),
@@ -1200,7 +1211,10 @@ async fn followup_restores_a_worker_across_turns_without_repeating_committed_wri
         records
             .iter()
             .filter(|record| matches!(
-                record.request.as_ref().map(|request| decode_request(request).unwrap()),
+                record
+                    .request
+                    .as_ref()
+                    .map(|request| decode_request(request).unwrap()),
                 Some(AutomationCapabilityRequest::ManageResource(
                     ManageResourceRequest::Save { .. }
                 ))

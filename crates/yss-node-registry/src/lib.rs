@@ -78,10 +78,6 @@ impl NodeRegistry {
         self.get(id).map(|node| node.protocol.as_ref())
     }
 
-    pub fn has_nominal_parameter_validator(&self, id: &TypeId) -> bool {
-        self.inner.nominal_validators.contains_key(id)
-    }
-
     pub fn validate_nominal_parameter(
         &self,
         id: &TypeId,

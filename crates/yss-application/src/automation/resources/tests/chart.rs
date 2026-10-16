@@ -1,5 +1,5 @@
 use super::*;
-use yss_assistant_contract::{model::{ChartResourceRef, ChartSettingsUpdate}};
+use yss_assistant_contract::model::{ChartResourceRef, ChartSettingsUpdate};
 
 fn read(f: &mut Fixture, resource: &ProjectResourceRef) -> ChartInspection {
     let AutomationCapabilityResult::ChartInspection(value) = f

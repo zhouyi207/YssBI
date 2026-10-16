@@ -770,9 +770,11 @@ mod responsive_tests {
             px(300.),
             true,
         );
-        let mut preferred = DockAreaState::default();
-        preferred.left_dock = Some(left.clone());
-        preferred.right_dock = Some(right.clone());
+        let preferred = DockAreaState {
+            left_dock: Some(left.clone()),
+            right_dock: Some(right.clone()),
+            ..Default::default()
+        };
         let mut visible = preferred.clone();
         visible.left_dock = Some(DockState::new(
             left.panel().clone(),
@@ -796,13 +798,15 @@ mod responsive_tests {
 
     #[test]
     fn user_visibility_override_is_persisted_instead_of_previous_preference() {
-        let mut state = DockAreaState::default();
-        state.right_dock = Some(DockState::new(
-            PanelState::new("details"),
-            DockPlacement::Right,
-            px(350.),
-            false,
-        ));
+        let mut state = DockAreaState {
+            right_dock: Some(DockState::new(
+                PanelState::new("details"),
+                DockPlacement::Right,
+                px(350.),
+                false,
+            )),
+            ..Default::default()
+        };
         let expected = state.clone();
         let policy = ResponsiveLayout {
             narrow: true,

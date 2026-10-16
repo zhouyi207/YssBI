@@ -27,8 +27,6 @@ impl DatabaseRuntimeRevision {
 pub struct DatabaseSchemaRevision(u64);
 
 impl DatabaseSchemaRevision {
-    pub const INITIAL: Self = Self(0);
-
     pub const fn from_existing(value: u64) -> Self {
         Self(value)
     }

@@ -16,7 +16,6 @@ const SELECT_RECORD: &str = "SELECT id, name, path, created_at, last_opened_at, 
 /// The only concrete SQLx/SQLite implementation of the Project registry port.
 pub struct SqliteProjectRegistryStore {
     pool: SqlitePool,
-    path: PathBuf,
 }
 
 #[derive(Debug, FromRow)]
@@ -47,16 +46,9 @@ impl SqliteProjectRegistryStore {
             .max_connections(1)
             .connect_with(options)
             .await?;
-        let store = Self {
-            pool,
-            path: db_path,
-        };
+        let store = Self { pool };
         store.ensure_schema().await?;
         Ok(store)
-    }
-
-    pub fn path(&self) -> &std::path::Path {
-        &self.path
     }
 
     async fn find_record(

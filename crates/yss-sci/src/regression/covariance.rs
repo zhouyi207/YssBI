@@ -439,7 +439,7 @@ fn clustered_score_meat(
         groups.entry(g).or_default().push(i);
     }
 
-    for (_g, indices) in groups.iter() {
+    for indices in groups.values() {
         let mut s_g = Col::<f64>::zeros(k);
         for &i in indices {
             let ui = row_weight(i);

@@ -194,14 +194,6 @@ impl ConversationPanel {
                                 view.accept_submission(event);
                             }
                             view.transcript = candidate;
-                            // YSS-DEBUG-BEGIN
-                            if let Some(count) = std::env::var("YSS_DEBUG_TURNS")
-                                .ok()
-                                .and_then(|v| v.parse::<u64>().ok())
-                            {
-                                super::debug_turns(&mut view.transcript, count);
-                            }
-                            // YSS-DEBUG-END
                             view.viewport.reset(
                                 view.transcript.turns.len(),
                                 !view.transcript.session_output.parts.is_empty(),
@@ -220,16 +212,9 @@ impl ConversationPanel {
                             );
                         }
                     }
-                    // YSS-DEBUG-BEGIN
                     Err(error) => {
                         view.set_stream_error(error, cx);
-                        if let Some(count) = std::env::var("YSS_DEBUG_TURNS")
-                            .ok()
-                            .and_then(|v| v.parse::<u64>().ok())
-                        {
-                            super::debug_turns(&mut view.transcript, count);
-                        }
-                    } // YSS-DEBUG-END
+                    }
                 }
                 view.buffered.clear();
                 view.advance_queue(window, cx);

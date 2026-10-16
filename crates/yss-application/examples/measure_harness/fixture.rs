@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use serde_json::json;
 use yss_application::ApplicationState;
+use yss_assistant_contract::model::*;
 use yss_assistant_contract::*;
 use yss_harness_contract::*;
-use yss_assistant_contract::model::*;
 use yss_project_identity::OperationId;
 
 use super::Error;

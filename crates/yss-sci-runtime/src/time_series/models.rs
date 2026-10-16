@@ -44,27 +44,12 @@ pub fn augmented_dickey_fuller(
     Ok(report)
 }
 
-pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<serde_json::Value, SciError> {
-    let result = yss_sci::time_series::models::var_fit(series, lags)?;
-    serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VarFit))
-}
-
 pub fn var_lag_order(
     series: Vec<Vec<f64>>,
     max_lags: usize,
 ) -> Result<serde_json::Value, SciError> {
     let result = yss_sci::time_series::models::var_lag_order(series, max_lags)?;
     serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VarLagOrder))
-}
-
-pub fn vec_fit(
-    series: Vec<Vec<f64>>,
-    rank: usize,
-    lags: usize,
-    trend: &str,
-) -> Result<serde_json::Value, SciError> {
-    let result = yss_sci::time_series::models::vec_fit(series, rank, lags, trend)?;
-    serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VecFit))
 }
 
 pub fn vec_rank_test(

@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use super::*;
 use crate::test_support::{
-    InMemoryHarnessStore, MockAgentDriver, NoteExtension, READ_NOTE, ScriptedDriver,
-    ScriptedStep, WRITE_NOTE, note_ports, project,
+    InMemoryHarnessStore, MockAgentDriver, NoteExtension, READ_NOTE, ScriptedDriver, ScriptedStep,
+    WRITE_NOTE, note_ports, project,
 };
 use serde_json::json;
 
@@ -264,7 +264,9 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
     let lead = crate::test_support::role("lead");
     for request in requests.iter() {
         assert_eq!(request.role, lead);
-        assert!(matches!(&request.messages[0], AgentMessage::System { content } if content == "You are the lead."));
+        assert!(
+            matches!(&request.messages[0], AgentMessage::System { content } if content == "You are the lead.")
+        );
         assert_eq!(
             request
                 .tools
@@ -549,7 +551,11 @@ async fn workflow_persists_and_completes_its_ordered_tool_steps() {
             .any(|event| matches!(event.event, HarnessEvent::WorkflowCompleted { .. }))
     );
     let records = store.tool_invocations();
-    assert!(records.iter().all(|record| record.workflow_run_id.as_ref() == Some(&planned.id)));
+    assert!(
+        records
+            .iter()
+            .all(|record| record.workflow_run_id.as_ref() == Some(&planned.id))
+    );
     assert!(
         crate::CompiledWorkflow::compile(
             WorkflowDefinition {
@@ -600,7 +606,10 @@ async fn project_session_reconciliation_stales_old_active_sessions() {
 #[tokio::test]
 async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
     let store = Arc::new(InMemoryHarnessStore::default());
-    let host = host(&store, Arc::new(MockAgentDriver::new("Ready for approval.")));
+    let host = host(
+        &store,
+        Arc::new(MockAgentDriver::new("Ready for approval.")),
+    );
     let session = host
         .create_session(PrincipalId::try_new("user-1").unwrap(), project())
         .await
@@ -621,8 +630,14 @@ async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
         .unwrap();
     let request = json!({"id": "a", "text": "approved"});
     assert!(matches!(
-        host.issue_capability_approval(&session.id, &turn_id, READ_NOTE, &json!({"id": "a"}), 1_000)
-            .await,
+        host.issue_capability_approval(
+            &session.id,
+            &turn_id,
+            READ_NOTE,
+            &json!({"id": "a"}),
+            1_000
+        )
+        .await,
         Err(HarnessError::Approval(ApprovalError::NotRequired))
     ));
     let grant = host
@@ -651,30 +666,38 @@ async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
         store
             .tool_invocations()
             .iter()
-            .any(|record| record.tool == WRITE_NOTE && record.state == ToolInvocationState::Succeeded)
+            .any(|record| record.tool == WRITE_NOTE
+                && record.state == ToolInvocationState::Succeeded)
     );
 }
 
 #[tokio::test]
 async fn scripted_turn_publishes_extension_notices_after_the_settled_call() {
     let store = Arc::new(InMemoryHarnessStore::default());
-    let driver = Arc::new(ScriptedDriver::default().script(
-        "lead",
-        vec![
-            ScriptedStep::Call(
-                DELEGATE_TASK_TOOL,
-                json!({
-                    "worker": "helper", "objective": "Rewrite a", "constraints": "",
-                    "completionCriteria": "Saved", "dependsOn": [],
-                    "scope": {"notes": ["a"], "write": true}
-                }),
+    let driver = Arc::new(
+        ScriptedDriver::default()
+            .script(
+                "lead",
+                vec![
+                    ScriptedStep::Call(
+                        DELEGATE_TASK_TOOL,
+                        json!({
+                            "worker": "helper", "objective": "Rewrite a", "constraints": "",
+                            "completionCriteria": "Saved", "dependsOn": [],
+                            "scope": {"notes": ["a"], "write": true}
+                        }),
+                    ),
+                    ScriptedStep::Text("Delegated."),
+                ],
+            )
+            .script(
+                "helper",
+                vec![ScriptedStep::Call(
+                    WRITE_NOTE,
+                    json!({"id": "a", "text": "rewritten"}),
+                )],
             ),
-            ScriptedStep::Text("Delegated."),
-        ],
-    ).script(
-        "helper",
-        vec![ScriptedStep::Call(WRITE_NOTE, json!({"id": "a", "text": "rewritten"}))],
-    ));
+    );
     let host = host(&store, driver.clone());
     let session = host
         .create_session(PrincipalId::try_new("user-1").unwrap(), project())

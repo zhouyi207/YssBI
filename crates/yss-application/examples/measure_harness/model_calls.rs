@@ -56,7 +56,10 @@ tokio::task_local! {
 }
 
 pub fn is_control(tool: &str) -> bool {
-    matches!(tool, DELEGATE_TASK_TOOL | FOLLOWUP_TASK_TOOL | PROPOSE_STATISTICAL_PLAN_TOOL)
+    matches!(
+        tool,
+        DELEGATE_TASK_TOOL | FOLLOWUP_TASK_TOOL | PROPOSE_STATISTICAL_PLAN_TOOL
+    )
 }
 
 pub fn observe_event(event: &HarnessEvent) {
@@ -65,7 +68,10 @@ pub fn observe_event(event: &HarnessEvent) {
     };
     let Ok(()) = CURRENT_CALL.try_with(|trace| {
         let mut trace = trace.borrow_mut();
-        if let AgentEvent::ToolInvocationStarted { invocation_id, tool } = event
+        if let AgentEvent::ToolInvocationStarted {
+            invocation_id,
+            tool,
+        } = event
             && tool == &trace.tool
         {
             // Binding may perform baseline reads first. The actual model call
@@ -89,31 +95,37 @@ impl AgentToolExecutor for ObservedExecutor {
                 tool: call.name.clone(),
                 invocation_id: None,
             });
-            CURRENT_CALL.scope(trace, async move {
-                let name = call.name.clone();
-                let outcome = self.inner.call(call).await;
-                let invocation_id = CURRENT_CALL.with(|trace| trace.borrow().invocation_id.clone());
-                let mut measured = CallMeasurement {
-                    role: self.role.clone(),
-                    effect: self.effects.get(&name).copied(),
-                    capability_id: name,
-                    invocation_id: outcome.invocation_id.clone().or(invocation_id),
-                    // Filled from the authoritative ledger, never raw provider JSON
-                    // or an extension-bound request containing internal revisions.
-                    argument_hash: None,
-                    result_hash: None,
-                    result_bytes: None,
-                    result_characters: None,
-                    elapsed_ms: started.elapsed().as_millis(),
-                    failure_code: None,
-                    fatal: outcome.fatal,
-                };
-                if measured.invocation_id.is_none() && outcome.fatal.is_none() {
-                    measured.record_projection(&outcome.output);
-                }
-                self.calls.lock().unwrap_or_else(|error| error.into_inner()).push(measured);
-                outcome
-            }).await
+            CURRENT_CALL
+                .scope(trace, async move {
+                    let name = call.name.clone();
+                    let outcome = self.inner.call(call).await;
+                    let invocation_id =
+                        CURRENT_CALL.with(|trace| trace.borrow().invocation_id.clone());
+                    let mut measured = CallMeasurement {
+                        role: self.role.clone(),
+                        effect: self.effects.get(&name).copied(),
+                        capability_id: name,
+                        invocation_id: outcome.invocation_id.clone().or(invocation_id),
+                        // Filled from the authoritative ledger, never raw provider JSON
+                        // or an extension-bound request containing internal revisions.
+                        argument_hash: None,
+                        result_hash: None,
+                        result_bytes: None,
+                        result_characters: None,
+                        elapsed_ms: started.elapsed().as_millis(),
+                        failure_code: None,
+                        fatal: outcome.fatal,
+                    };
+                    if measured.invocation_id.is_none() && outcome.fatal.is_none() {
+                        measured.record_projection(&outcome.output);
+                    }
+                    self.calls
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner())
+                        .push(measured);
+                    outcome
+                })
+                .await
         })
     }
 

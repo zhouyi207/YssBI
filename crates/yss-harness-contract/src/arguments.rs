@@ -1,9 +1,9 @@
 //! Model-facing diagnostics derived from trusted tool schemas, never argument values.
 
+use crate::{CapabilityFailure, CapabilityFailureCode};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use serde_path_to_error::Segment;
-use crate::{CapabilityFailure, CapabilityFailureCode};
 
 /// Decode model arguments, reporting schema-declared paths and categories without echoing values.
 pub fn decode_arguments<T: DeserializeOwned>(

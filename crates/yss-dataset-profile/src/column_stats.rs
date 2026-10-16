@@ -1,7 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct NumericColumnStats {
     pub column_name: String,
-    pub column_type: String,
     pub count: usize,
     pub null_count: usize,
     pub min: Option<f64>,
@@ -15,7 +14,6 @@ pub struct NumericColumnStats {
 #[derive(Debug, Clone)]
 pub struct StringColumnStats {
     pub column_name: String,
-    pub column_type: String,
     pub count: usize,
     pub null_count: usize,
     pub empty_count: usize,
