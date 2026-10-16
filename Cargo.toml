@@ -8,7 +8,8 @@ version = "0.5.0"
 edition = "2024"
 
 [workspace.dependencies]
-gpui-kit = { version = "=0.7.1", features = [
+gpui-kit = { version = "=0.7.3", features = [
+  "gpui-fast",
   "tree-sitter-bash",
   "tree-sitter-css",
   "tree-sitter-html",
@@ -111,7 +112,7 @@ opt-level = 1
 [profile.dev.package.yss-plugin-ui]
 opt-level = 1
 
-[profile.dev.package.gpui-pre]
+[profile.dev.package.gpui-fast]
 opt-level = 2
 
 [profile.dev.package.gpui-base]
@@ -120,7 +121,7 @@ opt-level = 2
 [profile.dev.package.gpui-component]
 opt-level = 2
 
-[profile.dev.package.gpui-pre-wgpu]
+[profile.dev.package.gpui-fast-wgpu]
 opt-level = 2
 
 # New WGPU windows compile shaders synchronously through Naga.

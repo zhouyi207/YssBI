@@ -5,16 +5,17 @@
 > Canonical owners: [src/main.rs](src/main.rs)、[Workbench](../yss-workbench/src)、[共享 UI](../yss-ui/src)、[任务与事件](../yss-desktop-services/src)，以及下表中的功能 crate
 > Update when: 原生宿主能力、状态所有权、启动方式或验收范围变化时
 
-这是 workspace 的默认原生桌面入口，GPUI 系列只直接依赖 [GPUI Kit](https://docs.rs/gpui-kit/0.7.1/gpui_kit/) 0.7.1。
+这是 workspace 的默认原生桌面入口，GPUI 系列只直接依赖 [GPUI Kit](https://docs.rs/gpui-kit/0.7.3/gpui_kit/) 0.7.3。
 核心 API 统一使用 `gpui_kit`，基础能力、组件和图标资源分别通过 `base`、`component`、`assets` 重导出访问；
 入口使用 `gpui_kit::application()`、`gpui_kit::init()` 和 `gpui_kit::assets::AllAssets`。
-Kit 默认启用 component/assets，现有 Tree-sitter 高亮 features 由 Kit 转发，不启用 WebView。
-GPUI Pre 0.3.8、Base/Component/Assets 0.7.1 仍是必要的传递依赖，根 Cargo profile 保留这些实际实现库的定向优化。
+Kit 默认启用 component/assets，并显式启用官方可选的实验性 `gpui-fast` 后端；现有 Tree-sitter 高亮 features 由 Kit 转发，不启用 WebView。
+Cargo.lock 固定 GPUI Fast 0.1.8 与 Base/Component/Assets 0.7.3，根 Cargo profile 针对实际绘制、控件和布局实现定向优化。
+Kit 发布包仍引入 GPUI Pre 0.3.9 等传递依赖，但应用只使用 Kit 选中的 Fast 类型与平台入口，不混用两套 API。
 平台 feature 由 Kit 管理，包含 font-kit、Wayland、X11 和仅影响 macOS 的 `runtime_shaders`。
-窗口及画布由 GPU 原生绘制，窗口手势由项目的 `window_chrome` 统一处理。除根 Cargo patch 固定的 `vendor/gpui-pre` 与 `vendor/gpui-pre-macros` 0.3.8 外，依赖使用 crates.io 发布版。
-GPUI 局部补丁复用视觉缓存时同时保留无障碍语义、焦点关系及动作监听器，不关闭 Dock 缓存；宏补丁仅将 `proptest_path` 改为 proptest-macro 0.6 要求的 Rust 路径。
-两个 vendor manifest 均记录上游包地址、校验和与修改源码清单。GPUI 单元测试需要的 IBM Plex Sans、Lilex 字体取自相同 Zed 提交，校验和及原始 OFL 许可保留在 vendor 中，仅由测试编译引用。
-后续升级需保留缓存语义与动作回放、随机树增量绘制等回归覆盖，不以跳过上游测试代替兼容性修复。
+窗口及画布由 GPU 原生绘制，窗口手势由项目的 `window_chrome` 统一处理。GPUI 依赖全部使用 crates.io 发布版，不再携带 `vendor/` 整包源码或本地 Cargo patch。
+缓存无障碍语义、焦点关系及动作回放由 [GPUI Fast](https://github.com/longbridge/gpui-fast) 上游实现承担；保留现有 Dock 缓存，不通过关闭缓存规避问题。
+主仓库不得维护整份第三方源码，具体约束见根 [.rules](../../.rules)。未发布的必要修复应使用经授权的外部依赖仓库并固定不可变提交，不得改用机器路径、包缓存修改或构建时重写源码。
+这次迁移不再维护旧本地框架的 property-test 宏与测试字体补丁，也不沿用此前框架内部测试的通过结论。发布包的上游内部测试限制不等于应用回归已覆盖这些内部行为。
 
 基础界面优先复用 `gpui_kit::component`：标题区域复用共享窗口装饰与主题，菜单使用 `AppMenuBar`，工作台使用 `DockSkin` 与根 `DockArea`，
 数据库及结果使用 `Table`，设置使用 `Settings / SettingPage / SettingGroup / SettingItem / SettingField`，输入、菜单、按钮、
@@ -1048,12 +1049,20 @@ Outputs / Results 命名另在中英文原生窗口逐一点击打开核对，�
 节点拖动的原生窗口验证覆盖普通布局与分屏布局：持续移动时画布继续绘制，侧栏四个入口与图工具栏未重绘，捕获帧的两处像素保持一致。
 已核对名称编辑区移除、四个导航入口、撤销/重做/保存、运行与结果搜索/更多菜单，以及混合标签切换和图分组放大后的工具栏位置。
 
-Windows 原生窗口另在隔离项目副本验证了参数草稿跨节点/图切换保留、保存前批量提交、保存后一次撤销/重做、无效整数阻止保存及关闭保护。
+迁移前 GPUI Pre 后端的 Windows 原生验收在隔离项目副本验证了参数草稿跨节点/图切换保留、保存前批量提交、保存后一次撤销/重做、无效整数阻止保存及关闭保护。
 已实际执行图运行、菜单复制/粘贴、技术诊断报告复制，以及空图添加与键盘搜索；窄窗收起/手动展开/宽窗恢复、18px 字号和明暗主题均在原生窗口检查。
 1000 节点/1000 连线场景覆盖平移、框选、多节点拖动、撤销与缩放；该开发构建交互检查不是 release 帧率或性能提升倍数证明。
 Windows UI Automation 已检查缓存侧栏动作在画布重绘后仍可调用，已加载和延迟恢复的图标签、属性面板及按钮均有可读名称。完整 IME 与跨平台验收仍未覆盖。
 文本菜单另经 Windows UI Automation 验证：复制、剪切和撤销不作用于图节点，菜单关闭后可继续键入；切换输入框及返回画布均更新命令目标，快捷键提示保留。
 普通键入验收使用英文布局，不代表完整 IME 组合输入验证；菜单焦点回归也覆盖真实组件的键盘打开、关闭与输入焦点恢复。
+
+切换 GPUI Kit 0.7.3 / GPUI Fast 0.1.8 后，原生宿主重新构建成功，应用与功能库回归共 359 项通过，1 项原有手动运行时性能测试保持忽略。
+Windows 原生复验覆盖绘制后接入 UI Automation、画布重绘后侧栏及导航的 Invoke/Toggle、隐藏面板移除语义，以及旧控件句柄不能再触发隐藏面板动作。
+另复验文本菜单复制/剪切/撤销与后续键入、跨输入框及返回画布后的命令目标、跨图草稿保留与保存、无效整数保护、实际图运行、千节点/千连线载入与平移缩放，以及窄窗收起/宽窗恢复。
+菜单项没有公开 InvokePattern，验收使用 UI Automation 定位后原生指针激活；这些检查不代表完整读屏、IME、跨平台支持或 release 性能测量。
+本次原生验收曾出现一次 `native_graph_open_failed` 提示，重试后全部夹具均可打开；日志未保留底层错误，原因未确定，不将其归因于后端迁移，也不将重试恢复视为根因修复。
+验证环境中，4 个回环 HTTP 用例在系统代理下失败，仅对测试进程设置 `NO_PROXY=127.0.0.1,localhost,::1` 后同一应用测试二进制的 188 项全部通过。
+其余 171 项回归在 `--jobs 1` 下通过；默认并行编译曾耗尽 Windows 提交内存。未为这些环境问题修改业务代码、放宽断言或跳过回归。
 
 ```sh
 cargo check -p yss-desktop-gpui --all-targets
@@ -1061,7 +1070,6 @@ cargo clippy -p yss-workbench -p yss-graph-ui --all-targets --no-deps -- -D warn
 cargo test -p yss-ui -p yss-data-ui -p yss-resource-ui --lib
 cargo test -p yss-filesystem -p yss-project -p yss-graph-ui -p yss-workbench -p yss-results-ui --lib
 cargo test -p yss-application --lib graph::catalog::tests
-cargo test -p yss-graph-ui -p gpui-pre --lib -- window::a11y::tests svg_renderer::tests randomized_element_tree::tests
 cargo fmt -p yss-desktop-gpui -p yss-workbench -p yss-graph-ui -- --check
 ```
 

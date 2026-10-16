@@ -42,6 +42,8 @@ cargo test -p yss-graph-runtime --lib
 
 Use module READMEs for prerequisites and focused cases. A zero-match filter, a compilation-only check or failed environment initialization is not a passing behavior test. Do not run the entire workspace by default for a bounded local change. Broaden checks when a shared contract or unresolved failure requires it, and state what additional risk the broader check covers.
 
+Loopback HTTP fixtures must not route through an outbound system proxy. On machines with a proxy enabled, scope `NO_PROXY=127.0.0.1,localhost,::1` to the test process and retain any other required bypass entries; do not change the user's global proxy settings or weaken timeout assertions. If concurrent compilation exhausts Windows commit memory (`os error 1455` / LLVM out of memory), use Cargo's `--jobs 1` for the same check rather than changing application code or omitting packages.
+
 ## Regression coverage
 
 Keep tests tied to observable behavior: state transitions, boundaries, precedence, error outcomes and durable commits. Reuse existing coverage before adding another case for the same path. Do not assert source spelling, file layout or the disappearance of an old symbol as a substitute for behavior.
@@ -53,6 +55,8 @@ Review [state ownership](./architecture.md#state-ownership), dependency directio
 Exercise the changed path in the native application with isolated application data and a project copy. Include the relevant success, failure, cancellation and late-result behavior. Check focus, keyboard/IME, pointer input, resize, theme and platform behavior where the change affects them.
 
 A component test or event-injected preview does not establish physical input, accessibility, repaint timing, multiple-window behavior or support on another operating system. Keep those acceptance items open until they are exercised. The [desktop README](https://github.com/zhouyi207/YssBI/blob/main/crates/yss-desktop-gpui/README.md) retains detailed scenarios; [TODO.md](https://github.com/zhouyi207/YssBI/blob/main/TODO.md) tracks remaining work.
+
+The published GPUI Fast backend is experimental. A dependency migration needs application regressions and native checks of cached accessibility callbacks, hidden-control removal, menu focus and retained drafts. A forced-refresh headless frame is not proof of a cache hit. The retired vendored framework's property-test macro and font-fixture repairs are not maintained here; their old internal-test results do not verify the current backend.
 
 For crate-boundary changes, exercise cross-owner paths: run a graph and open a leased result in another window; close the source tab; import and paginate a real dataset; save document, mind and chart edits; hide/reopen Assistant input; fail and then complete a project switch; change preferences and restart with saved DockArea layout. Use `YSSBI_APP_DATA_DIR` with an absolute temporary directory to avoid touching normal application state. These scenarios do not establish real-provider streaming, signed plugin execution, physical IME behavior or untested platform support.
 

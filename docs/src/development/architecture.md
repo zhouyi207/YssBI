@@ -73,7 +73,9 @@ Unbound-port diagnostics are static: a repeating animation schedules new frames 
 
 The existing connection layer also retains node layouts, port indexes and anchors. Pure position changes reuse presentation only while language, results and non-position projection content still match. Viewport size changes schedule a settling frame so newly visible nodes are mounted without another pointer event. Inline controls reconcile on projection, visible-node set or language changes; clean offscreen retention is bounded, while focused, dirty, pending and invalid controls remain available. Text measurement is keyed by content, font family and size.
 
-The repository pins a narrow `gpui-pre` 0.3.8 patch through Cargo's registry patch mechanism. Cached prepaint semantics and cached accessibility action listeners are replayed alongside visual content; caching is not disabled to make controls discoverable. Upstream package provenance and modified source paths are recorded in the vendor manifest.
+The desktop uses the published GPUI Kit 0.7.3 facade with its optional experimental `gpui-fast` backend; Cargo.lock resolves GPUI Fast 0.1.8. Cached accessibility semantics and action listeners are replayed by the upstream backend alongside visual content. Dock caching remains enabled, and application code uses only the backend types selected by the Kit facade.
+
+The repository carries neither a complete third-party source snapshot nor a local Cargo patch. Prefer registry releases with reproducible versions and a lockfile. A necessary unreleased fix belongs in an authorized external dependency repository pinned to an immutable commit, with its upstream issue, patch scope and removal condition documented. Machine-specific paths, package-cache edits and build-time source rewriting are not alternatives to this ownership boundary.
 
 Assistant history reduction and acknowledgement analysis run on a blocking worker, with session/generation and live-event ordering guards on delivery. Composer predicates borrow the input Rope. Collapsed cell previews and column details do not synchronize or build hidden bodies; reopening uses the latest selection.
 
