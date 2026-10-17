@@ -44,6 +44,8 @@ Use module READMEs for prerequisites and focused cases. A zero-match filter, a c
 
 Loopback HTTP fixtures must not route through an outbound system proxy. On machines with a proxy enabled, scope `NO_PROXY=127.0.0.1,localhost,::1` to the test process and retain any other required bypass entries; do not change the user's global proxy settings or weaken timeout assertions. If concurrent compilation exhausts Windows commit memory (`os error 1455` / LLVM out of memory), use Cargo's `--jobs 1` for the same check rather than changing application code or omitting packages.
 
+For functional fixtures that issue independent kernel or relation requests, create controls at each request boundary rather than sharing a deadline across earlier setup and operations. Keep the original per-request timeout, cancellation flag and memory limits, and reuse immutable registries and catalogs. Tests of deadline propagation retain their deliberate shared or expired controls.
+
 ## Regression coverage
 
 Keep tests tied to observable behavior: state transitions, boundaries, precedence, error outcomes and durable commits. Reuse existing coverage before adding another case for the same path. Do not assert source spelling, file layout or the disappearance of an old symbol as a substitute for behavior.

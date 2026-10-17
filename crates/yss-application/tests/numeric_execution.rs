@@ -1153,14 +1153,23 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
     };
     let factory: Arc<dyn yss_relational_contract::RelationFactory> =
         yss_database_runtime::dataset_query_engine().unwrap();
-    let control = KernelControl::new(
-        Arc::new(AtomicBool::new(false)),
-        Instant::now() + Duration::from_secs(10),
-    );
-    let relation_control = yss_relational_contract::RelationControl {
-        cancellation: control.cancellation.clone(),
-        deadline: control.deadline,
-        max_input_bytes: control.max_input_bytes,
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let kernels = KernelRegistry::default();
+    let cancellation = Arc::new(AtomicBool::new(false));
+    // Independent requests must not inherit time spent in earlier kernels or fixture setup.
+    let control = || {
+        KernelControl::new(
+            cancellation.clone(),
+            Instant::now() + Duration::from_secs(10),
+        )
+    };
+    let relation_control = || {
+        let control = control();
+        yss_relational_contract::RelationControl {
+            cancellation: control.cancellation,
+            deadline: control.deadline,
+            max_input_bytes: control.max_input_bytes,
+        }
     };
     let category = yss_database_arrow::with_column_semantic(
         Field::new("entity", DataType::Utf8, false),
@@ -1199,7 +1208,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
     .unwrap();
     let frame = factory
         .clone()
-        .materialize(data, &relation_control)
+        .materialize(data, &relation_control())
         .unwrap();
     let x = RuntimeValue::Series(frame.select_series("x").unwrap());
     let run = |suffix: &str,
@@ -1222,7 +1231,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             "panel.difference" => vec!["aligned", "series"],
             _ => vec!["series"],
         };
-        KernelRegistry::default().execute(
+        kernels.execute(
             &KernelId::new(if suffix.starts_with("logic.") {
                 format!("yssbi.compare.{}", suffix.strip_prefix("logic.").unwrap()).into()
             } else {
@@ -1244,7 +1253,6 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
                         })
                         .collect::<BTreeMap<_, _>>();
                     if !suffix.starts_with("logic.") {
-                        let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
                         let protocol = builtin
                             .registry
                             .protocol(&format!("yssbi.dataframe.{suffix}").parse().unwrap())
@@ -1284,7 +1292,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             let page = series
                 .as_relation()
                 .unwrap()
-                .page(0, 100, &relation_control)
+                .page(0, 100, &relation_control())
                 .unwrap();
             return serde_json::to_value(page.data.columns()[0].values()).unwrap();
         }
@@ -1313,7 +1321,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
                 std::slice::from_ref(&x),
                 vec![],
                 vec![V::Scalar(S::Numeric)],
-                &control
+                &control()
             )
             .unwrap()[0],
             number(expected)
@@ -1326,7 +1334,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             &[wide],
             vec![],
             vec![V::Scalar(S::Numeric)],
-            &control
+            &control()
         )
         .unwrap()[0],
         RuntimeValue::Scalar(TabularScalar::Unsigned(u64::MAX - 2))
@@ -1338,7 +1346,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             &[overflow],
             vec![],
             vec![V::Scalar(S::Numeric)],
-            &control
+            &control()
         ),
         Err(KernelError::NonFiniteResult)
     ));
@@ -1379,7 +1387,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             std::slice::from_ref(&x),
             vec![(param, number(size))],
             vec![numeric_series()],
-            &control,
+            &control(),
         )
         .unwrap();
         let actual = as_json(&result[0]);
@@ -1414,7 +1422,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             ),
         ],
         vec![numeric_series()],
-        &control,
+        &control(),
     )
     .unwrap();
     assert_eq!(
@@ -1430,7 +1438,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             RuntimeValue::Scalar(TabularScalar::String("a".into())),
         )],
         vec![V::DataSeries(Box::new(V::Scalar(S::Categorical)))],
-        &control,
+        &control(),
     )
     .unwrap();
     let RuntimeValue::Series(dummy_series) = &dummy[0] else {
@@ -1473,7 +1481,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             V::Scalar(S::Numeric),
             V::Scalar(S::Numeric),
         ],
-        &control,
+        &control(),
     )
     .unwrap();
     let restored = run(
@@ -1481,7 +1489,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
         &standardized,
         vec![],
         vec![numeric_series()],
-        &control,
+        &control(),
     )
     .unwrap();
     assert_eq!(
@@ -1506,7 +1514,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
         &[restored[0].clone(), x.clone()],
         tolerances(),
         vec![binary_series()],
-        &control,
+        &control(),
     )
     .unwrap();
     assert_eq!(
@@ -1518,7 +1526,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
         &[x.clone(), RuntimeValue::float64(4.0 + 1e-10).unwrap()],
         tolerances(),
         vec![binary_series()],
-        &control,
+        &control(),
     )
     .unwrap();
     assert_eq!(
@@ -1553,7 +1561,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             &[x.clone(), RuntimeValue::float64(4.0 + 1e-10).unwrap()],
             tolerances(),
             vec![binary_series()],
-            &control,
+            &control(),
         )
         .unwrap();
         assert!(matches!(compared[0], RuntimeValue::Series(_)));
@@ -1568,7 +1576,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             &operands,
             vec![],
             vec![binary_series()],
-            &control,
+            &control(),
         )
         .unwrap();
         assert_eq!(
@@ -1583,7 +1591,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
         &[restored[0].clone(), other],
         vec![],
         vec![binary_series()],
-        &control,
+        &control(),
     )
     .unwrap();
     assert_eq!(
@@ -1597,7 +1605,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             &[empty],
             vec![],
             vec![V::Scalar(S::Numeric)],
-            &control
+            &control()
         )
         .unwrap()[0],
         RuntimeValue::Scalar(TabularScalar::Null)
@@ -1616,7 +1624,7 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
                 &[],
                 range(5, 0, -2),
                 vec![numeric_series()],
-                &control
+                &control()
             )
             .unwrap()[0]
         ),
@@ -1628,14 +1636,13 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             &[],
             range(0, 10, 0),
             vec![numeric_series()],
-            &control
+            &control()
         ),
         Err(KernelError::InvalidParameter)
     ));
-    let tiny = KernelControl {
+    let tiny = || KernelControl {
         max_input_bytes: 1,
-        cancellation: control.cancellation.clone(),
-        deadline: control.deadline,
+        ..control()
     };
     assert!(matches!(
         run(
@@ -1647,30 +1654,29 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
                 V::Scalar(S::Numeric),
                 V::Scalar(S::Numeric)
             ],
-            &tiny
+            &tiny()
         ),
         Err(KernelError::BudgetExceeded)
     ));
-    assert!(matches!(
-        run(
-            "series.int_range",
-            &[],
-            range(i64::MIN, i64::MAX, 1),
-            vec![numeric_series()],
-            &tiny
-        ),
-        Err(KernelError::BudgetExceeded)
-    ));
-    control
-        .cancellation
-        .store(true, std::sync::atomic::Ordering::Release);
+    let range_budget_result = run(
+        "series.int_range",
+        &[],
+        range(i64::MIN, i64::MAX, 1),
+        vec![numeric_series()],
+        &tiny(),
+    );
+    assert!(
+        matches!(&range_budget_result, Err(KernelError::BudgetExceeded)),
+        "oversized range returned {range_budget_result:?}",
+    );
+    cancellation.store(true, std::sync::atomic::Ordering::Release);
     assert!(matches!(
         run(
             "series.length",
             &[x],
             vec![],
             vec![V::Scalar(S::Numeric)],
-            &control
+            &control()
         ),
         Err(KernelError::Cancelled)
     ));
