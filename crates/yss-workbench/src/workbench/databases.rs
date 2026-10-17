@@ -1,5 +1,6 @@
 //! Data routing consumes the current index and revision-bound Application queries.
 use super::Workbench;
+use super::details::DetailsTarget;
 use crate::databases::{DatabaseEditor, DatabaseEvent, query};
 use gpui_kit::component::dock::{DockPlacement, panel_handle};
 use gpui_kit::{AppContext, Context, Window};
@@ -177,11 +178,7 @@ impl Workbench {
                 }
                 match event {
                     DatabaseEvent::Activated => {
-                        view.active_editor = Some(editor.entity_id().into());
-                        view.details.update(cx, |details, cx| {
-                            details.set_database(editor.downgrade(), cx)
-                        });
-                        view.activate_file(editor.read(cx).id().to_owned(), cx);
+                        view.activate_editor(DetailsTarget::Database(editor.downgrade()), cx)
                     }
                     DatabaseEvent::SessionChanged => {
                         view.rebind_session(window, cx);
@@ -198,27 +195,5 @@ impl Workbench {
             cx,
         );
         editor
-    }
-    pub(super) fn refresh_databases(&self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(project) = &self.project else {
-            return;
-        };
-        for (id, editor) in &self.databases {
-            let Some(editor) = editor.upgrade() else {
-                continue;
-            };
-            if let Some(entry) = project.index.databases.iter().find(|entry| &entry.id == id) {
-                editor.update(cx, |editor, cx| {
-                    editor.replace_index(
-                        entry.revision,
-                        entry.name.clone().unwrap_or_else(|| id.clone()),
-                        window,
-                        cx,
-                    )
-                });
-            } else {
-                editor.update(cx, |editor, cx| editor.unavailable(cx));
-            }
-        }
     }
 }

@@ -11,6 +11,8 @@ pub type MindSaveOutcome = FileSaveOutcome<MindDocument>;
 
 impl FileEditor for MindCanvas {
     type File = MindDocument;
+    const PANEL_NAME: &'static str = "mind-editor";
+    const PATH_KEY: &'static str = "mindPath";
 
     fn session(&self) -> &FileSession<MindDocument> {
         &self.file

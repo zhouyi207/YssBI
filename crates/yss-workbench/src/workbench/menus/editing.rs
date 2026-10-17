@@ -1,11 +1,11 @@
 //! Menu editing reuses the selected editor's actions and the component text engine.
-use super::super::Workbench;
+use super::super::{EditorPanel, Workbench, files::FilePanel};
 use crate::{canvas, databases::CopyDatabaseSelection, minds::DeleteTopics};
 use gpui_kit::component::{
     dock::{BasePanelView, DockPlacement},
     input,
 };
-use gpui_kit::{Action, App, Context, Window};
+use gpui_kit::{Action, App, Context, FocusHandle, Window};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -19,6 +19,15 @@ pub(in crate::workbench) enum EditCommand {
 }
 
 impl EditCommand {
+    const ALL: [Self; 6] = [
+        Self::Undo,
+        Self::Redo,
+        Self::Cut,
+        Self::Copy,
+        Self::Paste,
+        Self::Delete,
+    ];
+
     pub(in crate::workbench) fn text_action(self) -> Box<dyn Action> {
         match self {
             Self::Undo => Box::new(input::Undo),
@@ -81,54 +90,57 @@ impl From<EditCommand> for canvas::GraphEditCommand {
     }
 }
 
+impl EditorPanel {
+    fn can_edit(&self, command: EditCommand, cx: &App) -> bool {
+        match self {
+            Self::Graph(graph) => graph.read(cx).is_edit_command_enabled(command.into()),
+            Self::File(FilePanel::Document(document)) => document.read(cx).is_editing(),
+            Self::File(FilePanel::Mind(_)) => command == EditCommand::Delete,
+            Self::File(FilePanel::Chart(_)) => false,
+            Self::Database(_) => command == EditCommand::Copy,
+        }
+    }
+
+    fn edit(&self, command: EditCommand, focus: &FocusHandle, window: &mut Window, cx: &mut App) {
+        if let Self::Graph(graph) = self {
+            graph.update(cx, |graph, cx| graph.edit(command.into(), cx));
+            return;
+        }
+        if !self.can_edit(command, cx) {
+            return;
+        }
+        let action: Box<dyn Action> = match self {
+            Self::File(FilePanel::Document(_)) => command.text_action(),
+            Self::File(FilePanel::Mind(_)) => Box::new(DeleteTopics),
+            Self::Database(_) => Box::new(CopyDatabaseSelection),
+            Self::Graph(_) | Self::File(FilePanel::Chart(_)) => return,
+        };
+        focus.dispatch_action(action.as_ref(), window, cx);
+    }
+}
+
 impl Workbench {
     pub(super) fn edit_menu_state(
         &self,
         window: &Window,
         cx: &App,
-    ) -> (Option<gpui_kit::FocusHandle>, [bool; 6]) {
+    ) -> (Option<FocusHandle>, [bool; 6]) {
         if window.is_action_available(&input::SelectAll, cx) {
             return (
                 window.focused(cx),
-                [
-                    EditCommand::Undo,
-                    EditCommand::Redo,
-                    EditCommand::Cut,
-                    EditCommand::Copy,
-                    EditCommand::Paste,
-                    EditCommand::Delete,
-                ]
-                .map(|command| window.is_action_available(command.text_action().as_ref(), cx)),
+                EditCommand::ALL
+                    .map(|command| window.is_action_available(command.text_action().as_ref(), cx)),
             );
         }
-        let Some(panel) = self.editor_command_panel(window, cx) else {
+        let Some(editor) = self
+            .editor_command_panel(window, cx)
+            .and_then(|panel| EditorPanel::from_view(panel.view()))
+        else {
             return (None, [false; 6]);
         };
-        let editor = panel.view();
-        if let Ok(graph) = editor.clone().downcast::<canvas::GraphCanvas>() {
-            use canvas::GraphEditCommand::*;
-            return (
-                None,
-                [Undo, Redo, Cut, Copy, Paste, Delete]
-                    .map(|command| graph.read(cx).is_edit_command_enabled(command)),
-            );
-        }
-        if let Ok(document) = editor
-            .clone()
-            .downcast::<crate::documents::DocumentEditor>()
-        {
-            return (None, [document.read(cx).is_editing(); 6]);
-        }
         (
             None,
-            [
-                false,
-                false,
-                false,
-                editor.entity_type() == std::any::TypeId::of::<crate::databases::DatabaseEditor>(),
-                false,
-                editor.entity_type() == std::any::TypeId::of::<crate::minds::MindCanvas>(),
-            ],
+            EditCommand::ALL.map(|command| editor.can_edit(command, cx)),
         )
     }
 
@@ -177,30 +189,8 @@ impl Workbench {
         let Some(panel) = self.editor_command_panel(window, cx) else {
             return;
         };
-        let editor = panel.view();
-        if let Ok(graph) = editor.clone().downcast::<canvas::GraphCanvas>() {
-            graph.update(cx, |graph, cx| graph.edit(command.into(), cx));
-            return;
+        if let Some(editor) = EditorPanel::from_view(panel.view()) {
+            editor.edit(command, &panel.focus_handle(cx), window, cx);
         }
-        let action: Box<dyn Action> = if editor
-            .clone()
-            .downcast::<crate::documents::DocumentEditor>()
-            .is_ok_and(|document| document.read(cx).is_editing())
-        {
-            command.text_action()
-        } else if editor.entity_type() == std::any::TypeId::of::<crate::minds::MindCanvas>()
-            && command == EditCommand::Delete
-        {
-            Box::new(DeleteTopics)
-        } else if editor.entity_type() == std::any::TypeId::of::<crate::databases::DatabaseEditor>()
-            && command == EditCommand::Copy
-        {
-            Box::new(CopyDatabaseSelection)
-        } else {
-            return;
-        };
-        panel
-            .focus_handle(cx)
-            .dispatch_action(action.as_ref(), window, cx);
     }
 }

@@ -241,9 +241,15 @@ impl Focusable for DatabaseEditor {
         self.grid.read(cx).focus_handle(cx)
     }
 }
+impl DatabaseEditor {
+    /// The dock factory that restores database editors.
+    pub const PANEL_NAME: &'static str = "database-editor";
+    /// The persisted panel field holding the database ID.
+    pub const ID_KEY: &'static str = "databaseId";
+}
 impl BasePanel for DatabaseEditor {
     fn panel_name(&self) -> &'static str {
-        "database-editor"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         !self.dirty() && !self.busy()
@@ -255,7 +261,7 @@ impl BasePanel for DatabaseEditor {
     }
     fn dump(&self, _: &App) -> PanelState {
         let mut state = PanelState::new(self.panel_name());
-        state.info = PanelInfo::Panel(serde_json::json!({"databaseId": self.id}));
+        state.info = PanelInfo::Panel(serde_json::json!({ (Self::ID_KEY): self.id }));
         state
     }
 }

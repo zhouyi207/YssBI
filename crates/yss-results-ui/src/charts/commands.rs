@@ -10,6 +10,8 @@ pub type ChartSaveOutcome = FileSaveOutcome<ChartDocument>;
 
 impl FileEditor for ChartEditor {
     type File = ChartDocument;
+    const PANEL_NAME: &'static str = "chart-editor";
+    const PATH_KEY: &'static str = "chartPath";
 
     fn session(&self) -> &FileSession<ChartDocument> {
         &self.file

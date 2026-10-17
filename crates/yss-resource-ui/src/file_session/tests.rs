@@ -1,13 +1,19 @@
 use super::*;
 use crate::documents::DocumentEditor;
+use gpui_kit::component::dock::PanelInfo;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{AnyWindowHandle, AppContext, Entity, TestAppContext, WindowOptions};
 use std::{cell::Cell, path::PathBuf, rc::Rc};
-use yss_application::{file_resources::FileMutation, session::ApplicationState};
+use yss_application::{
+    events::{CommittedResourceMutation, ResourceRoute},
+    file_resources::FileMutation,
+    session::ApplicationState,
+};
 use yss_desktop_services::DesktopEvents;
 use yss_project::docs::DocSnapshot;
 use yss_project_history::{
-    DocResourceKey, ResourceLifecycleKind, ResourceLifecyclePatch, ResourceLifecycleState,
+    DocResourceKey, ResourceKey, ResourceLifecycleKind, ResourceLifecyclePatch,
+    ResourceLifecycleState,
 };
 use yss_project_model::{
     ProjectData,
@@ -182,9 +188,9 @@ fn deliver(
 ) {
     cx.update_window(window, |_, window, cx| {
         document.update(cx, |document, cx| {
-            for route in file_routes(mutation) {
+            for route in mutation.routes() {
                 match route {
-                    FileRoute::Moved {
+                    ResourceRoute::Moved {
                         to,
                         from_revision,
                         to_revision,
@@ -196,8 +202,10 @@ fn deliver(
                         window,
                         cx,
                     ),
-                    FileRoute::Removed { .. } => document.mark_removed(cx),
-                    FileRoute::Changed { delta, .. } => document.accept_change(delta, window, cx),
+                    ResourceRoute::Removed { .. } => document.mark_removed(cx),
+                    ResourceRoute::Changed { delta, .. } => {
+                        document.accept_change(delta, window, cx)
+                    }
                 }
             }
         })
@@ -225,8 +233,8 @@ async fn a_rename_elsewhere_moves_the_open_draft_and_its_next_save(cx: &mut Test
         name: "Renamed".into(),
     });
     assert!(matches!(
-        file_routes(&renamed.mutation).as_slice(),
-        [FileRoute::Moved {
+        renamed.mutation.routes().as_slice(),
+        [ResourceRoute::Moved {
             from: "docs/Notes.md",
             to: "docs/Renamed.md",
             ..
@@ -241,6 +249,13 @@ async fn a_rename_elsewhere_moves_the_open_draft_and_its_next_save(cx: &mut Test
             !document.busy(),
             "a current snapshot moves without another read"
         );
+        assert_eq!(document.tab_title().as_ref(), "Renamed *");
+        let state = document.panel_state();
+        assert_eq!(state.panel_name, "document-editor");
+        assert!(matches!(
+            &state.info,
+            PanelInfo::Panel(info) if *info == serde_json::json!({"documentPath": "docs/Renamed.md"})
+        ));
     });
 
     save(window, &document, cx);

@@ -1,6 +1,7 @@
 //! Dock and cross-editor selection routing; graph drafts stay in the retained graph owner.
 #[cfg(test)]
 pub(super) mod tests;
+use super::EditorPanel;
 use super::files::{FilePanel, WeakFilePanel};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
@@ -8,8 +9,8 @@ use gpui_kit::component::{
     dock::{BasePanel, Panel, PanelEvent},
 };
 use gpui_kit::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement, Render,
-    WeakEntity, Window, div, prelude::*,
+    App, AppContext, Context, Entity, EntityId, EventEmitter, FocusHandle, Focusable, IntoElement,
+    Render, WeakEntity, Window, div, prelude::*,
 };
 use std::sync::Arc;
 use yss_data_ui::databases::DatabaseEditor;
@@ -20,10 +21,32 @@ use yss_node_protocol::{NodeTypeId, ParameterKey};
 use yss_project::GraphEditVersion;
 use yss_project_identity::ProjectInstanceId;
 
+/// An editor that renders its own details; graph selections use the graph inspector instead.
+#[derive(Clone)]
+pub(crate) enum DetailsTarget {
+    File(WeakFilePanel),
+    Database(WeakEntity<DatabaseEditor>),
+}
+
+impl DetailsTarget {
+    fn entity_id(&self) -> EntityId {
+        match self {
+            Self::File(file) => file.entity_id(),
+            Self::Database(database) => database.entity_id(),
+        }
+    }
+
+    pub(in crate::workbench) fn upgrade(&self) -> Option<EditorPanel> {
+        Some(match self {
+            Self::File(file) => EditorPanel::File(file.upgrade()?),
+            Self::Database(database) => EditorPanel::Database(database.upgrade()?),
+        })
+    }
+}
+
 pub struct DetailsPanel {
     graph: Entity<GraphDetails>,
-    file: Option<WeakFilePanel>,
-    database: Option<WeakEntity<DatabaseEditor>>,
+    target: Option<DetailsTarget>,
     log: Option<WeakEntity<super::logs::LogDetails>>,
     focus: FocusHandle,
     scroll: gpui_kit::ScrollHandle,
@@ -42,8 +65,7 @@ impl DetailsPanel {
         let focus = graph.read(cx).focus_handle(cx);
         Self {
             graph,
-            file: None,
-            database: None,
+            target: None,
             log: None,
             focus,
             scroll: gpui_kit::ScrollHandle::new(),
@@ -55,30 +77,20 @@ impl DetailsPanel {
     pub fn graph(&self, cx: &App) -> Option<Entity<GraphCanvas>> {
         self.graph.read(cx).graph()
     }
-    pub(crate) fn file(&self) -> Option<FilePanel> {
-        self.file.as_ref().and_then(WeakFilePanel::upgrade)
-    }
-    pub fn database(&self) -> Option<Entity<DatabaseEditor>> {
-        self.database.as_ref().and_then(WeakEntity::upgrade)
+    pub(crate) fn target_id(&self) -> Option<EntityId> {
+        self.target.as_ref().map(DetailsTarget::entity_id)
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
         self.target_subscription = None;
         self.graph.update(cx, |graph, cx| graph.clear(cx));
-        self.file = None;
-        self.database = None;
+        self.target = None;
         self.log = None;
         cx.notify();
     }
 
-    pub(crate) fn set_file(&mut self, file: WeakFilePanel, cx: &mut Context<Self>) {
-        let current = self.file();
-        let Some(panel) = file.upgrade() else {
-            return;
-        };
-        if current.is_some_and(|current| current.entity_id() == panel.entity_id())
-            && self.target_visible(cx)
-        {
+    pub(crate) fn set_target(&mut self, target: DetailsTarget, cx: &mut Context<Self>) {
+        if self.target_id() == Some(target.entity_id()) && self.target_visible(cx) {
             return;
         }
         self.clear(cx);
@@ -96,31 +108,26 @@ impl DetailsPanel {
                 })
             }};
         }
-        self.target_subscription = Some(match &panel {
-            FilePanel::Document(editor) => watch!(editor),
-            FilePanel::Mind(editor) => watch!(editor),
-            FilePanel::Chart(editor) => watch!(editor),
-        });
-        self.file = Some(file);
-    }
-    pub fn set_database(&mut self, database: WeakEntity<DatabaseEditor>, cx: &mut Context<Self>) {
-        if self.database.as_ref() == Some(&database) && self.target_visible(cx) {
-            return;
-        }
-        self.clear(cx);
-        if let Some(editor) = database.upgrade() {
-            let mut state = editor.read(cx).details_state(cx).into_owned();
-            self.target_subscription = Some(cx.observe(&editor, move |view, editor, cx| {
-                let next = editor.read(cx).details_state(cx);
-                if state != next {
-                    state = next.into_owned();
-                    if view.target_visible(cx) {
-                        cx.notify();
+        self.target_subscription = match target.upgrade() {
+            Some(EditorPanel::File(FilePanel::Document(editor))) => Some(watch!(&editor)),
+            Some(EditorPanel::File(FilePanel::Mind(editor))) => Some(watch!(&editor)),
+            Some(EditorPanel::File(FilePanel::Chart(editor))) => Some(watch!(&editor)),
+            // A database's details state also reads its grid, so it needs the app context.
+            Some(EditorPanel::Database(editor)) => {
+                let mut state = editor.read(cx).details_state(cx).into_owned();
+                Some(cx.observe(&editor, move |view, editor, cx| {
+                    let next = editor.read(cx).details_state(cx);
+                    if state != next {
+                        state = next.into_owned();
+                        if view.target_visible(cx) {
+                            cx.notify();
+                        }
                     }
-                }
-            }));
-        }
-        self.database = Some(database);
+                }))
+            }
+            Some(EditorPanel::Graph(_)) | None => None,
+        };
+        self.target = Some(target);
     }
     fn target_visible(&self, cx: &App) -> bool {
         self.log.as_ref().and_then(WeakEntity::upgrade).is_none()
@@ -143,8 +150,7 @@ impl DetailsPanel {
         cx: &mut Context<Self>,
     ) {
         self.target_subscription = None;
-        self.file = None;
-        self.database = None;
+        self.target = None;
         self.graph.update(cx, |details, cx| {
             details.set_selection(graph, nodes, projection, version, window, cx)
         });
@@ -230,28 +236,26 @@ impl Render for DetailsPanel {
         if let Some(log) = self.log.as_ref().and_then(WeakEntity::upgrade) {
             return panel.child(log).into_any_element();
         }
-        let content = if let Some(file) = self.file() {
-            match file {
-                FilePanel::Document(editor) => {
-                    editor.read(cx).render_details(cx).into_any_element()
-                }
-                FilePanel::Mind(editor) => {
-                    editor.update(cx, |editor, cx| editor.render_details(window, cx))
-                }
-                FilePanel::Chart(editor) => {
-                    editor.update(cx, |editor, cx| editor.render_details(cx))
-                }
+        let content = match self.target.as_ref().and_then(DetailsTarget::upgrade) {
+            Some(EditorPanel::File(FilePanel::Document(editor))) => {
+                editor.read(cx).render_details(cx).into_any_element()
             }
-        } else if let Some(database) = self.database() {
-            database.update(cx, |editor, cx| editor.render_details(window, cx))
-        } else {
-            yss_ui::appearance::empty_state(
+            Some(EditorPanel::File(FilePanel::Mind(editor))) => {
+                editor.update(cx, |editor, cx| editor.render_details(window, cx))
+            }
+            Some(EditorPanel::File(FilePanel::Chart(editor))) => {
+                editor.update(cx, |editor, cx| editor.render_details(cx))
+            }
+            Some(EditorPanel::Database(editor)) => {
+                editor.update(cx, |editor, cx| editor.render_details(window, cx))
+            }
+            Some(EditorPanel::Graph(_)) | None => yss_ui::appearance::empty_state(
                 IconName::FileText,
                 yss_ui::text::translate("detail.noSelection"),
                 yss_ui::text::translate("detail.noSelectionHint"),
                 cx,
             )
-            .into_any_element()
+            .into_any_element(),
         };
         panel.child(content).into_any_element()
     }

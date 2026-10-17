@@ -7,7 +7,7 @@ mod render;
 pub use commands::{ChartSaveOutcome, ChartSaveRequest};
 pub use details::DetailsDisplay;
 
-use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState};
+use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent, PanelState};
 use gpui_kit::{App, Context, EventEmitter, FocusHandle, Focusable, Window, actions};
 use std::sync::Arc;
 use yss_application::database::DatabaseMetaResult;
@@ -108,7 +108,7 @@ impl Focusable for ChartEditor {
 }
 impl BasePanel for ChartEditor {
     fn panel_name(&self) -> &'static str {
-        "chart-editor"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         !self.dirty() && !self.busy()
@@ -119,21 +119,12 @@ impl BasePanel for ChartEditor {
         }
     }
     fn dump(&self, _: &App) -> PanelState {
-        let mut state = PanelState::new(self.panel_name());
-        state.info = PanelInfo::Panel(serde_json::json!({"chartPath": self.path()}));
-        state
+        self.panel_state()
     }
 }
 impl Panel for ChartEditor {
     fn tab_name(&self, _: &App) -> Option<gpui_kit::SharedString> {
-        Some(
-            format!(
-                "{}{}",
-                self.file.snapshot().path.name(),
-                if self.dirty() { " *" } else { "" }
-            )
-            .into(),
-        )
+        Some(self.tab_title())
     }
     fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         self.tab_name(cx).unwrap_or_default()

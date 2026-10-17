@@ -15,7 +15,7 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Entity<Opening> {
-        let revision = self.indexed_graph_revision(path.as_str());
+        let revision = self.indexed_revision(path.as_str());
         let opening = cx.new(|cx| Opening::new(path, revision, cx));
         let lifecycle = self.lifecycle;
         self.subscriptions.push(cx.subscribe_in(

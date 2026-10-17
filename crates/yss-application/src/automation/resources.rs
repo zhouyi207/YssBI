@@ -193,6 +193,12 @@ fn graph_path(resource: &ProjectResourceRef) -> Result<GraphResourcePath> {
 fn file_path<T: ResourceFile>(resource: &ProjectResourceRef) -> Result<FilePath<T>> {
     FilePath::parse(&resource.id).map_err(|_| invalid("resource.id"))
 }
+fn file_target<T: ResourceFile>(
+    resource: &ProjectResourceRef,
+    version: &ResourceVersion,
+) -> Result<(FilePath<T>, FileVersion)> {
+    Ok((file_path(resource)?, file_version(version)?))
+}
 fn file_version(version: &ResourceVersion) -> Result<FileVersion> {
     Ok(FileVersion {
         session_id: version
@@ -460,7 +466,7 @@ pub(super) fn manage_resource(
         }
         | ManageResourceRequest::Delete { resource, version }
         | ManageResourceRequest::Save { resource, version } => (resource, version),
-        ManageResourceRequest::Create { .. } => unreachable!(),
+        ManageResourceRequest::Create { .. } => return Err(invalid("operation")),
     };
     check_version(session, resource, version)?;
     control.check()?;
@@ -481,14 +487,11 @@ pub(super) fn manage_resource(
                 ManageResourceRequest::Save { .. } => {
                     return content::save_graph(application, session, resource, version);
                 }
-                _ => unreachable!(),
+                ManageResourceRequest::Create { .. } => return Err(invalid("operation")),
             }
         }
         ProjectResourceKind::Chart => {
-            let target = (
-                file_path::<ChartDocument>(resource)?,
-                file_version(version)?,
-            );
+            let target = file_target::<ChartDocument>(resource, version)?;
             file_command(
                 application,
                 project,
@@ -497,7 +500,7 @@ pub(super) fn manage_resource(
             )?
         }
         ProjectResourceKind::Mind => {
-            let target = (file_path::<MindDocument>(resource)?, file_version(version)?);
+            let target = file_target::<MindDocument>(resource, version)?;
             file_command(
                 application,
                 project,
@@ -506,7 +509,7 @@ pub(super) fn manage_resource(
             )?
         }
         ProjectResourceKind::Doc => {
-            let target = (file_path::<DocDocument>(resource)?, file_version(version)?);
+            let target = file_target::<DocDocument>(resource, version)?;
             file_command(
                 application,
                 project,
@@ -541,7 +544,7 @@ pub(super) fn manage_resource(
                         .map_err(database_error)?
                         .mutation
                 }
-                _ => unreachable!(),
+                ManageResourceRequest::Create { .. } => return Err(invalid("operation")),
             }
         }
     };

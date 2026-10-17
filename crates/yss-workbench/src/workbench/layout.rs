@@ -4,6 +4,7 @@ mod missing;
 mod replacement;
 
 use super::Workbench;
+use crate::{canvas::GraphCanvas, databases::DatabaseEditor};
 use gpui_kit::component::dock::{
     BasePanelView, DockAreaState, DockEvent, DockLayout, DockPlacement, PaneRef, Panel, PanelId,
     PanelInfo, PanelState, panel_handle, register_panel,
@@ -370,7 +371,9 @@ impl Workbench {
             let mut databases = vec![];
             for id in layout
                 .as_ref()
-                .map(|state| resource_paths(state, "database-editor", "databaseId"))
+                .map(|state| {
+                    resource_paths(state, DatabaseEditor::PANEL_NAME, DatabaseEditor::ID_KEY)
+                })
                 .unwrap_or_default()
             {
                 if let Some(entry) = database_entries.iter().find(|entry| entry.id == id)
@@ -466,7 +469,13 @@ impl Workbench {
                         }
                         let openings = layout
                             .as_ref()
-                            .map(|layout| resource_paths(layout, "graph-editor", "graphPath"))
+                            .map(|layout| {
+                                resource_paths(
+                                    layout,
+                                    GraphCanvas::PANEL_NAME,
+                                    GraphCanvas::PATH_KEY,
+                                )
+                            })
                             .unwrap_or_default()
                             .into_iter()
                             .filter_map(|path| GraphResourcePath::new(path).ok())
@@ -600,9 +609,11 @@ impl Workbench {
         }
         let graphs = self.graphs.clone();
         let openings = self.graph_openings.clone();
-        register_panel(cx, "graph-editor", move |context, _, cx| {
+        register_panel(cx, GraphCanvas::PANEL_NAME, move |context, _, cx| {
             if let PanelInfo::Panel(info) = context.info()
-                && let Some(path) = info.get("graphPath").and_then(serde_json::Value::as_str)
+                && let Some(path) = info
+                    .get(GraphCanvas::PATH_KEY)
+                    .and_then(serde_json::Value::as_str)
             {
                 if let Some(graph) = graphs.get(path).and_then(WeakEntity::upgrade) {
                     return panel_handle(graph);
@@ -629,9 +640,11 @@ impl Workbench {
             });
         }
         let databases = self.databases.clone();
-        register_panel(cx, "database-editor", move |context, _, cx| {
+        register_panel(cx, DatabaseEditor::PANEL_NAME, move |context, _, cx| {
             if let PanelInfo::Panel(info) = context.info()
-                && let Some(id) = info.get("databaseId").and_then(serde_json::Value::as_str)
+                && let Some(id) = info
+                    .get(DatabaseEditor::ID_KEY)
+                    .and_then(serde_json::Value::as_str)
                 && let Some(editor) = databases.get(id).and_then(WeakEntity::upgrade)
             {
                 return panel_handle(editor);

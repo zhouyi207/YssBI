@@ -13,6 +13,21 @@ pub enum ResourceKey {
     Doc(DocResourceKey),
 }
 
+impl ResourceKey {
+    /// The project-relative file of the resource. A function key names its graph's file;
+    /// database keys are not paths.
+    pub fn path(&self) -> Option<&str> {
+        match self {
+            Self::Graph(path) => Some(path.as_str()),
+            Self::Function(key) => Some(&key.0),
+            Self::Chart(key) => Some(&key.0),
+            Self::Mind(key) => Some(&key.0),
+            Self::Doc(key) => Some(&key.0),
+            Self::Database(_) => None,
+        }
+    }
+}
+
 /// Project-owned mutation envelope. Application and Command adapters may
 /// carry this envelope across the session boundary, while Graph only receives
 /// the typed payload it needs for a single graph operation.

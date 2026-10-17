@@ -33,11 +33,11 @@ pub enum ActivityEvent {
     OpenGraph(String),
     OpenFile(String),
     OpenDatabase(String),
-    FileResource(String, super::resources::ResourceAction),
+    /// Manages a graph or authored file by path.
+    Resource(String, super::resources::ResourceAction),
     RevealResource(yss_project::RevealProjectResourceRequest),
     InspectNode(NodeTypeId),
     CreateNode(NodeCreation),
-    GraphResource(String, super::resources::ResourceAction),
     DatabaseResource(String, super::resources::ResourceAction),
     ActivateConversation(String),
     RenameConversation(String, String),

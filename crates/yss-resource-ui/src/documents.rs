@@ -9,7 +9,7 @@ pub use details::DetailsDisplay;
 use crate::file_session::FileEditor;
 use crate::file_session::{FileEditorEvent, FileSession};
 use gpui_kit::component::{
-    dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
+    dock::{BasePanel, Panel, PanelEvent, PanelState},
     input::{EditorState, InputEvent},
     text::{TextView, TextViewState},
 };
@@ -198,7 +198,7 @@ impl Focusable for DocumentEditor {
 }
 impl BasePanel for DocumentEditor {
     fn panel_name(&self) -> &'static str {
-        "document-editor"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         !self.dirty() && !self.busy()
@@ -211,21 +211,12 @@ impl BasePanel for DocumentEditor {
         }
     }
     fn dump(&self, _: &App) -> PanelState {
-        let mut state = PanelState::new(self.panel_name());
-        state.info = PanelInfo::Panel(serde_json::json!({"documentPath": self.path()}));
-        state
+        self.panel_state()
     }
 }
 impl Panel for DocumentEditor {
     fn tab_name(&self, _: &App) -> Option<gpui_kit::SharedString> {
-        Some(
-            format!(
-                "{}{}",
-                self.file.snapshot().path.name(),
-                if self.dirty() { " *" } else { "" }
-            )
-            .into(),
-        )
+        Some(self.tab_title())
     }
     fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui_kit::IntoElement {
         self.tab_name(cx).unwrap_or_default()

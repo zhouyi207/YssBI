@@ -2732,7 +2732,7 @@
       "revealResourceFailed": "Could not locate the resource. Refresh the project and try again.",
       "resourceChanged": "The resource changed or is busy. Close this dialog and try again.",
       "resourceCommittedUnavailable": "The resource operation completed, but its editor could not be opened. Open it again from the project list.",
-      "saveFileBeforeManaging": "Save the document or mind map before renaming, duplicating or deleting it.",
+      "saveFileBeforeManaging": "Save the file before renaming, duplicating or deleting it.",
       "fileResourceFailed": "The file operation failed. Check the name or refresh the project and try again.",
       "conversationNameInvalid": "The conversation name is invalid. Edit it and try again."
     },

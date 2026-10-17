@@ -3,6 +3,7 @@ mod databases;
 pub(in crate::workbench) mod names;
 mod navigation;
 mod operations;
+pub(in crate::workbench) use operations::ResourceTarget;
 mod reveal;
 use super::Workbench;
 use gpui_kit::{Context, Window};
@@ -14,6 +15,7 @@ pub(crate) enum ResourceAction {
     Delete,
     CopyPath,
 }
+use yss_application::events::CommittedResourceMutation;
 use yss_graph_document::GraphResourceKind;
 use yss_project_history::ResourceDocumentPatch;
 use yss_project_identity::OperationId;
@@ -51,15 +53,7 @@ impl Workbench {
                     operation,
                 )?,
             };
-            let path = receipt
-                .deltas
-                .iter()
-                .find_map(|delta| match &delta.payload {
-                    ResourceDocumentPatch::ResourceLifecycle(patch) if patch.before.is_none() => {
-                        patch.after.as_ref().map(|after| after.path.to_string())
-                    }
-                    _ => None,
-                });
+            let path = created_path(&receipt);
             publisher.publish_resource(receipt);
             Ok(path)
         });
@@ -105,4 +99,17 @@ impl Workbench {
         .detach();
         cx.notify();
     }
+}
+
+/// The path a create or duplicate command gave its new resource.
+fn created_path(mutation: &CommittedResourceMutation) -> Option<String> {
+    mutation
+        .deltas
+        .iter()
+        .find_map(|delta| match &delta.payload {
+            ResourceDocumentPatch::ResourceLifecycle(patch) if patch.before.is_none() => {
+                patch.after.as_ref().map(|after| after.path.to_string())
+            }
+            _ => None,
+        })
 }

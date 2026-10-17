@@ -11,6 +11,8 @@ pub type DocumentSaveOutcome = FileSaveOutcome<DocDocument>;
 
 impl FileEditor for DocumentEditor {
     type File = DocDocument;
+    const PANEL_NAME: &'static str = "document-editor";
+    const PATH_KEY: &'static str = "documentPath";
 
     fn session(&self) -> &FileSession<DocDocument> {
         &self.file

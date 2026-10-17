@@ -323,14 +323,11 @@ impl Workbench {
                     ActivityEvent::OpenDatabase(id) => {
                         view.open_database(id.clone(), None, window, cx)
                     }
-                    ActivityEvent::FileResource(path, action) => {
-                        view.file_resource_action(path.clone(), *action, window, cx)
+                    ActivityEvent::Resource(path, action) => {
+                        view.resource_action(path.clone(), *action, window, cx)
                     }
                     ActivityEvent::RevealResource(request) => {
                         view.reveal_resource(request.clone(), window, cx)
-                    }
-                    ActivityEvent::GraphResource(path, action) => {
-                        view.graph_resource_action(path.clone(), *action, window, cx)
                     }
                     ActivityEvent::DatabaseResource(id, action) => {
                         view.database_resource_action(id.clone(), *action, window, cx)
@@ -396,6 +393,18 @@ impl Workbench {
             dock.set_dock(DockPlacement::Left, left, window, cx);
             dock.set_dock_size(DockPlacement::Left, px(240.), window, cx);
         });
+    }
+
+    /// File and database editors show their own details; graph selections drive the inspector.
+    fn activate_editor(&mut self, target: details::DetailsTarget, cx: &mut Context<Self>) {
+        let Some(editor) = target.upgrade() else {
+            return;
+        };
+        self.active_editor = Some(editor.entity_id().into());
+        let resource = editor.resource(cx);
+        self.details
+            .update(cx, |details, cx| details.set_target(target, cx));
+        self.activate_file(resource, cx);
     }
 
     fn activate_file(&mut self, path: String, cx: &mut Context<Self>) {
@@ -472,6 +481,23 @@ impl EditorPanel {
             .ok()
     }
 
+    fn entity_id(&self) -> gpui_kit::EntityId {
+        match self {
+            Self::Graph(graph) => graph.entity_id(),
+            Self::File(panel) => panel.entity_id(),
+            Self::Database(editor) => editor.entity_id(),
+        }
+    }
+
+    /// The project tree row of the edited resource: a path, or a database's ID.
+    fn resource(&self, cx: &gpui_kit::App) -> String {
+        match self {
+            Self::Graph(graph) => graph.read(cx).path().to_owned(),
+            Self::File(panel) => panel.path(cx),
+            Self::Database(editor) => editor.read(cx).id().to_owned(),
+        }
+    }
+
     fn dirty(&self, cx: &gpui_kit::App) -> bool {
         match self {
             Self::Graph(graph) => graph.read(cx).dirty(cx),
@@ -498,17 +524,67 @@ impl EditorPanel {
         }
     }
 
-    /// Re-reads everything the editor shows, for when committed events may have been missed.
-    fn resync(&self, window: &mut Window, cx: &mut gpui_kit::App) {
+    /// Whether a change to `resource` can alter what the editor shows. Database editors follow
+    /// the index revision that every project refresh delivers.
+    fn shows(&self, resource: &yss_project_history::ResourceKey, cx: &gpui_kit::App) -> bool {
         match self {
-            Self::Graph(graph) => graph.update(cx, |graph, cx| {
-                graph.refresh(cx);
-                graph.resync_execution(cx);
-            }),
+            Self::Graph(graph) => graph.read(cx).shows(resource),
+            Self::File(panel) => resource.path() == Some(panel.path(cx).as_str()),
+            Self::Database(_) => false,
+        }
+    }
+
+    /// Graphs take the node catalog, charts the dataset catalog and database editors their
+    /// indexed revision and name.
+    fn accept_index(&self, project: &DesktopProject, window: &mut Window, cx: &mut gpui_kit::App) {
+        match self {
+            Self::Graph(graph) => {
+                if let Some(nodes) = project
+                    .panels
+                    .iter()
+                    .find(|panel| panel.panel_id == "nodes")
+                {
+                    let nodes = nodes.clone();
+                    graph.update(cx, |graph, cx| {
+                        graph.set_catalog(nodes, &project.language, cx)
+                    });
+                }
+            }
+            Self::File(files::FilePanel::Chart(chart)) => {
+                let catalog = project.index.clone();
+                chart.update(cx, |chart, cx| chart.replace_catalog(catalog, window, cx));
+            }
+            Self::File(files::FilePanel::Document(_) | files::FilePanel::Mind(_)) => {}
+            Self::Database(editor) => {
+                let id = editor.read(cx).id().to_owned();
+                match project.index.databases.iter().find(|entry| entry.id == id) {
+                    Some(entry) => {
+                        let name = entry.name.clone().unwrap_or(id);
+                        editor.update(cx, |editor, cx| {
+                            editor.replace_index(entry.revision, name, window, cx)
+                        });
+                    }
+                    None => editor.update(cx, |editor, cx| editor.unavailable(cx)),
+                }
+            }
+        }
+    }
+
+    fn refresh(&self, window: &mut Window, cx: &mut gpui_kit::App) {
+        match self {
+            Self::Graph(graph) => graph.update(cx, |graph, cx| graph.refresh(cx)),
             Self::File(panel) => panel.refresh(window, cx),
             Self::Database(editor) => {
                 editor.update(cx, |editor, cx| editor.reload(false, window, cx))
             }
+        }
+    }
+
+    /// Re-reads everything the editor shows, for when committed events may have been missed.
+    fn resync(&self, window: &mut Window, cx: &mut gpui_kit::App) {
+        self.refresh(window, cx);
+        if let Self::Graph(graph) = self {
+            graph.update(cx, |graph, cx| graph.resync_execution(cx));
         }
     }
 }

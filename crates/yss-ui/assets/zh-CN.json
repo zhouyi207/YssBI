@@ -2732,7 +2732,7 @@
       "revealResourceFailed": "无法定位资源，请刷新项目后重试。",
       "resourceChanged": "资源状态已改变或正在忙碌，请关闭后重试。",
       "resourceCommittedUnavailable": "资源操作已完成，但暂时无法打开编辑器。请从项目列表重新打开。",
-      "saveFileBeforeManaging": "请先保存文档或思维导图，再重命名、复制或删除。",
+      "saveFileBeforeManaging": "请先保存文件，再重命名、复制或删除。",
       "fileResourceFailed": "文件操作失败，请检查名称或刷新项目后重试。",
       "conversationNameInvalid": "会话名称无效，请修改后重试。"
     },

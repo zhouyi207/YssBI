@@ -81,16 +81,14 @@ pub(super) fn resource_menu(
                     let event = match &document.rows[row].content {
                         ActivityRowContent::Item(
                             ActivityItem::EventGraph { path, .. }
-                            | ActivityItem::FunctionGraph { path, .. },
-                        ) => ActivityEvent::GraphResource(path.clone(), action),
+                            | ActivityItem::FunctionGraph { path, .. }
+                            | ActivityItem::Chart { path, .. }
+                            | ActivityItem::Doc { path, .. }
+                            | ActivityItem::Mind { path, .. },
+                        ) => ActivityEvent::Resource(path.clone(), action),
                         ActivityRowContent::Item(ActivityItem::Database { id, .. }) => {
                             ActivityEvent::DatabaseResource(id.clone(), action)
                         }
-                        ActivityRowContent::Item(
-                            ActivityItem::Chart { path, .. }
-                            | ActivityItem::Doc { path, .. }
-                            | ActivityItem::Mind { path, .. },
-                        ) => ActivityEvent::FileResource(path.clone(), action),
                         _ => return,
                     };
                     cx.emit(event);

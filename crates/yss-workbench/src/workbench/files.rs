@@ -1,23 +1,20 @@
 //! Authored-file editors share one registry, open path, management flow and event route.
 use super::Workbench;
+use super::details::DetailsTarget;
 use super::name_form::NameForm;
-use super::resources::{ResourceAction, names::ResourcePrompts};
+use super::resources::{ResourceAction, ResourceTarget, names::ResourcePrompts};
 use crate::charts::ChartEditor;
 use crate::documents::{DocumentEditor, DocumentSaveOutcome, DocumentSaveRequest};
-use crate::file_session::{
-    FileEditor, FileEditorEvent, FileRoute, file_resource_path, file_routes,
-};
+use crate::file_session::{FileEditor, FileEditorEvent};
 use crate::minds::{MindCanvas, MindSaveOutcome, MindSaveRequest};
 use gpui_kit::component::dock::{BasePanelView, DockPlacement, panel_handle};
-use gpui_kit::{
-    AnyView, App, AppContext, ClipboardItem, Context, Entity, EntityId, WeakEntity, Window,
-};
+use gpui_kit::{AnyView, App, AppContext, Context, Entity, EntityId, WeakEntity, Window};
 use std::sync::Arc;
-use yss_application::{events::CommittedResourceMutation, session::ApplicationState};
+use yss_application::session::ApplicationState;
 use yss_chart_document::ChartDocument;
 use yss_desktop_services::ApplicationTasks;
 use yss_project::file_resources::{FileCommand, FileSnapshot, ResourceFile};
-use yss_project_history::{ResourceDeltaEvent, ResourceKey};
+use yss_project_history::ResourceDeltaEvent;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_project_model::{
     doc::DocDocument,
@@ -56,9 +53,9 @@ impl FileKind {
     /// The panel factory name and path key written by each editor's `BasePanel::dump`.
     pub(in crate::workbench) fn layout(self) -> (&'static str, &'static str) {
         match self {
-            Self::Document => ("document-editor", "documentPath"),
-            Self::Mind => ("mind-editor", "mindPath"),
-            Self::Chart => ("chart-editor", "chartPath"),
+            Self::Document => (DocumentEditor::PANEL_NAME, DocumentEditor::PATH_KEY),
+            Self::Mind => (MindCanvas::PANEL_NAME, MindCanvas::PATH_KEY),
+            Self::Chart => (ChartEditor::PANEL_NAME, ChartEditor::PATH_KEY),
         }
     }
 
@@ -70,7 +67,7 @@ impl FileKind {
         }
     }
 
-    fn prompts(self, name: &str) -> ResourcePrompts {
+    pub(in crate::workbench) fn prompts(self, name: &str) -> ResourcePrompts {
         let (rename_title, delete_title, delete_message) = match self {
             Self::Document | Self::Mind => (
                 crate::text::translate("contextMenu.sidebar.rename"),
@@ -152,24 +149,28 @@ impl OpenedFile {
         })
     }
 
-    fn manage(
+    pub(in crate::workbench) fn manage(
         owner: &ApplicationTasks,
-        target: &FileTarget,
+        target: &ResourceTarget,
+        kind: FileKind,
+        version: Option<&FileVersion>,
         action: ResourceAction,
         name: Option<String>,
     ) -> anyhow::Result<Option<Self>> {
-        Ok(match target.kind {
+        Ok(match kind {
             FileKind::Document => {
-                manage::<DocDocument>(owner, target, action, name)?.map(Self::Document)
+                manage::<DocDocument>(owner, target, version, action, name)?.map(Self::Document)
             }
-            FileKind::Mind => manage::<MindDocument>(owner, target, action, name)?.map(Self::Mind),
+            FileKind::Mind => {
+                manage::<MindDocument>(owner, target, version, action, name)?.map(Self::Mind)
+            }
             FileKind::Chart => {
-                manage::<ChartDocument>(owner, target, action, name)?.map(Self::Chart)
+                manage::<ChartDocument>(owner, target, version, action, name)?.map(Self::Chart)
             }
         })
     }
 
-    fn path(&self) -> &str {
+    pub(in crate::workbench) fn path(&self) -> &str {
         match self {
             Self::Document(snapshot) => snapshot.path.as_str(),
             Self::Mind(snapshot) => snapshot.path.as_str(),
@@ -192,12 +193,13 @@ fn commit<T: ResourceFile>(
 
 fn manage<T: ResourceFile>(
     owner: &ApplicationTasks,
-    target: &FileTarget,
+    target: &ResourceTarget,
+    version: Option<&FileVersion>,
     action: ResourceAction,
     name: Option<String>,
 ) -> anyhow::Result<Option<FileSnapshot<T>>> {
     let path = FilePath::<T>::parse(&target.path).map_err(anyhow::Error::msg)?;
-    let version = match &target.version {
+    let version = match version {
         Some(version) => version.clone(),
         None => {
             let snapshot = owner
@@ -243,6 +245,14 @@ pub(crate) enum WeakFilePanel {
 }
 
 impl WeakFilePanel {
+    pub(crate) fn entity_id(&self) -> EntityId {
+        match self {
+            Self::Document(editor) => editor.entity_id(),
+            Self::Mind(editor) => editor.entity_id(),
+            Self::Chart(editor) => editor.entity_id(),
+        }
+    }
+
     pub(crate) fn upgrade(&self) -> Option<FilePanel> {
         Some(match self {
             Self::Document(editor) => FilePanel::Document(editor.upgrade()?),
@@ -322,11 +332,11 @@ impl FilePanel {
         with_editor!(self, editor => editor.read(cx).busy())
     }
 
-    fn path(&self, cx: &App) -> String {
+    pub(in crate::workbench) fn path(&self, cx: &App) -> String {
         with_editor!(self, editor => editor.read(cx).path().to_owned())
     }
 
-    fn version(&self, cx: &App) -> FileVersion {
+    pub(in crate::workbench) fn version(&self, cx: &App) -> FileVersion {
         with_editor!(self, editor => editor.read(cx).version().clone())
     }
 
@@ -347,7 +357,12 @@ impl FilePanel {
         with_editor!(self, editor => editor.update(cx, |editor, cx| editor.refresh(window, cx)))
     }
 
-    fn accept_change(&self, delta: &ResourceDeltaEvent, window: &mut Window, cx: &mut App) {
+    pub(in crate::workbench) fn accept_change(
+        &self,
+        delta: &ResourceDeltaEvent,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
         with_editor!(self, editor => editor.update(cx, |editor, cx| {
             editor.accept_change(delta, window, cx)
         }))
@@ -370,15 +385,15 @@ impl FilePanel {
         })
     }
 
-    fn mark_removed(&self, cx: &mut App) {
+    pub(in crate::workbench) fn mark_removed(&self, cx: &mut App) {
         with_editor!(self, editor => editor.update(cx, |editor, cx| editor.mark_removed(cx)))
     }
 
-    fn lock(&self, cx: &mut App) -> bool {
+    pub(in crate::workbench) fn lock(&self, cx: &mut App) -> bool {
         with_editor!(self, editor => editor.update(cx, |editor, cx| editor.lock(cx)))
     }
 
-    fn unlock(&self, window: &mut Window, cx: &mut App) {
+    pub(in crate::workbench) fn unlock(&self, window: &mut Window, cx: &mut App) {
         with_editor!(self, editor => editor.update(cx, |editor, cx| {
             editor.finish_commit(None, window, cx)
         }))
@@ -449,17 +464,6 @@ impl FilePanel {
             editor.cancel_prepared_save(window, cx)
         }))
     }
-}
-
-#[derive(Clone)]
-struct FileTarget {
-    kind: FileKind,
-    project: ProjectInstanceId,
-    lifecycle: u64,
-    path: String,
-    name: String,
-    revision: ResourceRevision,
-    version: Option<FileVersion>,
 }
 
 impl Workbench {
@@ -593,7 +597,9 @@ impl Workbench {
                         return;
                     };
                     match event {
-                        FileEditorEvent::Activated => view.activate_file_panel(&panel, cx),
+                        FileEditorEvent::Activated => {
+                            view.activate_editor(DetailsTarget::File(panel.downgrade()), cx)
+                        }
                         FileEditorEvent::Removed => {
                             if !panel.unsaved(cx) {
                                 view.retire_file(&panel, window, cx);
@@ -612,15 +618,6 @@ impl Workbench {
         Some(panel)
     }
 
-    fn activate_file_panel(&mut self, panel: &FilePanel, cx: &mut Context<Self>) {
-        self.active_editor = Some(panel.entity_id().into());
-        let target = panel.downgrade();
-        self.details
-            .update(cx, |details, cx| details.set_file(target, cx));
-        let path = panel.path(cx);
-        self.activate_file(path, cx);
-    }
-
     pub(in crate::workbench) fn retire_file(
         &mut self,
         panel: &FilePanel,
@@ -632,12 +629,7 @@ impl Workbench {
                 .upgrade()
                 .is_none_or(|retained| retained.entity_id() != panel.entity_id())
         });
-        if self
-            .details
-            .read(cx)
-            .file()
-            .is_some_and(|current| current.entity_id() == panel.entity_id())
-        {
+        if self.details.read(cx).target_id() == Some(panel.entity_id()) {
             self.details.update(cx, |details, cx| details.clear(cx));
         }
         with_editor!(panel, editor => self
@@ -646,81 +638,30 @@ impl Workbench {
         self.persist_layout(cx);
     }
 
-    pub(in crate::workbench) fn refresh_file_resources(
-        &self,
-        resources: &[ResourceKey],
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        for path in resources.iter().filter_map(file_resource_path) {
-            if let Some(panel) = self.file_panel(path) {
-                panel.refresh(window, cx);
-            }
-        }
-    }
-
-    pub(in crate::workbench) fn update_chart_catalogs(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(project) = &self.project else {
-            return;
-        };
-        for panel in self.file_panels().collect::<Vec<_>>() {
-            if let FilePanel::Chart(chart) = panel {
-                let catalog = project.index.clone();
-                chart.update(cx, |chart, cx| chart.replace_catalog(catalog, window, cx));
-            }
-        }
-    }
-
-    /// The single route for committed file changes, whether the GUI, the Assistant or
-    /// another writer made them: moves follow the editor, deletions retire or detach it.
-    pub(in crate::workbench) fn accept_file_mutation(
+    /// A rename keeps the body, so the editor follows it without another read. Returns whether
+    /// the editor now lives at the destination.
+    pub(in crate::workbench) fn move_file(
         &mut self,
-        mutation: &CommittedResourceMutation,
+        from: &str,
+        to: &str,
+        from_revision: ResourceRevision,
+        to_revision: ResourceRevision,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) {
-        let mut moved_any = false;
-        for route in file_routes(mutation) {
-            match route {
-                FileRoute::Moved {
-                    from,
-                    to,
-                    from_revision,
-                    to_revision,
-                } => {
-                    let Some(panel) = self.file_panel(from) else {
-                        continue;
-                    };
-                    // A destination editor left by an earlier deletion keeps its own draft.
-                    if self.file_panel(to).is_some()
-                        || !panel.accept_move(to, from_revision, to_revision, window, cx)
-                    {
-                        panel.refresh(window, cx);
-                        continue;
-                    }
-                    self.files.remove(from);
-                    self.files.insert(to.to_owned(), panel.downgrade());
-                    moved_any = true;
-                }
-                FileRoute::Removed { path } => {
-                    if let Some(panel) = self.file_panel(path) {
-                        panel.mark_removed(cx);
-                    }
-                }
-                FileRoute::Changed { path, delta } => {
-                    if let Some(panel) = self.file_panel(path) {
-                        panel.accept_change(delta, window, cx);
-                    }
-                }
-            }
+    ) -> bool {
+        let Some(panel) = self.file_panel(from) else {
+            return false;
+        };
+        // A destination editor left by an earlier deletion keeps its own draft.
+        if self.file_panel(to).is_some()
+            || !panel.accept_move(to, from_revision, to_revision, window, cx)
+        {
+            panel.refresh(window, cx);
+            return false;
         }
-        if moved_any {
-            self.persist_layout(cx);
-        }
+        self.files.remove(from);
+        self.files.insert(to.to_owned(), panel.downgrade());
+        true
     }
 
     pub(in crate::workbench) fn create_file_dialog(
@@ -802,154 +743,6 @@ impl Workbench {
                     }
                     // Successful commits publish a resource event, which owns the index refresh.
                     // A failed operation may still have written files without returning a receipt.
-                    None => view.refresh_project(window, cx),
-                }
-                cx.notify();
-            })
-            .log_released();
-        })
-        .detach();
-        cx.notify();
-    }
-
-    pub(in crate::workbench) fn file_resource_action(
-        &mut self,
-        path: String,
-        action: ResourceAction,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.is_closing(cx) || self.opening.contains(&path) {
-            return;
-        }
-        let Some(project) = &self.project else {
-            return;
-        };
-        let Some(kind) = FileKind::of(&path) else {
-            return;
-        };
-        let Some((name, revision)) = project.indexed_file(&path) else {
-            return;
-        };
-        let panel = self.file_panel(&path);
-        let version = panel.as_ref().map(|panel| panel.version(cx));
-        let target = FileTarget {
-            kind,
-            project: project.identity.clone(),
-            lifecycle: self.lifecycle,
-            path,
-            name,
-            revision: version
-                .as_ref()
-                .map_or(revision, |version| version.revision),
-            version,
-        };
-        if matches!(action, ResourceAction::CopyPath) {
-            cx.write_to_clipboard(ClipboardItem::new_string(target.path));
-            return;
-        }
-        if panel.as_ref().is_some_and(|panel| panel.dirty(cx)) {
-            self.error = Some(crate::text::translate(
-                "native.workbench.saveFileBeforeManaging",
-            ));
-            cx.notify();
-            return;
-        }
-        let prompts = kind.prompts(&target.name);
-        self.confirm_resource_action(
-            target.name.clone(),
-            action,
-            prompts,
-            window,
-            cx,
-            move |view, name, form, window, cx| {
-                view.mutate_file(target.clone(), action, name, form, window, cx)
-            },
-        );
-    }
-
-    fn mutate_file(
-        &mut self,
-        target: FileTarget,
-        action: ResourceAction,
-        name: Option<String>,
-        form: Option<Entity<NameForm>>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.is_closing(cx)
-            || self.lifecycle != target.lifecycle
-            || self.opening.contains(&target.path)
-            || self
-                .project
-                .as_ref()
-                .is_none_or(|project| project.identity != target.project)
-        {
-            return;
-        }
-        let panel = self.file_panel(&target.path);
-        if let Some(panel) = &panel {
-            let version = panel.version(cx);
-            if panel.dirty(cx)
-                || version.revision != target.revision
-                || target
-                    .version
-                    .as_ref()
-                    .is_some_and(|original| *original != version)
-            {
-                self.error = Some(crate::text::translate("native.workbench.resourceChanged"));
-                cx.notify();
-                return;
-            }
-            // The editor stays readonly until the operation's receipt and events settle.
-            if !panel.lock(cx) {
-                return;
-            }
-        }
-        self.busy = true;
-        self.error = None;
-        let request = target.clone();
-        let owner = self.services.tasks.clone();
-        let job = self
-            .services
-            .run(move |_| OpenedFile::manage(&owner, &request, action, name));
-        cx.spawn_in(window, async move |view, cx| {
-            let result = job.await.ok().and_then(Result::ok);
-            view.update_in(cx, |view, window, cx| {
-                if let Some(panel) = &panel {
-                    panel.unlock(window, cx);
-                }
-                if view.lifecycle != target.lifecycle
-                    || view
-                        .project
-                        .as_ref()
-                        .is_none_or(|project| project.identity != target.project)
-                {
-                    NameForm::fail(form.as_ref(), "native.workbench.resourceChanged", cx);
-                    return;
-                }
-                view.busy = false;
-                view.finish_resource_name(
-                    form,
-                    result
-                        .is_none()
-                        .then_some("native.workbench.fileResourceFailed"),
-                    window,
-                    cx,
-                );
-                match result {
-                    // The published mutation already moved or retired the open editor.
-                    Some(Some(opened)) if matches!(action, ResourceAction::Duplicate) => {
-                        if let Some(panel) = view.install_file(opened, window, cx) {
-                            panel.focus(window, cx);
-                        }
-                    }
-                    Some(Some(opened)) => {
-                        if let Some(panel) = view.file_panel(opened.path()) {
-                            panel.focus(window, cx);
-                        }
-                    }
-                    Some(None) => {}
                     None => view.refresh_project(window, cx),
                 }
                 cx.notify();

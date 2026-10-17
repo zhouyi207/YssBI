@@ -1,4 +1,5 @@
 //! A graph tab before its first projection; it never invents an editable document.
+use crate::canvas::GraphCanvas;
 use gpui_kit::component::{
     ActiveTheme, Sizable,
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
@@ -62,7 +63,7 @@ impl Focusable for Opening {
 }
 impl BasePanel for Opening {
     fn panel_name(&self) -> &'static str {
-        "graph-editor"
+        GraphCanvas::PANEL_NAME
     }
     fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
         if active {
@@ -76,7 +77,8 @@ impl BasePanel for Opening {
     }
     fn dump(&self, _: &App) -> PanelState {
         let mut state = PanelState::new(self.panel_name());
-        state.info = PanelInfo::Panel(serde_json::json!({ "graphPath": self.path.as_str() }));
+        state.info =
+            PanelInfo::Panel(serde_json::json!({ (GraphCanvas::PATH_KEY): self.path.as_str() }));
         state
     }
 }

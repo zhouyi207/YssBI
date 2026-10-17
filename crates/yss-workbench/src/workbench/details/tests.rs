@@ -1,5 +1,5 @@
 use super::super::files::WeakFilePanel;
-use super::DetailsPanel;
+use super::{DetailsPanel, DetailsTarget};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
     AnyWindowHandle, AppContext, Context, Entity, IntoElement, Render, Subscription,
@@ -103,7 +103,10 @@ fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<InspectorWindow>) {
                 });
                 let details = cx.new(|cx| DetailsPanel::new(graph, window, cx));
                 details.update(cx, |details, cx| {
-                    details.set_file(WeakFilePanel::Document(document.downgrade()), cx)
+                    details.set_target(
+                        DetailsTarget::File(WeakFilePanel::Document(document.downgrade())),
+                        cx,
+                    )
                 });
                 let notifications = Rc::new(Cell::new(0));
                 let count = notifications.clone();
@@ -245,7 +248,10 @@ fn replacing_current_target_unsubscribes_background_editors(cx: &mut TestAppCont
         let target = view.read(cx).other_document.clone();
         let details = view.read(cx).details.clone();
         details.update(cx, |details, cx| {
-            details.set_file(WeakFilePanel::Document(target.downgrade()), cx)
+            details.set_target(
+                DetailsTarget::File(WeakFilePanel::Document(target.downgrade())),
+                cx,
+            )
         });
     });
     assert!(notifications(&view, cx) > 0);
@@ -265,7 +271,10 @@ fn replacing_current_target_unsubscribes_background_editors(cx: &mut TestAppCont
         let target = view.read(cx).other_document.clone();
         let details = view.read(cx).details.clone();
         details.update(cx, |details, cx| {
-            details.set_file(WeakFilePanel::Document(target.downgrade()), cx)
+            details.set_target(
+                DetailsTarget::File(WeakFilePanel::Document(target.downgrade())),
+                cx,
+            )
         });
     });
     assert_eq!(
@@ -282,7 +291,7 @@ fn database_errors_and_overlay_return_follow_current_target(cx: &mut TestAppCont
         let database = view.read(cx).database.clone();
         let details = view.read(cx).details.clone();
         details.update(cx, |details, cx| {
-            details.set_database(database.downgrade(), cx)
+            details.set_target(DetailsTarget::Database(database.downgrade()), cx)
         });
     });
     notifications(&view, cx);
@@ -327,15 +336,12 @@ fn database_errors_and_overlay_return_follow_current_target(cx: &mut TestAppCont
         let database = view.read(cx).database.clone();
         let details = view.read(cx).details.clone();
         details.update(cx, |details, cx| {
-            details.set_database(database.downgrade(), cx)
+            details.set_target(DetailsTarget::Database(database.downgrade()), cx)
         });
         assert!(!details.read(cx).graph.read(cx).showing_node_definition());
         assert!(!details.read(cx).graph_visible(cx));
         assert!(details.read(cx).target_visible(cx));
-        assert_eq!(
-            details.read(cx).database().unwrap().entity_id(),
-            database.entity_id()
-        );
+        assert_eq!(details.read(cx).target_id(), Some(database.entity_id()));
     });
     assert!(
         notifications(&view, cx) > 0,

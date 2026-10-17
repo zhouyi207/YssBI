@@ -111,8 +111,8 @@ impl DesktopProject {
         FileIndexUpdate::Rows
     }
 
-    /// Name and revision of an indexed authored file.
-    pub(crate) fn indexed_file(
+    /// Name and revision of an indexed graph or authored file.
+    pub(crate) fn indexed_resource(
         &self,
         path: &str,
     ) -> Option<(String, yss_project_identity::ResourceRevision)> {
@@ -125,9 +125,22 @@ impl DesktopProject {
                 .find(|entry| entry.path.as_str() == path)
                 .map(|entry| (entry.name.clone(), entry.revision))
         }
-        find(&self.index.docs, path)
-            .or_else(|| find(&self.index.minds, path))
-            .or_else(|| find(&self.index.charts, path))
+        let index = &self.index;
+        index
+            .event_graphs
+            .iter()
+            .map(|graph| (&graph.path, &graph.name, graph.revision))
+            .chain(
+                index
+                    .function_graphs
+                    .iter()
+                    .map(|graph| (&graph.path, &graph.name, graph.revision)),
+            )
+            .find(|(graph, ..)| graph.as_str() == path)
+            .map(|(_, name, revision)| (name.clone(), revision))
+            .or_else(|| find(&index.docs, path))
+            .or_else(|| find(&index.minds, path))
+            .or_else(|| find(&index.charts, path))
     }
 
     pub fn first_graph(&self) -> Option<String> {

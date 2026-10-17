@@ -1,16 +1,21 @@
 //! One editing session per open authored file; the owning editor keeps its unsubmitted draft.
-use gpui_kit::component::{Sizable, button::Button, dock::PanelEvent, notification::Notification};
+use gpui_kit::component::{
+    Sizable,
+    button::Button,
+    dock::{PanelEvent, PanelInfo, PanelState},
+    notification::Notification,
+};
 use gpui_kit::{
     Context, EventEmitter, IntoElement, ParentElement, SharedString, Styled, Task, Window,
 };
 use std::sync::Arc;
-use yss_application::{events::CommittedResourceMutation, file_resources::FileApplicationError};
+use yss_application::file_resources::FileApplicationError;
 use yss_desktop_services::ApplicationTasks;
 use yss_project::{
     ProjectOperationError,
     file_resources::{FileCommand, FileSnapshot, ResourceFile},
 };
-use yss_project_history::{ResourceDeltaEvent, ResourceDocumentPatch, ResourceKey};
+use yss_project_history::{ResourceDeltaEvent, ResourceDocumentPatch};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_project_model::file::{FileContent, FilePath, FileVersion};
 use yss_ui::lifecycle::LogReleased;
@@ -72,61 +77,6 @@ impl PendingFileRefresh {
             Self::Full => true,
         }
     }
-}
-
-/// How one committed mutation reaches an open authored-file editor.
-#[derive(Debug, PartialEq)]
-pub enum FileRoute<'a> {
-    Moved {
-        from: &'a str,
-        to: &'a str,
-        from_revision: ResourceRevision,
-        to_revision: ResourceRevision,
-    },
-    Removed {
-        path: &'a str,
-    },
-    Changed {
-        path: &'a str,
-        delta: &'a ResourceDeltaEvent,
-    },
-}
-
-pub fn file_resource_path(resource: &ResourceKey) -> Option<&str> {
-    match resource {
-        ResourceKey::Doc(key) => Some(&key.0),
-        ResourceKey::Mind(key) => Some(&key.0),
-        ResourceKey::Chart(key) => Some(&key.0),
-        _ => None,
-    }
-}
-
-/// Moves come first so that later routes in the same mutation address the moved editor.
-pub fn file_routes(mutation: &CommittedResourceMutation) -> Vec<FileRoute<'_>> {
-    let moves = mutation.moves.iter().filter_map(|moved| {
-        let delta = mutation.deltas.iter().find(|delta| {
-            file_resource_path(&delta.resource) == Some(moved.to.as_ref())
-                && matches!(&delta.payload, ResourceDocumentPatch::ResourceMove(patch)
-                    if patch.from == moved.from && patch.to == moved.to)
-        })?;
-        Some(FileRoute::Moved {
-            from: &moved.from,
-            to: &moved.to,
-            from_revision: delta.from_revision,
-            to_revision: delta.to_revision,
-        })
-    });
-    let changes = mutation.deltas.iter().filter_map(|delta| {
-        let path = file_resource_path(&delta.resource)?;
-        match &delta.payload {
-            ResourceDocumentPatch::ResourceMove(_) => None,
-            ResourceDocumentPatch::ResourceLifecycle(patch) if patch.after.is_none() => {
-                Some(FileRoute::Removed { path })
-            }
-            _ => Some(FileRoute::Changed { path, delta }),
-        }
-    });
-    moves.chain(changes).collect()
 }
 
 pub struct FileSession<T: ResourceFile> {
@@ -248,6 +198,10 @@ pub trait FileEditor:
     EventEmitter<PanelEvent> + EventEmitter<FileEditorEvent> + Sized + 'static
 {
     type File: ResourceFile;
+    /// The dock factory that restores this editor.
+    const PANEL_NAME: &'static str;
+    /// The persisted panel field holding the file path.
+    const PATH_KEY: &'static str;
 
     fn session(&self) -> &FileSession<Self::File>;
     fn session_mut(&mut self) -> &mut FileSession<Self::File>;
@@ -276,6 +230,21 @@ pub trait FileEditor:
 
     fn version(&self) -> &FileVersion {
         &self.session().snapshot.version
+    }
+
+    fn tab_title(&self) -> SharedString {
+        let name = self.session().snapshot.path.name();
+        if self.dirty() {
+            format!("{name} *").into()
+        } else {
+            name.to_owned().into()
+        }
+    }
+
+    fn panel_state(&self) -> PanelState {
+        let mut state = PanelState::new(Self::PANEL_NAME);
+        state.info = PanelInfo::Panel(serde_json::json!({ (Self::PATH_KEY): self.path() }));
+        state
     }
 
     fn busy(&self) -> bool {

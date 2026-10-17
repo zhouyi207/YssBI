@@ -228,8 +228,18 @@ impl GraphCanvas {
         view
     }
 
+    /// The dock factory that restores graph editors, including still-opening ones.
+    pub const PANEL_NAME: &'static str = "graph-editor";
+    /// The persisted panel field holding the graph path.
+    pub const PATH_KEY: &'static str = "graphPath";
+
     pub fn path(&self) -> &str {
         self.resource_path().as_str()
+    }
+
+    /// Whether a change to `resource` can alter this graph's projection.
+    pub fn shows(&self, resource: &yss_project_history::ResourceKey) -> bool {
+        resource.path() == Some(self.path()) || self.graph.depends_on_resource(resource)
     }
 
     pub fn dirty(&self, cx: &App) -> bool {
@@ -384,7 +394,7 @@ impl Focusable for GraphCanvas {
 }
 impl BasePanel for GraphCanvas {
     fn panel_name(&self) -> &'static str {
-        "graph-editor"
+        Self::PANEL_NAME
     }
     fn closable(&self, cx: &App) -> bool {
         !self.dirty(cx) && !self.busy && !self.execution.running()
@@ -401,7 +411,7 @@ impl BasePanel for GraphCanvas {
     fn dump(&self, cx: &App) -> gpui_kit::component::dock::PanelState {
         let mut state = gpui_kit::component::dock::PanelState::new(self.panel_name());
         state.info = gpui_kit::component::dock::PanelInfo::Panel(
-            serde_json::json!({"graphPath":self.path()}),
+            serde_json::json!({ (Self::PATH_KEY): self.path() }),
         );
         let _ = cx;
         state
