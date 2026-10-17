@@ -48,6 +48,46 @@ impl Workbench {
         });
     }
 
+    /// Zooms the group holding focus, or the active editor's; zoomed layouts restore instead.
+    pub(super) fn toggle_zoom(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.project.is_none() {
+            return;
+        }
+        if self.dock.read(cx).is_zoomed() {
+            self.dock
+                .update(cx, |dock, cx| dock.set_zoomed_out(window, cx));
+            return;
+        }
+        let node = {
+            let dock = self.dock.read(cx);
+            let Some(panel) = [
+                DockPlacement::Center,
+                DockPlacement::Left,
+                DockPlacement::Right,
+                DockPlacement::Bottom,
+            ]
+            .into_iter()
+            .filter_map(|placement| dock.layout(placement))
+            .flat_map(|tree| tree.panels())
+            .find(|id| {
+                dock.panel(*id)
+                    .is_some_and(|panel| panel.focus_handle(cx).contains_focused(window, cx))
+            })
+            .or_else(|| self.active_editor_panel(cx).map(|panel| panel.panel_id(cx))) else {
+                return;
+            };
+            let Some(node) = self
+                .panel_placement(panel, cx)
+                .and_then(|placement| dock.layout(placement)?.find_panel_node(panel))
+            else {
+                return;
+            };
+            node
+        };
+        self.dock
+            .update(cx, |dock, cx| dock.set_zoomed_in(node, window, cx));
+    }
+
     pub(super) fn reset_workbench_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.project.is_none() {
             return;

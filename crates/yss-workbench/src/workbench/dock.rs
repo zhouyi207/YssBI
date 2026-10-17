@@ -4,6 +4,7 @@ mod regions;
 mod tabs;
 mod watermark;
 mod zoom_sidebar;
+pub(super) use tabs::{CloseAllTabs, CloseOtherTabs, CloseTab};
 pub(super) use watermark::EmptyEditor;
 
 use super::{
@@ -271,6 +272,7 @@ impl TabGroupRenderer for WorkbenchTabs {
         if conversation::matches(group) {
             return conversation::capture_close(frame, &self.workbench);
         }
+        let frame = tabs::handle_close_actions(frame, &self.area, group, cx);
         frame.when_some(tabs::panel(group, &self.area, cx), |frame, panel| {
             let area = self.area.clone();
             let group = group.clone();

@@ -11,10 +11,12 @@ use gpui_kit::component::{
     tab::{Tab, TabBar},
 };
 use gpui_kit::{
-    AnyElement, App, AppContext, Context, Empty, Focusable, IntoElement, Render, ScrollHandle,
-    WeakEntity, Window, div, prelude::*, px, size,
+    AnyElement, App, AppContext, Context, Div, Empty, Focusable, IntoElement, Render, ScrollHandle,
+    Stateful, WeakEntity, Window, actions, div, prelude::*, px, size,
 };
 use std::{cell::Cell, sync::Arc};
+
+actions!(native_workbench, [CloseTab, CloseOtherTabs, CloseAllTabs]);
 
 #[derive(Default)]
 pub(super) struct Tabs {
@@ -79,28 +81,18 @@ enum CloseTabs {
     All,
 }
 
-fn tab_menu(
-    mut menu: PopupMenu,
-    area: &WeakEntity<DockArea>,
+fn scope_targets(
     group: &TabGroupContext,
     target: PanelId,
+    scope: CloseTabs,
     cx: &App,
-) -> PopupMenu {
-    let Some(target_index) = group
+) -> Option<Vec<PanelId>> {
+    let target_index = group
         .panels()
         .iter()
-        .position(|panel| panel.panel_id(cx) == target)
-    else {
-        return menu;
-    };
-    for (scope, label) in [
-        (CloseTabs::Current, "common.close"),
-        (CloseTabs::Others, "native.workbench.closeOtherTabs"),
-        (CloseTabs::Left, "native.workbench.closeTabsToLeft"),
-        (CloseTabs::Right, "native.workbench.closeTabsToRight"),
-        (CloseTabs::All, "native.workbench.closeAllTabs"),
-    ] {
-        let targets: Vec<_> = group
+        .position(|panel| panel.panel_id(cx) == target)?;
+    Some(
+        group
             .panels()
             .iter()
             .enumerate()
@@ -114,7 +106,77 @@ fn tab_menu(
                 };
                 (included && panel.visible(cx)).then(|| panel.panel_id(cx))
             })
-            .collect();
+            .collect(),
+    )
+}
+
+fn close_scope(
+    area: &WeakEntity<DockArea>,
+    group: &TabGroupContext,
+    target: PanelId,
+    scope: CloseTabs,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    if let Some(targets) = scope_targets(group, target, scope, cx)
+        && targets_closable(area, group, &targets, cx)
+    {
+        close_next(area.clone(), group.clone(), targets.into_iter(), window, cx);
+    }
+}
+
+/// Application-menu and keyboard tab commands act on the group's active editor.
+pub(super) fn handle_close_actions(
+    frame: Stateful<Div>,
+    area: &WeakEntity<DockArea>,
+    group: &TabGroupContext,
+    cx: &App,
+) -> Stateful<Div> {
+    let Some(target) = group.active_panel().map(|panel| panel.panel_id(cx)) else {
+        return frame;
+    };
+    let editor_group = area.upgrade().is_some_and(|area| {
+        area.read(cx)
+            .layout(DockPlacement::Center)
+            .is_some_and(|tree| tree.find_node(group.node()).is_some())
+    });
+    if !editor_group {
+        return frame;
+    }
+    let handler = |scope| {
+        let area = area.clone();
+        let group = group.clone();
+        move |window: &mut Window, cx: &mut App| {
+            cx.stop_propagation();
+            close_scope(&area, &group, target, scope, window, cx);
+        }
+    };
+    let current = handler(CloseTabs::Current);
+    let others = handler(CloseTabs::Others);
+    let all = handler(CloseTabs::All);
+    frame
+        .on_action(move |_: &CloseTab, window, cx| current(window, cx))
+        .on_action(move |_: &CloseOtherTabs, window, cx| others(window, cx))
+        .on_action(move |_: &CloseAllTabs, window, cx| all(window, cx))
+}
+
+fn tab_menu(
+    mut menu: PopupMenu,
+    area: &WeakEntity<DockArea>,
+    group: &TabGroupContext,
+    target: PanelId,
+    cx: &App,
+) -> PopupMenu {
+    for (scope, label) in [
+        (CloseTabs::Current, "common.close"),
+        (CloseTabs::Others, "native.workbench.closeOtherTabs"),
+        (CloseTabs::Left, "native.workbench.closeTabsToLeft"),
+        (CloseTabs::Right, "native.workbench.closeTabsToRight"),
+        (CloseTabs::All, "native.workbench.closeAllTabs"),
+    ] {
+        let Some(targets) = scope_targets(group, target, scope, cx) else {
+            return menu;
+        };
         let disabled = targets.is_empty() || !targets_closable(area, group, &targets, cx);
         let area = area.clone();
         let group = group.clone();
@@ -122,15 +184,7 @@ fn tab_menu(
             PopupMenuItem::new(crate::text::t(label))
                 .disabled(disabled)
                 .on_click(move |_, window, cx| {
-                    if targets_closable(&area, &group, &targets, cx) {
-                        close_next(
-                            area.clone(),
-                            group.clone(),
-                            targets.clone().into_iter(),
-                            window,
-                            cx,
-                        );
-                    }
+                    close_scope(&area, &group, target, scope, window, cx);
                 }),
         );
     }

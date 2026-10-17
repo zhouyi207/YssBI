@@ -140,35 +140,101 @@ impl Workbench {
             return;
         }
         let (text_focus, edits) = self.edit_menu_state(window, cx);
+        let command_panel = self.editor_command_panel(window, cx);
+        let dock = self.dock.read(cx);
+        let docks = [
+            DockPlacement::Left,
+            DockPlacement::Right,
+            DockPlacement::Bottom,
+        ]
+        .map(|placement| {
+            (
+                dock.has_dock(placement),
+                dock.is_dock_open(placement)
+                    && (!dock.is_zoomed()
+                        || placement == DockPlacement::Left
+                            && super::layout::columns::conversation_zoomed(dock)),
+            )
+        });
+        let zoomed = dock.is_zoomed();
         let context = MenuContext {
             busy: self.is_closing(cx),
             project: self.project.is_some(),
             editor: self.active_editor_panel(cx).map(|panel| panel.panel_id(cx)),
+            commands: command_panel
+                .as_ref()
+                .and_then(|panel| super::EditorPanel::from_view(panel.view()))
+                .map(|editor| editor.menu_commands(cx))
+                .unwrap_or_default(),
+            editor_focused: command_panel
+                .as_ref()
+                .is_some_and(|panel| panel.focus_handle(cx).contains_focused(window, cx)),
+            tabs: command_panel.as_ref().is_some_and(|panel| {
+                self.panel_placement(panel.panel_id(cx), cx) == Some(DockPlacement::Center)
+            }),
             text_focus,
             edits,
+            unsaved: self.has_unsaved(cx),
             can_split: self.editor_split_target(cx).is_some(),
-            sidebar_open: self.dock.read(cx).is_dock_open(DockPlacement::Left)
-                && (!self.dock.read(cx).is_zoomed()
-                    || super::layout::columns::conversation_zoomed(self.dock.read(cx))),
-            assistant_open: self
-                .dock_panel(WorkbenchPanel::Assistant)
-                .is_some_and(|(panel, _)| self.panel_placement(panel.panel_id(cx), cx).is_some()),
+            panels: PANELS
+                .into_iter()
+                .filter(|panel| self.panel_is_displayed(*panel, cx))
+                .collect(),
+            docks,
+            zoomed,
+            theme: crate::preferences::current(cx).appearance.mode,
         };
         context.install(&mut self.menu_context, &self.menu_bar, window, cx);
     }
 }
 
+const PANELS: [WorkbenchPanel; 9] = [
+    WorkbenchPanel::Project,
+    WorkbenchPanel::Nodes,
+    WorkbenchPanel::Assistant,
+    WorkbenchPanel::Plugins,
+    WorkbenchPanel::Details,
+    WorkbenchPanel::Problems,
+    WorkbenchPanel::Output,
+    WorkbenchPanel::Results,
+    WorkbenchPanel::Logs,
+];
+
+/// What the active editor can do, captured for the menu's disabled flags.
+#[derive(Default, PartialEq)]
+pub(super) struct EditorCommands {
+    pub(super) kind: Option<EditorKind>,
+    pub(super) graph: crate::canvas::GraphCommandState,
+    pub(super) export: bool,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum EditorKind {
+    Graph,
+    Document,
+    Mind,
+    Chart,
+    Database,
+}
+
 // A disposable menu projection; DockArea remains the authority for live layout state.
-#[derive(PartialEq)]
+#[derive(Default, PartialEq)]
 pub(super) struct MenuContext {
     busy: bool,
     project: bool,
     editor: Option<PanelId>,
+    commands: EditorCommands,
+    editor_focused: bool,
+    tabs: bool,
     text_focus: Option<gpui_kit::FocusHandle>,
-    edits: [bool; 6],
+    edits: [bool; 7],
+    unsaved: bool,
     can_split: bool,
-    sidebar_open: bool,
-    assistant_open: bool,
+    panels: Vec<WorkbenchPanel>,
+    /// Left, right and bottom: whether the dock exists and whether it is shown.
+    docks: [(bool, bool); 3],
+    zoomed: bool,
+    theme: yss_settings::ThemeMode,
 }
 
 impl MenuContext {
@@ -227,9 +293,6 @@ mod tests {
             let input_focus = self.input.read(cx).focus_handle(cx);
             let text_focus = input_focus.is_focused(window).then_some(input_focus);
             MenuContext {
-                busy: false,
-                project: false,
-                editor: None,
                 text_focus,
                 edits: [
                     false,
@@ -239,10 +302,9 @@ mod tests {
                         && window.is_action_available(&input::Copy, cx),
                     false,
                     false,
+                    false,
                 ],
-                can_split: false,
-                sidebar_open: false,
-                assistant_open: false,
+                ..MenuContext::default()
             }
             .install(&mut self.menu_context, &self.menu_bar, window, cx);
             div()

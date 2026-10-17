@@ -59,7 +59,7 @@ impl DatabaseEditor {
                     .ghost()
                     .icon(IconName::Download)
                     .tooltip(t("common.export"))
-                    .disabled(busy || !self.ready)
+                    .disabled(!self.can_export())
                     .dropdown_menu(move |mut menu, _, _| {
                         for (label, format) in [
                             (t("importModal.types.csv.label"), "csv"),

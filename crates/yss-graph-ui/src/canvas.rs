@@ -70,6 +70,19 @@ pub enum CanvasEvent {
     OpenGraph(String),
 }
 
+#[derive(Clone, Copy, Default, PartialEq)]
+pub struct GraphCommandState {
+    pub event_graph: bool,
+    pub editable: bool,
+    pub duplicate: bool,
+    pub has_selection: bool,
+    pub runnable: bool,
+    pub running: bool,
+    pub run_node: bool,
+    pub inspect: bool,
+    pub clear_run: bool,
+}
+
 struct Palette {
     point: Point<Pixels>,
     view: gpui_kit::Entity<palette::NodePalette>,
@@ -288,6 +301,22 @@ impl GraphCanvas {
 
     pub fn busy(&self) -> bool {
         self.busy
+    }
+
+    /// The toolbar's availability rules, for commands offered outside the canvas.
+    pub fn command_state(&self, cx: &App) -> GraphCommandState {
+        GraphCommandState {
+            event_graph: self.graph.projection.graph_path.kind()
+                == yss_graph_document::GraphResourceKind::EventGraph,
+            editable: self.can_edit(),
+            duplicate: self.is_edit_command_enabled(GraphEditCommand::Copy),
+            has_selection: !self.selected.is_empty(),
+            runnable: self.graph_run_unavailable_reason(cx).is_none(),
+            running: self.is_running(),
+            run_node: self.can_run() && self.selected.len() == 1,
+            inspect: !self.graph.results.outputs.is_empty(),
+            clear_run: self.clearable_run().is_some(),
+        }
     }
 
     pub fn zoom(&self) -> f32 {

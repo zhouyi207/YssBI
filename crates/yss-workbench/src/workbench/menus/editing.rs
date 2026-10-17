@@ -1,6 +1,13 @@
 //! Menu editing reuses the selected editor's actions and the component text engine.
 use super::super::{EditorPanel, Workbench, files::FilePanel};
-use crate::{canvas, databases::CopyDatabaseSelection, minds::DeleteTopics};
+use super::{EditorCommands, EditorKind};
+use crate::{
+    canvas,
+    databases::{CopyDatabaseSelection, SelectDatabasePage},
+    documents::ToggleDocumentPreview,
+    minds::{DeleteTopics, FitMind, FitTopics, SelectTopics},
+    workbench::dock::{CloseAllTabs, CloseOtherTabs, CloseTab},
+};
 use gpui_kit::component::{
     dock::{BasePanelView, DockPlacement},
     input,
@@ -16,16 +23,18 @@ pub(in crate::workbench) enum EditCommand {
     Copy,
     Paste,
     Delete,
+    SelectAll,
 }
 
 impl EditCommand {
-    const ALL: [Self; 6] = [
+    pub(super) const ALL: [Self; 7] = [
         Self::Undo,
         Self::Redo,
         Self::Cut,
         Self::Copy,
         Self::Paste,
         Self::Delete,
+        Self::SelectAll,
     ];
 
     pub(in crate::workbench) fn text_action(self) -> Box<dyn Action> {
@@ -36,7 +45,39 @@ impl EditCommand {
             Self::Copy => Box::new(input::Copy),
             Self::Paste => Box::new(input::Paste),
             Self::Delete => Box::new(input::Delete),
+            Self::SelectAll => Box::new(input::SelectAll),
         }
+    }
+
+    fn graph_command(self) -> Option<canvas::GraphEditCommand> {
+        Some(match self {
+            Self::Undo => canvas::GraphEditCommand::Undo,
+            Self::Redo => canvas::GraphEditCommand::Redo,
+            Self::Cut => canvas::GraphEditCommand::Cut,
+            Self::Copy => canvas::GraphEditCommand::Copy,
+            Self::Paste => canvas::GraphEditCommand::Paste,
+            Self::Delete => canvas::GraphEditCommand::Delete,
+            Self::SelectAll => return None,
+        })
+    }
+
+    /// The editor's own action for this command; a menu item carrying it shows the
+    /// shortcut that is effective inside the editor.
+    pub(super) fn editor_action(self, kind: EditorKind) -> Option<Box<dyn Action>> {
+        Some(match (kind, self) {
+            (EditorKind::Graph, Self::Undo) => Box::new(canvas::UndoGraph),
+            (EditorKind::Graph, Self::Redo) => Box::new(canvas::RedoGraph),
+            (EditorKind::Graph, Self::Cut) => Box::new(input::Cut),
+            (EditorKind::Graph, Self::Copy) => Box::new(input::Copy),
+            (EditorKind::Graph, Self::Paste) => Box::new(input::Paste),
+            (EditorKind::Graph, Self::Delete) => Box::new(canvas::DeleteSelection),
+            (EditorKind::Graph, Self::SelectAll) => Box::new(canvas::SelectAll),
+            (EditorKind::Mind, Self::Delete) => Box::new(DeleteTopics),
+            (EditorKind::Mind, Self::SelectAll) => Box::new(SelectTopics),
+            (EditorKind::Database, Self::Copy) => Box::new(CopyDatabaseSelection),
+            (EditorKind::Database, Self::SelectAll) => Box::new(SelectDatabasePage),
+            _ => return None,
+        })
     }
 
     pub(super) fn dispatch_text(
@@ -77,45 +118,72 @@ impl EditCommand {
     }
 }
 
-impl From<EditCommand> for canvas::GraphEditCommand {
-    fn from(command: EditCommand) -> Self {
-        match command {
-            EditCommand::Undo => Self::Undo,
-            EditCommand::Redo => Self::Redo,
-            EditCommand::Cut => Self::Cut,
-            EditCommand::Copy => Self::Copy,
-            EditCommand::Paste => Self::Paste,
-            EditCommand::Delete => Self::Delete,
-        }
-    }
-}
-
 impl EditorPanel {
     fn can_edit(&self, command: EditCommand, cx: &App) -> bool {
         match self {
-            Self::Graph(graph) => graph.read(cx).is_edit_command_enabled(command.into()),
+            Self::Graph(graph) => command
+                .graph_command()
+                .is_none_or(|command| graph.read(cx).is_edit_command_enabled(command)),
             Self::File(FilePanel::Document(document)) => document.read(cx).is_editing(),
-            Self::File(FilePanel::Mind(_)) => command == EditCommand::Delete,
+            Self::File(FilePanel::Mind(_)) => {
+                matches!(command, EditCommand::Delete | EditCommand::SelectAll)
+            }
             Self::File(FilePanel::Chart(_)) => false,
-            Self::Database(_) => command == EditCommand::Copy,
+            Self::Database(_) => matches!(command, EditCommand::Copy | EditCommand::SelectAll),
         }
     }
 
     fn edit(&self, command: EditCommand, focus: &FocusHandle, window: &mut Window, cx: &mut App) {
-        if let Self::Graph(graph) = self {
-            graph.update(cx, |graph, cx| graph.edit(command.into(), cx));
-            return;
-        }
         if !self.can_edit(command, cx) {
             return;
         }
-        let action: Box<dyn Action> = match self {
-            Self::File(FilePanel::Document(_)) => command.text_action(),
-            Self::File(FilePanel::Mind(_)) => Box::new(DeleteTopics),
-            Self::Database(_) => Box::new(CopyDatabaseSelection),
-            Self::Graph(_) | Self::File(FilePanel::Chart(_)) => return,
+        let action = match self {
+            Self::File(FilePanel::Document(_)) => Some(command.text_action()),
+            _ => command.editor_action(self.kind()),
         };
-        focus.dispatch_action(action.as_ref(), window, cx);
+        if let Some(action) = action {
+            focus.dispatch_action(action.as_ref(), window, cx);
+        }
+    }
+
+    fn kind(&self) -> EditorKind {
+        match self {
+            Self::Graph(_) => EditorKind::Graph,
+            Self::File(FilePanel::Document(_)) => EditorKind::Document,
+            Self::File(FilePanel::Mind(_)) => EditorKind::Mind,
+            Self::File(FilePanel::Chart(_)) => EditorKind::Chart,
+            Self::Database(_) => EditorKind::Database,
+        }
+    }
+
+    pub(super) fn menu_commands(&self, cx: &App) -> EditorCommands {
+        EditorCommands {
+            kind: Some(self.kind()),
+            graph: match self {
+                Self::Graph(graph) => graph.read(cx).command_state(cx),
+                _ => Default::default(),
+            },
+            export: matches!(self, Self::Database(editor) if editor.read(cx).can_export()),
+        }
+    }
+
+    /// The editor's own actions that the application menu offers.
+    fn handles(&self, action: &dyn Action) -> bool {
+        let actions: &[&dyn Action] = match self {
+            Self::Graph(_) => &[
+                &canvas::DuplicateSelection,
+                &canvas::OpenNodePalette,
+                &canvas::FrameGraph,
+                &canvas::FrameSelection,
+                &canvas::RunCurrentNode,
+                &canvas::RunToNode,
+                &canvas::RefreshRunState,
+            ],
+            Self::File(FilePanel::Mind(_)) => &[&FitMind, &FitTopics],
+            Self::File(FilePanel::Document(_)) => &[&ToggleDocumentPreview],
+            Self::File(FilePanel::Chart(_)) | Self::Database(_) => &[],
+        };
+        actions.iter().any(|handled| handled.partial_eq(action))
     }
 }
 
@@ -124,7 +192,7 @@ impl Workbench {
         &self,
         window: &Window,
         cx: &App,
-    ) -> (Option<FocusHandle>, [bool; 6]) {
+    ) -> (Option<FocusHandle>, [bool; 7]) {
         if window.is_action_available(&input::SelectAll, cx) {
             return (
                 window.focused(cx),
@@ -136,7 +204,7 @@ impl Workbench {
             .editor_command_panel(window, cx)
             .and_then(|panel| EditorPanel::from_view(panel.view()))
         else {
-            return (None, [false; 6]);
+            return (None, [false; 7]);
         };
         (
             None,
@@ -191,6 +259,45 @@ impl Workbench {
         };
         if let Some(editor) = EditorPanel::from_view(panel.view()) {
             editor.edit(command, &panel.focus_handle(cx), window, cx);
+        }
+    }
+}
+
+impl Workbench {
+    /// Menu items carry the editor's own actions so they show its shortcuts. Focus elsewhere
+    /// leaves such an action unhandled; it then reaches the workbench and goes to the editor.
+    pub(in crate::workbench) fn forward_to_editor(
+        &self,
+        action: &dyn Action,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if self.is_closing(cx) {
+            return;
+        }
+        let Some(panel) = self.editor_command_panel(window, cx) else {
+            return;
+        };
+        let focus = panel.focus_handle(cx);
+        // An action that already passed through the editor must not be sent back into it.
+        if focus.contains_focused(window, cx) {
+            return;
+        }
+        let tab_action = [&CloseTab as &dyn Action, &CloseOtherTabs, &CloseAllTabs]
+            .into_iter()
+            .any(|tab_action| tab_action.partial_eq(action));
+        // An action nothing below handles would bubble back here and be forwarded again.
+        let handled = if tab_action {
+            self.panel_placement(panel.panel_id(cx), cx) == Some(DockPlacement::Center)
+        } else {
+            EditorPanel::from_view(panel.view()).is_some_and(|editor| editor.handles(action))
+        };
+        if handled {
+            let action = action.boxed_clone();
+            // Closing tabs and editor commands may update the workbench, which is leased here.
+            window.defer(cx, move |window, cx| {
+                focus.dispatch_action(action.as_ref(), window, cx);
+            });
         }
     }
 }

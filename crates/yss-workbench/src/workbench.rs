@@ -64,7 +64,6 @@ pub struct Workbench {
     plugin_subscription: Option<gpui_kit::Subscription>,
     settings: Entity<crate::settings::SettingsPanel>,
     settings_window: Option<WindowHandle<Root>>,
-    logs_window: Option<WindowHandle<Root>>,
     settings_subscription: Option<gpui_kit::Subscription>,
     preference_subscription: Option<gpui_kit::Subscription>,
     menu_bar: Entity<gpui_kit::component::menu::AppMenuBar>,
@@ -157,7 +156,6 @@ impl Workbench {
             plugin_views: BTreeMap::new(),
             settings,
             settings_window: None,
-            logs_window: None,
             settings_subscription: None,
             preference_subscription: None,
             menu_bar,
@@ -229,11 +227,6 @@ impl Workbench {
         cx.on_release(|view, cx| {
             view.close_result_windows(cx);
             if let Some(handle) = view.settings_window {
-                handle
-                    .update(cx, |_, window, _| window.remove_window())
-                    .log_released();
-            }
-            if let Some(handle) = view.logs_window {
                 handle
                     .update(cx, |_, window, _| window.remove_window())
                     .log_released();

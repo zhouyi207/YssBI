@@ -6,7 +6,6 @@ const REPOSITORY: &str = "https://github.com/zhouyi207/YssBI";
 
 #[derive(Clone, Copy, PartialEq)]
 pub(in crate::workbench) enum HelpPage {
-    Architecture,
     Documentation,
     ReleaseNotes,
     Repository,
@@ -16,7 +15,6 @@ pub(in crate::workbench) enum HelpPage {
 impl HelpPage {
     pub(super) fn url(self) -> String {
         let suffix = match self {
-            Self::Architecture => "/blob/main/docs/src/development/architecture.md",
             Self::Documentation => "/blob/main/docs/src/getting-started.md",
             Self::ReleaseNotes => "/releases",
             Self::Repository => "",

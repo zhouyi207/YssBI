@@ -12,6 +12,8 @@ use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*
 use yss_harness_contract::{LanguageModelAuthentication, LanguageModelSelection};
 use yss_ui::text::t;
 
+pub(super) const KEYBINDINGS_PAGE: usize = 7;
+
 impl Render for SettingsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.refresh_key_placeholder(window, cx);
@@ -75,7 +77,11 @@ impl Render for SettingsPanel {
                     // Settings retains its translated search placeholder for the keyed lifetime.
                     Settings::new((
                         gpui_kit::ElementId::from("application-settings"),
-                        gpui_kit::SharedString::from(yss_ui::text::locale()),
+                        gpui_kit::SharedString::from(format!(
+                            "{}:{}",
+                            yss_ui::text::locale(),
+                            self.navigation
+                        )),
                     ))
                     .default_selected_index(self.initial_page)
                     .with_group_variant(GroupBoxVariant::Normal)

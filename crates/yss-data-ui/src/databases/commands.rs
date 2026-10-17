@@ -157,13 +157,13 @@ impl DatabaseEditor {
         .detach();
         self.changed(cx);
     }
-    pub(super) fn export(
-        &mut self,
-        format: &'static str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.busy() || !self.ready {
+    pub fn can_export(&self) -> bool {
+        !self.busy() && self.ready
+    }
+
+    /// `format` is the file extension: `csv` or `parquet`.
+    pub fn export(&mut self, format: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.can_export() {
             return;
         }
         let revision = self.revision;

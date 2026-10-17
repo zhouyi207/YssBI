@@ -1,11 +1,17 @@
 //! Workbench window chrome; DockArea retains every panel's layout and activation.
 use super::{
     Workbench,
+    dock::{CloseAllTabs, CloseOtherTabs, CloseTab},
     menus::{MenuCommand, WorkbenchPanel},
     status_bar::{ColumnStatusBar, STATUS_BAR_HEIGHT, StatusColumn},
 };
 use crate::{
-    canvas::{CancelRun, RunWholeGraph, SaveGraph},
+    canvas::{
+        CancelRun, DuplicateSelection, FrameGraph, FrameSelection, OpenNodePalette,
+        RefreshRunState, RunCurrentNode, RunToNode, RunWholeGraph, SaveGraph,
+    },
+    documents::ToggleDocumentPreview,
+    minds::{FitMind, FitTopics},
     window_chrome,
 };
 use gpui_kit::assets::IconName;
@@ -77,6 +83,49 @@ impl Workbench {
                 {
                     graph.update(cx, |graph, cx| graph.cancel_run(cx));
                 }
+            }))
+            .on_action(
+                cx.listener(|view, action: &DuplicateSelection, window, cx| {
+                    view.forward_to_editor(action, window, cx);
+                }),
+            )
+            .on_action(cx.listener(|view, action: &OpenNodePalette, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &FrameGraph, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &FrameSelection, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &RunCurrentNode, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &RunToNode, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &RefreshRunState, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &FitMind, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &FitTopics, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(
+                cx.listener(|view, action: &ToggleDocumentPreview, window, cx| {
+                    view.forward_to_editor(action, window, cx);
+                }),
+            )
+            .on_action(cx.listener(|view, action: &CloseTab, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &CloseOtherTabs, window, cx| {
+                view.forward_to_editor(action, window, cx);
+            }))
+            .on_action(cx.listener(|view, action: &CloseAllTabs, window, cx| {
+                view.forward_to_editor(action, window, cx);
             }))
             .on_action(cx.listener(|view, _: &SaveAllGraphs, window, cx| {
                 if !view.busy && !view.closing {

@@ -46,6 +46,8 @@ pub struct SettingsPanel {
     notifications: yss_ui::notifications::Notifications,
     page: Page,
     initial_page: gpui_kit::component::setting::SelectIndex,
+    // Settings keeps its selected page in keyed state; a new key applies `initial_page`.
+    navigation: u64,
     editor: Option<models::ProviderDraft>,
     model: Option<models::ModelDraft>,
     provider_subscriptions: Vec<Subscription>,
@@ -79,6 +81,7 @@ impl SettingsPanel {
             notifications: yss_ui::notifications::Notifications::new(window),
             page: Page::Overview,
             initial_page: Default::default(),
+            navigation: 0,
             editor: None,
             model: None,
             provider_subscriptions: vec![],
@@ -110,6 +113,19 @@ impl SettingsPanel {
             || self.knowledge.pending
             || self.preference_timer.is_some()
             || self.preference_write.is_some()
+    }
+
+    pub fn show_keybindings(&mut self, cx: &mut Context<Self>) {
+        self.initial_page = gpui_kit::component::setting::SelectIndex {
+            page_ix: render::KEYBINDINGS_PAGE,
+            group_ix: None,
+        };
+        self.navigation = self.navigation.wrapping_add(1);
+        cx.notify();
+    }
+
+    pub fn set_theme_mode(&mut self, mode: yss_settings::ThemeMode, cx: &mut Context<Self>) {
+        self.save_preferences(move |settings| settings.appearance.mode = mode, cx);
     }
 
     pub fn dirty(&self) -> bool {

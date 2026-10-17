@@ -6,7 +6,6 @@ mod render;
 mod selection;
 mod stream;
 mod toolbar;
-mod window;
 
 use crate::services::NativeServices;
 pub(super) use details::LogDetails;
