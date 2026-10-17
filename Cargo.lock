@@ -8602,16 +8602,16 @@ dependencies = [
 
 [[package]]
 name = "rig-agent"
-version = "0.43.0"
+version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb11364e7ec4cb4cc20b7dda77a1963652baab01070f0ef2ac275aea3a6081f8"
+checksum = "6e3fa130bb81762e875dff982301fb599046535bbc04d908a2ee1fea583d1c67"
 dependencies = [
  "async-stream",
  "futures",
  "http",
  "indexmap",
  "loom",
- "rig-core",
+ "rig-core 0.44.0",
  "schemars",
  "serde",
  "serde_json",
@@ -8636,9 +8636,36 @@ dependencies = [
  "mime",
  "mime_guess",
  "ordered-float 5.5.0",
- "rig-http",
+ "rig-http 0.43.0",
  "rig-reqwest",
  "rig-tungstenite",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "rig-core"
+version = "0.44.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c60db6e3da7681abbdfa9637c1a76dbd5a713f935f0a6753d72c5d2770ed4c6"
+dependencies = [
+ "async-stream",
+ "base64 0.22.1",
+ "bytes",
+ "fastrand",
+ "futures",
+ "glob",
+ "http",
+ "mime",
+ "mime_guess",
+ "ordered-float 5.5.0",
+ "rig-http 0.44.0",
  "schemars",
  "serde",
  "serde_json",
@@ -8665,6 +8692,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rig-http"
+version = "0.44.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9b68e5fe7258d64aeffb0a976ad0665ad2f94104d41eb4cdf463065ba57ec0b"
+dependencies = [
+ "bytes",
+ "futures",
+ "futures-timer",
+ "http",
+ "mime",
+ "thiserror 2.0.20",
+ "url",
+]
+
+[[package]]
 name = "rig-reqwest"
 version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8674,7 +8716,7 @@ dependencies = [
  "futures",
  "http",
  "reqwest",
- "rig-http",
+ "rig-http 0.43.0",
  "thiserror 2.0.20",
  "tokio",
  "url",
@@ -8687,7 +8729,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5466d96648810fe94747d48e1e952c9bc4fe1f6bb7baa46a9af16bfe5d1e8214"
 dependencies = [
  "futures",
- "rig-http",
+ "rig-http 0.43.0",
  "thiserror 2.0.20",
  "tokio",
  "tokio-tungstenite",
@@ -13304,7 +13346,7 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "rig-agent",
- "rig-core",
+ "rig-core 0.43.0",
  "rig-reqwest",
  "serde",
  "serde_json",
