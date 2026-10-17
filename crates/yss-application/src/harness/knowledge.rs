@@ -123,7 +123,7 @@ impl ProjectKnowledgeService {
             let document = scope
                 .session
                 .project()
-                .read_doc_source(scope.binding.project_instance_id(), &path)
+                .read_file_source(scope.binding.project_instance_id(), &path)
                 .map_err(|_| ProjectKnowledgeError::DocumentUnavailable)?;
             let hash = content_hash(&document.content.0)?;
             let identity = digest(
@@ -220,7 +220,7 @@ fn source_status(
     let document = match scope
         .session
         .project()
-        .read_doc_source(scope.binding.project_instance_id(), &path)
+        .read_file_source(scope.binding.project_instance_id(), &path)
     {
         Ok(document) => document,
         Err(yss_project::ProjectOperationError::ResourceRevisionConflict { .. }) => {

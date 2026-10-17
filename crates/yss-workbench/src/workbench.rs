@@ -1,6 +1,5 @@
 mod activity;
 mod assistant;
-mod charts;
 mod chrome;
 use yss_ui::lifecycle::LogReleased;
 use yss_ui::name_form;
@@ -9,8 +8,8 @@ pub(crate) use chrome::{OpenProjectDirectory, OpenRecentProject, SaveAllGraphs, 
 mod databases;
 mod details;
 mod dock;
-mod documents;
 mod events;
+mod files;
 mod graphs;
 mod imports;
 mod intents;
@@ -19,7 +18,6 @@ mod lifecycle;
 mod logs;
 mod menus;
 pub(crate) use menus::{bind_keys as bind_menu_keys, shortcut_commands};
-mod minds;
 mod output;
 mod plugins;
 mod problem_navigation;
@@ -88,9 +86,7 @@ pub struct Workbench {
     result_panels: BTreeMap<(uuid::Uuid, u64), WeakEntity<crate::results::ResultPanel>>,
     result_windows: Vec<results::window::ResultWindowHandle>,
     graphs: BTreeMap<String, WeakEntity<GraphCanvas>>,
-    documents: BTreeMap<String, WeakEntity<crate::documents::DocumentEditor>>,
-    charts: BTreeMap<String, WeakEntity<crate::charts::ChartEditor>>,
-    minds: BTreeMap<String, WeakEntity<crate::minds::MindCanvas>>,
+    files: BTreeMap<String, files::WeakFilePanel>,
     databases: BTreeMap<String, WeakEntity<crate::databases::DatabaseEditor>>,
     opening: BTreeSet<String>,
     graph_openings: BTreeMap<String, WeakEntity<graphs::Opening>>,
@@ -183,9 +179,7 @@ impl Workbench {
             result_panels: BTreeMap::new(),
             result_windows: vec![],
             graphs: BTreeMap::new(),
-            documents: BTreeMap::new(),
-            charts: BTreeMap::new(),
-            minds: BTreeMap::new(),
+            files: BTreeMap::new(),
             databases: BTreeMap::new(),
             opening: BTreeSet::new(),
             graph_openings: BTreeMap::new(),
@@ -325,33 +319,13 @@ impl Workbench {
                 |view, _, event, window, cx| match event {
                     ActivityEvent::RefreshResources => view.refresh_project(window, cx),
                     ActivityEvent::OpenGraph(path) => view.open_graph(path.clone(), window, cx),
-                    ActivityEvent::OpenDocument(path) => {
-                        view.open_document(path.clone(), None, window, cx)
-                    }
-                    ActivityEvent::OpenMind(path) => view.open_mind(path.clone(), None, window, cx),
+                    ActivityEvent::OpenFile(path) => view.open_file(path.clone(), None, window, cx),
                     ActivityEvent::OpenDatabase(id) => {
                         view.open_database(id.clone(), None, window, cx)
                     }
-                    ActivityEvent::OpenChart(path) => {
-                        view.open_chart(path.clone(), None, window, cx)
+                    ActivityEvent::FileResource(path, action) => {
+                        view.file_resource_action(path.clone(), *action, window, cx)
                     }
-                    ActivityEvent::ChartResource(path, action) => {
-                        view.chart_resource_action(path.clone(), *action, window, cx)
-                    }
-                    ActivityEvent::DocumentResource(path, action) => view.file_resource_action(
-                        resources::AuthoredKind::Document,
-                        path.clone(),
-                        *action,
-                        window,
-                        cx,
-                    ),
-                    ActivityEvent::MindResource(path, action) => view.file_resource_action(
-                        resources::AuthoredKind::Mind,
-                        path.clone(),
-                        *action,
-                        window,
-                        cx,
-                    ),
                     ActivityEvent::RevealResource(request) => {
                         view.reveal_resource(request.clone(), window, cx)
                     }
@@ -444,31 +418,13 @@ impl Workbench {
     }
 
     pub fn has_unsaved(&self, cx: &gpui_kit::App) -> bool {
-        if self.settings.read(cx).dirty() {
-            return true;
-        }
-        if self
-            .charts
-            .values()
-            .filter_map(WeakEntity::upgrade)
-            .any(|chart| chart.read(cx).dirty())
-        {
-            return true;
-        }
-        self.graphs
-            .values()
-            .filter_map(WeakEntity::upgrade)
-            .any(|graph| graph.read(cx).dirty(cx))
+        self.settings.read(cx).dirty()
             || self
-                .documents
+                .graphs
                 .values()
                 .filter_map(WeakEntity::upgrade)
-                .any(|document| document.read(cx).dirty())
-            || self
-                .minds
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|mind| mind.read(cx).dirty())
+                .any(|graph| graph.read(cx).dirty(cx))
+            || self.file_panels().any(|panel| panel.dirty(cx))
             || self
                 .databases
                 .values()
@@ -488,25 +444,11 @@ impl Workbench {
             || self.plugins.read(cx).busy()
             || self.settings.read(cx).has_pending_operation()
             || self
-                .charts
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|chart| chart.read(cx).busy())
-            || self
                 .graphs
                 .values()
                 .filter_map(WeakEntity::upgrade)
                 .any(|graph| graph.read(cx).busy())
-            || self
-                .documents
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|document| document.read(cx).busy())
-            || self
-                .minds
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|mind| mind.read(cx).busy())
+            || self.file_panels().any(|panel| panel.busy(cx))
             || self
                 .databases
                 .values()

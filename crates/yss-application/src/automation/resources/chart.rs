@@ -1,5 +1,6 @@
-//! Chart settings reuse the original reader and immediate-save transaction.
+//! Chart settings reuse the shared file snapshot and Edit/Save lifecycle.
 use super::*;
+use yss_project_model::chart::ChartEdit;
 
 pub(in crate::automation) fn inspect_chart(
     application: &ApplicationState,
@@ -8,36 +9,32 @@ pub(in crate::automation) fn inspect_chart(
     control: &CapabilityControl,
 ) -> Result<ChartInspection> {
     let resource = request.chart.resource();
-    let index = read_index(session)?;
-    let info = metadata(&index, &resource)?;
+    let chart = application
+        .read_file(
+            session.project_instance_id().clone(),
+            file_path::<ChartDocument>(&resource)?,
+        )
+        .map_err(file_error)?;
     let version = ResourceVersion {
-        revision: info.revision,
-        session_id: None,
+        revision: chart.version.revision.get(),
+        session_id: Some(chart.version.session_id.clone()),
     };
     if request
         .version
         .as_ref()
-        .is_some_and(|expected| expected != &version)
+        .is_some_and(|expected| !matches_file_version(expected, &chart.version))
     {
         return Err(conflict());
     }
-    let document = application
-        .load_chart_resource(
-            session.project_instance_id().clone(),
-            chart_path(&resource)?,
-            Some(index.publication_revision),
-        )
-        .map_err(chart_error)?;
-    check_version(session, &resource, &version)?;
     control.check()?;
     Ok(ChartInspection {
         chart: request.chart,
         version,
         settings: ChartSettings {
-            database_id: document.database_id,
-            chart_type: document.chart_type,
-            x: document.encodings.x,
-            y: document.encodings.y,
+            database_id: chart.content.database_id,
+            chart_type: chart.content.chart_type,
+            x: chart.content.encodings.x,
+            y: chart.content.encodings.y,
         },
     })
 }
@@ -48,15 +45,18 @@ pub(super) fn update_chart(
     resource: &ProjectResourceRef,
     version: &ResourceVersion,
     settings: model::ChartSettingsUpdate,
-    operation: OperationId,
     control: &CapabilityControl,
+    publish: Publication<'_>,
 ) -> Result<CommittedResourceMutation> {
     let project = session.project_instance_id().clone();
-    let path = chart_path(resource)?;
-    let mut document = application
-        .load_chart_resource(project.clone(), path.clone(), None)
-        .map_err(chart_error)?;
-    check_version(session, resource, version)?;
+    let path = file_path::<ChartDocument>(resource)?;
+    let current = application
+        .read_file(project.clone(), path.clone())
+        .map_err(file_error)?;
+    if !matches_file_version(version, &current.version) {
+        return Err(conflict());
+    }
+    let mut document = current.content;
     if let Some(database_id) = settings.database_id {
         document.database_id = database_id;
     }
@@ -70,13 +70,32 @@ pub(super) fn update_chart(
         document.encodings.y = y;
     }
     control.check()?;
-    application
-        .save_chart_resource(
-            project,
-            operation,
-            path,
-            document,
-            Some(ResourceRevision::new(version.revision)),
+    // Settings updates persist immediately, so the edit is followed by the same Save as the GUI.
+    let edited = application
+        .apply_file_command(
+            project.clone(),
+            OperationId::new(),
+            FileCommand::Edit {
+                path: path.clone(),
+                version: current.version,
+                edits: vec![ChartEdit::SetDocument { document }],
+            },
         )
-        .map_err(chart_error)
+        .map_err(file_error)?;
+    publish_committed(publish, &edited.mutation);
+    let version = edited.snapshot.ok_or_else(unavailable)?.version;
+    file_command(
+        application,
+        project,
+        OperationId::new(),
+        FileCommand::Save { path, version },
+    )
+}
+
+fn matches_file_version(expected: &ResourceVersion, current: &FileVersion) -> bool {
+    expected.revision == current.revision.get()
+        && expected
+            .session_id
+            .as_ref()
+            .is_none_or(|session_id| session_id == &current.session_id)
 }

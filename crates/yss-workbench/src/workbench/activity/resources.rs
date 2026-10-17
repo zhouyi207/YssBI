@@ -129,15 +129,11 @@ impl ActivityPanel {
             ActivityRowContent::Item(
                 ActivityItem::EventGraph { path, .. } | ActivityItem::FunctionGraph { path, .. },
             ) => ActivityEvent::OpenGraph(path.clone()),
-            ActivityRowContent::Item(ActivityItem::Chart { path, .. }) => {
-                ActivityEvent::OpenChart(path.clone())
-            }
-            ActivityRowContent::Item(ActivityItem::Mind { path, .. }) => {
-                ActivityEvent::OpenMind(path.clone())
-            }
-            ActivityRowContent::Item(ActivityItem::Doc { path, .. }) => {
-                ActivityEvent::OpenDocument(path.clone())
-            }
+            ActivityRowContent::Item(
+                ActivityItem::Chart { path, .. }
+                | ActivityItem::Mind { path, .. }
+                | ActivityItem::Doc { path, .. },
+            ) => ActivityEvent::OpenFile(path.clone()),
             ActivityRowContent::Item(ActivityItem::Database { id, .. }) => {
                 ActivityEvent::OpenDatabase(id.clone())
             }

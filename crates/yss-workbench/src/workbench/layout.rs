@@ -350,28 +350,21 @@ impl Workbench {
                     "Graph view checkpoints could not be read"
                 );
             }
-            let mut documents = vec![];
-            for path in layout
-                .as_ref()
-                .map(|state| resource_paths(state, "document-editor", "documentPath"))
-                .unwrap_or_default()
-            {
-                if let Ok(path) = yss_project_model::doc::DocPath::parse(&path)
-                    && let Ok(snapshot) = services.application.read_doc(identity.clone(), path)
+            let mut files = vec![];
+            for kind in super::files::FileKind::ALL {
+                let (panel_name, path_key) = kind.layout();
+                for path in layout
+                    .as_ref()
+                    .map(|state| resource_paths(state, panel_name, path_key))
+                    .unwrap_or_default()
                 {
-                    documents.push(snapshot);
-                }
-            }
-            let mut minds = vec![];
-            for path in layout
-                .as_ref()
-                .map(|state| resource_paths(state, "mind-editor", "mindPath"))
-                .unwrap_or_default()
-            {
-                if let Ok(path) = yss_project_model::mind::MindPath::parse(&path)
-                    && let Ok(snapshot) = services.application.read_mind(identity.clone(), path)
-                {
-                    minds.push(snapshot);
+                    if let Ok(opened) = super::files::OpenedFile::read(
+                        &services.application,
+                        identity.clone(),
+                        &path,
+                    ) {
+                        files.push(opened);
+                    }
                 }
             }
             let mut databases = vec![];
@@ -392,19 +385,6 @@ impl Workbench {
                     )
                 {
                     databases.push((entry.clone(), read));
-                }
-            }
-            let mut charts = vec![];
-            for path in layout
-                .as_ref()
-                .map(|state| resource_paths(state, "chart-editor", "chartPath"))
-                .unwrap_or_default()
-            {
-                if let Ok(path) = yss_chart_document::ChartResourcePath::parse(&path)
-                    && let Ok(read) =
-                        crate::charts::read(&services.application, identity.clone(), path)
-                {
-                    charts.push(read);
                 }
             }
             let mut conversations = vec![];
@@ -440,10 +420,8 @@ impl Workbench {
                 layout_failed,
                 viewport_failed,
                 layout,
-                documents,
-                minds,
+                files,
                 databases,
-                charts,
                 conversations,
                 assistant,
             ))
@@ -469,10 +447,8 @@ impl Workbench {
                         layout_failed,
                         viewport_failed,
                         layout,
-                        documents,
-                        minds,
+                        files,
                         databases,
-                        charts,
                         conversations,
                         assistant,
                     )) => {
@@ -496,17 +472,11 @@ impl Workbench {
                             .filter_map(|path| GraphResourcePath::new(path).ok())
                             .map(|path| view.create_graph_opening(path, window, cx))
                             .collect::<Vec<_>>();
-                        for document in documents {
-                            view.install_document(document, window, cx);
-                        }
-                        for mind in minds {
-                            view.install_mind(mind, window, cx);
+                        for opened in files {
+                            view.install_file(opened, window, cx);
                         }
                         for (entry, read) in databases {
                             view.install_database(entry, Some(read), window, cx);
-                        }
-                        for chart in charts {
-                            view.install_chart(chart, window, cx);
                         }
                         view.install_assistant_document(assistant, window, cx);
                         for session in conversations {
@@ -547,28 +517,12 @@ impl Workbench {
                             }
                         });
                         if let Some(path) = path {
-                            if view.project.as_ref().is_some_and(|project| {
-                                project
-                                    .index
-                                    .docs
-                                    .iter()
-                                    .any(|document| document.path.as_str() == path)
-                            }) {
-                                view.open_document(path, None, window, cx);
-                            } else if view.project.as_ref().is_some_and(|project| {
-                                project
-                                    .index
-                                    .minds
-                                    .iter()
-                                    .any(|mind| mind.path.as_str() == path)
-                            }) {
-                                view.open_mind(path, None, window, cx);
+                            if super::files::FileKind::of(&path).is_some() {
+                                view.open_file(path, None, window, cx);
                             } else if view.project.as_ref().is_some_and(|project| {
                                 project.index.databases.iter().any(|entry| entry.id == path)
                             }) {
                                 view.open_database(path, None, window, cx);
-                            } else if yss_chart_document::ChartResourcePath::parse(&path).is_ok() {
-                                view.open_chart(path, None, window, cx);
                             } else {
                                 view.open_graph(path, window, cx);
                             }
@@ -659,26 +613,21 @@ impl Workbench {
             }
             panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
         });
-        let documents = self.documents.clone();
-        register_panel(cx, "document-editor", move |context, _, cx| {
-            if let PanelInfo::Panel(info) = context.info()
-                && let Some(path) = info.get("documentPath").and_then(serde_json::Value::as_str)
-                && let Some(document) = documents.get(path).and_then(WeakEntity::upgrade)
-            {
-                return panel_handle(document);
-            }
-            panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
-        });
-        let minds = self.minds.clone();
-        register_panel(cx, "mind-editor", move |context, _, cx| {
-            if let PanelInfo::Panel(info) = context.info()
-                && let Some(path) = info.get("mindPath").and_then(serde_json::Value::as_str)
-                && let Some(mind) = minds.get(path).and_then(WeakEntity::upgrade)
-            {
-                return panel_handle(mind);
-            }
-            panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
-        });
+        for kind in super::files::FileKind::ALL {
+            let (panel_name, path_key) = kind.layout();
+            let files = self.files.clone();
+            register_panel(cx, panel_name, move |context, _, cx| {
+                if let PanelInfo::Panel(info) = context.info()
+                    && let Some(path) = info.get(path_key).and_then(serde_json::Value::as_str)
+                    && let Some(panel) = files
+                        .get(path)
+                        .and_then(super::files::WeakFilePanel::upgrade)
+                {
+                    return panel.handle();
+                }
+                panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
+            });
+        }
         let databases = self.databases.clone();
         register_panel(cx, "database-editor", move |context, _, cx| {
             if let PanelInfo::Panel(info) = context.info()
@@ -686,16 +635,6 @@ impl Workbench {
                 && let Some(editor) = databases.get(id).and_then(WeakEntity::upgrade)
             {
                 return panel_handle(editor);
-            }
-            panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
-        });
-        let charts = self.charts.clone();
-        register_panel(cx, "chart-editor", move |context, _, cx| {
-            if let PanelInfo::Panel(info) = context.info()
-                && let Some(path) = info.get("chartPath").and_then(serde_json::Value::as_str)
-                && let Some(chart) = charts.get(path).and_then(WeakEntity::upgrade)
-            {
-                return panel_handle(chart);
             }
             panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
         });

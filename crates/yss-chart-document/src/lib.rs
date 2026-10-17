@@ -1,10 +1,5 @@
-use std::path::Path;
-
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
-use yss_project_layout::{CHART_EXTENSION, CHARTS_DIR};
-use yss_resource_naming::{ResourceName, ResourceNameValidationError};
 
 pub const CURRENT_CHART_SCHEMA_VERSION: u32 = 4;
 
@@ -63,132 +58,11 @@ impl ChartDocument {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum ChartResourcePathError {
-    #[error("chart resource path must be in the charts directory")]
-    WrongDirectory,
-    #[error("chart resource path must not be nested")]
-    Nested,
-    #[error("chart resource path must use the .yssbi-chart extension")]
-    WrongExtension,
-    #[error("chart resource path has an invalid name")]
-    InvalidName(#[source] ResourceNameValidationError),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct ChartResourcePath {
-    value: String,
-    display_name: ResourceName,
-}
-
-impl ChartResourcePath {
-    pub fn parse(value: &str) -> Result<Self, ChartResourcePathError> {
-        let relative = value
-            .strip_prefix(&format!("{CHARTS_DIR}/"))
-            .ok_or(ChartResourcePathError::WrongDirectory)?;
-        if relative.contains('/') || relative.contains('\\') {
-            return Err(ChartResourcePathError::Nested);
-        }
-        let stem = relative
-            .strip_suffix(&format!(".{CHART_EXTENSION}"))
-            .ok_or(ChartResourcePathError::WrongExtension)?;
-        let display_name =
-            ResourceName::parse(stem).map_err(ChartResourcePathError::InvalidName)?;
-
-        Ok(Self {
-            value: value.to_owned(),
-            display_name,
-        })
-    }
-
-    pub fn from_name(name: &ResourceName) -> Self {
-        Self {
-            value: format!("{CHARTS_DIR}/{}.{CHART_EXTENSION}", name.as_str()),
-            display_name: name.clone(),
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.value
-    }
-
-    pub fn display_name(&self) -> &ResourceName {
-        &self.display_name
-    }
-
-    pub fn relative_path(&self) -> &Path {
-        Path::new(&self.value)
-    }
-}
-
-impl TryFrom<String> for ChartResourcePath {
-    type Error = ChartResourcePathError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::parse(&value)
-    }
-}
-
-impl From<ChartResourcePath> for String {
-    fn from(value: ChartResourcePath) -> Self {
-        value.value
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use serde_json::json;
-    use yss_resource_naming::{ResourceName, ResourceNameValidationError};
 
-    use super::{
-        CURRENT_CHART_SCHEMA_VERSION, ChartDocument, ChartResourcePath, ChartResourcePathError,
-        ChartType,
-    };
-
-    #[test]
-    fn chart_path_round_trips_canonical_resource_identity() {
-        let name = ResourceName::parse("Sales Report").unwrap();
-        let path = ChartResourcePath::from_name(&name);
-
-        assert_eq!(path.as_str(), "charts/Sales Report.yssbi-chart");
-        assert_eq!(path.display_name(), &name);
-        assert_eq!(
-            path.relative_path(),
-            Path::new("charts/Sales Report.yssbi-chart")
-        );
-
-        let serialized = serde_json::to_string(&path).unwrap();
-        assert_eq!(serialized, r#""charts/Sales Report.yssbi-chart""#);
-        assert_eq!(
-            serde_json::from_str::<ChartResourcePath>(&serialized).unwrap(),
-            path
-        );
-    }
-
-    #[test]
-    fn chart_path_rejects_nested_wrong_extension_and_invalid_stem() {
-        assert_eq!(
-            ChartResourcePath::parse("reports/Sales Report.yssbi-chart"),
-            Err(ChartResourcePathError::WrongDirectory)
-        );
-        assert_eq!(
-            ChartResourcePath::parse("charts/Regional/Sales Report.yssbi-chart"),
-            Err(ChartResourcePathError::Nested)
-        );
-        assert_eq!(
-            ChartResourcePath::parse("charts/Sales Report.json"),
-            Err(ChartResourcePathError::WrongExtension)
-        );
-        assert_eq!(
-            ChartResourcePath::parse("charts/Sales?.yssbi-chart"),
-            Err(ChartResourcePathError::InvalidName(
-                ResourceNameValidationError::ForbiddenCharacter('?')
-            ))
-        );
-    }
+    use super::{CURRENT_CHART_SCHEMA_VERSION, ChartDocument, ChartType};
 
     #[test]
     fn chart_document_has_one_current_strict_wire_contract() {

@@ -17,7 +17,8 @@ impl MindCanvas {
     ) -> impl IntoElement + use<> {
         let current = topic.parent_id.clone();
         let parent_name = self
-            .snapshot
+            .file
+            .snapshot()
             .content
             .nodes
             .iter()
@@ -26,7 +27,7 @@ impl MindCanvas {
             .unwrap_or_else(|| yss_ui::text::translate("native.minds.unnamedTopic"));
         let owner = cx.entity().downgrade();
         inspector::choice_trigger("mind-parent", parent_name)
-            .disabled(self.busy())
+            .disabled(!self.file.editable())
             .dropdown_menu(move |menu, _, cx| {
                 let candidates = owner
                     .update(cx, |view, _| {
@@ -67,7 +68,7 @@ impl MindCanvas {
     fn parent_choices(&self, id: &str) -> Vec<(String, String)> {
         // This index only filters presentation. Project validates the actual tree edit.
         let mut children = std::collections::HashMap::<&str, Vec<&str>>::new();
-        for node in &self.snapshot.content.nodes {
+        for node in &self.file.snapshot().content.nodes {
             if let Some(parent) = node.parent_id.as_deref() {
                 children.entry(parent).or_default().push(&node.id);
             }
@@ -81,7 +82,8 @@ impl MindCanvas {
                 pending.extend(group);
             }
         }
-        self.snapshot
+        self.file
+            .snapshot()
             .content
             .nodes
             .iter()

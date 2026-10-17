@@ -371,9 +371,7 @@ impl Workbench {
             );
         });
         self.assistant_intent = None;
-        self.documents.clear();
-        self.charts.clear();
-        self.minds.clear();
+        self.files.clear();
         self.databases.clear();
         self.result_panels.clear();
         self.opening.clear();

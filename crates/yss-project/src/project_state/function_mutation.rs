@@ -230,6 +230,7 @@ mod tests {
     use crate::fixtures::TempProject;
     use yss_graph_document::GraphResourceKind;
     use yss_project_history::{FunctionDocument, FunctionDocumentPatch, FunctionSignature};
+    use yss_project_identity::OperationId;
 
     fn function_project(revision: ResourceRevision) -> (TempProject, GraphResourcePath) {
         let path = GraphResourcePath::new("functions/Compute.yssbi-function").unwrap();
@@ -273,7 +274,7 @@ mod tests {
         let committed = state.get_data().unwrap().graphs[&path].function.clone();
         assert_eq!(committed.as_ref().unwrap().signature, after);
         assert_eq!(committed.as_ref().unwrap().revision, next_revision);
-        assert_eq!(state.revision_state_for_test().0[&path], next_revision);
+        assert_eq!(state.revision_state_for_test()[&path], next_revision);
 
         let session = state.capture_project_session().unwrap();
         let persisted = crate::project_io::load_project_graph_from_file(
@@ -308,7 +309,7 @@ mod tests {
         state
             .load_graph_document(&project, &path, u64::MAX - 1)
             .unwrap();
-        assert_eq!(state.revision_state_for_test().0[&path], next_revision);
+        assert_eq!(state.revision_state_for_test()[&path], next_revision);
         assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
 
         let stale = MutationRequest {

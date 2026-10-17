@@ -77,26 +77,18 @@ impl Workbench {
             UiIntent::OpenResource {
                 resource,
                 node_id: None,
-            } if resource.kind == ProjectResourceKind::Doc => {
-                self.open_document(resource.id, Some(receipt.id), window, cx);
-            }
-            UiIntent::OpenResource {
-                resource,
-                node_id: None,
-            } if resource.kind == ProjectResourceKind::Mind => {
-                self.open_mind(resource.id, Some(receipt.id), window, cx);
+            } if matches!(
+                resource.kind,
+                ProjectResourceKind::Doc | ProjectResourceKind::Mind | ProjectResourceKind::Chart
+            ) =>
+            {
+                self.open_file(resource.id, Some(receipt.id), window, cx);
             }
             UiIntent::OpenResource {
                 resource,
                 node_id: None,
             } if resource.kind == ProjectResourceKind::Database => {
                 self.open_database(resource.id, Some(receipt.id), window, cx);
-            }
-            UiIntent::OpenResource {
-                resource,
-                node_id: None,
-            } if resource.kind == ProjectResourceKind::Chart => {
-                self.open_chart(resource.id, Some(receipt.id), window, cx);
             }
             UiIntent::ShowPanel {
                 panel: UiPanel::Assistant,

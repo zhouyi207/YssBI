@@ -93,7 +93,7 @@ impl ResourceCatalog {
         for item in &index.charts {
             add(
                 Kind::Chart,
-                item.chart_path.as_str(),
+                item.path.as_str(),
                 &item.name,
                 item.revision,
                 None,

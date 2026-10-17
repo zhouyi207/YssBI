@@ -1,6 +1,7 @@
 //! Dock and cross-editor selection routing; graph drafts stay in the retained graph owner.
 #[cfg(test)]
 pub(super) mod tests;
+use super::files::{FilePanel, WeakFilePanel};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Icon,
@@ -18,15 +19,11 @@ use yss_graph_ui::{GraphServices, canvas::GraphCanvas, details::GraphDetails};
 use yss_node_protocol::{NodeTypeId, ParameterKey};
 use yss_project::GraphEditVersion;
 use yss_project_identity::ProjectInstanceId;
-use yss_resource_ui::{documents::DocumentEditor, minds::MindCanvas};
-use yss_results_ui::charts::ChartEditor;
 
 pub struct DetailsPanel {
     graph: Entity<GraphDetails>,
-    document: Option<WeakEntity<DocumentEditor>>,
-    mind: Option<WeakEntity<MindCanvas>>,
+    file: Option<WeakFilePanel>,
     database: Option<WeakEntity<DatabaseEditor>>,
-    chart: Option<WeakEntity<ChartEditor>>,
     log: Option<WeakEntity<super::logs::LogDetails>>,
     focus: FocusHandle,
     scroll: gpui_kit::ScrollHandle,
@@ -45,10 +42,8 @@ impl DetailsPanel {
         let focus = graph.read(cx).focus_handle(cx);
         Self {
             graph,
-            document: None,
-            mind: None,
+            file: None,
             database: None,
-            chart: None,
             log: None,
             focus,
             scroll: gpui_kit::ScrollHandle::new(),
@@ -60,67 +55,53 @@ impl DetailsPanel {
     pub fn graph(&self, cx: &App) -> Option<Entity<GraphCanvas>> {
         self.graph.read(cx).graph()
     }
-    pub fn document(&self) -> Option<Entity<DocumentEditor>> {
-        self.document.as_ref().and_then(WeakEntity::upgrade)
-    }
-    pub fn mind(&self) -> Option<Entity<MindCanvas>> {
-        self.mind.as_ref().and_then(WeakEntity::upgrade)
+    pub(crate) fn file(&self) -> Option<FilePanel> {
+        self.file.as_ref().and_then(WeakFilePanel::upgrade)
     }
     pub fn database(&self) -> Option<Entity<DatabaseEditor>> {
         self.database.as_ref().and_then(WeakEntity::upgrade)
-    }
-    pub fn chart(&self) -> Option<Entity<ChartEditor>> {
-        self.chart.as_ref().and_then(WeakEntity::upgrade)
     }
 
     pub fn clear(&mut self, cx: &mut Context<Self>) {
         self.target_subscription = None;
         self.graph.update(cx, |graph, cx| graph.clear(cx));
-        self.document = None;
-        self.mind = None;
+        self.file = None;
         self.database = None;
-        self.chart = None;
         self.log = None;
         cx.notify();
     }
 
-    pub fn set_document(&mut self, document: WeakEntity<DocumentEditor>, cx: &mut Context<Self>) {
-        if self.document.as_ref() == Some(&document) && self.target_visible(cx) {
+    pub(crate) fn set_file(&mut self, file: WeakFilePanel, cx: &mut Context<Self>) {
+        let current = self.file();
+        let Some(panel) = file.upgrade() else {
+            return;
+        };
+        if current.is_some_and(|current| current.entity_id() == panel.entity_id())
+            && self.target_visible(cx)
+        {
             return;
         }
         self.clear(cx);
-        if let Some(editor) = document.upgrade() {
-            let mut state = editor.read(cx).details_state().into_owned();
-            self.target_subscription = Some(cx.observe(&editor, move |view, editor, cx| {
-                let next = editor.read(cx).details_state();
-                if state != next {
-                    state = next.into_owned();
-                    if view.target_visible(cx) {
-                        cx.notify();
+        macro_rules! watch {
+            ($editor:expr) => {{
+                let mut state = $editor.read(cx).details_state().into_owned();
+                cx.observe($editor, move |view, editor, cx| {
+                    let next = editor.read(cx).details_state();
+                    if state != next {
+                        state = next.into_owned();
+                        if view.target_visible(cx) {
+                            cx.notify();
+                        }
                     }
-                }
-            }));
+                })
+            }};
         }
-        self.document = Some(document);
-    }
-    pub fn set_mind(&mut self, mind: WeakEntity<MindCanvas>, cx: &mut Context<Self>) {
-        if self.mind.as_ref() == Some(&mind) && self.target_visible(cx) {
-            return;
-        }
-        self.clear(cx);
-        if let Some(editor) = mind.upgrade() {
-            let mut state = editor.read(cx).details_state().into_owned();
-            self.target_subscription = Some(cx.observe(&editor, move |view, editor, cx| {
-                let next = editor.read(cx).details_state();
-                if state != next {
-                    state = next.into_owned();
-                    if view.target_visible(cx) {
-                        cx.notify();
-                    }
-                }
-            }));
-        }
-        self.mind = Some(mind);
+        self.target_subscription = Some(match &panel {
+            FilePanel::Document(editor) => watch!(editor),
+            FilePanel::Mind(editor) => watch!(editor),
+            FilePanel::Chart(editor) => watch!(editor),
+        });
+        self.file = Some(file);
     }
     pub fn set_database(&mut self, database: WeakEntity<DatabaseEditor>, cx: &mut Context<Self>) {
         if self.database.as_ref() == Some(&database) && self.target_visible(cx) {
@@ -141,26 +122,6 @@ impl DetailsPanel {
         }
         self.database = Some(database);
     }
-    pub fn set_chart(&mut self, chart: WeakEntity<ChartEditor>, cx: &mut Context<Self>) {
-        if self.chart.as_ref() == Some(&chart) && self.target_visible(cx) {
-            return;
-        }
-        self.clear(cx);
-        if let Some(editor) = chart.upgrade() {
-            let mut state = editor.read(cx).details_state().into_owned();
-            self.target_subscription = Some(cx.observe(&editor, move |view, editor, cx| {
-                let next = editor.read(cx).details_state();
-                if state != next {
-                    state = next.into_owned();
-                    if view.target_visible(cx) {
-                        cx.notify();
-                    }
-                }
-            }));
-        }
-        self.chart = Some(chart);
-    }
-
     fn target_visible(&self, cx: &App) -> bool {
         self.log.as_ref().and_then(WeakEntity::upgrade).is_none()
             && !self.graph.read(cx).showing_node_definition()
@@ -182,10 +143,8 @@ impl DetailsPanel {
         cx: &mut Context<Self>,
     ) {
         self.target_subscription = None;
-        self.document = None;
-        self.mind = None;
+        self.file = None;
         self.database = None;
-        self.chart = None;
         self.graph.update(cx, |details, cx| {
             details.set_selection(graph, nodes, projection, version, window, cx)
         });
@@ -271,14 +230,20 @@ impl Render for DetailsPanel {
         if let Some(log) = self.log.as_ref().and_then(WeakEntity::upgrade) {
             return panel.child(log).into_any_element();
         }
-        let content = if let Some(document) = self.document() {
-            document.read(cx).render_details(cx).into_any_element()
-        } else if let Some(mind) = self.mind() {
-            mind.update(cx, |mind, cx| mind.render_details(window, cx))
+        let content = if let Some(file) = self.file() {
+            match file {
+                FilePanel::Document(editor) => {
+                    editor.read(cx).render_details(cx).into_any_element()
+                }
+                FilePanel::Mind(editor) => {
+                    editor.update(cx, |editor, cx| editor.render_details(window, cx))
+                }
+                FilePanel::Chart(editor) => {
+                    editor.update(cx, |editor, cx| editor.render_details(cx))
+                }
+            }
         } else if let Some(database) = self.database() {
             database.update(cx, |editor, cx| editor.render_details(window, cx))
-        } else if let Some(chart) = self.chart() {
-            chart.update(cx, |editor, cx| editor.render_details(cx))
         } else {
             yss_ui::appearance::empty_state(
                 IconName::FileText,

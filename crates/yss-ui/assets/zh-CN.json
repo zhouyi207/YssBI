@@ -2660,6 +2660,11 @@
       "parameterName": "参数%{value0}",
       "returnValue": "返回值",
       "zoomPanel": "放大面板",
+      "closeOtherTabs": "关闭其他标签",
+      "closeTabsToLeft": "关闭左侧标签",
+      "closeTabsToRight": "关闭右侧标签",
+      "closeAllTabs": "关闭全部标签",
+      "tabsCloseProtected": "请先保存更改并等待操作完成",
       "newConversation": "新建对话",
       "expandConversation": "展开对话",
       "conversationOptions": "对话选项",
@@ -2696,9 +2701,7 @@
       "deleteDatabaseMessage": "该数据库及其数据将被删除，引用它的图节点需要重新选择资源。",
       "renameDatabase": "重命名数据库",
       "resourceOperationUnconfirmed": "资源操作未完成，提交可能已生效，请检查目录后再试。",
-      "saveChartBeforeEditing": "请先保存该图表的配置，再修改图表资源。",
       "deleteChartMessage": "图表文件将删除，原数据集会保留。",
-      "chartResourceFailed": "图表资源未修改，请刷新目录后检查实际状态。",
       "renameGraph": "重命名图",
       "newMarkdown": "新建 Markdown 文档",
       "fileCreateFailed": "无法创建文件，请检查名称和当前项目。",
@@ -2833,10 +2836,7 @@
       "executableParentMissing": "可执行文件无父目录"
     },
     "documents": {
-      "togglePreview": "编辑 / 预览 · Ctrl+Shift+V",
-      "saveFailed": "文档未保存。内容已保留，请检查外部修改或文件写入错误。",
-      "externalChange": "文档已在其他位置修改。当前输入已保留，保存需要重新核验版本。",
-      "readFailed": "文档暂不可读取。当前输入已保留，请检查项目目录。"
+      "togglePreview": "编辑 / 预览 · Ctrl+Shift+V"
     },
     "canvas": {
       "emptyGraph": "从节点开始",
@@ -2992,9 +2992,7 @@
     },
     "minds": {
       "topicChanged": "主题已在其他位置修改。当前输入已保留，请核对后重新打开或放弃输入。",
-      "saveFailed": "思维导图未保存。当前内容已保留，请检查外部修改或写入错误。",
       "topicSubmitFailed": "主题修改未提交。输入已保留，请检查当前文件。",
-      "readFailed": "思维导图暂不可读取。当前内容已保留。",
       "selectTopicHint": "选择主题以编辑内容与分支",
       "selectedTopics": "已选择 %{value0} 个主题",
       "topicContent": "主题内容",
@@ -3009,8 +3007,6 @@
       "axesHint": "选择 X 轴和 Y 轴列，查看散点或折线",
       "dataFailed": "无法读取当前配置的绘图数据，请重新选择列或刷新。",
       "previewFailed": "图表预览未读取，请检查数据集、列类型或当前资源状态。",
-      "readFailed": "图表未读取，本地配置已保留，请刷新项目后重试。",
-      "removed": "图表已移除，本地未保存的配置仍保留。",
       "loading": "正在读取图表",
       "preparingData": "数据准备在后台执行",
       "previewUnavailable": "预览暂不可用",
@@ -3023,12 +3019,10 @@
       "otherValues": "另有 %{other_count} 个值归入其他类别",
       "plotSummary": "X：%{value0} · Y：%{value1} · %{value2} 个绘图点",
       "dataPoints": "数据点",
-      "saveFailed": "图表保存未完成，配置已保留，请检查当前项目后重试。",
       "unnamedDataset": "未命名数据集",
       "chooseDataset": "选择数据集",
       "removedDataset": "已移除的数据集",
       "noDataset": "不选择数据集",
-      "externalChange": "文件已变化，本地配置已保留。保存会写入当前配置。",
       "unsavedConfiguration": "配置有未保存的更改。Ctrl/Cmd+S 保存。",
       "unavailableName": "%{name}（当前不可用）",
       "distributionColumn": "分布列",
@@ -3157,6 +3151,16 @@
     },
     "inspector": {
       "moreActions": "更多操作"
+    },
+    "files": {
+      "saveFailed": "“%{name}”未保存。修改已保留，请检查外部修改或文件写入错误。",
+      "readFailed": "“%{name}”暂不可读取。修改已保留，请检查项目目录。",
+      "conflict": "“%{name}”已在其他位置修改。未保存的修改已保留：可重新载入新版本，或保留修改并在保存时覆盖。",
+      "removed": "“%{name}”已在其他位置删除。未保存的修改仍显示在此，但已无法保存。",
+      "reload": "重新载入",
+      "keepChanges": "保留我的修改",
+      "statusConflict": "已在其他位置修改",
+      "statusRemoved": "已删除"
     }
   }
 }

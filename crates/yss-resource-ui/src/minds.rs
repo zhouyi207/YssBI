@@ -7,6 +7,7 @@ mod layout;
 mod render;
 mod topics;
 
+use crate::file_session::{FileEditor, FileEditorEvent, FileSession};
 use buffers::TopicBuffer;
 pub use commands::{MindSaveOutcome, MindSaveRequest};
 pub use details::DetailsDisplay;
@@ -40,10 +41,6 @@ actions!(
     ]
 );
 
-pub enum MindEvent {
-    Activated,
-}
-
 enum Gesture {
     Pan {
         press: Point<Pixels>,
@@ -58,8 +55,7 @@ enum Gesture {
 }
 
 pub struct MindCanvas {
-    services: Arc<ApplicationTasks>,
-    snapshot: MindSnapshot,
+    file: FileSession<yss_project_model::mind::MindDocument>,
     focus: FocusHandle,
     layout: MindLayout,
     selected: BTreeSet<String>,
@@ -73,21 +69,9 @@ pub struct MindCanvas {
     _appearance: gpui_kit::Subscription,
     fit_pending: bool,
     gesture: Option<Gesture>,
-    busy: bool,
-    refreshing: bool,
-    refresh_again: bool,
-    error: Option<String>,
-    notifications: yss_ui::notifications::Notifications,
 }
 
 impl MindCanvas {
-    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
-        if let Some(error) = &error {
-            self.notifications.error(error.clone(), cx);
-        }
-        self.error = error;
-    }
-
     pub fn new(
         services: Arc<ApplicationTasks>,
         snapshot: MindSnapshot,
@@ -97,8 +81,7 @@ impl MindCanvas {
         let layout = MindLayout::new(&snapshot.content, &BTreeSet::new());
         let font_scale = yss_ui::preferences::current(cx).appearance.ui_font_size / 14.;
         Self {
-            services,
-            snapshot,
+            file: FileSession::new(services, snapshot, window),
             focus: cx.focus_handle(),
             layout,
             selected: BTreeSet::new(),
@@ -127,47 +110,34 @@ impl MindCanvas {
             }),
             fit_pending: true,
             gesture: None,
-            busy: false,
-            refreshing: false,
-            refresh_again: false,
-            error: None,
-            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
     pub fn snapshot(&self) -> &MindSnapshot {
-        &self.snapshot
-    }
-    pub fn path(&self) -> &str {
-        self.snapshot.path.as_str()
-    }
-    pub fn dirty(&self) -> bool {
-        self.snapshot.dirty || self.buffers.values().any(|buffer| buffer.dirty)
-    }
-    pub fn busy(&self) -> bool {
-        self.busy || self.refreshing
+        self.file.snapshot()
     }
     pub fn focus_canvas(&self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
-        cx.emit(MindEvent::Activated);
+        cx.emit(FileEditorEvent::Activated);
     }
     fn selected_topic(&self) -> Option<&yss_project_model::mind::MindNode> {
         if self.selected.len() != 1 {
             return None;
         }
         let id = self.selected.iter().next()?;
-        self.snapshot
+        self.file
+            .snapshot()
             .content
             .nodes
             .iter()
             .find(|node| &node.id == id)
     }
     fn rebuild_layout(&mut self) {
-        self.layout = MindLayout::new(&self.snapshot.content, &self.collapsed);
+        self.layout = MindLayout::new(&self.file.snapshot().content, &self.collapsed);
         let visible = self
             .layout
             .nodes
             .iter()
-            .map(|node| self.snapshot.content.nodes[node.index].id.as_str())
+            .map(|node| self.file.snapshot().content.nodes[node.index].id.as_str())
             .collect::<std::collections::HashSet<_>>();
         self.selected.retain(|id| visible.contains(id.as_str()));
         self.labels.retain(|id, _| visible.contains(id.as_str()));
@@ -186,7 +156,7 @@ impl MindCanvas {
 }
 
 impl EventEmitter<PanelEvent> for MindCanvas {}
-impl EventEmitter<MindEvent> for MindCanvas {}
+impl EventEmitter<FileEditorEvent> for MindCanvas {}
 impl Focusable for MindCanvas {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus.clone()
@@ -201,7 +171,7 @@ impl BasePanel for MindCanvas {
     }
     fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
         if active {
-            cx.emit(MindEvent::Activated);
+            cx.emit(FileEditorEvent::Activated);
         } else {
             self.cancel_gesture();
             cx.notify();
@@ -218,7 +188,7 @@ impl Panel for MindCanvas {
         Some(
             format!(
                 "{}{}",
-                self.snapshot.path.name(),
+                self.file.snapshot().path.name(),
                 if self.dirty() { " *" } else { "" }
             )
             .into(),

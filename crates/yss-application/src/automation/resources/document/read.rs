@@ -10,7 +10,10 @@ pub(in crate::automation) fn read_document(
 ) -> Result<DocumentReadResult> {
     let resource = request.input.document().resource();
     let snapshot = application
-        .read_doc(session.project_instance_id().clone(), doc_path(&resource)?)
+        .read_file(
+            session.project_instance_id().clone(),
+            file_path::<DocDocument>(&resource)?,
+        )
         .map_err(file_error)?;
     let version = ResourceVersion {
         revision: snapshot.version.revision.get(),

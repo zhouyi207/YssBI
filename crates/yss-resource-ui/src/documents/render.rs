@@ -1,4 +1,5 @@
 use super::{DocumentEditor, SaveDocument, ToggleDocumentPreview};
+use crate::file_session::FileEditor;
 use gpui_kit::component::{
     ActiveTheme, ElementExt, Sizable,
     button::{Button, ButtonVariants},
@@ -82,7 +83,11 @@ impl Render for DocumentEditor {
                         .size_full()
                         .bordered(false)
                         .appearance(false)
-                        .readonly((self.busy && !self.autosave_in_flight) || self.refreshing)
+                        .readonly(
+                            (self.file.committing() && !self.autosave_in_flight)
+                                || self.file.reading()
+                                || self.file.removed(),
+                        )
                         .into_any_element()
                 },
             ))

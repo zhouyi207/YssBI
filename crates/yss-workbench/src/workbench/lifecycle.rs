@@ -55,16 +55,26 @@ impl Workbench {
             }
             return;
         };
-        self.closing = matches!(after, AfterSave::Project(_));
-        self.busy = true;
-        let (progress, _) = ProjectProgress::start(ProjectStage::Saving, None, cx);
-        if let AfterSave::Project(operation) = &after {
-            operation.show_progress(progress.clone(), cx);
+        if requests.is_empty() {
+            if let AfterSave::Project(operation) = after {
+                self.perform_project_operation(*operation, window, cx);
+            }
+            return;
         }
-        self.project_progress = Some(progress);
+        // Prepared targets own their save locks; is_closing also checks those locks.
+        // Only navigation needs to block the workspace and move focus out of editors.
+        let navigating = matches!(after, AfterSave::Project(_));
+        if let AfterSave::Project(operation) = &after {
+            self.closing = true;
+            self.busy = true;
+            let (progress, _) = ProjectProgress::start(ProjectStage::Saving, None, cx);
+            operation.show_progress(progress.clone(), cx);
+            self.project_progress = Some(progress);
+            window.focus(&self.focus, cx);
+            cx.notify();
+        }
         self.error = None;
         let lifecycle = self.lifecycle;
-        window.focus(&self.focus, cx);
         let owner = self.services.clone();
         let task = self.services.run(move |_| {
             Ok(requests
@@ -78,9 +88,11 @@ impl Workbench {
                 if view.lifecycle != lifecycle {
                     return;
                 }
-                view.busy = false;
-                view.project_progress = None;
-                view.closing = false;
+                if navigating {
+                    view.busy = false;
+                    view.project_progress = None;
+                    view.closing = false;
+                }
                 let failed = if let Some(responses) = result {
                     targets
                         .iter()
@@ -108,12 +120,13 @@ impl Workbench {
                         );
                     }
                 }
-                cx.notify();
+                if failed || navigating {
+                    cx.notify();
+                }
             })
             .log_released();
         })
         .detach();
-        cx.notify();
     }
     pub(super) fn reset_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.details =

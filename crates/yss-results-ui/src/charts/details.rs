@@ -13,6 +13,7 @@ use yss_chart_document::{ChartDocument, ChartEncodings, ChartType};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_database_schema::DatabaseColumnFact;
 use yss_project_identity::ResourceRevision;
+use yss_resource_ui::file_session::{FileEditor, file_status};
 use yss_ui::inspector::{
     self, InlineMessage, InspectorHeader, InspectorSection, PropertyField, Severity,
 };
@@ -26,10 +27,7 @@ pub struct DetailsDisplay<'a> {
     source: Option<(Cow<'a, str>, ResourceRevision)>,
     metadata_revision: Option<u64>,
     columns_page: usize,
-    busy: bool,
-    available: bool,
-    dirty: bool,
-    external_change: bool,
+    status: &'static str,
 }
 
 impl DetailsDisplay<'_> {
@@ -42,10 +40,7 @@ impl DetailsDisplay<'_> {
                 .map(|(id, revision)| (Cow::Owned(id.into_owned()), revision)),
             metadata_revision: self.metadata_revision,
             columns_page: self.columns_page,
-            busy: self.busy,
-            available: self.available,
-            dirty: self.dirty,
-            external_change: self.external_change,
+            status: self.status,
         }
     }
 }
@@ -67,7 +62,7 @@ impl ChartEditor {
     /// Configuration epochs identify retained draft/schema data without cloning it.
     pub fn details_state(&self) -> DetailsDisplay<'_> {
         DetailsDisplay {
-            path: Cow::Borrowed(self.path.as_str()),
+            path: Cow::Borrowed(self.path()),
             epoch: self.draft_epoch,
             source: self
                 .meta_source
@@ -75,10 +70,7 @@ impl ChartEditor {
                 .map(|(id, revision)| (Cow::Borrowed(id.as_str()), *revision)),
             metadata_revision: self.meta.as_ref().map(|meta| meta.data_revision),
             columns_page: self.columns_page,
-            busy: self.busy(),
-            available: self.available,
-            dirty: self.dirty(),
-            external_change: self.external_change,
+            status: file_status(self),
         }
     }
 
@@ -90,7 +82,7 @@ impl ChartEditor {
             .child(
                 InspectorHeader::new(
                     IconName::ChartLine,
-                    self.path.display_name().as_str().to_owned(),
+                    self.file.snapshot().path.name().to_owned(),
                 )
                 .detail(translate("detail.itemTypes.chart")),
             )
@@ -100,7 +92,7 @@ impl ChartEditor {
     }
 
     fn render_configuration(&self, cx: &mut Context<Self>) -> InspectorSection {
-        let editable = !self.busy() && self.available;
+        let editable = self.draft_editable();
         let epoch = self.draft_epoch;
         let owner = cx.entity().downgrade();
         let datasets = self.catalog.clone();
@@ -119,7 +111,9 @@ impl ChartEditor {
                 })
                 .unwrap_or_else(|| translate("native.charts.removedDataset"))
         };
-        let status = if self.dirty() {
+        let status = if self.file.removed() || self.file.conflicted() {
+            InlineMessage::new(Severity::Warning, translate(file_status(self))).into_any_element()
+        } else if self.dirty() {
             InlineMessage::new(
                 Severity::Information,
                 translate("native.charts.unsavedConfiguration"),
@@ -238,7 +232,7 @@ impl ChartEditor {
         }))
         .control(
             inspector::choice_trigger(if x_axis { "chart-x" } else { "chart-y" }, label)
-                .disabled(self.busy() || !self.available || self.meta.is_none())
+                .disabled(!self.draft_editable() || self.meta.is_none())
                 .dropdown_menu(move |mut menu, _, _| {
                     let columns = metadata
                         .iter()

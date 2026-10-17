@@ -1,4 +1,4 @@
-//! Retained document and mind editors over canonical application resource state.
+//! Retained authored-file editors and their shared session over canonical application state.
 pub mod documents;
-pub mod file_commands;
+pub mod file_session;
 pub mod minds;

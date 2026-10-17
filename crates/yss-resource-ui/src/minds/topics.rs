@@ -66,7 +66,7 @@ impl MindCanvas {
         let node_ids = self
             .selected
             .iter()
-            .filter(|id| *id != &self.snapshot.content.root_id)
+            .filter(|id| *id != &self.file.snapshot().content.root_id)
             .cloned()
             .collect::<Vec<_>>();
         if !node_ids.is_empty() {
@@ -78,7 +78,8 @@ impl MindCanvas {
         let topic = self.selected_topic()?;
         let parent = topic.parent_id.as_ref()?;
         let mut siblings = self
-            .snapshot
+            .file
+            .snapshot()
             .content
             .nodes
             .iter()

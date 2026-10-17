@@ -1,4 +1,4 @@
-//! Shared lifecycle for authored Mind and Markdown files.
+//! Shared lifecycle for authored Mind, Markdown and Chart files.
 use crate::project_writers::{ProjectResourceMutationFacts, context};
 use crate::{ProjectError, ProjectOperationError, ProjectState};
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,9 @@ pub trait ResourceFile: FileContent {
     fn files_mut(data: &mut ProjectData) -> &mut HashMap<FilePath<Self>, FileState<Self>>;
     fn patch(patch: FilePatch<Self>) -> ProjectDataPatch;
     fn key(path: &FilePath<Self>) -> ResourceKey;
+    fn initial(name: &str, _data: &ProjectData) -> Self {
+        Self::new(name, &mut || uuid::Uuid::new_v4().to_string())
+    }
 }
 pub(crate) fn apply_patch<T: ResourceFile>(data: &mut ProjectData, patch: FilePatch<T>) {
     let files = T::files_mut(data);
@@ -123,6 +126,11 @@ fn error(message: impl ToString) -> ProjectOperationError {
         message: message.to_string(),
     }
 }
+fn not_found<T: FileContent>(path: &FilePath<T>) -> ProjectOperationError {
+    ProjectOperationError::ResourceNotFound {
+        path: path.as_str().into(),
+    }
+}
 fn key<T: ResourceFile>(path: &FilePath<T>) -> ResourceKey {
     T::key(path)
 }
@@ -219,7 +227,7 @@ impl ProjectState {
     /// Reference consumers need a current authored document whose saved file still
     /// exists and has not changed externally. Editors can continue using read_file
     /// to recover dirty content even after external removal.
-    pub(crate) fn read_file_source<T: ResourceFile>(
+    pub fn read_file_source<T: ResourceFile>(
         &self,
         project: &ProjectInstanceId,
         path: &FilePath<T>,
@@ -236,9 +244,7 @@ impl ProjectState {
                 });
             }
             let data = self.project_data.read().unwrap();
-            let state = T::files(&data)
-                .get(path)
-                .ok_or_else(|| error("document not found"))?;
+            let state = T::files(&data).get(path).ok_or_else(|| not_found(path))?;
             (state.saved_hash.clone(), state.version.clone())
         };
         let persisted = read_file_content::<T>(session.root.as_path(), path).map_err(error)?;
@@ -257,7 +263,7 @@ impl ProjectState {
         Ok(current)
     }
 
-    pub(crate) fn read_file<T: ResourceFile>(
+    pub fn read_file<T: ResourceFile>(
         &self,
         project: &ProjectInstanceId,
         path: &FilePath<T>,
@@ -270,14 +276,12 @@ impl ProjectState {
             });
         }
         let data = self.project_data.read().unwrap();
-        let document = T::files(&data)
-            .get(path)
-            .ok_or_else(|| error("document not found"))?;
+        let document = T::files(&data).get(path).ok_or_else(|| not_found(path))?;
         Ok(snapshot(project, path, document))
     }
 
     /// GUI and automation both edit the same current document; only Save writes its body.
-    pub(crate) fn apply_file_command<T: ResourceFile>(
+    pub fn apply_file_command<T: ResourceFile>(
         &self,
         project: &ProjectInstanceId,
         operation_id: OperationId,
@@ -328,7 +332,7 @@ impl ProjectState {
             | FileCommand::Rename { path, version, .. }
             | FileCommand::Duplicate { path, version, .. }
             | FileCommand::Delete { path, version } => {
-                let current = source.ok_or_else(|| error("document not found"))?;
+                let current = source.ok_or_else(|| not_found(path))?;
                 if &current.version != version {
                     return Err(ProjectOperationError::ResourceRevisionConflict {
                         message: "document edit version changed".into(),
@@ -355,11 +359,9 @@ impl ProjectState {
         let patch = match command {
             FileCommand::Create { name } => {
                 let path = unique_path(&name)?;
-                let document = FileState::<T>::new(
-                    T::new(path.name(), &mut || uuid::Uuid::new_v4().to_string()),
-                    uuid::Uuid::new_v4().to_string(),
-                )
-                .map_err(error)?;
+                let initial = T::initial(path.name(), &self.project_data.read().unwrap());
+                let document = FileState::<T>::new(initial, uuid::Uuid::new_v4().to_string())
+                    .map_err(error)?;
                 absent.insert(key(&path));
                 writes.push(write(&path, &document)?);
                 result_snapshot = Some(snapshot(project, &path, &document));
@@ -779,8 +781,8 @@ mod tests {
         let prepared = state
             .save_project_as_transaction(project, &destination, OperationId::new())
             .unwrap();
-        let source_doc = state.read_doc(project, &doc.path).unwrap();
-        let source_mind = state.read_mind(project, &mind.path).unwrap();
+        let source_doc = state.read_file(project, &doc.path).unwrap();
+        let source_mind = state.read_file(project, &mind.path).unwrap();
         let unchanged_source_files = source_doc_bytes == std::fs::read(&source_doc_path).unwrap()
             && source_mind_bytes == std::fs::read(&source_mind_path).unwrap();
         let target_doc =
@@ -792,8 +794,8 @@ mod tests {
         let activated = state
             .activate_prepared_project(prepared.prepared_activation)
             .unwrap();
-        let reopened_doc = state.read_doc(&activated.instance_id, &doc.path).unwrap();
-        let reopened_mind = state.read_mind(&activated.instance_id, &mind.path).unwrap();
+        let reopened_doc = state.read_file(&activated.instance_id, &doc.path).unwrap();
+        let reopened_mind = state.read_file(&activated.instance_id, &mind.path).unwrap();
         drop(fixture);
         std::fs::remove_dir_all(destination).unwrap();
 

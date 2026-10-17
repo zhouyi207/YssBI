@@ -2,13 +2,68 @@
 use super::{
     super::{Workbench, name_form::NameForm},
     ResourceAction,
-    operations::GraphTarget,
 };
 use gpui_kit::{Context, Entity, Focusable, SharedString, Window};
 use yss_ui::lifecycle::LogReleased;
 
+/// Kind-specific wording for the shared rename and delete prompts.
+pub(in crate::workbench) struct ResourcePrompts {
+    pub rename_title: SharedString,
+    pub delete_title: SharedString,
+    pub delete_message: SharedString,
+}
+
 impl Workbench {
-    pub(super) fn resource_name_dialog(
+    /// Rename asks for a name, Delete asks for confirmation and Duplicate commits at once.
+    pub(in crate::workbench) fn confirm_resource_action(
+        &mut self,
+        name: String,
+        action: ResourceAction,
+        prompts: ResourcePrompts,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        commit: impl Fn(
+            &mut Self,
+            Option<String>,
+            Option<Entity<NameForm>>,
+            &mut Window,
+            &mut Context<Self>,
+        ) + 'static,
+    ) {
+        match action {
+            ResourceAction::Rename => self.resource_name_dialog(
+                prompts.rename_title,
+                name,
+                crate::text::translate("contextMenu.dialog.renameSubmit"),
+                window,
+                cx,
+                move |view, name, form, window, cx| {
+                    commit(view, Some(name), Some(form), window, cx)
+                },
+            ),
+            ResourceAction::Delete => {
+                let owner = cx.entity().downgrade();
+                crate::modal_window::confirm(
+                    prompts.delete_title,
+                    prompts.delete_message,
+                    crate::text::t("common.delete"),
+                    crate::text::t("common.cancel"),
+                    window,
+                    cx,
+                    move |_, window, cx| {
+                        owner
+                            .update(cx, |view, cx| commit(view, None, None, window, cx))
+                            .log_released();
+                        true
+                    },
+                );
+            }
+            ResourceAction::Duplicate => commit(self, None, None, window, cx),
+            ResourceAction::CopyPath => {}
+        }
+    }
+
+    pub(in crate::workbench) fn resource_name_dialog(
         &mut self,
         title: impl Into<SharedString>,
         initial: String,
@@ -78,7 +133,7 @@ impl Workbench {
         );
     }
 
-    pub(super) fn finish_resource_name(
+    pub(in crate::workbench) fn finish_resource_name(
         &mut self,
         form: Option<Entity<NameForm>>,
         error: Option<&'static str>,
@@ -95,30 +150,5 @@ impl Workbench {
         } else if let Some(error) = error {
             self.error = Some(crate::text::translate(error));
         }
-    }
-
-    pub(super) fn rename_graph_dialog(
-        &mut self,
-        target: GraphTarget,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.resource_name_dialog(
-            crate::text::translate("native.workbench.renameGraph"),
-            target.name.clone(),
-            crate::text::translate("contextMenu.dialog.renameSubmit"),
-            window,
-            cx,
-            move |view, name, form, window, cx| {
-                view.mutate_graph_resource(
-                    target.clone(),
-                    ResourceAction::Rename,
-                    Some(name),
-                    Some(form),
-                    window,
-                    cx,
-                );
-            },
-        );
     }
 }

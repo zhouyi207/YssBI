@@ -1,5 +1,6 @@
 //! Lightweight resource facts from existing membership and resident authorities.
 use crate::{ProjectOperationError, ProjectState, file_resources::ResourceFile};
+use yss_chart_document::ChartDocument;
 use yss_graph_document::GraphResourceKind;
 use yss_project_identity::{
     ProjectInstanceId, ProjectResourceKind as Kind, ProjectResourceRef, ResourceRevision,
@@ -48,7 +49,8 @@ impl ProjectState {
         let graphs =
             crate::scan_graph_resource_index(session.root.as_path()).map_err(read_error)?;
         let charts =
-            crate::chart_io::scan_chart_paths(session.root.as_path()).map_err(read_error)?;
+            crate::file_resources::scan_file_paths::<ChartDocument>(session.root.as_path())
+                .map_err(read_error)?;
         let minds = crate::file_resources::scan_file_paths::<MindDocument>(session.root.as_path())
             .map_err(read_error)?;
         let docs = crate::file_resources::scan_file_paths::<DocDocument>(session.root.as_path())
@@ -91,24 +93,7 @@ impl ProjectState {
         }
         drop(editing);
         drop(revisions);
-        let chart_revisions = self.chart_revisions.read().unwrap();
-        for path in charts {
-            resources.push(ResourceMetadata {
-                resource: ProjectResourceRef {
-                    kind: Kind::Chart,
-                    id: path.as_str().into(),
-                },
-                name: path.display_name().as_str().into(),
-                revision: chart_revisions
-                    .get(&path)
-                    .copied()
-                    .unwrap_or(ResourceRevision::INITIAL),
-                session_id: None,
-                dirty: Some(false),
-                root_topic_id: None,
-            });
-        }
-        drop(chart_revisions);
+        append_files(&mut resources, &data, charts, Kind::Chart);
         append_files(&mut resources, &data, minds, Kind::Mind);
         append_files(&mut resources, &data, docs, Kind::Doc);
         for entry in &mut resources {

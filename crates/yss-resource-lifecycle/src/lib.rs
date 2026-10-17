@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use thiserror::Error;
-use yss_chart_document::ChartResourcePath;
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ProjectInstanceId;
 
@@ -15,39 +14,6 @@ pub enum ResourceLifecycleError {
     TransactionBusy { message: String },
     #[error("stale resource lifecycle: {message}")]
     StaleLifecycle { message: String },
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum LifecycleResourcePath {
-    Graph(GraphResourcePath),
-    Chart(ChartResourcePath),
-}
-
-impl From<&GraphResourcePath> for LifecycleResourcePath {
-    fn from(path: &GraphResourcePath) -> Self {
-        Self::Graph(path.clone())
-    }
-}
-
-impl From<&ChartResourcePath> for LifecycleResourcePath {
-    fn from(path: &ChartResourcePath) -> Self {
-        Self::Chart(path.clone())
-    }
-}
-
-impl From<&LifecycleResourcePath> for LifecycleResourcePath {
-    fn from(path: &LifecycleResourcePath) -> Self {
-        path.clone()
-    }
-}
-
-impl std::fmt::Display for LifecycleResourcePath {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Graph(path) => formatter.write_str(path.as_str()),
-            Self::Chart(path) => formatter.write_str(path.as_str()),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -60,7 +26,7 @@ pub enum ResourceLifecycleIntent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResourceLifecycleOwner {
     pub project_instance_id: ProjectInstanceId,
-    pub resource_path: LifecycleResourcePath,
+    pub resource_path: GraphResourcePath,
     pub token: u64,
     pub intent: ResourceLifecycleIntent,
     registration_id: u64,
@@ -69,7 +35,7 @@ pub struct ResourceLifecycleOwner {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ResourceLifecycleKey {
     project_instance_id: ProjectInstanceId,
-    resource_path: LifecycleResourcePath,
+    resource_path: GraphResourcePath,
 }
 
 impl ResourceLifecycleOwner {
@@ -118,7 +84,7 @@ impl ResourceLifecycleRegistry {
     pub fn register(
         &self,
         project_instance_id: &ProjectInstanceId,
-        resource_path: impl Into<LifecycleResourcePath>,
+        resource_path: &GraphResourcePath,
         token: u64,
         intent: ResourceLifecycleIntent,
     ) -> Result<ResourceLifecycleGuard, ResourceLifecycleError> {
@@ -126,7 +92,7 @@ impl ResourceLifecycleRegistry {
         self.register_locked(
             &mut state,
             project_instance_id,
-            resource_path.into(),
+            resource_path.clone(),
             token,
             intent,
             Some(token),
@@ -136,11 +102,11 @@ impl ResourceLifecycleRegistry {
     pub fn allocate_and_register(
         &self,
         project_instance_id: &ProjectInstanceId,
-        resource_path: impl Into<LifecycleResourcePath>,
+        resource_path: &GraphResourcePath,
         intent: ResourceLifecycleIntent,
     ) -> Result<ResourceLifecycleGuard, ResourceLifecycleError> {
         let mut state = self.lock_state();
-        let resource_path = resource_path.into();
+        let resource_path = resource_path.clone();
         let key = ResourceLifecycleKey {
             project_instance_id: project_instance_id.clone(),
             resource_path: resource_path.clone(),
@@ -176,7 +142,7 @@ impl ResourceLifecycleRegistry {
         &self,
         state: &mut ResourceLifecycleState,
         project_instance_id: &ProjectInstanceId,
-        resource_path: LifecycleResourcePath,
+        resource_path: GraphResourcePath,
         token: u64,
         intent: ResourceLifecycleIntent,
         client_token: Option<u64>,
@@ -500,25 +466,26 @@ mod tests {
     }
 
     #[test]
-    fn graph_and_chart_paths_have_independent_lifecycle_owners() {
+    fn distinct_graph_paths_have_independent_lifecycle_owners() {
         let registry = super::ResourceLifecycleRegistry::default();
-        let session = project("independent-resource-kinds");
-        let graph = super::LifecycleResourcePath::Graph(
-            GraphResourcePath::new("events/Shared.yssbi-event").unwrap(),
-        );
-        let chart = super::LifecycleResourcePath::Chart(
-            ChartResourcePath::parse("charts/Shared.yssbi-chart").unwrap(),
-        );
+        let session = project("independent-resource-paths");
+        let event = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
+        let function = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
 
-        let graph_guard = registry
-            .register(&session, &graph, 1, super::ResourceLifecycleIntent::Rename)
+        let event_guard = registry
+            .register(&session, &event, 1, super::ResourceLifecycleIntent::Rename)
             .unwrap();
-        let chart_guard = registry
-            .register(&session, &chart, 1, super::ResourceLifecycleIntent::Rename)
+        let function_guard = registry
+            .register(
+                &session,
+                &function,
+                1,
+                super::ResourceLifecycleIntent::Rename,
+            )
             .unwrap();
 
-        registry.validate(graph_guard.owner()).unwrap();
-        registry.validate(chart_guard.owner()).unwrap();
+        registry.validate(event_guard.owner()).unwrap();
+        registry.validate(function_guard.owner()).unwrap();
         assert_eq!(registry.entry_count(), 2);
     }
 
@@ -526,75 +493,68 @@ mod tests {
     fn client_tokens_are_monotonic_per_resource_path() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = project("monotonic-resource-token");
-        let chart = super::LifecycleResourcePath::Chart(
-            ChartResourcePath::parse("charts/Report.yssbi-chart").unwrap(),
-        );
+        let graph = GraphResourcePath::new("events/Report.yssbi-event").unwrap();
         let first = registry
-            .register(&session, &chart, 7, super::ResourceLifecycleIntent::Rename)
+            .register(&session, &graph, 7, super::ResourceLifecycleIntent::Rename)
             .unwrap();
         drop(first);
 
         let error = registry
-            .register(&session, &chart, 7, super::ResourceLifecycleIntent::Rename)
+            .register(&session, &graph, 7, super::ResourceLifecycleIntent::Rename)
             .unwrap_err();
 
         assert_stale(error);
         registry
-            .register(&session, &chart, 8, super::ResourceLifecycleIntent::Rename)
+            .register(&session, &graph, 8, super::ResourceLifecycleIntent::Rename)
             .unwrap();
     }
 
     #[test]
-    fn retirement_removes_graph_and_chart_lifecycle_ownership() {
+    fn retirement_removes_every_lifecycle_ownership() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = project("clear-shared-lifecycle");
-        let graph = super::LifecycleResourcePath::Graph(
-            GraphResourcePath::new("events/Clear.yssbi-event").unwrap(),
-        );
-        let chart = super::LifecycleResourcePath::Chart(
-            ChartResourcePath::parse("charts/Clear.yssbi-chart").unwrap(),
-        );
-        let graph_guard = registry
-            .register(&session, &graph, 1, super::ResourceLifecycleIntent::Load)
+        let loaded = GraphResourcePath::new("events/Clear.yssbi-event").unwrap();
+        let renamed = GraphResourcePath::new("events/Renamed.yssbi-event").unwrap();
+        let loaded_guard = registry
+            .register(&session, &loaded, 1, super::ResourceLifecycleIntent::Load)
             .unwrap();
-        let chart_guard = registry
-            .register(&session, &chart, 1, super::ResourceLifecycleIntent::Rename)
+        let renamed_guard = registry
+            .register(
+                &session,
+                &renamed,
+                1,
+                super::ResourceLifecycleIntent::Rename,
+            )
             .unwrap();
 
         drop(registry.boundary_recovering().0.take_state());
 
         assert_eq!(registry.entry_count(), 0);
-        assert_stale(registry.validate(graph_guard.owner()).unwrap_err());
-        assert_stale(registry.validate(chart_guard.owner()).unwrap_err());
+        assert_stale(registry.validate(loaded_guard.owner()).unwrap_err());
+        assert_stale(registry.validate(renamed_guard.owner()).unwrap_err());
     }
 
     #[test]
-    fn tokens_do_not_pollute_other_paths_or_resource_kinds() {
+    fn tokens_do_not_pollute_other_paths() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = project("resource-token-isolation");
-        let graph = super::LifecycleResourcePath::Graph(
-            GraphResourcePath::new("events/Report.yssbi-event").unwrap(),
-        );
-        let chart = super::LifecycleResourcePath::Chart(
-            ChartResourcePath::parse("charts/Report.yssbi-chart").unwrap(),
-        );
-        let other_chart = super::LifecycleResourcePath::Chart(
-            ChartResourcePath::parse("charts/Other.yssbi-chart").unwrap(),
-        );
+        let graph = GraphResourcePath::new("events/Report.yssbi-event").unwrap();
+        let renamed = GraphResourcePath::new("events/Renamed.yssbi-event").unwrap();
+        let other = GraphResourcePath::new("events/Other.yssbi-event").unwrap();
 
         registry
             .register(&session, &graph, 40, super::ResourceLifecycleIntent::Load)
             .unwrap();
         registry
-            .register(&session, &chart, 1, super::ResourceLifecycleIntent::Rename)
-            .unwrap();
-        registry
             .register(
                 &session,
-                &other_chart,
+                &renamed,
                 1,
                 super::ResourceLifecycleIntent::Rename,
             )
+            .unwrap();
+        registry
+            .register(&session, &other, 1, super::ResourceLifecycleIntent::Rename)
             .unwrap();
     }
 

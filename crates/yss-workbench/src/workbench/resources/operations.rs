@@ -2,13 +2,14 @@
 use super::super::Workbench;
 use super::super::name_form::NameForm;
 use super::ResourceAction;
+use super::names::ResourcePrompts;
 use gpui_kit::{ClipboardItem, Context, Entity, Window};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
-pub(super) struct GraphTarget {
+struct GraphTarget {
     pub project: ProjectInstanceId,
     pub lifecycle: u64,
     pub path: GraphResourcePath,
@@ -72,47 +73,32 @@ impl Workbench {
             revision,
             name,
         };
-        match action {
-            ResourceAction::Rename => self.rename_graph_dialog(target, window, cx),
-            ResourceAction::Duplicate => {
-                self.mutate_graph_resource(target, action, None, None, window, cx)
-            }
-            ResourceAction::CopyPath => {
-                cx.write_to_clipboard(ClipboardItem::new_string(target.path.as_str().into()))
-            }
-            ResourceAction::Delete => {
-                let owner = cx.entity().downgrade();
-                crate::modal_window::confirm(
-                    crate::text::format(
-                        "native.workbench.deleteResourceTitle",
-                        &[("value0", target.name.to_string())],
-                    ),
-                    crate::text::t("native.workbench.deleteGraphMessage"),
-                    crate::text::t("common.delete"),
-                    crate::text::t("common.cancel"),
-                    window,
-                    cx,
-                    move |_, window, cx| {
-                        owner
-                            .update(cx, |view, cx| {
-                                view.mutate_graph_resource(
-                                    target.clone(),
-                                    action,
-                                    None,
-                                    None,
-                                    window,
-                                    cx,
-                                )
-                            })
-                            .log_released();
-                        true
-                    },
-                );
-            }
+        if matches!(action, ResourceAction::CopyPath) {
+            cx.write_to_clipboard(ClipboardItem::new_string(target.path.as_str().into()));
+            return;
         }
+        let prompts = ResourcePrompts {
+            rename_title: crate::text::translate("native.workbench.renameGraph").into(),
+            delete_title: crate::text::format(
+                "native.workbench.deleteResourceTitle",
+                &[("value0", target.name.clone())],
+            )
+            .into(),
+            delete_message: crate::text::translate("native.workbench.deleteGraphMessage").into(),
+        };
+        self.confirm_resource_action(
+            target.name.clone(),
+            action,
+            prompts,
+            window,
+            cx,
+            move |view, name, form, window, cx| {
+                view.mutate_graph_resource(target.clone(), action, name, form, window, cx)
+            },
+        );
     }
 
-    pub(super) fn mutate_graph_resource(
+    fn mutate_graph_resource(
         &mut self,
         target: GraphTarget,
         action: ResourceAction,
@@ -170,7 +156,9 @@ impl Workbench {
                     request.revision,
                     OperationId::new(),
                 )?,
-                ResourceAction::CopyPath => unreachable!(),
+                ResourceAction::CopyPath => {
+                    anyhow::bail!("copying a path does not mutate the graph")
+                }
             };
             let path = match action {
                 ResourceAction::Duplicate => {

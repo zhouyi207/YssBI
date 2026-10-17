@@ -17,7 +17,7 @@ The binary composes Workbench; Workbench depends on feature UI crates, never the
 | `yss-data-ui`          | Dataset browser/editor and import forms                                                                                                                |
 | `yss-results-ui`       | Leased result readers, reports, chart editor and plots; Workbench coordinates independent result windows                                               |
 | `yss-settings-ui`      | Retained SettingsPanel, model/knowledge settings and preference editing                                                                                |
-| `yss-resource-ui`      | Markdown documents, mind maps and their captured-version save requests                                                                                 |
+| `yss-resource-ui`      | Markdown documents, mind maps and the authored-file session shared with the chart editor                                                               |
 | `yss-plugin-ui`        | Plugin management and native plugin views over the canonical PluginManager                                                                             |
 
 All GUI crates inherit the same workspace `gpui-kit` dependency. They do not introduce Zed's UI, theme, workspace or GPUI dependency chain. Domain, Application and `yss-desktop-services` remain GPUI-free.
@@ -91,7 +91,7 @@ Save and run capture pending parameter and port input through the canvas owner. 
 
 Node dragging retains shared original positions plus a displacement. Pointer moves do not rebuild the selected-position map; release submits one version-checked move, while cancellation and no-op gestures submit none. Connection geometry survives projection refreshes by connection identity, with endpoint and port-order changes invalidating the relevant cache entries.
 
-Captured file, database and chart saves use their `ApplicationTasks` owner; Workbench save requests use its private `NativeServices`. They do not accept a second Application instance or runtime handle. Operation identities, session/version checks and edited snapshots on persistence failure remain part of the save contract.
+Documents, mind maps and charts are authored files with one editing session (`yss-resource-ui::file_session`): the session owns the file snapshot, save and refresh state, conflicts with a newer version and removal, while each editor keeps only its draft. Workbench routes every committed file receipt — moves, deletions and changes, whether from the GUI, the Assistant or an external writer — to the open editor through the same registry. Captured file, database and chart saves use their `ApplicationTasks` owner; Workbench save requests use its private `NativeServices`. They do not accept a second Application instance or runtime handle. Operation identities, session/version checks and edited snapshots on persistence failure remain part of the save contract.
 
 Analysis graphs express data ports and dependencies. Control flow, effects and sequencing belong to Workflow owners. Execution captures the document and semantic identity, prepares a matching immutable plan internally, and returns run facts and result references. Plan caches are backend details, not a second frontend lifecycle.
 

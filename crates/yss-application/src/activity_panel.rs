@@ -265,10 +265,10 @@ pub fn project_activity_panel(index: Option<&yss_project::ProjectIndex>) -> Acti
                 "chart" => document
                     .rows
                     .extend(index.charts.iter().map(|chart| ActivityRow {
-                        id: format!("chart:{}", chart.chart_path.as_str()),
+                        id: format!("chart:{}", chart.path.as_str()),
                         depth: 1,
                         content: ActivityRowContent::Item(ActivityItem::Chart {
-                            path: chart.chart_path.as_str().into(),
+                            path: chart.path.as_str().into(),
                             name: chart.name.clone(),
                         }),
                     })),

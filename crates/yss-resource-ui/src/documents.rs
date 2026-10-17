@@ -6,6 +6,8 @@ mod render;
 pub use commands::{DocumentSaveOutcome, DocumentSaveRequest};
 pub use details::DetailsDisplay;
 
+use crate::file_session::FileEditor;
+use crate::file_session::{FileEditorEvent, FileSession};
 use gpui_kit::component::{
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
     input::{EditorState, InputEvent},
@@ -24,13 +26,8 @@ actions!(native_documents, [SaveDocument, ToggleDocumentPreview]);
 
 const PREVIEW_RESIZE_SETTLE: Duration = Duration::from_millis(120);
 
-pub enum DocumentEvent {
-    Activated,
-}
-
 pub struct DocumentEditor {
-    services: Arc<ApplicationTasks>,
-    snapshot: DocSnapshot,
+    file: FileSession<yss_project_model::doc::DocDocument>,
     input: Entity<EditorState>,
     preview: Entity<TextViewState>,
     preview_view: TextView,
@@ -42,25 +39,11 @@ pub struct DocumentEditor {
     preview_resize_task: Option<gpui_kit::Task<()>>,
     autosave: autosave::AutosaveState,
     autosave_task: Option<gpui_kit::Task<()>>,
-    _save_task: Option<gpui_kit::Task<()>>,
-    _refresh_task: Option<gpui_kit::Task<()>>,
     autosave_in_flight: bool,
     draft_dirty: bool,
-    busy: bool,
-    refreshing: bool,
-    refresh_again: bool,
-    error: Option<String>,
-    notifications: yss_ui::notifications::Notifications,
 }
 
 impl DocumentEditor {
-    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
-        if let Some(error) = &error {
-            self.notifications.error(error.clone(), cx);
-        }
-        self.error = error;
-    }
-
     pub fn new(
         services: Arc<ApplicationTasks>,
         snapshot: DocSnapshot,
@@ -87,7 +70,7 @@ impl DocumentEditor {
                 InputEvent::Change => {
                     let was_dirty = view.dirty();
                     view.draft_dirty =
-                        view.input.read(cx).text() != view.snapshot.content.0.as_str();
+                        view.input.read(cx).text() != view.file.snapshot().content.0.as_str();
                     view.autosave.edited();
                     view.schedule_autosave(window, cx);
                     if view.preview_visible {
@@ -105,7 +88,7 @@ impl DocumentEditor {
                     }
                     cx.notify();
                 }
-                InputEvent::Focus => cx.emit(DocumentEvent::Activated),
+                InputEvent::Focus => cx.emit(FileEditorEvent::Activated),
                 InputEvent::Blur => view.autosave_on_focus_change(window, cx),
                 _ => {}
             });
@@ -119,8 +102,7 @@ impl DocumentEditor {
             }
         });
         Self {
-            services,
-            snapshot,
+            file: FileSession::new(services, snapshot, window),
             input,
             preview,
             preview_view,
@@ -132,30 +114,13 @@ impl DocumentEditor {
             preview_resize_task: None,
             autosave: autosave::AutosaveState::new(settings),
             autosave_task: None,
-            _save_task: None,
-            _refresh_task: None,
             autosave_in_flight: false,
             draft_dirty: false,
-            busy: false,
-            refreshing: false,
-            refresh_again: false,
-            error: None,
-            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
 
     pub fn snapshot(&self) -> &DocSnapshot {
-        &self.snapshot
-    }
-
-    pub fn path(&self) -> &str {
-        self.snapshot.path.as_str()
-    }
-    pub fn dirty(&self) -> bool {
-        self.snapshot.dirty || self.draft_dirty
-    }
-    pub fn busy(&self) -> bool {
-        self.busy || self.refreshing
+        self.file.snapshot()
     }
 
     pub fn is_editing(&self) -> bool {
@@ -169,7 +134,7 @@ impl DocumentEditor {
             self.input.read(cx).focus_handle(cx)
         };
         window.focus(&handle, cx);
-        cx.emit(DocumentEvent::Activated);
+        cx.emit(FileEditorEvent::Activated);
     }
 
     fn update_preview(&self, cx: &mut Context<Self>) {
@@ -221,7 +186,7 @@ impl DocumentEditor {
 }
 
 impl EventEmitter<PanelEvent> for DocumentEditor {}
-impl EventEmitter<DocumentEvent> for DocumentEditor {}
+impl EventEmitter<FileEditorEvent> for DocumentEditor {}
 impl Focusable for DocumentEditor {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         if self.preview_visible {
@@ -240,7 +205,7 @@ impl BasePanel for DocumentEditor {
     }
     fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {
         if active {
-            cx.emit(DocumentEvent::Activated);
+            cx.emit(FileEditorEvent::Activated);
         } else {
             self.autosave_on_focus_change(window, cx);
         }
@@ -256,7 +221,7 @@ impl Panel for DocumentEditor {
         Some(
             format!(
                 "{}{}",
-                self.snapshot.path.name(),
+                self.file.snapshot().path.name(),
                 if self.dirty() { " *" } else { "" }
             )
             .into(),

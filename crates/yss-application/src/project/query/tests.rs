@@ -37,7 +37,7 @@ fn raw_project_index_tracks_committed_resources_and_rejects_foreign_projects() {
     assert!(initial.docs.is_empty());
 
     let created = application
-        .apply_doc_command(
+        .apply_file_command(
             identity.clone(),
             OperationId::new(),
             DocCommand::Create {
@@ -78,7 +78,7 @@ fn project_query_rejects_a_publication_changed_during_projection() {
     let mut committed_revision = 0;
     let result = application.query_project_index_with(identity.clone(), |_, index| {
         committed_revision = application
-            .apply_doc_command(
+            .apply_file_command(
                 identity.clone(),
                 OperationId::new(),
                 DocCommand::Create {
@@ -114,7 +114,7 @@ fn resource_reveal_uses_the_requested_project_and_an_existing_native_path() {
         .project_instance_id()
         .clone();
     let snapshot = application
-        .apply_doc_command(
+        .apply_file_command(
             identity.clone(),
             OperationId::new(),
             DocCommand::Create {

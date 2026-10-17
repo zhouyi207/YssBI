@@ -2,6 +2,7 @@
 mod parent;
 
 use super::MindCanvas;
+use crate::file_session::{FileEditor, file_status};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     Disableable, Sizable,
@@ -19,6 +20,7 @@ use yss_ui::text::translate;
 #[derive(PartialEq)]
 pub struct DetailsDisplay<'a> {
     path: Cow<'a, str>,
+    status: &'static str,
     topic: Option<TopicDisplay<'a>>,
     selected_count: usize,
     error: Option<Cow<'a, str>>,
@@ -38,6 +40,7 @@ impl DetailsDisplay<'_> {
     pub fn into_owned(self) -> DetailsDisplay<'static> {
         DetailsDisplay {
             path: Cow::Owned(self.path.into_owned()),
+            status: self.status,
             topic: self.topic.map(|topic| TopicDisplay {
                 version: Cow::Owned(topic.version.into_owned()),
                 id: Cow::Owned(topic.id.into_owned()),
@@ -73,18 +76,19 @@ impl MindCanvas {
     pub fn details_state(&self) -> DetailsDisplay<'_> {
         DetailsDisplay {
             path: Cow::Borrowed(self.path()),
+            status: file_status(self),
             topic: self.selected_topic().map(|topic| TopicDisplay {
-                version: Cow::Borrowed(&self.snapshot.version),
+                version: Cow::Borrowed(&self.file.snapshot().version),
                 id: Cow::Borrowed(topic.id.as_str()),
                 collapsed: self.collapsed.contains(&topic.id),
-                busy: self.busy(),
+                busy: !self.file.editable(),
                 dirty: self
                     .buffers
                     .get(&topic.id)
                     .is_some_and(|buffer| buffer.dirty),
             }),
             selected_count: self.selected.len(),
-            error: self.error.as_deref().map(Cow::Borrowed),
+            error: self.file.error().map(|error| Cow::Borrowed(error.as_ref())),
         }
     }
 
@@ -99,17 +103,31 @@ impl MindCanvas {
             .flex()
             .flex_col()
             .child(
-                InspectorHeader::new(IconName::Network, self.snapshot.path.name().to_owned())
-                    .detail(translate("detail.itemTypes.mind")),
+                InspectorHeader::new(
+                    IconName::Network,
+                    self.file.snapshot().path.name().to_owned(),
+                )
+                .detail(translate("detail.itemTypes.mind")),
             )
             .child(topic)
             .child(
                 InspectorSection::new("mind-info", translate("detail.sections.info")).child(
-                    inspector::property_row(
-                        translate("detail.fields.path"),
-                        self.path().to_owned(),
-                        cx,
-                    ),
+                    inspector::property_list([
+                        inspector::property_row(
+                            translate("detail.fields.path"),
+                            self.path().to_owned(),
+                            cx,
+                        )
+                        .into_any_element(),
+                        inspector::property_row(
+                            translate("detail.fields.status"),
+                            translate(file_status(self)),
+                            cx,
+                        )
+                        .id("mind-status")
+                        .role(gpui_kit::accesskit::Role::Status)
+                        .into_any_element(),
+                    ]),
                 ),
             )
             .into_any_element()
@@ -140,12 +158,12 @@ impl MindCanvas {
         let Some(topic) = self.selected_topic() else {
             return section;
         };
-        let busy = self.busy();
+        let busy = !self.file.editable();
         let root = topic.parent_id.is_none();
         let dirty = self.buffers.get(&id).is_some_and(|buffer| buffer.dirty);
         let target = TopicTarget {
             id,
-            version: self.snapshot.version.clone(),
+            version: self.file.snapshot().version.clone(),
         };
         section
             .child(
@@ -207,9 +225,10 @@ impl MindCanvas {
         root: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let busy = self.busy();
+        let busy = !self.file.editable();
         let leaf = !self
-            .snapshot
+            .file
+            .snapshot()
             .content
             .nodes
             .iter()
@@ -287,8 +306,8 @@ impl MindCanvas {
     }
 
     fn accepts_topic(&self, target: &TopicTarget) -> bool {
-        !self.busy()
-            && self.snapshot.version == target.version
+        self.file.editable()
+            && self.file.snapshot().version == target.version
             && self.selected.len() == 1
             && self.selected.contains(&target.id)
     }

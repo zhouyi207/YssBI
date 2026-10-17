@@ -2660,6 +2660,11 @@
       "parameterName": "Parameter%{value0}",
       "returnValue": "Return value",
       "zoomPanel": "Zoom panel",
+      "closeOtherTabs": "Close other tabs",
+      "closeTabsToLeft": "Close tabs to the left",
+      "closeTabsToRight": "Close tabs to the right",
+      "closeAllTabs": "Close all tabs",
+      "tabsCloseProtected": "Save changes and wait for pending operations",
       "newConversation": "New conversation",
       "expandConversation": "Expand conversation",
       "conversationOptions": "Conversation options",
@@ -2696,9 +2701,7 @@
       "deleteDatabaseMessage": "This database and its data will be deleted. Graph nodes referencing it will need another resource selection.",
       "renameDatabase": "Rename database",
       "resourceOperationUnconfirmed": "Resource operation did not complete; changes may already be applied. Check the directory before retrying.",
-      "saveChartBeforeEditing": "Save chart configuration before modifying its resource.",
       "deleteChartMessage": "The chart file will be deleted. The source dataset will be kept.",
-      "chartResourceFailed": "The chart resource was not modified. Refresh the directory and check its actual state.",
       "renameGraph": "Rename graph",
       "newMarkdown": "New Markdown document",
       "fileCreateFailed": "Could not create the file. Check its name and the current project.",
@@ -2833,10 +2836,7 @@
       "executableParentMissing": "The executable has no parent directory"
     },
     "documents": {
-      "togglePreview": "Edit / Preview · Ctrl+Shift+V",
-      "saveFailed": "The document was not saved. Your content is preserved. Check for external changes or file write errors.",
-      "externalChange": "The document changed elsewhere. Your input is preserved; its version must be verified before saving.",
-      "readFailed": "The document could not be read. Your input is preserved. Check the project directory."
+      "togglePreview": "Edit / Preview · Ctrl+Shift+V"
     },
     "canvas": {
       "emptyGraph": "Start with a node",
@@ -2992,9 +2992,7 @@
     },
     "minds": {
       "topicChanged": "The topic changed elsewhere. Your input is preserved. Review it, then reopen or discard input.",
-      "saveFailed": "The mind map was not saved. Your content is preserved. Check external changes or write errors.",
       "topicSubmitFailed": "Topic changes were not submitted. Your input is preserved. Check the current file.",
-      "readFailed": "The mind map could not be read. Your content is preserved.",
       "selectTopicHint": "Select a topic to edit its content and branches",
       "selectedTopics": "%{value0} topics selected",
       "topicContent": "Topic content",
@@ -3009,8 +3007,6 @@
       "axesHint": "Select X and Y columns to view a scatter or line plot",
       "dataFailed": "Could not read plot data for the current configuration. Select columns again or refresh.",
       "previewFailed": "Could not read the chart preview. Check the dataset, column types, or current resource state.",
-      "readFailed": "Could not read the chart. Local configuration is preserved. Refresh the project and retry.",
-      "removed": "The chart was removed. Your unsaved local configuration is preserved.",
       "loading": "Reading chart",
       "preparingData": "Data is prepared in the background",
       "previewUnavailable": "Preview unavailable",
@@ -3023,12 +3019,10 @@
       "otherValues": "%{other_count} additional values grouped as Other",
       "plotSummary": "X: %{value0} · Y: %{value1} · %{value2} plot points",
       "dataPoints": "Data points",
-      "saveFailed": "Could not save the chart. Configuration is preserved. Check the current project and retry.",
       "unnamedDataset": "Unnamed dataset",
       "chooseDataset": "Choose dataset",
       "removedDataset": "Removed dataset",
       "noDataset": "No dataset",
-      "externalChange": "The file changed. Local configuration is preserved. Saving writes the current configuration.",
       "unsavedConfiguration": "Configuration has unsaved changes. Ctrl/Cmd+S to save.",
       "unavailableName": "%{name} (unavailable)",
       "distributionColumn": "Distribution column",
@@ -3157,6 +3151,16 @@
     },
     "inspector": {
       "moreActions": "More actions"
+    },
+    "files": {
+      "saveFailed": "“%{name}” was not saved. Your changes are preserved. Check for external changes or file write errors.",
+      "readFailed": "“%{name}” could not be read. Your changes are preserved. Check the project directory.",
+      "conflict": "“%{name}” changed elsewhere. Your unsaved changes are kept: reload to use the new version, or keep your changes and save over it.",
+      "removed": "“%{name}” was deleted elsewhere. Your unsaved changes stay visible here but can no longer be saved.",
+      "reload": "Reload",
+      "keepChanges": "Keep my changes",
+      "statusConflict": "Changed elsewhere",
+      "statusRemoved": "Deleted"
     }
   }
 }

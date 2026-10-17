@@ -17,9 +17,9 @@ impl Workbench {
             ProjectResourceKind::EventGraph | ProjectResourceKind::FunctionGraph => {
                 self.open_graph(resource.id.clone(), window, cx)
             }
-            ProjectResourceKind::Doc => self.open_document(resource.id.clone(), None, window, cx),
-            ProjectResourceKind::Mind => self.open_mind(resource.id.clone(), None, window, cx),
-            ProjectResourceKind::Chart => self.open_chart(resource.id.clone(), None, window, cx),
+            ProjectResourceKind::Doc | ProjectResourceKind::Mind | ProjectResourceKind::Chart => {
+                self.open_file(resource.id.clone(), None, window, cx)
+            }
         }
     }
 }

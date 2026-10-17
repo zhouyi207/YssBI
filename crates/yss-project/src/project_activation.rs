@@ -3,7 +3,6 @@ use crate::{ProjectSession, ProjectState, ProjectStore};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
-use yss_chart_document::ChartResourcePath;
 use yss_filesystem::NormalizedRoot;
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ProjectInstanceId;
@@ -72,7 +71,6 @@ pub struct PreparedProjectActivation {
     pub data: ProjectData,
     pub store: ProjectStore,
     pub(crate) graph_resource_revisions: HashMap<GraphResourcePath, ResourceRevision>,
-    pub(crate) chart_revisions: HashMap<ChartResourcePath, ResourceRevision>,
     pub(crate) authority_basis: Option<PreparedAuthorityBasis>,
     pub(crate) requires_final_rebuild: bool,
 }
@@ -97,17 +95,11 @@ impl PreparedProjectActivation {
             .keys()
             .map(|path| (path.clone(), ResourceRevision::INITIAL))
             .collect();
-        let chart_revisions = data
-            .charts
-            .keys()
-            .map(|path| (path.clone(), ResourceRevision::INITIAL))
-            .collect();
         Ok(Self {
             session_root,
             data,
             store,
             graph_resource_revisions,
-            chart_revisions,
             authority_basis,
             requires_final_rebuild,
         })

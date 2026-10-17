@@ -4,10 +4,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use super::{
-    GraphResourceIndex, GraphResourcePath, ProjectChartIndexEntry, ProjectError,
-    load_charts_from_root, read_chart_index_entries, scan_graph_resource_index,
-};
+use super::{GraphResourceIndex, GraphResourcePath, ProjectError, scan_graph_resource_index};
 use crate::filesystem::project_root_from_path;
 use crate::manifest::{CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
@@ -82,7 +79,7 @@ pub struct ProjectIndex {
     pub export_time: String,
     pub event_graphs: Vec<ProjectEventGraphIndexEntry>,
     pub function_graphs: Vec<ProjectFunctionGraphIndexEntry>,
-    pub charts: Vec<ProjectChartIndexEntry>,
+    pub charts: Vec<crate::charts::ChartIndexEntry>,
     pub databases: Vec<ProjectDatabaseIndexEntry>,
 }
 
@@ -178,37 +175,29 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     for graph_path in project_data.graphs.keys() {
         write_loaded_graph_document(project_data, root, graph_path)?;
     }
-    for (chart_path, chart) in &project_data.charts {
-        let (relative_path, contents) = super::serialize_chart(chart_path, chart)?;
-        let target = root.join(relative_path);
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(target, contents)?;
-    }
-    for (path, document) in &project_data.minds {
-        use yss_project_model::file::FileContent;
-        std::fs::write(
-            root.join(path.as_str()),
-            document
-                .content()
-                .encode()
-                .map_err(ProjectError::InvalidProjectFormat)?,
-        )?;
-    }
-    for (path, document) in &project_data.docs {
-        use yss_project_model::file::FileContent;
-        std::fs::write(
-            root.join(path.as_str()),
-            document
-                .content()
-                .encode()
-                .map_err(ProjectError::InvalidProjectFormat)?,
-        )?;
-    }
+    write_files(&project_data.charts, root)?;
+    write_files(&project_data.minds, root)?;
+    write_files(&project_data.docs, root)?;
 
     let manifest = project_manifest_from_data(project_data);
     write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
+    Ok(())
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn write_files<T: yss_project_model::file::FileContent>(
+    files: &HashMap<yss_project_model::file::FilePath<T>, yss_project_model::file::FileState<T>>,
+    root: &Path,
+) -> Result<(), ProjectError> {
+    for (path, document) in files {
+        std::fs::write(
+            root.join(path.as_str()),
+            document
+                .content()
+                .encode()
+                .map_err(ProjectError::InvalidProjectFormat)?,
+        )?;
+    }
     Ok(())
 }
 
@@ -221,7 +210,7 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     project_data.metadata.project_name = project_name;
     project_data.metadata.export_time = export_time;
     project_data.databases = discover_databases_from_root(root.as_path())?;
-    project_data.charts = load_charts_from_root(root.as_path())?;
+    project_data.charts = crate::file_resources::load_files(root.as_path())?;
     project_data.minds = crate::file_resources::load_files(root.as_path())?;
     project_data.docs = crate::file_resources::load_files(root.as_path())?;
 
@@ -266,12 +255,12 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
                 })
             })
             .collect::<Result<Vec<_>, ProjectError>>()?;
-    let charts = read_chart_index_entries(root)?;
 
     let (project_name, export_time) = manifest.into_parts();
     Ok(ProjectIndex {
         minds: crate::file_resources::file_index(root)?,
         docs: crate::file_resources::file_index(root)?,
+        charts: crate::file_resources::file_index(root)?,
         project_instance_id: String::new(),
         publication_revision: 0,
         authority_generation: 0,
@@ -279,7 +268,6 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         export_time,
         event_graphs,
         function_graphs,
-        charts,
         databases: Vec::new(),
     })
 }

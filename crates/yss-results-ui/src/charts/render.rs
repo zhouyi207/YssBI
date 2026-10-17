@@ -6,6 +6,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants},
 };
 use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
+use yss_resource_ui::file_session::FileEditor;
 use yss_ui::appearance;
 
 impl Render for ChartEditor {
@@ -45,15 +46,15 @@ impl Render for ChartEditor {
                             .small()
                             .ghost()
                             .label(yss_ui::text::t("common.refresh"))
-                            .disabled(self.busy())
-                            .on_click(cx.listener(|view, _, window, cx| view.refresh(window, cx))),
+                            .disabled(self.busy() || self.file.removed())
+                            .on_click(cx.listener(|view, _, window, cx| view.reload(window, cx))),
                     )
                     .child(
                         Button::new("chart-save")
                             .small()
                             .primary()
                             .label(yss_ui::text::t("common.save"))
-                            .disabled(self.busy() || !self.available || !self.dirty())
+                            .disabled(self.busy() || !self.dirty())
                             .on_click(cx.listener(|view, _, window, cx| view.save(window, cx))),
                     ),
             )
@@ -69,7 +70,7 @@ impl Render for ChartEditor {
 }
 impl ChartEditor {
     fn render_preview(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.preview_loading || self.reading {
+        if self.preview_loading || self.file.reading() {
             return appearance::empty_state(
                 IconName::ChartLine,
                 yss_ui::text::t("native.charts.loading"),

@@ -15,9 +15,9 @@ pub(super) fn edit_document(
     control: &CapabilityControl,
 ) -> Result<(CommittedResourceMutation, DocumentEditReceipt)> {
     let project = session.project_instance_id().clone();
-    let path = doc_path(resource)?;
+    let path = file_path::<DocDocument>(resource)?;
     let snapshot = application
-        .read_doc(project.clone(), path.clone())
+        .read_file(project.clone(), path.clone())
         .map_err(file_error)?;
     if snapshot.version != file_version(version)? {
         return Err(conflict());
@@ -26,7 +26,7 @@ pub(super) fn edit_document(
     let character_count = markdown.chars().count();
     control.check()?;
     let result = application
-        .apply_doc_command(
+        .apply_file_command(
             project,
             OperationId::new(),
             FileCommand::Edit {

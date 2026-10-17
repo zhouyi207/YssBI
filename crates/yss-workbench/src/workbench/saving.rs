@@ -1,11 +1,9 @@
 //! Native save capture and receipt installation; each domain owner commits its own file.
 use super::Workbench;
+use super::files::{FilePanel, FileSave, FileSaved};
 use crate::{
     canvas::{GraphCanvas, GraphCommandOutcome, GraphSaveRequest},
-    charts::{ChartEditor, ChartSaveOutcome, ChartSaveRequest},
     databases::{DatabaseEditor, DatabaseSaveOutcome, DatabaseSaveRequest},
-    documents::{DocumentEditor, DocumentSaveOutcome, DocumentSaveRequest},
-    minds::{MindCanvas, MindSaveOutcome, MindSaveRequest},
     services::NativeServices,
     settings::{SettingsPanel, SettingsSaveOutcome, SettingsSaveRequest},
 };
@@ -15,26 +13,20 @@ use yss_ui::lifecycle::LogReleased;
 
 pub(super) enum SaveTarget {
     Graph(Entity<GraphCanvas>),
-    Document(Entity<DocumentEditor>),
-    Mind(Entity<MindCanvas>),
+    File(FilePanel),
     Database(Entity<DatabaseEditor>),
-    Chart(Entity<ChartEditor>),
     Settings(Entity<SettingsPanel>, Option<WindowHandle<Root>>),
 }
 pub(super) enum SaveRequest {
     Graph(GraphSaveRequest),
-    Document(DocumentSaveRequest),
-    Mind(MindSaveRequest),
+    File(FileSave),
     Database(DatabaseSaveRequest),
-    Chart(ChartSaveRequest),
     Settings(SettingsSaveRequest),
 }
 pub(super) enum SaveOutcome {
     Graph(Box<GraphCommandOutcome>),
-    Document(DocumentSaveOutcome),
-    Mind(MindSaveOutcome),
+    File(FileSaved),
     Database(DatabaseSaveOutcome),
-    Chart(ChartSaveOutcome),
     Settings(SettingsSaveOutcome),
 }
 impl SaveRequest {
@@ -43,10 +35,8 @@ impl SaveRequest {
             Self::Graph(request) => {
                 SaveOutcome::Graph(Box::new(request.commit(&owner.application.application)))
             }
-            Self::Document(request) => SaveOutcome::Document(request.commit(&owner.tasks)),
-            Self::Mind(request) => SaveOutcome::Mind(request.commit(&owner.tasks)),
+            Self::File(request) => SaveOutcome::File(request.commit(&owner.tasks)),
             Self::Database(request) => SaveOutcome::Database(request.commit(&owner.tasks)),
-            Self::Chart(request) => SaveOutcome::Chart(request.commit(&owner.tasks)),
             Self::Settings(request) => SaveOutcome::Settings(request.commit(&owner.settings)),
         }
     }
@@ -57,18 +47,10 @@ impl SaveTarget {
             Self::Graph(view) => view
                 .update(cx, |view, cx| view.prepare_save(cx))
                 .map(SaveRequest::Graph),
-            Self::Document(view) => view
-                .update(cx, |view, cx| view.prepare_save(cx))
-                .map(SaveRequest::Document),
-            Self::Mind(view) => view
-                .update(cx, |view, cx| view.prepare_save(cx))
-                .map(SaveRequest::Mind),
+            Self::File(panel) => panel.prepare_save(cx).map(SaveRequest::File),
             Self::Database(view) => view
                 .update(cx, |view, cx| view.prepare_save(cx))
                 .map(SaveRequest::Database),
-            Self::Chart(view) => view
-                .update(cx, |view, cx| view.prepare_save(cx))
-                .map(SaveRequest::Chart),
             Self::Settings(view, _) => view
                 .update(cx, |view, cx| view.prepare_save(cx))
                 .map(SaveRequest::Settings),
@@ -84,24 +66,12 @@ impl SaveTarget {
             (Self::Graph(view), SaveOutcome::Graph(outcome)) => {
                 !view.update(cx, |view, cx| view.finish_command(*outcome, cx))
             }
-            (Self::Document(view), SaveOutcome::Document(outcome)) => {
-                let failed = outcome.failed();
-                view.update(cx, |view, cx| view.finish_save(outcome, window, cx));
-                failed
-            }
-            (Self::Mind(view), SaveOutcome::Mind(outcome)) => {
-                let failed = outcome.failed();
-                view.update(cx, |view, cx| view.finish_save(outcome, window, cx));
-                failed
+            (Self::File(panel), SaveOutcome::File(outcome)) => {
+                panel.finish_save(outcome, window, cx)
             }
             (Self::Database(view), SaveOutcome::Database(outcome)) => {
                 let failed = outcome.is_failed();
                 view.update(cx, |view, cx| view.finish_save(outcome, cx));
-                failed
-            }
-            (Self::Chart(view), SaveOutcome::Chart(outcome)) => {
-                let failed = outcome.failed();
-                view.update(cx, |view, cx| view.finish_save(outcome, window, cx));
                 failed
             }
             (Self::Settings(view, target_window), SaveOutcome::Settings(outcome)) => {
@@ -121,16 +91,8 @@ impl SaveTarget {
                 window,
                 cx,
             ),
-            Self::Chart(view) => view.update(cx, |view, cx| {
-                view.finish_save(ChartSaveOutcome::failure(), window, cx)
-            }),
             Self::Graph(view) => view.update(cx, |view, cx| view.fail_prepared_save(cx)),
-            Self::Document(view) => view.update(cx, |view, cx| {
-                view.finish_save(DocumentSaveOutcome::new(None, true), window, cx)
-            }),
-            Self::Mind(view) => view.update(cx, |view, cx| {
-                view.finish_save(MindSaveOutcome::new(None, true), window, cx)
-            }),
+            Self::File(panel) => panel.fail_save(window, cx),
             Self::Database(view) => view.update(cx, |view, cx| {
                 view.finish_save(DatabaseSaveOutcome::failed(), cx)
             }),
@@ -139,12 +101,8 @@ impl SaveTarget {
     fn abort(&self, window: &mut Window, cx: &mut Context<Workbench>) {
         match self {
             Self::Settings(view, _) => view.update(cx, |view, cx| view.cancel_prepared_save(cx)),
-            Self::Chart(view) => view.update(cx, |view, cx| view.cancel_prepared_save(window, cx)),
             Self::Graph(view) => view.update(cx, |view, cx| view.cancel_prepared_save(cx)),
-            Self::Document(view) => {
-                view.update(cx, |view, cx| view.cancel_prepared_save(window, cx))
-            }
-            Self::Mind(view) => view.update(cx, |view, cx| view.cancel_prepared_save(window, cx)),
+            Self::File(panel) => panel.cancel_save(window, cx),
             Self::Database(view) => {
                 view.update(cx, |view, cx| view.cancel_prepared_save(window, cx))
             }
@@ -190,18 +148,9 @@ impl Workbench {
             .filter(|view| view.read(cx).dirty(cx))
             .map(SaveTarget::Graph)
             .chain(
-                self.documents
-                    .values()
-                    .filter_map(gpui_kit::WeakEntity::upgrade)
-                    .filter(|view| view.read(cx).dirty())
-                    .map(SaveTarget::Document),
-            )
-            .chain(
-                self.minds
-                    .values()
-                    .filter_map(gpui_kit::WeakEntity::upgrade)
-                    .filter(|view| view.read(cx).dirty())
-                    .map(SaveTarget::Mind),
+                self.file_panels()
+                    .filter(|panel| panel.dirty(cx))
+                    .map(SaveTarget::File),
             )
             .chain(
                 self.databases
@@ -209,13 +158,6 @@ impl Workbench {
                     .filter_map(gpui_kit::WeakEntity::upgrade)
                     .filter(|view| view.read(cx).dirty())
                     .map(SaveTarget::Database),
-            )
-            .chain(
-                self.charts
-                    .values()
-                    .filter_map(gpui_kit::WeakEntity::upgrade)
-                    .filter(|view| view.read(cx).dirty())
-                    .map(SaveTarget::Chart),
             )
             .chain(
                 self.settings

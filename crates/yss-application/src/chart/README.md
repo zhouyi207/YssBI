@@ -1,15 +1,16 @@
 # Chart application
 
 > Status: Current
-> Scope: 图表资源操作、预览投影、保存和前端配置草稿的交付契约
+> Scope: 图表预览投影、Harness 图表设置和前端配置草稿的交付契约
 > Canonical owners: 本模块编排图表用例；Project 拥有持久化和资源版本，前端拥有配置草稿
 > Update when: 图表查询、保存、预览或版本身份改变时
 
 ## 资源与预览
 
-[resources.rs](resources.rs) 协调 Project 的图表文档操作；[query.rs](query.rs) 捕获及重验项目、数据库版本；[projection.rs](projection.rs) 只接收数值和轴格式并生成有界绘图点，不访问会话或执行器。采样保留原有步长规则，输出点数组受请求上限约束，不再先复制全部有效点。
+图表文件的读取、编辑、保存、复制、重命名和删除与 Mind/Doc 共用 [file_resources.rs](../file_resources.rs)
+的 `read_file`/`apply_file_command`；本模块只负责预览。[query.rs](query.rs) 捕获及重验项目、数据库版本；[projection.rs](projection.rs) 只接收数值和轴格式并生成有界绘图点，不访问会话或执行器。采样保留原有步长规则，输出点数组受请求上限约束，不再先复制全部有效点。
 
-复制的可选名称直接交给 Project writer，在同一次文件事务中分配实际名称和新路径；GUI 未指定时沿用默认副本命名。
+复制的可选名称直接交给 Project 文件命令，在同一次文件事务中分配实际名称和新路径；GUI 未指定时沿用默认副本命名。
 
 [原生宿主](../../../yss-desktop-gpui/README.md)直接消费本模块的完整图表文档、原数据库分布和有界列对，
 使用 GPUI 绘制独立直方图、散点与折线。配置草稿及绘图坐标由原生视图拥有，保存、资源版本、分布和数值投影仍由 Rust 原 owner 拥有。
@@ -24,16 +25,17 @@
 
 ## 保存与版本
 
-GUI 的独立 Chart Save 按提交的完整内容覆盖资源，不接受 frontend `expectedRevision`。
-Harness 的图表设置编辑携带读取时的资源 revision，Application 将它交给同一 Project writer，
-在捕获事务基线时比较并在提交处重验，拒绝覆盖期间发生的新修改。
-Harness 的 `inspect_chart` 返回当前类型化配置；`update_chart` 只合并显式设置的字段，再通过上述 writer 立即持久化。
+GUI 保存把配置草稿作为 `ChartEdit::SetDocument` 提交到捕获的文件版本，再执行 Save；
+文件在磁盘上被外部修改或版本已变化时保存被拒绝，草稿保留，由编辑器的冲突状态决定重新载入或保留草稿后覆盖。
+Harness 的 `inspect_chart` 返回当前类型化配置和文件版本（revision 与文件会话）；`update_chart` 校验读取时的版本，
+只合并显式设置的字段，以同样的 Edit 与 Save 立即持久化，两次提交都会发布资源事件。
 省略字段保持原值，轴的 null 清空对应配置，空 databaseId 断开数据源；这两个工具不触发数据计算或图表渲染。
-`ChartDocument` 和图表文件只保存图表配置与格式版本，不携带资源 `revision`；资源版本由 Rust Project 单独管理。
-`yss-chart-document::ChartType` 是图表类型的唯一 Rust 定义；文档、Project 索引和变更状态、Harness 设置
-共用 histogram/scatter/line 枚举及其序列化，Application 不再维护字符串与类型之间的映射。
+`ChartDocument` 和图表文件只保存图表配置与格式版本，不携带资源 `revision`；资源版本由 Project 的文件状态管理。
+`yss-chart-document::ChartType` 是图表类型的唯一 Rust 定义；文档和 Harness 设置共用 histogram/scatter/line
+枚举及其序列化，Application 不再维护字符串与类型之间的映射。
 
-前端用 operation ID 和资源路径确认保存回执，通过文档内容判断保存期间是否产生新编辑，成功才清除 dirty。干净图表的刷新依据资源索引；GUI 初次视图读取和索引刷新都必须携带捕获的 Project publication revision，由 Rust 校验快照一致性。前端在途请求也以发布版本区分，返回时保留原项目、资源修订及读取令牌检查。Application 的原生/Harness 读取仍可使用已捕获会话的可选版本入口。重命名、删除等资源操作和 Rust 内部事务继续校验资源版本。
+编辑器从文件快照开始，资源事件按修订号决定是否重新读取；自身保存回执已包含的修订不会再读。
+数据集目录由工作台已接纳的项目索引提供，图表读取不再为单个文件查询完整项目索引。
 
 图表格式与字段校验由 `yss-chart-document` 和 Project 拥有，原生宿主直接消费类型化文档和查询结果。
 列对投影只交付有限坐标及 number/date/datetime 轴格式，可选轴标签由呈现层显示；

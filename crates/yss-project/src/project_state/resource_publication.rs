@@ -5,10 +5,6 @@ pub(crate) fn validate_context_revisions(
     context: &ProjectTransactionContext,
     data: &ProjectData,
     graph_resource_revisions: &std::collections::HashMap<GraphResourcePath, ResourceRevision>,
-    chart_revisions: &std::collections::HashMap<
-        ChartResourcePath,
-        yss_project_identity::ResourceRevision,
-    >,
 ) -> Result<(), ProjectOperationError> {
     for resource in &context.affected_resources {
         let expected = context.expected_revisions.get(resource).ok_or_else(|| {
@@ -37,9 +33,10 @@ pub(crate) fn validate_context_revisions(
                 .ok()
                 .and_then(|path| data.docs.get(&path))
                 .map(|doc| doc.version.revision),
-            ResourceKey::Chart(path) => ChartResourcePath::parse(path.0.as_ref())
+            ResourceKey::Chart(path) => yss_project_model::chart::ChartPath::parse(&path.0)
                 .ok()
-                .and_then(|path| chart_revisions.get(&path).copied()),
+                .and_then(|path| data.charts.get(&path))
+                .map(|chart| chart.version.revision),
         };
         if actual != Some(*expected) {
             return Err(ProjectOperationError::ResourceRevisionConflict {
@@ -72,7 +69,7 @@ pub(crate) fn validate_context_revisions(
             ResourceKey::Doc(path) => yss_project_model::doc::DocPath::parse(&path.0)
                 .ok()
                 .is_some_and(|path| data.docs.contains_key(&path)),
-            ResourceKey::Chart(path) => ChartResourcePath::parse(path.0.as_ref())
+            ResourceKey::Chart(path) => yss_project_model::chart::ChartPath::parse(&path.0)
                 .ok()
                 .is_some_and(|path| data.charts.contains_key(&path)),
         };
@@ -81,24 +78,6 @@ pub(crate) fn validate_context_revisions(
                 message: format!("expected {resource:?} to remain absent"),
             });
         }
-    }
-    Ok(())
-}
-
-pub(super) fn validate_chart_path_insertion(
-    data: &ProjectData,
-    chart_path: &ChartResourcePath,
-) -> Result<(), ProjectOperationError> {
-    let portable_key = chart_path.display_name().portable_key();
-    if data.charts.keys().any(|existing| {
-        existing != chart_path && existing.display_name().portable_key() == portable_key
-    }) {
-        return Err(ProjectOperationError::ResourceRevisionConflict {
-            message: format!(
-                "chart path '{}' conflicts with an existing portable name",
-                chart_path.as_str()
-            ),
-        });
     }
     Ok(())
 }
@@ -220,136 +199,9 @@ pub(super) fn normalize_function_patch_revisions(
                 )?;
             }
         }
-        ProjectDataPatch::Mind(_)
-        | ProjectDataPatch::Doc(_)
-        | ProjectDataPatch::UpsertChart { .. }
-        | ProjectDataPatch::RemoveChart { .. }
-        | ProjectDataPatch::MoveChart { .. } => {}
+        ProjectDataPatch::Mind(_) | ProjectDataPatch::Doc(_) | ProjectDataPatch::Chart(_) => {}
     }
     Ok(())
-}
-
-pub(super) fn chart_document_state(
-    document: &ChartDocument,
-) -> yss_project_history::ChartDocumentState {
-    yss_project_history::ChartDocumentState {
-        database_id: document.database_id.clone(),
-        chart_type: document.chart_type,
-        encodings: document.encodings.clone(),
-    }
-}
-
-pub(super) fn chart_lifecycle_state(
-    path: &ChartResourcePath,
-    revision: ResourceRevision,
-) -> yss_project_history::ResourceLifecycleState {
-    yss_project_history::ResourceLifecycleState {
-        revision,
-        path: path.as_str().into(),
-        kind: yss_project_history::ResourceLifecycleKind::Chart,
-        name: path.display_name().as_str().to_string(),
-    }
-}
-
-pub(super) fn chart_move_revision(
-    target: &ChartResourcePath,
-    source_revision: ResourceRevision,
-    retained_target_revision: Option<ResourceRevision>,
-) -> Result<ResourceRevision, ProjectOperationError> {
-    checked_resource_revision(
-        target.as_str(),
-        source_revision.max(retained_target_revision.unwrap_or(ResourceRevision::INITIAL)),
-    )
-}
-
-pub(super) fn chart_publication_deltas(
-    operation_id: OperationId,
-    patch: &ProjectDataPatch,
-    data: &ProjectData,
-    revisions: &std::collections::HashMap<ChartResourcePath, ResourceRevision>,
-) -> Result<Vec<yss_project_history::ResourceDeltaEvent>, ProjectOperationError> {
-    let chart_key = |path: &ChartResourcePath| {
-        ResourceKey::Chart(yss_project_history::ChartResourceKey(path.as_str().into()))
-    };
-    match patch {
-        ProjectDataPatch::UpsertChart { path, document } => {
-            let before = data.charts.get(path);
-            let retained = revisions.get(path).copied();
-            let revision = match retained {
-                Some(retained) => checked_resource_revision(path.as_str(), retained)?,
-                None => ResourceRevision::INITIAL,
-            };
-            let (from_revision, payload) = if let Some(before) = before {
-                (
-                    retained.ok_or_else(|| ProjectOperationError::ResourceRevisionConflict {
-                        message: format!("chart '{}' has no resource revision", path.as_str()),
-                    })?,
-                    yss_project_history::ResourceDocumentPatch::Chart(
-                        yss_project_history::ChartDocumentPatch {
-                            before: chart_document_state(before),
-                            after: chart_document_state(document),
-                        },
-                    ),
-                )
-            } else {
-                (
-                    retained.unwrap_or(revision),
-                    yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
-                        yss_project_history::ResourceLifecyclePatch {
-                            before: None,
-                            after: Some(chart_lifecycle_state(path, revision)),
-                        },
-                    ),
-                )
-            };
-            Ok(vec![yss_project_history::ResourceDeltaEvent {
-                resource: chart_key(path),
-                from_revision,
-                to_revision: revision,
-                caused_by: Some(operation_id),
-                payload,
-            }])
-        }
-        ProjectDataPatch::RemoveChart { path, revision } => {
-            if !data.charts.contains_key(path) {
-                return Err(ProjectOperationError::ResourceRevisionConflict {
-                    message: format!("chart '{}' is absent", path.as_str()),
-                });
-            }
-            Ok(vec![yss_project_history::ResourceDeltaEvent {
-                resource: chart_key(path),
-                from_revision: *revision,
-                to_revision: checked_resource_revision(path.as_str(), *revision)?,
-                caused_by: Some(operation_id),
-                payload: yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
-                    yss_project_history::ResourceLifecyclePatch {
-                        before: Some(chart_lifecycle_state(path, *revision)),
-                        after: None,
-                    },
-                ),
-            }])
-        }
-        ProjectDataPatch::MoveChart { from, to, .. } => {
-            let from_revision = revisions.get(from).copied().ok_or_else(|| {
-                ProjectOperationError::ResourceRevisionConflict {
-                    message: format!("chart '{}' has no resource revision", from.as_str()),
-                }
-            })?;
-            Ok(vec![yss_project_history::ResourceDeltaEvent {
-                resource: chart_key(to),
-                from_revision,
-                to_revision: chart_move_revision(to, from_revision, revisions.get(to).copied())?,
-                caused_by: Some(operation_id),
-                payload: yss_project_history::ResourceDocumentPatch::ResourceMove(
-                    yss_project_history::ResourcePathMovePatch {
-                        from: from.as_str().into(),
-                        to: to.as_str().into(),
-                    },
-                ),
-            }])
-        }
-        _ => Ok(Vec::new()),
-    }
 }
 
 pub(super) fn canonical_resource_lifecycle_events(
@@ -434,11 +286,9 @@ pub(super) fn canonical_resource_lifecycle_events(
             )]);
         }
         ProjectDataPatch::MoveGraph { .. } => {}
-        ProjectDataPatch::Mind(_)
-        | ProjectDataPatch::Doc(_)
-        | ProjectDataPatch::UpsertChart { .. }
-        | ProjectDataPatch::RemoveChart { .. }
-        | ProjectDataPatch::MoveChart { .. } => return Ok(Vec::new()),
+        ProjectDataPatch::Mind(_) | ProjectDataPatch::Doc(_) | ProjectDataPatch::Chart(_) => {
+            return Ok(Vec::new());
+        }
     }
     let ProjectDataPatch::MoveGraph {
         from,
@@ -514,11 +364,7 @@ pub(super) fn patch_projection_paths(patch: &ProjectDataPatch, data: &ProjectDat
                     .map(|path| path.as_str().to_string()),
             );
         }
-        ProjectDataPatch::Mind(_)
-        | ProjectDataPatch::Doc(_)
-        | ProjectDataPatch::UpsertChart { .. }
-        | ProjectDataPatch::RemoveChart { .. }
-        | ProjectDataPatch::MoveChart { .. } => {}
+        ProjectDataPatch::Mind(_) | ProjectDataPatch::Doc(_) | ProjectDataPatch::Chart(_) => {}
     }
     paths.into_iter().collect()
 }

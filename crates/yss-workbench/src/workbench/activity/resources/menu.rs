@@ -86,15 +86,11 @@ pub(super) fn resource_menu(
                         ActivityRowContent::Item(ActivityItem::Database { id, .. }) => {
                             ActivityEvent::DatabaseResource(id.clone(), action)
                         }
-                        ActivityRowContent::Item(ActivityItem::Chart { path, .. }) => {
-                            ActivityEvent::ChartResource(path.clone(), action)
-                        }
-                        ActivityRowContent::Item(ActivityItem::Doc { path, .. }) => {
-                            ActivityEvent::DocumentResource(path.clone(), action)
-                        }
-                        ActivityRowContent::Item(ActivityItem::Mind { path, .. }) => {
-                            ActivityEvent::MindResource(path.clone(), action)
-                        }
+                        ActivityRowContent::Item(
+                            ActivityItem::Chart { path, .. }
+                            | ActivityItem::Doc { path, .. }
+                            | ActivityItem::Mind { path, .. },
+                        ) => ActivityEvent::FileResource(path.clone(), action),
                         _ => return,
                     };
                     cx.emit(event);
@@ -120,7 +116,7 @@ fn reveal_request(item: &ActivityItem) -> Option<RevealProjectResourceRequest> {
             path: yss_project_model::mind::MindPath::parse(path).ok()?,
         },
         ActivityItem::Chart { path, .. } => RevealProjectResourceRequest::Chart {
-            chart_path: yss_chart_document::ChartResourcePath::parse(path).ok()?,
+            path: yss_project_model::chart::ChartPath::parse(path).ok()?,
         },
         ActivityItem::Database { id, .. } => RevealProjectResourceRequest::Database {
             database_id: id.clone(),

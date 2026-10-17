@@ -37,20 +37,13 @@ impl Workbench {
             return;
         };
         let editor = panel.view();
-        if let Ok(document) = editor
-            .clone()
-            .downcast::<crate::documents::DocumentEditor>()
-        {
-            document.update(cx, |document, cx| document.save(window, cx));
-        } else if let Ok(mind) = editor.clone().downcast::<crate::minds::MindCanvas>() {
-            mind.update(cx, |mind, cx| mind.save(window, cx));
+        if let Some(file) = super::files::FilePanel::from_view(editor.clone()) {
+            file.save(window, cx);
         } else if let Ok(database) = editor
             .clone()
             .downcast::<crate::databases::DatabaseEditor>()
         {
             database.update(cx, |editor, cx| editor.save(window, cx));
-        } else if let Ok(chart) = editor.clone().downcast::<crate::charts::ChartEditor>() {
-            chart.update(cx, |chart, cx| chart.save(window, cx));
         } else if let Ok(graph) = editor.downcast::<crate::canvas::GraphCanvas>() {
             graph.update(cx, |graph, cx| graph.submit(GraphCommand::Save, None, cx));
         }

@@ -24,10 +24,12 @@ yss-graph-execution = { path = "../yss-graph-execution" }
 yss-node-kernel = { path = "../yss-node-kernel" }
 yss-project = { path = "../yss-project" }
 yss-project-identity = { path = "../yss-project-identity" }
+yss-project-model = { path = "../yss-project-model" }
+yss-resource-ui = { path = "../yss-resource-ui" }
 yss-ui = { path = "../yss-ui" }
 
 [dev-dependencies]
+tempfile = "3"
 gpui-kit = { workspace = true, features = ["test-support"] }
 tokio.workspace = true
 yss-project = { path = "../yss-project", features = ["test-support"] }
-yss-project-model = { path = "../yss-project-model" }

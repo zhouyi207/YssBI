@@ -12,7 +12,7 @@ use yss_graph_document::{
 use yss_node_registry::NodeRegistry;
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::{GraphResourceDocument, ProjectDataPatch};
-use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};
+use yss_resource_lifecycle::ResourceLifecycleIntent;
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
 use crate::project_writers::{ProjectResourceMutationFacts, context};
@@ -548,7 +548,7 @@ impl ProjectState {
     pub(crate) fn acquire_resource_rename_ownership(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-        resource_path: LifecycleResourcePath,
+        resource_path: &GraphResourcePath,
         lifecycle_token: u64,
     ) -> Result<crate::ResourceRenameOwnershipLease, ProjectOperationError> {
         let session = self.capture_project_session()?;
@@ -603,7 +603,7 @@ impl ProjectState {
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
         let mut ownership = self.acquire_resource_rename_ownership(
             expected_project_instance_id,
-            LifecycleResourcePath::Graph(graph_path.clone()),
+            graph_path,
             lifecycle_token,
         )?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;

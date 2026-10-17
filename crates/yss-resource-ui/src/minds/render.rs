@@ -2,6 +2,7 @@ use super::layout::TopicPlacement;
 use super::{
     CancelMindGesture, DeleteTopics, FitMind, FitTopics, MindCanvas, SaveMind, SelectTopics,
 };
+use crate::file_session::FileEditor;
 use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
@@ -76,7 +77,7 @@ impl Render for MindCanvas {
                     .layout
                     .nodes
                     .iter()
-                    .map(|node| view.snapshot.content.nodes[node.index].id.clone())
+                    .map(|node| view.file.snapshot().content.nodes[node.index].id.clone())
                     .collect();
                 view.changed(cx);
             }))
@@ -153,7 +154,7 @@ impl MindCanvas {
         placement: TopicPlacement,
         cx: &mut Context<Self>,
     ) -> gpui_kit::AnyElement {
-        let topic = &self.snapshot.content.nodes[placement.index];
+        let topic = &self.file.snapshot().content.nodes[placement.index];
         let id = topic.id.clone();
         let content = &topic.content;
         let label = if let Some((previous, state)) = self.labels.get_mut(&id) {

@@ -1,5 +1,6 @@
 //! File information uses the editor's current snapshot and draft status.
 use super::DocumentEditor;
+use crate::file_session::{FileEditor, file_status};
 use gpui_kit::assets::IconName;
 use gpui_kit::{App, IntoElement, div, prelude::*};
 use std::borrow::Cow;
@@ -10,8 +11,7 @@ use yss_ui::text::translate;
 #[derive(PartialEq)]
 pub struct DetailsDisplay<'a> {
     path: Cow<'a, str>,
-    busy: bool,
-    dirty: bool,
+    status: &'static str,
     error: Option<Cow<'a, str>>,
 }
 
@@ -19,8 +19,7 @@ impl DetailsDisplay<'_> {
     pub fn into_owned(self) -> DetailsDisplay<'static> {
         DetailsDisplay {
             path: Cow::Owned(self.path.into_owned()),
-            busy: self.busy,
-            dirty: self.dirty,
+            status: self.status,
             error: self.error.map(|error| Cow::Owned(error.into_owned())),
         }
     }
@@ -31,26 +30,19 @@ impl DocumentEditor {
     pub fn details_state(&self) -> DetailsDisplay<'_> {
         DetailsDisplay {
             path: Cow::Borrowed(self.path()),
-            busy: self.busy(),
-            dirty: self.dirty(),
-            error: self.error.as_deref().map(Cow::Borrowed),
+            status: file_status(self),
+            error: self.file.error().map(|error| Cow::Borrowed(error.as_ref())),
         }
     }
 
     pub fn render_details(&self, cx: &App) -> impl IntoElement + use<> {
-        let status = translate(if self.busy() {
-            "native.workbench.loadingOrSaving"
-        } else if self.dirty() {
-            "native.workbench.unsavedChanges"
-        } else {
-            "native.workbench.saved"
-        });
+        let status = translate(file_status(self));
         div()
             .min_w_0()
             .flex()
             .flex_col()
             .child(
-                InspectorHeader::new(IconName::FileText, self.snapshot.path.name().to_owned())
+                InspectorHeader::new(IconName::FileText, self.snapshot().path.name().to_owned())
                     .detail(translate("native.workbench.markdownDocument")),
             )
             .child(

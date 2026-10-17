@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use yss_chart_document::{ChartEncodings, ChartType};
 use yss_graph_document::{FunctionParameterId, GraphResourcePath};
 use yss_project_identity::{OperationId, ResourceRevision};
 
@@ -126,20 +125,6 @@ pub struct ResourcePathMovePatch {
     pub to: Box<str>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChartDocumentState {
-    pub database_id: String,
-    pub chart_type: ChartType,
-    pub encodings: ChartEncodings,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChartDocumentPatch {
-    pub before: ChartDocumentState,
-    pub after: ChartDocumentState,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DatabaseDocumentPatch {
     pub before: Option<yss_database_contract::DatabaseDecl>,
@@ -150,7 +135,6 @@ pub struct DatabaseDocumentPatch {
 #[serde(tag = "kind", content = "patch", rename_all = "snake_case")]
 pub enum ResourceDocumentPatch {
     Function(FunctionDocumentPatch),
-    Chart(ChartDocumentPatch),
     ResourceLifecycle(ResourceLifecyclePatch),
     ResourceMove(ResourcePathMovePatch),
     Database(DatabaseDocumentPatch),

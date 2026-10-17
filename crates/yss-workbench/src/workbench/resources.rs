@@ -1,14 +1,10 @@
 //! Native resource creation consumes the existing application receipt and publication.
-mod authored;
-mod charts;
 mod databases;
-mod files;
-mod names;
+pub(in crate::workbench) mod names;
 mod navigation;
 mod operations;
 mod reveal;
 use super::Workbench;
-pub(super) use authored::AuthoredKind;
 use gpui_kit::{Context, Window};
 use yss_ui::lifecycle::LogReleased;
 #[derive(Clone, Copy)]

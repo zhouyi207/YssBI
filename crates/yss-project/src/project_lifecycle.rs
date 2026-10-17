@@ -9,10 +9,8 @@ use yss_filesystem::{
     validate_destination_policy,
 };
 use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
-use yss_project_layout::{
-    CHART_EXTENSION, CHARTS_DIR, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE,
-};
-use yss_project_model::file::FileContent;
+use yss_project_layout::{CHART_EXTENSION, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE};
+use yss_project_model::file::{FileContent, FilePath, FileState};
 use yss_project_model::{ProjectData, normalize_project_name};
 
 pub struct PreparedProjectCopy {
@@ -395,7 +393,6 @@ fn copy_mutations(
         write_mutation(catalog_path, catalog),
     );
     files.remove(Path::new(PROJECT_METADATA_FILE));
-    files.retain(|path, _| !path.starts_with(CHARTS_DIR));
     files.insert(
         PathBuf::from(PROJECT_METADATA_FILE),
         write_mutation(
@@ -408,26 +405,28 @@ fn copy_mutations(
             crate::serialize_graph_document(authority, graph_path).map_err(prepare_error)?;
         files.insert(path.clone(), write_mutation(path, contents));
     }
-    for (chart_path, chart) in &authority.charts {
-        let (path, contents) = crate::serialize_chart(chart_path, chart).map_err(prepare_error)?;
-        files.insert(path.clone(), write_mutation(path, contents));
-    }
-    for (mind_path, mind) in &authority.minds {
-        let path = PathBuf::from(mind_path.as_str());
-        let contents = mind.content().encode().map_err(prepare_error)?;
-        files.insert(path.clone(), write_mutation(path, contents));
-    }
-    for (doc_path, doc) in &authority.docs {
-        let path = PathBuf::from(doc_path.as_str());
-        let contents = doc.content().encode().map_err(prepare_error)?;
-        files.insert(path.clone(), write_mutation(path, contents));
-    }
+    resident_file_writes(&mut files, &authority.charts)?;
+    resident_file_writes(&mut files, &authority.minds)?;
+    resident_file_writes(&mut files, &authority.docs)?;
     let mut mutations = directories
         .into_iter()
         .map(|relative_path| StagedFilesystemMutation::CreateDirectory { relative_path })
         .collect::<Vec<_>>();
     mutations.extend(files.into_values());
     Ok(mutations)
+}
+
+// Resident bodies include unsaved edits; they replace the copied source files.
+fn resident_file_writes<T: FileContent>(
+    files: &mut BTreeMap<PathBuf, StagedFilesystemMutation>,
+    resident: &std::collections::HashMap<FilePath<T>, FileState<T>>,
+) -> Result<(), ProjectOperationError> {
+    for (path, state) in resident {
+        let path = PathBuf::from(path.as_str());
+        let contents = state.content().encode().map_err(prepare_error)?;
+        files.insert(path.clone(), write_mutation(path, contents));
+    }
+    Ok(())
 }
 
 fn validate_project_copy_staged_file(relative: &Path, staged: &Path) -> Result<(), String> {

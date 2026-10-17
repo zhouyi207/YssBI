@@ -96,7 +96,7 @@ impl MindCanvas {
                 for node in &self.layout.nodes {
                     if intersects(rect, node.bounds) {
                         self.selected
-                            .insert(self.snapshot.content.nodes[node.index].id.clone());
+                            .insert(self.file.snapshot().content.nodes[node.index].id.clone());
                     }
                 }
             }
@@ -132,7 +132,7 @@ impl MindCanvas {
         let rect = if selection && !self.selected.is_empty() {
             let mut selected = self.layout.nodes.iter().filter(|node| {
                 self.selected
-                    .contains(&self.snapshot.content.nodes[node.index].id)
+                    .contains(&self.file.snapshot().content.nodes[node.index].id)
             });
             let Some(first) = selected.next() else {
                 return;

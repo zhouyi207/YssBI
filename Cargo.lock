@@ -12886,9 +12886,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "thiserror 2.0.20",
- "yss-project-layout",
- "yss-resource-naming",
 ]
 
 [[package]]
@@ -13522,7 +13519,6 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "uuid",
- "yss-chart-document",
  "yss-database-contract",
  "yss-graph-document",
  "yss-project-identity",
@@ -13619,7 +13615,6 @@ name = "yss-resource-lifecycle"
 version = "0.1.0"
 dependencies = [
  "thiserror 2.0.20",
- "yss-chart-document",
  "yss-graph-document",
  "yss-project-identity",
 ]
@@ -13639,10 +13634,14 @@ version = "0.5.0"
 dependencies = [
  "gpui-kit",
  "serde_json",
+ "tempfile",
+ "tokio",
  "uuid",
  "yss-application",
  "yss-desktop-services",
+ "yss-filesystem",
  "yss-project",
+ "yss-project-history",
  "yss-project-identity",
  "yss-project-model",
  "yss-settings",
@@ -13657,6 +13656,7 @@ dependencies = [
  "chrono",
  "gpui-kit",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "yss-application",
@@ -13671,6 +13671,7 @@ dependencies = [
  "yss-project",
  "yss-project-identity",
  "yss-project-model",
+ "yss-resource-ui",
  "yss-ui",
 ]
 

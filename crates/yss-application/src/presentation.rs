@@ -358,7 +358,7 @@ impl ApplicationState {
                     Kind::Chart => index
                         .charts
                         .iter()
-                        .any(|entry| entry.chart_path.as_str() == resource.id),
+                        .any(|entry| entry.path.as_str() == resource.id),
                     Kind::Mind => index
                         .minds
                         .iter()

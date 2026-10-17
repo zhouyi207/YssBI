@@ -7,7 +7,7 @@ use gpui_kit::component::{
         AnyDrag, BasePanelView, ClosePanel, DockArea, DockLayout, DockPlacement, DragPanel,
         PanelHandle, PanelId, TabGroupContext, ToggleZoom,
     },
-    menu::DropdownMenu,
+    menu::{ContextMenuExt, DropdownMenu, PopupMenu, PopupMenuItem},
     tab::{Tab, TabBar},
 };
 use gpui_kit::{
@@ -70,6 +70,124 @@ pub(super) fn close(
     }
 }
 
+#[derive(Clone, Copy)]
+enum CloseTabs {
+    Current,
+    Others,
+    Left,
+    Right,
+    All,
+}
+
+fn tab_menu(
+    mut menu: PopupMenu,
+    area: &WeakEntity<DockArea>,
+    group: &TabGroupContext,
+    target: PanelId,
+    cx: &App,
+) -> PopupMenu {
+    let Some(target_index) = group
+        .panels()
+        .iter()
+        .position(|panel| panel.panel_id(cx) == target)
+    else {
+        return menu;
+    };
+    for (scope, label) in [
+        (CloseTabs::Current, "common.close"),
+        (CloseTabs::Others, "native.workbench.closeOtherTabs"),
+        (CloseTabs::Left, "native.workbench.closeTabsToLeft"),
+        (CloseTabs::Right, "native.workbench.closeTabsToRight"),
+        (CloseTabs::All, "native.workbench.closeAllTabs"),
+    ] {
+        let targets: Vec<_> = group
+            .panels()
+            .iter()
+            .enumerate()
+            .filter_map(|(index, panel)| {
+                let included = match scope {
+                    CloseTabs::Current => index == target_index,
+                    CloseTabs::Others => index != target_index,
+                    CloseTabs::Left => index < target_index,
+                    CloseTabs::Right => index > target_index,
+                    CloseTabs::All => true,
+                };
+                (included && panel.visible(cx)).then(|| panel.panel_id(cx))
+            })
+            .collect();
+        let disabled = targets.is_empty() || !targets_closable(area, group, &targets, cx);
+        let area = area.clone();
+        let group = group.clone();
+        menu = menu.item(
+            PopupMenuItem::new(crate::text::t(label))
+                .disabled(disabled)
+                .on_click(move |_, window, cx| {
+                    if targets_closable(&area, &group, &targets, cx) {
+                        close_next(
+                            area.clone(),
+                            group.clone(),
+                            targets.clone().into_iter(),
+                            window,
+                            cx,
+                        );
+                    }
+                }),
+        );
+    }
+    if group
+        .panels()
+        .iter()
+        .any(|panel| panel.visible(cx) && !panel.closable(cx))
+    {
+        menu = menu
+            .separator()
+            .label(crate::text::t("native.workbench.tabsCloseProtected"));
+    }
+    menu
+}
+
+fn targets_closable(
+    area: &WeakEntity<DockArea>,
+    group: &TabGroupContext,
+    targets: &[PanelId],
+    cx: &App,
+) -> bool {
+    let Some(area_entity) = area.upgrade() else {
+        return false;
+    };
+    let dock = area_entity.read(cx);
+    let last = panel(group, area, cx).map(|panel| panel.panel_id(cx));
+    !dock.is_locked()
+        && !group.is_locked()
+        && targets.iter().all(|id| {
+            dock.layout(DockPlacement::Center)
+                .is_some_and(|tree| tree.find_panel_node(*id) == Some(group.node()))
+                && dock.panel(*id).is_some_and(|panel| panel.closable(cx))
+                && (group.is_panel_closable(*id, cx) || last == Some(*id))
+        })
+}
+
+fn close_next(
+    area: WeakEntity<DockArea>,
+    group: TabGroupContext,
+    mut targets: std::vec::IntoIter<PanelId>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let Some(id) = targets.next() else { return };
+    if !targets_closable(&area, &group, &[id], cx) {
+        return;
+    }
+    close(&area, &group, id, window, cx);
+    if targets.len() > 0 {
+        // Dock applies ClosePanel events after this callback. Let that lifecycle
+        // finish before deciding whether the next target is the last editor.
+        window.defer(cx, move |window, cx| {
+            close_next(area, group, targets, window, cx)
+        });
+    }
+}
+
 impl Tabs {
     pub(super) fn render(
         &self,
@@ -103,6 +221,13 @@ impl Tabs {
         let toolbar_zoom = zoomed || zoom_control.is_some_and(|control| control.toolbar_visible());
         let menu_zoom = zoomed || zoom_control.is_some_and(|control| control.menu_visible());
         let presentation = handle.map(PanelHandle::panel);
+        let editor_group = area.upgrade().is_some_and(|area| {
+            area.read(cx)
+                .layout(DockPlacement::Center)
+                .is_some_and(|tree| tree.find_node(group.node()).is_some())
+        });
+        let menu_area = area.clone();
+        let menu_group = group.clone();
         TabBar::new("tab-bar")
             .small()
             .h(super::HEADER_HEIGHT)
@@ -141,6 +266,24 @@ impl Tabs {
                                 .max_h(super::HEADER_HEIGHT)
                                 .selected(id == active_id)
                                 .child(title)
+                                .relative()
+                                .when(editor_group, |tab| {
+                                    // TabBar accepts Tab rather than a ContextMenu wrapper.
+                                    // A full-tab child keeps the component's pointer/drag behavior.
+                                    tab.child(
+                                        div()
+                                            .id(("editor-tab-context", id.as_u64()))
+                                            .absolute()
+                                            .inset_0()
+                                            .context_menu({
+                                                let area = area.clone();
+                                                let group = group.clone();
+                                                move |menu, _, cx| {
+                                                    tab_menu(menu, &area, &group, id, cx)
+                                                }
+                                            }),
+                                    )
+                                })
                                 .when(closable, |tab| {
                                     tab.suffix(
                                         Button::new(("close-tab", id.as_u64()))
@@ -305,11 +448,20 @@ impl Tabs {
                             .icon(IconName::Ellipsis)
                             .xsmall()
                             .ghost()
-                            .tab_stop(false)
+                            .tab_stop(editor_group)
                             .accessibility_label(crate::text::t("native.canvas.moreActions"))
                             .dropdown_menu(move |menu, window, cx| {
                                 menu.when_some(presentation.clone(), |menu, panel| {
                                     panel.dropdown_menu(menu, window, cx)
+                                })
+                                .when(editor_group, |menu| {
+                                    tab_menu(
+                                        menu.separator(),
+                                        &menu_area,
+                                        &menu_group,
+                                        active_id,
+                                        cx,
+                                    )
                                 })
                                 .separator()
                                 .menu_with_disabled(
@@ -321,10 +473,15 @@ impl Tabs {
                                     Box::new(ToggleZoom),
                                     !menu_zoom,
                                 )
-                                .when(closable, |menu| {
-                                    menu.separator()
-                                        .menu(crate::text::t("common.close"), Box::new(ClosePanel))
-                                })
+                                .when(
+                                    closable && !editor_group,
+                                    |menu| {
+                                        menu.separator().menu(
+                                            crate::text::t("common.close"),
+                                            Box::new(ClosePanel),
+                                        )
+                                    },
+                                )
                             })
                             .anchor(gpui_kit::Anchor::TopRight),
                     ),

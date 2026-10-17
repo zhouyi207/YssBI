@@ -42,9 +42,9 @@ GraphEditingMetadata 用弱引用标识 `current_hash` 所对应的不可变正�
 发布 delta 的资源身份由 `ResourceKey` 表达，文件生命周期种类由 `ResourceLifecycleKind` 表达；
 delta 不提供另一套资源分类或逆补丁接口。Graph 撤销仍使用文档 owner 的 `GraphDocumentPatch`。
 
-Graph 保存统一使用图编辑会话的 `save_graph_edit`，按当前编辑身份提交并更新 saved-content identity；Chart 使用自己的文档保存用例。工作台保存全部逐资源调用这些入口，Project 不再提供绕过编辑会话回执的整项目 flush 或独立 graph writer。
+Graph 保存统一使用图编辑会话的 `save_graph_edit`，按当前编辑身份提交并更新 saved-content identity；Chart、Mind、Doc 使用共享文件生命周期的 Edit/Save 命令。工作台保存全部逐资源调用这些入口，Project 不再提供绕过编辑会话回执的整项目 flush 或独立 graph writer。
 
-Save As 以捕获的当前 ProjectData 覆盖目标副本中的 Graph、Chart、Mind 和 Doc 正文；Mind/Doc 复用各自 `FileContent::encode`，包含未保存编辑。复制不保存或修改源项目，仍在目标 publication 前重验源项目身份及 authority generation。
+Save As 以捕获的当前 ProjectData 覆盖目标副本中的 Graph、Chart、Mind 和 Doc 正文；Chart/Mind/Doc 复用各自 `FileContent::encode`，包含未保存编辑。复制不保存或修改源项目，仍在目标 publication 前重验源项目身份及 authority generation。
 
 创建项目和 Save As 的目标目录守卫持有同一份 FS RootBinding，在事务前后重验原生目录身份；
 失败清理要求本次创建事实并重验目录身份；身份已变的目标不执行回滚清理。
@@ -70,8 +70,8 @@ GroupTransform 角色形成正文调用边。
 `read_resource_catalog` 提供资源身份、名称、版本和轻量状态；复用现有路径扫描和数据库声明，不读取正文、不复制 ProjectData、不打开关闭图。文件成员仍由磁盘路径决定，resident 状态只补充其版本、dirty 和初始业务引用。调用方通过原 `validate_project_index_version` 重验 publication 与 authority generation。数据库 dirty 仍归 Database owner；图尚未打开时不虚构编辑会话。
 
 项目索引在既有 publication 锁内借用当前数据和资源 revision 表，仅复制索引所需的声明、
-函数签名与版本，不复制文档正文。单张 Chart 读取在同一会话校验边界只复制目标文档，
-并校验调用者的 publication revision；Save As 仍捕获复制所需的完整当前正文。
+函数签名与版本，不复制文档正文。Chart/Mind/Doc 的索引条目只来自目录扫描与驻留版本，
+不读取正文；单个文件读取只复制目标文档；Save As 仍捕获复制所需的完整当前正文。
 
 Graph、Chart、Mind、Doc 和 Database 的复制接受可选目标名称，在同一次复制提交中沿用名称分配规则；不通过复制后重命名实现。返回的实际名称和资源身份用于后续操作。
 
@@ -149,10 +149,8 @@ Graph 名称分配在文件系统 lease 下扫描一次路径，并在现有一�
 与复制共用已扫描索引的名称分配入口，不复制完整 ProjectData 或另构造路径规则。
 Graph 重命名在同一文件系统 lease 下扫描一次路径索引，源图及调用图读取共用该索引，
 继续由 Project IO 校验索引成员和图文件类型，不在每次读取正文时再次扫描全部路径。
-Chart writers 通过同一捕获入口只读取
-项目身份与 authority generation，Save 额外捕获目标存在性及其 revision，删除只捕获目标存在性。
-名称分配借用 Chart 路径和默认数据库 ID，复制、重命名只复制目标 Chart 文档，不复制无关正文或 revision 表。
-两类 writer 共用 transaction context。取得文件系统 lease 后与暂存完成后，
+文件资源命令通过同一捕获入口只复制目标文档，名称检查只借用同类型的驻留路径。
+Graph 与文件资源 writer 共用 transaction context。取得文件系统 lease 后与暂存完成后，
 均检查捕获的 authority generation、受影响资源版本以及源/目标路径存在性；重命名复用相同的 ownership lease
 和 patch 发布入口。函数签名的 before-state、函数版本与所属 Graph 版本也在事务内校验，文件落盘成功后才发布，
 发布失败则回滚文件。签名最终发布在锁内重验原 GraphWriterSnapshot 的 authority generation，确保准备的依赖集合仍有效；
@@ -161,22 +159,20 @@ Graph revision 不随驻留状态重置：卸载/重新加载保留版本，删�
 Graph 加载在同一 publication 边界核对捕获的项目身份并读取驻留文档，旧请求不能读到
 同路径新项目的正文。磁盘加载返回本次安装的不可变文档，并重验会话，不在发布后再次读取当前图。
 
-Watcher 的 rescan 在 filesystem lease 下读取文件，重验项目身份后同步驻留 graph/chart，
+Watcher 的 rescan 在 filesystem lease 下读取文件，重验项目身份后同步驻留 graph 与 Chart/Mind/Doc 文件，
 预先校验全部版本推进，再发布变更。无内容变化的重复 rescan 不再次推进版本。
 未打开的 graph 保持按需加载；未保存图正文就是 Rust 当前驻留数据，watcher 不得用旧文件替换它。
 Watcher 在 publication 锁内重新比较扫描结果与当前正文；扫描期间的撤销若已恢复磁盘
 内容，刷新保留当前编辑会话、重做历史与版本，不重复安装同一正文或推进发布版本。
-ProjectIndex 的文件成员来自磁盘扫描，内存只提供适用的权威版本，不得复活已删除的 chart。
+ProjectIndex 的文件成员来自磁盘扫描，内存只提供适用的权威版本，不得复活已删除的文件。
 
-Chart 文档和文件不包含资源 revision；`chart_revisions` 是其唯一版本 authority，在项目激活时从初始版本开始，
-与 Graph 的资源版本生命周期一致。Chart 的创建、保存、复制、移动和删除复用资源 patch 的标准回执，
-writer 不再重复构造 delta。刷新文档时可绑定 Project publication revision，在同一次一致读取中验证。
-Chart 重命名的目标版本高于源版本及目标路径保留的删除版本，原路径保留递增后的 tombstone；回执与状态安装复用同一计算，旧目标路径的保存基线不能重新匹配新资源。
+Chart 是与 Mind/Doc 相同的文件资源（见下文“当前文档编辑”），版本由驻留 `FileState` 的
+文件会话与 revision 表达，不另设 revision 表。删除后重建的同名图表开始新的文件会话，
+旧会话的编辑基线不能匹配新资源。新建图表默认绑定 ID 最小的数据集。
 图表文件采用 `yss-chart-document::CURRENT_CHART_SCHEMA_VERSION` 定义的严格格式，不读取含旧文档版本字段的格式，也不自动迁移。
-图表类型由同一 crate 的 `ChartType` 枚举拥有，只允许 histogram、scatter、line；文档、索引和资源变更状态
-直接持有该类型，未知类型在反序列化入口拒绝，不能作为任意字符串进入已提交状态。
-Chart writer 支持调用者提供读取时的预期 revision；Harness 设置编辑使用它，GUI 的独立 Save
-继续按 Rust 当前基线覆盖。Graph/Chart 重命名接受内部生命周期请求，由既有 lifecycle owner
+图表类型由同一 crate 的 `ChartType` 枚举拥有，只允许 histogram、scatter、line；文档直接持有该类型，
+未知类型在反序列化入口拒绝，不能作为任意字符串进入已提交状态。
+Graph 重命名接受内部生命周期请求，由既有 lifecycle owner
 分配令牌，不占用客户端令牌水位，也不由 Harness 维护另一套计数器。
 
 `yss-resource-lifecycle` 独占资源生命周期登记、令牌准入和守卫回退链；Project 负责项目身份、
@@ -187,13 +183,16 @@ Chart writer 支持调用者提供读取时的预期 revision；Harness 设置�
 
 ## 当前文档编辑
 
-Mind 与 Doc 的当前正文分别驻留在 `ProjectData.minds`、`ProjectData.docs`，项目索引也分别提供
-`minds`、`docs`。格式和树约束由 [Project model](../yss-project-model/README.md) 拥有。
-`minds.rs`、`docs.rs` 各自提供强类型查询和命令入口；`file_resources.rs` 通过泛型复用
+Mind、Doc 与 Chart 的当前正文分别驻留在 `ProjectData.minds`、`ProjectData.docs`、`ProjectData.charts`，
+项目索引也分别提供 `minds`、`docs`、`charts`。格式和树约束由 [Project model](../yss-project-model/README.md) 拥有。
+`minds.rs`、`docs.rs`、`charts.rs` 只声明各自的 `ResourceFile` 绑定和类型别名；`file_resources.rs`
+提供泛型的 `read_file`、`read_file_source`、`apply_file_command`，复用
 Create/Edit/Save/Discard/Rename/Duplicate/Delete 的文件 lease、WriterSnapshot、
 ProjectDataPatch、文件事务回滚和 resource publication，不使用混合文档枚举分派编辑。
+新文件的初始正文由 `ResourceFile::initial` 决定；缺失的文件以 `ResourceNotFound` 报告。
 普通编辑只更新 Rust 当前正文，Save 写入捕获版本并更新保存指纹；重命名只移动
 已有文件并保留当前未保存内容。复制 Mind 会重新分配内部节点 ID。
+目录中扩展名不匹配的文件不属于资源；嵌套目录、重定向和可移植名称冲突仍拒绝整个目录读取。
 
 文件命令复用 Writer 的一致捕获入口，只复制目标文档，并在创建、重命名、复制时捕获
 同类型的驻留路径用于名称检查，不复制其他资源正文或 revision 表。单文档读取只复制
@@ -204,9 +203,9 @@ ProjectDataPatch、文件事务回滚和 resource publication，不使用混合�
 Save 还会比较磁盘正文与保存指纹，拒绝覆盖未处理的外部修改。Discard 按捕获的编辑版本
 重新读取磁盘；文件已被外部删除时，Discard 放弃其脏驻留内容并发布移除回执，不重新创建文件。
 文件成员仍由目录扫描决定；文档按项目加载并受单文件大小和节点数限制。
-知识来源读取使用 `read_doc_source`：只读取一份文档及其保存文件，核对磁盘保存指纹与捕获的编辑版本，不复制整份 ProjectData 或扫描项目索引。正常未保存编辑可以成为显式来源；外部删除或尚未处理的外部修改会拒绝引用，编辑器的原始 `read_doc` 仍可用于恢复脏正文。
+知识来源读取使用 `read_file_source`：只读取一份文档及其保存文件，核对磁盘保存指纹与捕获的编辑版本，不复制整份 ProjectData 或扫描项目索引。正常未保存编辑可以成为显式来源；外部删除或尚未处理的外部修改会拒绝引用，编辑器的原始 `read_file` 仍可用于恢复脏正文。
 
-两类资源事件分别使用 `ResourceKey::Mind`、`ResourceKey::Doc`，生命周期种类与各自身份一致。
+三类资源事件分别使用 `ResourceKey::Mind`、`ResourceKey::Doc`、`ResourceKey::Chart`，生命周期种类与各自身份一致。
 生命周期 patch 的 before/after 同时存在时表示文档版本更新；正文由对应读快照交付。
 UI 与其他 Application 调用者使用同一个 typed command API，新增类型无须另建文件系统层。
 
