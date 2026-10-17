@@ -25,10 +25,10 @@ pub use identity::{
 };
 pub use model::{
     CachePolicy, ConnectionsPerPort, Determinism, ExecutionSemantics, InitialPortCountError,
-    InitialPortCounts, InputBindingSpec, InputConsumption, LiteralPolicy, ManagedNodeRole,
-    NodeCatalogProtocol, NodeInstanceDisplaySpec, NodeInterfaceProtocol, NodeProtocol, NodeScope,
-    OutputProduction, PortCardinality, PortDirection, PortEditorSpec, PortMemberGroupSpec,
-    PortSpec, ProtocolError, ResourceDisplayKind, validate_execution,
+    InitialPortCounts, InputBindingSpec, LiteralPolicy, ManagedNodeRole, NodeCatalogProtocol,
+    NodeInstanceDisplaySpec, NodeInterfaceProtocol, NodeProtocol, NodeScope, PortCardinality,
+    PortDirection, PortEditorSpec, PortMemberGroupSpec, PortSpec, ProtocolError,
+    ResourceDisplayKind, validate_execution,
 };
 pub use parameter::{
     Parameter, ParameterCondition, ParameterConstraint, ParameterEditorSpec, ParameterGroup,

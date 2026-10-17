@@ -1,4 +1,5 @@
 //! Only remote web URLs reach the platform launcher.
+use crate::lifecycle::LogReleased;
 use gpui_kit::component::{WindowExt, notification::Notification};
 use gpui_kit::{App, SharedString, Window};
 
@@ -18,12 +19,13 @@ pub fn open_external(href: &SharedString, window: &mut Window, cx: &mut App) {
     window
         .spawn(cx, async move |cx| {
             if opening.await.is_err() {
-                let _ = cx.update(|window, cx| {
+                cx.update(|window, cx| {
                     window.push_notification(
                         Notification::error(crate::text::t("notifications.externalUrl.openFailed")),
                         cx,
                     );
-                });
+                })
+                .log_released();
             }
         })
         .detach();

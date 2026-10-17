@@ -1,10 +1,12 @@
-use super::{Workbench, activity::ReadState};
-use crate::project::DesktopProject;
+use super::{Workbench, activity::ReadState, files::FileKind};
+use crate::project::{DesktopProject, FileIndexUpdate};
 use gpui_kit::{Context, Window};
 use tokio::sync::broadcast::error::RecvError;
+use yss_application::events::{CommittedResourceMutation, ResourceRoute};
 use yss_application::graph::editing::GraphActivity;
 use yss_desktop_services::DesktopEvent;
 use yss_graph_document::GraphResourcePath;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn connect_events(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -62,16 +64,7 @@ impl Workbench {
                             .update_in(cx, |view, window, cx| {
                                 view.close_stale_result_windows(cx);
                                 view.refresh_project(window, cx);
-                                view.refresh_graphs(cx);
-                                view.refresh_documents(window, cx);
-                                view.refresh_minds(window, cx);
-                                for graph in view
-                                    .graphs
-                                    .values()
-                                    .filter_map(gpui_kit::WeakEntity::upgrade)
-                                {
-                                    graph.update(cx, |graph, cx| graph.resync_execution(cx));
-                                }
+                                view.resync_editors(window, cx);
                                 view.resync_intents(window, cx);
                             })
                             .is_err()
@@ -100,16 +93,19 @@ impl Workbench {
                     graph.update(cx, |graph, cx| graph.accept_execution(event, cx));
                 }
             }
-            DesktopEvent::Graph(identity, GraphActivity::Changed { graph_path, .. })
+            DesktopEvent::Graph(identity, GraphActivity::Changed { graph_path, cause, .. })
                 if identity == project.identity =>
             {
                 let resource = GraphResourcePath::new(graph_path.clone()).ok()
                     .map(yss_project_history::ResourceKey::Graph);
                 for graph in self.graphs.values().filter_map(gpui_kit::WeakEntity::upgrade) {
                     let canvas = graph.read(cx);
-                    let affected = canvas.path() == graph_path
-                        || resource.as_ref().is_some_and(|resource| canvas.graph().depends_on_resource(resource));
-                    if affected {
+                    let own_graph = canvas.path() == graph_path;
+                    let dependency = resource.as_ref()
+                        .is_some_and(|resource| canvas.graph().depends_on_resource(resource));
+                    if own_graph {
+                        graph.update(cx, |graph, cx| graph.accept_graph_change(&cause, cx));
+                    } else if dependency {
                         graph.update(cx, |graph, cx| graph.refresh(cx));
                     }
                 }
@@ -118,54 +114,36 @@ impl Workbench {
                 if invalidation.project_instance_id() == &project.identity =>
             {
                 self.refresh_project(window, cx);
-                if let Some(resources) = invalidation.resources() {
-                    for graph in self.graphs.values().filter_map(gpui_kit::WeakEntity::upgrade) {
-                        let canvas = graph.read(cx);
-                        if resources.iter().any(|resource| {
-                            matches!(resource, yss_project_history::ResourceKey::Graph(path) if path.as_str() == canvas.path())
-                                || canvas.graph().depends_on_resource(resource)
-                        }) {
-                            graph.update(cx, |graph, cx| graph.refresh(cx));
+                match invalidation.resources() {
+                    Some(resources) => {
+                        for editor in self.editors().collect::<Vec<_>>() {
+                            if resources.iter().any(|resource| editor.shows(resource, cx)) {
+                                editor.refresh(window, cx);
+                            }
                         }
                     }
-                    for resource in resources {
-                        if let yss_project_history::ResourceKey::Doc(path) = resource
-                            && let Some(document) = self.documents.get(path.0.as_ref()).and_then(gpui_kit::WeakEntity::upgrade) {
-                            document.update(cx, |document, cx| document.refresh(window, cx));
-                        }
-                        if let yss_project_history::ResourceKey::Mind(path) = resource
-                            && let Some(mind) = self.minds.get(path.0.as_ref()).and_then(gpui_kit::WeakEntity::upgrade) {
-                            mind.update(cx, |mind, cx| mind.refresh(window, cx));
-                        }
-                    }
-                } else {
-                    self.refresh_graphs(cx);
-                    self.refresh_documents(window, cx);
-                    self.refresh_minds(window, cx);
+                    None => self.resync_editors(window, cx),
                 }
             }
             DesktopEvent::Resource(mutation) if mutation.project_instance_id == project.identity => {
-                self.accept_graph_resources(&mutation, window, cx);
-                if !self.refreshing_index
-                    && self.project.as_mut().is_some_and(|project| project.accept_file_save(&mutation))
-                {
-                    let resources = self.project.as_ref().map(|project| project.resources.clone());
-                    self.assistant.update(cx, |assistant, cx| {
-                        assistant.set_resource_catalog(resources, cx);
-                    });
-                } else {
-                    self.refresh_project(window, cx);
-                }
-                for delta in &mutation.deltas {
-                    if let yss_project_history::ResourceKey::Doc(path) = &delta.resource
-                        && let Some(document) = self.documents.get(path.0.as_ref()).and_then(gpui_kit::WeakEntity::upgrade) {
-                        document.update(cx, |document, cx| document.refresh(window, cx));
-                    }
-                    if let yss_project_history::ResourceKey::Mind(path) = &delta.resource
-                        && let Some(mind) = self.minds.get(path.0.as_ref()).and_then(gpui_kit::WeakEntity::upgrade) {
-                        mind.update(cx, |mind, cx| mind.refresh(window, cx));
+                let refreshing = self.refreshing_index;
+                let update = match self.project.as_mut() {
+                    Some(project) if !refreshing => project.accept_file_receipt(&mutation),
+                    _ => FileIndexUpdate::Rejected,
+                };
+                match update {
+                    FileIndexUpdate::Rejected => self.refresh_project(window, cx),
+                    FileIndexUpdate::Revisions | FileIndexUpdate::Rows => {
+                        let resources = self.project.as_ref().map(|project| project.resources.clone());
+                        self.assistant.update(cx, |assistant, cx| {
+                            assistant.set_resource_catalog(resources, cx);
+                        });
+                        if matches!(update, FileIndexUpdate::Rows) {
+                            self.publish_activity_documents(false, cx);
+                        }
                     }
                 }
+                self.accept_resource_mutation(&mutation, window, cx);
             }
             DesktopEvent::Ui(identity, delivery, event)
                 if identity == project.identity && self.ui_delivery == Some(delivery) => match event {
@@ -181,6 +159,80 @@ impl Workbench {
                 tracing::trace!(session_id=?event.session_id,sequence=event.sequence,"Native Harness event delivered");
             }
             _ => {}
+        }
+    }
+
+    /// The single route for committed resource changes, whether the GUI, the Assistant or
+    /// another writer made them: moves follow the open editor, deletions retire or detach it.
+    pub(super) fn accept_resource_mutation(
+        &mut self,
+        mutation: &CommittedResourceMutation,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self
+            .project
+            .as_ref()
+            .is_none_or(|project| project.identity != mutation.project_instance_id)
+        {
+            return;
+        }
+        let mut moved_files = false;
+        for route in mutation.routes() {
+            match route {
+                ResourceRoute::Moved {
+                    from,
+                    to,
+                    from_revision,
+                    to_revision,
+                } => {
+                    if FileKind::of(to).is_some() {
+                        moved_files |=
+                            self.move_file(from, to, from_revision, to_revision, window, cx);
+                    } else if let Ok(to) = GraphResourcePath::new(to) {
+                        self.move_graph_resource(from, to, from_revision, to_revision, window, cx);
+                    }
+                }
+                ResourceRoute::Removed { path, revision } => {
+                    if let Some(panel) = self.file_panel(path) {
+                        panel.mark_removed(cx);
+                    } else if GraphResourcePath::new(path).is_ok() {
+                        self.remove_graph_resource(path, revision, window, cx);
+                    }
+                }
+                ResourceRoute::Changed { path, delta } => {
+                    if let Some(panel) = self.file_panel(path) {
+                        panel.accept_change(delta, window, cx);
+                    }
+                }
+            }
+        }
+        if moved_files {
+            self.persist_layout(cx);
+        }
+        // Graph projections also follow their dependencies and the graphs that a
+        // signature change invalidated, not only their own resource.
+        let affected = mutation.projection_status.affected_graph_paths();
+        for graph in self
+            .graphs
+            .values()
+            .filter_map(gpui_kit::WeakEntity::upgrade)
+        {
+            let canvas = graph.read(cx);
+            if affected.iter().any(|path| path.as_str() == canvas.path())
+                || mutation
+                    .deltas
+                    .iter()
+                    .any(|delta| canvas.shows(&delta.resource))
+            {
+                graph.update(cx, |graph, cx| graph.refresh(cx));
+            }
+        }
+    }
+
+    fn resync_editors(&self, window: &mut Window, cx: &mut Context<Self>) {
+        for editor in self.editors().collect::<Vec<_>>() {
+            editor.resync(window, cx);
         }
     }
 
@@ -201,28 +253,7 @@ impl Workbench {
         });
         self.connect_events(window, cx);
         self.refresh_project(window, cx);
-        self.refresh_graphs(cx);
-        for chart in self
-            .charts
-            .values()
-            .filter_map(gpui_kit::WeakEntity::upgrade)
-        {
-            chart.update(cx, |chart, cx| chart.refresh(window, cx));
-        }
-        for editor in self
-            .databases
-            .values()
-            .filter_map(gpui_kit::WeakEntity::upgrade)
-        {
-            editor.update(cx, |editor, cx| editor.reload(false, window, cx));
-        }
-        for graph in self
-            .graphs
-            .values()
-            .filter_map(gpui_kit::WeakEntity::upgrade)
-        {
-            graph.update(cx, |graph, cx| graph.resync_execution(cx));
-        }
+        self.resync_editors(window, cx);
     }
 
     pub(super) fn install_project_index(
@@ -246,6 +277,26 @@ impl Workbench {
             .project
             .as_ref()
             .is_none_or(|previous| previous.language != project.language);
+        self.project = Some(project);
+        self.publish_activity_documents(language_changed, cx);
+        let editors = self.editors().collect::<Vec<_>>();
+        if let Some(project) = &self.project {
+            for editor in editors {
+                editor.accept_index(project, window, cx);
+            }
+        }
+    }
+
+    /// Hands the accepted activity documents to their panels; project rows bind the node catalog.
+    fn publish_activity_documents(&self, notify: bool, cx: &mut Context<Self>) {
+        let Some(project) = &self.project else {
+            return;
+        };
+        let nodes = project
+            .panels
+            .iter()
+            .find(|panel| panel.panel_id == "nodes")
+            .cloned();
         for document in &project.panels {
             if let Some(panel) = self
                 .activities
@@ -253,35 +304,18 @@ impl Workbench {
                 .and_then(gpui_kit::WeakEntity::upgrade)
             {
                 let owner = cx.entity().downgrade();
+                let nodes = nodes.clone();
                 panel.update(cx, |panel, cx| {
                     panel.replace_document(document.clone(), cx);
-                    if language_changed {
+                    if notify {
                         cx.notify();
                     }
-                    if let Some(catalog) = project
-                        .panels
-                        .iter()
-                        .find(|panel| panel.panel_id == "nodes")
-                    {
-                        panel.set_project_resources(owner, catalog.clone(), cx);
+                    if let Some(nodes) = nodes {
+                        panel.set_project_resources(owner, nodes, cx);
                     }
                 });
             }
-            if document.panel_id == "nodes" {
-                for graph in self
-                    .graphs
-                    .values()
-                    .filter_map(gpui_kit::WeakEntity::upgrade)
-                {
-                    graph.update(cx, |graph, cx| {
-                        graph.set_catalog(document.clone(), &project.language, cx)
-                    });
-                }
-            }
         }
-        self.project = Some(project);
-        self.refresh_databases(window, cx);
-        self.refresh_charts(window, cx);
     }
 
     pub(super) fn refresh_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -306,7 +340,7 @@ impl Workbench {
                 query.clone(),
                 services
                     .application
-                    .query_project_index(query, language, true)?,
+                    .query_project_presentation(query, language)?,
                 language,
             ))
         });
@@ -315,7 +349,7 @@ impl Workbench {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle
                     || view.index_generation != generation
                     || view
@@ -338,6 +372,16 @@ impl Workbench {
                             ReadState::Failed("native.workbench.activityLoadFailed"),
                             cx,
                         );
+                        let lifecycle = view.lifecycle;
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            crate::text::translate("native.workbench.activityLoadFailed"),
+                            cx,
+                            move |view, window, cx| {
+                                if view.lifecycle == lifecycle {
+                                    view.refresh_project(window, cx);
+                                }
+                            },
+                        );
                         tracing::warn!(
                             code = "native_activity_refresh_failed",
                             "Native activity refresh failed"
@@ -348,7 +392,8 @@ impl Workbench {
                     view.refresh_project(window, cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
     }

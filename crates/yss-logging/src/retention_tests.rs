@@ -2,10 +2,11 @@ use std::{collections::BTreeMap, path::Path, sync::mpsc, time::Duration};
 
 use chrono::NaiveDateTime;
 use sqlx::{ConnectOptions, Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+use tracing_subscriber::prelude::*;
 
 use crate::{
-    FrontendLogEntryDto, LogDomain, LogLevel, LogOrigin, LogQuery, LogRecordDto,
-    LogRetentionPolicy, LogRuntime, LogStoreError, LogStreamFailure, store::LogStore,
+    LogDomain, LogLevel, LogOrigin, LogQuery, LogRecordDto, LogRetentionPolicy, LogRuntime,
+    LogStoreError, LogStreamFailure, collector::LogLayer, store::LogStore,
 };
 
 fn now() -> NaiveDateTime {
@@ -295,16 +296,10 @@ fn runtime_policy_changes_keep_live_subscribers_and_high_water_after_eviction() 
     let snapshot = logs.subscribe_batches(|_| true).unwrap();
     assert!(snapshot.entries.is_empty());
     assert_eq!(snapshot.latest_sequence, 1);
-    logs.submit_frontend(vec![FrontendLogEntryDto {
-        level: LogLevel::Info,
-        domain: LogDomain::Ui,
-        target: "retention.test".into(),
-        event: None,
-        message: "next record".into(),
-        source: None,
-        fields: BTreeMap::new(),
-    }])
-    .unwrap();
+    let subscriber = tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(None)));
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::info!(target: "retention.test", log_domain = "ui", "next record");
+    });
     let next = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
     assert!(next.failure.is_none());
     assert_eq!(next.entries[0].sequence, 2);
@@ -378,16 +373,10 @@ fn startup_retention_runs_before_snapshot_and_resumes_after_empty_history() {
     assert_eq!(snapshot.stream_id, stream);
     assert_eq!(snapshot.latest_sequence, 1);
     assert!(snapshot.entries.is_empty());
-    logs.submit_frontend(vec![FrontendLogEntryDto {
-        level: LogLevel::Info,
-        domain: LogDomain::Ui,
-        target: "retention.test".into(),
-        event: None,
-        message: "after startup".into(),
-        source: None,
-        fields: BTreeMap::new(),
-    }])
-    .unwrap();
+    let subscriber = tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(None)));
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::info!(target: "retention.test", log_domain = "ui", "after startup");
+    });
     assert_eq!(logs.statistics().unwrap().latest_sequence, 2);
     logs.shutdown();
 }

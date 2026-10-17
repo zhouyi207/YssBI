@@ -29,6 +29,20 @@ impl Contents {
         {
             return;
         }
+        if self.projection.as_ref().is_some_and(|previous| {
+            previous.nodes.len() == projection.nodes.len()
+                && previous
+                    .nodes
+                    .iter()
+                    .zip(projection.nodes.iter())
+                    .all(|(previous, next)| {
+                        previous.node_id == next.node_id
+                            && previous.parameter_groups == next.parameter_groups
+                    })
+        }) {
+            self.projection = Some(projection.clone());
+            return;
+        }
         self.summaries = projection
             .nodes
             .iter()

@@ -1,4 +1,5 @@
 //! A restored tab whose resource is unavailable, without a fabricated document or result.
+use super::super::files::FileKind;
 use crate::appearance;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::dock::{BasePanel, Panel, PanelEvent, PanelState};
@@ -47,9 +48,9 @@ impl BasePanel for MissingPanel {
 impl Panel for MissingPanel {
     fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         if let gpui_kit::component::dock::PanelInfo::Panel(info) = &self.state.info {
-            info.get("graphPath")
-                .or_else(|| info.get("documentPath"))
-                .or_else(|| info.get("mindPath"))
+            std::iter::once(crate::canvas::GraphCanvas::PATH_KEY)
+                .chain(FileKind::ALL.map(|kind| kind.layout().1))
+                .find_map(|key| info.get(key))
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_owned)
                 .unwrap_or_else(|| {

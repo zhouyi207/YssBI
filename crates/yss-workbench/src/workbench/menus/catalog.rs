@@ -13,7 +13,7 @@ fn item(key: &str, action: impl Action, disabled: bool) -> MenuItem {
     MenuItem::action(translate(key), action).disabled(disabled)
 }
 
-pub(super) fn application_menus(context: MenuContext) -> Vec<Menu> {
+pub(super) fn application_menus(context: &MenuContext) -> Vec<Menu> {
     let mut menus = vec![];
     if cfg!(target_os = "macos") {
         menus.push(
@@ -88,7 +88,7 @@ pub(super) fn application_menus(context: MenuContext) -> Vec<Menu> {
     menus
 }
 
-fn file_menu(context: MenuContext) -> Menu {
+fn file_menu(context: &MenuContext) -> Menu {
     let disabled = context.busy || !context.project;
     Menu::new(translate("menubar.file")).items([
         item(
@@ -121,7 +121,7 @@ fn file_menu(context: MenuContext) -> Menu {
     ])
 }
 
-fn edit_menu(context: MenuContext) -> Menu {
+fn edit_menu(context: &MenuContext) -> Menu {
     let edits = [
         ("common.undo", EditCommand::Undo),
         ("common.redo", EditCommand::Redo),

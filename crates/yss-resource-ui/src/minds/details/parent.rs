@@ -1,12 +1,12 @@
 //! Derive eligible parents only when the picker opens, then validate its captured target.
 use super::{MindCanvas, TopicTarget};
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
+    Disableable,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit::{Context, IntoElement, div, prelude::*};
+use gpui_kit::{Context, IntoElement};
 use yss_project_model::mind::{MindEdit, MindNode};
+use yss_ui::inspector;
 
 impl MindCanvas {
     pub(super) fn parent_picker(
@@ -14,10 +14,11 @@ impl MindCanvas {
         topic: &MindNode,
         target: TopicTarget,
         cx: &mut Context<Self>,
-    ) -> gpui_kit::AnyElement {
+    ) -> impl IntoElement + use<> {
         let current = topic.parent_id.clone();
         let parent_name = self
-            .snapshot
+            .file
+            .snapshot()
             .content
             .nodes
             .iter()
@@ -25,65 +26,49 @@ impl MindCanvas {
             .map(topic_title)
             .unwrap_or_else(|| yss_ui::text::translate("native.minds.unnamedTopic"));
         let owner = cx.entity().downgrade();
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::translate("documents.parent")),
-            )
-            .child(
-                Button::new("mind-parent")
-                    .small()
-                    .ghost()
-                    .label(parent_name)
-                    .disabled(self.busy())
-                    .dropdown_menu(move |menu, _, cx| {
-                        let candidates = owner
-                            .update(cx, |view, _| {
-                                if view.accepts_topic(&target) {
-                                    view.parent_choices(&target.id)
-                                } else {
-                                    vec![]
-                                }
-                            })
-                            .unwrap_or_default();
-                        let mut menu = menu.scrollable(true);
-                        for (parent_id, title) in candidates {
-                            let owner = owner.clone();
-                            let target = target.clone();
-                            let checked = current.as_ref() == Some(&parent_id);
-                            menu = menu.item(PopupMenuItem::new(title).checked(checked).on_click(
-                                move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        if !checked && view.accepts_topic(&target) {
-                                            view.apply_edits(
-                                                vec![MindEdit::MoveNode {
-                                                    node_id: target.id.clone(),
-                                                    parent_id: parent_id.clone(),
-                                                    before_id: None,
-                                                }],
-                                                window,
-                                                cx,
-                                            );
-                                        }
-                                    });
-                                },
-                            ));
+        inspector::choice_trigger("mind-parent", parent_name)
+            .disabled(!self.file.editable())
+            .dropdown_menu(move |menu, _, cx| {
+                let candidates = owner
+                    .update(cx, |view, _| {
+                        if view.accepts_topic(&target) {
+                            view.parent_choices(&target.id)
+                        } else {
+                            vec![]
                         }
-                        menu
-                    }),
-            )
-            .into_any_element()
+                    })
+                    .unwrap_or_default();
+                let mut menu = menu.scrollable(true);
+                for (parent_id, title) in candidates {
+                    let target = target.clone();
+                    let checked = current.as_ref() == Some(&parent_id);
+                    menu = menu.item(PopupMenuItem::new(title).checked(checked).on_click(
+                        inspector::owner_command(
+                            owner.clone(),
+                            move |view: &mut MindCanvas, window, cx| {
+                                if !checked && view.accepts_topic(&target) {
+                                    view.apply_edits(
+                                        vec![MindEdit::MoveNode {
+                                            node_id: target.id.clone(),
+                                            parent_id: parent_id.clone(),
+                                            before_id: None,
+                                        }],
+                                        window,
+                                        cx,
+                                    );
+                                }
+                            },
+                        ),
+                    ));
+                }
+                menu
+            })
     }
 
     fn parent_choices(&self, id: &str) -> Vec<(String, String)> {
         // This index only filters presentation. Project validates the actual tree edit.
         let mut children = std::collections::HashMap::<&str, Vec<&str>>::new();
-        for node in &self.snapshot.content.nodes {
+        for node in &self.file.snapshot().content.nodes {
             if let Some(parent) = node.parent_id.as_deref() {
                 children.entry(parent).or_default().push(&node.id);
             }
@@ -97,7 +82,8 @@ impl MindCanvas {
                 pending.extend(group);
             }
         }
-        self.snapshot
+        self.file
+            .snapshot()
             .content
             .nodes
             .iter()

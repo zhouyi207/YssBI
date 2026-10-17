@@ -1,9 +1,10 @@
 //! Connection menu actions reuse the shared popup and original edit transaction.
-use crate::canvas::{GraphCanvas, GraphCommand};
+use crate::canvas::{GraphCanvas, GraphCommand, commands::DeleteSelection};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme, Icon, menu::PopupMenuItem};
-use gpui_kit::{Context, Pixels, Point, Window, div, prelude::*};
+use gpui_kit::component::menu::PopupMenuItem;
+use gpui_kit::{Context, Pixels, Point, Window, prelude::*};
 use yss_graph_editor::EditorGraphMutation;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub(super) fn show_connection_menu(
@@ -39,32 +40,29 @@ impl GraphCanvas {
                 } else {
                     "contextMenu.connection.breakLink"
                 };
-                let item = if delete {
-                    PopupMenuItem::element(move |_, cx| {
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .text_color(cx.theme().danger)
-                            .child(Icon::new(IconName::Trash).size_4())
-                            .child(div().flex_1().child(yss_ui::text::t(label)))
-                            .child("Del")
+                let item = PopupMenuItem::new(yss_ui::text::t(label))
+                    .icon(if delete {
+                        IconName::Trash
+                    } else {
+                        IconName::Unlink
                     })
-                } else {
-                    PopupMenuItem::new(yss_ui::text::t(label)).icon(IconName::Unlink)
-                };
+                    .when(delete, |item| item.action(Box::new(DeleteSelection)));
                 menu = menu.item(item.on_click(move |_, _, cx| {
-                    let _ = owner.update(cx, |view, cx| {
-                        if view.menu_is_current(menu_id, &projection, version, language) {
-                            view.submit(
-                                GraphCommand::Edit(EditorGraphMutation::DisconnectConnections {
-                                    connection_ids: ids.clone(),
-                                }),
-                                Some(version),
-                                cx,
-                            );
-                        }
-                    });
+                    owner
+                        .update(cx, |view, cx| {
+                            if view.menu_is_current(menu_id, &projection, version, language) {
+                                view.submit(
+                                    GraphCommand::Edit(
+                                        EditorGraphMutation::DisconnectConnections {
+                                            connection_ids: ids.clone(),
+                                        },
+                                    ),
+                                    Some(version),
+                                    cx,
+                                );
+                            }
+                        })
+                        .log_released();
                 }));
             }
             menu

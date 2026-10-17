@@ -4,6 +4,7 @@
 //! remain owned by their dedicated crates and Project I/O adapters. This model
 //! deliberately does not read the clock or expose monolithic JSON persistence.
 
+pub mod chart;
 pub mod doc;
 pub mod file;
 pub mod mind;
@@ -14,7 +15,6 @@ pub use patch::ProjectDataPatch;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_database_contract::DatabaseDecl;
 use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
 use yss_project_history::{FunctionDocument, FunctionSignature};
@@ -72,7 +72,7 @@ pub struct ProjectData {
     pub minds: HashMap<mind::MindPath, mind::MindState>,
     pub docs: HashMap<doc::DocPath, doc::DocState>,
     pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
-    pub charts: HashMap<ChartResourcePath, ChartDocument>,
+    pub charts: HashMap<chart::ChartPath, chart::ChartState>,
     pub databases: HashMap<String, DatabaseDecl>,
     pub metadata: ProjectMetadata,
 }

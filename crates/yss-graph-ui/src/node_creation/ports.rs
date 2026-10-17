@@ -63,7 +63,7 @@ impl NodeCreationView {
 
     pub(super) fn port_counts(&mut self, cx: &mut Context<Self>) -> Option<InitialPortCounts> {
         let mut values = self.form.as_ref()?.port_counts.clone();
-        let mut valid = true;
+        let mut first_error = None;
         for port in &mut self.ports {
             let PortCountPolicy::Configurable {
                 min,
@@ -90,7 +90,6 @@ impl NodeCreationView {
                 }
                 port.error = None;
             } else {
-                valid = false;
                 port.error = Some(yss_ui::text::format(
                     "native.workbench.portCountRange",
                     &[
@@ -98,10 +97,21 @@ impl NodeCreationView {
                         ("max", max.unwrap_or(u16::MAX).to_string()),
                     ],
                 ));
+                if let Some(error) = &port.error {
+                    first_error.get_or_insert_with(|| {
+                        gpui_kit::component::notification::Notification::error(error.clone())
+                            .title(port.title.clone())
+                    });
+                }
             }
         }
         cx.notify();
-        valid.then_some(values)
+        if let Some(error) = first_error {
+            self.notifications.push(error, cx);
+            None
+        } else {
+            Some(values)
+        }
     }
 }
 

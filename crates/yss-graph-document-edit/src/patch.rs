@@ -1,7 +1,7 @@
 use crate::port_references::PortReferenceIndex;
 use crate::{DocumentError, GraphDocumentRead, validate_graph_document};
 use std::borrow::Cow;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicPortBinding, GraphDocument, GraphDocumentOperation,
     GraphDocumentPatch, InputState, PortAddress,
@@ -187,9 +187,30 @@ pub fn prepare_graph_document_patch(
     Ok(document)
 }
 
+enum PreviewDocument<'a> {
+    ReadOnly(Cow<'a, GraphDocument>),
+    Staged(&'a mut Arc<GraphDocument>),
+}
+
+impl PreviewDocument<'_> {
+    fn document(&self) -> &GraphDocument {
+        match self {
+            Self::ReadOnly(document) => document,
+            Self::Staged(document) => document,
+        }
+    }
+
+    fn to_mut(&mut self) -> &mut GraphDocument {
+        match self {
+            Self::ReadOnly(document) => document.to_mut(),
+            Self::Staged(document) => Arc::make_mut(document),
+        }
+    }
+}
+
 /// Reuse one private candidate and its original structural proof across temporary patches.
 pub struct GraphDocumentPatchPreview<'a> {
-    document: Cow<'a, GraphDocument>,
+    document: PreviewDocument<'a>,
     validated: Option<bool>,
     references: OnceLock<PortReferenceIndex>,
 }
@@ -197,21 +218,34 @@ pub struct GraphDocumentPatchPreview<'a> {
 impl<'a> GraphDocumentPatchPreview<'a> {
     pub fn new(document: &'a GraphDocument) -> Self {
         Self {
-            document: Cow::Borrowed(document),
+            document: PreviewDocument::ReadOnly(Cow::Borrowed(document)),
+            validated: None,
+            references: OnceLock::new(),
+        }
+    }
+
+    /// Borrow the transaction's candidate, forking shared content only on the first patch.
+    pub fn in_place(document: &'a mut Arc<GraphDocument>) -> Self {
+        Self {
+            document: PreviewDocument::Staged(document),
             validated: None,
             references: OnceLock::new(),
         }
     }
 
     pub fn document(&self) -> &GraphDocument {
-        &self.document
+        self.document.document()
     }
 
     pub fn read(&mut self) -> GraphDocumentRead<'_> {
         let validated = *self
             .validated
-            .get_or_insert_with(|| validate_graph_document(&self.document).is_ok());
-        GraphDocumentRead::from_validity(&self.document, validated, Some(&self.references))
+            .get_or_insert_with(|| validate_graph_document(self.document.document()).is_ok());
+        GraphDocumentRead::from_validity(
+            self.document.document(),
+            validated,
+            Some(&self.references),
+        )
     }
 
     pub fn prepare<'stage>(
@@ -225,6 +259,13 @@ impl<'a> GraphDocumentPatchPreview<'a> {
             validated,
             Some(&mut self.references),
         )
+    }
+
+    /// Retain a validated patch in this candidate rather than restoring it on scope exit.
+    pub fn apply(&mut self, patch: &GraphDocumentPatch) -> Result<(), DocumentError> {
+        self.prepare(patch)?.commit();
+        self.validated = Some(true);
+        Ok(())
     }
 }
 
@@ -407,6 +448,50 @@ mod tests {
         };
         document.connections.insert(connection.id, connection);
         document
+    }
+
+    #[test]
+    fn retained_candidate_patches_preserve_reference_indexes_and_rollback_failures() {
+        use std::sync::Arc;
+        let original = Arc::new(document_with_bound_connection());
+        let connection = original.connections.values().next().unwrap().clone();
+        let remove = GraphDocumentPatch::new([GraphDocumentOperation::RemoveConnection {
+            connection: connection.clone(),
+        }]);
+        let restore = GraphDocumentPatch::new([GraphDocumentOperation::InsertConnection {
+            connection: connection.clone(),
+        }]);
+        let rejected = GraphDocumentPatch::new([
+            GraphDocumentOperation::InsertConnection {
+                connection: connection.clone(),
+            },
+            GraphDocumentOperation::InsertConnection {
+                connection: connection.clone(),
+            },
+        ]);
+        let mut candidate = Arc::clone(&original);
+        {
+            let mut preview = GraphDocumentPatchPreview::in_place(&mut candidate);
+            assert_eq!(preview.read().connections_for(&connection.input).count(), 1);
+            preview.apply(&remove).unwrap();
+            assert_eq!(preview.read().connections_for(&connection.input).count(), 0);
+            assert_eq!(
+                preview.apply(&rejected),
+                Err(DocumentError::DuplicateConnection(connection.id))
+            );
+            assert_eq!(preview.read().connections_for(&connection.input).count(), 0);
+            {
+                let staged = preview.prepare(&restore).unwrap();
+                assert_eq!(staged.read().connections_for(&connection.input).count(), 1);
+            }
+            assert_eq!(preview.read().connections_for(&connection.input).count(), 0);
+        }
+        assert!(candidate.connections.is_empty());
+        assert_eq!(original.connections.len(), 1);
+        GraphDocumentPatchPreview::in_place(&mut candidate)
+            .apply(&restore)
+            .unwrap();
+        assert_eq!(candidate, original);
     }
 
     #[test]

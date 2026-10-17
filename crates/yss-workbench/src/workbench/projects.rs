@@ -17,6 +17,7 @@ use gpui_kit::{
 use std::path::PathBuf;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry_contract::ProjectRecord;
+use yss_ui::lifecycle::LogReleased;
 
 pub(crate) enum ProjectCommand {
     Open {
@@ -43,7 +44,9 @@ impl ProjectOperation {
         cx: &mut Context<Workbench>,
     ) {
         if let Some(dialog) = &self.dialog {
-            let _ = dialog.update(cx, |form, cx| form.show_progress(progress, cx));
+            dialog
+                .update(cx, |form, cx| form.show_progress(progress, cx))
+                .log_released();
         }
     }
     pub(crate) fn new(
@@ -67,9 +70,11 @@ impl ProjectOperation {
         cx: &mut Context<Workbench>,
     ) {
         if let Some(dialog) = &self.dialog {
-            let _ = dialog.update(cx, |view, cx| {
-                view.finish(lifecycle, Some(message.as_ref().into()), None, cx)
-            });
+            dialog
+                .update(cx, |view, cx| {
+                    view.finish(lifecycle, Some(message.as_ref().into()), None, cx)
+                })
+                .log_released();
         }
     }
 }
@@ -179,7 +184,9 @@ impl Workbench {
                     }
                 });
                 let picker_id = picker.entity_id();
-                let _ = owner.update(cx, |view, _| view.recent_picker = Some(picker.downgrade()));
+                owner
+                    .update(cx, |view, _| view.recent_picker = Some(picker.downgrade()))
+                    .log_released();
                 let focus = picker.read(cx).focus_handle(cx);
                 crate::modal_window::ModalContent::new(move |_, _| {
                     gpui_kit::div().h(px(400.)).child(
@@ -191,15 +198,17 @@ impl Workbench {
                 .focus(focus)
                 .on_closed(move |cx| {
                     cx.defer(move |cx| {
-                        let _ = owner.update(cx, |view, _| {
-                            if view
-                                .recent_picker
-                                .as_ref()
-                                .is_some_and(|current| current.entity_id() == picker_id)
-                            {
-                                view.recent_picker = None;
-                            }
-                        });
+                        owner
+                            .update(cx, |view, _| {
+                                if view
+                                    .recent_picker
+                                    .as_ref()
+                                    .is_some_and(|current| current.entity_id() == picker_id)
+                                {
+                                    view.recent_picker = None;
+                                }
+                            })
+                            .log_released();
                     });
                 })
             },
@@ -286,7 +295,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = prompt.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle {
                     return;
                 }
@@ -312,7 +321,8 @@ impl Workbench {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
     }
@@ -368,7 +378,7 @@ impl Workbench {
         );
         cx.spawn_in(window, async move |view, cx| {
             let choice = prompt.await.ok();
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle {
                     return;
                 }
@@ -387,7 +397,8 @@ impl Workbench {
                     ),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

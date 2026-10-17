@@ -2,54 +2,53 @@ use super::*;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+/// Delegation arguments must arrive whole; the executor reports schema diagnostics as feedback.
 #[derive(Default)]
 struct Delegation {
-    tasks: Mutex<Vec<model::AgentTaskInput>>,
+    tasks: Mutex<Vec<Value>>,
 }
 
-impl ModelCapabilityExecutor for Delegation {
-    fn begin_control<'a>(
-        &'a self,
-        tool: AgentControlTool,
-    ) -> AgentFuture<'a, Result<ToolInvocationId, CapabilityFailure>> {
-        StaticExecutor.begin_control(tool)
-    }
+fn delegation_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "worker": {"type": "string"},
+            "objective": {"type": "string"},
+            "constraints": {"type": "string"},
+            "completionCriteria": {"type": "string"}
+        },
+        "required": ["worker", "objective", "constraints", "completionCriteria"]
+    })
+}
 
-    fn finish_control<'a>(
-        &'a self,
-        id: ToolInvocationId,
-        tool: AgentControlTool,
-        failure: Option<CapabilityFailure>,
-    ) -> AgentFuture<'a, Result<(), CapabilityFailure>> {
-        StaticExecutor.finish_control(id, tool, failure)
-    }
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code, reason = "fields exist only to exercise argument decoding")]
+struct DelegationInput {
+    worker: String,
+    objective: String,
+    constraints: String,
+    completion_criteria: String,
+}
 
-    fn execute<'a>(
+impl AgentToolExecutor for Delegation {
+    fn call<'a>(
         &'a self,
-        _: ModelCapabilityRequest,
-    ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
-        Box::pin(async { panic!("delegation must not invoke business tools") })
-    }
-
-    fn delegate<'a>(
-        &'a self,
-        task: model::AgentTaskInput,
-    ) -> AgentFuture<'a, Result<AgentTaskOutcome, CapabilityFailure>> {
+        call: yss_harness_contract::ToolCall,
+    ) -> AgentFuture<'a, ToolCallOutcome> {
         Box::pin(async move {
-            let role = task.worker;
-            self.tasks.lock().unwrap().push(task);
-            Ok(AgentTaskOutcome {
-                run_id: AgentRunId::try_new("review-run").unwrap(),
-                role,
-                state: AgentRunState::Completed,
-                report: None,
-                failure_code: None,
-                artifacts: vec![],
-                results: vec![],
-                evidence: vec![],
-                plan: None,
-                invalidated_runs: vec![],
-            })
+            assert_eq!(call.name, DELEGATE_TASK_TOOL);
+            if let Err(failure) =
+                decode_arguments::<DelegationInput>(call.arguments.clone(), &delegation_schema())
+            {
+                return ToolCallOutcome {
+                    invocation_id: None,
+                    output: json!({"state": "failed", "failure": {"code": failure.code, "details": failure.details}}),
+                    fatal: None,
+                };
+            }
+            self.tasks.lock().unwrap().push(call.arguments);
+            completed(json!({"runId": "review-run", "state": "completed"}))
         })
     }
 }
@@ -103,15 +102,12 @@ fn delegation_stream(arguments: &Value, id: usize) -> String {
 
 #[tokio::test]
 async fn native_deepseek_preserves_fragmented_delegation_and_accepts_corrected_retry() {
-    let task = model::AgentTaskInput {
-        worker: AgentRole::Review,
-        objective: "检查 diamonds 报告".into(),
-        constraints: "只读；保留 \"cut\" 字段\n禁止修改原数据".into(),
-        completion_criteria: "返回核验结论".into(),
-        depends_on: vec![],
-        scope: model::AgentTaskScopeInput::default(),
-    };
-    let valid = serde_json::to_value(&task).unwrap();
+    let valid = json!({
+        "worker": "review",
+        "objective": "检查 diamonds 报告",
+        "constraints": "只读；保留 \"cut\" 字段\n禁止修改原数据",
+        "completionCriteria": "返回核验结论",
+    });
     let mut missing = valid.clone();
     missing.as_object_mut().unwrap().remove("constraints");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -122,9 +118,9 @@ async fn native_deepseek_preserves_fragmented_delegation_and_accepts_corrected_r
     config.adapter = "deepseek/openai".into();
     let driver = configured_driver(config);
     let executor = Arc::new(Delegation::default());
-    let mut input = request(vec![]);
-    input.role = AgentRole::Manager;
-    input.control_tools = vec![AgentControlTool::DelegateTask];
+    let mut input = request(vec![tool(DELEGATE_TASK_TOOL, delegation_schema())]);
+    input.tools.retain(|tool| tool.name == DELEGATE_TASK_TOOL);
+    input.role = AgentRoleId::try_new("manager").unwrap();
     let server = async {
         for (index, response) in [
             delegation_stream(&missing, 0),
@@ -178,5 +174,5 @@ async fn native_deepseek_preserves_fragmented_delegation_and_accepts_corrected_r
     })
     .await
     .unwrap();
-    assert_eq!(*executor.tasks.lock().unwrap(), vec![task]);
+    assert_eq!(*executor.tasks.lock().unwrap(), vec![valid]);
 }

@@ -58,7 +58,6 @@ pub struct RunGraphRequest {
     project_instance_id: ProjectInstanceId,
     graph_path: GraphResourcePath,
     demand: RunDemand,
-    required_resources: Box<[ProjectResourceRequirement]>,
     resource_authorizations: Option<Box<[RunResourceAuthorization]>>,
     inherit_graph_reads: bool,
     cancellation: Arc<AtomicBool>,
@@ -85,7 +84,6 @@ impl RunGraphRequest {
             project_instance_id,
             graph_path,
             demand: RunDemand::Default,
-            required_resources: Box::new([]),
             resource_authorizations: None,
             inherit_graph_reads: false,
             cancellation: Arc::new(AtomicBool::new(false)),
@@ -97,14 +95,6 @@ impl RunGraphRequest {
 
     pub fn with_demand(mut self, demand: RunDemand) -> Self {
         self.demand = demand;
-        self
-    }
-
-    pub fn with_required_resources(
-        mut self,
-        resources: impl IntoIterator<Item = ProjectResourceRequirement>,
-    ) -> Self {
-        self.required_resources = resources.into_iter().collect();
         self
     }
 
@@ -422,8 +412,7 @@ where
         }
         *allowed = grants.into_boxed_slice();
     }
-    let required_resources =
-        merge_resource_requirements(request.required_resources.iter().cloned(), graph_reads);
+    let required_resources = graph_reads;
     if let Some(allowed) = &request.resource_authorizations {
         for required in &required_resources {
             if !allowed.iter().any(|grant| {
@@ -513,6 +502,7 @@ where
         captured.publish_graph_activity(super::editing::GraphActivity::Changed {
             graph_path: request.graph_path.as_str().into(),
             editing: editing.state,
+            cause: super::editing::GraphChangeCause::Results,
         });
     }
     outcome
@@ -595,17 +585,6 @@ fn revalidate_final_session(
     state
         .revalidate_captured_session(captured)
         .map_err(ExecutionApplicationError::StaleSession)
-}
-
-fn merge_resource_requirements(
-    first: impl IntoIterator<Item = ProjectResourceRequirement>,
-    second: impl IntoIterator<Item = ProjectResourceRequirement>,
-) -> Vec<ProjectResourceRequirement> {
-    let mut resources = BTreeMap::new();
-    for requirement in first.into_iter().chain(second) {
-        resources.insert(requirement.resource().as_str().to_owned(), requirement);
-    }
-    resources.into_values().collect()
 }
 
 fn graph_resource_requirements(

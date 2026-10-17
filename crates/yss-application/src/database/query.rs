@@ -205,14 +205,16 @@ pub(super) fn query_database_metadata_in_captured_session(
         expected_revision,
         DatabaseApplicationOperation::ReadMetadata,
         |session, database| {
-            let snapshot = session_api::metadata_snapshot(session, database)?;
+            let (name, schema, row_count, data_revision) =
+                session_api::metadata_snapshot(session, database)?.into_parts();
+            let columns = schema.into_columns().into_vec();
             Ok(DatabaseMetaResult {
                 id: id.to_owned(),
-                name: snapshot.name().to_owned(),
-                row_count: snapshot.row_count(),
-                column_count: snapshot.schema().columns().len(),
-                columns: snapshot.schema().columns().to_vec(),
-                data_revision: snapshot.data_revision(),
+                name: name.into(),
+                row_count,
+                column_count: columns.len(),
+                columns,
+                data_revision,
             })
         },
     )

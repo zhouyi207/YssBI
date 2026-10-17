@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use yss_chart_document::{ChartEncodings, ChartType};
 use yss_graph_document::{FunctionParameterId, GraphResourcePath};
 use yss_project_identity::{OperationId, ResourceRevision};
 
@@ -12,6 +11,21 @@ pub enum ResourceKey {
     Chart(ChartResourceKey),
     Mind(MindResourceKey),
     Doc(DocResourceKey),
+}
+
+impl ResourceKey {
+    /// The project-relative file of the resource. A function key names its graph's file;
+    /// database keys are not paths.
+    pub fn path(&self) -> Option<&str> {
+        match self {
+            Self::Graph(path) => Some(path.as_str()),
+            Self::Function(key) => Some(&key.0),
+            Self::Chart(key) => Some(&key.0),
+            Self::Mind(key) => Some(&key.0),
+            Self::Doc(key) => Some(&key.0),
+            Self::Database(_) => None,
+        }
+    }
 }
 
 /// Project-owned mutation envelope. Application and Command adapters may
@@ -126,20 +140,6 @@ pub struct ResourcePathMovePatch {
     pub to: Box<str>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChartDocumentState {
-    pub database_id: String,
-    pub chart_type: ChartType,
-    pub encodings: ChartEncodings,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChartDocumentPatch {
-    pub before: ChartDocumentState,
-    pub after: ChartDocumentState,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DatabaseDocumentPatch {
     pub before: Option<yss_database_contract::DatabaseDecl>,
@@ -150,7 +150,6 @@ pub struct DatabaseDocumentPatch {
 #[serde(tag = "kind", content = "patch", rename_all = "snake_case")]
 pub enum ResourceDocumentPatch {
     Function(FunctionDocumentPatch),
-    Chart(ChartDocumentPatch),
     ResourceLifecycle(ResourceLifecyclePatch),
     ResourceMove(ResourcePathMovePatch),
     Database(DatabaseDocumentPatch),

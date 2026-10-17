@@ -7,10 +7,6 @@ pub use ast::{BinaryOp, ComparisonOp, MathError, MathErrorKind, MathExpr, MathRe
 
 pub const MAX_RELATIONS: usize = 64;
 
-pub fn ensure_relation_count(count: usize) -> Result<(), MathError> {
-    adapter::ensure_relation_count(count)
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MathInputFormat {
     Plain,

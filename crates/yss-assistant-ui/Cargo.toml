@@ -20,6 +20,7 @@ yss-application = { path = "../yss-application" }
 yss-desktop-services = { path = "../yss-desktop-services" }
 yss-graph-execution = { path = "../yss-graph-execution" }
 yss-harness-contract = { path = "../yss-harness-contract" }
+yss-assistant-contract = { path = "../yss-assistant-contract" }
 yss-harness-core = { path = "../yss-harness-core" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-settings = { path = "../yss-settings" }

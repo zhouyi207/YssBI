@@ -6,12 +6,11 @@ use crate::{
     ResourceRenameOwnershipLease,
 };
 use std::sync::{Arc, Mutex, RwLock};
-use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_filesystem::{FilesystemCoordinator, NormalizedRoot};
 use yss_graph_document::GraphResourcePath;
 use yss_project_history::{MutationRequest, ProjectResourceMutationError, ResourceKey};
 use yss_project_identity::ProjectInstanceId;
-use yss_project_identity::{OperationId, ResourceRevision};
+use yss_project_identity::ResourceRevision;
 use yss_project_model::{GraphResourceDocument, ProjectData};
 use yss_resource_lifecycle::ResourceLifecycleRegistry;
 
@@ -42,9 +41,8 @@ pub use graph_operation::{
 };
 use resource_patch::CommittedResourceMutation;
 use resource_publication::{
-    canonical_resource_lifecycle_events, chart_publication_deltas,
-    normalize_function_patch_revisions, normalize_function_resource_revision,
-    patch_projection_paths, validate_chart_path_insertion,
+    canonical_resource_lifecycle_events, normalize_function_patch_revisions,
+    normalize_function_resource_revision, patch_projection_paths,
 };
 pub(super) use resource_publication::{checked_resource_revision, validate_context_revisions};
 
@@ -149,22 +147,10 @@ impl ProjectState {
             .unwrap() = Some(hook);
     }
 
-    pub fn activation_revision(&self) -> u64 {
-        self.activation_generation
-            .load(std::sync::atomic::Ordering::Acquire)
-            / 2
-    }
-
     #[cfg(any(test, feature = "test-support"))]
     pub fn revision_state_for_test(
         &self,
-    ) -> (
-        std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision>,
-        std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
-    ) {
-        (
-            self.graph_resource_revisions.read().unwrap().clone(),
-            self.chart_revisions.read().unwrap().clone(),
-        )
+    ) -> std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision> {
+        self.graph_resource_revisions.read().unwrap().clone()
     }
 }

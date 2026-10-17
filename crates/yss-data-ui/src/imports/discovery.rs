@@ -1,6 +1,7 @@
 //! Read-only file and SQL discovery runs outside the window event loop.
 use super::{ImportDialog, ImportKind, ImportStage, ImportTask, SourceLocation};
 use gpui_kit::{Context, PathPromptOptions, Window};
+use yss_ui::lifecycle::LogReleased;
 
 impl ImportDialog {
     pub(super) fn choose_file(
@@ -33,24 +34,27 @@ impl ImportDialog {
                 .and_then(Result::ok)
                 .flatten()
                 .and_then(|paths| paths.into_iter().next());
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.task = None;
                 if failed {
-                    view.error = Some(yss_ui::text::t("native.imports.pickerFailed").into());
+                    view.notifications
+                        .error(yss_ui::text::t("native.imports.pickerFailed"), cx);
                 }
                 if let Some(path) = path {
                     if let Some(path) = path.to_str() {
                         view.stage = ImportStage::File(kind, path.to_owned());
-                        view.error = None;
+
                         if matches!(kind, ImportKind::Excel | ImportKind::Sqlite) {
                             view.discover_file(window, cx);
                         }
                     } else {
-                        view.error = Some(yss_ui::text::t("native.imports.invalidFilePath").into());
+                        view.notifications
+                            .error(yss_ui::text::t("native.imports.invalidFilePath"), cx);
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -76,10 +80,10 @@ impl ImportDialog {
         let ImportStage::Connection(kind) = self.stage else {
             return;
         };
-        match self.connection.url(kind, cx) {
+        match self.connection.url(cx) {
             Ok(connection) => self.discover(SourceLocation::Sql { kind, connection }, window, cx),
             Err(error) => {
-                self.error = Some(error);
+                self.notifications.error(error, cx);
                 cx.notify();
             }
         }
@@ -89,7 +93,7 @@ impl ImportDialog {
             return;
         }
         self.task = Some(ImportTask::Discovery);
-        self.error = None;
+
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
         let query = source.clone();
@@ -115,7 +119,7 @@ impl ImportDialog {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -124,11 +128,16 @@ impl ImportDialog {
                     Some(choices) if !choices.is_empty() => {
                         view.stage = ImportStage::Selection { source, choices };
                     }
-                    Some(_) => view.error = Some(yss_ui::text::t("native.imports.noTables").into()),
-                    None => view.error = Some(yss_ui::text::t("native.imports.readFailed").into()),
+                    Some(_) => view
+                        .notifications
+                        .error(yss_ui::text::t("native.imports.noTables"), cx),
+                    None => view
+                        .notifications
+                        .error(yss_ui::text::t("native.imports.readFailed"), cx),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -138,7 +147,7 @@ impl ImportDialog {
             return;
         }
         self.task = Some(ImportTask::Discovery);
-        self.error = None;
+
         self.stage = ImportStage::Samples {
             entries: vec![],
             load_failed: false,
@@ -153,7 +162,7 @@ impl ImportDialog {
             let result = job.await.ok().and_then(Result::ok).unwrap_or(Err(
                 "importModal.samples.errors.sample_resource_unavailable",
             ));
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 view.task = None;
                 match result {
                     Ok(entries) => {
@@ -167,11 +176,12 @@ impl ImportDialog {
                             entries: vec![],
                             load_failed: true,
                         };
-                        view.error = Some(yss_ui::text::translate(key));
+                        view.notifications.error(yss_ui::text::translate(key), cx);
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

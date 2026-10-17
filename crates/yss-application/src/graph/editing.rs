@@ -12,11 +12,19 @@ use super::edit::{GraphDocumentChange, GraphDocumentEditor};
 use super::resources::ResourceMutationApplicationError;
 use crate::session::{ApplicationSession, ApplicationState};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GraphChangeCause {
+    Edit { operation_id: OperationId },
+    Dependencies,
+    Results,
+}
+
 #[derive(Clone)]
 pub enum GraphActivity {
     Changed {
         graph_path: String,
         editing: GraphEditingState,
+        cause: GraphChangeCause,
     },
     Execution(super::run::RunApplicationEvent),
 }
@@ -212,15 +220,18 @@ pub struct GraphEditRequest {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct GraphEditResponse {
     pub update: GraphDocumentChange,
     pub editing: GraphEditingState,
     pub result_state: super::results::GraphResultState,
+    pub operation_id: OperationId,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphSaveResponse {
     pub project_instance_id: ProjectInstanceId,
+    /// A replay retains the original saved revision even when `graph` includes later edits.
     pub resource_revision: ResourceRevision,
     pub graph: GraphEditResponse,
 }
@@ -277,6 +288,7 @@ impl ApplicationState {
         captured: &Arc<ApplicationSession>,
         path: &GraphResourcePath,
         locale: &str,
+        operation_id: OperationId,
     ) -> Result<GraphEditResponse, ResourceMutationApplicationError> {
         let snapshot = captured
             .project()
@@ -289,6 +301,7 @@ impl ApplicationState {
             update.result_inputs.clone(),
         );
         Ok(GraphEditResponse {
+            operation_id,
             result_state,
             update,
             editing: snapshot.state,
@@ -322,14 +335,37 @@ impl ApplicationState {
         request: GraphEditRequest,
         mutation: EditorGraphMutation,
     ) -> Result<GraphEditResponse, ResourceMutationApplicationError> {
+        let fingerprint = command_fingerprint(&request, "edit", &[&mutation])?;
+        self.commit_graph_mutations(request, std::iter::once(mutation), fingerprint)
+    }
+
+    /// Commit ordered native mutations atomically with one projection and history entry.
+    pub fn edit_graph_batch(
+        &self,
+        request: GraphEditRequest,
+        mutations: Vec<EditorGraphMutation>,
+    ) -> Result<GraphEditResponse, ResourceMutationApplicationError> {
+        let fingerprint = command_fingerprint(&request, "edit", &mutations)?;
+        self.commit_graph_mutations(request, mutations, fingerprint)
+    }
+
+    fn commit_graph_mutations(
+        &self,
+        request: GraphEditRequest,
+        mutations: impl IntoIterator<Item = EditorGraphMutation>,
+        fingerprint: [u8; 32],
+    ) -> Result<GraphEditResponse, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&request.project_instance_id)?;
         let _editing = captured
             .coordinate_graph_edit(&request.graph_path)
             .map_err(|_| ResourceMutationApplicationError::EditingBusy)?;
-        let fingerprint = command_fingerprint(&request, "edit", &mutation)?;
         if let Some(receipt) = existing_command(&captured, &request, fingerprint)? {
-            let mut response =
-                self.current_graph_response(&captured, &request.graph_path, &request.locale)?;
+            let mut response = self.current_graph_response(
+                &captured,
+                &request.graph_path,
+                &request.locale,
+                request.operation_id,
+            )?;
             response.update.changed = receipt.commit.invalidations.graph;
             return Ok(response);
         }
@@ -349,7 +385,9 @@ impl ApplicationState {
             &request.locale,
             Arc::clone(&operation.document),
         )?;
-        let _ = editor.apply(mutation)?;
+        for mutation in mutations {
+            let _ = editor.apply(mutation)?;
+        }
         let update = editor.finish(self)?;
         let receipt = captured
             .project()
@@ -367,8 +405,12 @@ impl ApplicationState {
         captured.publish_graph_activity(GraphActivity::Changed {
             graph_path: request.graph_path.as_str().into(),
             editing: receipt.editing.clone(),
+            cause: GraphChangeCause::Edit {
+                operation_id: request.operation_id,
+            },
         });
         Ok(GraphEditResponse {
+            operation_id: request.operation_id,
             result_state,
             update,
             editing: receipt.editing,
@@ -386,8 +428,12 @@ impl ApplicationState {
             .map_err(|_| ResourceMutationApplicationError::EditingBusy)?;
         let fingerprint = command_fingerprint(&request, if redo { "redo" } else { "undo" }, &())?;
         if let Some(receipt) = existing_command(&captured, &request, fingerprint)? {
-            let mut response =
-                self.current_graph_response(&captured, &request.graph_path, &request.locale)?;
+            let mut response = self.current_graph_response(
+                &captured,
+                &request.graph_path,
+                &request.locale,
+                request.operation_id,
+            )?;
             response.update.changed = receipt.commit.invalidations.graph;
             return Ok(response);
         }
@@ -440,8 +486,12 @@ impl ApplicationState {
         captured.publish_graph_activity(GraphActivity::Changed {
             graph_path: request.graph_path.as_str().into(),
             editing: receipt.editing.clone(),
+            cause: GraphChangeCause::Edit {
+                operation_id: request.operation_id,
+            },
         });
         Ok(GraphEditResponse {
+            operation_id: request.operation_id,
             result_state,
             update,
             editing: receipt.editing,
@@ -465,6 +515,7 @@ impl ApplicationState {
                     &captured,
                     &request.graph_path,
                     &request.locale,
+                    request.operation_id,
                 )?,
             });
         }
@@ -504,11 +555,15 @@ impl ApplicationState {
         captured.publish_graph_activity(GraphActivity::Changed {
             graph_path: request.graph_path.as_str().into(),
             editing: receipt.editing.clone(),
+            cause: GraphChangeCause::Edit {
+                operation_id: request.operation_id,
+            },
         });
         Ok(GraphSaveResponse {
             project_instance_id: request.project_instance_id,
             resource_revision: receipt.to_revision,
             graph: GraphEditResponse {
+                operation_id: request.operation_id,
                 result_state,
                 update,
                 editing: receipt.editing,

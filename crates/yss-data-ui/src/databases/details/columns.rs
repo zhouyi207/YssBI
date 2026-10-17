@@ -2,8 +2,7 @@
 use super::{DatabaseEditor, DetailsState};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
+    Disableable,
     collapsible::Collapsible,
     menu::{DropdownMenu, PopupMenuItem},
 };
@@ -12,6 +11,8 @@ use yss_application::database::{DatabaseMetaResult, DatabaseMutation};
 use yss_data_contract::SemanticType;
 use yss_database_schema::DatabaseColumnFact;
 use yss_project_identity::ResourceRevision;
+use yss_ui::inspector::{self, InspectorSection, Pager};
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::text::translate as t;
 
 const PAGE_COLUMNS: usize = 50;
@@ -58,103 +59,69 @@ impl DatabaseEditor {
         &self,
         meta: &DatabaseMetaResult,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    ) -> InspectorSection {
+        let section = InspectorSection::new("database-columns", t("detail.fields.columns"))
+            .count(meta.columns.len())
+            .collapsible(
+                self.details.columns_open,
+                cx.listener(|view, open: &bool, _, cx| {
+                    view.details.columns_open = *open;
+                    view.changed(cx);
+                }),
+            );
+        if !self.details.columns_open {
+            return section;
+        }
         let page = self.details.columns_page;
         let pages = meta.columns.len().div_ceil(PAGE_COLUMNS).max(1);
-        let mut content = div().flex().flex_col().gap_2();
-        if self.details.columns_open {
-            for (index, column) in meta
-                .columns
-                .iter()
-                .enumerate()
-                .skip(page * PAGE_COLUMNS)
-                .take(PAGE_COLUMNS)
-            {
-                let name = column.name().as_str().to_owned();
-                let open = self.details.expanded.contains(&name);
-                content = content.child(
-                    Collapsible::new()
-                        .open(open)
-                        .child(
-                            Button::new(("database-column-details", index))
-                                .small()
-                                .ghost()
-                                .w_full()
-                                .label(name.clone())
-                                .tooltip(name.clone())
-                                .icon(if open {
-                                    IconName::ChevronDown
-                                } else {
-                                    IconName::ChevronRight
-                                })
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    if !view.details.expanded.remove(&name) {
-                                        view.details.expanded.insert(name.clone());
-                                    }
-                                    view.changed(cx);
-                                })),
-                        )
-                        .when(open, |section| {
-                            section.content(self.column_settings(column, index, cx))
-                        }),
-                );
-            }
-            if pages > 1 {
-                content = content.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .gap_2()
-                        .child(
-                            Button::new("columns-previous")
-                                .small()
-                                .ghost()
-                                .icon(IconName::ChevronLeft)
-                                .tooltip(t("databaseEditor.previousPage"))
-                                .disabled(page == 0)
-                                .on_click(cx.listener(|view, _, _, cx| {
-                                    view.details.columns_page =
-                                        view.details.columns_page.saturating_sub(1);
-                                    view.changed(cx);
-                                })),
-                        )
-                        .child(div().text_xs().child(format!("{} / {pages}", page + 1)))
-                        .child(
-                            Button::new("columns-next")
-                                .small()
-                                .ghost()
-                                .icon(IconName::ChevronRight)
-                                .tooltip(t("databaseEditor.nextPage"))
-                                .disabled(page + 1 >= pages)
-                                .on_click(cx.listener(move |view, _, _, cx| {
-                                    view.details.columns_page =
-                                        (view.details.columns_page + 1).min(pages - 1);
-                                    view.changed(cx);
-                                })),
-                        ),
-                );
-            }
-        }
-        Collapsible::new()
-            .open(self.details.columns_open)
-            .child(
-                Button::new("database-columns")
-                    .small()
-                    .ghost()
+        let mut list = div().min_w_0().flex().flex_col();
+        for (index, column) in meta
+            .columns
+            .iter()
+            .enumerate()
+            .skip(page * PAGE_COLUMNS)
+            .take(PAGE_COLUMNS)
+        {
+            let name = column.name().as_str().to_owned();
+            let open = self.details.expanded.contains(&name);
+            list = list.child(
+                Collapsible::new()
                     .w_full()
-                    .label(t("detail.fields.columns"))
-                    .icon(if self.details.columns_open {
-                        IconName::ChevronDown
-                    } else {
-                        IconName::ChevronRight
-                    })
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.details.columns_open = !view.details.columns_open;
-                        view.changed(cx);
-                    })),
-            )
-            .content(content)
+                    .min_w_0()
+                    .open(open)
+                    .child(
+                        inspector::disclosure(
+                            ("database-column-details", index),
+                            name.clone(),
+                            Some(column.display_type().to_owned().into()),
+                            open,
+                            cx,
+                        )
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if !view.details.expanded.remove(&name) {
+                                view.details.expanded.insert(name.clone());
+                            }
+                            view.changed(cx);
+                        })),
+                    )
+                    .when(open, |section| {
+                        section.content(self.column_settings(column, index, cx))
+                    }),
+            );
+        }
+        section.child(div().min_w_0().flex().flex_col().gap_1().child(list).when(
+            pages > 1,
+            |body| {
+                body.child(div().flex().justify_end().child(
+                    Pager::new("columns-pager", page, pages).on_change(cx.listener(
+                        |view, page: &usize, _, cx| {
+                            view.details.columns_page = *page;
+                            view.changed(cx);
+                        },
+                    )),
+                ))
+            },
+        ))
     }
 
     fn column_settings(
@@ -172,120 +139,109 @@ impl DatabaseEditor {
         let current = column.physical_type().to_owned();
         let supported = column.supported_semantic_types().to_vec();
         let kind = column.semantic().map(|semantic| semantic.kind);
+        let editable = !self.busy() && self.ready;
+        let physical = inspector::choice_trigger(("column-physical", index), current.clone())
+            .disabled(!editable)
+            .dropdown_menu(move |mut menu, _, _| {
+                for dtype in std::iter::once(current.as_str())
+                    .chain(PHYSICAL_TYPES.into_iter().filter(|dtype| *dtype != current))
+                {
+                    let name = physical_name.clone();
+                    let before = current.clone();
+                    let dtype = dtype.to_owned();
+                    menu = menu.item(PopupMenuItem::new(dtype.clone()).on_click(
+                        inspector::owner_command(
+                            owner.clone(),
+                            move |view: &mut DatabaseEditor, window, cx| {
+                                view.confirm_physical(
+                                    name.clone(),
+                                    before.clone(),
+                                    dtype.clone(),
+                                    revision,
+                                    window,
+                                    cx,
+                                )
+                            },
+                        ),
+                    ));
+                }
+                menu
+            });
+        let semantic = inspector::choice_trigger(
+            ("column-semantic", index),
+            kind.map(|kind| kind.as_str().to_owned())
+                .unwrap_or_else(|| t("native.databases.unset")),
+        )
+        .disabled(!editable || supported.is_empty())
+        .dropdown_menu(move |mut menu, _, _| {
+            for kind in &supported {
+                let kind = *kind;
+                let name = name.clone();
+                menu = menu.item(PopupMenuItem::new(kind.as_str()).on_click(
+                    inspector::owner_command(
+                        semantic_owner.clone(),
+                        move |view: &mut DatabaseEditor, window, cx| {
+                            view.open_column_semantic(&name, kind, revision, window, cx)
+                        },
+                    ),
+                ));
+            }
+            menu
+        });
+        let configurable = kind.filter(|kind| {
+            column.supported_semantic_types().contains(kind)
+                && matches!(
+                    kind,
+                    SemanticType::Numeric
+                        | SemanticType::Categorical
+                        | SemanticType::Ordinal
+                        | SemanticType::Binary
+                )
+        });
         div()
+            .min_w_0()
+            .pl(inspector::DISCLOSURE_INDENT)
+            .pt_0p5()
+            .pb_2()
             .flex()
             .flex_col()
             .gap_2()
-            .pl_3()
-            .pb_2()
-            .child(
+            .child(inspector::sub_field(
+                t("native.databases.storageType"),
+                physical,
+                cx,
+            ))
+            .child(inspector::sub_field(
+                t("native.databases.semantics"),
                 div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(t("native.databases.storageType")),
-            )
-            .child(
-                Button::new(("column-physical", index))
-                    .small()
-                    .outline()
-                    .label(current.clone())
-                    .disabled(self.busy() || !self.ready)
-                    .dropdown_menu(move |mut menu, _, _| {
-                        for dtype in std::iter::once(current.as_str())
-                            .chain(PHYSICAL_TYPES.into_iter().filter(|dtype| *dtype != current))
-                        {
-                            let owner = owner.clone();
-                            let name = physical_name.clone();
-                            let before = current.clone();
-                            let dtype = dtype.to_owned();
-                            menu = menu.item(PopupMenuItem::new(dtype.clone()).on_click(
-                                move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        view.confirm_physical(
-                                            name.clone(),
-                                            before.clone(),
-                                            dtype.clone(),
-                                            revision,
-                                            window,
-                                            cx,
-                                        )
-                                    });
-                                },
-                            ));
-                        }
-                        menu
-                    }),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(t("native.databases.semantics")),
-            )
-            .child(
-                div()
+                    .min_w_0()
                     .flex()
+                    .items_center()
                     .gap_1()
-                    .child(
-                        Button::new(("column-semantic", index))
-                            .small()
-                            .outline()
-                            .flex_1()
-                            .label(
-                                kind.map(|kind| kind.as_str().to_owned())
-                                    .unwrap_or_else(|| t("native.databases.unset")),
+                    .child(div().flex_1().min_w_0().child(semantic))
+                    .when_some(configurable, |row, kind| {
+                        row.child(
+                            inspector::action_button(
+                                ("column-semantic-edit", index),
+                                IconName::Pencil,
+                                t(if kind == SemanticType::Numeric {
+                                    "detail.data.editConstraints"
+                                } else {
+                                    "detail.data.editMapping"
+                                }),
                             )
-                            .disabled(self.busy() || !self.ready || supported.is_empty())
-                            .dropdown_menu(move |mut menu, _, _| {
-                                for kind in &supported {
-                                    let kind = *kind;
-                                    let owner = semantic_owner.clone();
-                                    let name = name.clone();
-                                    menu = menu.item(PopupMenuItem::new(kind.as_str()).on_click(
-                                        move |_, window, cx| {
-                                            let _ = owner.update(cx, |view, cx| {
-                                                view.open_column_semantic(
-                                                    &name, kind, revision, window, cx,
-                                                )
-                                            });
-                                        },
-                                    ));
-                                }
-                                menu
-                            }),
-                    )
-                    .when_some(
-                        kind.filter(|kind| {
-                            column.supported_semantic_types().contains(kind)
-                                && matches!(
-                                    kind,
-                                    SemanticType::Numeric
-                                        | SemanticType::Categorical
-                                        | SemanticType::Ordinal
-                                        | SemanticType::Binary
-                                )
-                        }),
-                        |view, kind| {
-                            view.child(
-                                Button::new(("column-semantic-edit", index))
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::Pencil)
-                                    .tooltip(t(if kind == SemanticType::Numeric {
-                                        "detail.data.editConstraints"
-                                    } else {
-                                        "detail.data.editMapping"
-                                    }))
-                                    .disabled(self.busy() || !self.ready)
-                                    .on_click(cx.listener(move |view, _, window, cx| {
-                                        view.open_column_semantic(
-                                            &edit_name, kind, revision, window, cx,
-                                        )
-                                    })),
-                            )
-                        },
-                    ),
-            )
+                            .disabled(!editable)
+                            .on_click(cx.listener(
+                                move |view, _, window, cx| {
+                                    view.open_column_semantic(
+                                        &edit_name, kind, revision, window, cx,
+                                    )
+                                },
+                            )),
+                        )
+                    }),
+                cx,
+            ))
     }
 
     fn open_column_semantic(
@@ -340,7 +296,7 @@ impl DatabaseEditor {
         self.changed(cx);
         cx.spawn_in(window, async move |view, cx| {
             let confirmed = matches!(prompt.await, Ok(0));
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -361,7 +317,8 @@ impl DatabaseEditor {
                     view.reload(false, window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
     }

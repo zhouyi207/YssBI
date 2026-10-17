@@ -7,7 +7,9 @@ mod menu;
 
 use super::{GraphCanvas, presentation::State};
 use gpui_kit::component::ActiveTheme;
-use gpui_kit::{Context, IntoElement, MouseButton, div, prelude::*, px};
+use gpui_kit::{
+    AnyElement, App, Context, Hsla, IntoElement, MouseButton, Pixels, div, prelude::*, px,
+};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_graph_editor::projection::{
     ConnectionDecision, EditorDiagnosticSeverity, EditorPortModel, EditorPortTypeState,
@@ -29,6 +31,24 @@ pub(crate) fn scalar_input_type(port: &EditorPortModel) -> Option<SemanticType> 
         } => Some(*kind),
         _ => None,
     }
+}
+
+fn port_color(port: &EditorPortModel, cx: &App) -> Hsla {
+    if port.orphan {
+        cx.theme().danger
+    } else {
+        appearance::data_color(type_color(port), cx)
+    }
+}
+
+/// The port as drawn on the canvas, so other surfaces show the same type shape and color.
+pub(crate) fn port_glyph(port: &EditorPortModel, diameter: Pixels, cx: &App) -> AnyElement {
+    glyph::Glyph::new(&port.type_state).render(
+        diameter,
+        port_color(port, cx),
+        port.connections.current > 0,
+        false,
+    )
 }
 
 pub(super) fn type_color(port: &EditorPortModel) -> u32 {
@@ -82,11 +102,7 @@ impl GraphCanvas {
         let active = drag.is_some_and(|drag| drag.source == port.address);
         let target = drag.is_some_and(|drag| drag.target.as_ref() == Some(&port.address));
         let dimmed = !active && matches!(decision, Some(ConnectionDecision::Invalid { .. }));
-        let color = if port.orphan {
-            cx.theme().danger
-        } else {
-            appearance::data_color(type_color(port), cx)
-        };
+        let color = port_color(port, cx);
         let display = self
             .presentation
             .ports
@@ -98,7 +114,7 @@ impl GraphCanvas {
             .port_details
             .as_ref()
             .and_then(|details| details.diagnostic(&port.address));
-        let pulse = !port.orphan
+        let emphasized = !port.orphan
             && !active
             && port.connections.current == 0
             && port.direction == PortDirection::Input
@@ -152,8 +168,7 @@ impl GraphCanvas {
                     px(diameter * self.zoom),
                     color,
                     port.connections.current > 0 || active,
-                    pulse,
-                    cx,
+                    emphasized,
                 ))
         };
         let tooltip_address = port.address.clone();

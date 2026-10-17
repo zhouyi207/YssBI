@@ -31,17 +31,13 @@ use crate::text::translate;
 
 pub enum ActivityEvent {
     OpenGraph(String),
-    OpenDocument(String),
-    OpenMind(String),
+    OpenFile(String),
     OpenDatabase(String),
-    OpenChart(String),
-    ChartResource(String, super::resources::ResourceAction),
-    DocumentResource(String, super::resources::ResourceAction),
-    MindResource(String, super::resources::ResourceAction),
+    /// Manages a graph or authored file by path.
+    Resource(String, super::resources::ResourceAction),
     RevealResource(yss_project::RevealProjectResourceRequest),
     InspectNode(NodeTypeId),
     CreateNode(NodeCreation),
-    GraphResource(String, super::resources::ResourceAction),
     DatabaseResource(String, super::resources::ResourceAction),
     ActivateConversation(String),
     RenameConversation(String, String),

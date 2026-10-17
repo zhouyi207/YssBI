@@ -4,13 +4,17 @@ mod input;
 
 use super::ConversationPanel;
 use gpui_kit::assets::IconName;
+use gpui_kit::base::input::Rope;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable, WindowExt,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::Enter,
-    notification::Notification,
 };
-use gpui_kit::{AnyElement, Context, IntoElement, Window, div, prelude::*, relative};
+use gpui_kit::{AnyElement, Context, IntoElement, Window, div, prelude::*, relative, rems};
+
+fn draft_is_blank(text: &Rope) -> bool {
+    text.chars().all(char::is_whitespace)
+}
 
 impl ConversationPanel {
     pub(super) fn render_composer(
@@ -18,45 +22,53 @@ impl ConversationPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let empty = self.transcript.turns.is_empty();
         let (reference_button, picker) = self.reference_picker(window, cx);
-        let editor = div()
-            .id("assistant-composer-body")
+        let card = div()
             .min_w_0()
-            .min_h_0()
-            .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap_2()
-            .when(empty, |editor| editor.flex_1())
-            .child(self.render_drafts(cx))
-            .child(self.reference_chips(
-                "draft-references",
-                self.references.iter().map(|r| (r, None)),
-                true,
-                cx,
-            ))
-            .child(self.render_input(empty, picker, cx));
+            .gap_1()
+            .p_1()
+            .border_1()
+            .border_color(cx.theme().input)
+            .rounded_lg()
+            .bg(cx.theme().background)
+            .shadow_xs()
+            .when(!self.references.is_empty(), |card| {
+                card.child(div().px_2().pt_1().child(self.reference_chips(
+                    "draft-references",
+                    self.references.iter().map(|r| (r, None)),
+                    true,
+                    cx,
+                )))
+            })
+            .child(self.render_input(picker, cx))
+            .child(self.render_controls(reference_button, window, cx));
         div()
             .id("assistant-composer")
             .on_action(cx.listener(Self::submit_input))
+            .flex_shrink_0()
+            .max_h(relative(0.75))
             .flex()
-            .flex_col()
-            .min_w_0()
-            .min_h_0()
-            .gap_2()
-            .p_2()
-            .bg(cx.theme().tab_active)
-            .when(empty, |composer| composer.flex_1())
-            .when(!empty, |composer| {
-                composer
-                    .flex_shrink_0()
-                    .max_h(relative(0.75))
-                    .border_t_1()
-                    .border_color(cx.theme().border)
-            })
-            .child(editor)
-            .child(self.render_controls(reference_button, window, cx))
+            .justify_center()
+            .px_4()
+            .pt_2()
+            .pb_3()
+            .bg(cx.theme().background)
+            .child(
+                div()
+                    .id("assistant-composer-body")
+                    .w_full()
+                    .max_w(rems(48.))
+                    .min_w_0()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(self.render_drafts(cx))
+                    .child(card),
+            )
             .into_any_element()
     }
 
@@ -67,32 +79,15 @@ impl ConversationPanel {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let running = self.running();
-        let empty = self.input.read(cx).value().trim().is_empty();
+        let empty = draft_is_blank(self.input.read(cx).text());
         div()
             .flex()
             .flex_wrap()
             .flex_shrink_0()
             .items_center()
             .gap_1()
-            .when_some(
-                self.stream_error.as_ref().or(self.error.as_ref()),
-                |controls, error| {
-                    let error = error.clone();
-                    controls.child(
-                        Button::new("assistant-error")
-                            .xsmall()
-                            .danger()
-                            .outline()
-                            .icon(IconName::CircleAlert)
-                            .tooltip(error.clone())
-                            .accessibility_label(error.clone())
-                            .on_click(move |_, window, cx| {
-                                window.push_notification(Notification::error(error.clone()), cx);
-                            }),
-                    )
-                },
-            )
             .child(reference_button)
+            .child(self.mode_picker(cx))
             .child(self.effort_picker(cx))
             .child(
                 div()
@@ -104,57 +99,88 @@ impl ConversationPanel {
                     .justify_end()
                     .gap_1()
                     .child(self.usage_indicator(cx))
-                    .child(self.mode_picker(cx))
                     .child(self.model_picker(window, cx))
-                    .when(running && !empty, |controls| {
+                    .when(running, |controls| {
                         controls.child(
                             Button::new("assistant-queue")
-                                .xsmall()
+                                .small()
                                 .ghost()
                                 .icon(IconName::ListPlus)
                                 .tooltip(yss_ui::text::t("panel.assistantQueueHint"))
                                 .accessibility_label(yss_ui::text::t("panel.assistantQueueMessage"))
-                                .disabled(!self.ready || self.selecting || !self.model_available())
+                                .disabled(
+                                    empty
+                                        || !self.ready
+                                        || self.selecting
+                                        || !self.model_available(),
+                                )
                                 .on_click(cx.listener(|view, _, window, cx| {
                                     view.queue_message(window, cx)
                                 })),
                         )
                     })
-                    .child(if running {
-                        Button::new("assistant-stop")
-                            .xsmall()
-                            .danger()
-                            .icon(IconName::Square)
-                            .tooltip(yss_ui::text::t("panel.assistantCancel"))
-                            .accessibility_label(yss_ui::text::t("panel.assistantCancel"))
-                            .disabled(self.stopping)
-                            .loading(self.stopping)
-                            .when(self.stopping, |button| {
-                                button.tooltip(yss_ui::text::t("native.assistant.waitingForStop"))
-                            })
-                            .on_click(cx.listener(|view, _, _, cx| view.cancel(cx)))
-                    } else {
-                        Button::new("assistant-send")
-                            .xsmall()
-                            .primary()
-                            .icon(IconName::ArrowUp)
-                            .tooltip_with_action(
-                                yss_ui::text::t("panel.assistantSend"),
-                                &Enter {
-                                    secondary: false,
-                                    shift: false,
-                                },
-                                Some("Input"),
-                            )
-                            .accessibility_label(yss_ui::text::t("panel.assistantSend"))
-                            .disabled(empty || !self.can_send())
-                            .loading(self.refreshing)
-                            .when(self.refreshing, |button| {
-                                button.tooltip(yss_ui::text::t("native.assistant.restoring"))
-                            })
-                            .on_click(cx.listener(|view, _, window, cx| view.send(window, cx)))
-                    }),
+                    .child(self.render_action_button(empty, cx)),
             )
             .into_any_element()
+    }
+
+    fn render_action_button(&self, empty: bool, cx: &mut Context<Self>) -> Button {
+        let running = self.running();
+        let button = if running {
+            Button::new("assistant-stop")
+                .small()
+                .outline()
+                .icon(IconName::Square)
+                .tooltip(yss_ui::text::t("panel.assistantComposerStop"))
+                .accessibility_label(yss_ui::text::t("panel.assistantCancel"))
+                .on_click(cx.listener(|view, _, _, cx| view.cancel(cx)))
+        } else {
+            Button::new("assistant-send")
+                .small()
+                .primary()
+                .icon(IconName::ArrowUp)
+                .tooltip_with_action(
+                    yss_ui::text::t("panel.assistantSend"),
+                    &Enter {
+                        secondary: false,
+                        shift: false,
+                    },
+                    Some("Input"),
+                )
+                .accessibility_label(yss_ui::text::t("panel.assistantSend"))
+                .disabled(empty || !self.can_send())
+                .on_click(cx.listener(|view, _, window, cx| view.send(window, cx)))
+        };
+        if self.stopping {
+            let label = yss_ui::text::t("native.assistant.waitingForStop");
+            button
+                .warning()
+                .outline()
+                .disabled(true)
+                .loading(true)
+                .tooltip(label.clone())
+                .accessibility_label(label)
+        } else if self.refreshing || (!self.ready && !running) {
+            let failed = !self.refreshing && self.stream_error.is_some();
+            let label = yss_ui::text::t(if failed {
+                "panel.assistantStatusError"
+            } else if self.catalog.is_none() {
+                "panel.assistantStatusInitializing"
+            } else {
+                "native.assistant.restoring"
+            });
+            button
+                .info()
+                .outline()
+                .when(failed, |button| {
+                    button.warning().icon(IconName::TriangleAlert)
+                })
+                .disabled(true)
+                .loading(!failed)
+                .tooltip(label.clone())
+                .accessibility_label(label)
+        } else {
+            button
+        }
     }
 }

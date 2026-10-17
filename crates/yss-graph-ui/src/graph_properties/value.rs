@@ -1,28 +1,20 @@
 //! Read presentation only; the original graph editor normalizes and validates writes.
-use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    Disableable, Sizable,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit::{App, ElementId, IntoElement, Window, prelude::*};
+use gpui_kit::{App, IntoElement, Window};
 use yss_data_contract::{DataValue, SemanticType, ValueType};
 use yss_graph_document::GraphConstant;
 
-pub(super) fn type_picker(
-    id: impl Into<ElementId>,
-    label: String,
+/// Offers the common value types on `trigger`; the owner applies the chosen type name.
+pub(super) fn type_menu(
+    trigger: Button,
     current: Option<String>,
-    disabled: bool,
     on_choose: impl Fn(&String, &mut Window, &mut App) + 'static,
 ) -> gpui_kit::AnyElement {
     let on_choose = std::rc::Rc::new(on_choose);
-    Button::new(id)
-        .small()
-        .w_full()
-        .label(label)
-        .icon(IconName::ChevronDown)
-        .disabled(disabled)
+    trigger
         .dropdown_menu(move |menu, _, _| {
             let mut menu = menu.scrollable(true);
             for (value, label) in type_options() {

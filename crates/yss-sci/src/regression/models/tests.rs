@@ -14,6 +14,51 @@ fn control() -> ScientificExecutionControl {
 }
 
 #[test]
+fn optimizer_keeps_gradient_convergence_when_objective_changes_round_away() {
+    let control = control();
+    let options = IterationOptions {
+        max_iterations: 1000,
+        tolerance: 1e-8,
+    };
+    // The exact objective is 1 + x^2. Summing the two squared residuals can
+    // obscure a near-minimum improvement without making its gradient zero.
+    let objective = |beta: &[f64]| Ok(((beta[0] - 1.0).powi(2) + (beta[0] + 1.0).powi(2)) / 2.0);
+    for initial in [-1e-7, -2e-8, -1e-8, 1e-8, 2e-8, 1e-7] {
+        let result = common::minimize(&objective, vec![initial], options, &control).unwrap();
+        let gradient = common::gradient(&objective, &result.beta, &control).unwrap();
+        assert!(gradient[0].abs() <= options.tolerance, "{gradient:?}");
+        assert!(
+            (2.0 * result.beta[0]).abs() <= options.tolerance,
+            "{:?}",
+            result.beta
+        );
+    }
+}
+
+#[test]
+fn optimizer_rejects_unrepresentable_progress_above_gradient_tolerance() {
+    let initial = 1e20;
+    let evaluations_at_initial = std::cell::Cell::new(0);
+    let objective = |beta: &[f64]| {
+        if beta[0] == initial {
+            evaluations_at_initial.set(evaluations_at_initial.get() + 1);
+        }
+        Ok(beta[0])
+    };
+    let result = common::minimize(
+        &objective,
+        vec![initial],
+        IterationOptions {
+            max_iterations: 1000,
+            tolerance: 1e-8,
+        },
+        &control(),
+    );
+    assert!(matches!(result, Err(Error::ComputationFailed)));
+    assert_eq!(evaluations_at_initial.get(), 1);
+}
+
+#[test]
 fn coefficient_intervals_keep_large_degree_accuracy() {
     let covariance = yss_sci_linalg::Mat::identity(1, 1);
     let coefficients = common::coefficient_table(

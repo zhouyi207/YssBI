@@ -14,6 +14,7 @@ tracing.workspace = true
 uuid.workspace = true
 yss-application = { path = "../yss-application" }
 yss-harness-contract = { path = "../yss-harness-contract" }
+yss-assistant-contract = { path = "../yss-assistant-contract" }
 yss-project = { path = "../yss-project" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-ui-contract = { path = "../yss-ui-contract" }

@@ -1,32 +1,25 @@
 //! Field layout consumes current projections; diagnostic text shares the Problems formatter.
 use super::*;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
-    checkbox::Checkbox,
-};
+use gpui_kit::component::{Disableable, Sizable, switch::Switch};
 use std::collections::BTreeMap;
 use yss_graph_analysis_contract::DiagnosticLocation;
-use yss_graph_editor::projection::{EditorDiagnosticModel, EditorDiagnosticSeverity};
+use yss_graph_editor::projection::EditorDiagnosticModel;
+use yss_ui::inspector::{self, InspectorSection, PropertyField};
+use yss_ui::text::translate;
 
 impl ParameterForm {
+    /// Each parameter group is its own section, so a node never shows a group title under a
+    /// redundant "Parameters" heading.
     pub(in crate::parameters) fn render_parameters(
         &self,
         busy: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let mut content = div()
-            .p_4()
-            .flex()
-            .flex_col()
-            .gap_4()
-            .border_b_1()
-            .border_color(cx.theme().border);
         if self.fields.is_empty() {
-            return content
-                .child(controls::hint(
-                    yss_ui::text::translate("native.workbench.noParameters"),
+            return InspectorSection::new("parameters", translate("detail.sections.parameters"))
+                .child(inspector::hint(
+                    translate("native.workbench.noParameters"),
                     cx,
                 ))
                 .into_any_element();
@@ -37,11 +30,17 @@ impl ParameterForm {
                 diagnostics.entry(key).or_default().push(diagnostic);
             }
         }
-        for group in &self.groups {
-            let fields = group
-                .fields
-                .clone()
-                .map(|index| {
+        let mut sections = div().min_w_0().flex().flex_col();
+        for (group_index, group) in self.groups.iter().enumerate() {
+            let mut section = InspectorSection::new(
+                ("parameter-group", group_index),
+                group.display.title.to_string(),
+            )
+            .when_some(group.display.description.as_deref(), |section, text| {
+                section.description(text.to_owned())
+            });
+            for index in group.fields.clone() {
+                section = section.child(
                     self.render_parameter(
                         index,
                         diagnostics
@@ -50,32 +49,12 @@ impl ParameterForm {
                             .unwrap_or_default(),
                         busy,
                         cx,
-                    )
-                })
-                .collect::<Vec<_>>();
-            content = content.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_3()
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                            .text_color(cx.theme().muted_foreground)
-                            .child(group.display.title.to_string()),
-                    )
-                    .children(
-                        group
-                            .display
-                            .description
-                            .as_deref()
-                            .map(|text| controls::hint(text, cx)),
-                    )
-                    .children(fields),
-            );
+                    ),
+                );
+            }
+            sections = sections.child(section);
         }
-        content.into_any_element()
+        sections.into_any_element()
     }
 
     fn render_parameter(
@@ -87,11 +66,13 @@ impl ParameterForm {
     ) -> AnyElement {
         let field = &self.fields[index];
         let epoch = self.epoch;
+        let title = field.model.display.title.to_string();
         let editor = match &field.draft {
-            ParameterDraft::Toggle => Checkbox::new(("parameter-toggle", index))
-                .label(yss_ui::text::translate("plugins.enable"))
+            ParameterDraft::Toggle => Switch::new(("parameter-toggle", index))
+                .small()
                 .checked(field.model.value == Some(Value::Bool(true)))
                 .disabled(busy)
+                .accessibility_label(title.clone())
                 .on_click(cx.listener(move |view, value: &bool, _, cx| {
                     if view.accepts_input(epoch, cx) {
                         view.commit_parameter(index, Value::Bool(*value), cx)
@@ -110,18 +91,95 @@ impl ParameterForm {
                 .flex()
                 .items_start()
                 .gap_1()
-                .child(input.render(busy))
+                .child(match input {
+                    TextField::Single(input) => gpui_kit::component::input::Input::new(input)
+                        .small()
+                        .flex_1()
+                        .min_w_0()
+                        .disabled(busy)
+                        .aria_label(title.clone())
+                        .into_any_element(),
+                    TextField::Multiline(input) => gpui_kit::component::input::Textarea::new(input)
+                        .small()
+                        .flex_1()
+                        .min_w_0()
+                        .disabled(busy)
+                        .aria_label(title.clone())
+                        .into_any_element(),
+                })
                 .child(
-                    controls::apply(("parameter-apply", index), busy).on_click(cx.listener(
-                        move |view, _, _, cx| {
+                    inspector::apply_button(("parameter-apply", index), busy).on_click(
+                        cx.listener(move |view, _, _, cx| {
                             if view.accepts_input(epoch, cx) {
                                 view.apply_parameter(index, cx)
                             }
-                        },
-                    )),
+                        }),
+                    ),
                 )
                 .into_any_element(),
         };
+        // Discarding only means something while an unapplied draft or its error is showing.
+        let restorable = matches!(
+            field.draft,
+            ParameterDraft::Text { .. }
+                | ParameterDraft::List(_)
+                | ParameterDraft::Domain(_)
+                | ParameterDraft::Relational(_)
+        ) && (field.dirty || field.error.is_some());
+        let mut property = PropertyField::new(title)
+            .when_some(
+                field.model.display.description.as_deref(),
+                |property, text| property.description(text.to_owned()),
+            )
+            .when(restorable, |property| {
+                property.action(
+                    inspector::action_button(
+                        ("parameter-restore", index),
+                        IconName::RotateCcw,
+                        translate("common.restore"),
+                    )
+                    .disabled(busy)
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        if view.accepts_input(epoch, cx) {
+                            view.restore_parameter(index, window, cx);
+                        }
+                    })),
+                )
+            })
+            .action(
+                inspector::action_button(
+                    ("parameter-reset", index),
+                    IconName::Undo2,
+                    translate("native.workbench.resetParameter"),
+                )
+                .disabled(busy)
+                .on_click(cx.listener(move |view, _, window, cx| {
+                    if view.accepts_input(epoch, cx) {
+                        view.restore_parameter(index, window, cx);
+                        view.commit_parameter(index, Value::Null, cx)
+                    }
+                })),
+            )
+            .control(self.reveal_editor(index, editor))
+            .when(
+                matches!(field.draft, ParameterDraft::Toggle),
+                PropertyField::inline,
+            );
+        for diagnostic in diagnostics {
+            property = property.message(crate::feedback::diagnostic_message(diagnostic));
+        }
+        if let Some(error) = &field.error {
+            property = property.message(inspector::InlineMessage::new(
+                inspector::Severity::Error,
+                error.clone(),
+            ));
+        } else if field.dirty {
+            property = property.message(inspector::InlineMessage::new(
+                inspector::Severity::Information,
+                translate("native.workbench.unappliedChanges"),
+            ));
+        }
+
         let content = div()
             .on_action(cx.listener(
                 move |view, _: &gpui_kit::component::input::Escape, window, cx| {
@@ -131,89 +189,7 @@ impl ParameterForm {
                     }
                 },
             ))
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_sm()
-                            .child(field.model.display.title.to_string()),
-                    )
-                    .when(
-                        matches!(
-                            field.draft,
-                            ParameterDraft::Text { .. }
-                                | ParameterDraft::List(_)
-                                | ParameterDraft::Domain(_)
-                                | ParameterDraft::Relational(_)
-                        ),
-                        |header| {
-                            header.child(
-                                Button::new(("parameter-restore", index))
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::RotateCcw)
-                                    .tooltip(yss_ui::text::translate("common.restore"))
-                                    .disabled(busy)
-                                    .on_click(cx.listener(move |view, _, window, cx| {
-                                        if view.accepts_input(epoch, cx) {
-                                            view.restore_parameter(index, window, cx);
-                                        }
-                                    })),
-                            )
-                        },
-                    )
-                    .child(
-                        Button::new(("parameter-reset", index))
-                            .small()
-                            .ghost()
-                            .icon(IconName::Undo2)
-                            .tooltip(yss_ui::text::translate("native.workbench.resetParameter"))
-                            .disabled(busy)
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                if view.accepts_input(epoch, cx) {
-                                    view.restore_parameter(index, window, cx);
-                                    view.commit_parameter(index, Value::Null, cx)
-                                }
-                            })),
-                    ),
-            )
-            .children(
-                field
-                    .model
-                    .display
-                    .description
-                    .as_deref()
-                    .map(|text| controls::hint(text, cx)),
-            )
-            .child(self.reveal_editor(index, editor))
-            .children(diagnostics.iter().map(|diagnostic| {
-                let color = match diagnostic.severity {
-                    EditorDiagnosticSeverity::Error => cx.theme().danger,
-                    EditorDiagnosticSeverity::Warning => cx.theme().warning,
-                    EditorDiagnosticSeverity::Information => cx.theme().muted_foreground,
-                };
-                div()
-                    .text_xs()
-                    .text_color(color)
-                    .child(crate::feedback::graph_diagnostic(diagnostic))
-            }))
-            .children(field.error.as_ref().map(|error| {
-                div()
-                    .id(("parameter-error", index))
-                    .role(gpui_kit::accesskit::Role::Alert)
-                    .text_xs()
-                    .text_color(cx.theme().danger)
-                    .child(error.clone())
-            }))
-            .into_any_element();
+            .child(property);
         self.reveal_field(index, content, cx)
     }
 }

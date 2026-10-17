@@ -6,8 +6,59 @@ use gpui_kit::component::{
     menu::{ContextMenuExt, PopupMenuItem},
 };
 use gpui_kit::{AnyElement, Div, Stateful};
+use yss_ui::lifecycle::LogReleased;
 
 impl ActivityPanel {
+    pub(super) fn render_category_toggle(&self, cx: &mut Context<Self>) -> Option<Button> {
+        let document = self.document.as_ref()?;
+        let any_expanded = document
+            .rows
+            .iter()
+            .filter_map(|row| match &row.content {
+                ActivityRowContent::Category {
+                    default_expanded, ..
+                } => Some(
+                    self.expanded
+                        .get(&row.id)
+                        .copied()
+                        .unwrap_or(*default_expanded),
+                ),
+                _ => None,
+            })
+            .reduce(|any, expanded| any || expanded)?;
+        let label = translate(if any_expanded {
+            "native.workbench.collapseAll"
+        } else {
+            "native.workbench.expandAll"
+        });
+        let expected = document.clone();
+        Some(
+            Button::new("activity-toggle-categories")
+                .small()
+                .ghost()
+                .icon(if any_expanded {
+                    IconName::ChevronsDownUp
+                } else {
+                    IconName::ChevronsUpDown
+                })
+                .accessibility_label(label.clone())
+                .tooltip(label)
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    if !view.accepts(&expected) {
+                        return;
+                    }
+                    for row in &expected.rows {
+                        if matches!(row.content, ActivityRowContent::Category { .. }) {
+                            view.expanded.insert(row.id.clone(), !any_expanded);
+                        }
+                    }
+                    view.rebuild_rows(cx);
+                    view.scroll.scroll_to_item(0, gpui_kit::ScrollStrategy::Top);
+                    cx.notify();
+                })),
+        )
+    }
+
     pub(super) fn render_category(
         &self,
         index: usize,
@@ -49,6 +100,7 @@ impl ActivityPanel {
             .children(tools.iter().map(|tool| {
                 let tool_id = tool.id.to_owned();
                 let expected = document.clone();
+                let label: gpui_kit::SharedString = tool.label.resolve_with(translate).into();
                 Button::new(gpui_kit::SharedString::from(format!(
                     "category-tool-{}-{tool_id}",
                     row.id
@@ -57,7 +109,8 @@ impl ActivityPanel {
                 .ghost()
                 .size_5()
                 .icon(feedback::tool_icon(tool.icon))
-                .tooltip(tool.label.resolve_with(translate))
+                .accessibility_label(label.clone())
+                .tooltip(label)
                 .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
                     cx.stop_propagation()
                 })
@@ -89,11 +142,13 @@ impl ActivityPanel {
                         PopupMenuItem::new(tool.label.resolve_with(translate))
                             .icon(feedback::tool_icon(tool.icon))
                             .on_click(move |_, _, cx| {
-                                let _ = owner.update(cx, |view, cx| {
-                                    if view.accepts(&expected) {
-                                        cx.emit(ActivityEvent::Tool(tool_id.clone()));
-                                    }
-                                });
+                                owner
+                                    .update(cx, |view, cx| {
+                                        if view.accepts(&expected) {
+                                            cx.emit(ActivityEvent::Tool(tool_id.clone()));
+                                        }
+                                    })
+                                    .log_released();
                             }),
                     );
                 }

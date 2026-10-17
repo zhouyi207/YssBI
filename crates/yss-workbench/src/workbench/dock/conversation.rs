@@ -10,13 +10,16 @@ use gpui_kit::component::{
     tooltip::Tooltip,
 };
 use gpui_kit::{AnyElement, App, Empty, Entity, IntoElement, WeakEntity, Window, div, prelude::*};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) fn matches(group: &TabGroupContext) -> bool {
     !group.panels().is_empty() && group.panels().iter().all(columns::is_conversation)
 }
 
 fn close(workbench: &WeakEntity<Workbench>, window: &mut Window, cx: &mut App) {
-    let _ = workbench.update(cx, |view, cx| view.close_conversation_window(window, cx));
+    workbench
+        .update(cx, |view, cx| view.close_conversation_window(window, cx))
+        .log_released();
 }
 
 pub(super) fn render(
@@ -32,7 +35,6 @@ pub(super) fn render(
         return Empty.into_any_element();
     };
     let title = panel.read(cx).display_title();
-    let mode = panel.update(cx, |panel, cx| panel.read_only_button(cx));
     let locked = area.upgrade().is_none_or(|area| area.read(cx).is_locked());
     let busy = workbench
         .upgrade()
@@ -65,18 +67,20 @@ pub(super) fn render(
                 })
                 .child(title),
         )
-        .child(mode)
         .child(
             Button::new("conversation-new")
                 .xsmall()
                 .ghost()
                 .icon(IconName::Plus)
                 .tooltip(crate::text::t("native.workbench.newConversation"))
+                .accessibility_label(crate::text::t("native.workbench.newConversation"))
                 .disabled(busy)
                 .on_click({
                     let workbench = workbench.clone();
                     move |_, window, cx| {
-                        let _ = workbench.update(cx, |view, cx| view.new_conversation(window, cx));
+                        workbench
+                            .update(cx, |view, cx| view.new_conversation(window, cx))
+                            .log_released();
                     }
                 }),
         )
@@ -91,6 +95,11 @@ pub(super) fn render(
                 })
                 .selected(group.is_zoomed())
                 .disabled(locked)
+                .accessibility_label(if group.is_zoomed() {
+                    crate::text::t("native.workbench.restoreLayout")
+                } else {
+                    crate::text::t("native.workbench.expandConversation")
+                })
                 .tooltip(if group.is_zoomed() {
                     crate::text::t("native.workbench.restoreLayout")
                 } else {
@@ -117,6 +126,7 @@ fn options(
         .ghost()
         .icon(IconName::Ellipsis)
         .tooltip(crate::text::t("native.workbench.conversationOptions"))
+        .accessibility_label(crate::text::t("native.workbench.conversationOptions"))
         .dropdown_menu(move |menu, _, cx| {
             let id = panel.read(cx).session_id().to_string();
             let title = panel
@@ -141,11 +151,13 @@ fn options(
                 PopupMenuItem::new(crate::text::t("native.workbench.renameConversation"))
                     .disabled(busy)
                     .on_click(move |_, window, cx| {
-                        let _ = rename.update(cx, |view, cx| {
-                            if Some(view.lifecycle) == lifecycle {
-                                view.rename_conversation(id.clone(), title.clone(), window, cx);
-                            }
-                        });
+                        rename
+                            .update(cx, |view, cx| {
+                                if Some(view.lifecycle) == lifecycle {
+                                    view.rename_conversation(id.clone(), title.clone(), window, cx);
+                                }
+                            })
+                            .log_released();
                     }),
             )
             .item(
@@ -156,14 +168,18 @@ fn options(
                             let view = owner.read(cx);
                             Some(view.lifecycle) == lifecycle && !view.is_closing(cx)
                         }) {
-                            let _ = refresh.update(cx, |view, cx| view.refresh(window, cx));
+                            refresh
+                                .update(cx, |view, cx| view.refresh(window, cx))
+                                .log_released();
                         }
                     }),
             )
             .item(
                 PopupMenuItem::new(crate::text::t("native.workbench.modelSettings")).on_click(
                     move |_, window, cx| {
-                        let _ = settings.update(cx, |view, cx| view.show_settings(window, cx));
+                        settings
+                            .update(cx, |view, cx| view.show_settings(window, cx))
+                            .log_released();
                     },
                 ),
             )

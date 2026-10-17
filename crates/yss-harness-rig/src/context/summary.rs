@@ -13,7 +13,7 @@ impl ContextHook {
         &self,
         messages: &[&Message],
     ) -> Result<String, AgentDriverFailure> {
-        let source = summary_source(messages.iter().copied())
+        let source = summary_source(messages.iter().copied(), self.capabilities.as_ref())
             .map_err(|_| crate::error::invalid_response())?;
         let (threshold, checkpoint) = {
             let state = self.state.lock().unwrap_or_else(|e| e.into_inner());

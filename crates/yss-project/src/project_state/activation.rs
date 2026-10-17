@@ -8,8 +8,6 @@ struct ActivationGarbage {
     _store: ProjectStore,
     _graph_resource_revisions:
         std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision>,
-    _chart_revisions:
-        std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
     _database_authority_revisions: std::collections::HashMap<String, u64>,
     _identity: ProjectAuthorityExpectation,
     _recovery_message: Option<String>,
@@ -70,7 +68,6 @@ impl ProjectState {
             data,
             store,
             graph_resource_revisions,
-            chart_revisions,
             authority_basis,
             requires_final_rebuild: _,
         } = prepared;
@@ -122,11 +119,6 @@ impl ProjectState {
                     Ok(guard) => (guard, false),
                     Err(error) => (error.into_inner(), true),
                 };
-            let (mut current_chart_revisions, chart_revisions_recovered) =
-                match self.chart_revisions.write() {
-                    Ok(guard) => (guard, false),
-                    Err(error) => (error.into_inner(), true),
-                };
             let (mut current_identity, identity_recovered) = match self.activation_identity.write()
             {
                 Ok(guard) => (guard, false),
@@ -170,7 +162,6 @@ impl ProjectState {
                     &mut *current_graph_resource_revisions,
                     graph_resource_revisions,
                 ),
-                _chart_revisions: std::mem::replace(&mut *current_chart_revisions, chart_revisions),
                 _identity: std::mem::replace(&mut *current_identity, next_identity),
                 _recovery_message: std::mem::take(&mut *recovery),
             };
@@ -199,9 +190,6 @@ impl ProjectState {
             }
             if graph_resource_revisions_recovered {
                 self.graph_resource_revisions.clear_poison();
-            }
-            if chart_revisions_recovered {
-                self.chart_revisions.clear_poison();
             }
             if identity_recovered {
                 self.activation_identity.clear_poison();

@@ -22,16 +22,16 @@ impl HarnessResourceResolverPort for ApplicationResourceResolver {
         Box::pin(async move {
             tokio::task::spawn_blocking(move || {
                 if cancellation.is_cancelled() {
-                    return Err(CapabilityFailure::new(CapabilityFailureCode::Cancelled));
+                    return Err(CapabilityFailure::new(CapabilityFailureCode::CANCELLED));
                 }
                 let result = application.resolve_harness_resources(&project, &resources);
                 if cancellation.is_cancelled() {
-                    return Err(CapabilityFailure::new(CapabilityFailureCode::Cancelled));
+                    return Err(CapabilityFailure::new(CapabilityFailureCode::CANCELLED));
                 }
                 result
             })
             .await
-            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?
+            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::INTERNAL_FAILURE))?
         })
     }
 }

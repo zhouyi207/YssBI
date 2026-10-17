@@ -2,16 +2,17 @@
 use super::{map_session_capture_error, map_session_revalidation_error};
 use crate::events::CommittedResourceMutation;
 use crate::session::{ApplicationSession, ApplicationState};
-use yss_chart_document::ChartResourcePath;
+use yss_assistant_contract::*;
+use yss_chart_document::ChartDocument;
 use yss_graph_document::{GraphResourceKind, GraphResourcePath};
 use yss_harness_contract::*;
-use yss_project::file_resources::FileCommand;
+use yss_project::file_resources::{FileCommand, ResourceFile};
 use yss_project_history::{ResourceDocumentPatch, ResourceKey, ResourceLifecycleKind};
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_model::{
-    doc::{DocDocument, DocPath},
-    file::FileVersion,
-    mind::{MindDocument, MindPath},
+    doc::DocDocument,
+    file::{FilePath, FileVersion},
+    mind::MindDocument,
 };
 
 mod chart;
@@ -48,7 +49,7 @@ impl ApplicationState {
             || session.project_session_id() != binding.project_session_id()
         {
             return Err(CapabilityFailure::new(
-                CapabilityFailureCode::ProjectSessionChanged,
+                CapabilityFailureCode::PROJECT_SESSION_CHANGED,
             ));
         }
         let index = read_index(&session)?;
@@ -85,13 +86,13 @@ impl ApplicationState {
 }
 
 fn invalid(field: &str) -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::InvalidRequest).with_detail("field", field)
+    CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST).with_detail("field", field)
 }
 fn conflict() -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
+    CapabilityFailure::new(CapabilityFailureCode::REVISION_CONFLICT)
 }
 fn unavailable() -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::ResourceUnavailable)
+    CapabilityFailure::new(CapabilityFailureCode::RESOURCE_UNAVAILABLE)
 }
 fn reference(kind: ProjectResourceKind, id: impl Into<String>) -> ProjectResourceRef {
     ProjectResourceRef {
@@ -159,15 +160,6 @@ pub(super) fn project_inspection(
         page,
     })
 }
-fn metadata(
-    index: &yss_project::resource_catalog::ResourceCatalog,
-    resource: &ProjectResourceRef,
-) -> Result<ProjectResourceInspection> {
-    resource_entries(index)
-        .into_iter()
-        .find(|entry| entry.resource == *resource)
-        .ok_or_else(unavailable)
-}
 fn check_version(
     session: &ApplicationSession,
     resource: &ProjectResourceRef,
@@ -198,14 +190,14 @@ fn graph_path(resource: &ProjectResourceRef) -> Result<GraphResourcePath> {
     }
     Ok(path)
 }
-fn chart_path(resource: &ProjectResourceRef) -> Result<ChartResourcePath> {
-    ChartResourcePath::parse(&resource.id).map_err(|_| invalid("resource.id"))
+fn file_path<T: ResourceFile>(resource: &ProjectResourceRef) -> Result<FilePath<T>> {
+    FilePath::parse(&resource.id).map_err(|_| invalid("resource.id"))
 }
-fn mind_path(resource: &ProjectResourceRef) -> Result<MindPath> {
-    MindPath::parse(&resource.id).map_err(|_| invalid("resource.id"))
-}
-fn doc_path(resource: &ProjectResourceRef) -> Result<DocPath> {
-    DocPath::parse(&resource.id).map_err(|_| invalid("resource.id"))
+fn file_target<T: ResourceFile>(
+    resource: &ProjectResourceRef,
+    version: &ResourceVersion,
+) -> Result<(FilePath<T>, FileVersion)> {
+    Ok((file_path(resource)?, file_version(version)?))
 }
 fn file_version(version: &ResourceVersion) -> Result<FileVersion> {
     Ok(FileVersion {
@@ -215,6 +207,37 @@ fn file_version(version: &ResourceVersion) -> Result<FileVersion> {
             .filter(|id| !id.is_empty())
             .ok_or_else(|| invalid("version.sessionId"))?,
         revision: ResourceRevision::new(version.revision),
+    })
+}
+fn file_command<T: ResourceFile>(
+    application: &ApplicationState,
+    project: yss_project_identity::ProjectInstanceId,
+    operation: OperationId,
+    command: FileCommand<T>,
+) -> Result<CommittedResourceMutation> {
+    application
+        .apply_file_command(project, operation, command)
+        .map(|result| result.mutation)
+        .map_err(file_error)
+}
+fn file_management<T: ResourceFile>(
+    (path, version): (FilePath<T>, FileVersion),
+    request: ManageResourceRequest,
+) -> Result<FileCommand<T>> {
+    Ok(match request {
+        ManageResourceRequest::Rename { name, .. } => FileCommand::Rename {
+            path,
+            version,
+            name,
+        },
+        ManageResourceRequest::Duplicate { name, .. } => FileCommand::Duplicate {
+            path,
+            version,
+            name,
+        },
+        ManageResourceRequest::Delete { .. } => FileCommand::Delete { path, version },
+        ManageResourceRequest::Save { .. } => FileCommand::Save { path, version },
+        ManageResourceRequest::Create { .. } => return Err(invalid("operation")),
     })
 }
 fn file_resource_kind(kind: ResourceLifecycleKind) -> ProjectResourceKind {
@@ -262,7 +285,7 @@ fn mutation_receipt(mutation: &CommittedResourceMutation) -> Result<ResourceMuta
                     // A publication key is not a DatabaseId; the committed declaration owns the ID.
                     let ResourceDocumentPatch::Database(patch) = &delta.payload else {
                         return Err(CapabilityFailure::new(
-                            CapabilityFailureCode::OutcomeUnknown,
+                            CapabilityFailureCode::OUTCOME_UNKNOWN,
                         ));
                     };
                     let declaration =
@@ -271,7 +294,7 @@ fn mutation_receipt(mutation: &CommittedResourceMutation) -> Result<ResourceMuta
                             .as_ref()
                             .or(patch.before.as_ref())
                             .ok_or_else(|| {
-                                CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown)
+                                CapabilityFailure::new(CapabilityFailureCode::OUTCOME_UNKNOWN)
                             })?;
                     (
                         reference(ProjectResourceKind::Database, declaration.id.as_str()),
@@ -317,14 +340,18 @@ fn committed(
 ) -> Result<ResourceMutationReceipt> {
     let mut receipt = mutation_receipt(&mutation)?;
     attach_committed_metadata(application, session, &mut receipt);
-    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| publish(&mutation))).is_err() {
+    publish_committed(publish, &mutation);
+    Ok(receipt)
+}
+
+fn publish_committed(publish: Publication<'_>, mutation: &CommittedResourceMutation) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| publish(mutation))).is_err() {
         tracing::warn!(
             domain = "Application",
             event = "harness_resource_publication_panicked",
             "Resource committed but its publication callback panicked"
         );
     }
-    Ok(receipt)
 }
 
 fn attach_committed_metadata(
@@ -398,29 +425,24 @@ pub(super) fn manage_resource(
             ResourceCreation::FunctionGraph { name } => application
                 .create_function_graph(project, name, operation)
                 .map_err(graph_error)?,
-            ResourceCreation::Chart { name } => application
-                .create_chart_resource(project, operation, name, None)
-                .map_err(chart_error)?,
-            ResourceCreation::Mind { name } => {
-                application
-                    .apply_mind_command(
-                        project,
-                        operation,
-                        FileCommand::<MindDocument>::Create { name },
-                    )
-                    .map_err(file_error)?
-                    .mutation
-            }
-            ResourceCreation::Doc { name } => {
-                application
-                    .apply_doc_command(
-                        project,
-                        operation,
-                        FileCommand::<DocDocument>::Create { name },
-                    )
-                    .map_err(file_error)?
-                    .mutation
-            }
+            ResourceCreation::Chart { name } => file_command::<ChartDocument>(
+                application,
+                project,
+                operation,
+                FileCommand::Create { name },
+            )?,
+            ResourceCreation::Mind { name } => file_command::<MindDocument>(
+                application,
+                project,
+                operation,
+                FileCommand::Create { name },
+            )?,
+            ResourceCreation::Doc { name } => file_command::<DocDocument>(
+                application,
+                project,
+                operation,
+                FileCommand::Create { name },
+            )?,
             ResourceCreation::Database { source, name } => {
                 application
                     .load_database_for_application(
@@ -444,7 +466,7 @@ pub(super) fn manage_resource(
         }
         | ManageResourceRequest::Delete { resource, version }
         | ManageResourceRequest::Save { resource, version } => (resource, version),
-        ManageResourceRequest::Create { .. } => unreachable!(),
+        ManageResourceRequest::Create { .. } => return Err(invalid("operation")),
     };
     check_version(session, resource, version)?;
     control.check()?;
@@ -465,88 +487,35 @@ pub(super) fn manage_resource(
                 ManageResourceRequest::Save { .. } => {
                     return content::save_graph(application, session, resource, version);
                 }
-                _ => unreachable!(),
+                ManageResourceRequest::Create { .. } => return Err(invalid("operation")),
             }
         }
         ProjectResourceKind::Chart => {
-            let path = chart_path(resource)?;
-            match request {
-                ManageResourceRequest::Rename { name, .. } => application
-                    .rename_chart_resource(project, operation, path, expected, name, 0)
-                    .map_err(chart_error)?,
-                ManageResourceRequest::Duplicate { name, .. } => application
-                    .duplicate_chart_resource(project, operation, path, expected, name)
-                    .map_err(chart_error)?,
-                ManageResourceRequest::Delete { .. } => application
-                    .remove_chart_resource(project, operation, path, expected)
-                    .map_err(chart_error)?,
-                ManageResourceRequest::Save { .. } => {
-                    // Charts have no Rust editing buffer; saving the current persisted version is a no-op.
-                    let mut receipt = ResourceMutationReceipt {
-                        database_edit: None,
-                        publication_revision: None,
-                        changes: vec![ResourceChange {
-                            resource: resource.clone(),
-                            revision: version.revision,
-                            revision_kind: ResourceRevisionKind::Resource,
-                            deleted: false,
-                        }],
-                        moves: vec![],
-                        mind_edit: None,
-                        document_edit: None,
-                        resources: Vec::new(),
-                    };
-                    attach_committed_metadata(application, session, &mut receipt);
-                    return Ok(receipt);
-                }
-                _ => unreachable!(),
-            }
+            let target = file_target::<ChartDocument>(resource, version)?;
+            file_command(
+                application,
+                project,
+                operation,
+                file_management(target, request)?,
+            )?
         }
         ProjectResourceKind::Mind => {
-            let path = mind_path(resource)?;
-            let version = file_version(version)?;
-            let command = match request {
-                ManageResourceRequest::Rename { name, .. } => FileCommand::Rename {
-                    path,
-                    version,
-                    name,
-                },
-                ManageResourceRequest::Duplicate { name, .. } => FileCommand::Duplicate {
-                    path,
-                    version,
-                    name,
-                },
-                ManageResourceRequest::Delete { .. } => FileCommand::Delete { path, version },
-                ManageResourceRequest::Save { .. } => FileCommand::Save { path, version },
-                _ => unreachable!(),
-            };
-            application
-                .apply_mind_command(project, operation, command)
-                .map_err(file_error)?
-                .mutation
+            let target = file_target::<MindDocument>(resource, version)?;
+            file_command(
+                application,
+                project,
+                operation,
+                file_management(target, request)?,
+            )?
         }
         ProjectResourceKind::Doc => {
-            let path = doc_path(resource)?;
-            let version = file_version(version)?;
-            let command = match request {
-                ManageResourceRequest::Rename { name, .. } => FileCommand::Rename {
-                    path,
-                    version,
-                    name,
-                },
-                ManageResourceRequest::Duplicate { name, .. } => FileCommand::Duplicate {
-                    path,
-                    version,
-                    name,
-                },
-                ManageResourceRequest::Delete { .. } => FileCommand::Delete { path, version },
-                ManageResourceRequest::Save { .. } => FileCommand::Save { path, version },
-                _ => unreachable!(),
-            };
-            application
-                .apply_doc_command(project, operation, command)
-                .map_err(file_error)?
-                .mutation
+            let target = file_target::<DocDocument>(resource, version)?;
+            file_command(
+                application,
+                project,
+                operation,
+                file_management(target, request)?,
+            )?
         }
         ProjectResourceKind::Database => {
             let id = resource.id.clone();
@@ -575,7 +544,7 @@ pub(super) fn manage_resource(
                         .map_err(database_error)?
                         .mutation
                 }
-                _ => unreachable!(),
+                ManageResourceRequest::Create { .. } => return Err(invalid("operation")),
             }
         }
     };
@@ -585,18 +554,18 @@ pub(super) fn manage_resource(
 fn project_error(error: yss_project::ProjectOperationError) -> CapabilityFailure {
     use yss_project::ProjectOperationError as E;
     let code = match &error {
-        E::StaleProjectLifecycle { .. } => CapabilityFailureCode::ProjectSessionChanged,
+        E::StaleProjectLifecycle { .. } => CapabilityFailureCode::PROJECT_SESSION_CHANGED,
         E::StaleResourceLifecycle { .. }
         | E::CatalogResourceStale { .. }
-        | E::ResourceRevisionConflict { .. } => CapabilityFailureCode::RevisionConflict,
+        | E::ResourceRevisionConflict { .. } => CapabilityFailureCode::REVISION_CONFLICT,
         E::ProjectLifecycleAdmissionClosed { .. } | E::ProjectRecoveryRequired { .. } => {
-            CapabilityFailureCode::ProjectSessionUnavailable
+            CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE
         }
-        E::ChartNotFound { .. } => CapabilityFailureCode::ResourceUnavailable,
+        E::ResourceNotFound { .. } => CapabilityFailureCode::RESOURCE_UNAVAILABLE,
         E::TransactionCommitFailed { .. } | E::TransactionRollbackFailed { .. } => {
-            CapabilityFailureCode::OutcomeUnknown
+            CapabilityFailureCode::OUTCOME_UNKNOWN
         }
-        _ => CapabilityFailureCode::MutationRejected,
+        _ => CapabilityFailureCode::MUTATION_REJECTED,
     };
     CapabilityFailure::new(code).with_detail("reason", error.code())
 }
@@ -607,17 +576,6 @@ fn file_error(error: crate::file_resources::FileApplicationError) -> CapabilityF
             map_session_capture_error(error)
         }
         crate::file_resources::FileApplicationError::SessionChanged(error) => {
-            map_session_revalidation_error(error)
-        }
-    }
-}
-fn chart_error(error: crate::chart::ChartApplicationError) -> CapabilityFailure {
-    match error {
-        crate::chart::ChartApplicationError::Project(error) => project_error(error),
-        crate::chart::ChartApplicationError::SessionCapture(error) => {
-            map_session_capture_error(error)
-        }
-        crate::chart::ChartApplicationError::SessionChanged(error) => {
             map_session_revalidation_error(error)
         }
     }
@@ -633,8 +591,8 @@ fn graph_error(
         E::Resource(yss_project_history::ProjectResourceMutationError::StaleRevision {
             ..
         }) => conflict(),
-        E::EditingBusy => CapabilityFailure::new(CapabilityFailureCode::InvocationConflict),
-        _ => CapabilityFailure::new(CapabilityFailureCode::MutationRejected),
+        E::EditingBusy => CapabilityFailure::new(CapabilityFailureCode::INVOCATION_CONFLICT),
+        _ => CapabilityFailure::new(CapabilityFailureCode::MUTATION_REJECTED),
     }
 }
 fn database_error(error: crate::database::DatabaseUseCaseError) -> CapabilityFailure {
@@ -645,13 +603,13 @@ fn database_error(error: crate::database::DatabaseUseCaseError) -> CapabilityFai
         E::Database(D::StaleRevision { .. }) => conflict(),
         E::Database(D::NotFound { .. }) => unavailable(),
         E::Database(D::Project { source, .. }) => project_error(source),
-        E::SessionRefresh(_) => CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown),
+        E::SessionRefresh(_) => CapabilityFailure::new(CapabilityFailureCode::OUTCOME_UNKNOWN),
         E::Database(D::Internal(error))
             if error.operation()
                 == crate::database::DatabaseApplicationOperation::ExportPublicationUncertain =>
         {
-            CapabilityFailure::new(CapabilityFailureCode::OutcomeUnknown)
+            CapabilityFailure::new(CapabilityFailureCode::OUTCOME_UNKNOWN)
         }
-        _ => CapabilityFailure::new(CapabilityFailureCode::MutationRejected),
+        _ => CapabilityFailure::new(CapabilityFailureCode::MUTATION_REJECTED),
     }
 }

@@ -1,10 +1,6 @@
-use crate::{
-    ProjectOperationError, ProjectState,
-    file_resources::{self, ResourceFile},
-};
+use crate::file_resources::{self, ResourceFile};
 use std::collections::HashMap;
 use yss_project_history::{DocResourceKey, ResourceKey, ResourceLifecycleKind};
-use yss_project_identity::{OperationId, ProjectInstanceId};
 use yss_project_model::{
     ProjectData, ProjectDataPatch,
     doc::{DocDocument, DocPath, DocState},
@@ -27,31 +23,5 @@ impl ResourceFile for DocDocument {
     }
     fn key(path: &DocPath) -> ResourceKey {
         ResourceKey::Doc(DocResourceKey(path.as_str().into()))
-    }
-}
-impl ProjectState {
-    /// Read current content only while its saved file remains a valid source.
-    pub fn read_doc_source(
-        &self,
-        project: &ProjectInstanceId,
-        path: &DocPath,
-    ) -> Result<DocSnapshot, ProjectOperationError> {
-        self.read_file_source(project, path)
-    }
-
-    pub fn read_doc(
-        &self,
-        project: &ProjectInstanceId,
-        path: &DocPath,
-    ) -> Result<DocSnapshot, ProjectOperationError> {
-        self.read_file(project, path)
-    }
-    pub fn apply_doc_command(
-        &self,
-        project: &ProjectInstanceId,
-        operation: OperationId,
-        command: DocCommand,
-    ) -> Result<DocCommandResult, ProjectOperationError> {
-        self.apply_file_command(project, operation, command)
     }
 }

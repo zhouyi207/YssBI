@@ -16,6 +16,7 @@ use yss_harness_contract::{
     LanguageModelAuthentication, LanguageModelCatalog, LanguageModelConfig,
     LanguageModelProviderStatus, LanguageModelSelection,
 };
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 struct Choice {
@@ -83,7 +84,9 @@ impl Picker {
             if let ComboboxEvent::Change(values) = event
                 && let Some(value) = values.first()
             {
-                let _ = owner.update(cx, |view, cx| view.select_model(value.clone(), window, cx));
+                owner
+                    .update(cx, |view, cx| view.select_model(value.clone(), window, cx))
+                    .log_released();
             }
         });
         Self {
@@ -256,12 +259,14 @@ impl ConversationPanel {
                     .xsmall()
                     .ghost()
                     .w_full()
-                    .label(yss_ui::text::t("settings.models.manage"))
+                    .label(yss_ui::text::t("panel.assistantOpenSettings"))
                     .on_click(move |_, window, cx| {
-                        let _ = owner.update(cx, |view, cx| {
-                            view.input.focus_handle(cx).focus(window, cx);
-                            cx.emit(ConversationEvent::Settings);
-                        });
+                        owner
+                            .update(cx, |view, cx| {
+                                view.input.focus_handle(cx).focus(window, cx);
+                                cx.emit(ConversationEvent::Settings);
+                            })
+                            .log_released();
                     })
             })
             .into_any_element();

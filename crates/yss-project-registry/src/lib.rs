@@ -82,16 +82,11 @@ pub enum ProjectRegistryError {
 
 pub struct ProjectRegistry {
     store: Arc<dyn ProjectRegistryStore>,
-    path: PathBuf,
 }
 
 impl ProjectRegistry {
-    pub fn new(store: Arc<dyn ProjectRegistryStore>, path: PathBuf) -> Self {
-        Self { store, path }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
+    pub fn new(store: Arc<dyn ProjectRegistryStore>) -> Self {
+        Self { store }
     }
 
     pub async fn list_projects(&self) -> Result<Vec<ProjectRecord>, ProjectRegistryError> {
@@ -609,10 +604,7 @@ mod tests {
     }
 
     fn registry(records: Vec<ProjectRecord>) -> ProjectRegistry {
-        ProjectRegistry::new(
-            Arc::new(MemoryProjectRegistryStore::with_records(records)),
-            PathBuf::from("memory://project-registry"),
-        )
+        ProjectRegistry::new(Arc::new(MemoryProjectRegistryStore::with_records(records)))
     }
 
     #[tokio::test]

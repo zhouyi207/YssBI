@@ -4,6 +4,7 @@ use gpui_kit::{Context, Window};
 use yss_application::harness::HarnessSessionError;
 use yss_harness_contract::LanguageModelSelection;
 use yss_harness_core::HarnessError;
+use yss_ui::lifecycle::LogReleased;
 
 impl ConversationPanel {
     pub(super) fn send(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -84,7 +85,7 @@ impl ConversationPanel {
                     false,
                 )
             });
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 let Some(pending) = view.pending.take() else {
                     return;
                 };
@@ -94,7 +95,7 @@ impl ConversationPanel {
                 }
                 if let Err(error) = result {
                     view.queue_paused = true;
-                    view.error = Some(error);
+                    view.set_error(error, cx);
                     if !pending.accepted && !accepted {
                         view.unsent = Some(pending.message);
                     }
@@ -103,7 +104,8 @@ impl ConversationPanel {
                 view.reload(false, window, cx);
                 cx.emit(ConversationEvent::DirectoryChanged);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -144,7 +146,7 @@ impl ConversationPanel {
             let result = job.await.unwrap_or_else(|_| {
                 Err(yss_ui::text::t("native.assistant.modelUnconfirmed").into())
             });
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 if view.selection_generation != generation {
                     return;
                 }
@@ -154,10 +156,11 @@ impl ConversationPanel {
                         view.update_session(session);
                         view.error = None;
                     }
-                    Err(error) => view.error = Some(error),
+                    Err(error) => view.set_error(error, cx),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

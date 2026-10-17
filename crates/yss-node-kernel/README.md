@@ -252,6 +252,8 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 事件、起始时间、治疗和预测风险各读取一次，计算及输出组装只消费中立准备结果。
 静态 Cox 和 AFT 将原行序的时间、事件和风险一起物化为 `predictions` 关系，供下游
 评估节点选列；不把无血缘的内存预测向量与数据表按相同行数强行对齐。
+似然模型、参数生存及其他共享 BFGS 消费者沿用 SCI 的目标值舍入误差处理；
+不以参数未发生可表示变化作为收敛依据，成功仍须满足原请求的梯度容差。
 列线图只解码静态 Cox 类型，并由 SCI 计算刻度；Graph 负责图形类别。
 
 ## 模块

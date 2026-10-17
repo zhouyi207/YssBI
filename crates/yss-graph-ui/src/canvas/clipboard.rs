@@ -3,9 +3,53 @@ use super::{GraphCanvas, GraphCommand};
 use gpui_kit::{ClipboardItem, Context};
 use std::sync::Arc;
 use yss_graph_editor::EditorGraphMutation;
+use yss_ui::lifecycle::LogReleased;
+
+/// Editing intent shared by graph menus, toolbar controls and keyboard actions.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum GraphEditCommand {
+    Undo,
+    Redo,
+    Cut,
+    Copy,
+    Paste,
+    Delete,
+}
 
 impl GraphCanvas {
-    pub(super) fn copy_selection(&mut self, cut: bool, cx: &mut Context<Self>) {
+    pub fn is_edit_command_enabled(&self, command: GraphEditCommand) -> bool {
+        if !self.can_edit() || self.read_task.is_some() {
+            return false;
+        }
+        match command {
+            GraphEditCommand::Undo => self.graph.editing.can_undo,
+            GraphEditCommand::Redo => self.graph.editing.can_redo,
+            GraphEditCommand::Cut | GraphEditCommand::Copy => self.can_copy_selection(),
+            GraphEditCommand::Paste => true,
+            GraphEditCommand::Delete => {
+                !self.selected_connections.is_empty()
+                    || self.graph.projection.nodes.iter().any(|node| {
+                        self.selected.contains(&node.node_id) && !node.capabilities.managed
+                    })
+            }
+        }
+    }
+
+    pub fn edit(&mut self, command: GraphEditCommand, cx: &mut Context<Self>) {
+        if !self.is_edit_command_enabled(command) {
+            return;
+        }
+        match command {
+            GraphEditCommand::Undo => self.submit(GraphCommand::Undo, None, cx),
+            GraphEditCommand::Redo => self.submit(GraphCommand::Redo, None, cx),
+            GraphEditCommand::Cut => self.copy_selection(true, cx),
+            GraphEditCommand::Copy => self.copy_selection(false, cx),
+            GraphEditCommand::Paste => self.paste_selection(cx),
+            GraphEditCommand::Delete => self.delete_selection(cx),
+        }
+    }
+
+    fn copy_selection(&mut self, cut: bool, cx: &mut Context<Self>) {
         if !self.can_copy_selection() {
             return;
         }
@@ -25,7 +69,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.read_task = None;
                 if !view.can_edit()
                     || view.graph.editing.version != version
@@ -52,16 +96,18 @@ impl GraphCanvas {
                             code = "native_graph_copy_failed",
                             "Graph clipboard export failed"
                         );
-                        view.error = Some(yss_ui::text::translate("panel.assistantCopyFailed"));
+                        view.notifications
+                            .error(yss_ui::text::translate("panel.assistantCopyFailed"), cx);
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }
 
-    pub(super) fn paste_selection(&mut self, cx: &mut Context<Self>) {
+    fn paste_selection(&mut self, cx: &mut Context<Self>) {
         if !self.can_edit() {
             return;
         }
@@ -72,7 +118,7 @@ impl GraphCanvas {
         let task = cx.read_from_clipboard_async();
         self.read_task = Some(cx.spawn(async move |view, cx| {
             let result = task.await;
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.read_task = None;
                 if !view.can_edit()
                     || view.graph.editing.version != version
@@ -84,12 +130,13 @@ impl GraphCanvas {
                     Some(source) => {
                         view.submit(GraphCommand::Paste { source, anchor }, Some(version), cx)
                     }
-                    None => {
-                        view.error = Some(yss_ui::text::translate("native.canvas.commandFailed"))
-                    }
+                    None => view
+                        .notifications
+                        .error(yss_ui::text::translate("native.canvas.commandFailed"), cx),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

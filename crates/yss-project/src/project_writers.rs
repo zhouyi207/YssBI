@@ -3,18 +3,18 @@ use crate::manifest::ProjectManifest;
 use crate::{ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use yss_chart_document::{ChartDocument, ChartResourcePath};
-use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation};
+use yss_chart_document::ChartDocument;
 use yss_graph_document::GraphResourcePath;
-use yss_project_history::{ChartResourceKey, ResourceKey};
+use yss_project_history::ResourceKey;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
-use yss_project_layout::{CHART_EXTENSION, PROJECT_METADATA_FILE};
-use yss_project_model::{GraphResourceDocument, ProjectData, ProjectDataPatch};
-use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
-
-#[path = "project_writers/charts.rs"]
-mod charts;
+use yss_project_layout::PROJECT_METADATA_FILE;
+use yss_project_model::{
+    GraphResourceDocument, ProjectData,
+    doc::DocDocument,
+    file::{FileContent, FilePath},
+    mind::MindDocument,
+};
 
 #[derive(Debug, Clone)]
 pub struct ProjectResourceMutationFacts {
@@ -94,10 +94,6 @@ pub(crate) struct GraphWriterSnapshot {
     pub(crate) authority_generation: u64,
 }
 
-fn chart_key(path: &ChartResourcePath) -> ResourceKey {
-    ResourceKey::Chart(ChartResourceKey(path.as_str().into()))
-}
-
 pub(crate) fn context(
     state: &ProjectState,
     session: ProjectSession,
@@ -130,19 +126,9 @@ pub(crate) fn validate_document(path: &Path, contents: &[u8]) -> Result<(), Stri
                 .map(|_| ())
                 .map_err(|error| error.to_string())
         }
-        Some(CHART_EXTENSION) => serde_json::from_slice::<ChartDocument>(contents)
-            .map(|_| ())
-            .map_err(|error| error.to_string()),
-        Some(yss_project_layout::MIND_EXTENSION) => {
-            use yss_project_model::file::FileContent;
-            yss_project_model::mind::MindPath::parse(&path.to_string_lossy().replace('\\', "/"))?;
-            yss_project_model::mind::MindDocument::decode(contents).map(|_| ())
-        }
-        Some(yss_project_layout::DOC_EXTENSION) => {
-            use yss_project_model::file::FileContent;
-            yss_project_model::doc::DocPath::parse(&path.to_string_lossy().replace('\\', "/"))?;
-            yss_project_model::doc::DocDocument::decode(contents).map(|_| ())
-        }
+        Some(ChartDocument::EXTENSION) => validate_file::<ChartDocument>(path, contents),
+        Some(MindDocument::EXTENSION) => validate_file::<MindDocument>(path, contents),
+        Some(DocDocument::EXTENSION) => validate_file::<DocDocument>(path, contents),
         _ if path == Path::new(PROJECT_METADATA_FILE) => {
             serde_json::from_slice::<ProjectManifest>(contents)
                 .map(|_| ())
@@ -153,6 +139,11 @@ pub(crate) fn validate_document(path: &Path, contents: &[u8]) -> Result<(), Stri
             path.display()
         )),
     }
+}
+
+fn validate_file<T: FileContent>(path: &Path, contents: &[u8]) -> Result<(), String> {
+    FilePath::<T>::parse(&path.to_string_lossy().replace('\\', "/"))?;
+    T::decode(contents).map(|_| ())
 }
 
 impl ProjectState {
@@ -212,14 +203,11 @@ impl ProjectState {
         }
         let data = self.project_data.read().unwrap();
         let graph_resource_revisions = self.graph_resource_revisions.read().unwrap();
-        let chart_revisions = self.chart_revisions.read().unwrap();
         super::project_state::validate_context_revisions(
             context,
             &data,
             &graph_resource_revisions,
-            &chart_revisions,
         )?;
-        drop(chart_revisions);
         drop(graph_resource_revisions);
         drop(data);
         drop(publication);

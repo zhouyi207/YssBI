@@ -55,11 +55,27 @@ pub(super) struct NodePalette {
     refresh_pending: bool,
     generation: u64,
     error: Option<&'static str>,
+    notifications: yss_ui::notifications::Notifications,
     task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl NodePalette {
+    fn set_error(&mut self, error: Option<&'static str>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            if *error == "native.canvas.catalogFailed" {
+                self.notifications.error_with_retry(
+                    yss_ui::text::translate(error),
+                    cx,
+                    |view, _, cx| view.query(cx),
+                );
+            } else {
+                self.notifications.error(yss_ui::text::translate(error), cx);
+            }
+        }
+        self.error = error;
+    }
+
     pub(super) fn new(
         services: Arc<GraphServices>,
         target: PaletteTarget,
@@ -81,7 +97,16 @@ impl NodePalette {
             }
         })];
         if let Some(graph) = target.graph.upgrade() {
-            subscriptions.push(cx.observe(&graph, |_, _, cx| cx.notify()));
+            let mut current = true;
+            subscriptions.push(cx.observe(&graph, move |view, _, cx| {
+                let next = view.current(cx);
+                if current && !next && !view.creating && view.configuration.is_none() {
+                    view.notifications
+                        .error(yss_ui::text::t("native.workbench.creationChanged"), cx);
+                }
+                current = next;
+                cx.notify();
+            }));
         }
         let refresh_pending = catalog.is_none();
         Self {
@@ -100,6 +125,7 @@ impl NodePalette {
             refresh_pending,
             generation: 0,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             task: None,
             _subscriptions: subscriptions,
         }
@@ -145,7 +171,6 @@ impl NodePalette {
 
     pub(super) fn creation_failed(&mut self, cx: &mut Context<Self>) {
         self.creating = false;
-        self.error = Some("canvas.nodePalette.createFailed");
         if let Some(form) = &self.configuration {
             form.update(cx, |form, cx| form.creation_failed(cx));
         }
@@ -255,6 +280,8 @@ impl NodePalette {
                             port_counts,
                         } => {
                             if !view.can_create(cx) {
+                                view.notifications
+                                    .error(yss_ui::text::t("native.workbench.creationChanged"), cx);
                                 form.update(cx, |form, cx| form.creation_failed(cx));
                                 return;
                             }

@@ -3,6 +3,7 @@ mod content;
 mod forms;
 mod view;
 
+use crate::lifecycle::LogReleased;
 pub use content::ModalContent;
 pub use forms::confirm;
 use gpui_kit::base::{
@@ -49,7 +50,9 @@ impl ModalState {
         cx.on_release(|state, cx| {
             if let Some(child) = state.child.take() {
                 cx.defer(move |cx| {
-                    let _ = child.update(cx, |_, window, _| window.remove_window());
+                    child
+                        .update(cx, |_, window, _| window.remove_window())
+                        .log_released();
                 });
             }
         })
@@ -116,20 +119,22 @@ fn request(pending: Pending, window: &mut Window, cx: &mut App) {
     let child = state.read(cx).child;
     if let Some(child) = child {
         cx.defer(move |cx| {
-            let _ = child.update(cx, |_, window, cx| {
-                let existing = self::state(window, cx)
-                    .read(cx)
-                    .modal
-                    .clone()
-                    .and_then(|modal| modal.upgrade());
-                if existing.is_some_and(|modal| modal.read(cx).title == pending.title) {
-                    activate_last(window, cx);
-                } else {
-                    // A nested form can be requested by an event delivered to the workbench.
-                    // Its native parent is the visible modal; its business callbacks keep their origin.
-                    request(pending, window, cx);
-                }
-            });
+            child
+                .update(cx, |_, window, cx| {
+                    let existing = self::state(window, cx)
+                        .read(cx)
+                        .modal
+                        .clone()
+                        .and_then(|modal| modal.upgrade());
+                    if existing.is_some_and(|modal| modal.read(cx).title == pending.title) {
+                        activate_last(window, cx);
+                    } else {
+                        // A nested form can be requested by an event delivered to the workbench.
+                        // Its native parent is the visible modal; its business callbacks keep their origin.
+                        request(pending, window, cx);
+                    }
+                })
+                .log_released();
         });
         return;
     }
@@ -199,22 +204,28 @@ fn open_pending(
             root
         },
     );
-    let _ = owner.update(cx, |state, _| {
-        state.opening = false;
-        state.child = result.as_ref().ok().map(|window| (*window).into());
-    });
+    owner
+        .update(cx, |state, _| {
+            state.opening = false;
+            state.child = result.as_ref().ok().map(|window| (*window).into());
+        })
+        .log_released();
     if let Err(error) = result {
         tracing::error!(%error, "Native modal window could not be opened");
-        let _ = parent.update(cx, |_, window, cx| {
-            window.push_notification(crate::text::t("native.modal_window.openFailed"), cx)
-        });
+        parent
+            .update(cx, |_, window, cx| {
+                window.push_notification(crate::text::t("native.modal_window.openFailed"), cx)
+            })
+            .log_released();
     }
 }
 
 /// Close this modal after a completed operation, bypassing the cancellation veto.
 pub fn close(window: &mut Window, cx: &mut App) {
     if let Some(modal) = state(window, cx).read(cx).modal.clone() {
-        let _ = modal.update(cx, |modal, cx| modal.finish(window, cx));
+        modal
+            .update(cx, |modal, cx| modal.finish(window, cx))
+            .log_released();
     }
 }
 
@@ -223,7 +234,9 @@ pub fn close_child(window: &mut Window, cx: &mut App) {
     let child = detach_last_child(window, cx);
     if let Some(child) = child {
         cx.defer(move |cx| {
-            let _ = child.update(cx, |_, window, cx| close(window, cx));
+            child
+                .update(cx, |_, window, cx| close(window, cx))
+                .log_released();
         });
     }
 }
@@ -257,13 +270,15 @@ pub fn update_child(
     let child = state(window, cx).read(cx).child;
     if let Some(child) = child {
         cx.defer(move |cx| {
-            let _ = child.update(cx, |_, window, cx| {
-                if state(window, cx).read(cx).child.is_some() {
-                    update_child(window, cx, update);
-                } else {
-                    update(window, cx);
-                }
-            });
+            child
+                .update(cx, |_, window, cx| {
+                    if state(window, cx).read(cx).child.is_some() {
+                        update_child(window, cx, update);
+                    } else {
+                        update(window, cx);
+                    }
+                })
+                .log_released();
         });
     }
 }

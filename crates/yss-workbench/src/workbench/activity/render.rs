@@ -1,8 +1,8 @@
 //! Render only requested visible rows; documents and actions remain with ActivityPanel.
 use super::*;
-use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme, Icon, Sizable, input::Input, tooltip::Tooltip};
+use gpui_kit::component::{ActiveTheme, tooltip::Tooltip};
 use gpui_kit::{AnyElement, uniform_list};
+use yss_ui::sidebar;
 
 impl Render for ActivityPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -29,18 +29,10 @@ impl Render for ActivityPanel {
             .flex()
             .flex_col()
             .bg(cx.theme().sidebar)
-            .px_1()
-            .py_1()
+            .child(self.render_header(cx))
             .when_some(self.search.as_ref(), |view, search| {
-                view.child(
-                    div().px_1().pb_1().child(
-                        Input::new(search)
-                            .small()
-                            .prefix(Icon::new(IconName::Search).size_3()),
-                    ),
-                )
+                view.child(sidebar::search(search))
             })
-            .children(self.tools(cx))
             .children(self.feedback(cx))
             .when(!self.rows.is_empty(), |body| {
                 body.child(
@@ -55,6 +47,7 @@ impl Render for ActivityPanel {
                     )
                     .flex_1()
                     .min_h_0()
+                    .when(self.panel_id != "assistant", |list| list.px_1())
                     .track_scroll(&self.scroll),
                 )
             })
@@ -62,6 +55,12 @@ impl Render for ActivityPanel {
 }
 
 impl ActivityPanel {
+    fn render_header(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        sidebar::header(self.title_text())
+            .children(self.render_category_toggle(cx))
+            .children(self.tools(cx))
+    }
+
     fn render_row(
         &self,
         index: usize,
@@ -82,10 +81,6 @@ impl ActivityPanel {
             .aria_label(row_label(&row.content))
             .aria_level(row.depth + 1)
             .when(focused, |row| row.aria_active_descendant())
-            .when(
-                focused && self.focus.is_focused(window) && window.last_input_was_keyboard(),
-                |row| row.bg(cx.theme().muted),
-            )
             .on_mouse_down(
                 gpui_kit::MouseButton::Left,
                 cx.listener(move |view, _, window, cx| {
@@ -94,20 +89,35 @@ impl ActivityPanel {
                     }
                 }),
             )
-            .pl(px(16. + row.depth as f32 * 16.))
-            .pr_2()
-            .h(px(if self.panel_id == "assistant" {
-                52.
-            } else {
-                28.
-            }))
             .w_full()
-            .min_w_0()
-            .rounded_sm()
-            .flex()
-            .items_center()
-            .gap_1p5()
-            .text_size(px(13.));
+            .min_w_0();
+        let selected_conversation = matches!(
+            &row.content,
+            ActivityRowContent::Item(ActivityItem::Conversation { session_id, .. })
+                if self.active_resource.as_deref() == Some(session_id)
+        );
+        let item = if matches!(
+            &row.content,
+            ActivityRowContent::Item(ActivityItem::Conversation { .. })
+        ) {
+            sidebar::list_item(item, selected_conversation, cx)
+        } else {
+            item.pl(px(16. + row.depth as f32 * 16.))
+                .pr_2()
+                .h(px(28.))
+                .rounded_sm()
+                .flex()
+                .items_center()
+                .gap_1p5()
+                .text_size(px(13.))
+        }
+        .when(
+            focused
+                && !selected_conversation
+                && self.focus.is_focused(window)
+                && window.last_input_was_keyboard(),
+            |row| row.bg(cx.theme().muted),
+        );
         let item = match &row.content {
             ActivityRowContent::Item(ActivityItem::Conversation { .. }) => {
                 return Some(self.render_conversation(index, item, cx));

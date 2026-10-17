@@ -1,12 +1,14 @@
 //! Conversation rows use the original directory identity and the workbench's mutation state.
 use super::*;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
+    Disableable, Sizable,
     button::{Button, ButtonVariants},
     menu::{ContextMenuExt, PopupMenuItem},
     tooltip::Tooltip,
 };
 use gpui_kit::{AnyElement, Div, Stateful};
+use yss_ui::lifecycle::LogReleased;
+use yss_ui::sidebar;
 
 pub(super) fn title(value: &str) -> std::borrow::Cow<'_, str> {
     if value.is_empty() {
@@ -42,7 +44,6 @@ impl ActivityPanel {
         else {
             return item.into_any_element();
         };
-        let selected = self.active_resource.as_deref() == Some(session_id);
         let label = title(name).into_owned();
         let time = i64::try_from(*last_opened_at)
             .ok()
@@ -56,45 +57,35 @@ impl ActivityPanel {
         let expected_menu = document.clone();
         let owner = cx.entity().downgrade();
         item.group("activity-conversation")
-            .aria_selected(selected)
             .aria_description(time.clone())
-            .child(Icon::new(IconName::MessageSquareText).size_3())
             .child(
                 div()
                     .min_w_0()
-                    .flex_1()
                     .flex()
-                    .flex_col()
+                    .items_center()
                     .gap_1()
-                    .child(div().truncate().child(label))
+                    .child(sidebar::item_title(label).flex_1())
                     .child(
-                        div()
-                            .text_size(px(11.))
-                            .text_color(cx.theme().muted_foreground)
-                            .child(time),
+                        Button::new(format!("conversation-rename:{session_id}"))
+                            .ghost()
+                            .small()
+                            .size_5()
+                            .flex_shrink_0()
+                            .icon(IconName::Pencil)
+                            .tooltip(crate::text::translate("panel.assistantRenameConversation"))
+                            .disabled(self.conversation_busy(cx))
+                            .opacity(0.)
+                            .group_hover("activity-conversation", |button| button.opacity(1.))
+                            .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
+                                cx.stop_propagation()
+                            })
+                            .on_click(cx.listener(move |view, _, _, cx| {
+                                cx.stop_propagation();
+                                view.rename_row(&expected_rename, index, cx);
+                            })),
                     ),
             )
-            .child(
-                Button::new(("conversation-rename", index))
-                    .ghost()
-                    .small()
-                    .size_5()
-                    .icon(IconName::Pencil)
-                    .tooltip(crate::text::translate("panel.assistantRenameConversation"))
-                    .disabled(self.conversation_busy(cx))
-                    .opacity(0.)
-                    .group_hover("activity-conversation", |button| button.opacity(1.))
-                    .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
-                        cx.stop_propagation()
-                    })
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        cx.stop_propagation();
-                        view.rename_row(&expected_rename, index, cx);
-                    })),
-            )
-            .cursor_pointer()
-            .when(selected, |item| item.bg(cx.theme().sidebar_accent))
-            .hover(|item| item.bg(cx.theme().muted))
+            .child(sidebar::item_detail(time, cx))
             .tooltip(move |window, cx| Tooltip::new(hint.clone()).build(window, cx))
             .on_click(cx.listener(move |view, _, _, cx| {
                 if view.accepts(&expected_open) {
@@ -114,9 +105,9 @@ impl ActivityPanel {
                         .icon(IconName::Pencil)
                         .disabled(busy)
                         .on_click(move |_, _, cx| {
-                            let _ = rename.update(cx, |view, cx| {
-                                view.rename_row(&rename_document, index, cx)
-                            });
+                            rename
+                                .update(cx, |view, cx| view.rename_row(&rename_document, index, cx))
+                                .log_released();
                         }),
                 )
                 .separator()
@@ -127,20 +118,22 @@ impl ActivityPanel {
                     .icon(IconName::Trash)
                     .disabled(busy)
                     .on_click(move |_, _, cx| {
-                        let _ = delete.update(cx, |view, cx| {
-                            if view.accepts(&delete_document)
-                                && let ActivityRowContent::Item(ActivityItem::Conversation {
-                                    session_id,
-                                    title,
-                                    ..
-                                }) = &delete_document.rows[index].content
-                            {
-                                cx.emit(ActivityEvent::DeleteConversation(
-                                    session_id.clone(),
-                                    title.clone(),
-                                ));
-                            }
-                        });
+                        delete
+                            .update(cx, |view, cx| {
+                                if view.accepts(&delete_document)
+                                    && let ActivityRowContent::Item(ActivityItem::Conversation {
+                                        session_id,
+                                        title,
+                                        ..
+                                    }) = &delete_document.rows[index].content
+                                {
+                                    cx.emit(ActivityEvent::DeleteConversation(
+                                        session_id.clone(),
+                                        title.clone(),
+                                    ));
+                                }
+                            })
+                            .log_released();
                     }),
                 )
             })

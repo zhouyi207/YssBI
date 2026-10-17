@@ -1,4 +1,3 @@
-use super::receipts::{Evidence, record_receipt};
 use crate::{HarnessPorts, events::EventWriter};
 use std::collections::BTreeMap;
 use yss_harness_contract::*;
@@ -67,7 +66,7 @@ pub(crate) async fn recover_runs(
                     invocation_id,
                     tool,
                 } => {
-                    controls.insert(invocation_id.clone(), (*tool, run_id.cloned()));
+                    controls.insert(invocation_id.clone(), (tool.clone(), run_id.cloned()));
                 }
                 AgentEvent::ControlToolFinished { invocation_id, .. } => {
                     controls.remove(invocation_id);
@@ -80,7 +79,7 @@ pub(crate) async fn recover_runs(
         let event = AgentEvent::ControlToolFinished {
             invocation_id,
             tool,
-            failure_code: Some(CapabilityFailureCode::OutcomeUnknown),
+            failure_code: Some(CapabilityFailureCode::OUTCOME_UNKNOWN),
             failure_details: None,
         };
         writer
@@ -106,14 +105,14 @@ pub(crate) async fn recover_runs(
                 scope,
                 ..
             } => {
-                runs.insert(request.run_id.clone(), (*role, Some(scope.clone())));
+                runs.insert(request.run_id.clone(), (role.clone(), Some(scope.clone())));
             }
             HarnessEvent::AgentRunStarted {
                 run_id, role, task, ..
             } => {
                 runs.insert(
                     run_id.clone(),
-                    (*role, task.as_ref().map(|task| task.scope.clone())),
+                    (role.clone(), task.as_ref().map(|task| task.scope.clone())),
                 );
             }
             HarnessEvent::AgentRunFinished { outcome } => {
@@ -122,50 +121,54 @@ pub(crate) async fn recover_runs(
             _ => {}
         }
     }
+    let root = ports.extension.root_role();
+    let project = ports
+        .sessions
+        .load_session(&turn.session_id)
+        .await?
+        .ok_or(crate::HarnessError::SessionNotFound)?
+        .project;
     let mut runs: Vec<_> = runs.into_iter().collect();
-    runs.sort_by_key(|(_, (role, _))| *role == AgentRole::Manager);
-    for (run_id, (role, task)) in runs {
-        let mut evidence = Evidence::default();
-        let mut scope = AgentInvocationScope {
+    runs.sort_by_key(|(_, (role, _))| *role == root);
+    for (run_id, (role, task_scope)) in runs {
+        let worker = role != root;
+        let hooks = ports.extension.start_run(RunStart {
             run_id: run_id.clone(),
-            role,
-            task,
-        };
+            role: role.clone(),
+            task_scope,
+            project: project.clone(),
+        });
+        let mut invocations = Vec::new();
         for envelope in &events {
             if envelope.turn_id.as_ref() != Some(&turn.id) {
                 continue;
             }
             let event = match &envelope.event {
                 HarnessEvent::AgentRunOutput { run_id: id, event } if id == &run_id => event,
-                HarnessEvent::Agent(event) if role == AgentRole::Manager => event,
+                HarnessEvent::Agent(event) if !worker => event,
                 _ => continue,
             };
-            if let AgentEvent::PlanProposed { plan } = event {
-                evidence.plan = Some(plan.clone());
-            }
             if let AgentEvent::ToolInvocationStarted { invocation_id, .. }
             | AgentEvent::ToolInvocationCompleted { invocation_id, .. }
             | AgentEvent::ToolInvocationFailed { invocation_id, .. } = event
-                && !evidence.invocations.contains(invocation_id)
+                && !invocations.contains(invocation_id)
                 && let Some(record) = ports
                     .tool_ledger
                     .load_invocation(&turn.session_id, invocation_id)
                     .await?
                 && record.agent_run_id.as_ref() == Some(&run_id)
             {
-                evidence.invocations.push(invocation_id.clone());
-                if let (Some(request), Some(result)) = (record.request.bound(), &record.result) {
-                    record_receipt(request, result, &mut evidence, &mut scope);
-                }
+                invocations.push(invocation_id.clone());
+                hooks.replay(&record, &project);
             }
         }
         writer.append(&turn.session_id, Some(&turn.id), HarnessEvent::AgentRunFinished {
             outcome: Box::new(AgentTaskOutcome {
                 run_id, role, state: AgentRunState::Interrupted,
-                report: (role != AgentRole::Manager).then(|| WorkerReport { summary: "The process stopped before this task finished. Inspect recorded effects before deciding on further work.".into(),
+                report: worker.then(|| WorkerReport { summary: "The process stopped before this task finished. Inspect recorded effects before deciding on further work.".into(),
                     warnings: vec!["An interrupted operation may already have committed; do not automatically repeat it.".into()], blocked_reason: Some("interrupted".into()), next_steps: vec![] }),
-                failure_code: Some(AgentDriverFailureCode::InternalFailure), artifacts: evidence.artifacts,
-                results: evidence.results, evidence: evidence.invocations, plan: evidence.plan, invalidated_runs: vec![],
+                failure_code: Some(AgentDriverFailureCode::InternalFailure),
+                evidence: invocations, facts: hooks.finish().facts, invalidated_runs: vec![],
             }),
         }).await?;
     }

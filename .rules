@@ -30,6 +30,13 @@
 
 - This project has not been released. Do not write migration logic for old data, formats or type contracts. Use the current contracts directly when making changes; do not add compatibility conversions or migration version fields.
 
+## Third-party dependencies
+
+- Do not commit or maintain complete third-party library or framework source trees in this repository. This prohibition includes `vendor/`, renamed directories, source archives, generated snapshots, Git subtrees and submodules used as local dependency replacements.
+- Prefer published registry packages with reproducible versions and lockfiles. If a required fix is not released, use an external dependency repository pinned to an immutable commit; document the upstream issue, patch scope and removal condition. Creating or publishing a fork requires explicit user authorization.
+- Do not replace vendoring with machine-specific paths, local-only Git URLs, edits to the package-manager cache, or build scripts that rewrite downloaded dependency sources. A clean checkout must resolve its declared dependencies without an undocumented preparation step.
+- Keep temporary upstream checkouts used for investigation outside this repository. Do not discard required behavior fixes, disable caching, or skip failing regressions merely to remove vendored source; verify the replacement against the affected behavior.
+
 # Timers in tests
 
 * In GPUI tests, prefer GPUI executor timers over `smol::Timer::after(...)` when you need timeouts, delays, or to drive `run_until_parked()`:

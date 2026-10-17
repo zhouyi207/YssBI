@@ -4,10 +4,14 @@ use std::collections::HashMap;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Theme, ThemeMode};
 use gpui_kit::{
-    App, Global, Hsla, IntoElement, SharedString, Subscription, Window, WindowAppearance, WindowId,
-    div, prelude::*, px, rgb,
+    Anchor, App, Global, Hsla, IntoElement, Rems, SharedString, Subscription, Window,
+    WindowAppearance, WindowId, div, prelude::*, px, rems, rgb,
 };
 use yss_settings::AppearanceSettings;
+
+// Chrome and its controls share the same UI-font scale as their labels.
+pub const HEADER_HEIGHT: Rems = rems(2.);
+pub const HEADER_BUTTON_SIZE: Rems = rems(1.5);
 
 struct Appearance {
     system: WindowAppearance,
@@ -90,6 +94,7 @@ pub fn apply(cx: &mut App) {
         Theme::change(mode, None, cx);
     }
     Theme::update(cx, |theme| {
+        theme.notification.placement = Anchor::BottomRight;
         theme.font_family = ui_font;
         theme.font_size = px(settings.ui_font_size);
         theme.mono_font_family = mono_font;

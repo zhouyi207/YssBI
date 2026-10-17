@@ -14,6 +14,7 @@ use gpui_kit::{
     Subscription, WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, div,
     prelude::*, px, size,
 };
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn connect_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -29,6 +30,8 @@ impl Workbench {
                         language = crate::text::locale();
                         view.menu_context = None;
                         view.refresh_project(window, cx);
+                        // Graph projections are read in the active language; other editors
+                        // translate while rendering.
                         view.refresh_graphs(cx);
                         cx.notify();
                     }
@@ -137,7 +140,7 @@ impl SettingsWindow {
                                 .as_ref()
                                 .is_some_and(|current| current.identity == project)
                             {
-                                view.open_document(path, None, window, cx);
+                                view.open_file(path, None, window, cx);
                             }
                         });
                     }
@@ -214,12 +217,13 @@ impl SettingsWindow {
         let owner_window = self.owner_window;
         // Return the current window before forwarding actions to another window.
         cx.defer(move |cx| {
-            let _ = owner_window.update(cx, |_, window, cx| {
-                if let Some(owner) = owner.upgrade() {
-                    window.activate_window();
-                    owner.update(cx, |view, cx| command(view, window, cx));
-                }
-            });
+            owner_window
+                .update(cx, |_, window, cx| {
+                    if let Some(owner) = owner.upgrade() {
+                        owner.update(cx, |view, cx| command(view, window, cx));
+                    }
+                })
+                .log_released();
         });
     }
 }
@@ -257,6 +261,7 @@ impl Render for SettingsWindow {
                 }
                 let command = command.clone();
                 view.in_workbench(cx, move |view, window, cx| {
+                    window.activate_window();
                     view.dispatch_menu(&command, window, cx);
                 });
             }))

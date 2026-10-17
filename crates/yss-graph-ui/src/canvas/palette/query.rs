@@ -3,6 +3,7 @@ use yss_application::{
     activity_panel::nodes_activity_panel_from_catalog,
     graph::catalog::{CompatibleCatalogRequest, LocalizedCatalogRequest},
 };
+use yss_ui::lifecycle::LogReleased;
 
 impl NodePalette {
     pub(in crate::canvas) fn catalog_changed(
@@ -61,7 +62,7 @@ impl NodePalette {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if view.generation != generation || language != yss_ui::text::locale() {
                     return;
                 }
@@ -83,11 +84,12 @@ impl NodePalette {
                             code = "native_node_palette_query_failed",
                             "Node palette query failed"
                         );
-                        view.error = Some("native.canvas.catalogFailed");
+                        view.set_error(Some("native.canvas.catalogFailed"), cx);
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

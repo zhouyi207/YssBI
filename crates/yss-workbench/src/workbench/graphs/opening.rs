@@ -1,7 +1,7 @@
 //! A graph tab before its first projection; it never invents an editable document.
+use crate::canvas::GraphCanvas;
 use gpui_kit::component::{
     ActiveTheme, Sizable,
-    button::Button,
     dock::{BasePanel, Panel, PanelEvent, PanelInfo, PanelState},
     spinner::Spinner,
 };
@@ -63,7 +63,7 @@ impl Focusable for Opening {
 }
 impl BasePanel for Opening {
     fn panel_name(&self) -> &'static str {
-        "graph-editor"
+        GraphCanvas::PANEL_NAME
     }
     fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
         if active {
@@ -77,20 +77,27 @@ impl BasePanel for Opening {
     }
     fn dump(&self, _: &App) -> PanelState {
         let mut state = PanelState::new(self.panel_name());
-        state.info = PanelInfo::Panel(serde_json::json!({ "graphPath": self.path.as_str() }));
+        state.info =
+            PanelInfo::Panel(serde_json::json!({ (GraphCanvas::PATH_KEY): self.path.as_str() }));
         state
     }
 }
 impl Panel for Opening {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        self.path
-            .as_str()
-            .rsplit('/')
-            .next()
-            .unwrap_or(self.path.as_str())
-            .trim_end_matches(".yssbi-event")
-            .trim_end_matches(".yssbi-function")
-            .to_owned()
+    fn tab_name(&self, _: &App) -> Option<gpui_kit::SharedString> {
+        Some(
+            self.path
+                .as_str()
+                .rsplit('/')
+                .next()
+                .unwrap_or(self.path.as_str())
+                .trim_end_matches(".yssbi-event")
+                .trim_end_matches(".yssbi-function")
+                .to_owned()
+                .into(),
+        )
+    }
+    fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.tab_name(cx).unwrap_or_default()
     }
 }
 impl Render for Opening {
@@ -107,21 +114,7 @@ impl Render for Opening {
             .text_color(cx.theme().muted_foreground)
             .child(div().text_sm().child(self.path.as_str().to_owned()))
             .child(if self.failed {
-                div()
-                    .id("graph-open-error")
-                    .role(gpui_kit::accesskit::Role::Alert)
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap_3()
-                    .child(crate::text::t("native.canvas.openFailed"))
-                    .child(
-                        Button::new("retry-open-graph")
-                            .small()
-                            .label(crate::text::t("common.retry"))
-                            .on_click(cx.listener(|_, _, _, cx| cx.emit(OpeningEvent::Retry))),
-                    )
-                    .into_any_element()
+                div().into_any_element()
             } else {
                 div()
                     .id("graph-opening")

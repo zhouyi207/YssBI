@@ -26,7 +26,7 @@ impl GraphResourceIndex {
     }
 
     pub fn get_by_path(&self, path: &str) -> Option<&ScannedGraphEntry> {
-        self.by_path.get(&normalize_resource_path(path))
+        self.by_path.get(&normalize_graph_resource_path(path))
     }
 }
 
@@ -61,10 +61,6 @@ pub fn scan_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, Proj
         .collect();
 
     Ok(GraphResourceIndex { entries, by_path })
-}
-
-pub fn normalize_resource_path(path: &str) -> String {
-    normalize_graph_resource_path(path)
 }
 
 fn collect_graph_resource_files(

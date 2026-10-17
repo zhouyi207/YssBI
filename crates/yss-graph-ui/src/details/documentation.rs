@@ -1,5 +1,6 @@
 //! Read-only node documentation from the application's localized catalog.
 use std::sync::Arc;
+use yss_ui::lifecycle::LogReleased;
 
 mod render;
 
@@ -26,6 +27,7 @@ enum DocumentationState {
 
 pub(super) struct NodeDocumentation {
     services: Arc<GraphServices>,
+    notifications: yss_ui::notifications::Notifications,
     target: Option<DocumentationTarget>,
     state: DocumentationState,
     expanded: bool,
@@ -34,12 +36,13 @@ pub(super) struct NodeDocumentation {
 }
 
 impl NodeDocumentation {
-    pub(super) fn new(services: Arc<GraphServices>) -> Self {
+    pub(super) fn new(services: Arc<GraphServices>, window: &gpui_kit::Window) -> Self {
         Self {
             services,
+            notifications: yss_ui::notifications::Notifications::new(window),
             target: None,
             state: DocumentationState::Missing,
-            expanded: true,
+            expanded: false,
             generation: 0,
             task: None,
         }
@@ -48,16 +51,6 @@ impl NodeDocumentation {
     fn set_target(&mut self, target: Option<DocumentationTarget>, cx: &mut Context<Self>) {
         if self.target == target {
             return;
-        }
-        if self
-            .target
-            .as_ref()
-            .zip(target.as_ref())
-            .is_none_or(|(old, next)| {
-                old.project != next.project || old.node_type != next.node_type
-            })
-        {
-            self.expanded = true;
         }
         self.task = None;
         self.target = target;
@@ -84,7 +77,7 @@ impl NodeDocumentation {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if view.generation != generation
                     || view.target.as_ref() != Some(&target)
                     || target.language != yss_ui::text::locale()
@@ -96,10 +89,23 @@ impl NodeDocumentation {
                         cx.new(|cx| TextViewState::markdown(&markdown, cx).selectable(true)),
                     ),
                     Ok(None) => DocumentationState::Missing,
-                    Err(_) => DocumentationState::Failed,
+                    Err(_) => {
+                        let target = target.clone();
+                        view.notifications.error_with_retry(
+                            yss_ui::text::t("native.workbench.nodeDocumentationFailed"),
+                            cx,
+                            move |view, _, cx| {
+                                if view.target.as_ref() == Some(&target) {
+                                    view.read(cx);
+                                }
+                            },
+                        );
+                        DocumentationState::Failed
+                    }
                 };
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }
@@ -115,7 +121,6 @@ impl super::GraphDetails {
         self.node_definition = Some(node_type.clone());
         self.connection_picker = None;
         self.hidden = None;
-        self.error = None;
         self.epoch = self.epoch.wrapping_add(1);
         self.documentation.update(cx, |documentation, cx| {
             documentation.set_target(
@@ -126,6 +131,8 @@ impl super::GraphDetails {
                 }),
                 cx,
             );
+            documentation.expanded = true;
+            cx.notify();
         });
         cx.notify();
     }

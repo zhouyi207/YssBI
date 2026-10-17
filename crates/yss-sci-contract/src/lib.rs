@@ -25,7 +25,7 @@ mod error;
 mod observation;
 
 pub use error::{SciError, SciOperationCode};
-pub use observation::{CategoricalRole, MissingValuePolicy, StatisticalObservationMetadata};
+pub use observation::{MissingValuePolicy, StatisticalObservationMetadata};
 pub mod decision;
 pub mod doe;
 pub mod psychometrics;

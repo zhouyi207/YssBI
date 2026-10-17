@@ -1,5 +1,6 @@
 //! Shared native frame and modal actions, built from the existing component controls.
 use super::{ModalContent, state};
+use crate::lifecycle::LogReleased;
 use crate::window_chrome;
 use gpui_kit::base::actions::{Cancel, Confirm};
 use gpui_kit::component::{
@@ -35,9 +36,11 @@ impl ModalWindow {
         let handle = window.window_handle();
         let modal = cx.weak_entity();
         window.on_window_should_close(cx, move |window, cx| {
-            let _ = modal.update(cx, |modal, cx| {
-                modal.cancel(&ClickEvent::default(), window, cx)
-            });
+            modal
+                .update(cx, |modal, cx| {
+                    modal.cancel(&ClickEvent::default(), window, cx)
+                })
+                .log_released();
             false
         });
         cx.on_release(move |modal, cx| {
@@ -45,20 +48,22 @@ impl ModalWindow {
                 closed(cx);
             }
             cx.defer(move |cx| {
-                let _ = parent.update(cx, |_, window, cx| {
-                    let restore_focus = state(window, cx).update(cx, |state, _| {
-                        if state.child == Some(handle) {
-                            state.child = None;
+                parent
+                    .update(cx, |_, window, cx| {
+                        let restore_focus = state(window, cx).update(cx, |state, _| {
+                            if state.child == Some(handle) {
+                                state.child = None;
+                            }
+                            state.child.is_none()
+                        });
+                        if restore_focus {
+                            window.activate_window();
+                            if let Some(focus) = previous_focus {
+                                window.focus(&focus, cx);
+                            }
                         }
-                        state.child.is_none()
-                    });
-                    if restore_focus {
-                        window.activate_window();
-                        if let Some(focus) = previous_focus {
-                            window.focus(&focus, cx);
-                        }
-                    }
-                });
+                    })
+                    .log_released();
             });
         })
         .detach();
@@ -86,13 +91,15 @@ impl ModalWindow {
         let handle = window.window_handle();
         let parent = self.parent;
         cx.defer(move |cx| {
-            let _ = parent.update(cx, |_, window, cx| {
-                state(window, cx).update(cx, |state, _| {
-                    if state.child == Some(handle) {
-                        state.child = None;
-                    }
+            parent
+                .update(cx, |_, window, cx| {
+                    state(window, cx).update(cx, |state, _| {
+                        if state.child == Some(handle) {
+                            state.child = None;
+                        }
+                    })
                 })
-            });
+                .log_released();
         });
         window.remove_window();
     }
@@ -120,15 +127,19 @@ impl ModalWindow {
             let close = origin
                 .update(cx, |_, window, cx| action(&event, window, cx))
                 .unwrap_or(true);
-            let _ = handle.update(cx, |_, window, cx| {
-                let _ = modal.update(cx, |modal, cx| {
-                    modal.confirming = false;
-                    if close {
-                        modal.finish(window, cx);
-                    }
-                    cx.notify();
-                });
-            });
+            handle
+                .update(cx, |_, window, cx| {
+                    modal
+                        .update(cx, |modal, cx| {
+                            modal.confirming = false;
+                            if close {
+                                modal.finish(window, cx);
+                            }
+                            cx.notify();
+                        })
+                        .log_released();
+                })
+                .log_released();
         });
         cx.notify();
     }
@@ -227,37 +238,39 @@ pub(super) fn open_prompt(
         open_prompt(child, title, message, buttons, sender, cx);
         return;
     }
-    let _ = parent.update(cx, |_, window, cx| {
-        super::open(title, size(px(540.), px(280.)), window, cx, move |_, _| {
-            let sender = Rc::new(RefCell::new(Some(sender)));
-            let enter = sender.clone();
-            ModalContent::new(move |_, _| div().text_sm().child(message.clone()))
-                .confirm(crate::text::t("common.confirm"), move |_, _, cx| {
-                    if let Some(sender) = enter.borrow_mut().take() {
-                        cx.defer(move |_| {
-                            let _ = sender.send(0);
-                        });
-                    }
-                    true
-                })
-                .footer(move |_, _| {
-                    div().flex().justify_end().flex_wrap().gap_2().children(
-                        buttons.iter().enumerate().map(|(index, label)| {
-                            let sender = sender.clone();
-                            Button::new(("prompt-answer", index))
-                                .label(label.clone())
-                                .when(index == 0, |button| button.primary())
-                                .on_click(move |_, window, cx| {
-                                    super::close(window, cx);
-                                    if let Some(sender) = sender.borrow_mut().take() {
-                                        cx.defer(move |_| {
-                                            let _ = sender.send(index);
-                                        });
-                                    }
-                                })
-                        }),
-                    )
-                })
-        });
-    });
+    parent
+        .update(cx, |_, window, cx| {
+            super::open(title, size(px(540.), px(280.)), window, cx, move |_, _| {
+                let sender = Rc::new(RefCell::new(Some(sender)));
+                let enter = sender.clone();
+                ModalContent::new(move |_, _| div().text_sm().child(message.clone()))
+                    .confirm(crate::text::t("common.confirm"), move |_, _, cx| {
+                        if let Some(sender) = enter.borrow_mut().take() {
+                            cx.defer(move |_| {
+                                let _ = sender.send(0);
+                            });
+                        }
+                        true
+                    })
+                    .footer(move |_, _| {
+                        div().flex().justify_end().flex_wrap().gap_2().children(
+                            buttons.iter().enumerate().map(|(index, label)| {
+                                let sender = sender.clone();
+                                Button::new(("prompt-answer", index))
+                                    .label(label.clone())
+                                    .when(index == 0, |button| button.primary())
+                                    .on_click(move |_, window, cx| {
+                                        super::close(window, cx);
+                                        if let Some(sender) = sender.borrow_mut().take() {
+                                            cx.defer(move |_| {
+                                                let _ = sender.send(index);
+                                            });
+                                        }
+                                    })
+                            }),
+                        )
+                    })
+            });
+        })
+        .log_released();
 }

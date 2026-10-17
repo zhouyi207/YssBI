@@ -658,39 +658,51 @@ fn chart_edits_preserve_the_active_graph_and_execution_session() {
         GraphRuntimeTestControl::default(),
     );
     let instance = active.session.project_instance_id().clone();
-    active
+    let created = active
         .application
-        .create_chart_resource(
+        .apply_file_command(
             instance.clone(),
             yss_project_identity::OperationId::new(),
-            "Chart".into(),
-            None,
+            yss_project::charts::ChartCommand::Create {
+                name: "Chart".into(),
+            },
         )
+        .unwrap()
+        .snapshot
         .unwrap();
-    let path = yss_chart_document::ChartResourcePath::parse("charts/Chart.yssbi-chart").unwrap();
-    let mut document = active
-        .application
-        .load_chart_resource(instance.clone(), path.clone(), None)
-        .unwrap();
+    let mut document = created.content.clone();
     document.chart_type = yss_chart_document::ChartType::Scatter;
-    active
+    let edited = active
         .application
-        .save_chart_resource(
+        .apply_file_command(
             instance.clone(),
             yss_project_identity::OperationId::new(),
-            path.clone(),
-            document,
-            None,
+            yss_project::charts::ChartCommand::Edit {
+                path: created.path.clone(),
+                version: created.version,
+                edits: vec![yss_project_model::chart::ChartEdit::SetDocument { document }],
+            },
+        )
+        .unwrap()
+        .snapshot
+        .unwrap();
+    active
+        .application
+        .apply_file_command(
+            instance.clone(),
+            yss_project_identity::OperationId::new(),
+            yss_project::charts::ChartCommand::Save {
+                path: edited.path.clone(),
+                version: edited.version,
+            },
         )
         .unwrap();
+    let saved = active.application.read_file(instance, edited.path).unwrap();
     assert_eq!(
-        active
-            .application
-            .load_chart_resource(instance, path, None)
-            .unwrap()
-            .chart_type,
+        saved.content.chart_type,
         yss_chart_document::ChartType::Scatter
     );
+    assert!(!saved.dirty);
     assert!(Arc::ptr_eq(
         &active.session,
         &active.application.capture_session().unwrap()

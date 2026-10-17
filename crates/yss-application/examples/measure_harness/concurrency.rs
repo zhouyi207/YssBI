@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use yss_application::harness::ApplicationCapabilityGateway;
+use yss_assistant_contract::*;
 use yss_harness_contract::*;
 
 pub struct ConcurrentEdit {
@@ -82,5 +83,5 @@ impl CapabilityGatewayPort for ConcurrentEdit {
 }
 
 fn invalid() -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::InternalFailure)
+    CapabilityFailure::new(CapabilityFailureCode::INTERNAL_FAILURE)
 }

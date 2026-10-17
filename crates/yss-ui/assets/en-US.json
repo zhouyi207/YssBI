@@ -88,7 +88,6 @@
       "storage": "History storage target",
       "storageHint": "0 disables size eviction; 1–10240 MiB of SQLite pages. Deletes oldest records first. Background reclamation, WAL, readers and fragmentation can leave files above this target. Deletion cannot be undone.",
       "applyFailed": "Log retention was saved but maintenance could not be applied. Check disk space and database access.",
-      "retentionFailed": "Log history maintenance failed. Check available disk space and database access, then restart the application.",
       "visibleLevelsDescription": "Filter displayed records only. This does not change log collection; Rust uses RUST_LOG and explicit UI logs collect INFO and above.",
       "retentionDaysDescription": "Delete records older than this many days, using their recorded local time. Disabled keeps all ages. Cleanup continues in bounded background passes.",
       "maxStorageDescription": "Target for allocated SQLite history pages, including indexes. Oldest records are removed first; free pages and WAL space are reclaimed gradually. Readers, fragmentation and pending work may keep files above this target. This is not a hard file-size cap.",
@@ -133,6 +132,7 @@
         "SaveDocument": "Save document",
         "ToggleDocumentPreview": "Toggle document preview",
         "SaveGraph": "Save",
+        "OpenNodePalette": "Add node…",
         "UndoGraph": "Undo graph change",
         "RedoGraph": "Redo graph change",
         "SelectAll": "Select all nodes",
@@ -385,6 +385,36 @@
     "primarySideBar": "Primary Side Bar",
     "assistant": "Assistant",
     "assistantEmptyTitle": "Statistical analysis assistant",
+    "assistantStartTitle": "Start with a research question",
+    "assistantStarterHint": "Choose a starting point, then edit the draft before sending.",
+    "assistantStarterQuestionLabel": "Frame a question",
+    "assistantStarterQuestionPrompt": "Help me turn my research goal into a clear, testable question. Ask about the outcome, population, and available data before proposing an analysis.",
+    "assistantStarterQualityLabel": "Plan data checks",
+    "assistantStarterQualityPrompt": "Help me plan data-quality checks for my study. First ask which data are available, then outline checks for missing values, duplicates, outliers, and variable definitions.",
+    "assistantStarterMethodLabel": "Choose a method",
+    "assistantStarterMethodPrompt": "Help me choose an analysis method. First clarify my research question, study design, variable types, and assumptions, then explain suitable methods and diagnostics.",
+    "assistantComposerStop": "Stop",
+    "assistantComposerSendKeys": "Enter to send · Shift+Enter for a new line",
+    "assistantComposerQueueKeys": "Enter to queue · Shift+Enter for a new line",
+    "assistantQueuePaused": "Queue paused. Send the next message when you are ready.",
+    "assistantAllowEdits": "Allow edits for the next turn",
+    "assistantToolResultPreview": "Result: %{preview}",
+    "assistantToolResources": "%{artifacts} resource changes · %{results} computation results",
+    "assistantPreviewItems": "%{count} items",
+    "assistantPreviewFields": "%{count} fields",
+    "assistantTaskWarnings": "%{count} warnings · expand for details",
+    "assistantPlanModes": {
+      "confirmatory": "Confirmatory",
+      "exploratory": "Exploratory",
+      "postHoc": "Post hoc"
+    },
+    "assistantPlanMethods": "Candidate methods",
+    "assistantPlanRequirements": "Plan requirements: %{variables} variable roles · %{diagnostics} diagnostics · %{checks} robustness checks",
+    "assistantPlanPopulation": "Target population",
+    "assistantPlanContrast": "Contrast",
+    "assistantPlanRobustnessCheck": "Robustness check",
+    "assistantTaskToolCalls": "%{count} recorded tool calls",
+    "assistantToolsUncertain": "Tool calls · %{count}, some outcomes unconfirmed",
     "assistantElapsed": "Elapsed %{value}",
     "assistantStartedAt": "Started: %{value}",
     "assistantFinishedAt": "Finished: %{value}",
@@ -546,16 +576,16 @@
     "assistantTool": "Tool call",
     "assistantScrollToBottom": "Jump to latest message",
     "assistantCancel": "Stop the current analysis",
-    "assistantStatusInitializing": "Connecting to the Harness…",
-    "assistantStatusProviderUnavailable": "Configure and select a model in Settings → AI",
+    "assistantStatusInitializing": "Initializing conversation…",
     "assistantStatusReady": "Press Ctrl+Enter to send",
     "assistantReplyInterrupted": "This response was interrupted. Completed operations are preserved. You can ask me to check the current progress and continue.",
     "assistantReplyStopped": "Stopped this response. Completed operations are preserved, and we can continue when you are ready.",
     "assistantStatusRunning": "Analyzing…",
     "assistantStatusError": "Assistant is temporarily unavailable",
     "assistantConversations": "Conversations",
-    "assistantNoConversations": "No conversations yet. Use + above to start one.",
-    "assistantNoMatchingConversations": "No matching conversations.",
+    "assistantNoConversations": "No conversations yet",
+    "assistantConversationHint": "Explore and analyze your project with the assistant",
+    "assistantNoMatchingConversations": "No matching conversations",
     "assistantNewConversation": "New chat",
     "assistantYou": "You",
     "assistantThinking": "Thinking",
@@ -769,11 +799,7 @@
     "outputClear": "Clear run failure",
     "problemsNoGraph": "Open a graph to view its problems",
     "problemsEmpty": "No problems were reported for the current graph",
-    "problemsCount": "%{count} problems",
     "problemsLocateNode": "Locate problem node"
-  },
-  "resultSource": {
-    "readFailed": "The result could not be read"
   },
   "runFailure": {
     "title": "Execution failed",
@@ -1720,37 +1746,6 @@
       "noMatches": "No matches found"
     }
   },
-  "editorDropPreview": {
-    "openResource": "Open %{name}",
-    "mergeIntoGroup": "Move to this group",
-    "splitLeft": "Split Left",
-    "splitRight": "Split Right",
-    "splitTop": "Split Up",
-    "splitBottom": "Split Down"
-  },
-  "tabBar": {
-    "toolbar": {
-      "maximizeGroup": "Maximize Group",
-      "restoreGroup": "Restore Group",
-      "moreTabs": "More Tabs",
-      "dragToDock": "Drag to Dock Floating Window",
-      "floatWindowActions": "Floating Window Actions"
-    },
-    "contextMenu": {
-      "close": "Close",
-      "hideContent": "Hide Content",
-      "floatTab": "Float Tab",
-      "floatGroup": "Float Group",
-      "detachTab": "Move Tab to New Floating Window",
-      "detachGroup": "Move Group to New Floating Window",
-      "dockFloat": "Dock Floating Window in Main Workspace",
-      "closeFloat": "Close All Tabs in Floating Window",
-      "expandContent": "Expand Content",
-      "closeOthers": "Close Others",
-      "closeSaved": "Close Saved",
-      "closeAll": "Close All"
-    }
-  },
   "activityBar": {
     "plugins": "Plugins",
     "project": "Project",
@@ -1867,12 +1862,6 @@
     "addColumn": "Add Column",
     "deleteColumn": "Delete Column \"%{name}\""
   },
-  "resultState": {
-    "pending": "Result pending (%{completed}/%{total})",
-    "executionFailed": "Result computation failed",
-    "upstreamFailed": "An upstream result failed",
-    "cancelled": "Result computation was cancelled"
-  },
   "sourceInspector": {
     "inspectRows": "Inspect data (%{count} rows)",
     "viewMode": "View mode",
@@ -1924,10 +1913,7 @@
     "failedInitialize": "Failed to initialize window"
   },
   "log": {
-    "streamTruncated": "Some logs may be missing",
-    "streamDisconnected": "Log stream disconnected",
     "title": "Logs",
-    "showCount": "Showing %{filtered} / %{total}",
     "refresh": "Refresh logs",
     "autoScrollEnabled": "Auto scroll enabled",
     "autoScrollDisabled": "Auto scroll disabled",
@@ -1944,7 +1930,6 @@
       "ui": "UI"
     },
     "clear": "Clear logs",
-    "loadingLogs": "Loading logs...",
     "noLogs": "No logs",
     "noMatches": "No matching logs",
     "runGraphHint": "Run a graph to show logs",
@@ -2114,7 +2099,20 @@
     "unavailable": "Details for this file are currently unavailable.",
     "sections": {
       "info": "Info",
-      "diagnostics": "Problems"
+      "diagnostics": "Problems",
+      "parameters": "Parameters",
+      "topic": "Topic"
+    },
+    "diagnosticSummary": {
+      "counts": "%{errors} errors · %{warnings} warnings · %{information} notes · %{blocking} blocking",
+      "connectInputs": "Connect the required inputs below, or enter a value where available.",
+      "configureParameters": "Complete the highlighted parameters below before running.",
+      "review": "Review the problems below and correct the affected configuration or connections.",
+      "technical": "Technical details",
+      "nodeId": "Node ID",
+      "nodeType": "Node type",
+      "copy": "Copy technical report",
+      "copyHint": "Includes node and port IDs, every original diagnostic, severity, blocking status, arguments, and related locations."
     },
     "parameterEditor": {
       "column": "Column",
@@ -2152,13 +2150,17 @@
       "origin": "Origin",
       "target": "Target",
       "event": "Event",
-      "fields": "Fields"
+      "fields": "Fields",
+      "path": "Path",
+      "status": "Status",
+      "reference": "Reference"
     },
     "itemTypes": {
       "event_graph": "Event Graph",
       "function_graph": "Function Graph",
       "data": "Dataset",
-      "chart": "Chart"
+      "chart": "Chart",
+      "mind": "Mind map"
     },
     "typeLabels": {
       "function_graph": "Function Graph"
@@ -2351,7 +2353,7 @@
     "assistant": {
       "prompt": "Ask YssBI a question or describe the analysis to perform…",
       "restoring": "Restoring conversation…",
-      "configureModelHint": "Configure an available model in model settings.",
+      "configureModelHint": "Choose an available model or open Model settings in the model picker.",
       "waitingForStop": "Stop requested. Waiting for the current operation to finish…",
       "processing": "Processing…",
       "loadEarlier": "Load earlier messages",
@@ -2517,6 +2519,9 @@
       "layoutSaveFailed": "Could not save the workbench layout. Check the application data directory.",
       "layoutRestoreFailed": "Could not restore the workbench. Open resources from the project explorer.",
       "applyChanges": "Apply changes",
+      "parameterDraftConflict": "This field changed while you were editing. Restore the current value before applying your change.",
+      "pendingInputsInvalid": "Correct the invalid input or resolve the field conflict in Details before saving or running. Your input is preserved.",
+      "unappliedChanges": "Unapplied changes",
       "integerOutOfRange": "Enter a valid integer within the supported range",
       "finiteNumberRequired": "Enter a finite number",
       "settingsShortcut": "Settings · Ctrl+,",
@@ -2524,10 +2529,10 @@
       "databaseOpenFailed": "Could not open data. Refresh the project explorer and retry.",
       "chartOpenFailed": "Could not open the chart. Refresh the project and retry.",
       "nodeCatalog": "Node catalog",
+      "collapseAll": "Collapse all",
+      "expandAll": "Expand all",
       "switchPanel": "Switch panel in this area",
       "restoreLayout": "Restore layout",
-      "logStorageUnavailable": "Log storage unavailable",
-      "logConnectionFailed": "Could not connect to log storage",
       "clearDisplay": "Clear display",
       "entryCount": "%{value0} entries",
       "logsEmpty": "Application activity will appear here",
@@ -2655,6 +2660,11 @@
       "parameterName": "Parameter%{value0}",
       "returnValue": "Return value",
       "zoomPanel": "Zoom panel",
+      "closeOtherTabs": "Close other tabs",
+      "closeTabsToLeft": "Close tabs to the left",
+      "closeTabsToRight": "Close tabs to the right",
+      "closeAllTabs": "Close all tabs",
+      "tabsCloseProtected": "Save changes and wait for pending operations",
       "newConversation": "New conversation",
       "expandConversation": "Expand conversation",
       "conversationOptions": "Conversation options",
@@ -2691,9 +2701,7 @@
       "deleteDatabaseMessage": "This database and its data will be deleted. Graph nodes referencing it will need another resource selection.",
       "renameDatabase": "Rename database",
       "resourceOperationUnconfirmed": "Resource operation did not complete; changes may already be applied. Check the directory before retrying.",
-      "saveChartBeforeEditing": "Save chart configuration before modifying its resource.",
       "deleteChartMessage": "The chart file will be deleted. The source dataset will be kept.",
-      "chartResourceFailed": "The chart resource was not modified. Refresh the directory and check its actual state.",
       "renameGraph": "Rename graph",
       "newMarkdown": "New Markdown document",
       "fileCreateFailed": "Could not create the file. Check its name and the current project.",
@@ -2724,11 +2732,12 @@
       "revealResourceFailed": "Could not locate the resource. Refresh the project and try again.",
       "resourceChanged": "The resource changed or is busy. Close this dialog and try again.",
       "resourceCommittedUnavailable": "The resource operation completed, but its editor could not be opened. Open it again from the project list.",
-      "saveFileBeforeManaging": "Save the document or mind map before renaming, duplicating or deleting it.",
+      "saveFileBeforeManaging": "Save the file before renaming, duplicating or deleting it.",
       "fileResourceFailed": "The file operation failed. Check the name or refresh the project and try again.",
       "conversationNameInvalid": "The conversation name is invalid. Edit it and try again."
     },
     "plugins": {
+      "listTitle": "Plugin list",
       "search": "Search plugin names or publishers",
       "busy": "The plugin is running a task or in use by another view. Try again when it finishes.",
       "changed": "The plugin was updated or removed. Select it again.",
@@ -2741,11 +2750,8 @@
       "removed": "The plugin was removed. Refresh the list.",
       "wrongPlatform": "This package does not support the current platform. Choose a package for your system and architecture.",
       "operationFailed": "The plugin operation did not complete. Check the package or plugin storage and retry.",
-      "loadingCatalog": "Reading plugin catalog…",
       "catalogFailed": "Could not read the plugin catalog. Try again.",
-      "loadingDetails": "Reading plugin details…",
       "detailsFailed": "Could not read plugin details. Try again.",
-      "installedCount": "%{value0} installed plugins",
       "packageReadFailed": "Could not read the package. Close and select it again.",
       "confirmationFailed": "Could not create installation confirmation. Check system time and select the package again.",
       "installationBusy": "The plugin is busy. Installation confirmation is preserved.",
@@ -2760,13 +2766,10 @@
       "confirmNewSigner": "Confirm updating this plugin with the new signer above",
       "verifying": "Verifying signature and contents…",
       "confirmInstall": "Confirm installation",
-      "choosingPackage": "Choosing package…",
       "chooseSignedPackage": "Choose signed plugin package",
       "inspectPackage": "Inspect plugin package",
       "packagePickerFailed": "Could not open the package picker. Try again.",
-      "installing": "Installing plugin…",
       "installationUnconfirmed": "Installation unconfirmed. Retry in this window; the inspected package is preserved.",
-      "installed": "Plugin installed.",
       "installPackage": "Install plugin package…",
       "refreshCatalog": "Refresh catalog and status",
       "options": "Plugin options",
@@ -2785,13 +2788,6 @@
       "collectPackagesTitle": "Remove unused plugin packages?",
       "collectPackagesMessage": "Remove packages not referenced by installed plugins or valid receipts. Project resources and installed plugins will be kept.",
       "confirm": "Confirm",
-      "updating": "Updating plugin…",
-      "packagesCollected": "Removed %{count} unused plugin packages.",
-      "enabledFeedback": "Plugin enabled.",
-      "disabledFeedback": "Plugin disabled.",
-      "uninstalled": "Plugin uninstalled. Private data and project results are preserved.",
-      "cacheCleared": "Plugin cache cleared.",
-      "resultsCleared": "Historical result cache cleared.",
       "taskFailed": "The plugin task did not complete. Refresh and check its actual status.",
       "accepted": "Accepted",
       "cancelling": "Cancelling",
@@ -2840,12 +2836,11 @@
       "executableParentMissing": "The executable has no parent directory"
     },
     "documents": {
-      "togglePreview": "Edit / Preview · Ctrl+Shift+V",
-      "saveFailed": "The document was not saved. Your content is preserved. Check for external changes or file write errors.",
-      "externalChange": "The document changed elsewhere. Your input is preserved; its version must be verified before saving.",
-      "readFailed": "The document could not be read. Your input is preserved. Check the project directory."
+      "togglePreview": "Edit / Preview · Ctrl+Shift+V"
     },
     "canvas": {
+      "emptyGraph": "Start with a node",
+      "addNode": "Add node…",
       "catalogFailed": "Unable to load the node catalog. Try again.",
       "resetViewShortcut": "Reset view · Home",
       "loadingCompatibleNodes": "Loading compatible nodes…",
@@ -2997,16 +2992,13 @@
     },
     "minds": {
       "topicChanged": "The topic changed elsewhere. Your input is preserved. Review it, then reopen or discard input.",
-      "saveFailed": "The mind map was not saved. Your content is preserved. Check external changes or write errors.",
       "topicSubmitFailed": "Topic changes were not submitted. Your input is preserved. Check the current file.",
-      "readFailed": "The mind map could not be read. Your content is preserved.",
       "selectTopicHint": "Select a topic to edit its content and branches",
       "selectedTopics": "%{value0} topics selected",
       "topicContent": "Topic content",
       "applyContent": "Apply content",
       "restoreContent": "Restore content",
       "addSibling": "Add sibling",
-      "reference": "Reference: %{value0}",
       "unnamedTopic": "Unnamed topic"
     },
     "charts": {
@@ -3015,8 +3007,6 @@
       "axesHint": "Select X and Y columns to view a scatter or line plot",
       "dataFailed": "Could not read plot data for the current configuration. Select columns again or refresh.",
       "previewFailed": "Could not read the chart preview. Check the dataset, column types, or current resource state.",
-      "readFailed": "Could not read the chart. Local configuration is preserved. Refresh the project and retry.",
-      "removed": "The chart was removed. Your unsaved local configuration is preserved.",
       "loading": "Reading chart",
       "preparingData": "Data is prepared in the background",
       "previewUnavailable": "Preview unavailable",
@@ -3029,13 +3019,10 @@
       "otherValues": "%{other_count} additional values grouped as Other",
       "plotSummary": "X: %{value0} · Y: %{value1} · %{value2} plot points",
       "dataPoints": "Data points",
-      "saveFailed": "Could not save the chart. Configuration is preserved. Check the current project and retry.",
       "unnamedDataset": "Unnamed dataset",
       "chooseDataset": "Choose dataset",
       "removedDataset": "Removed dataset",
-      "configuration": "Chart configuration",
       "noDataset": "No dataset",
-      "externalChange": "The file changed. Local configuration is preserved. Saving writes the current configuration.",
       "unsavedConfiguration": "Configuration has unsaved changes. Ctrl/Cmd+S to save.",
       "unavailableName": "%{name} (unavailable)",
       "distributionColumn": "Distribution column",
@@ -3161,6 +3148,19 @@
       "environmentFailed": "The application environment could not be initialized. Check access to the application data directory, then close YssBI and restart.",
       "failureCode": "Reason code: %{code}",
       "close": "Close"
+    },
+    "inspector": {
+      "moreActions": "More actions"
+    },
+    "files": {
+      "saveFailed": "“%{name}” was not saved. Your changes are preserved. Check for external changes or file write errors.",
+      "readFailed": "“%{name}” could not be read. Your changes are preserved. Check the project directory.",
+      "conflict": "“%{name}” changed elsewhere. Your unsaved changes are kept: reload to use the new version, or keep your changes and save over it.",
+      "removed": "“%{name}” was deleted elsewhere. Your unsaved changes stay visible here but can no longer be saved.",
+      "reload": "Reload",
+      "keepChanges": "Keep my changes",
+      "statusConflict": "Changed elsewhere",
+      "statusRemoved": "Deleted"
     }
   }
 }

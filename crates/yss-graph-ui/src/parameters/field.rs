@@ -2,7 +2,7 @@
 mod choices;
 pub(super) mod list;
 mod render;
-use super::{ParameterForm, controls, domain::DomainDraft, relational::RelationalDraft};
+use super::{ParameterForm, domain::DomainDraft, relational::RelationalDraft};
 use gpui_kit::component::input::InputEvent;
 use gpui_kit::{
     AnyElement, Context, Entity, EntityId, EventEmitter, IntoElement, Subscription, Window, div,
@@ -22,6 +22,8 @@ pub(super) struct ParameterField {
     pub draft: ParameterDraft,
     pub error: Option<String>,
     pub dirty: bool,
+    pub latest: Option<EditorParameterModel>,
+    pub identity_conflict: bool,
     _input_subscription: Option<Subscription>,
 }
 
@@ -167,6 +169,8 @@ impl ParameterField {
             draft,
             error: None,
             dirty: false,
+            latest: None,
+            identity_conflict: false,
             _input_subscription: input_subscription,
         }
     }
@@ -181,7 +185,7 @@ impl ParameterField {
                         if self.model.value_type
                             == Some(ValueType::Scalar(SemanticType::Numeric)) =>
                     {
-                        controls::number(&text)
+                        yss_ui::input::number(&text)
                     }
                     TextFormat::Number => Err(yss_ui::text::translate(
                         "notifications.parameter.unsupportedNumericType",
@@ -244,8 +248,10 @@ pub(super) fn subscribe_input<T: EventEmitter<InputEvent> + 'static>(
             }
             InputEvent::Change => {
                 let field = &mut view.fields[index];
+                // The first unapplied edit reveals the field's discard action.
+                let mut refresh = !field.dirty;
                 field.dirty = true;
-                let mut refresh = field.error.take().is_some();
+                refresh |= field.error.take().is_some();
                 if let ParameterDraft::Domain(draft) = &mut field.draft {
                     draft.input_changed(input_id);
                     refresh = true;
@@ -293,6 +299,11 @@ impl ParameterForm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(model) = self.fields[index].latest.take() {
+            self.fields[index] = ParameterField::new(model, window, cx);
+            cx.notify();
+            return;
+        }
         let model = self.fields[index].model.clone();
         if let ParameterDraft::Text { input, format } = &self.fields[index].draft {
             let value = model
@@ -306,6 +317,8 @@ impl ParameterForm {
             input.set_value(value, window, cx);
             self.fields[index].error = None;
             self.fields[index].dirty = false;
+            self.fields[index].identity_conflict = false;
+            self.fields[index].model = model;
         } else {
             self.fields[index] = ParameterField::new(model, window, cx);
         }

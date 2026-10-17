@@ -738,10 +738,6 @@ fn data_port(
             literal_policy: LiteralPolicy::Forbidden,
             default_value: None,
         }),
-        consumption: (direction == PortDirection::Input)
-            .then_some(InputConsumption::FullyMaterialized),
-        production: (direction == PortDirection::Output)
-            .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
     })

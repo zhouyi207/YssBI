@@ -10,12 +10,11 @@ pub use resources::ApplicationResourceResolver;
 
 use std::sync::Arc;
 use thiserror::Error;
+use yss_assistant_extension::{KnowledgeError, install_builtin_statistical_knowledge};
 use yss_harness_contract::{
     HarnessSessionId, HarnessSessionRecord, PrincipalId, ProjectSessionBinding,
 };
-use yss_harness_core::{
-    HarnessError, HarnessHost, HarnessPorts, KnowledgeError, install_builtin_statistical_knowledge,
-};
+use yss_harness_core::{HarnessError, HarnessHost, HarnessPorts};
 
 use crate::session::{ApplicationSession, ApplicationState, SessionCaptureError};
 
@@ -235,13 +234,13 @@ mod concurrency_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yss_assistant_extension::{AssistantExtension, test_support::RejectingCapabilityGateway};
     use yss_harness_contract::{
         HarnessSessionState, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
         HarnessTurnState, UnixMillis,
     };
     use yss_harness_core::test_support::{
-        FixedClock, InMemoryHarnessStore, MockAgentDriver, RejectingCapabilityGateway,
-        SequentialIds,
+        FixedClock, InMemoryHarnessStore, MockAgentDriver, SequentialIds,
     };
     use yss_harness_core::{KnowledgeQuery, KnowledgeService};
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
@@ -272,7 +271,9 @@ mod tests {
             models: yss_harness_core::test_support::fixed_model(Arc::new(MockAgentDriver::new(
                 "Saved answer",
             ))),
-            capability_gateway: Arc::new(RejectingCapabilityGateway),
+            extension: Arc::new(
+                AssistantExtension::new(Arc::new(RejectingCapabilityGateway)).unwrap(),
+            ),
             sessions: store.clone(),
             events: store.clone(),
             event_sink: Arc::new(InMemoryHarnessStore::default()),
@@ -334,6 +335,7 @@ mod tests {
             .await
             .unwrap();
         drop(host);
+        store.close().await;
         drop(store);
 
         let reopened = Arc::new(
@@ -360,6 +362,7 @@ mod tests {
         ));
         assert!(host.events_after(&deleted.id, 0).await.unwrap().is_empty());
         drop(host);
+        reopened.close().await;
         drop(reopened);
         std::fs::remove_dir_all(directory).unwrap();
     }
@@ -429,6 +432,7 @@ mod tests {
             .await
             .unwrap();
         drop(host);
+        store.close().await;
         drop(store);
         drop(application);
 
@@ -585,8 +589,9 @@ mod tests {
         drop(another_application);
         drop(application);
         drop(host);
+        store.close().await;
         drop(store);
-        let _ = std::fs::remove_dir_all(directory);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[tokio::test]
@@ -598,7 +603,9 @@ mod tests {
             models: yss_harness_core::test_support::fixed_model(Arc::new(MockAgentDriver::new(
                 "unused",
             ))),
-            capability_gateway: Arc::new(RejectingCapabilityGateway),
+            extension: Arc::new(
+                AssistantExtension::new(Arc::new(RejectingCapabilityGateway)).unwrap(),
+            ),
             sessions: store.clone(),
             events: store.clone(),
             event_sink: store.clone(),

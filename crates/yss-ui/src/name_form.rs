@@ -1,8 +1,4 @@
-//! Shared name input owns only its draft, submission state and localized error.
-use gpui_kit::component::{
-    ActiveTheme,
-    input::{Input, InputEvent, InputState},
-};
+use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, Render, Window, div,
     prelude::*,
@@ -11,26 +7,16 @@ use gpui_kit::{
 pub struct NameForm {
     input: Entity<InputState>,
     busy: bool,
-    error: Option<&'static str>,
-    _subscription: gpui_kit::Subscription,
+    notifications: crate::notifications::Notifications,
 }
 
 impl NameForm {
     pub fn new(initial: String, window: &mut Window, cx: &mut App) -> Entity<Self> {
         let input = cx.new(|cx| InputState::new(window, cx).default_value(initial));
-        cx.new(|cx| {
-            let subscription = cx.subscribe(&input, |form: &mut Self, _, event, cx| {
-                if matches!(event, InputEvent::Change) {
-                    form.error = None;
-                    cx.notify();
-                }
-            });
-            Self {
-                input,
-                busy: false,
-                error: None,
-                _subscription: subscription,
-            }
+        cx.new(|_| Self {
+            input,
+            busy: false,
+            notifications: crate::notifications::Notifications::new(window),
         })
     }
 
@@ -48,13 +34,14 @@ impl NameForm {
 
     pub fn submitting(&mut self, cx: &mut Context<Self>) {
         self.busy = true;
-        self.error = None;
         cx.notify();
     }
 
     pub fn finish(&mut self, error: Option<&'static str>, cx: &mut Context<Self>) {
         self.busy = false;
-        self.error = error;
+        if let Some(error) = error {
+            self.notifications.error(crate::text::translate(error), cx);
+        }
         cx.notify();
     }
 
@@ -72,21 +59,11 @@ impl Focusable for NameForm {
 }
 
 impl Render for NameForm {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
             .gap_2()
             .child(Input::new(&self.input).disabled(self.busy))
-            .when_some(self.error, |body, error| {
-                body.child(
-                    div()
-                        .id("name-form-error")
-                        .role(gpui_kit::accesskit::Role::Alert)
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(crate::text::translate(error)),
-                )
-            })
     }
 }

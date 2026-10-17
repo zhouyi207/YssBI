@@ -88,7 +88,6 @@
       "storage": "历史存储目标",
       "storageHint": "0 表示不限制；1–10240 MiB。以 SQLite 页为目标，先删最旧记录；后台回收，WAL、读取事务和碎片可能使文件暂时超出目标。删除无法撤销。",
       "applyFailed": "日志保留设置已保存，但未能应用清理策略。请检查磁盘空间和数据库访问权限。",
-      "retentionFailed": "日志历史清理失败。请检查可用磁盘空间和数据库访问权限，然后重启应用。",
       "visibleLevelsDescription": "仅过滤显示的记录，不改变日志采集。Rust 使用 RUST_LOG，显式界面日志仅采集 INFO 及以上级别。",
       "retentionDaysDescription": "按记录的本机时间删除超过此天数的日志。禁用后不按时间删除；清理会在后台分批继续。",
       "maxStorageDescription": "SQLite 日志历史已分配页的目标大小，包含索引。先删除最旧记录，再逐步回收空闲页和 WAL 空间。读取事务、碎片及待处理清理可能使文件超过目标；这不是文件大小硬上限。",
@@ -133,6 +132,7 @@
         "SaveDocument": "保存文档",
         "ToggleDocumentPreview": "切换文档预览",
         "SaveGraph": "保存",
+        "OpenNodePalette": "添加节点…",
         "UndoGraph": "撤销图编辑",
         "RedoGraph": "重做图编辑",
         "SelectAll": "选择所有节点",
@@ -385,6 +385,36 @@
     "primarySideBar": "主侧栏",
     "assistant": "助手",
     "assistantEmptyTitle": "统计分析助手",
+    "assistantStartTitle": "从研究问题开始",
+    "assistantStarterHint": "选择一个起点，编辑草稿后再发送。",
+    "assistantStarterQuestionLabel": "梳理研究问题",
+    "assistantStarterQuestionPrompt": "帮我把研究目标整理成清晰、可检验的问题。请先询问研究结局、目标人群和可用数据，再建议分析方案。",
+    "assistantStarterQualityLabel": "规划数据检查",
+    "assistantStarterQualityPrompt": "帮我规划研究数据的质量检查。请先询问有哪些数据，再列出缺失值、重复记录、异常值和变量定义的检查步骤。",
+    "assistantStarterMethodLabel": "选择分析方法",
+    "assistantStarterMethodPrompt": "帮我选择分析方法。请先明确研究问题、研究设计、变量类型和假设，再解释适用的方法与诊断步骤。",
+    "assistantComposerStop": "停止",
+    "assistantComposerSendKeys": "Enter 发送 · Shift+Enter 换行",
+    "assistantComposerQueueKeys": "Enter 加入待发送 · Shift+Enter 换行",
+    "assistantQueuePaused": "待发送列表已暂停，可在准备好后发送下一条。",
+    "assistantAllowEdits": "下一轮允许编辑",
+    "assistantToolResultPreview": "结果：%{preview}",
+    "assistantToolResources": "%{artifacts} 项资源变更 · %{results} 项计算结果",
+    "assistantPreviewItems": "%{count} 项",
+    "assistantPreviewFields": "%{count} 个字段",
+    "assistantTaskWarnings": "%{count} 条警告 · 展开查看",
+    "assistantPlanModes": {
+      "confirmatory": "验证性分析",
+      "exploratory": "探索性分析",
+      "postHoc": "事后分析"
+    },
+    "assistantPlanMethods": "候选方法",
+    "assistantPlanRequirements": "计划要求：%{variables} 个变量角色 · %{diagnostics} 项诊断 · %{checks} 项稳健性检验",
+    "assistantPlanPopulation": "目标总体",
+    "assistantPlanContrast": "比较目标",
+    "assistantPlanRobustnessCheck": "稳健性检验",
+    "assistantTaskToolCalls": "已记录 %{count} 次工具调用",
+    "assistantToolsUncertain": "工具调用 · %{count} 项，部分结果未确认",
     "assistantElapsed": "已用 %{value}",
     "assistantStartedAt": "开始：%{value}",
     "assistantFinishedAt": "结束：%{value}",
@@ -546,16 +576,16 @@
     "assistantTool": "工具调用",
     "assistantScrollToBottom": "回到最新消息",
     "assistantCancel": "停止当前分析",
-    "assistantStatusInitializing": "正在连接 Harness…",
-    "assistantStatusProviderUnavailable": "请在设置 → AI 中配置并选择模型",
+    "assistantStatusInitializing": "正在初始化会话…",
     "assistantStatusReady": "Ctrl+Enter 发送",
     "assistantReplyInterrupted": "这次处理暂时中断了，前面已完成的操作仍然保留。你可以让我检查当前进度并继续。",
     "assistantReplyStopped": "已停止本次处理，前面已完成的操作仍然保留。需要时可以继续。",
     "assistantStatusRunning": "正在分析…",
-    "assistantStatusError": "Assistant 暂时不可用",
+    "assistantStatusError": "助手暂时不可用",
     "assistantConversations": "对话列表",
-    "assistantNoConversations": "暂无对话，点击上方 + 开始新对话。",
-    "assistantNoMatchingConversations": "没有匹配的对话。",
+    "assistantNoConversations": "尚未创建对话",
+    "assistantConversationHint": "与助手一起探索和分析项目",
+    "assistantNoMatchingConversations": "没有匹配的对话",
     "assistantNewConversation": "新对话",
     "assistantYou": "你",
     "assistantThinking": "思考",
@@ -769,11 +799,7 @@
     "outputClear": "清除运行错误",
     "problemsNoGraph": "请打开图以查看问题",
     "problemsEmpty": "当前图没有问题",
-    "problemsCount": "%{count} 个问题",
     "problemsLocateNode": "定位问题节点"
-  },
-  "resultSource": {
-    "readFailed": "无法读取结果"
   },
   "runFailure": {
     "title": "执行失败",
@@ -1720,37 +1746,6 @@
       "noMatches": "未找到匹配项"
     }
   },
-  "editorDropPreview": {
-    "openResource": "打开 %{name}",
-    "mergeIntoGroup": "移动到该分组",
-    "splitLeft": "向左拆分",
-    "splitRight": "向右拆分",
-    "splitTop": "向上拆分",
-    "splitBottom": "向下拆分"
-  },
-  "tabBar": {
-    "toolbar": {
-      "maximizeGroup": "最大化分组",
-      "restoreGroup": "还原分组",
-      "moreTabs": "更多标签",
-      "dragToDock": "拖动以停靠整个浮窗",
-      "floatWindowActions": "浮动窗口操作"
-    },
-    "contextMenu": {
-      "close": "关闭",
-      "hideContent": "隐藏内容",
-      "floatTab": "浮动标签",
-      "floatGroup": "浮动整个分组",
-      "detachTab": "将此标签分离为新浮窗",
-      "detachGroup": "将此分组分离为新浮窗",
-      "dockFloat": "将整个浮窗停靠回主工作区",
-      "closeFloat": "关闭浮动窗口中的全部标签",
-      "expandContent": "展开内容",
-      "closeOthers": "关闭其他",
-      "closeSaved": "关闭已保存",
-      "closeAll": "全部关闭"
-    }
-  },
   "activityBar": {
     "plugins": "插件",
     "project": "项目",
@@ -1867,12 +1862,6 @@
     "addColumn": "添加列",
     "deleteColumn": "删除列 \"%{name}\""
   },
-  "resultState": {
-    "pending": "结果处理中（%{completed}/%{total}）",
-    "executionFailed": "结果计算失败",
-    "upstreamFailed": "上游结果计算失败",
-    "cancelled": "结果计算已取消"
-  },
   "sourceInspector": {
     "inspectRows": "查看数据（%{count} 行）",
     "viewMode": "查看方式",
@@ -1924,10 +1913,7 @@
     "failedInitialize": "窗口初始化失败"
   },
   "log": {
-    "streamTruncated": "部分日志可能已丢失",
-    "streamDisconnected": "日志连接已断开",
     "title": "日志",
-    "showCount": "显示 %{filtered} / %{total} 条",
     "refresh": "刷新日志",
     "autoScrollEnabled": "自动滚动已启用",
     "autoScrollDisabled": "自动滚动已禁用",
@@ -1944,7 +1930,6 @@
       "ui": "界面"
     },
     "clear": "清空日志",
-    "loadingLogs": "加载日志中...",
     "noLogs": "暂无日志",
     "noMatches": "没有匹配的日志",
     "runGraphHint": "执行图后将显示日志",
@@ -2114,7 +2099,20 @@
     "unavailable": "此文件的详情暂不可用。",
     "sections": {
       "info": "信息",
-      "diagnostics": "问题"
+      "diagnostics": "问题",
+      "parameters": "参数",
+      "topic": "主题"
+    },
+    "diagnosticSummary": {
+      "counts": "%{errors} 个错误 · %{warnings} 个警告 · %{information} 个提示 · %{blocking} 项阻止运行",
+      "connectInputs": "连接下方必需的输入；支持直接输入的端口也可填写值。",
+      "configureParameters": "先完善下方标出问题的参数，再运行。",
+      "review": "展开下方问题列表，修正对应的配置或连接。",
+      "technical": "技术详情",
+      "nodeId": "节点 ID",
+      "nodeType": "节点类型",
+      "copy": "复制技术报告",
+      "copyHint": "包含节点和端口 ID、全部原始诊断、严重程度、运行阻断状态、参数及关联位置。"
     },
     "parameterEditor": {
       "column": "列",
@@ -2152,13 +2150,17 @@
       "origin": "记录来源",
       "target": "目标",
       "event": "事件",
-      "fields": "字段"
+      "fields": "字段",
+      "path": "路径",
+      "status": "状态",
+      "reference": "引用"
     },
     "itemTypes": {
       "event_graph": "事件图",
       "function_graph": "函数图",
       "data": "数据集",
-      "chart": "图表"
+      "chart": "图表",
+      "mind": "思维导图"
     },
     "typeLabels": {
       "function_graph": "函数图"
@@ -2351,7 +2353,7 @@
     "assistant": {
       "prompt": "向 YssBI 提问，或描述要完成的分析…",
       "restoring": "正在恢复会话…",
-      "configureModelHint": "请在模型设置中配置可用的模型。",
+      "configureModelHint": "选择可用模型，或在模型选择菜单中打开“模型设置”。",
       "waitingForStop": "已请求停止，等待正在执行的操作结束…",
       "processing": "正在处理…",
       "loadEarlier": "加载更早的消息",
@@ -2517,6 +2519,9 @@
       "layoutSaveFailed": "工作台布局未能保存，请检查应用数据目录。",
       "layoutRestoreFailed": "工作台恢复失败，可以从项目目录打开资源。",
       "applyChanges": "应用修改",
+      "parameterDraftConflict": "编辑期间此字段已更改。请先恢复当前值，再重新修改。",
+      "pendingInputsInvalid": "请先在属性面板中修正无效输入或处理字段冲突，再保存或运行。输入已保留。",
+      "unappliedChanges": "尚未应用的修改",
       "integerOutOfRange": "请输入有效的整数，数值超出支持范围",
       "finiteNumberRequired": "请输入有限的数字",
       "settingsShortcut": "设置 · Ctrl+,",
@@ -2524,10 +2529,10 @@
       "databaseOpenFailed": "数据未打开，请刷新项目目录后重试。",
       "chartOpenFailed": "无法打开图表，请刷新项目后重试。",
       "nodeCatalog": "节点目录",
+      "collapseAll": "全部收起",
+      "expandAll": "全部展开",
       "switchPanel": "切换此区域的面板",
       "restoreLayout": "恢复布局",
-      "logStorageUnavailable": "日志存储不可用",
-      "logConnectionFailed": "无法连接日志存储",
       "clearDisplay": "清空显示",
       "entryCount": "%{value0} 条",
       "logsEmpty": "应用运行记录会显示在这里",
@@ -2655,6 +2660,11 @@
       "parameterName": "参数%{value0}",
       "returnValue": "返回值",
       "zoomPanel": "放大面板",
+      "closeOtherTabs": "关闭其他标签",
+      "closeTabsToLeft": "关闭左侧标签",
+      "closeTabsToRight": "关闭右侧标签",
+      "closeAllTabs": "关闭全部标签",
+      "tabsCloseProtected": "请先保存更改并等待操作完成",
       "newConversation": "新建对话",
       "expandConversation": "展开对话",
       "conversationOptions": "对话选项",
@@ -2691,9 +2701,7 @@
       "deleteDatabaseMessage": "该数据库及其数据将被删除，引用它的图节点需要重新选择资源。",
       "renameDatabase": "重命名数据库",
       "resourceOperationUnconfirmed": "资源操作未完成，提交可能已生效，请检查目录后再试。",
-      "saveChartBeforeEditing": "请先保存该图表的配置，再修改图表资源。",
       "deleteChartMessage": "图表文件将删除，原数据集会保留。",
-      "chartResourceFailed": "图表资源未修改，请刷新目录后检查实际状态。",
       "renameGraph": "重命名图",
       "newMarkdown": "新建 Markdown 文档",
       "fileCreateFailed": "无法创建文件，请检查名称和当前项目。",
@@ -2724,11 +2732,12 @@
       "revealResourceFailed": "无法定位资源，请刷新项目后重试。",
       "resourceChanged": "资源状态已改变或正在忙碌，请关闭后重试。",
       "resourceCommittedUnavailable": "资源操作已完成，但暂时无法打开编辑器。请从项目列表重新打开。",
-      "saveFileBeforeManaging": "请先保存文档或思维导图，再重命名、复制或删除。",
+      "saveFileBeforeManaging": "请先保存文件，再重命名、复制或删除。",
       "fileResourceFailed": "文件操作失败，请检查名称或刷新项目后重试。",
       "conversationNameInvalid": "会话名称无效，请修改后重试。"
     },
     "plugins": {
+      "listTitle": "插件列表",
       "search": "搜索插件名称或发布者",
       "busy": "插件正在执行任务或被其他视图使用，请完成后重试。",
       "changed": "插件已更新或移除，请重新选择。",
@@ -2741,11 +2750,8 @@
       "removed": "插件已移除，请刷新列表。",
       "wrongPlatform": "安装包不适用于当前平台，请选择当前系统和架构的安装包。",
       "operationFailed": "插件操作未完成，请检查安装包或插件存储后重试。",
-      "loadingCatalog": "正在读取插件目录…",
       "catalogFailed": "插件目录未读取，请重试。",
-      "loadingDetails": "正在读取插件详情…",
       "detailsFailed": "插件详情未读取，请重试。",
-      "installedCount": "%{value0} 个已安装插件",
       "packageReadFailed": "安装包未读取，请关闭后重新选择。",
       "confirmationFailed": "无法创建安装确认，请检查系统时间后重新选择安装包。",
       "installationBusy": "插件正在处理其他操作，安装确认已保留。",
@@ -2760,13 +2766,10 @@
       "confirmNewSigner": "确认使用上述新签名者更新此插件",
       "verifying": "正在检查签名和内容…",
       "confirmInstall": "确认安装",
-      "choosingPackage": "正在选择安装包…",
       "chooseSignedPackage": "选择签名插件包",
       "inspectPackage": "检查插件安装包",
       "packagePickerFailed": "安装包选择器未打开，请重试。",
-      "installing": "正在安装插件…",
       "installationUnconfirmed": "安装结果未确认，请在此窗口重试；已检查的安装包会保留。",
-      "installed": "插件已安装。",
       "installPackage": "安装插件包…",
       "refreshCatalog": "刷新目录与状态",
       "options": "插件选项",
@@ -2785,13 +2788,6 @@
       "collectPackagesTitle": "回收未使用插件包？",
       "collectPackagesMessage": "移除未被已安装插件或有效回执引用的包；项目资源和已安装插件会保留。",
       "confirm": "确认",
-      "updating": "正在更新插件…",
-      "packagesCollected": "已回收 %{count} 个未使用插件包。",
-      "enabledFeedback": "插件已启用。",
-      "disabledFeedback": "插件已停用。",
-      "uninstalled": "插件已卸载，私有数据与项目结果保留。",
-      "cacheCleared": "插件缓存已清理。",
-      "resultsCleared": "历史结果缓存已清理。",
       "taskFailed": "插件任务未完成，请刷新并检查实际状态。",
       "accepted": "已接纳",
       "cancelling": "取消中",
@@ -2840,12 +2836,11 @@
       "executableParentMissing": "可执行文件无父目录"
     },
     "documents": {
-      "togglePreview": "编辑 / 预览 · Ctrl+Shift+V",
-      "saveFailed": "文档未保存。内容已保留，请检查外部修改或文件写入错误。",
-      "externalChange": "文档已在其他位置修改。当前输入已保留，保存需要重新核验版本。",
-      "readFailed": "文档暂不可读取。当前输入已保留，请检查项目目录。"
+      "togglePreview": "编辑 / 预览 · Ctrl+Shift+V"
     },
     "canvas": {
+      "emptyGraph": "从节点开始",
+      "addNode": "添加节点…",
       "catalogFailed": "无法读取节点目录，请重试。",
       "resetViewShortcut": "重置视图 · Home",
       "loadingCompatibleNodes": "加载兼容节点…",
@@ -2997,16 +2992,13 @@
     },
     "minds": {
       "topicChanged": "主题已在其他位置修改。当前输入已保留，请核对后重新打开或放弃输入。",
-      "saveFailed": "思维导图未保存。当前内容已保留，请检查外部修改或写入错误。",
       "topicSubmitFailed": "主题修改未提交。输入已保留，请检查当前文件。",
-      "readFailed": "思维导图暂不可读取。当前内容已保留。",
       "selectTopicHint": "选择主题以编辑内容与分支",
       "selectedTopics": "已选择 %{value0} 个主题",
       "topicContent": "主题内容",
       "applyContent": "应用内容",
       "restoreContent": "恢复内容",
       "addSibling": "添加同级",
-      "reference": "引用：%{value0}",
       "unnamedTopic": "未命名主题"
     },
     "charts": {
@@ -3015,8 +3007,6 @@
       "axesHint": "选择 X 轴和 Y 轴列，查看散点或折线",
       "dataFailed": "无法读取当前配置的绘图数据，请重新选择列或刷新。",
       "previewFailed": "图表预览未读取，请检查数据集、列类型或当前资源状态。",
-      "readFailed": "图表未读取，本地配置已保留，请刷新项目后重试。",
-      "removed": "图表已移除，本地未保存的配置仍保留。",
       "loading": "正在读取图表",
       "preparingData": "数据准备在后台执行",
       "previewUnavailable": "预览暂不可用",
@@ -3029,13 +3019,10 @@
       "otherValues": "另有 %{other_count} 个值归入其他类别",
       "plotSummary": "X：%{value0} · Y：%{value1} · %{value2} 个绘图点",
       "dataPoints": "数据点",
-      "saveFailed": "图表保存未完成，配置已保留，请检查当前项目后重试。",
       "unnamedDataset": "未命名数据集",
       "chooseDataset": "选择数据集",
       "removedDataset": "已移除的数据集",
-      "configuration": "图表配置",
       "noDataset": "不选择数据集",
-      "externalChange": "文件已变化，本地配置已保留。保存会写入当前配置。",
       "unsavedConfiguration": "配置有未保存的更改。Ctrl/Cmd+S 保存。",
       "unavailableName": "%{name}（当前不可用）",
       "distributionColumn": "分布列",
@@ -3161,6 +3148,19 @@
       "environmentFailed": "应用运行环境无法初始化。请检查应用数据目录的访问权限，关闭后重新启动。",
       "failureCode": "原因代码：%{code}",
       "close": "关闭"
+    },
+    "inspector": {
+      "moreActions": "更多操作"
+    },
+    "files": {
+      "saveFailed": "“%{name}”未保存。修改已保留，请检查外部修改或文件写入错误。",
+      "readFailed": "“%{name}”暂不可读取。修改已保留，请检查项目目录。",
+      "conflict": "“%{name}”已在其他位置修改。未保存的修改已保留：可重新载入新版本，或保留修改并在保存时覆盖。",
+      "removed": "“%{name}”已在其他位置删除。未保存的修改仍显示在此，但已无法保存。",
+      "reload": "重新载入",
+      "keepChanges": "保留我的修改",
+      "statusConflict": "已在其他位置修改",
+      "statusRemoved": "已删除"
     }
   }
 }

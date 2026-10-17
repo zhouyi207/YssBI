@@ -2,7 +2,7 @@ name: Release packages
 
 on:
   push:
-    tags: ['v*']
+    tags: ['app-v*']
   workflow_dispatch:
 
 permissions:
@@ -46,8 +46,8 @@ jobs:
           version = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['workspace']['package']['version']
           if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?', version):
               raise SystemExit('Workspace version is not a release version')
-          if os.environ['GITHUB_REF'] != f'refs/tags/v{version}':
-              raise SystemExit('Run this workflow from the tag matching the workspace version: v' + version)
+          if os.environ['GITHUB_REF'] != f'refs/tags/app-v{version}':
+              raise SystemExit('Run this workflow from the tag matching the workspace version: app-v' + version)
           subprocess.run(['git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/gpui'], check=True)
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
               output.write(f'version={version}\n')
@@ -104,10 +104,14 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: python scripts/package.py --target "$BUILD_TARGET" --output dist --linux-format tar.gz --linux-format deb --linux-format rpm
-      - name: Build macOS or Windows packages
-        if: runner.os != 'Linux'
+      - name: Build macOS packages
+        if: runner.os == 'macOS'
         shell: bash
         run: python scripts/package.py --target "$BUILD_TARGET" --output dist
+      - name: Build Windows packages
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/package.py --target "$env:BUILD_TARGET" --output dist
       - name: Validate assets and smoke packaged native applications
         shell: bash
         run: |
@@ -209,7 +213,7 @@ jobs:
           python - <<'PY'
           import hashlib, json, os, pathlib, tomllib, urllib.error, urllib.parse, urllib.request
           version = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['workspace']['package']['version']
-          tag = f'v{version}'
+          tag = f'app-v{version}'
           if version != os.environ['PACKAGE_VERSION'] or os.environ['GITHUB_REF'] != f'refs/tags/{tag}':
               raise SystemExit('Release tag and workspace version disagree')
           directory = pathlib.Path('dist')

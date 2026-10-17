@@ -12,8 +12,6 @@ pub enum SciOperationCode {
     VarLagOrder,
     VecFit,
     VecRank,
-    KernelDensity,
-    AcfPacf,
     SerialTests,
     TTest,
     WaldTest,

@@ -6,6 +6,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
+use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::Context;
 use yss_application::graph::run::{
@@ -137,10 +138,10 @@ impl GraphCanvas {
         }
     }
 
-    pub(super) fn graph_run_unavailable_reason(&self) -> Option<&'static str> {
+    pub(super) fn graph_run_unavailable_reason(&self, cx: &gpui_kit::App) -> Option<&'static str> {
         self.execution_unavailable_reason().or_else(|| {
-            // Pending port input may fix the problem; recheck after its transaction.
-            (self.presentation.graph_blocked && !self.has_dirty_port_inputs())
+            // Pending inputs may fix the problem; recheck after their transaction.
+            (self.presentation.graph_blocked && !self.has_dirty_inputs(cx))
                 .then_some("canvas.problemsBlockExecution")
         })
     }
@@ -193,14 +194,14 @@ impl GraphCanvas {
     }
 
     pub fn run_graph(&mut self, demand: RunDemand, cx: &mut Context<Self>) {
-        if !self.can_run()
-            || (matches!(demand, RunDemand::Default)
-                && self.graph_run_unavailable_reason().is_some())
-        {
+        if !self.can_run() {
             return;
         }
-        if self.has_dirty_port_inputs() {
-            self.submit(super::GraphCommand::RunAfterPortInputs(demand), None, cx);
+        if self.has_dirty_inputs(cx) {
+            self.submit(super::GraphCommand::RunAfterInputs(demand), None, cx);
+            return;
+        }
+        if matches!(demand, RunDemand::Default) && self.graph_run_unavailable_reason(cx).is_some() {
             return;
         }
         self.context_menu = None;
@@ -216,7 +217,7 @@ impl GraphCanvas {
             .runs
             .last_key_value()
             .map(|(_, projection)| projection.event.identity().clone());
-        self.error = None;
+
         self.refresh_presentation();
         let task = self.services.run(move |services| {
             let application = services;
@@ -251,7 +252,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.execution.submitting = None;
                 if view.graph.results.execution_session_id != execution_session_id {
                     view.resync_execution(cx);
@@ -267,13 +268,14 @@ impl GraphCanvas {
                             code = "native_run_request_rejected",
                             "Native run request rejected"
                         );
-                        view.error = Some(run_rejection(&error));
+                        view.notifications.error(run_rejection(&error), cx);
                     }
                 }
                 view.resync_execution(cx);
                 cx.emit(CanvasEvent::Execution);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.emit(CanvasEvent::Execution);
@@ -305,15 +307,17 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.execution.cancelling = false;
                 if result.is_err() {
-                    view.error = Some(yss_ui::text::t("native.canvas.cancelFailed").into());
+                    view.notifications
+                        .error(yss_ui::text::t("native.canvas.cancelFailed"), cx);
                 }
                 view.resync_execution(cx);
                 cx.emit(CanvasEvent::Execution);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.emit(CanvasEvent::Execution);
@@ -365,7 +369,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 let buffered = view.execution.recovery.take().unwrap_or_default();
                 if view.execution.recover_again {
                     view.resync_execution(cx);
@@ -389,7 +393,8 @@ impl GraphCanvas {
                 view.refresh_presentation();
                 cx.emit(CanvasEvent::Execution);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.emit(CanvasEvent::Execution);

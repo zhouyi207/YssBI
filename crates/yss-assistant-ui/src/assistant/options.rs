@@ -8,6 +8,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{AnyElement, Context, div, prelude::*, px};
 use yss_harness_contract::{HarnessMode, ReasoningEffort};
+use yss_ui::lifecycle::LogReleased;
 
 impl ConversationPanel {
     pub(super) fn effort_choices(&self) -> (Vec<ReasoningEffort>, Option<ReasoningEffort>) {
@@ -94,7 +95,9 @@ impl ConversationPanel {
                         })
                         .checked(selected == mode)
                         .on_click(move |_, _, cx| {
-                            let _ = owner.update(cx, |view, cx| view.set_mode(mode, cx));
+                            owner
+                                .update(cx, |view, cx| view.set_mode(mode, cx))
+                                .log_released();
                         }),
                     );
                 }
@@ -135,7 +138,9 @@ impl ConversationPanel {
                     PopupMenuItem::new(yss_ui::text::t("panel.assistantResetEffort"))
                         .disabled(explicit.is_none())
                         .on_click(move |_, _, cx| {
-                            let _ = reset.update(cx, |view, cx| view.set_effort(None, cx));
+                            reset
+                                .update(cx, |view, cx| view.set_effort(None, cx))
+                                .log_released();
                         }),
                 );
                 if !choices.is_empty() {
@@ -156,8 +161,9 @@ impl ConversationPanel {
                         PopupMenuItem::new(label)
                             .checked(selected == Some(effort))
                             .on_click(move |_, _, cx| {
-                                let _ =
-                                    owner.update(cx, |view, cx| view.set_effort(Some(effort), cx));
+                                owner
+                                    .update(cx, |view, cx| view.set_effort(Some(effort), cx))
+                                    .log_released();
                             }),
                     );
                 }

@@ -5,11 +5,9 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, tooltip::Tooltip};
 use gpui_kit::{App, Context, IntoElement, MouseButton, div, point, prelude::*, px};
 use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorNodeModel};
-use yss_node_protocol::PortDirection;
 
 use super::{
-    GraphCanvas,
-    geometry::{self, NodeLayout},
+    GraphCanvas, geometry,
     presentation::{NodeAppearance, State},
 };
 use crate::feedback;
@@ -20,9 +18,11 @@ impl GraphCanvas {
         &self,
         node: &EditorNodeModel,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
+    ) -> Option<impl IntoElement + use<>> {
         let id = node.node_id;
-        let layout = NodeLayout::new(node);
+        let layer = self.connection_layer.borrow();
+        let geometry = layer.node(id)?;
+        let layout = geometry.layout;
         let position = geometry::position(node, &self.preview);
         let origin = self.offset + point(px(position.x as f32), px(position.y as f32)) * self.zoom;
         let display = self
@@ -39,16 +39,8 @@ impl GraphCanvas {
         } else {
             display.state.color(cx)
         };
-        let inputs = node
-            .ports
-            .iter()
-            .filter(|p| p.direction == PortDirection::Input)
-            .collect::<Vec<_>>();
-        let outputs = node
-            .ports
-            .iter()
-            .filter(|p| p.direction == PortDirection::Output)
-            .collect::<Vec<_>>();
+        let inputs = &geometry.inputs;
+        let outputs = &geometry.outputs;
         let primary = node
             .diagnostics
             .iter()
@@ -57,131 +49,138 @@ impl GraphCanvas {
         let dimmed = self
             .connection_drag()
             .is_some_and(|drag| drag.dimmed_nodes.contains(&id));
-        div()
-            .id(gpui_kit::SharedString::from(format!("node-{id}")))
-            .absolute()
-            .left(origin.x)
-            .top(origin.y)
-            .w(px(layout.width * self.zoom))
-            .h(px(layout.height * self.zoom))
-            .rounded(px(4. * self.zoom))
-            .border_1()
-            .border_color(border)
-            .when(
-                matches!(display.state, State::Unexecuted | State::Stale),
-                |view| view.border_dashed(),
-            )
-            .bg(cx.theme().background)
-            .opacity(if dimmed { 0.35 } else { 1. })
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |view, event, window, cx| view.begin_node(id, event, window, cx)),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |view, event, window, cx| {
-                    view.begin_node_menu(id, event, window, cx)
-                }),
-            )
-            .when(
-                matches!(display.state, State::Error | State::Valid),
-                |view| {
+        Some(
+            div()
+                .id(geometry.element_id.clone())
+                .absolute()
+                .left(origin.x)
+                .top(origin.y)
+                .w(px(layout.width * self.zoom))
+                .h(px(layout.height * self.zoom))
+                .rounded(px(4. * self.zoom))
+                .border_1()
+                .border_color(border)
+                .when(
+                    matches!(display.state, State::Unexecuted | State::Stale),
+                    |view| view.border_dashed(),
+                )
+                .bg(cx.theme().background)
+                .opacity(if dimmed { 0.35 } else { 1. })
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |view, event, window, cx| {
+                        view.begin_node(id, event, window, cx)
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |view, event, window, cx| {
+                        view.begin_node_menu(id, event, window, cx)
+                    }),
+                )
+                .when(
+                    matches!(display.state, State::Error | State::Valid),
+                    |view| {
+                        view.child(
+                            div()
+                                .absolute()
+                                .size_full()
+                                .rounded(px(4. * self.zoom))
+                                .bg(display.state.color(cx).opacity(0.07)),
+                        )
+                    },
+                )
+                .when(display.state == State::Partial, |view| {
                     view.child(
                         div()
                             .absolute()
-                            .size_full()
-                            .rounded(px(4. * self.zoom))
-                            .bg(display.state.color(cx).opacity(0.07)),
+                            .inset(px(3. * self.zoom))
+                            .rounded(px(2. * self.zoom))
+                            .border_1()
+                            .border_color(cx.theme().success),
                     )
-                },
-            )
-            .when(display.state == State::Partial, |view| {
-                view.child(
-                    div()
-                        .absolute()
-                        .inset(px(3. * self.zoom))
-                        .rounded(px(2. * self.zoom))
-                        .border_1()
-                        .border_color(cx.theme().success),
-                )
-            })
-            .when(!layout.compact, |view| {
-                view.child(self.render_node_header(node, cx))
-                    .child(self.render_node_parameters(id, cx))
-            })
-            .when(layout.compact, |view| {
-                view.child(
-                    div()
-                        .absolute()
-                        .left(px((layout.width - 8.) / 2. * self.zoom))
-                        .top(px((layout.height - 8.) / 2. * self.zoom))
-                        .size(px(8. * self.zoom))
-                        .rounded_full()
-                        .border_1()
-                        .border_color(cx.theme().muted_foreground),
-                )
-            })
-            .children((0..inputs.len().max(outputs.len())).map(|index| {
-                div()
-                    .absolute()
-                    .left_0()
-                    .right_0()
-                    .top(px(
-                        (layout.ports_top + index as f32 * layout.port_height) * self.zoom
-                    ))
-                    .h(px(layout.port_height * self.zoom))
-                    .flex()
-                    .items_center()
-                    .child(
+                })
+                .when(!layout.compact, |view| {
+                    view.child(self.render_node_header(node, cx))
+                        .child(self.render_node_parameters(id, cx))
+                })
+                .when(layout.compact, |view| {
+                    view.child(
                         div()
-                            .w_1_2()
-                            .min_w_0()
-                            .h_full()
-                            .flex()
-                            .items_center()
-                            .children(
-                                inputs
-                                    .get(index)
-                                    .map(|port| self.render_port(port, layout.compact, cx)),
-                            ),
+                            .absolute()
+                            .left(px((layout.width - 8.) / 2. * self.zoom))
+                            .top(px((layout.height - 8.) / 2. * self.zoom))
+                            .size(px(8. * self.zoom))
+                            .rounded_full()
+                            .border_1()
+                            .border_color(cx.theme().muted_foreground),
                     )
-                    .child(
-                        div()
-                            .w_1_2()
-                            .min_w_0()
-                            .h_full()
-                            .flex()
-                            .items_center()
-                            .justify_end()
-                            .children(
-                                outputs
-                                    .get(index)
-                                    .map(|port| self.render_port(port, layout.compact, cx)),
-                            ),
-                    )
-            }))
-            .child(self.render_node_badge(display, primary, cx))
-            .when(display.state != State::Error, |view| {
-                view.children(primary.map(|diagnostic| {
-                    let color = match diagnostic.severity {
-                        EditorDiagnosticSeverity::Error => cx.theme().danger,
-                        EditorDiagnosticSeverity::Warning => cx.theme().warning,
-                        EditorDiagnosticSeverity::Information => cx.theme().primary,
-                    };
-                    let diagnostic = diagnostic.clone();
+                })
+                .children((0..inputs.len().max(outputs.len())).map(|index| {
                     div()
-                        .id("diagnostic")
                         .absolute()
-                        .left(px(-5. * self.zoom))
-                        .top(px(-5. * self.zoom))
-                        .size(px(10. * self.zoom))
-                        .rounded_full()
-                        .bg(color)
-                        .tooltip(move |window, cx| {
-                            Tooltip::new(feedback::graph_diagnostic(&diagnostic)).build(window, cx)
-                        })
+                        .left_0()
+                        .right_0()
+                        .top(px(
+                            (layout.ports_top + index as f32 * layout.port_height) * self.zoom
+                        ))
+                        .h(px(layout.port_height * self.zoom))
+                        .flex()
+                        .items_center()
+                        .child(
+                            div()
+                                .w_1_2()
+                                .min_w_0()
+                                .h_full()
+                                .flex()
+                                .items_center()
+                                .children(
+                                    inputs
+                                        .get(index)
+                                        .and_then(|index| node.ports.get(*index))
+                                        .map(|port| self.render_port(port, layout.compact, cx)),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .w_1_2()
+                                .min_w_0()
+                                .h_full()
+                                .flex()
+                                .items_center()
+                                .justify_end()
+                                .children(
+                                    outputs
+                                        .get(index)
+                                        .and_then(|index| node.ports.get(*index))
+                                        .map(|port| self.render_port(port, layout.compact, cx)),
+                                ),
+                        )
                 }))
-            })
+                .child(self.render_node_badge(display, primary, cx))
+                .when(display.state != State::Error, |view| {
+                    view.children(primary.map(|diagnostic| {
+                        let color = match diagnostic.severity {
+                            EditorDiagnosticSeverity::Error => cx.theme().danger,
+                            EditorDiagnosticSeverity::Warning => cx.theme().warning,
+                            EditorDiagnosticSeverity::Information => cx.theme().primary,
+                        };
+                        let diagnostic = diagnostic.clone();
+                        div()
+                            .id("diagnostic")
+                            .absolute()
+                            .left(px(-5. * self.zoom))
+                            .top(px(-5. * self.zoom))
+                            .size(px(10. * self.zoom))
+                            .rounded_full()
+                            .bg(color)
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(feedback::graph_diagnostic(&diagnostic))
+                                    .build(window, cx)
+                            })
+                    }))
+                }),
+        )
     }
 
     fn render_node_header(&self, node: &EditorNodeModel, cx: &App) -> impl IntoElement + use<> {

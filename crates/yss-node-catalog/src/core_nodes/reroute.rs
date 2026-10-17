@@ -3,9 +3,8 @@ use super::support::{
 };
 use crate::{REROUTE_INPUT_PORT, REROUTE_NODE_TYPE, REROUTE_OUTPUT_PORT};
 use yss_node_protocol::{
-    InputBindingSpec, InputConsumption, LiteralPolicy, NodeStyleId, NodeTypingSpec,
-    OutputProduction, PortCardinality, PortDirection, PortEditorSpec, PortKey, PortSpec, TypeExpr,
-    TypeParameterId,
+    InputBindingSpec, LiteralPolicy, NodeStyleId, NodeTypingSpec, PortCardinality, PortDirection,
+    PortEditorSpec, PortKey, PortSpec, TypeExpr, TypeParameterId,
 };
 use yss_node_registry::{RegisteredNode, TransparentNodeRole};
 
@@ -102,10 +101,6 @@ fn port(
             literal_policy: LiteralPolicy::Forbidden,
             default_value: None,
         }),
-        consumption: (direction == PortDirection::Input)
-            .then_some(InputConsumption::FullyMaterialized),
-        production: (direction == PortDirection::Output)
-            .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
     })

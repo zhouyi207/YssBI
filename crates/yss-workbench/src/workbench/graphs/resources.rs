@@ -1,83 +1,13 @@
 //! Committed resource receipts rebind native panels; projections still come from Application.
 use gpui_kit::{Context, Entity, Focusable, Window};
-use yss_application::events::CommittedResourceMutation;
 use yss_graph_document::GraphResourcePath;
-use yss_project_history::{ResourceDocumentPatch, ResourceKey, ResourceLifecycleKind};
 use yss_project_identity::ResourceRevision;
 
 use super::super::Workbench;
 use super::Opening;
 
 impl Workbench {
-    pub(in crate::workbench) fn accept_graph_resources(
-        &mut self,
-        mutation: &CommittedResourceMutation,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self
-            .project
-            .as_ref()
-            .is_none_or(|project| project.identity != mutation.project_instance_id)
-        {
-            return;
-        }
-        for moved in &mutation.moves {
-            if !is_graph(moved.kind) {
-                continue;
-            }
-            // Reference graphs also have move patches; only the destination delta versions this move.
-            let Some(delta) = mutation.deltas.iter().find(|delta| {
-                graph_path(&delta.resource) == Some(moved.to.as_ref())
-                    && matches!(&delta.payload, ResourceDocumentPatch::ResourceMove(patch)
-                        if patch.from == moved.from && patch.to == moved.to)
-            }) else {
-                continue;
-            };
-            let Ok(path) = GraphResourcePath::new(moved.to.to_string()) else {
-                continue;
-            };
-            self.move_graph_resource(
-                &moved.from,
-                path,
-                delta.from_revision,
-                delta.to_revision,
-                window,
-                cx,
-            );
-        }
-        for delta in &mutation.deltas {
-            if let ResourceDocumentPatch::ResourceLifecycle(patch) = &delta.payload
-                && patch.after.is_none()
-                && let Some(before) = &patch.before
-                && is_graph(before.kind)
-                && graph_path(&delta.resource) == Some(before.path.as_ref())
-            {
-                self.remove_graph_resource(&before.path, delta.from_revision, window, cx);
-            }
-        }
-        for graph in self
-            .graphs
-            .values()
-            .filter_map(gpui_kit::WeakEntity::upgrade)
-        {
-            let canvas = graph.read(cx);
-            let affected = mutation
-                .projection_status
-                .affected_graph_paths()
-                .iter()
-                .any(|path| path.as_str() == canvas.path())
-                || mutation.deltas.iter().any(|delta| {
-                    graph_path(&delta.resource) == Some(canvas.path())
-                        || canvas.graph().depends_on_resource(&delta.resource)
-                });
-            if affected {
-                graph.update(cx, |graph, cx| graph.refresh(cx));
-            }
-        }
-    }
-
-    fn move_graph_resource(
+    pub(in crate::workbench) fn move_graph_resource(
         &mut self,
         from: &str,
         to: GraphResourcePath,
@@ -109,7 +39,7 @@ impl Workbench {
             self.bind_graph_resource(canvas, from, &to, window, cx);
             true
         } else {
-            self.indexed_graph_revision(from)
+            self.indexed_revision(from)
                 .is_none_or(|revision| revision <= before)
         };
         if let Some(opening) = self
@@ -238,7 +168,7 @@ impl Workbench {
         }
     }
 
-    fn remove_graph_resource(
+    pub(in crate::workbench) fn remove_graph_resource(
         &mut self,
         path: &str,
         before: ResourceRevision,
@@ -257,7 +187,7 @@ impl Workbench {
             self.retire_graph(canvas, window, cx);
             true
         } else {
-            self.indexed_graph_revision(path)
+            self.indexed_revision(path)
                 .is_none_or(|revision| revision <= before)
         };
         if let Some(opening) = self
@@ -280,20 +210,9 @@ impl Workbench {
         }
     }
 
-    pub(super) fn indexed_graph_revision(&self, path: &str) -> Option<ResourceRevision> {
-        let index = &self.project.as_ref()?.index;
-        index
-            .event_graphs
-            .iter()
-            .find(|graph| graph.path == path)
-            .map(|graph| graph.revision)
-            .or_else(|| {
-                index
-                    .function_graphs
-                    .iter()
-                    .find(|graph| graph.path == path)
-                    .map(|graph| graph.revision)
-            })
+    pub(super) fn indexed_revision(&self, path: &str) -> Option<ResourceRevision> {
+        let (_, revision) = self.project.as_ref()?.indexed_resource(path)?;
+        Some(revision)
     }
 
     fn retire_graph(
@@ -312,27 +231,10 @@ impl Workbench {
             self.problems.update(cx, |problems, cx| problems.clear(cx));
             self.output
                 .update(cx, |output, cx| output.set_graph(None, cx));
-            self.results.update(cx, |results, cx| {
-                results.set_graph(None);
-                cx.notify();
-            });
+            self.results
+                .update(cx, |results, cx| results.set_graph(None, cx));
         }
         self.dock
             .update(cx, |dock, cx| dock.remove_panel(canvas, window, cx));
-    }
-}
-
-fn is_graph(kind: ResourceLifecycleKind) -> bool {
-    matches!(
-        kind,
-        ResourceLifecycleKind::EventGraph | ResourceLifecycleKind::FunctionGraph
-    )
-}
-
-fn graph_path(key: &ResourceKey) -> Option<&str> {
-    match key {
-        ResourceKey::Graph(path) => Some(path.as_str()),
-        ResourceKey::Function(path) => Some(&path.0),
-        _ => None,
     }
 }

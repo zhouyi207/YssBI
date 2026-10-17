@@ -4,12 +4,13 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::task::Poll;
 use tokio::sync::Notify;
+use yss_assistant_extension::{AssistantExtension, test_support::RejectingCapabilityGateway};
 use yss_harness_contract::{
     HarnessSessionState, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
     PersistenceFailure, PersistenceFuture,
 };
 use yss_harness_core::test_support::{
-    FixedClock, InMemoryHarnessStore, MockAgentDriver, RejectingCapabilityGateway, SequentialIds,
+    FixedClock, InMemoryHarnessStore, MockAgentDriver, SequentialIds,
 };
 
 const LOAD: u8 = 1;
@@ -121,7 +122,9 @@ fn host(sessions: &Arc<PausedSessions>) -> Arc<HarnessHost> {
             models: yss_harness_core::test_support::fixed_model(Arc::new(MockAgentDriver::new(
                 "unused",
             ))),
-            capability_gateway: Arc::new(RejectingCapabilityGateway),
+            extension: Arc::new(
+                AssistantExtension::new(Arc::new(RejectingCapabilityGateway)).unwrap(),
+            ),
             sessions: sessions.clone(),
             events: store.clone(),
             event_sink: store.clone(),

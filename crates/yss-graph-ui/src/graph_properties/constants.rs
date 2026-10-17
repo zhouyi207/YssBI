@@ -9,6 +9,7 @@ use gpui_kit::{AppContext, Context, Entity, Window};
 use yss_data_contract::{DataValue, SemanticType, ValueType};
 use yss_graph_document::{ConstantId, GraphConstant};
 use yss_graph_editor::EditorGraphMutation;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone, PartialEq)]
 pub(super) struct ConstantOverview {
@@ -258,7 +259,7 @@ impl GraphProperties {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation
                     || view
                         .graph()
@@ -279,13 +280,13 @@ impl GraphProperties {
                         field.original_input = Some(source.clone());
                         field.input = Some(input_state(source, &field.data_type, window, cx));
                     }
-                    Err(_) => {
-                        view.error =
-                            Some(yss_ui::text::t("native.workbench.constantReadFailed").into())
-                    }
+                    Err(_) => view
+                        .notifications
+                        .error(yss_ui::text::t("native.workbench.constantReadFailed"), cx),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

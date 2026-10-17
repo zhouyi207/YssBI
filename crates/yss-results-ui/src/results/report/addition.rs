@@ -19,7 +19,7 @@ pub(super) struct AdditionForm {
     nomiss0: bool,
     pub open: bool,
     pub busy: bool,
-    pub error: Option<&'static str>,
+    pub(super) notifications: yss_ui::notifications::Notifications,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -57,7 +57,7 @@ impl AdditionForm {
             hypothesis,
             open: false,
             busy: false,
-            error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             _subscriptions: subscriptions,
         }
     }

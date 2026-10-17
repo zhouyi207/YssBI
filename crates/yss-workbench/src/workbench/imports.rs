@@ -7,6 +7,7 @@ use yss_data_ui::imports::{
     sample_import_failure,
 };
 use yss_project_identity::OperationId;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn import_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -46,7 +47,9 @@ impl Workbench {
                                 })
                                 .unwrap_or(false);
                             if !started {
-                                let _ = failure.update(cx, |view, cx| view.reject_submission(cx));
+                                failure
+                                    .update(cx, |view, cx| view.reject_submission(cx))
+                                    .log_released();
                             }
                         });
                     });
@@ -111,14 +114,14 @@ impl Workbench {
             });
             let language = crate::text::locale();
             let project = application
-                .query_project_index(scope.project().clone(), language, true)
+                .query_project_presentation(scope.project().clone(), language)
                 .ok()
                 .map(|snapshot| DesktopProject::new(scope.project().clone(), snapshot, language));
             Ok((imported, project))
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != expected.lifecycle()
                     || view
                         .project
@@ -134,18 +137,27 @@ impl Workbench {
                 }
                 // Import can commit before a failed session refresh; re-query the actual owners in either case.
                 view.rebind_session(window, cx);
-                match &imported {
-                    Ok(id) => {
-                        view.expand_project_category("project.data", cx);
-                        view.open_database(id.clone(), None, window, cx);
-                    }
-                    Err(key) => view.error = Some(crate::text::translate(key)),
+                if let Ok(id) = &imported {
+                    view.expand_project_category("project.data", cx);
+                    view.open_database(id.clone(), None, window, cx);
                 }
-                let _ = dialog.update(cx, |dialog, cx| {
-                    dialog.finished(imported.map(|_| ()), window, cx)
-                });
+                let error = imported
+                    .as_ref()
+                    .err()
+                    .map(|key| crate::text::translate(key));
+                if dialog
+                    .update(cx, |dialog, cx| {
+                        dialog.finished(imported.map(|_| ()), window, cx)
+                    })
+                    .log_released()
+                    .is_none()
+                    && let Some(error) = error
+                {
+                    view.error = Some(error);
+                }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

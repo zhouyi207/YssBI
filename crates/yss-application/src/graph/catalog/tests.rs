@@ -343,14 +343,24 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
         b"unreadable function body",
     )
     .unwrap();
-    let activities = Arc::new(std::sync::Mutex::new(BTreeSet::new()));
-    let observed = Arc::clone(&activities);
+    let caller_version = session
+        .project()
+        .read_graph_editing(session.project_instance_id(), &caller)
+        .unwrap()
+        .state
+        .version;
+    let (observed, activities) = std::sync::mpsc::channel();
     let _subscription = application
         .subscribe_graph_activity(
             session.project_instance_id(),
             Arc::new(move |activity| {
-                if let crate::graph::editing::GraphActivity::Changed { graph_path, .. } = activity {
-                    observed.lock().unwrap().insert(graph_path);
+                if let crate::graph::editing::GraphActivity::Changed {
+                    graph_path,
+                    editing,
+                    cause,
+                } = activity
+                {
+                    observed.send((graph_path, editing.version, cause)).unwrap();
                 }
             }),
         )
@@ -411,8 +421,22 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
         ]
         .into()
     );
+    let activities = activities.try_iter().collect::<Vec<_>>();
+    assert!(
+        activities.iter().all(|(_, _, cause)| {
+            *cause == crate::graph::editing::GraphChangeCause::Dependencies
+        })
+    );
+    assert!(
+        activities
+            .iter()
+            .any(|(path, version, _)| { path == caller.as_str() && *version == caller_version })
+    );
     assert_eq!(
-        *activities.lock().unwrap(),
+        activities
+            .into_iter()
+            .map(|(path, _, _)| path)
+            .collect::<BTreeSet<_>>(),
         [
             nested.as_str().into(),
             caller.as_str().into(),
@@ -478,7 +502,9 @@ fn connection_candidates_are_read_only_and_reject_an_obsolete_graph_version() {
             before.state.version,
             &source_port,
             ConnectionIntent::Connect,
+            &|| false,
         )
+        .unwrap()
         .unwrap();
     assert!(candidates.candidates.iter().any(|candidate| candidate.port
         == PortAddress::declared(target, "left".parse().unwrap())
@@ -490,6 +516,25 @@ fn connection_candidates_are_read_only_and_reject_an_obsolete_graph_version() {
         .unwrap();
     assert_eq!(after.state, before.state);
     assert_eq!(after.document, before.document);
+    assert!(
+        app.graph_connection_candidates(
+            &instance,
+            &graph,
+            before.state.version,
+            &source_port,
+            ConnectionIntent::Connect,
+            &|| true,
+        )
+        .unwrap()
+        .is_none()
+    );
+    let after_cancel = staged
+        .session
+        .project()
+        .read_graph_editing(&instance, &graph)
+        .unwrap();
+    assert_eq!(after_cancel.state, before.state);
+    assert_eq!(after_cancel.document, before.document);
     app.edit_graph(
         crate::graph::editing::GraphEditRequest {
             project_instance_id: instance.clone(),
@@ -512,7 +557,8 @@ fn connection_candidates_are_read_only_and_reject_an_obsolete_graph_version() {
             &graph,
             before.state.version,
             &source_port,
-            ConnectionIntent::Connect
+            ConnectionIntent::Connect,
+            &|| false,
         ),
         Err(
             crate::graph::resources::ResourceMutationApplicationError::GraphOperation(
@@ -862,7 +908,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     ));
     let snapshot = session
         .application
-        .query_project_index(project_instance_id.clone(), "zh-CN", true)
+        .query_project_presentation(project_instance_id.clone(), "zh-CN")
         .unwrap();
     assert_eq!(snapshot.activity_panels.len(), 2);
     for id in [
@@ -933,7 +979,7 @@ fn all_non_deferred_builtin_nodes_are_available_in_catalog_and_sidebar() {
         .unwrap();
     let snapshot = session
         .application
-        .query_project_index(project_instance_id, "zh-CN", true)
+        .query_project_presentation(project_instance_id, "zh-CN")
         .unwrap();
     // Scope exceptions are reviewed in the catalog owner's document, not inferred
     // from missing kernels. Implementing an exception must also remove its record.
@@ -1412,8 +1458,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
             "en-US",
         ))
         .unwrap()
-        .projection()
-        .clone();
+        .into_projection();
     let edit_request = || crate::graph::editing::GraphEditRequest {
         project_instance_id: instance.clone(),
         graph_path: graph.clone(),

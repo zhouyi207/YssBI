@@ -11,7 +11,6 @@ pub use display::number as format_number;
 
 use std::sync::Arc;
 
-use gpui_kit::component::ActiveTheme;
 use gpui_kit::{Context, Entity, EventEmitter, IntoElement, Render, Window, div, prelude::*};
 use yss_data_contract::TabularScalar;
 use yss_graph_execution::result::ResultReference;
@@ -23,7 +22,6 @@ use yss_desktop_services::ApplicationTasks;
 
 pub struct ReportView {
     sections: Vec<Entity<Section>>,
-    invalid: bool,
     linear: Option<Entity<linear::LinearReport>>,
     addition: Option<addition::AdditionForm>,
 }
@@ -48,13 +46,15 @@ impl ReportView {
                 ));
                 return Self {
                     sections: vec![],
-                    invalid: false,
                     linear: Some(cx.new(|cx| linear::LinearReport::new(services, *report, cx))),
                     addition,
                 };
             }
         };
-        let invalid = declarations.is_err();
+        if declarations.is_err() {
+            yss_ui::notifications::Notifications::new(window)
+                .error(yss_ui::text::t("native.reports.invalidDisplay"), cx);
+        }
         let mut sections = declarations
             .unwrap_or_default()
             .into_iter()
@@ -82,7 +82,6 @@ impl ReportView {
         }));
         Self {
             sections,
-            invalid,
             linear: None,
             addition: None,
         }
@@ -96,7 +95,9 @@ impl ReportView {
     ) {
         if let Some(form) = &mut self.addition {
             form.busy = busy;
-            form.error = error;
+            if let Some(error) = error {
+                form.notifications.error(yss_ui::text::translate(error), cx);
+            }
             form.open |= busy || error.is_some();
             cx.notify();
         }
@@ -120,13 +121,6 @@ impl Render for ReportView {
                     .flex()
                     .flex_col()
                     .gap_4()
-                    .when(self.invalid, |body| {
-                        body.child(
-                            div()
-                                .text_color(cx.theme().danger)
-                                .child(yss_ui::text::translate("native.reports.invalidDisplay")),
-                        )
-                    })
                     .when_some(self.addition.as_ref(), |body, form| {
                         body.child(form.render(cx))
                     })

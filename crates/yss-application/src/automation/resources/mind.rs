@@ -16,9 +16,9 @@ pub(super) fn edit_mind(
     control: &CapabilityControl,
 ) -> Result<(CommittedResourceMutation, MindEditReceipt)> {
     let project = session.project_instance_id().clone();
-    let path = mind_path(resource)?;
+    let path = file_path::<MindDocument>(resource)?;
     let snapshot = application
-        .read_mind(project.clone(), path.clone())
+        .read_file(project.clone(), path.clone())
         .map_err(file_error)?;
     if snapshot.version != file_version(version)? {
         return Err(conflict());
@@ -77,7 +77,7 @@ pub(super) fn edit_mind(
         > MAX_CAPABILITY_RESULT_BYTES - 65_536
     {
         return Err(
-            CapabilityFailure::new(CapabilityFailureCode::ResultTooLarge).with_detail(
+            CapabilityFailure::new(CapabilityFailureCode::RESULT_TOO_LARGE).with_detail(
                 "nextStep",
                 "Use a smaller subtree batch so the exact topic mapping fits in one receipt.",
             ),
@@ -85,7 +85,7 @@ pub(super) fn edit_mind(
     }
     control.check()?;
     let result = application
-        .apply_mind_command(
+        .apply_file_command(
             project,
             OperationId::new(),
             FileCommand::Edit {

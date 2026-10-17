@@ -15,6 +15,14 @@ yss-application = { path = "../yss-application" }
 yss-desktop-services = { path = "../yss-desktop-services" }
 yss-project = { path = "../yss-project" }
 yss-project-identity = { path = "../yss-project-identity" }
+yss-project-history = { path = "../yss-project-history" }
 yss-project-model = { path = "../yss-project-model" }
 yss-settings = { path = "../yss-settings" }
 yss-ui = { path = "../yss-ui" }
+
+[dev-dependencies]
+gpui-kit = { workspace = true, features = ["test-support"] }
+tempfile = "3"
+tokio.workspace = true
+yss-project = { path = "../yss-project", features = ["test-support"] }
+yss-filesystem = { path = "../yss-filesystem" }

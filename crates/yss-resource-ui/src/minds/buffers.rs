@@ -14,13 +14,8 @@ pub(super) struct TopicBuffer {
 }
 impl MindCanvas {
     pub(super) fn discard_input(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(node) = self
-            .snapshot
-            .content
-            .nodes
-            .iter()
-            .find(|node| node.id == id)
-        else {
+        let snapshot = self.file.snapshot();
+        let Some(node) = snapshot.content.nodes.iter().find(|node| node.id == id) else {
             return;
         };
         if let Some(buffer) = self.buffers.get_mut(id) {
@@ -28,9 +23,9 @@ impl MindCanvas {
                 input.set_value(node.content.clone(), window, cx)
             });
             buffer.original = node.content.clone();
-            buffer.version = self.snapshot.version.clone();
+            buffer.version = snapshot.version.clone();
             buffer.dirty = false;
-            self.error = None;
+            self.file.clear_error();
             self.changed(cx);
         }
     }
@@ -44,7 +39,8 @@ impl MindCanvas {
             return Some(buffer.input.clone());
         }
         let node = self
-            .snapshot
+            .file
+            .snapshot()
             .content
             .nodes
             .iter()
@@ -72,7 +68,7 @@ impl MindCanvas {
                 original,
                 dirty: false,
                 generation: 0,
-                version: self.snapshot.version.clone(),
+                version: self.file.snapshot().version.clone(),
                 _subscription: subscription,
             },
         );
@@ -103,9 +99,10 @@ impl MindCanvas {
         if self
             .buffers
             .values()
-            .any(|buffer| buffer.dirty && buffer.version != self.snapshot.version)
+            .any(|buffer| buffer.dirty && buffer.version != self.file.snapshot().version)
         {
-            self.error = Some(yss_ui::text::t("native.minds.topicChanged").into());
+            self.file
+                .report(yss_ui::text::t("native.minds.topicChanged"), cx);
             self.changed(cx);
             return None;
         }
@@ -121,15 +118,12 @@ impl MindCanvas {
         )
     }
 
-    pub(super) fn install_snapshot(
-        &mut self,
-        snapshot: yss_project::minds::MindSnapshot,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.snapshot = snapshot;
-        let nodes = &self.snapshot.content.nodes;
-        let by_id = nodes
+    /// Topic buffers follow the installed snapshot unless they hold their own draft.
+    pub(super) fn reconcile_buffers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let snapshot = self.file.snapshot();
+        let by_id = snapshot
+            .content
+            .nodes
             .iter()
             .map(|node| (node.id.as_str(), node))
             .collect::<std::collections::HashMap<_, _>>();
@@ -144,7 +138,7 @@ impl MindCanvas {
                     });
                 }
                 buffer.original = node.content.clone();
-                buffer.version = self.snapshot.version.clone();
+                buffer.version = snapshot.version.clone();
                 buffer.dirty = false;
             }
             true

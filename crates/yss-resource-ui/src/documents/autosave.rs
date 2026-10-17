@@ -1,8 +1,10 @@
 //! Document-only autosave. Timers belong to the editor; disk writes use captured save commands.
 use super::DocumentEditor;
+use crate::file_session::FileEditor;
 use gpui_kit::{Context, Window};
 use std::time::Duration;
 use yss_settings::{Autosave, EditorSettings};
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) struct AutosaveState {
     pub settings: EditorSettings,
@@ -100,26 +102,30 @@ impl DocumentEditor {
         let timer = cx.background_executor().timer(delay);
         self.autosave_task = Some(cx.spawn_in(window, async move |view, cx| {
             timer.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.autosave_task = None;
                 // An in-flight save/refresh resumes the pending work on completion;
                 // never spin or start a second write against the same revision.
-                if view.autosave.can_save(view.dirty(), view.busy()) {
+                if view.autosave.can_save(view.dirty(), !view.file.editable()) {
                     view.save_document(true, window, cx);
                 }
-            });
+            })
+            .log_released();
         }));
     }
 
     pub(super) fn autosave_on_focus_change(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.autosave.focus_lost(self.dirty());
-        if self.autosave.focus_save_ready(self.dirty(), self.busy()) {
+        if self
+            .autosave
+            .focus_save_ready(self.dirty(), !self.file.editable())
+        {
             self.save_document(true, window, cx);
         }
     }
 
     pub(super) fn resume_autosave(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.busy() {
+        if !self.file.editable() {
             return;
         }
         if self.autosave.focus_save_ready(self.dirty(), false) {

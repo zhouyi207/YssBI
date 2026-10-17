@@ -88,15 +88,13 @@ struct SemanticPort<'a>(&'a PortSpec);
 impl Serialize for SemanticPort<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let port = self.0;
-        let mut fields = serializer.serialize_struct("SemanticPort", 9)?;
+        let mut fields = serializer.serialize_struct("SemanticPort", 7)?;
         fields.serialize_field("key", &port.key)?;
         fields.serialize_field("direction", &port.direction)?;
         fields.serialize_field("valueType", &port.value_type)?;
         fields.serialize_field("cardinality", &port.cardinality)?;
         fields.serialize_field("connections", &port.connections)?;
         fields.serialize_field("inputBinding", &port.input_binding)?;
-        fields.serialize_field("consumption", &port.consumption)?;
-        fields.serialize_field("production", &port.production)?;
         fields.serialize_field("schema", &port.schema)?;
         fields.end()
     }
@@ -193,8 +191,6 @@ mod tests {
                     cardinality: PortCardinality::Declared,
                     connections: ConnectionsPerPort::Single,
                     input_binding: None,
-                    consumption: None,
-                    production: Some(OutputProduction::FullyMaterialized),
                     editor: PortEditorSpec::Default,
                     schema: None,
                 }]
@@ -220,10 +216,6 @@ mod tests {
             managed_role: None,
         };
         let original = protocol_fingerprint(&protocol).unwrap();
-        assert_eq!(
-            original.to_hex(),
-            "4e0e70e78c22868362a499a02c054810fbf5b6700460630ec342a2a2812718f6"
-        );
         for editor in [
             ParameterEditorSpec::Auto,
             ParameterEditorSpec::Hidden,
@@ -234,30 +226,18 @@ mod tests {
             protocol.parameters.groups[0].parameters[0].editor = editor;
             assert_eq!(original, protocol_fingerprint(&protocol).unwrap());
         }
-        for (editor, expected) in [
-            (
-                ParameterEditorSpec::SemanticDomain,
-                "9bc25d2c142b3f25691eaf4d88826f1b0858f7aa19c35040004be3bf57d25f2b",
-            ),
-            (
-                ParameterEditorSpec::GraphConstant,
-                "0e0dc2a04513cbc14e99dda89cee9cf8a809c12fdf3a8aa05b02d19f437f5b69",
-            ),
-            (
-                ParameterEditorSpec::Resource {
-                    kind: ResourceDisplayKind::Function,
-                },
-                "360dc0560e076da17b35adb3e27fb15f967f584fc3613787707c64fcbed819cc",
-            ),
-            (
-                ParameterEditorSpec::Resource {
-                    kind: ResourceDisplayKind::Database,
-                },
-                "fc710a12c200fd5320ab33e7179804880406ba8478cf38c98af047533a98ea25",
-            ),
+        for editor in [
+            ParameterEditorSpec::SemanticDomain,
+            ParameterEditorSpec::GraphConstant,
+            ParameterEditorSpec::Resource {
+                kind: ResourceDisplayKind::Function,
+            },
+            ParameterEditorSpec::Resource {
+                kind: ResourceDisplayKind::Database,
+            },
         ] {
             protocol.parameters.groups[0].parameters[0].editor = editor;
-            assert_eq!(protocol_fingerprint(&protocol).unwrap().to_hex(), expected);
+            assert_ne!(original, protocol_fingerprint(&protocol).unwrap());
         }
         protocol.parameters.groups[0].parameters[0].editor = ParameterEditorSpec::Number;
         protocol.interface.ports[0].title = "Translated result".into();

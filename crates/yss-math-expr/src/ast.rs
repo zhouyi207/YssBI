@@ -50,19 +50,6 @@ pub enum ComparisonOp {
     DistributedAs,
 }
 
-impl ComparisonOp {
-    pub fn reversed(self) -> Self {
-        match self {
-            Self::Eq => Self::Eq,
-            Self::Lt => Self::Gt,
-            Self::Le => Self::Ge,
-            Self::Gt => Self::Lt,
-            Self::Ge => Self::Le,
-            Self::DistributedAs => Self::DistributedAs,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MathErrorKind {
     EmptyInput,

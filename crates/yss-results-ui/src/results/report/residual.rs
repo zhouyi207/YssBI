@@ -14,6 +14,7 @@ use yss_application::{
 };
 use yss_desktop_services::ApplicationTasks;
 use yss_graph_execution::result::ResultReference;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct Selection {
@@ -167,14 +168,22 @@ impl ResidualView {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.loading = false;
                 match result {
                     Ok(data) => view.data = Some(data),
-                    Err(_) => view.error = true,
+                    Err(_) => {
+                        view.error = true;
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            yss_ui::text::t("native.reports.analysisFailed"),
+                            cx,
+                            |view, window, cx| view.load(window, cx),
+                        );
+                    }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

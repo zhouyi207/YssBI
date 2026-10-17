@@ -86,26 +86,20 @@ impl ProjectState {
             let mut lifecycle = self.resource_lifecycle.boundary();
             let mut data = self.project_data.write().unwrap();
             let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
-            let mut chart_revisions = self.chart_revisions.write().unwrap();
             self.ensure_project_operational()?;
-            validate_context_revisions(
-                context,
-                &data,
-                &graph_resource_revisions,
-                &chart_revisions,
-            )?;
+            validate_context_revisions(context, &data, &graph_resource_revisions)?;
             normalize_function_patch_revisions(&mut patch, &data, &graph_resource_revisions)?;
-            let chart_deltas =
-                chart_publication_deltas(context.operation_id, &patch, &data, &chart_revisions)?;
             let publication_advance = publication.prepare_resource_revision()?;
             let mut deltas =
                 canonical_resource_lifecycle_events(context, &patch, &graph_resource_revisions)?;
-            deltas.extend(chart_deltas);
             match &patch {
                 ProjectDataPatch::Mind(patch) => deltas.extend(
                     crate::file_resources::publication_deltas(context.operation_id, patch, &data)?,
                 ),
                 ProjectDataPatch::Doc(patch) => deltas.extend(
+                    crate::file_resources::publication_deltas(context.operation_id, patch, &data)?,
+                ),
+                ProjectDataPatch::Chart(patch) => deltas.extend(
                     crate::file_resources::publication_deltas(context.operation_id, patch, &data)?,
                 ),
                 _ => {}
@@ -126,16 +120,9 @@ impl ProjectState {
                     },
                     name: moved.name.clone().into_boxed_str(),
                 }],
-                ProjectDataPatch::MoveChart { from, to, .. } => {
-                    vec![crate::project_writers::ProjectResourceMove {
-                        from: from.as_str().into(),
-                        to: to.as_str().into(),
-                        kind: yss_project_history::ResourceLifecycleKind::Chart,
-                        name: to.display_name().as_str().into(),
-                    }]
-                }
                 ProjectDataPatch::Mind(patch) => crate::file_resources::moves(patch),
                 ProjectDataPatch::Doc(patch) => crate::file_resources::moves(patch),
+                ProjectDataPatch::Chart(patch) => crate::file_resources::moves(patch),
                 _ => Vec::new(),
             };
             let projection_paths = patch_projection_paths(&patch, &data);
@@ -148,6 +135,9 @@ impl ProjectState {
                     crate::file_resources::apply_patch(&mut data, patch)
                 }
                 ProjectDataPatch::Doc(patch) => {
+                    crate::file_resources::apply_patch(&mut data, patch)
+                }
+                ProjectDataPatch::Chart(patch) => {
                     crate::file_resources::apply_patch(&mut data, patch)
                 }
                 ProjectDataPatch::InsertGraph { path, resource } => {
@@ -214,35 +204,6 @@ impl ProjectState {
                             Self::install_validated_resident_graph(&mut data, path, resource);
                         }
                     }
-                }
-                ProjectDataPatch::UpsertChart { path, document } => {
-                    validate_chart_path_insertion(&data, &path)?;
-                    let retained_revision = chart_revisions.get(&path).copied();
-                    let revision = match retained_revision {
-                        Some(retained) => checked_resource_revision(path.as_str(), retained)?,
-                        None => ResourceRevision::INITIAL,
-                    };
-                    data.charts.insert(path.clone(), document);
-                    chart_revisions.insert(path, revision);
-                }
-                ProjectDataPatch::RemoveChart { path, revision } => {
-                    let next_revision = checked_resource_revision(path.as_str(), revision)?;
-                    data.charts.remove(&path);
-                    chart_revisions.insert(path, next_revision);
-                }
-                ProjectDataPatch::MoveChart { from, to, moved } => {
-                    let source_revision = chart_revisions[&from];
-                    let source_tombstone =
-                        checked_resource_revision(from.as_str(), source_revision)?;
-                    let target_revision = super::resource_publication::chart_move_revision(
-                        &to,
-                        source_revision,
-                        chart_revisions.get(&to).copied(),
-                    )?;
-                    data.charts.remove(&from);
-                    data.charts.insert(to.clone(), moved);
-                    chart_revisions.insert(from, source_tombstone);
-                    chart_revisions.insert(to, target_revision);
                 }
             }
 

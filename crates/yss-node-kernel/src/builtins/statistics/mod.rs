@@ -82,6 +82,30 @@ pub(super) fn install(
         .register(
             KernelId::new(id.into()).expect("kernel id"),
             std::num::NonZeroU32::new(match id {
+                "yssbi.statistics.econometrics.sfa"
+                | "yssbi.statistics.mixed.crossed_effects"
+                | "yssbi.statistics.mixed.glmm"
+                | "yssbi.statistics.mixed.hlm"
+                | "yssbi.statistics.mixed.lmm"
+                | "yssbi.statistics.mixed.logistic"
+                | "yssbi.statistics.mixed.negative_binomial"
+                | "yssbi.statistics.mixed.poisson"
+                | "yssbi.statistics.mixed.random_intercept"
+                | "yssbi.statistics.mixed.random_slope" => 9,
+                "yssbi.statistics.spatial.panel" => 10,
+                "yssbi.statistics.spatial.sac"
+                | "yssbi.statistics.spatial.sdem"
+                | "yssbi.statistics.spatial.sdm"
+                | "yssbi.statistics.spatial.sem"
+                | "yssbi.statistics.spatial.slm" => 8,
+                "yssbi.statistics.timeseries.arima" | "yssbi.statistics.timeseries.sarima" => 7,
+                "yssbi.statistics.timeseries.exponential_smoothing"
+                | "yssbi.statistics.timeseries.ets"
+                | "yssbi.statistics.timeseries.holt_winters"
+                | "yssbi.statistics.timeseries.arch"
+                | "yssbi.statistics.timeseries.garch"
+                | "yssbi.statistics.timeseries.egarch"
+                | "yssbi.statistics.timeseries.gjr_garch" => 6,
                 "yssbi.statistics.econometrics.panel.fd"
                 | "yssbi.statistics.econometrics.panel.fe" => 12,
                 "yssbi.statistics.panel.compare" => 13,
@@ -104,12 +128,12 @@ pub(super) fn install(
                 | "yssbi.statistics.meta.egger"
                 | "yssbi.statistics.panel.did.twfe"
                 | "yssbi.statistics.prais.fit" => 11,
-                "yssbi.statistics.test.nonparametric.family"
-                | "yssbi.statistics.survival.aft"
+                "yssbi.statistics.test.nonparametric.family" => 11,
+                "yssbi.statistics.survival.aft"
                 | "yssbi.statistics.survival.exponential"
                 | "yssbi.statistics.survival.loglogistic"
                 | "yssbi.statistics.survival.lognormal"
-                | "yssbi.statistics.survival.weibull" => 11,
+                | "yssbi.statistics.survival.weibull" => 12,
                 "yssbi.statistics.plot.forest"
                 | "yssbi.statistics.plot.funnel"
                 | "yssbi.statistics.prais.summary"
@@ -163,11 +187,9 @@ pub(super) fn install(
                 | "yssbi.statistics.test.mann_whitney"
                 | "yssbi.statistics.test.runs"
                 | "yssbi.statistics.causal.regression_adjustment"
-                | "yssbi.statistics.meta.begg"
-                | "yssbi.statistics.spatial.panel" => 9,
+                | "yssbi.statistics.meta.begg" => 9,
                 "yssbi.statistics.econometrics.panel.cointegration"
                 | "yssbi.statistics.econometrics.panel.unit_root"
-                | "yssbi.statistics.econometrics.sfa"
                 | "yssbi.statistics.logit.fit"
                 | "yssbi.statistics.probit.fit"
                 | "yssbi.statistics.test.proportion.two"
@@ -181,15 +203,6 @@ pub(super) fn install(
                 | "yssbi.statistics.causal.rdd"
                 | "yssbi.statistics.test.heterogeneity"
                 | "yssbi.statistics.longitudinal.gee"
-                | "yssbi.statistics.mixed.crossed_effects"
-                | "yssbi.statistics.mixed.glmm"
-                | "yssbi.statistics.mixed.hlm"
-                | "yssbi.statistics.mixed.lmm"
-                | "yssbi.statistics.mixed.logistic"
-                | "yssbi.statistics.mixed.negative_binomial"
-                | "yssbi.statistics.mixed.poisson"
-                | "yssbi.statistics.mixed.random_intercept"
-                | "yssbi.statistics.mixed.random_slope"
                 | "yssbi.statistics.postestimation.adjusted_predictions" => 8,
                 "yssbi.statistics.panel.did.randomization"
                 | "yssbi.statistics.plot.calibration"
@@ -217,8 +230,6 @@ pub(super) fn install(
                 | "yssbi.statistics.test.cochran_q"
                 | "yssbi.statistics.timeseries.granger"
                 | "yssbi.statistics.timeseries.grey_prediction"
-                | "yssbi.statistics.timeseries.arima"
-                | "yssbi.statistics.timeseries.sarima"
                 | "yssbi.statistics.meta.continuous"
                 | "yssbi.statistics.meta.binary"
                 | "yssbi.statistics.meta.single_proportion"
@@ -228,12 +239,7 @@ pub(super) fn install(
                 | "yssbi.statistics.power.anova"
                 | "yssbi.statistics.power.linear_regression"
                 | "yssbi.plot.coefficient.view" => 6,
-                "yssbi.statistics.spatial.sac"
-                | "yssbi.statistics.spatial.sdem"
-                | "yssbi.statistics.spatial.sdm"
-                | "yssbi.statistics.spatial.sem"
-                | "yssbi.statistics.spatial.slm"
-                | "yssbi.statistics.timeseries.phillips_perron" => 7,
+                "yssbi.statistics.timeseries.phillips_perron" => 7,
                 "yssbi.statistics.diagnostic.breusch_godfrey"
                 | "yssbi.statistics.diagnostic.collinearity"
                 | "yssbi.statistics.diagnostic.ljung_box"
@@ -244,13 +250,6 @@ pub(super) fn install(
                 | "yssbi.statistics.test.normality"
                 | "yssbi.statistics.workflow.delphi"
                 | "yssbi.statistics.timeseries.kpss"
-                | "yssbi.statistics.timeseries.exponential_smoothing"
-                | "yssbi.statistics.timeseries.ets"
-                | "yssbi.statistics.timeseries.holt_winters"
-                | "yssbi.statistics.timeseries.arch"
-                | "yssbi.statistics.timeseries.garch"
-                | "yssbi.statistics.timeseries.egarch"
-                | "yssbi.statistics.timeseries.gjr_garch"
                 | "yssbi.statistics.survey.mean_proportion" => 5,
                 "yssbi.statistics.spatial.moran" => 6,
                 "yssbi.plot.pp_qq.view" | "yssbi.statistics.meta.combine_p" => 6,

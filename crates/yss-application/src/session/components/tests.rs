@@ -61,10 +61,6 @@ fn definition() -> NodeProtocol {
                 value: yss_data_contract::DataValue::Integer(2),
             }),
         }),
-        consumption: (direction == PortDirection::Input)
-            .then_some(InputConsumption::FullyMaterialized),
-        production: (direction == PortDirection::Output)
-            .then_some(OutputProduction::FullyMaterialized),
         editor: PortEditorSpec::Default,
         schema: None,
     })

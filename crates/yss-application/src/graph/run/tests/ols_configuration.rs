@@ -104,15 +104,6 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
             .clone();
         // Graph constants supply both the declared series type and its values.
         for (source, input) in [(response, port(target, "y")), (predictor, input)] {
-            let source = if target == summary {
-                let mut node = document.nodes[&source].clone();
-                node.id = NodeId::new();
-                let id = node.id;
-                document.nodes.insert(id, node);
-                id
-            } else {
-                source
-            };
             let output = port(source, "value");
             let id = yss_graph_document::ConnectionId::new();
             document.connections.insert(

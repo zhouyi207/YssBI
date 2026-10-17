@@ -1,12 +1,11 @@
 //! Choice values stay in the projection; localized menu entries are built only on open.
-use super::{EditorParameterConfiguration, ParameterDraft, ParameterForm, controls};
-use gpui_kit::assets::IconName;
+use super::{EditorParameterConfiguration, ParameterDraft, ParameterForm};
 use gpui_kit::component::{
-    Disableable, Sizable,
-    button::Button,
+    Disableable,
     menu::{DropdownMenu, PopupMenuItem},
 };
 use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
+use yss_ui::inspector::{self, InlineMessage};
 use yss_ui::text::translate;
 
 fn option_label(key: &str, option: &str) -> String {
@@ -78,11 +77,7 @@ impl ParameterForm {
         let loading = constant && properties.loading();
         let epoch = self.epoch;
         let owner = cx.entity().downgrade();
-        let button = Button::new(("parameter-choice", index))
-            .small()
-            .w_full()
-            .label(label)
-            .icon(IconName::ChevronDown)
+        let button = inspector::choice_trigger(("parameter-choice", index), label)
             .disabled(busy || loading || empty)
             .dropdown_menu(move |mut menu, _, cx| {
                 menu = menu.scrollable(true);
@@ -123,12 +118,12 @@ impl ParameterForm {
                     }
                 };
                 for (value, label) in options {
-                    let owner = owner.clone();
                     menu = menu.item(
                         PopupMenuItem::new(label)
                             .checked(current == Some(value.as_str()))
-                            .on_click(move |_, _, cx| {
-                                let _ = owner.update(cx, |view, cx| {
+                            .on_click(inspector::owner_command(
+                                owner.clone(),
+                                move |view: &mut ParameterForm, _, cx| {
                                     if view.accepts_input(epoch, cx) {
                                         view.commit_parameter(
                                             index,
@@ -136,8 +131,8 @@ impl ParameterForm {
                                             cx,
                                         );
                                     }
-                                });
-                            }),
+                                },
+                            )),
                     );
                 }
                 menu
@@ -148,13 +143,12 @@ impl ParameterForm {
             .gap_1()
             .child(button)
             .when(unavailable, |view| {
-                view.child(controls::hint(
-                    translate("detail.parameterEditor.unavailableChoice"),
-                    cx,
-                ))
+                view.child(InlineMessage::warning(translate(
+                    "detail.parameterEditor.unavailableChoice",
+                )))
             })
             .when(empty && !loading, |view| {
-                view.child(controls::hint(
+                view.child(inspector::hint(
                     translate(if constant {
                         "native.workbench.noConstants"
                     } else {

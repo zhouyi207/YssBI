@@ -81,17 +81,3 @@ pub struct LogSubscriptionDto {
     pub latest_sequence: u64,
     pub truncated: bool,
 }
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct FrontendLogEntryDto {
-    pub level: LogLevel,
-    pub domain: LogDomain,
-    pub target: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event: Option<String>,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-    pub fields: LogFields,
-}

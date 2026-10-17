@@ -271,6 +271,11 @@ impl ApplicationState {
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
         let result = committed_resource_mutation_from_project(result);
+        for graph in result.projection_status.affected_graph_paths() {
+            captured
+                .execution()
+                .invalidate_graph_results(graph.as_str());
+        }
         for path in result.projection_status.affected_graph_paths() {
             if let Ok(snapshot) = captured
                 .project()
@@ -279,13 +284,9 @@ impl ApplicationState {
                 captured.publish_graph_activity(crate::graph::editing::GraphActivity::Changed {
                     graph_path: path.as_str().into(),
                     editing: snapshot.state,
+                    cause: crate::graph::editing::GraphChangeCause::Dependencies,
                 });
             }
-        }
-        for graph in result.projection_status.affected_graph_paths() {
-            captured
-                .execution()
-                .invalidate_graph_results(graph.as_str());
         }
         Ok(result)
     }

@@ -18,10 +18,7 @@ use super::dto::{
 };
 use super::rust_projection::project_log_record;
 use super::worker::{BoundedWorker, EnqueueResult};
-use crate::collector::{
-    CapturedLog, OutputHandle, sanitize_event, sanitize_fields, sanitize_message, sanitize_source,
-    sanitize_target,
-};
+use crate::collector::{CapturedLog, OutputHandle};
 
 pub const RECENT_LOG_CAPACITY: usize = 5_000;
 const LOG_INGRESS_CAPACITY: usize = 1_024;
@@ -51,15 +48,6 @@ pub(crate) struct PendingLog {
 }
 
 impl PendingLog {
-    fn sanitized(mut self) -> Self {
-        self.target = sanitize_target(&self.target);
-        self.event = self.event.map(|value| sanitize_event(&value));
-        self.message = sanitize_message(&self.message);
-        self.source = self.source.map(|value| sanitize_source(&value));
-        self.fields = sanitize_fields(self.fields);
-        self
-    }
-
     fn records_dropped(dropped_count: u64) -> Self {
         Self {
             timestamp: super::local_timestamp_now(),
@@ -113,7 +101,6 @@ enum DispatcherCommand {
         policy: LogRetentionPolicy,
         response: mpsc::Sender<Result<(), LogStoreError>>,
     },
-    Publish(PendingLog),
     PublishRust {
         record: CapturedLog,
         console: Option<OutputHandle>,
@@ -298,25 +285,6 @@ impl LogHub {
         (hub, guard, release)
     }
 
-    pub(crate) fn publish(&self, records: Vec<PendingLog>) -> Result<(), LogsUnavailable> {
-        if records.is_empty() {
-            return Ok(());
-        }
-        if self.shutdown.load(Ordering::Acquire) || self.storage_failed.load(Ordering::Acquire) {
-            return Err(LogsUnavailable);
-        }
-
-        for record in records {
-            self.try_enqueue_dropped_marker()?;
-            match self.sender.try_send(DispatcherCommand::Publish(record)) {
-                Ok(()) => {}
-                Err(TrySendError::Full(_)) => self.add_dropped(1),
-                Err(TrySendError::Disconnected(_)) => return Err(LogsUnavailable),
-            }
-        }
-        self.try_enqueue_dropped_marker()
-    }
-
     pub(crate) fn publish_rust(
         &self,
         record: CapturedLog,
@@ -478,10 +446,6 @@ impl DispatcherState {
         }
     }
 
-    fn publish(&mut self, pending: PendingLog) {
-        self.publish_sanitized(pending.sanitized());
-    }
-
     fn publish_rust(&mut self, captured: CapturedLog, console: Option<OutputHandle>) {
         let record = captured.into_sanitized_record();
         if let Some(console) = console {
@@ -530,7 +494,7 @@ impl DispatcherState {
 
     fn publish_dropped(&mut self, dropped_count: u64) {
         if dropped_count > 0 {
-            self.publish(PendingLog::records_dropped(dropped_count));
+            self.publish_sanitized(PendingLog::records_dropped(dropped_count));
         }
     }
 
@@ -789,7 +753,6 @@ fn process_command(command: DispatcherCommand, state: &mut DispatcherState) -> b
             };
             let _ = response.send(result);
         }
-        DispatcherCommand::Publish(record) => state.publish(record),
         DispatcherCommand::PublishRust { record, console } => state.publish_rust(record, console),
         DispatcherCommand::ReportDropped(dropped_count) => state.publish_dropped(dropped_count),
         DispatcherCommand::Subscribe { sink, response } => {
@@ -828,7 +791,6 @@ fn drain_for_shutdown(
             Ok(DispatcherCommand::SetRetention { response, .. }) => {
                 let _ = response.send(Err(LogStoreError::Unavailable));
             }
-            Ok(DispatcherCommand::Publish(record)) => state.publish(record),
             Ok(DispatcherCommand::PublishRust { record, console }) => {
                 state.publish_rust(record, console);
             }
@@ -873,17 +835,20 @@ mod retention_tests {
             .set_retention(LogRetentionPolicy::new(Some(1), None).unwrap())
             .unwrap();
         let stream = state.stream_id.clone();
-        state.publish(PendingLog {
-            timestamp: "2000-01-01T00:00:00.000".into(),
-            level: LogLevel::Info,
-            origin: LogOrigin::Rust,
-            domain: LogDomain::System,
-            target: "retention.test".into(),
-            event: None,
-            message: "late delivery".into(),
-            source: None,
-            fields: BTreeMap::new(),
-        });
+        state.publish_rust(
+            CapturedLog {
+                timestamp: chrono::NaiveDateTime::parse_from_str(
+                    "2000-01-01T00:00:00.000",
+                    "%Y-%m-%dT%H:%M:%S%.f",
+                )
+                .unwrap(),
+                level: LogLevel::Info,
+                target: "retention.test".into(),
+                message: "late delivery".into(),
+                fields: BTreeMap::new(),
+            },
+            None,
+        );
         // Force the scheduling boundary instead of sleeping for wall-clock time.
         state.retention_deadline = Some(Instant::now());
         state.maintain_if_due();

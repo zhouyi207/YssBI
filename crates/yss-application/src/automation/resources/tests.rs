@@ -45,7 +45,7 @@ fn message_references_use_project_identity_and_reject_missing_or_foreign_resourc
             .resolve_harness_resources(&binding, &[doc.clone(), doc.clone()])
             .unwrap_err()
             .code,
-        CapabilityFailureCode::InvalidRequest
+        CapabilityFailureCode::INVALID_REQUEST
     );
     let foreign = ProjectSessionBinding::new(
         yss_project_identity::ProjectInstanceId::from_existing("other-project".into()),
@@ -56,7 +56,7 @@ fn message_references_use_project_identity_and_reject_missing_or_foreign_resourc
             .resolve_harness_resources(&foreign, std::slice::from_ref(&graph))
             .unwrap_err()
             .code,
-        CapabilityFailureCode::ProjectSessionChanged
+        CapabilityFailureCode::PROJECT_SESSION_CHANGED
     );
     let version = fixture.inspect(&doc).version;
     fixture.manage(ManageResourceRequest::Delete {
@@ -68,7 +68,7 @@ fn message_references_use_project_identity_and_reject_missing_or_foreign_resourc
             .resolve_harness_resources(&binding, &[doc])
             .unwrap_err()
             .code,
-        CapabilityFailureCode::ResourceUnavailable
+        CapabilityFailureCode::RESOURCE_UNAVAILABLE
     );
     assert_eq!(
         application
@@ -79,8 +79,40 @@ fn message_references_use_project_identity_and_reject_missing_or_foreign_resourc
     );
 }
 
-#[test]
-fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_at_gateway() {
+#[tokio::test]
+async fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_at_gateway() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use yss_harness_contract::{AgentToolExecutor, RunStart, ToolCall};
+    use yss_harness_core::test_support::{InMemoryHarnessStore, SequentialIds, run_executor};
+
+    async fn call(
+        executor: &dyn AgentToolExecutor,
+        store: &InMemoryHarnessStore,
+        tool: &str,
+        resource: &ProjectResourceRef,
+    ) -> Result<AutomationCapabilityResult> {
+        let arguments = serde_json::json!({"resource": resource});
+        let outcome = executor
+            .call(ToolCall {
+                name: tool.into(),
+                arguments,
+            })
+            .await;
+        assert!(outcome.fatal.is_none(), "{outcome:?}");
+        if let Some(id) = outcome.invocation_id {
+            let record = store
+                .tool_invocations()
+                .into_iter()
+                .find(|record| record.id == id)
+                .unwrap();
+            assert!(record.failure.is_none());
+            return Ok(
+                yss_assistant_contract::decode_result(record.result.as_ref().unwrap()).unwrap(),
+            );
+        }
+        Err(serde_json::from_value(outcome.output["failure"].clone()).unwrap())
+    }
+
     let mut fixture = Fixture::new();
     let doc = fixture.create(ResourceCreation::Doc {
         name: "Report".into(),
@@ -91,73 +123,149 @@ fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_at_gate
     let chart = fixture.create(ResourceCreation::Chart {
         name: "Plot".into(),
     });
-    let doc_version = fixture.inspect(&doc).version;
-    let other_version = fixture.inspect(&other).version;
-    let chart_version = fixture.inspect(&chart).version;
-    let scope = AgentInvocationScope {
-        run_id: AgentRunId::try_new("report-run").unwrap(),
-        role: AgentRole::Report,
-        task: Some(AgentTaskScope {
-            resources: vec![
-                AgentResourceAccess {
-                    resource: doc.clone(),
-                    version: Some(doc_version.clone()),
-                    operations: vec![
-                        AgentResourceOperation::Inspect,
-                        AgentResourceOperation::Save,
-                    ],
-                },
-                // Even an overbroad task cannot give ReportAgent a different role's write authority.
-                AgentResourceAccess {
-                    resource: chart.clone(),
-                    version: Some(chart_version.clone()),
-                    operations: vec![
-                        AgentResourceOperation::Inspect,
-                        AgentResourceOperation::Save,
-                    ],
-                },
-            ],
-            ..Default::default()
-        }),
-    };
-    fixture.context = fixture.context.clone().with_agent(scope.clone());
-    for (resource, version) in [(chart, chart_version), (other, other_version)] {
-        let failure = fixture
-            .call(AutomationCapabilityRequest::ManageResource(
-                ManageResourceRequest::Save { resource, version },
-            ))
-            .unwrap_err();
-        assert_eq!(failure.code, CapabilityFailureCode::InvalidRequest);
-    }
-    fixture
-        .call(AutomationCapabilityRequest::ManageResource(
-            ManageResourceRequest::Save {
-                resource: doc.clone(),
-                version: doc_version.clone(),
+    let report_markdown = "# Report\n\nReady to save.";
+    for (resource, markdown) in [
+        (&doc, report_markdown),
+        (&other, "# Other\n\nMust remain unsaved."),
+    ] {
+        fixture.edit(
+            resource,
+            ResourceEdit::WriteDocument {
+                markdown: markdown.into(),
             },
-        ))
-        .unwrap();
-    fixture.context = fixture.context.clone().with_agent(AgentInvocationScope {
-        role: AgentRole::Review,
-        ..scope
-    });
-    assert!(
-        fixture
-            .call(AutomationCapabilityRequest::ManageResource(
-                ManageResourceRequest::Save {
-                    resource: doc.clone(),
-                    version: doc_version
-                }
-            ))
-            .is_err()
+        );
+        assert!(fixture.inspect(resource).dirty);
+    }
+    let doc_before = fixture.inspect(&doc);
+    let chart_before = fixture.inspect(&chart);
+    let task = AgentTaskScope {
+        resources: vec![
+            AgentResourceAccess {
+                resource: doc.clone(),
+                version: Some(doc_before.version.clone()),
+                operations: vec![
+                    AgentResourceOperation::Inspect,
+                    AgentResourceOperation::Save,
+                ],
+            },
+            // Even an overbroad task cannot give ReportAgent a different role's write authority.
+            AgentResourceAccess {
+                resource: chart.clone(),
+                version: Some(chart_before.version.clone()),
+                operations: vec![
+                    AgentResourceOperation::Inspect,
+                    AgentResourceOperation::Save,
+                ],
+            },
+        ],
+        ..Default::default()
+    };
+    let publications = Arc::new(AtomicUsize::new(0));
+    let gateway = Arc::new(crate::harness::ApplicationCapabilityGateway::new(
+        fixture.application.as_ref().unwrap().clone(),
+        {
+            let publications = publications.clone();
+            Arc::new(move |_| {
+                publications.fetch_add(1, Ordering::Relaxed);
+            })
+        },
+    ));
+    let extension = Arc::new(yss_assistant_extension::AssistantExtension::new(gateway).unwrap());
+    let store = Arc::new(InMemoryHarnessStore::default());
+    let ids = Arc::new(SequentialIds::default());
+    let (_report_hooks, report) = run_executor(
+        extension.clone(),
+        store.clone(),
+        ids.clone(),
+        RunStart {
+            run_id: AgentRunId::try_new("report-run").unwrap(),
+            role: AgentRole::Report.id(),
+            task_scope: Some(serde_json::to_value(&task).unwrap()),
+            project: fixture.context.project().clone(),
+        },
     );
-    assert!(
-        fixture
-            .call(AutomationCapabilityRequest::InspectResource(
-                InspectResourceRequest { resource: doc }
-            ))
-            .is_ok()
+    for resource in [&chart, &other] {
+        let before = fixture.inspect(resource);
+        let path = fixture.directory.join("project").join(&resource.id);
+        let saved = std::fs::read(&path).unwrap();
+        let failure = call(report.as_ref(), &store, "save_resource", resource)
+            .await
+            .unwrap_err();
+        assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
+        assert_eq!(failure.details["reason"], "agent_scope_denied");
+        assert_eq!(fixture.inspect(resource), before);
+        assert_eq!(std::fs::read(path).unwrap(), saved);
+        assert_eq!(publications.load(Ordering::Relaxed), 0);
+    }
+    assert_eq!(
+        call(report.as_ref(), &store, "inspect_resource", &doc)
+            .await
+            .unwrap(),
+        AutomationCapabilityResult::ResourceInspection(doc_before)
     );
+    let AutomationCapabilityResult::ResourceManaged(receipt) =
+        call(report.as_ref(), &store, "save_resource", &doc)
+            .await
+            .unwrap()
+    else {
+        panic!("resource save receipt")
+    };
+    assert!(
+        receipt
+            .changes
+            .iter()
+            .any(|change| { change.resource == doc && !change.deleted })
+    );
+    let saved = fixture.inspect(&doc);
+    assert!(!saved.dirty);
+    assert_eq!(
+        std::fs::read_to_string(fixture.directory.join("project").join(&doc.id)).unwrap(),
+        report_markdown
+    );
+    assert_eq!(publications.load(Ordering::Relaxed), 1);
+
+    fixture.edit(
+        &doc,
+        ResourceEdit::AppendDocument {
+            text: "\n\nAwaiting review.".into(),
+        },
+    );
+    let review_before = fixture.inspect(&doc);
+    assert!(review_before.dirty);
+    // Start Review from the current owner version, not Report's pre-save grant.
+    let mut review_task = task;
+    review_task.resources[0].version = Some(review_before.version.clone());
+    let review_store = Arc::new(InMemoryHarnessStore::default());
+    let (_review_hooks, review) = run_executor(
+        extension,
+        review_store.clone(),
+        ids,
+        RunStart {
+            run_id: AgentRunId::try_new("review-run").unwrap(),
+            role: AgentRole::Review.id(),
+            task_scope: Some(serde_json::to_value(review_task).unwrap()),
+            project: fixture.context.project().clone(),
+        },
+    );
+    let publication_count = publications.load(Ordering::Relaxed);
+    let failure = call(review.as_ref(), &review_store, "save_resource", &doc)
+        .await
+        .unwrap_err();
+    assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
+    assert_eq!(failure.details["capabilityId"], "save_resource");
+    assert_eq!(fixture.inspect(&doc), review_before);
+    assert_eq!(
+        std::fs::read_to_string(fixture.directory.join("project").join(&doc.id)).unwrap(),
+        report_markdown
+    );
+    assert_eq!(
+        call(review.as_ref(), &review_store, "inspect_resource", &doc)
+            .await
+            .unwrap(),
+        AutomationCapabilityResult::ResourceInspection(review_before.clone())
+    );
+    assert_eq!(fixture.inspect(&doc), review_before);
+    assert_eq!(publications.load(Ordering::Relaxed), publication_count);
 }
 impl Fixture {
     fn new() -> Self {
@@ -407,7 +515,7 @@ fn lifecycle_receipts_continue_at_the_committed_identity_without_content_reads()
             },
         ))
         .unwrap_err();
-    assert_eq!(failed.code, CapabilityFailureCode::MutationRejected);
+    assert_eq!(failed.code, CapabilityFailureCode::MUTATION_REJECTED);
     let saved = f.manage(ManageResourceRequest::Save {
         resource: copy.resource,
         version: copy.version,
@@ -585,7 +693,7 @@ fn file_lifecycles_return_real_identities_publish_and_open_each_resource_kind() 
                 ))
                 .unwrap_err()
                 .code,
-                CapabilityFailureCode::ResourceUnavailable
+                CapabilityFailureCode::RESOURCE_UNAVAILABLE
             );
         }
     }
@@ -644,7 +752,7 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
         ))
         .unwrap_err()
         .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     let inserted = f.edit(
         &resource,
@@ -804,7 +912,7 @@ fn datasets_keep_rows_types_semantics_and_history_through_copy_export_and_lifecy
         ))
         .unwrap_err()
         .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     assert_eq!(std::fs::read_to_string(&output).unwrap(), exported);
     let version = f.inspect(&resource).version;
@@ -898,7 +1006,7 @@ fn function_signatures_and_graph_history_share_the_current_project_editing_state
         ))
         .unwrap_err()
         .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     let event = f.create(ResourceCreation::EventGraph {
         name: "Main".into(),

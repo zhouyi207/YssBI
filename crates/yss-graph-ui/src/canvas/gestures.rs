@@ -1,13 +1,14 @@
 //! Pointer gestures belong to one canvas; only a completed node drag edits the graph.
 mod update;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
+use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::{
     Context, DispatchPhase, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
     Point, WeakEntity, Window,
 };
-use yss_graph_document::{ConnectionId, NodeId, NodePosition};
+use yss_graph_document::{ConnectionId, NodeId};
 use yss_project::GraphEditVersion;
 
 use super::{GraphCanvas, connections, geometry};
@@ -22,7 +23,6 @@ pub(super) enum Gesture {
     },
     Nodes {
         press: Point<Pixels>,
-        positions: BTreeMap<NodeId, NodePosition>,
         version: GraphEditVersion,
         reveal: Option<NodeId>,
         moved: bool,
@@ -114,9 +114,9 @@ impl GraphCanvas {
             })
             .map(|node| (node.node_id, node.position))
             .collect();
+        self.preview = geometry::NodeMovement::new(positions);
         self.gesture = Some(Gesture::Nodes {
             press: event.position,
-            positions,
             version: self.graph.editing.version,
             reveal: (!additive).then_some(id),
             moved: false,
@@ -156,6 +156,7 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        cx.stop_propagation();
         if !self.can_edit() {
             return;
         }
@@ -201,39 +202,52 @@ impl GraphCanvas {
             if phase != DispatchPhase::Capture {
                 return;
             }
-            let _ = moving.update(cx, |view, cx| {
-                if view.gesture.is_some() {
-                    view.pointer_move(event, cx);
-                }
-            });
+            moving
+                .update(cx, |view, cx| {
+                    if view.gesture.is_some() {
+                        view.pointer_move(event, cx);
+                    }
+                })
+                .log_released();
         });
         window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
             if phase != DispatchPhase::Capture {
                 return;
             }
-            let _ = owner.update(cx, |view, cx| {
-                if view
-                    .gesture
-                    .as_ref()
-                    .is_some_and(|g| g.button() == event.button)
-                {
-                    let event = event.clone();
-                    // Let a port consume the release first. The deferred fallback also runs
-                    // when another child stops bubbling, without retaining window listeners.
-                    cx.defer_in(window, move |view, window, cx| {
-                        view.pointer_up(&event, window, cx);
-                    });
-                }
-            });
+            owner
+                .update(cx, |view, cx| {
+                    if view
+                        .gesture
+                        .as_ref()
+                        .is_some_and(|g| g.button() == event.button)
+                    {
+                        let event = event.clone();
+                        // Let a port consume the release first. The deferred fallback also runs
+                        // when another child stops bubbling, without retaining window listeners.
+                        cx.defer_in(window, move |view, window, cx| {
+                            view.pointer_up(&event, window, cx);
+                        });
+                    }
+                })
+                .log_released();
         });
     }
 
     pub(super) fn node_at(&self, screen: Point<Pixels>) -> Option<NodeId> {
         let world = (screen - self.bounds.get().origin - self.offset) / self.zoom;
-        self.graph.projection.nodes.iter().rev().find_map(|node| {
-            geometry::node_bounds(node, geometry::position(node, &self.preview))
-                .contains(&world)
-                .then_some(node.node_id)
-        })
+        let layer = self.connection_layer.borrow();
+        self.graph
+            .projection
+            .nodes
+            .iter()
+            .zip(layer.nodes())
+            .rev()
+            .find_map(|(node, geometry)| {
+                geometry
+                    .layout
+                    .bounds(geometry::position(node, &self.preview))
+                    .contains(&world)
+                    .then_some(node.node_id)
+            })
     }
 }

@@ -1,10 +1,13 @@
-//! Automation identities, project bindings and the invocation authority envelope.
+//! Automation identities, project bindings and the generic invocation identity.
 
-use crate::{AgentInvocationScope, ApprovalGrantId};
+use crate::{AgentRunId, ApprovalGrantId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
+/// Declares validation, accessors and serde for a bounded string identity.
+#[doc(hidden)]
+#[macro_export]
 macro_rules! string_identity {
     ($name:ident, $label:literal) => {
         impl $name {
@@ -40,8 +43,6 @@ macro_rules! string_identity {
         }
     };
 }
-
-pub(crate) use string_identity;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, JsonSchema)]
 #[serde(transparent)]
@@ -95,19 +96,19 @@ impl ProjectSessionBinding {
     }
 }
 
+/// The Harness-owned identity of one tool invocation. Extensions add their own call bindings.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CapabilityInvocationContext {
-    principal_id: PrincipalId,
-    harness_session_id: HarnessSessionId,
-    invocation_id: CapabilityInvocationId,
-    project: ProjectSessionBinding,
-    approval_grant_id: Option<ApprovalGrantId>,
-    agent: Option<AgentInvocationScope>,
-    graph_observation: Option<String>,
+pub struct ToolInvocationContext {
+    pub principal_id: PrincipalId,
+    pub harness_session_id: HarnessSessionId,
+    pub invocation_id: CapabilityInvocationId,
+    pub project: ProjectSessionBinding,
+    pub approval_grant_id: Option<ApprovalGrantId>,
+    pub agent_run_id: Option<AgentRunId>,
 }
 
-impl CapabilityInvocationContext {
+impl ToolInvocationContext {
     pub fn new(
         principal_id: PrincipalId,
         harness_session_id: HarnessSessionId,
@@ -120,52 +121,7 @@ impl CapabilityInvocationContext {
             invocation_id,
             project,
             approval_grant_id: None,
-            agent: None,
-            graph_observation: None,
+            agent_run_id: None,
         }
-    }
-
-    pub fn principal_id(&self) -> &PrincipalId {
-        &self.principal_id
-    }
-
-    pub fn harness_session_id(&self) -> &HarnessSessionId {
-        &self.harness_session_id
-    }
-
-    pub fn invocation_id(&self) -> &CapabilityInvocationId {
-        &self.invocation_id
-    }
-
-    pub fn project(&self) -> &ProjectSessionBinding {
-        &self.project
-    }
-
-    pub fn with_approval(mut self, approval_grant_id: ApprovalGrantId) -> Self {
-        self.approval_grant_id = Some(approval_grant_id);
-        self
-    }
-
-    pub fn approval_grant_id(&self) -> Option<&ApprovalGrantId> {
-        self.approval_grant_id.as_ref()
-    }
-
-    pub fn with_agent(mut self, agent: AgentInvocationScope) -> Self {
-        self.agent = Some(agent);
-        self
-    }
-
-    pub fn agent(&self) -> Option<&AgentInvocationScope> {
-        self.agent.as_ref()
-    }
-
-    /// Captured semantic inputs for this graph call, never a model argument.
-    pub fn with_graph_observation(mut self, hash: Option<String>) -> Self {
-        self.graph_observation = hash;
-        self
-    }
-
-    pub fn graph_observation(&self) -> Option<&str> {
-        self.graph_observation.as_deref()
     }
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use arrow::array::{Array, DictionaryArray, Int8Array, StringArray, UInt64Array};
 use arrow::datatypes::{DataType, Field, Int8Type, Schema, TimeUnit};
 use serde_json::json;
-use yss_data_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
+use yss_data_contract::TabularScalar;
 use yss_database_contract::DatabaseId;
 
 use super::*;
@@ -975,53 +975,52 @@ fn edited_values_reject_overflow_and_decimal_truncation() {
 
 #[test]
 fn document_literals_keep_unsigned_values_and_reject_lossy_numeric_mixing() {
-    let snapshot = |values: Vec<TabularScalar>| {
-        TabularSnapshot::try_from_columns(
-            vec![TabularColumn::new(
-                TabularColumnName::try_from("value").unwrap(),
-                values.into_boxed_slice(),
-            )]
-            .into_boxed_slice(),
-        )
-        .unwrap()
-    };
-    let batch = to_record_batch(&snapshot(vec![
-        TabularScalar::Unsigned(u64::MAX),
-        TabularScalar::Null,
-    ]))
+    let (_, array) = materialized_column(
+        "value",
+        &[TabularScalar::Unsigned(u64::MAX), TabularScalar::Null],
+        None,
+    )
     .unwrap();
-    assert_eq!(batch.column(0).data_type(), &DataType::UInt64);
+    assert_eq!(array.data_type(), &DataType::UInt64);
     assert_eq!(
-        batch
-            .column(0)
+        array
             .as_any()
             .downcast_ref::<UInt64Array>()
             .unwrap()
             .value(0),
         u64::MAX
     );
-    assert!(batch.column(0).is_null(1));
+    assert!(array.is_null(1));
     assert!(
-        to_record_batch(&snapshot(vec![
-            TabularScalar::Unsigned(u64::MAX),
-            TabularScalar::Integer(-1)
-        ]))
+        materialized_column(
+            "value",
+            &[
+                TabularScalar::Unsigned(u64::MAX),
+                TabularScalar::Integer(-1)
+            ],
+            None,
+        )
         .is_err()
     );
     assert!(
-        to_record_batch(&snapshot(vec![
-            TabularScalar::Unsigned(u64::MAX),
-            TabularScalar::Float64(1.0.try_into().unwrap())
-        ]))
+        materialized_column(
+            "value",
+            &[
+                TabularScalar::Unsigned(u64::MAX),
+                TabularScalar::Float64(1.0.try_into().unwrap()),
+            ],
+            None,
+        )
         .is_err()
     );
-    let batch = to_record_batch(&snapshot(vec![
-        TabularScalar::Integer(-1),
-        TabularScalar::Unsigned(10),
-    ]))
+    let (_, array) = materialized_column(
+        "value",
+        &[TabularScalar::Integer(-1), TabularScalar::Unsigned(10)],
+        None,
+    )
     .unwrap();
     assert_eq!(
-        array_to_scalars(batch.column(0).as_ref(), &mut (16 * 1024 * 1024)).unwrap(),
+        array_to_scalars(array.as_ref(), &mut (16 * 1024 * 1024)).unwrap(),
         vec![TabularScalar::Integer(-1), TabularScalar::Integer(10)]
     );
 }

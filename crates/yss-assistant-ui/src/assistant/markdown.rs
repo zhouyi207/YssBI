@@ -8,10 +8,11 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     Context, ElementId, Overflow, SharedString, StyleRefinement, WeakEntity, Window, div,
-    prelude::*, px,
+    prelude::*, rems,
 };
 use yss_desktop_services::resources::ResourceCatalog;
 use yss_project_identity::{ProjectResourceKind as Kind, ProjectResourceRef};
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::markdown::Markdown;
 
 pub(super) fn view(
@@ -21,7 +22,7 @@ pub(super) fn view(
     owner: WeakEntity<ConversationPanel>,
 ) -> TextView {
     let mut code = StyleRefinement::default()
-        .pt(px(38.))
+        .pt(rems(2.5))
         .flex()
         .flex_col()
         .items_start()
@@ -33,7 +34,9 @@ pub(super) fn view(
     table.overflow.x = Some(Overflow::Scroll);
     TextView::markdown(id, text)
         .plugin(Markdown::default().on_link_click(move |href, window, cx| {
-            let _ = owner.update(cx, |view, cx| view.open_markdown_link(href, window, cx));
+            owner
+                .update(cx, |view, cx| view.open_markdown_link(href, window, cx))
+                .log_released();
         }))
         .stream_fade(streaming)
         .style(TextViewStyle::default().code_block(code).table(table))
@@ -46,7 +49,7 @@ pub(super) fn view(
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(
-                    div().max_w(px(160.)).truncate().child(
+                    div().max_w(rems(10.)).truncate().child(
                         block
                             .lang()
                             .unwrap_or_else(|| yss_ui::text::t("panel.assistantCode").into()),
@@ -55,7 +58,6 @@ pub(super) fn view(
                 .child(
                     Clipboard::new("copy-code")
                         .xsmall()
-                        .tooltip(yss_ui::text::t("panel.assistantCopyCode"))
                         .accessibility_label(yss_ui::text::t("panel.assistantCopyCode"))
                         .value_fn(move |_, _| format!("{code}\n").into()),
                 )

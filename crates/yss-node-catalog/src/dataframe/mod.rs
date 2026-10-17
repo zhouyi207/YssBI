@@ -143,7 +143,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
     match kind {
         Frequency | GroupBy => aggregation::interface(kind),
         DataframeSource => Ok((
-            vec![streaming_output(
+            vec![data_output(
                 "dataframe",
                 "DataFrame",
                 dataframe_type()?,
@@ -153,8 +153,8 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         Limit => Ok((
             vec![
-                streaming_input("source", "Source", dataframe_type()?)?,
-                streaming_output(
+                data_input("source", "Source", dataframe_type()?)?,
+                data_output(
                     "result",
                     "Result",
                     dataframe_type()?,
@@ -168,8 +168,8 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         Rename => Ok((
             vec![
-                streaming_input("source", "Source", dataframe_type()?)?,
-                streaming_output(
+                data_input("source", "Source", dataframe_type()?)?,
+                data_output(
                     "result",
                     "Result",
                     dataframe_type()?,
@@ -188,8 +188,8 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
             let subset_type = data_series_type(concrete("core.text")?);
             Ok((
                 vec![
-                    streaming_input("source", "Source", dataframe_type()?)?,
-                    streaming_output(
+                    data_input("source", "Source", dataframe_type()?)?,
+                    data_output(
                         "result",
                         "Result",
                         dataframe_type()?,
@@ -260,8 +260,8 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         Combine => Ok((
             vec![
-                composition_input("series", "DataSeries", series_type()?, 1)?,
-                streaming_output(
+                user_input("series", "DataSeries", series_type()?, 1)?,
+                data_output(
                     "dataframe",
                     "DataFrame",
                     dataframe_type()?,
@@ -275,8 +275,8 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         ConcatRows | ConcatColumns => Ok((
             vec![
-                composition_input("frames", "DataFrame", dataframe_type()?, 2)?,
-                streaming_output(
+                user_input("frames", "DataFrame", dataframe_type()?, 2)?,
+                data_output(
                     "result",
                     "Result",
                     dataframe_type()?,
@@ -298,9 +298,9 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         Join => Ok((
             vec![
-                streaming_input("left", "Left", dataframe_type()?)?,
-                streaming_input("right", "Right", dataframe_type()?)?,
-                streaming_output(
+                data_input("left", "Left", dataframe_type()?)?,
+                data_input("right", "Right", dataframe_type()?)?,
+                data_output(
                     "result",
                     "Result",
                     dataframe_type()?,
@@ -404,7 +404,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         Standardize => Ok((
             vec![
                 data_input("series", "DataSeries", numeric_series_type())?,
-                streaming_output("standardized", "Standardized", float_series_type()?, None)?,
+                data_output("standardized", "Standardized", float_series_type()?, None)?,
                 data_output("mean", "Mean", float_type()?, None)?,
                 data_output(
                     "standard_deviation",
@@ -417,10 +417,10 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         InverseStandardize => Ok((
             vec![
-                streaming_input("standardized", "Standardized", float_series_type()?)?,
+                data_input("standardized", "Standardized", float_series_type()?)?,
                 scalar_input("mean", "Mean", "core.numeric")?,
                 scalar_input("standard_deviation", "Standard Deviation", "core.numeric")?,
-                streaming_output("series", "DataSeries", float_series_type()?, None)?,
+                data_output("series", "DataSeries", float_series_type()?, None)?,
             ],
             vec![],
         )),
@@ -526,17 +526,6 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
     }
 }
 
-fn composition_input(
-    key: &'static str,
-    title: &'static str,
-    value_type: TypeExpr,
-    min: u16,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    let mut port = user_input(key, title, value_type, min)?;
-    port.consumption = Some(InputConsumption::Streaming);
-    Ok(port)
-}
-
 fn choice_parameter(
     key: &'static str,
     default: &'static str,
@@ -561,8 +550,8 @@ fn choice_parameter(
 
 fn relational_ports(result_schema: SchemaExpr) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
-        streaming_input("source", "Source", dataframe_type()?)?,
-        streaming_output("result", "Result", dataframe_type()?, Some(result_schema))?,
+        data_input("source", "Source", dataframe_type()?)?,
+        data_output("result", "Result", dataframe_type()?, Some(result_schema))?,
     ])
 }
 
@@ -579,16 +568,6 @@ fn data_input(
         PortCardinality::Declared,
         None,
     )
-}
-
-fn streaming_input(
-    key: &'static str,
-    title: &'static str,
-    value_type: TypeExpr,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    let mut spec = data_input(key, title, value_type)?;
-    spec.consumption = Some(InputConsumption::Streaming);
-    Ok(spec)
 }
 
 fn scalar_input(
@@ -631,17 +610,6 @@ fn data_output(
     )
 }
 
-fn streaming_output(
-    key: &'static str,
-    title: &'static str,
-    value_type: TypeExpr,
-    schema: Option<SchemaExpr>,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    let mut spec = data_output(key, title, value_type, schema)?;
-    spec.production = Some(OutputProduction::Streaming);
-    Ok(spec)
-}
-
 fn derived_output(
     key: &'static str,
     title: &'static str,
@@ -668,12 +636,6 @@ fn port(
     cardinality: PortCardinality,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    let relational = match &value_type {
-        TypeExpr::Concrete(id) => id.as_str() == "tabular.dataframe",
-        TypeExpr::Applied { constructor, .. } => constructor.as_str() == "core.data_series",
-        TypeExpr::Union(types) => types.iter().any(|t| matches!(t, TypeExpr::Applied { constructor, .. } if constructor.as_str() == "core.data_series")),
-        _ => false,
-    };
     Ok(PortSpec {
         key: port_key(key)?,
         title: title.into(),
@@ -684,16 +646,6 @@ fn port(
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Forbidden,
             default_value: None,
-        }),
-        consumption: (direction == PortDirection::Input).then_some(if relational {
-            InputConsumption::Streaming
-        } else {
-            InputConsumption::FullyMaterialized
-        }),
-        production: (direction == PortDirection::Output).then_some(if relational {
-            OutputProduction::Streaming
-        } else {
-            OutputProduction::FullyMaterialized
         }),
         editor: PortEditorSpec::Default,
         schema,

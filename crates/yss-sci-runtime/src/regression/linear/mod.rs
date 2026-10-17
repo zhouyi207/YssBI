@@ -66,10 +66,6 @@ pub fn linear_regression(
     control.check()?;
     let report = crate::regression::report::linear_regression_report(&fit)
         .map_err(|_| ScientificComputationError::ComputationFailed)?;
-    let mut design = request.predictors;
-    if constant {
-        design.insert(0, vec![1.0; observations]);
-    }
     control.check()?;
     Ok(LinearRegressionResult {
         weights,
@@ -77,7 +73,7 @@ pub fn linear_regression(
         coefficients: fit.coefficients,
         fitted: fit.fitted,
         residuals: fit.residuals,
-        design,
+        design: fit.design,
         report,
     })
 }

@@ -7,7 +7,6 @@ use yss_ui::layout_store::LayoutStore;
 pub struct WindowState {
     store: Option<Arc<LayoutStore>>,
     size: Size<Pixels>,
-    executor: Handle,
     load_failed: bool,
     changed: bool,
     delivery: Option<Task<()>>,
@@ -18,13 +17,12 @@ impl WindowState {
         let mut state = Self {
             store: None,
             size: size(px(1480.), px(940.)),
-            executor,
             load_failed: false,
             changed: false,
             delivery: None,
         };
         let loaded = crate::services::paths::NativePaths::resolve().and_then(|paths| {
-            let store = Arc::new(LayoutStore::new(&paths.application.app_data_dir));
+            let store = Arc::new(LayoutStore::new(&paths.application.app_data_dir, executor));
             let saved = store.window_bounds();
             state.store = Some(store);
             if let Some(saved) = saved? {
@@ -121,7 +119,7 @@ impl WindowState {
         }
         self.store
             .as_ref()
-            .map(|store| store.save_window_bounds(self.size, debounce, &self.executor))
+            .map(|store| store.save_window_bounds(self.size, debounce))
     }
 }
 

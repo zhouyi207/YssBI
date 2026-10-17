@@ -2,6 +2,7 @@ use super::layout::TopicPlacement;
 use super::{
     CancelMindGesture, DeleteTopics, FitMind, FitTopics, MindCanvas, SaveMind, SelectTopics,
 };
+use crate::file_session::FileEditor;
 use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
@@ -12,6 +13,7 @@ use gpui_kit::{
     prelude::*, px,
 };
 use std::collections::HashMap;
+use yss_ui::lifecycle::LogReleased;
 
 impl Render for MindCanvas {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -75,7 +77,7 @@ impl Render for MindCanvas {
                     .layout
                     .nodes
                     .iter()
-                    .map(|node| view.snapshot.content.nodes[node.index].id.clone())
+                    .map(|node| view.file.snapshot().content.nodes[node.index].id.clone())
                     .collect();
                 view.changed(cx);
             }))
@@ -104,11 +106,13 @@ impl Render for MindCanvas {
                 canvas(
                     move |rect, _, cx| {
                         bounds.set(rect);
-                        let _ = owner.update(cx, |view, cx| {
-                            if view.fit_pending {
-                                view.fit(false, cx);
-                            }
-                        });
+                        owner
+                            .update(cx, |view, cx| {
+                                if view.fit_pending {
+                                    view.fit(false, cx);
+                                }
+                            })
+                            .log_released();
                     },
                     move |rect, _, window, cx| {
                         let mut path = PathBuilder::stroke(px(1.5));
@@ -141,21 +145,6 @@ impl Render for MindCanvas {
                         .bg(cx.theme().primary.opacity(0.1)),
                 )
             })
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .absolute()
-                        .bottom_2()
-                        .left_3()
-                        .right_3()
-                        .p_2()
-                        .rounded_md()
-                        .bg(cx.theme().muted)
-                        .text_color(cx.theme().danger)
-                        .text_xs()
-                        .child(error),
-                )
-            })
     }
 }
 
@@ -165,7 +154,7 @@ impl MindCanvas {
         placement: TopicPlacement,
         cx: &mut Context<Self>,
     ) -> gpui_kit::AnyElement {
-        let topic = &self.snapshot.content.nodes[placement.index];
+        let topic = &self.file.snapshot().content.nodes[placement.index];
         let id = topic.id.clone();
         let content = &topic.content;
         let label = if let Some((previous, state)) = self.labels.get_mut(&id) {
@@ -216,7 +205,11 @@ impl MindCanvas {
                     view.begin_topic(click_id.clone(), event, window, cx)
                 }),
             )
-            .child(TextView::new(&label).plugin(yss_ui::markdown::Markdown::default()))
+            .child(
+                TextView::new(&label)
+                    .plugin(yss_ui::markdown::Markdown::default())
+                    .selectable(false),
+            )
             .when(placement.children > 0, |view| {
                 view.child(
                     div()

@@ -1,11 +1,11 @@
 //! Menu editing reuses the selected editor's actions and the component text engine.
-use super::super::Workbench;
+use super::super::{EditorPanel, Workbench, files::FilePanel};
 use crate::{canvas, databases::CopyDatabaseSelection, minds::DeleteTopics};
 use gpui_kit::component::{
     dock::{BasePanelView, DockPlacement},
     input,
 };
-use gpui_kit::{Action, App, Context, Window};
+use gpui_kit::{Action, App, Context, FocusHandle, Window};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -19,6 +19,15 @@ pub(in crate::workbench) enum EditCommand {
 }
 
 impl EditCommand {
+    const ALL: [Self; 6] = [
+        Self::Undo,
+        Self::Redo,
+        Self::Cut,
+        Self::Copy,
+        Self::Paste,
+        Self::Delete,
+    ];
+
     pub(in crate::workbench) fn text_action(self) -> Box<dyn Action> {
         match self {
             Self::Undo => Box::new(input::Undo),
@@ -29,36 +38,110 @@ impl EditCommand {
             Self::Delete => Box::new(input::Delete),
         }
     }
+
+    pub(super) fn dispatch_text(
+        self,
+        menu_focus: Option<&gpui_kit::FocusHandle>,
+        scope: &gpui_kit::FocusHandle,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> bool {
+        // An unavailable text action is still a text command, never a graph fallback.
+        if window.is_action_available(&input::SelectAll, cx) {
+            let action = self.text_action();
+            if window.is_action_available(action.as_ref(), cx) {
+                window.dispatch_action(action, cx);
+            }
+            return true;
+        }
+        let Some(focus) = menu_focus.filter(|_| {
+            window
+                .context_stack()
+                .iter()
+                .any(|context| context.contains("AppMenuBar"))
+        }) else {
+            return false;
+        };
+        let focus = focus.clone();
+        let scope = scope.clone();
+        // AppMenuBar's queued dismissal otherwise restores the focused menu trigger
+        // after this command. Finish the effect cycle before restoring the text target.
+        window.defer(cx, move |window, cx| {
+            // A dismissed field must never redirect a captured text command to the graph.
+            if scope.contains(&focus, window) {
+                focus.focus(window, cx);
+                focus.dispatch_action(self.text_action().as_ref(), window, cx);
+            }
+        });
+        true
+    }
+}
+
+impl From<EditCommand> for canvas::GraphEditCommand {
+    fn from(command: EditCommand) -> Self {
+        match command {
+            EditCommand::Undo => Self::Undo,
+            EditCommand::Redo => Self::Redo,
+            EditCommand::Cut => Self::Cut,
+            EditCommand::Copy => Self::Copy,
+            EditCommand::Paste => Self::Paste,
+            EditCommand::Delete => Self::Delete,
+        }
+    }
+}
+
+impl EditorPanel {
+    fn can_edit(&self, command: EditCommand, cx: &App) -> bool {
+        match self {
+            Self::Graph(graph) => graph.read(cx).is_edit_command_enabled(command.into()),
+            Self::File(FilePanel::Document(document)) => document.read(cx).is_editing(),
+            Self::File(FilePanel::Mind(_)) => command == EditCommand::Delete,
+            Self::File(FilePanel::Chart(_)) => false,
+            Self::Database(_) => command == EditCommand::Copy,
+        }
+    }
+
+    fn edit(&self, command: EditCommand, focus: &FocusHandle, window: &mut Window, cx: &mut App) {
+        if let Self::Graph(graph) = self {
+            graph.update(cx, |graph, cx| graph.edit(command.into(), cx));
+            return;
+        }
+        if !self.can_edit(command, cx) {
+            return;
+        }
+        let action: Box<dyn Action> = match self {
+            Self::File(FilePanel::Document(_)) => command.text_action(),
+            Self::File(FilePanel::Mind(_)) => Box::new(DeleteTopics),
+            Self::Database(_) => Box::new(CopyDatabaseSelection),
+            Self::Graph(_) | Self::File(FilePanel::Chart(_)) => return,
+        };
+        focus.dispatch_action(action.as_ref(), window, cx);
+    }
 }
 
 impl Workbench {
-    pub(super) fn edit_menu_availability(&self, cx: &App) -> [bool; 6] {
-        if self.active_editor_panel(cx).is_none() {
-            return [false; 6];
+    pub(super) fn edit_menu_state(
+        &self,
+        window: &Window,
+        cx: &App,
+    ) -> (Option<FocusHandle>, [bool; 6]) {
+        if window.is_action_available(&input::SelectAll, cx) {
+            return (
+                window.focused(cx),
+                EditCommand::ALL
+                    .map(|command| window.is_action_available(command.text_action().as_ref(), cx)),
+            );
         }
-        let details = self.details.read(cx);
-        if let Some(graph) = details.graph(cx) {
-            let graph = graph.read(cx);
-            return [
-                graph.graph().editing().can_undo,
-                graph.graph().editing().can_redo,
-                false,
-                false,
-                false,
-                true,
-            ];
-        }
-        if let Some(document) = details.document() {
-            return [document.read(cx).is_editing(); 6];
-        }
-        [
-            false,
-            false,
-            false,
-            details.database().is_some(),
-            false,
-            details.mind().is_some(),
-        ]
+        let Some(editor) = self
+            .editor_command_panel(window, cx)
+            .and_then(|panel| EditorPanel::from_view(panel.view()))
+        else {
+            return (None, [false; 6]);
+        };
+        (
+            None,
+            EditCommand::ALL.map(|command| editor.can_edit(command, cx)),
+        )
     }
 
     pub(in crate::workbench) fn editor_command_panel(
@@ -96,38 +179,18 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let text_action = command.text_action();
-        // AppMenuBar restores the pre-menu focus. Property inputs keep their own editing
-        // semantics, so a text operation must not accidentally delete graph nodes.
-        if window.is_action_available(text_action.as_ref(), cx) {
-            window.dispatch_action(text_action, cx);
+        let menu_focus = self
+            .menu_context
+            .as_ref()
+            .and_then(|context| context.text_focus.as_ref());
+        if command.dispatch_text(menu_focus, &self.focus, window, cx) {
             return;
         }
         let Some(panel) = self.editor_command_panel(window, cx) else {
             return;
         };
-        let details = self.details.read(cx);
-        let action: Box<dyn Action> = if details.graph(cx).is_some() {
-            match command {
-                EditCommand::Undo => Box::new(canvas::UndoGraph),
-                EditCommand::Redo => Box::new(canvas::RedoGraph),
-                EditCommand::Delete => Box::new(canvas::DeleteSelection),
-                _ => return,
-            }
-        } else if details
-            .document()
-            .is_some_and(|document| document.read(cx).is_editing())
-        {
-            text_action
-        } else if details.mind().is_some() && command == EditCommand::Delete {
-            Box::new(DeleteTopics)
-        } else if details.database().is_some() && command == EditCommand::Copy {
-            Box::new(CopyDatabaseSelection)
-        } else {
-            return;
-        };
-        panel
-            .focus_handle(cx)
-            .dispatch_action(action.as_ref(), window, cx);
+        if let Some(editor) = EditorPanel::from_view(panel.view()) {
+            editor.edit(command, &panel.focus_handle(cx), window, cx);
+        }
     }
 }

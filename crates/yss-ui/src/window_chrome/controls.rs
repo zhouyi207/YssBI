@@ -29,6 +29,7 @@ pub(super) fn render(
             controls.child(control(
                 "window-minimize",
                 IconName::WindowMinimize,
+                "common.minimize",
                 WindowControlArea::Min,
                 |_, window, _| window.minimize_window(),
                 cx,
@@ -42,6 +43,11 @@ pub(super) fn render(
                 } else {
                     IconName::WindowMaximize
                 },
+                if window.is_maximized() {
+                    "common.restore"
+                } else {
+                    "common.maximize"
+                },
                 WindowControlArea::Max,
                 |_, window, _| window.zoom_window(),
                 cx,
@@ -50,6 +56,7 @@ pub(super) fn render(
         .child(control(
             "window-close",
             IconName::WindowClose,
+            "common.close",
             WindowControlArea::Close,
             on_close,
             cx,
@@ -59,6 +66,7 @@ pub(super) fn render(
 fn control(
     id: &'static str,
     icon: IconName,
+    label: &'static str,
     area: WindowControlArea,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     cx: &App,
@@ -79,11 +87,14 @@ fn control(
     };
     div()
         .id(id)
+        .role(gpui_kit::accesskit::Role::Button)
+        .aria_label(crate::text::t(label))
         .flex()
         .flex_shrink_0()
         .items_center()
         .justify_center()
         .w(TITLE_BAR_HEIGHT)
+        .min_w(crate::appearance::HEADER_HEIGHT)
         .h_full()
         .text_color(cx.theme().foreground)
         .hover(move |style| style.bg(hover).text_color(foreground))
@@ -92,15 +103,16 @@ fn control(
             control.window_control_area(area)
         })
         .when(cfg!(target_os = "linux"), |control| {
-            control
-                .on_mouse_down(MouseButton::Left, |_, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                })
-                .on_click(move |event, window, cx| {
-                    cx.stop_propagation();
-                    on_click(event, window, cx);
-                })
+            control.on_mouse_down(MouseButton::Left, |_, window, cx| {
+                window.prevent_default();
+                cx.stop_propagation();
+            })
+        })
+        // Native caption hit testing owns pointer clicks on Windows. The callback
+        // also gives accessibility activation the same command on every platform.
+        .on_click(move |event, window, cx| {
+            cx.stop_propagation();
+            on_click(event, window, cx);
         })
         .child(Icon::new(icon).small())
 }

@@ -9,8 +9,10 @@ use yss_project_identity::ResourceRevision;
 use yss_resource_naming::ResourceName;
 
 pub const MAX_FILE_BYTES: usize = 2 * 1024 * 1024;
-pub trait FileContent: Clone + Debug + PartialEq + Serialize + DeserializeOwned {
-    type Edit: Clone + Debug + DeserializeOwned;
+pub trait FileContent:
+    Clone + Debug + PartialEq + Serialize + DeserializeOwned + Send + Sync + 'static
+{
+    type Edit: Clone + Debug + DeserializeOwned + Send;
     const KIND: &'static str;
     const DIRECTORY: &'static str;
     const EXTENSION: &'static str;

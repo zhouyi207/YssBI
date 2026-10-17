@@ -676,8 +676,7 @@ fn opening_a_version_four_project_does_not_create_a_catalog_or_change_its_files(
         )
         .await
         .unwrap();
-        let registry_path = store.path().to_owned();
-        let registry = crate::project::ProjectManagement::new(Arc::new(store), registry_path);
+        let registry = crate::project::ProjectManagement::new(Arc::new(store));
         app.create_project_for_application(
             &registry,
             "New project after rejected load",

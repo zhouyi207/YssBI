@@ -65,3 +65,60 @@ pub(crate) fn node_title(node: &EditorNodeModel) -> &str {
         .as_deref()
         .unwrap_or(&node.display.title)
 }
+
+pub(crate) fn argument_label(
+    key: &str,
+    value: &str,
+    location: &Location,
+    projection: &EditorProjectionModel,
+    owner: Option<&EditorNodeModel>,
+) -> Option<String> {
+    match key {
+        "port" | "output" | "input" => {
+            if let DiagnosticLocation::Port(address) = location
+                && address.to_string() == value
+            {
+                return label(location, projection, owner);
+            }
+            owner
+                .into_iter()
+                .chain(projection.nodes.iter())
+                .find_map(|node| {
+                    node.ports
+                        .iter()
+                        .find(|port| port.address.to_string() == value)
+                        .map(|port| {
+                            format!(
+                                "{} · {}",
+                                node_title(node),
+                                port.display
+                                    .instance_label
+                                    .as_deref()
+                                    .unwrap_or(&port.display.label)
+                            )
+                        })
+                })
+        }
+        "node_type" => owner
+            .into_iter()
+            .chain(projection.nodes.iter())
+            .find(|node| node.node_type.as_str() == value)
+            .map(|node| node.display.title.to_string()),
+        "parameter_key" => {
+            let node_id = match location {
+                DiagnosticLocation::Parameter { node_id, .. } => *node_id,
+                DiagnosticLocation::Node(node_id) => *node_id,
+                _ => return None,
+            };
+            owner
+                .filter(|node| node.node_id == node_id)
+                .or_else(|| projection.nodes.iter().find(|node| node.node_id == node_id))?
+                .parameter_groups
+                .iter()
+                .flat_map(|group| group.parameters.iter())
+                .find(|parameter| parameter.key.as_str() == value)
+                .map(|parameter| parameter.display.title.to_string())
+        }
+        _ => None,
+    }
+}

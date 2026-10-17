@@ -2,6 +2,7 @@ use super::{GraphProperties, constants::ConstantOverview, signature::SignatureDr
 use gpui_kit::{Context, Window};
 use yss_graph_document::GraphResourceKind;
 use yss_project_history::FunctionDocument;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphProperties {
     pub(super) fn read(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -21,7 +22,7 @@ impl GraphProperties {
             field.value_loading = false;
             field.load_token = field.load_token.wrapping_add(1);
         }
-        self.error = None;
+
         let task = self.services.run(move |services| {
             let application = services;
             let document = application.current_graph_document(&project, &path, version)?;
@@ -31,13 +32,8 @@ impl GraphProperties {
                 .map(ConstantOverview::from_constant)
                 .collect::<anyhow::Result<Vec<_>>>()?;
             let function = if path.kind() == GraphResourceKind::FunctionGraph {
-                let snapshot = application.query_project_index(
-                    project.clone(),
-                    yss_ui::text::locale(),
-                    false,
-                )?;
-                let function = snapshot
-                    .index
+                let index = application.query_project_index(project.clone())?;
+                let function = index
                     .function_graphs
                     .into_iter()
                     .find(|function| function.path == path.as_str())
@@ -57,7 +53,7 @@ impl GraphProperties {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -79,13 +75,14 @@ impl GraphProperties {
                         }
                         view.ready = true;
                     }
-                    Err(_) => {
-                        view.error =
-                            Some(yss_ui::text::t("native.workbench.graphPropertiesFailed").into())
-                    }
+                    Err(_) => view.notifications.error(
+                        yss_ui::text::t("native.workbench.graphPropertiesFailed"),
+                        cx,
+                    ),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

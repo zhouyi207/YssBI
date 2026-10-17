@@ -27,6 +27,33 @@ impl<'a> EditorMutationPlanner<'a> {
         }
     }
 
+    pub(super) fn in_place(
+        graph_path: &'a GraphResourcePath,
+        document: &'a mut Arc<GraphDocument>,
+        registry: &'a NodeRegistry,
+        catalog: &'a CatalogMutationValidationSnapshot,
+        analysis: Option<&'a GraphAnalysis>,
+    ) -> Self {
+        Self {
+            graph_path,
+            registry,
+            catalog,
+            semantics: analysis.map(GraphAnalysis::semantic_snapshot),
+            candidate: GraphDocumentPatchPreview::in_place(document),
+        }
+    }
+
+    pub(super) fn apply(
+        &mut self,
+        mutation: EditorGraphMutation,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
+        let patch = self.plan(mutation)?;
+        if !patch.is_empty() {
+            self.candidate.apply(&patch)?;
+        }
+        Ok(patch)
+    }
+
     pub(super) fn plan(
         &mut self,
         mutation: EditorGraphMutation,
@@ -43,6 +70,12 @@ impl<'a> EditorMutationPlanner<'a> {
                 self.registry,
                 context,
             )?;
+            if patch.is_empty() {
+                yss_graph_document_edit::validate_graph_document(self.candidate.document())?;
+                return Ok(GraphDocumentPatch::new(crate::binding_cleanup::operations(
+                    self.candidate.read(),
+                )));
+            }
             let staged = self.candidate.prepare(&patch)?;
             let cleanup = crate::binding_cleanup::operations(staged.read());
             drop(staged);

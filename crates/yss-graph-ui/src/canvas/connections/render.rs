@@ -1,4 +1,4 @@
-use std::{rc::Rc, time::Duration};
+use std::time::Duration;
 
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::{
@@ -80,7 +80,7 @@ impl GraphCanvas {
         let presentation = self.presentation.clone();
         let offset = self.offset;
         let zoom = self.zoom;
-        let preview = Rc::new(self.preview.clone());
+        let preview = self.preview.clone();
         // Animate small markers; static strokes and hit meshes keep their geometry caches.
         // GPUI stops this when the element is hidden or reduced motion is enabled.
         div()

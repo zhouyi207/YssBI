@@ -9,33 +9,31 @@ Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime�
 
 ## 1. Current runtime path
 
-```text
-GPUI NativeServices
-    ↓ ApplicationServices / typed Harness calls
-yss-application::harness + host-owned HarnessEventSinkPort
-    ↓
-yss-harness-core
-    ├─ session / turn
-    ├─ statistical plan / workflow
-    ├─ tool registry / invocation ledger
-    ├─ approval
-    ├─ skill resolution
-    ├─ knowledge access / passages / citations
-    └─ ordered event sequence
-    ↓ typed ports
-    ├─ LanguageModelResolverPort → Application model settings → yss-harness-rig (AgentDriverPort)
-    ├─ CapabilityGatewayPort → yss-application::harness blocking adapter → yss-application
-    ├─ KnowledgeIndexPort → yss-harness-tantivy (BM25)
-    └─ persistence ports → yss-harness-sqlite
+```mermaid
+flowchart TD
+    UI["GPUI 宿主"] --> APP["ApplicationServices / typed Harness calls"]
+    APP --> CORE["Harness Core：会话、运行、委派、工作流、账本、审批与有序事件"]
+    CORE --> EXT["HarnessExtension：AssistantExtension"]
+    EXT --> GATEWAY["CapabilityGatewayPort"]
+    GATEWAY --> OWNERS["Application / Project / Graph / Database owners"]
+    CORE --> MODEL["LanguageModelResolverPort：Application 模型设置 → Rig"]
+    CORE --> KNOWLEDGE["KnowledgeIndexPort：Tantivy"]
+    CORE --> STORE["Persistence ports：SQLite"]
+    CORE --> SINK["宿主注入的 HarnessEventSinkPort"]
 ```
 
-`yss-application::runtime` 接收平台中立的 ApplicationPaths 与端口组装回调；其中 `runtime/harness.rs` 构造 SQLite store、模型配置服务、时钟和 ID 实现。GPUI 宿主组装 BlockingHarnessGateway 与 HarnessEventSinkPort，再交给已有 HarnessPorts。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。原生宿主将已持久化事件投递到有界 NativeEvent 流；持久序列及重放仍归 Harness。Assistant 公开读投影由 [Harness Contract](../yss-harness-contract/README.md) 的 `assistant` 模块拥有。Harness Core 不依赖 GPUI、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。原生 Assistant 能力、布局与未完成验收由 [GPUI host](../yss-desktop-gpui/README.md) 维护。
+`yss-application::runtime` 接收平台中立的 ApplicationPaths 与端口组装回调；其中 `runtime/harness.rs`
+构造 SQLite store、模型服务、时钟和 ID，并将宿主 gateway 封装为 `AssistantExtension`，通过
+`HarnessPorts.extension` 注入 Core。`yss-application::harness` 协调知识安装、启动恢复和项目会话绑定。
+Core 负责通用生命周期、持久序列与重放，通过 extension hooks 取得角色声明、业务授权、回执投影和交付判断；
+它不依赖 GPUI、Rig、SQLite、ProjectState、Graph runtime 或具体 Database owner。
 
 ## Manager–Worker roles and task lifecycle
 
-桌面使用扁平的六角色编排。角色定义和工具集合由 [agents/mod.rs](src/agents/mod.rs)
-拥有，权限检查位于 [agents/policy.rs](src/agents/policy.rs)；[orchestration](src/orchestration/mod.rs) 拥有运行和委派，回执归集与中断恢复分别位于其子模块。Rig 根据
-provider-neutral 请求构建模型与工具循环，不另设角色注册表或持久状态。
+桌面使用扁平的六角色编排。角色定义和工具集合由
+[Assistant agents](../yss-assistant-extension/src/agents.rs) 拥有，角色、任务授权和读取基线归
+`yss-assistant-extension`；[Core orchestration](src/orchestration/mod.rs) 拥有通用运行和委派。
+Rig 根据 provider-neutral 请求构建模型与工具循环，不另设角色注册表或持久状态。
 
 | 角色         | 职责与写入边界                                                       |
 | ------------ | -------------------------------------------------------------------- |
@@ -52,21 +50,25 @@ provider-neutral 请求构建模型与工具循环，不另设角色注册表或
 创建授权同时列出精确创建参数和新资源后续允许的操作。Core 按任务规范生成内部去重身份，
 同一 turn 的相同规范复用已有结果；运行中的相同任务明确拒绝，不自动执行第二次。
 
-面向模型的任务和业务工具输入、结果投影由 Contract 的 [model.rs](../yss-harness-contract/src/model.rs) 及其子模块拥有。
+面向模型的任务和业务工具输入、结果投影由 `yss-assistant-contract` 拥有；
+Core 通过 `HarnessExtension`、`AgentRunHooks` 和 `ToolSpec` 消费这些声明，不解析业务参数。
 委派 key、资源版本和编辑会话不出现在委派/续接 schema、Worker 任务正文、任务结果或任务历史回放中。
-Core 从 Manager 的真实读取回执捕获版本，未读取过的资源通过现有资源工具捕获元数据；
+Assistant extension 从 Manager 的真实读取回执捕获版本，未读取过的资源通过现有资源工具捕获元数据；
 已观察到的旧版本不自动换成最新版本。数据库运行/Schema 版本独立于项目资源版本：
 读取过 schema/profile 后，自动绑定使用资源 Owner 的最小分页读取核对数据身份，再取得资源版本，不能直接转换计数器。
 
-[observations.rs](src/orchestration/observations.rs) 是回执的内存投影，随完整事件/账本历史重建，不随模型上下文压缩丢弃，
+[Assistant observations](../yss-assistant-extension/src/run/observations.rs) 是回执的内存投影，由 run hooks 随完整事件/账本历史重建，不随模型上下文压缩丢弃，
 也不成为资源 authority 或新持久化存储。Worker 改变已读资源时旧观察失效，Manager 必须重新读取；
 项目会话更换后，旧观察也必须通过当前项目读取重新建立。Worker 启动前仍在执行门内核对完整授权版本，
 业务 Owner 在提交时继续执行原有并发校验。
 
-Core 和 Application Gateway 共用角色策略，按工具、操作、资源种类、具体资源和结果引用
-检查权限。Manager 生成的任务不能改变角色边界，例如 Report 获得 `edit_resource` 也不能
-编辑 Database。新资源仅从真实回执取得 ID，并继承明确声明的操作。统计图执行另外在
-Application 的准备入口核对实际资源需求、语义依赖和资源版本；已授权的图执行继承 Manager 对实际语义依赖的共享读取权限，显式依赖版本仍须匹配，不继承写入权限。项目会话、审批和资源 Owner 的提交校验继续生效。内部图/资源读取回执保留完整版本；模型只看到业务事实。`inspect_resource` 返回身份、名称和 dirty 状态；函数资源另保留既有签名投影，不返回节点或连线正文。
+Core 拒绝未在当前角色注册的工具；Assistant extension 按工具、操作、资源种类、具体资源和结果引用
+执行角色与任务授权。Application Gateway 不复制这套角色策略，仍由 Application 和资源 Owner 校验项目会话、
+资源版本及原子提交。Manager 生成的过宽任务不能改变角色边界，例如 Report 不能编辑 Database，
+Review 不能写入。新资源仅从真实回执取得 ID，并继承明确声明的操作。统计图执行在 Application
+准备入口继续核对实际资源需求、语义依赖和资源版本；共享读取权限不会授予写权限。
+内部图/资源读取回执保留完整版本；模型只看到业务事实。`inspect_resource` 返回身份、名称和 dirty 状态；
+函数资源另保留既有签名投影，不返回节点或连线正文。
 
 图变更在模型与内部入口共用角色能力检查；内部授权读取原请求的能力身份与图引用，不复制节点、参数或常量值。普通、Workflow 和审批执行器由同一个基础构造函数初始化共同服务与默认状态，再设置各自的专属身份。
 
@@ -125,16 +127,15 @@ Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各
 | Core Host     | [host/mod.rs](src/host/mod.rs) 构造共享状态；[session](src/host/session.rs)、[turn](src/host/turn.rs)、[workflow](src/host/workflow.rs)、[approval](src/host/approval.rs) 分别实现对应入口                                                                                                                                                                                                                                                                  |
 | Core 公共依赖 | [ports.rs](src/ports.rs) 拥有注入端口集合，[error.rs](src/error.rs) 拥有 Core 错误；编排器不依赖 Host 内部实现                                                                                                                                                                                                                                                                                                                                              |
 | 上下文与事件  | [conversation.rs](src/conversation.rs) 统一历史重建和消息组装；[events.rs](src/events.rs) 统一持久事件写入、交付及 Agent 输出适配                                                                                                                                                                                                                                                                                                                           |
-| 角色与权限    | [agents/mod.rs](src/agents/mod.rs) 定义六角色、工具及并发度，[policy.rs](src/agents/policy.rs) 执行共享授权检查                                                                                                                                                                                                                                                                                                                                             |
-| 编排与交付    | [orchestration/mod.rs](src/orchestration/mod.rs) 调度 Manager/Worker；[delegation.rs](src/orchestration/delegation.rs) 绑定模型任务与读取基线；[receipts.rs](src/orchestration/receipts.rs) 从真实回执归集证据、产物并更新任务范围；[recovery.rs](src/orchestration/recovery.rs) 恢复未结束的运行                                                                                                                                                           |
+| 角色与权限    | [Assistant agents](../yss-assistant-extension/src/agents.rs) 定义六角色与工具，Assistant extension 执行角色和任务授权；Core 执行工具注册与模式准入 |
+| 编排与交付    | [Core orchestration](src/orchestration/mod.rs) 调度通用运行；[Assistant run](../yss-assistant-extension/src/run.rs) 绑定任务、归集业务回执并恢复读取基线；其回归测试位于 [run/tests.rs](../yss-assistant-extension/src/run/tests.rs) |
 | Rig           | [driver.rs](../yss-harness-rig/src/driver.rs) 执行模型循环，[provider/client.rs](../yss-harness-rig/src/provider/client.rs) 建立原生协议客户端，[stream.rs](../yss-harness-rig/src/stream.rs) 管理流与取消，[messages.rs](../yss-harness-rig/src/messages.rs) 映射消息，[tools](../yss-harness-rig/src/tools/mod.rs) 映射模型工具，[error.rs](../yss-harness-rig/src/error.rs) 分类失败                                                                     |
-| Knowledge     | [knowledge.rs](src/knowledge.rs) 处理查询与引用；[knowledge/tools.rs](src/knowledge/tools.rs) 映射公开工具结果与内部引用事件；[knowledge/index.rs](src/knowledge/index.rs) 管理来源快照与索引发布；[knowledge/retrieval.rs](src/knowledge/retrieval.rs) 拥有 Unicode 分段与引用身份；[knowledge/builtins.rs](src/knowledge/builtins.rs) 安装内置来源                                                                                                        |
+| Knowledge     | [knowledge.rs](src/knowledge.rs) 处理查询与引用；[knowledge/tools.rs](src/knowledge/tools.rs) 映射公开工具结果与内部引用事件；[knowledge/index.rs](src/knowledge/index.rs) 管理来源快照与索引发布；[knowledge/retrieval.rs](src/knowledge/retrieval.rs) 拥有 Unicode 分段与引用身份 |
 | Tantivy       | [lib.rs](../yss-harness-tantivy/src/lib.rs) 实现中立索引构建端口；[index.rs](../yss-harness-tantivy/src/index.rs) 拥有字段、查询和摘要；[tokenizer.rs](../yss-harness-tantivy/src/tokenizer.rs) 拥有中英文分词；[collector.rs](../yss-harness-tantivy/src/collector.rs) 在结果限制前按文档去重                                                                                                                                                              |
 | SQLite        | [lib.rs](../yss-harness-sqlite/src/lib.rs) 构造唯一 Store/连接池；各持久化 port 分别实现于 session、events、workflow、ledger、approval 和 knowledge 模块；[schema.rs](../yss-harness-sqlite/src/schema.rs) 拥有唯一 schema，[codec.rs](../yss-harness-sqlite/src/codec.rs) 共享编码与错误映射                                                                                                                                                               |
-| Contract      | [契约说明](../yss-harness-contract/README.md) 维护共享值边界；[lib.rs](../yss-harness-contract/src/lib.rs) 只组织模块和导出；[context.rs](../yss-harness-contract/src/context.rs) 拥有调用身份与绑定，[capabilities.rs](../yss-harness-contract/src/capabilities.rs) 拥有能力注册、请求/结果信封与 schema，[gateway.rs](../yss-harness-contract/src/gateway.rs) 拥有调用控制和 port，[inspection.rs](../yss-harness-contract/src/inspection.rs) 拥有读取投影，[graph.rs](../yss-harness-contract/src/graph.rs) 集中图契约 |
+| Contract      | [契约说明](../yss-harness-contract/README.md) 维护共享值边界；[lib.rs](../yss-harness-contract/src/lib.rs) 只组织模块和导出；[context.rs](../yss-harness-contract/src/context.rs) 拥有调用身份与绑定 |
 
-角色提示与通用工具提示位于 `src/agents/prompts/*.md`，由 `include_str!` 将原始 Markdown 文本编译进程序，直接作为系统消息使用，不做 Markdown 渲染或解析。
-提示词不承担后端授权，编写约束见 [crates 规则](../.rules)。版本化 Skill 仍位于 `skills/`，由 SkillRegistry 解析。
+提示词不承担后端授权，编写约束见 [crates 规则](../.rules)。
 现有测试随模块组织到对应 `tests.rs` 或并发测试文件，测试功能和协议夹具保持一致。
 
 ## 2. Authority
@@ -269,9 +270,7 @@ Core 的审批、工具幂等、任务、技能和知识摘要也由 `hex` 编�
 
 `list_graph_results` 只列出当前有效输出，可按节点、输出 Pin、运行筛选并分页；指定运行也不返回仅由报告租约持有的旧结果。读取回执区分 `currentValid` 与显式租约持有的 `retained`，后者不进入结果目录。重跑准入或输入失效移除相关旧输出，失败、取消与撤销均不恢复。运行状态、过期会话、已回收结果和不存在的表分别反馈；读取永不触发重算。Worker 授权、委派和历史回放使用同一完整业务引用。
 
-Model-facing schema 来自 Contract 的 `model::CapabilityInput` 所用业务参数类型。
-`ModelCapabilityExecutor` 接收公开意图；Core 的 [capabilities.rs](src/orchestration/capabilities.rs) 先授权，
-再绑定 Worker 已捕获的资源版本、函数签名版本、图文档与语义依据，生成内部 typed request。
+Model-facing schema 来自 `model::CapabilityInput` 所用业务参数类型。
 模型不填写 revision/sessionId、图 hash、条件查询 token 或幂等 key。内部 Workflow/审批直接使用原有内部契约。
 Rig 实时返回与历史回放共用 `model::capability_result`，工具历史参数共用 `CapabilityInput` 投影；
 错误投影保留输入 schema 声明的业务字段、参数范围和下一步指引；不透传内部字段名。
@@ -606,9 +605,9 @@ Rig streams the first text promptly and coalesces subsequent deltas at 40 ms or 
 
 控制调用耗时包含绑定、Worker 排队与执行以及结果交付，不能解释为纯模型或节点计算时间；Worker 本身继续由原 AgentRun 事件记录准入、运行和结算。Assistant 契约将控制调用投影成普通工具生命周期，详情从原事件重建开始/结束时间；任务正文、授权、结果与统计计划沿用各自投影，不复制到工具参数摘要中。真实图运行的 admission/running/finalization 时间仍由 Execution owner 提供。
 
-实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务请求被拒绝、revision/invocation conflict 及 approval_required 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。图校验的 ready/diagnostics 和图执行的 status/failureCode 由各自能力结果表达；执行成功由提交回执确认，运行事件补充取消和失败定位。`outcome_unknown` 保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录能力失败，不因协议层成功交付反馈而改写为成功。
+实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务请求被拒绝、revision/invocation conflict 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。图校验的 ready/diagnostics 和图执行的 status/failureCode 由各自能力结果表达；执行成功由提交回执确认，运行事件补充取消和失败定位。`outcome_unknown` 保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录能力失败，不因协议层成功交付反馈而改写为成功。
 
-普通工具和统计计划工具共用 Rig adapter 的参数解码器。反序列化失败以现有 CapabilityFailure 的 InvalidRequest 返回 reason、category、path 和 expected；字段路径只保留 schema 已声明的字段及数组索引，动态 map key 脱敏，预期类型、范围和枚举来自工具自身 schema，并限制诊断长度。原始 Serde 文案、错误参数值和凭据不进入反馈。计划策略拒绝继续提供 reason 和 availableMethods。
+普通工具和统计计划工具共用参数解码器。反序列化失败以现有 CapabilityFailure 的 InvalidRequest 返回 reason、category、path 和 expected；字段路径只保留 schema 已声明的字段及数组索引，动态 map key 脱敏，预期类型、范围和枚举来自工具自身 schema，并限制诊断长度。原始 Serde 文案、错误参数值和凭据不进入反馈。计划策略拒绝继续提供 reason 和 availableMethods。
 
 模型生成当前未注册或不允许调用的工具名时，Rig 的 `tools/feedback` hook 通过原生 Skip 决策向模型返回 `tool_not_available` 和当前允许的工具名称，不把它直接升级为整轮 `invalid_provider_response`。流式响应中尚未准入的同批工具不会执行，已完成的前序工具不重放；不自动猜测工具别名，也不扩张角色权限。未注册调用没有 Core capability 身份，不伪造业务账本；诊断日志仅记录原因和工具名，不记录参数或历史。协议参数字节不可解析时仍保留原有失败分类。
 
@@ -650,7 +649,6 @@ Assistant 读投影只公开压缩进度计数，不公开 checkpoint 正文或 
 
 历史不替代当前工具事实。图工具的运行事件进入原有 Execution/Results 消费者；对话只复用持久 Harness 事件与工具 receipt，不新增第二份持久聊天状态。
 
-Assistant 读投影由 [Harness Contract](../yss-harness-contract/README.md) 从已持久化事件派生；
 原生视图只持有展示与输入暂态，不直接调用 Rig 或绕过 Application gateway。
 Project/session replacement 或 provider unavailable 改变投影及动作可用性，
 不能保留旧业务句柄继续提交。工具、任务、引用与用量展示仍使用对应的真实身份与事件，

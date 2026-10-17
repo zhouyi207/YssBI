@@ -5,14 +5,14 @@ use crate::error::{cancelled, invalid_response};
 use crate::messages::prepare_messages;
 use crate::recovery::{TurnOutput, backoff, retryable};
 use crate::stream::consume_text_stream_with_activity;
-use crate::tools::{control_tool, dynamic_tool};
+use crate::tools::dynamic_tool;
 use rig_agent::agent::AgentBuilder;
 use rig_core::{DynModel, operation::Completion};
 use std::sync::{Arc, Mutex};
 use tracing::Instrument;
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEventOutput,
-    AgentTurnRequest, AgentTurnResult, CancellationToken, ModelCapabilityExecutor,
+    AgentToolExecutor, AgentTurnRequest, AgentTurnResult, CancellationToken,
 };
 
 pub struct RigAgentDriver {
@@ -72,7 +72,7 @@ impl RigAgentDriver {
     async fn execute_turn(
         &self,
         request: AgentTurnRequest,
-        capabilities: Arc<dyn ModelCapabilityExecutor>,
+        capabilities: Arc<dyn AgentToolExecutor>,
         output: Arc<dyn AgentEventOutput>,
         cancellation: CancellationToken,
     ) -> Result<AgentTurnResult, AgentDriverFailure> {
@@ -91,27 +91,18 @@ impl RigAgentDriver {
         let prepared = prepare_messages(request.messages)?;
         let tool_tasks = Arc::new(Mutex::new(Vec::new()));
         let (tool_failure, failure_receiver) = tokio::sync::watch::channel(None);
-        let mut tools = request
+        let tools = request
             .tools
             .into_iter()
-            .map(|descriptor| {
+            .map(|spec| {
                 dynamic_tool(
-                    descriptor,
+                    spec,
                     Arc::clone(&capabilities),
                     Arc::clone(&tool_tasks),
                     tool_failure.clone(),
                 )
             })
-            .collect::<Result<Vec<_>, _>>()?;
-        for control in &request.control_tools {
-            tools.push(control_tool(
-                *control,
-                Arc::clone(&capabilities),
-                Arc::clone(&output),
-                Arc::clone(&tool_tasks),
-                tool_failure.clone(),
-            )?);
-        }
+            .collect::<Vec<_>>();
         let output = Arc::new(TurnOutput::new(output));
         let hook = ContextHook::new(
             self.model.clone(),
@@ -124,7 +115,7 @@ impl RigAgentDriver {
         )
         .with_model_parameters(self.temperature, parameters.clone());
         let mut builder = AgentBuilder::new(self.model.clone())
-            .name(request.role.name())
+            .name(request.role.as_str())
             .preamble(&prepared.preamble)
             // Rig otherwise defaults to one model call. The Harness ends on the
             // model's final response or cancellation, not a product turn quota.
@@ -248,7 +239,7 @@ impl AgentDriverPort for RigAgentDriver {
     fn run_turn<'a>(
         &'a self,
         request: AgentTurnRequest,
-        capabilities: Arc<dyn ModelCapabilityExecutor>,
+        capabilities: Arc<dyn AgentToolExecutor>,
         output: Arc<dyn AgentEventOutput>,
         cancellation: CancellationToken,
     ) -> yss_harness_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {

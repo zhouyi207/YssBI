@@ -2,21 +2,22 @@
 
 use std::sync::Arc;
 
+use yss_assistant_contract::{
+    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityId,
+    CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection,
+    DatasetSchemaInspection, GraphPortInspection, InspectDatasetProfileRequest,
+    InspectDatasetSchemaRequest, ResultCategoryInspection,
+};
+#[cfg(test)]
+use yss_assistant_contract::{
+    InspectResultRequest, ReadResultTableRequest, ResultInspection, ResultRef, ResultValidity,
+    ResultValueInspection, TableRef,
+};
 use yss_database_contract::DatabaseId;
 use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_snapshot};
 use yss_graph_document::{PortAddress, PortRef};
 use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
-use yss_harness_contract::{
-    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityControl, CapabilityFailure,
-    CapabilityFailureCode, CapabilityId, CapabilityInvocationContext, DatasetColumnSchema,
-    DatasetProfileInspection, DatasetSchemaInspection, GraphPortInspection,
-    InspectDatasetProfileRequest, InspectDatasetSchemaRequest, ResultCategoryInspection,
-};
-#[cfg(test)]
-use yss_harness_contract::{
-    InspectResultRequest, ReadResultTableRequest, ResultInspection, ResultRef, ResultValidity,
-    ResultValueInspection, TableRef,
-};
+use yss_harness_contract::{CapabilityControl, CapabilityFailure, CapabilityFailureCode};
 #[cfg(test)]
 use yss_node_kernel::RuntimeValue;
 
@@ -49,15 +50,13 @@ fn invoke_capability(
     control: &CapabilityControl,
     publish: &mut dyn FnMut(&crate::events::CommittedResourceMutation),
 ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
+    // Agent authority is enforced once by the Assistant extension before this owner call.
     control.check()?;
-    if let Some(agent) = context.agent() {
-        yss_harness_core::authorize_agent_capability(agent, &request)?;
-    }
     let read_only =
         request.capability_id().descriptor().effect == yss_harness_contract::ToolEffect::Inspect;
-    request
-        .validate()
-        .map_err(|error| error.into_failure(request.capability_id()))?;
+    request.validate().map_err(|error| {
+        yss_assistant_contract::contract_failure(error, request.capability_id())
+    })?;
     let captured = application
         .capture_session()
         .map_err(map_session_capture_error)?;
@@ -129,11 +128,6 @@ fn invoke_capability(
             catalog::inspect_node_type(application, &captured, request)
                 .map(AutomationCapabilityResult::NodeTypeInspection)
         }
-        AutomationCapabilityRequest::SearchKnowledge(_)
-        | AutomationCapabilityRequest::ReadKnowledge(_) => Err(CapabilityFailure::new(
-            CapabilityFailureCode::InvalidRequest,
-        )
-        .with_detail("reason", "knowledge_requires_harness_executor")),
         AutomationCapabilityRequest::InspectDatasetSchema(request) => {
             inspect_dataset_schema(&captured, request)
                 .map(AutomationCapabilityResult::DatasetSchemaInspection)
@@ -173,11 +167,11 @@ fn invoke_capability(
 fn map_ui_error(error: crate::presentation::UiError) -> CapabilityFailure {
     use crate::presentation::UiError;
     let code = match error {
-        UiError::Invalid => CapabilityFailureCode::InvalidRequest,
-        UiError::Conflict => CapabilityFailureCode::InvocationConflict,
-        UiError::Session => CapabilityFailureCode::ProjectSessionChanged,
-        UiError::Capacity => CapabilityFailureCode::ResultTooLarge,
-        UiError::Unavailable | UiError::Workbench => CapabilityFailureCode::ResultUnavailable,
+        UiError::Invalid => CapabilityFailureCode::INVALID_REQUEST,
+        UiError::Conflict => CapabilityFailureCode::INVOCATION_CONFLICT,
+        UiError::Session => CapabilityFailureCode::PROJECT_SESSION_CHANGED,
+        UiError::Capacity => CapabilityFailureCode::RESULT_TOO_LARGE,
+        UiError::Unavailable | UiError::Workbench => CapabilityFailureCode::RESULT_UNAVAILABLE,
     };
     CapabilityFailure::new(code).with_detail("uiCode", error.to_string())
 }
@@ -191,7 +185,7 @@ fn ensure_project_binding(
         || binding.project_session_id() != captured.project_session_id()
     {
         return Err(CapabilityFailure::new(
-            CapabilityFailureCode::ProjectSessionMismatch,
+            CapabilityFailureCode::PROJECT_SESSION_MISMATCH,
         ));
     }
     Ok(())
@@ -224,12 +218,12 @@ fn inspect_dataset_schema(
         .project()
         .read_database_declaration(captured.project_instance_id(), &request.database_id)
         .map_err(|_| {
-            CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+            CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
                 .with_detail("databaseId", &request.database_id)
         })?;
 
     let catalog = catalog_snapshot(captured.database()).map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+        CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
             .with_detail("databaseId", &request.database_id)
     })?;
     let schema = catalog
@@ -237,7 +231,7 @@ fn inspect_dataset_schema(
         .iter()
         .find(|schema| schema.database().as_str() == request.database_id)
         .ok_or_else(|| {
-            CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+            CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
                 .with_detail("databaseId", &request.database_id)
         })?;
     enforce_result_bound(CapabilityId::InspectDatasetSchema, schema.columns().len())?;
@@ -258,7 +252,7 @@ fn inspect_dataset_schema(
             .collect(),
     };
     revalidate_catalog_snapshot(captured.database(), &catalog).map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+        CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
             .with_detail("databaseId", &request.database_id)
     })?;
     Ok(inspection)
@@ -273,11 +267,11 @@ fn inspect_dataset_profile(
         .project()
         .read_database_declaration(captured.project_instance_id(), &request.database_id)
         .map_err(|_| {
-            CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+            CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
                 .with_detail("databaseId", &request.database_id)
         })?;
     let catalog = catalog_snapshot(captured.database()).map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+        CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
             .with_detail("databaseId", &request.database_id)
     })?;
     let schema = catalog
@@ -285,7 +279,7 @@ fn inspect_dataset_profile(
         .iter()
         .find(|schema| schema.database().as_str() == request.database_id)
         .ok_or_else(|| {
-            CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+            CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
                 .with_detail("databaseId", &request.database_id)
         })?;
     let overview = yss_database_runtime::session_api::dataset_overview_with_control(
@@ -318,7 +312,7 @@ fn inspect_dataset_profile(
         rows_with_nulls: overview.data_completeness.rows_with_nulls,
     };
     revalidate_catalog_snapshot(captured.database(), &catalog).map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+        CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
             .with_detail("databaseId", &request.database_id)
     })?;
     Ok(inspection)
@@ -331,9 +325,9 @@ fn map_dataset_profile_error(
     use yss_database_runtime::error::DatabaseErrorCode;
 
     let code = match error.code() {
-        DatabaseErrorCode::Cancelled => CapabilityFailureCode::Cancelled,
-        DatabaseErrorCode::Deadline => CapabilityFailureCode::DeadlineElapsed,
-        _ => CapabilityFailureCode::DatabaseUnavailable,
+        DatabaseErrorCode::Cancelled => CapabilityFailureCode::CANCELLED,
+        DatabaseErrorCode::Deadline => CapabilityFailureCode::DEADLINE_ELAPSED,
+        _ => yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE,
     };
     CapabilityFailure::new(code).with_detail("databaseId", database_id)
 }
@@ -389,7 +383,7 @@ fn enforce_result_bound(
     let maximum = usize::from(capability_id.descriptor().maximum_results);
     if result_count > maximum {
         return Err(
-            CapabilityFailure::new(CapabilityFailureCode::ResultTooLarge)
+            CapabilityFailure::new(CapabilityFailureCode::RESULT_TOO_LARGE)
                 .with_detail("capabilityId", capability_id.as_str())
                 .with_detail("maximumResults", maximum.to_string()),
         );
@@ -398,33 +392,33 @@ fn enforce_result_bound(
 }
 
 fn map_session_capture_error(_: SessionCaptureError) -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::ProjectSessionUnavailable)
+    CapabilityFailure::new(CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE)
 }
 
 fn map_project_inspection_error(error: yss_project::ProjectOperationError) -> CapabilityFailure {
     use yss_project::ProjectOperationError;
     CapabilityFailure::new(match error {
         ProjectOperationError::StaleProjectLifecycle { .. } => {
-            CapabilityFailureCode::ProjectSessionChanged
+            CapabilityFailureCode::PROJECT_SESSION_CHANGED
         }
         ProjectOperationError::CatalogResourceStale { .. } => {
-            CapabilityFailureCode::RevisionConflict
+            CapabilityFailureCode::REVISION_CONFLICT
         }
         ProjectOperationError::ProjectLifecycleAdmissionClosed { .. }
         | ProjectOperationError::ProjectRecoveryRequired { .. } => {
-            CapabilityFailureCode::ProjectSessionUnavailable
+            CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE
         }
-        _ => CapabilityFailureCode::CatalogUnavailable,
+        _ => yss_assistant_contract::failure_code::CATALOG_UNAVAILABLE,
     })
 }
 
 fn map_session_revalidation_error(error: SessionRevalidationError) -> CapabilityFailure {
     match error {
         SessionRevalidationError::Unavailable(_) => {
-            CapabilityFailure::new(CapabilityFailureCode::ProjectSessionUnavailable)
+            CapabilityFailure::new(CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE)
         }
         SessionRevalidationError::Changed => {
-            CapabilityFailure::new(CapabilityFailureCode::ProjectSessionChanged)
+            CapabilityFailure::new(CapabilityFailureCode::PROJECT_SESSION_CHANGED)
         }
     }
 }
@@ -433,10 +427,10 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
     match error {
         CatalogQueryApplicationError::SessionCapture(error) => map_session_capture_error(error),
         CatalogQueryApplicationError::SessionChanged => {
-            CapabilityFailure::new(CapabilityFailureCode::ProjectSessionChanged)
+            CapabilityFailure::new(CapabilityFailureCode::PROJECT_SESSION_CHANGED)
         }
         CatalogQueryApplicationError::CatalogProjectStale => {
-            CapabilityFailure::new(CapabilityFailureCode::ProjectSessionMismatch)
+            CapabilityFailure::new(CapabilityFailureCode::PROJECT_SESSION_MISMATCH)
         }
         CatalogQueryApplicationError::Editing(_)
         | CatalogQueryApplicationError::Parameters(_)
@@ -444,7 +438,7 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
         | CatalogQueryApplicationError::Database(_)
         | CatalogQueryApplicationError::Contract(_)
         | CatalogQueryApplicationError::Graph(_) => {
-            CapabilityFailure::new(CapabilityFailureCode::CatalogUnavailable)
+            CapabilityFailure::new(yss_assistant_contract::failure_code::CATALOG_UNAVAILABLE)
         }
     }
 }
@@ -453,10 +447,10 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
 mod tests {
     use super::graph::editor_mutation;
     use super::*;
+    use yss_assistant_contract::GraphEditOperation;
     use yss_data_contract::TabularScalar;
     use yss_graph_document::{NodeId, NodePosition};
     use yss_graph_editor::EditorGraphMutation;
-    use yss_harness_contract::GraphEditOperation;
 
     #[test]
     fn new_plot_kind_labels_follow_the_execution_enum_wire() {
@@ -493,7 +487,7 @@ mod tests {
             enforce_result_bound(CapabilityId::InspectDatasetSchema, maximum + 1)
                 .unwrap_err()
                 .code,
-            CapabilityFailureCode::ResultTooLarge
+            CapabilityFailureCode::RESULT_TOO_LARGE
         );
     }
 
@@ -504,14 +498,14 @@ mod tests {
         use yss_relational_contract::RelationError;
 
         for (source, expected) in [
-            (RelationError::Cancelled, CapabilityFailureCode::Cancelled),
+            (RelationError::Cancelled, CapabilityFailureCode::CANCELLED),
             (
                 RelationError::DeadlineExceeded,
-                CapabilityFailureCode::DeadlineElapsed,
+                CapabilityFailureCode::DEADLINE_ELAPSED,
             ),
             (
                 RelationError::QueryFailed,
-                CapabilityFailureCode::DatabaseUnavailable,
+                yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE,
             ),
         ] {
             let error = DatabaseError::dataset(
@@ -658,7 +652,7 @@ mod tests {
             &control,
         )
         .unwrap_err();
-        assert_eq!(invalid.code, CapabilityFailureCode::InvalidRequest);
+        assert_eq!(invalid.code, CapabilityFailureCode::INVALID_REQUEST);
         for part in ["null", "", "structured:/invented_table"] {
             let failure = results::read_table(
                 &application,
@@ -732,8 +726,8 @@ mod tests {
         assert_eq!(
             failures,
             [
-                CapabilityFailureCode::Cancelled,
-                CapabilityFailureCode::DeadlineElapsed
+                CapabilityFailureCode::CANCELLED,
+                CapabilityFailureCode::DEADLINE_ELAPSED
             ]
         );
     }
@@ -743,7 +737,7 @@ mod tests {
         let node_id = uuid::Uuid::from_u128(1);
         let mutation = editor_mutation(
             GraphEditOperation::MoveNodes {
-                positions: vec![yss_harness_contract::GraphEditPosition {
+                positions: vec![yss_assistant_contract::GraphEditPosition {
                     node_id: node_id.to_string(),
                     x: 10.0,
                     y: 20.0,
@@ -767,7 +761,7 @@ mod tests {
             )
             .unwrap_err()
             .code,
-            CapabilityFailureCode::InvalidRequest
+            CapabilityFailureCode::INVALID_REQUEST
         );
     }
 }

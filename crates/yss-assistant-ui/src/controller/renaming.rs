@@ -4,6 +4,7 @@ use gpui_kit::{Context, Entity, Focusable, Window, px};
 use yss_application::harness::HarnessSessionError;
 use yss_harness_contract::HarnessSessionId;
 use yss_harness_core::HarnessError;
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::name_form::NameForm;
 
 impl AssistantController {
@@ -42,23 +43,25 @@ impl AssistantController {
                             let Some(title) = form.read(cx).value(cx) else {
                                 return false;
                             };
-                            let _ = owner.update(cx, |view, cx| {
-                                if view.epoch != lifecycle {
-                                    NameForm::fail(
-                                        Some(&form),
-                                        "native.assistant.sessionChanged",
-                                        cx,
-                                    );
-                                } else if !view.unavailable(cx) {
-                                    view.commit_conversation_rename(
-                                        session.clone(),
-                                        title,
-                                        form.clone(),
-                                        window,
-                                        cx,
-                                    );
-                                }
-                            });
+                            owner
+                                .update(cx, |view, cx| {
+                                    if view.epoch != lifecycle {
+                                        NameForm::fail(
+                                            Some(&form),
+                                            "native.assistant.sessionChanged",
+                                            cx,
+                                        );
+                                    } else if !view.unavailable(cx) {
+                                        view.commit_conversation_rename(
+                                            session.clone(),
+                                            title,
+                                            form.clone(),
+                                            window,
+                                            cx,
+                                        );
+                                    }
+                                })
+                                .log_released();
                             false
                         },
                     )
@@ -88,7 +91,7 @@ impl AssistantController {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.epoch != lifecycle {
                     NameForm::fail(Some(&form), "native.assistant.sessionChanged", cx);
                     return;
@@ -128,7 +131,8 @@ impl AssistantController {
                 }
                 view.invalidate_directory(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

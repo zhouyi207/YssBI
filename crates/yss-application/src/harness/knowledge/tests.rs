@@ -53,7 +53,7 @@ impl Fixture {
 
     fn command(&self, command: DocCommand) -> Option<DocSnapshot> {
         self.application
-            .apply_doc_command(self.project(), OperationId::new(), command)
+            .apply_file_command(self.project(), OperationId::new(), command)
             .unwrap()
             .snapshot
     }
@@ -265,7 +265,7 @@ async fn project_sources_reject_changed_or_deleted_documents_and_remove_snapshot
     assert!(
         fixture
             .application
-            .read_doc(fixture.project(), dirty.path.clone())
+            .read_file(fixture.project(), dirty.path.clone())
             .unwrap()
             .dirty
     );

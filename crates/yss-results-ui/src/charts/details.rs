@@ -2,18 +2,22 @@ mod columns;
 pub(super) use columns::PAGE_COLUMNS;
 
 use super::ChartEditor;
-use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
-
+use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
+    Disableable,
     menu::{DropdownMenu, PopupMenuItem},
 };
+use gpui_kit::{AnyElement, Context, IntoElement, SharedString, WeakEntity, div, prelude::*};
 use std::borrow::Cow;
-use yss_chart_document::{ChartEncodings, ChartType};
+use yss_chart_document::{ChartDocument, ChartEncodings, ChartType};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_database_schema::DatabaseColumnFact;
 use yss_project_identity::ResourceRevision;
+use yss_resource_ui::file_session::{FileEditor, file_status};
+use yss_ui::inspector::{
+    self, InlineMessage, InspectorHeader, InspectorSection, PropertyField, Severity,
+};
+use yss_ui::text::translate;
 
 /// Borrowed configuration identity; chart content remains in its retained owner.
 #[derive(PartialEq)]
@@ -23,10 +27,7 @@ pub struct DetailsDisplay<'a> {
     source: Option<(Cow<'a, str>, ResourceRevision)>,
     metadata_revision: Option<u64>,
     columns_page: usize,
-    busy: bool,
-    available: bool,
-    dirty: bool,
-    external_change: bool,
+    status: &'static str,
 }
 
 impl DetailsDisplay<'_> {
@@ -39,10 +40,7 @@ impl DetailsDisplay<'_> {
                 .map(|(id, revision)| (Cow::Owned(id.into_owned()), revision)),
             metadata_revision: self.metadata_revision,
             columns_page: self.columns_page,
-            busy: self.busy,
-            available: self.available,
-            dirty: self.dirty,
-            external_change: self.external_change,
+            status: self.status,
         }
     }
 }
@@ -64,7 +62,7 @@ impl ChartEditor {
     /// Configuration epochs identify retained draft/schema data without cloning it.
     pub fn details_state(&self) -> DetailsDisplay<'_> {
         DetailsDisplay {
-            path: Cow::Borrowed(self.path.as_str()),
+            path: Cow::Borrowed(self.path()),
             epoch: self.draft_epoch,
             source: self
                 .meta_source
@@ -72,19 +70,34 @@ impl ChartEditor {
                 .map(|(id, revision)| (Cow::Borrowed(id.as_str()), *revision)),
             metadata_revision: self.meta.as_ref().map(|meta| meta.data_revision),
             columns_page: self.columns_page,
-            busy: self.busy(),
-            available: self.available,
-            dirty: self.dirty(),
-            external_change: self.external_change,
+            status: file_status(self),
         }
     }
 
     pub fn render_details(&self, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .child(
+                InspectorHeader::new(
+                    IconName::ChartLine,
+                    self.file.snapshot().path.name().to_owned(),
+                )
+                .detail(translate("detail.itemTypes.chart")),
+            )
+            .child(self.render_configuration(cx))
+            .child(self.render_columns(cx))
+            .into_any_element()
+    }
+
+    fn render_configuration(&self, cx: &mut Context<Self>) -> InspectorSection {
+        let editable = self.draft_editable();
         let epoch = self.draft_epoch;
         let owner = cx.entity().downgrade();
         let datasets = self.catalog.clone();
         let current_name = if self.draft.database_id.is_empty() {
-            yss_ui::text::t("native.charts.chooseDataset").into()
+            translate("native.charts.chooseDataset")
         } else {
             datasets
                 .databases
@@ -94,134 +107,93 @@ impl ChartEditor {
                     entry
                         .name
                         .clone()
-                        .unwrap_or_else(|| yss_ui::text::translate("native.charts.unnamedDataset"))
+                        .unwrap_or_else(|| translate("native.charts.unnamedDataset"))
                 })
-                .unwrap_or_else(|| yss_ui::text::t("native.charts.removedDataset").into())
+                .unwrap_or_else(|| translate("native.charts.removedDataset"))
         };
-        let type_owner = owner.clone();
-        let mut view = div()
-            .p_4()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .child(
-                div()
-                    .text_sm()
-                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                    .child(self.path.display_name().as_str().to_owned()),
+        let status = if self.file.removed() || self.file.conflicted() {
+            InlineMessage::new(Severity::Warning, translate(file_status(self))).into_any_element()
+        } else if self.dirty() {
+            InlineMessage::new(
+                Severity::Information,
+                translate("native.charts.unsavedConfiguration"),
             )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::t("native.charts.configuration")),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .child(yss_ui::text::t("detail.itemTypes.data")),
-            )
-            .child(
-                Button::new("chart-dataset")
-                    .small()
-                    .ghost()
-                    .label(current_name)
-                    .disabled(self.busy() || !self.available)
+            .into_any_element()
+        } else {
+            inspector::hint(translate("native.workbench.saved"), cx).into_any_element()
+        };
+        let kind_owner = owner.clone();
+        InspectorSection::new(
+            "chart-configuration",
+            translate("chartsSidebar.configuration"),
+        )
+        .child(
+            PropertyField::new(translate("detail.itemTypes.data")).control(
+                inspector::choice_trigger("chart-dataset", current_name)
+                    .disabled(!editable)
                     .dropdown_menu(move |mut menu, _, _| {
-                        for (id, name) in std::iter::once((
-                            String::new(),
-                            yss_ui::text::t("native.charts.noDataset").into(),
-                        ))
-                        .chain(datasets.databases.iter().map(|entry| {
-                            (
-                                entry.id.clone(),
-                                entry.name.clone().unwrap_or_else(|| {
-                                    yss_ui::text::translate("native.charts.unnamedDataset")
-                                }),
-                            )
-                        })) {
-                            let owner = owner.clone();
-                            menu = menu.item(PopupMenuItem::new(name).on_click(
-                                move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        view.update_draft(
-                                            epoch,
-                                            |document| {
-                                                if document.database_id != id {
-                                                    document.database_id = id.clone();
-                                                    document.encodings =
-                                                        ChartEncodings { x: None, y: None };
-                                                }
-                                            },
-                                            window,
-                                            cx,
-                                        )
-                                    });
+                        for (id, name) in
+                            std::iter::once((String::new(), translate("native.charts.noDataset")))
+                                .chain(datasets.databases.iter().map(|entry| {
+                                    (
+                                        entry.id.clone(),
+                                        entry.name.clone().unwrap_or_else(|| {
+                                            translate("native.charts.unnamedDataset")
+                                        }),
+                                    )
+                                }))
+                        {
+                            menu = menu.item(draft_item(
+                                owner.clone(),
+                                epoch,
+                                name,
+                                move |document| {
+                                    if document.database_id != id {
+                                        document.database_id = id.clone();
+                                        document.encodings = ChartEncodings { x: None, y: None };
+                                    }
                                 },
                             ));
                         }
                         menu
                     }),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .child(yss_ui::text::t("chartsSidebar.chartType")),
-            )
-            .child(
-                Button::new("chart-kind")
-                    .small()
-                    .ghost()
-                    .label(chart_type_label(self.draft.chart_type))
-                    .disabled(self.busy() || !self.available)
+            ),
+        )
+        .child(
+            PropertyField::new(translate("chartsSidebar.chartType")).control(
+                inspector::choice_trigger("chart-kind", chart_type_label(self.draft.chart_type))
+                    .disabled(!editable)
                     .dropdown_menu(move |mut menu, _, _| {
                         for kind in [ChartType::Histogram, ChartType::Scatter, ChartType::Line] {
-                            let owner = type_owner.clone();
-                            menu = menu.item(PopupMenuItem::new(chart_type_label(kind)).on_click(
-                                move |_, window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        view.update_draft(
-                                            epoch,
-                                            |document| {
-                                                if document.chart_type != kind {
-                                                    document.chart_type = kind;
-                                                    document.encodings =
-                                                        ChartEncodings { x: None, y: None };
-                                                }
-                                            },
-                                            window,
-                                            cx,
-                                        )
-                                    });
+                            menu = menu.item(draft_item(
+                                kind_owner.clone(),
+                                epoch,
+                                chart_type_label(kind),
+                                move |document| {
+                                    if document.chart_type != kind {
+                                        document.chart_type = kind;
+                                        document.encodings = ChartEncodings { x: None, y: None };
+                                    }
                                 },
                             ));
                         }
                         menu
                     }),
-            );
-        if self.draft.chart_type != ChartType::Histogram {
-            view = view.child(self.axis_field(true, cx));
-        }
-        view = view.child(self.axis_field(false, cx));
-        view = view.child(self.render_columns(cx));
-        view = view.child(
+            ),
+        )
+        .when(self.draft.chart_type != ChartType::Histogram, |section| {
+            section.child(self.axis_field(true, cx))
+        })
+        .child(self.axis_field(false, cx))
+        .child(
             div()
-                .border_t_1()
-                .border_color(cx.theme().border)
-                .pt_3()
-                .text_xs()
-                .text_color(cx.theme().muted_foreground)
-                .child(if self.external_change {
-                    yss_ui::text::t("native.charts.externalChange")
-                } else if self.dirty() {
-                    yss_ui::text::t("native.charts.unsavedConfiguration")
-                } else {
-                    yss_ui::text::t("native.workbench.saved")
-                }),
-        );
-        view.into_any_element()
+                .id("chart-status")
+                .role(gpui_kit::accesskit::Role::Status)
+                .child(status),
+        )
     }
-    fn axis_field(&self, x_axis: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+
+    fn axis_field(&self, x_axis: bool, cx: &mut Context<Self>) -> PropertyField {
         let epoch = self.draft_epoch;
         let owner = cx.entity().downgrade();
         let histogram = self.draft.chart_type == ChartType::Histogram;
@@ -250,61 +222,54 @@ impl ChartEditor {
                     )
                 }
             })
-            .unwrap_or_else(|| yss_ui::text::t("panel.assistantToolFacts.columns").into());
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(div().text_xs().child(if histogram {
-                yss_ui::text::t("native.charts.distributionColumn")
-            } else if x_axis {
-                yss_ui::text::t("chartsSidebar.encodingX")
-            } else {
-                yss_ui::text::t("native.charts.yAxis")
-            }))
-            .child(
-                Button::new(if x_axis { "chart-x" } else { "chart-y" })
-                    .small()
-                    .ghost()
-                    .label(label)
-                    .disabled(self.busy() || !self.available || self.meta.is_none())
-                    .dropdown_menu(move |mut menu, _, _| {
-                        let columns = metadata
-                            .iter()
-                            .flat_map(|meta| meta.columns.iter())
-                            .filter(|column| histogram || numeric(column))
-                            .map(|column| Some(column.name().as_str().to_owned()));
-                        for column in std::iter::once(None).chain(columns) {
-                            let owner = owner.clone();
-                            menu = menu.item(
-                                PopupMenuItem::new(column.clone().unwrap_or_else(|| {
-                                    yss_ui::text::t("native.charts.clearSelection").into()
-                                }))
-                                .on_click(
-                                    move |_, window, cx| {
-                                        let _ = owner.update(cx, |view, cx| {
-                                            view.update_draft(
-                                                epoch,
-                                                |document| {
-                                                    if x_axis {
-                                                        document.encodings.x = column.clone();
-                                                    } else {
-                                                        document.encodings.y = column.clone();
-                                                        if histogram {
-                                                            document.encodings.x = None;
-                                                        }
-                                                    }
-                                                },
-                                                window,
-                                                cx,
-                                            )
-                                        });
-                                    },
-                                ),
-                            );
-                        }
-                        menu
-                    }),
-            )
+            .unwrap_or_else(|| translate("panel.assistantToolFacts.columns"));
+        PropertyField::new(translate(if histogram {
+            "native.charts.distributionColumn"
+        } else if x_axis {
+            "chartsSidebar.encodingX"
+        } else {
+            "native.charts.yAxis"
+        }))
+        .control(
+            inspector::choice_trigger(if x_axis { "chart-x" } else { "chart-y" }, label)
+                .disabled(!self.draft_editable() || self.meta.is_none())
+                .dropdown_menu(move |mut menu, _, _| {
+                    let columns = metadata
+                        .iter()
+                        .flat_map(|meta| meta.columns.iter())
+                        .filter(|column| histogram || numeric(column))
+                        .map(|column| Some(column.name().as_str().to_owned()));
+                    for column in std::iter::once(None).chain(columns) {
+                        let label = column
+                            .clone()
+                            .unwrap_or_else(|| translate("native.charts.clearSelection"));
+                        menu =
+                            menu.item(draft_item(owner.clone(), epoch, label, move |document| {
+                                if x_axis {
+                                    document.encodings.x = column.clone();
+                                } else {
+                                    document.encodings.y = column.clone();
+                                    if histogram {
+                                        document.encodings.x = None;
+                                    }
+                                }
+                            }));
+                    }
+                    menu
+                }),
+        )
     }
+}
+
+/// A menu choice edits the draft captured at render; a newer draft ignores the stale choice.
+fn draft_item(
+    owner: WeakEntity<ChartEditor>,
+    epoch: u64,
+    label: impl Into<SharedString>,
+    edit: impl Fn(&mut ChartDocument) + 'static,
+) -> PopupMenuItem {
+    PopupMenuItem::new(label).on_click(inspector::owner_command(
+        owner,
+        move |view: &mut ChartEditor, window, cx| view.update_draft(epoch, &edit, window, cx),
+    ))
 }

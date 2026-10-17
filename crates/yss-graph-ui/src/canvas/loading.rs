@@ -1,9 +1,12 @@
 //! Projection reads retain the last view and drafts; only successful reads restore editing.
 use super::{CanvasEvent, GraphCanvas};
 use gpui_kit::Context;
+use std::collections::VecDeque;
+use yss_application::graph::editing::GraphChangeCause;
 use yss_graph_document::GraphResourcePath;
 use yss_project::GraphEditVersion;
-use yss_project_identity::ResourceRevision;
+use yss_project_identity::{OperationId, ResourceRevision};
+use yss_ui::lifecycle::LogReleased;
 
 #[cfg(test)]
 mod tests;
@@ -13,7 +16,60 @@ pub(super) struct ResourceMove {
     draft_base: Option<GraphEditVersion>,
 }
 
+#[derive(Default)]
+pub(super) struct ChangeDelivery {
+    pending: Vec<OperationId>,
+    acknowledged: VecDeque<OperationId>,
+}
+
+impl ChangeDelivery {
+    fn receive(&mut self, operation: OperationId, busy: bool) -> bool {
+        if let Some(index) = self.acknowledged.iter().position(|id| *id == operation) {
+            self.acknowledged.remove(index);
+            return false;
+        }
+        if busy {
+            if !self.pending.contains(&operation) {
+                self.pending.push(operation);
+            }
+            return false;
+        }
+        true
+    }
+
+    fn finish(&mut self, operations: &[OperationId]) -> bool {
+        for operation in operations {
+            if let Some(index) = self.pending.iter().position(|id| id == operation) {
+                self.pending.swap_remove(index);
+            } else if !self.acknowledged.contains(operation) {
+                // Replayed commands need not publish another event. Bound their receipts
+                // rather than retaining them forever; eviction can only cause an extra read.
+                if self.acknowledged.len() == 512 {
+                    self.acknowledged.pop_front();
+                }
+                self.acknowledged.push_back(*operation);
+            }
+        }
+        let refresh = !self.pending.is_empty();
+        self.pending.clear();
+        refresh
+    }
+}
+
 impl GraphCanvas {
+    pub fn accept_graph_change(&mut self, cause: &GraphChangeCause, cx: &mut Context<Self>) {
+        if let GraphChangeCause::Edit { operation_id } = cause
+            && !self.change_delivery.receive(*operation_id, self.busy)
+        {
+            return;
+        }
+        self.refresh(cx);
+    }
+
+    pub(super) fn finish_change_delivery(&mut self, operations: &[OperationId]) {
+        self.refresh_pending |= self.change_delivery.finish(operations);
+    }
+
     pub fn refresh_for_navigation(
         &mut self,
         cx: &mut Context<Self>,
@@ -149,7 +205,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.refresh_task = None;
                 if view.resource_path() != &path {
                     return;
@@ -184,6 +240,11 @@ impl GraphCanvas {
                                 "Native graph refresh failed"
                             );
                             view.refresh_failed = true;
+                            view.notifications.error_with_retry(
+                                yss_ui::text::t("native.canvas.refreshFailed"),
+                                cx,
+                                |view, _, cx| view.refresh(cx),
+                            );
                             view.palette = None;
                             view.cancel_gesture();
                             view.emit_selection(cx);
@@ -194,7 +255,8 @@ impl GraphCanvas {
                     view.refresh(cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }
@@ -239,13 +301,19 @@ impl GraphCanvas {
                 .flatten()
         });
         let previous_ports = self.port_details.clone();
+        let preserve_presentation = self.graph.results == graph.results
+            && self.graph.language == graph.language
+            && super::presentation::same_content(&self.graph.projection, &graph.projection);
         self.graph.replace(graph);
         if self.graph.language != yss_ui::text::locale() {
             self.refresh(cx);
         }
-        *self.connection_layer.borrow_mut() =
-            super::connections::ConnectionLayer::new(&self.graph.projection);
-        self.refresh_presentation();
+        self.connection_layer
+            .borrow_mut()
+            .install(&self.graph.projection);
+        if !preserve_presentation {
+            self.refresh_presentation();
+        }
         if let (Some(base), Some(previous_ports)) = (draft_base, previous_ports) {
             self.rebind_moved_port_inputs(base, &previous_ports);
         }

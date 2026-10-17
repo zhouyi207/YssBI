@@ -1,21 +1,19 @@
 use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};
 
-mod builtins;
 mod index;
 mod retrieval;
 #[cfg(test)]
 mod tests;
 mod tools;
 
-pub use builtins::install_builtin_statistical_knowledge;
 use index::{IndexedDocument, PreparedIndex};
 use retrieval::{chunk_id, passages};
 use yss_harness_contract::{
     KnowledgeChunkId, KnowledgeCitation, KnowledgeDocumentId, KnowledgeDocumentRecord,
     KnowledgeIndexFailure, KnowledgeIndexPort, KnowledgeIndexQuery, KnowledgeSearchHit,
     KnowledgeSourceId, KnowledgeSourceRecord, KnowledgeSourceStatus, KnowledgeSourceStorePort,
-    PersistenceFailure, ProjectSessionBinding, SensitivityClass, SourceHash, UnixMillis,
+    PersistenceFailure, ProjectSessionBinding, SensitivityClass, SourceHash,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

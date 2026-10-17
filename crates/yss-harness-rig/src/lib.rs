@@ -2,7 +2,6 @@
 
 #![forbid(unsafe_code)]
 
-mod arguments;
 mod context;
 mod driver;
 mod error;

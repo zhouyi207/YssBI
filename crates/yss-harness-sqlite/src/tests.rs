@@ -2,9 +2,9 @@ use yss_harness_contract::*;
 
 use super::*;
 use yss_harness_contract::{
-    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, AutomationCapabilityRequest,
-    HarnessEvent, HarnessSessionState, IdempotencyKey, InspectGraphRequest, PrincipalId,
-    ProjectSessionBinding, SourceHash, ToolInvocationId, ToolInvocationState, UnixMillis,
+    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, HarnessEvent, HarnessSessionState,
+    IdempotencyKey, PrincipalId, ProjectSessionBinding, SourceHash, ToolInvocationId,
+    ToolInvocationState, UnixMillis,
 };
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
@@ -27,7 +27,7 @@ async fn connect_preserves_literal_percent_encoded_directory_names() {
     let database = std::path::Path::new("db").join("statistical-harness.sqlite");
     let literal_exists = literal.join(&database).is_file();
     let decoded_exists = decoded.join(&database).exists();
-    store.pool.close().await;
+    store.close().await;
     std::fs::remove_dir_all(directory).unwrap();
 
     assert!(
@@ -46,20 +46,15 @@ async fn capability_workflow_definitions_round_trip_and_reject_version_replaceme
         "steps": [{
             "id": "inspect_schema",
             "dependsOn": [],
-            "request": {
-                "type": "inspect_dataset_schema",
-                "payload": {"databaseId": "dataset-1"}
-            }
+            "tool": "inspect_dataset_schema",
+            "request": {"databaseId": "dataset-1"}
         }]
     }))
     .unwrap();
     store.save_definition(&definition).await.unwrap();
     store.save_definition(&definition).await.unwrap();
     let mut conflicting = definition.clone();
-    conflicting.steps[0].request =
-        AutomationCapabilityRequest::InspectDatasetSchema(InspectDatasetSchemaRequest {
-            database_id: "dataset-2".into(),
-        });
+    conflicting.steps[0].request = serde_json::json!({"databaseId": "dataset-2"});
     assert_eq!(
         store.save_definition(&conflicting).await.unwrap_err().code,
         PersistenceFailureCode::Conflict
@@ -89,7 +84,6 @@ async fn rejects_incompatible_schema_without_rewriting_records() {
         .unwrap();
     let store = SqliteHarnessStore {
         pool,
-        path: None,
         knowledge_generation: Default::default(),
     };
     assert_eq!(
@@ -188,11 +182,12 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
         workflow_run_id: None,
         workflow_step_id: None,
         project,
-        capability_id: yss_harness_contract::CapabilityId::InspectGraph,
-        request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest::overview(
-            "events/Main.yssbi-event".to_owned(),
-        ))
-        .into(),
+        tool: "inspect_graph".into(),
+        effect: yss_harness_contract::ToolEffect::Inspect,
+        arguments: serde_json::json!({"graph": {"kind": "event_graph", "id": "events/Main.yssbi-event"}}),
+        request: Some(
+            serde_json::json!({"graph": "events/Main.yssbi-event", "detail": "overview"}),
+        ),
         state: ToolInvocationState::Running,
         result: None,
         failure: None,
@@ -216,30 +211,24 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
     finished.state = ToolInvocationState::Failed;
     finished.finished_at = Some(UnixMillis::from_existing(43));
     finished.failure = Some(yss_harness_contract::CapabilityFailure::new(
-        yss_harness_contract::CapabilityFailureCode::InternalFailure,
+        yss_harness_contract::CapabilityFailureCode::INTERNAL_FAILURE,
     ));
     store.finish(&finished).await.unwrap();
     assert!(store.load_running_invocations().await.unwrap().is_empty());
-    for input in [
-        None,
-        Some(yss_harness_contract::model::CapabilityInput::InspectGraph(
-            yss_harness_contract::model::InspectGraphInput {
-                graph: yss_harness_contract::GraphResourceRef::for_path("events/Main.yssbi-event"),
-            },
-        )),
+    for arguments in [
+        serde_json::json!({}),
+        serde_json::json!({"graph": {"kind": "event_graph", "id": "events/Main.yssbi-event"}}),
     ] {
         let mut rejected = finished.clone();
-        let id = if input.is_some() {
-            "binding-rejected"
-        } else {
+        let id = if arguments == serde_json::json!({}) {
             "decode-rejected"
+        } else {
+            "binding-rejected"
         };
         rejected.id = ToolInvocationId::try_new(id).unwrap();
         rejected.idempotency_key = IdempotencyKey::try_new(id).unwrap();
-        rejected.request = yss_harness_contract::ToolInvocationRequest::Rejected {
-            capability_id: rejected.capability_id,
-            input,
-        };
+        rejected.request = None;
+        rejected.arguments = arguments;
         store.begin(&rejected).await.unwrap();
         assert_eq!(
             store
@@ -297,7 +286,7 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
         principal_id: session.principal_id.clone(),
         session_id: session.id,
         project: invocation.project.clone(),
-        capability_id: yss_harness_contract::CapabilityId::ApplyGraphEdit,
+        tool: "apply_graph_edit".into(),
         request_fingerprint: SourceHash::try_new("fingerprint-1").unwrap(),
         issued_at: UnixMillis::from_existing(13),
         expires_at: UnixMillis::from_existing(100),

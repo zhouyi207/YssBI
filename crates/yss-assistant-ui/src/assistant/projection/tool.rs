@@ -1,6 +1,6 @@
 //! Tool outcomes are reduced from events; a completed invocation can contain a failed graph run.
 use super::Timing;
-use yss_harness_contract::AssistantToolIdentity;
+use yss_assistant_contract::AssistantToolIdentity;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(in crate::assistant) enum ToolState {

@@ -5,6 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use yss_plugin_runtime::{
     NativeCommandReply, NativeOperation, PluginFailure, TaskSnapshot, operation_id,
 };
+use yss_ui::lifecycle::LogReleased;
 
 enum Reply {
     Command(NativeCommandReply),
@@ -29,7 +30,7 @@ impl PluginViewPanel {
             match self.values(cx) {
                 Ok(value) => value,
                 Err(error) => {
-                    self.error = Some(error);
+                    self.show_error(error, cx);
                     cx.notify();
                     return;
                 }
@@ -48,7 +49,7 @@ impl PluginViewPanel {
                     .ok()
                     .and_then(|now| operation_id(now, &uuid::Uuid::new_v4().to_string()).ok());
                 let Some(id) = id else {
-                    self.error = Some(PluginFailure::new("plugin_operation_invalid"));
+                    self.show_error(PluginFailure::new("plugin_operation_invalid"), cx);
                     cx.notify();
                     return;
                 };
@@ -66,7 +67,7 @@ impl PluginViewPanel {
         match self.values(cx) {
             Ok(value) => self.request("views.set_state", value, window, cx),
             Err(error) => {
-                self.error = Some(error);
+                self.show_error(error, cx);
                 cx.notify();
             }
         }
@@ -92,8 +93,6 @@ impl PluginViewPanel {
             return;
         };
         self.busy = true;
-        self.error = None;
-        self.message = None;
         let session = lease.session_id.clone();
         let binding = lease.window.clone();
         let job = self.services.run(move |services| {
@@ -117,37 +116,45 @@ impl PluginViewPanel {
                     }
                     .map_err(|_| PluginFailure::new("plugin_response_invalid"))
                 });
-            let _ = panel.update_in(cx, |panel, window, cx| {
-                if panel.closed {
-                    return;
-                }
-                panel.busy = false;
-                match result {
-                    Ok(Reply::Command(reply)) => {
-                        panel.message = Some(reply.message);
-                        if let Some(form) = reply.view
-                            && let Err(error) = panel.install_form(form, Value::Null, window, cx)
-                        {
-                            panel.error = Some(error);
+            panel
+                .update_in(cx, |panel, window, cx| {
+                    if panel.closed {
+                        return;
+                    }
+                    panel.busy = false;
+                    match result {
+                        Ok(Reply::Command(reply)) => {
+                            panel.notifications.push(
+                                gpui_kit::component::notification::Notification::info(
+                                    reply.message,
+                                ),
+                                cx,
+                            );
+                            if let Some(form) = reply.view
+                                && let Err(error) =
+                                    panel.install_form(form, Value::Null, window, cx)
+                            {
+                                panel.show_error(error, cx);
+                            }
                         }
-                    }
-                    Ok(Reply::Task(task)) => {
-                        panel.task = Some(*task);
-                        panel.poll_task(window, cx);
-                    }
-                    Ok(Reply::Open(view)) => {
-                        if let Some(key) = &panel.key {
-                            cx.emit(OpenNativeView {
-                                key: key.clone(),
-                                view,
-                            });
+                        Ok(Reply::Task(task)) => {
+                            panel.task = Some(*task);
+                            panel.poll_task(window, cx);
                         }
+                        Ok(Reply::Open(view)) => {
+                            if let Some(key) = &panel.key {
+                                cx.emit(OpenNativeView {
+                                    key: key.clone(),
+                                    view,
+                                });
+                            }
+                        }
+                        Ok(Reply::Saved) => {}
+                        Err(error) => panel.show_error(error, cx),
                     }
-                    Ok(Reply::Saved) => {}
-                    Err(error) => panel.error = Some(error),
-                }
-                cx.notify();
-            });
+                    cx.notify();
+                })
+                .log_released();
         })
         .detach();
         cx.notify();
@@ -195,19 +202,21 @@ impl PluginViewPanel {
                     serde_json::from_value(value)
                         .map_err(|_| PluginFailure::new("plugin_response_invalid"))
                 });
-            let _ = panel.update_in(cx, |panel, window, cx| {
-                if panel.closed {
-                    return;
-                }
-                match result {
-                    Ok(task) => {
-                        panel.task = Some(task);
-                        panel.poll_task(window, cx);
+            panel
+                .update_in(cx, |panel, window, cx| {
+                    if panel.closed {
+                        return;
                     }
-                    Err(error) => panel.error = Some(error),
-                }
-                cx.notify();
-            });
+                    match result {
+                        Ok(task) => {
+                            panel.task = Some(task);
+                            panel.poll_task(window, cx);
+                        }
+                        Err(error) => panel.show_error(error, cx),
+                    }
+                    cx.notify();
+                })
+                .log_released();
         })
         .detach();
     }

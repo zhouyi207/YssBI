@@ -1,6 +1,5 @@
 //! The editor hosts plugin details; sidebar and modal composition reuse the same owner.
 use super::PluginsPanel;
-use gpui_kit::component::ActiveTheme;
 use gpui_kit::{Context, IntoElement, Render, Window, div, prelude::*};
 
 impl Render for PluginsPanel {
@@ -13,34 +12,5 @@ impl Render for PluginsPanel {
             .flex()
             .flex_col()
             .child(div().flex_1().min_h_0().child(self.render_details(cx)))
-            .child(self.render_status(cx))
-    }
-}
-impl PluginsPanel {
-    pub(super) fn render_status(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
-        div()
-            .px_3()
-            .py_2()
-            .flex_shrink_0()
-            .border_t_1()
-            .border_color(cx.theme().border)
-            .text_xs()
-            .text_color(if self.error.is_some() {
-                cx.theme().danger
-            } else {
-                cx.theme().muted_foreground
-            })
-            .child(
-                self.error
-                    .clone()
-                    .or_else(|| self.task.as_ref().map(|task| task.to_string()))
-                    .or_else(|| self.feedback.clone())
-                    .unwrap_or_else(|| {
-                        yss_ui::text::format(
-                            "native.plugins.installedCount",
-                            &[("value0", self.entries.len().to_string())],
-                        )
-                    }),
-            )
     }
 }

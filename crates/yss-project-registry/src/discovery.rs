@@ -216,31 +216,18 @@ mod tests {
             if error.kind() == std::io::ErrorKind::NotFound));
     }
 
-    #[cfg(any(unix, windows))]
+    #[cfg(unix)]
     #[test]
     fn discovery_does_not_follow_directory_or_metadata_symlinks() {
         let root = TestDirectory::new("symlink-root");
         let outside = TestDirectory::new("symlink-outside");
         std::fs::write(outside.path().join(PROJECT_METADATA_FILE), "{}").unwrap();
-        #[cfg(unix)]
-        {
-            std::os::unix::fs::symlink(outside.path(), root.path().join("redirect")).unwrap();
-            std::os::unix::fs::symlink(
-                outside.path().join(PROJECT_METADATA_FILE),
-                root.path().join(PROJECT_METADATA_FILE),
-            )
-            .unwrap();
-        }
-        #[cfg(windows)]
-        {
-            std::os::windows::fs::symlink_dir(outside.path(), root.path().join("redirect"))
-                .unwrap();
-            std::os::windows::fs::symlink_file(
-                outside.path().join(PROJECT_METADATA_FILE),
-                root.path().join(PROJECT_METADATA_FILE),
-            )
-            .unwrap();
-        }
+        std::os::unix::fs::symlink(outside.path(), root.path().join("redirect")).unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join(PROJECT_METADATA_FILE),
+            root.path().join(PROJECT_METADATA_FILE),
+        )
+        .unwrap();
 
         let registry = ProjectTaskCancellationRegistry::new();
         let cancellation = registry.begin();
@@ -250,6 +237,77 @@ mod tests {
         let redirected_root = root.path().join("redirect");
         let error = discover_project_metadata_files(&redirected_root, &cancellation).unwrap_err();
         assert!(matches!(error, ProjectDiscoveryError::InvalidRoot));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn discovery_skips_metadata_file_reparse_points() -> std::io::Result<()> {
+        use std::os::windows::fs::MetadataExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_ATTRIBUTE_REPARSE_POINT, REPARSE_GUID_DATA_BUFFER,
+        };
+        use windows_sys::Win32::System::IO::DeviceIoControl;
+        use windows_sys::Win32::System::Ioctl::{
+            FSCTL_DELETE_REPARSE_POINT, FSCTL_SET_REPARSE_POINT,
+        };
+
+        fn update_reparse_point(file: &std::fs::File, control: u32) -> std::io::Result<()> {
+            // A private non-Microsoft tag needs no symlink privilege or installed filter.
+            // Its empty GUID buffer works for both setting and deleting the fixture.
+            let data = REPARSE_GUID_DATA_BUFFER {
+                ReparseTag: 0x0000_0042,
+                ReparseGuid: windows_sys::core::GUID::from_u128(
+                    0x4de346d6_73e9_4d73_b074_2f27f0bdc558,
+                ),
+                ..Default::default()
+            };
+            let mut returned = 0;
+            // SAFETY: the owned file handle and initialized header remain alive for
+            // this synchronous call; no output buffer or overlapped I/O is used.
+            let success = unsafe {
+                DeviceIoControl(
+                    file.as_raw_handle(),
+                    control,
+                    std::ptr::from_ref(&data).cast(),
+                    std::mem::offset_of!(REPARSE_GUID_DATA_BUFFER, GenericReparseBuffer) as u32,
+                    std::ptr::null_mut(),
+                    0,
+                    &mut returned,
+                    std::ptr::null_mut(),
+                )
+            };
+            if success == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        }
+
+        let root = TestDirectory::new("metadata-reparse");
+        let metadata_path = root.path().join(PROJECT_METADATA_FILE);
+        let file = std::fs::File::create_new(&metadata_path)?;
+        update_reparse_point(&file, FSCTL_SET_REPARSE_POINT)?;
+
+        let registry = ProjectTaskCancellationRegistry::new();
+        let cancellation = registry.begin();
+        let metadata = std::fs::symlink_metadata(&metadata_path);
+        let found = discover_project_metadata_files(root.path(), &cancellation);
+
+        // Remove the tag through the original handle before assertions or recursive
+        // fixture cleanup; no path is reopened through the unknown reparse point.
+        update_reparse_point(&file, FSCTL_DELETE_REPARSE_POINT)?;
+        drop(file);
+
+        let metadata = metadata?;
+        assert!(metadata.is_file());
+        assert!(!metadata.file_type().is_symlink());
+        assert_ne!(metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT, 0);
+        assert!(found.unwrap().is_empty());
+        assert_eq!(
+            discover_project_metadata_files(root.path(), &cancellation).unwrap(),
+            vec![metadata_path]
+        );
+        Ok(())
     }
 
     #[cfg(windows)]

@@ -7,10 +7,10 @@ use arrow::array::{
 };
 use arrow::compute::{CastOptions, cast_with_options};
 use arrow::datatypes::i256;
-use arrow::datatypes::{DataType, Field, Schema};
+use arrow::datatypes::{DataType, Field};
 use arrow::record_batch::RecordBatch;
 use serde_json::Value;
-use yss_data_contract::{TabularScalar, TabularSnapshot};
+use yss_data_contract::TabularScalar;
 
 use crate::{CategoryDomain, TabularArrowError};
 
@@ -559,20 +559,4 @@ pub(crate) fn scalars_to_array(values: &[TabularScalar]) -> Result<ArrayRef, Tab
         ))),
         _ => return Err(TabularArrowError::UnsupportedType),
     })
-}
-
-pub fn to_record_batch(snapshot: &TabularSnapshot) -> Result<RecordBatch, TabularArrowError> {
-    let arrays = snapshot
-        .columns()
-        .iter()
-        .map(|column| scalars_to_array(column.values()))
-        .collect::<Result<Vec<_>, _>>()?;
-    let fields = snapshot
-        .columns()
-        .iter()
-        .zip(&arrays)
-        .map(|(column, array)| Field::new(column.name().as_str(), array.data_type().clone(), true))
-        .collect::<Vec<_>>();
-    RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)
-        .map_err(|_| TabularArrowError::BuildFailed)
 }

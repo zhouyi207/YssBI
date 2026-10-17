@@ -78,7 +78,6 @@ pub struct ConversationPanel {
     unsent: Option<DraftMessage>,
     queue: VecDeque<DraftMessage>,
     queue_paused: bool,
-    input_expanded: bool,
     selecting: bool,
     ready: bool,
     refreshing: bool,
@@ -92,9 +91,25 @@ pub struct ConversationPanel {
     event_task: Option<gpui_kit::Task<()>>,
     expanded: BTreeMap<String, bool>,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     stream_error: Option<String>,
 }
 impl ConversationPanel {
+    fn set_error(&mut self, error: String, cx: &mut Context<Self>) {
+        self.notifications.error(error.clone(), cx);
+        self.error = Some(error);
+    }
+
+    fn set_stream_error(&mut self, error: String, cx: &mut Context<Self>) {
+        if self.stream_error.as_ref() != Some(&error) {
+            self.notifications
+                .error_with_retry(error.clone(), cx, |view, window, cx| {
+                    view.reload(false, window, cx);
+                });
+        }
+        self.stream_error = Some(error);
+    }
+
     pub fn new(
         services: Arc<AssistantServices>,
         session: HarnessSessionRecord,
@@ -103,7 +118,7 @@ impl ConversationPanel {
     ) -> Self {
         let input = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .auto_grow(3, 10)
+                .auto_grow(2, 12)
                 .submit_on_enter(true)
                 .placeholder(yss_ui::text::t("native.assistant.prompt"))
         });
@@ -149,7 +164,6 @@ impl ConversationPanel {
             unsent: None,
             queue: VecDeque::new(),
             queue_paused: true,
-            input_expanded: false,
             selecting: false,
             ready: false,
             refreshing: false,
@@ -163,8 +177,10 @@ impl ConversationPanel {
             event_task: None,
             expanded: BTreeMap::new(),
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             stream_error: None,
         };
+        panel.observe_scroll(cx);
         panel.connect(window, cx);
         panel.reload(false, window, cx);
         panel

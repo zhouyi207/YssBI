@@ -1,13 +1,12 @@
 //! Controls derive page ranges from the accepted page, never from a pending request.
 use super::*;
-use gpui_kit::Div;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
 };
 
 impl ResultPanel {
-    pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let paging = self
             .table
             .as_ref()
@@ -22,17 +21,20 @@ impl ResultPanel {
                 )
             });
         let has_toolbar = self.report.is_some() || paging.is_some() || self.loading;
-        div().when(has_toolbar, |bar| {
-            bar.flex()
+        div().id("result-toolbar").when(has_toolbar, |bar| {
+            bar.h(yss_ui::appearance::HEADER_HEIGHT)
+                .flex()
                 .flex_shrink_0()
-                .flex_wrap()
+                .min_w_0()
+                .overflow_x_scroll()
+                .whitespace_nowrap()
                 .items_center()
-                .justify_end()
                 .gap_2()
-                .p_2()
+                .px_2()
                 .text_xs()
                 .border_b_1()
                 .border_color(cx.theme().border)
+                .child(div().flex_1())
                 .when(self.report.is_some(), |bar| {
                     bar.children(
                         [
@@ -104,38 +106,6 @@ impl ResultPanel {
                 })
                 .when(self.loading, |bar| {
                     bar.child(yss_ui::text::translate("dataOperation.reading"))
-                })
-        })
-    }
-
-    pub(super) fn read_feedback(&self, cx: &mut Context<Self>) -> Div {
-        div().when_some(self.error.as_ref(), |banner, error| {
-            banner
-                .flex()
-                .flex_shrink_0()
-                .items_center()
-                .gap_3()
-                .px_3()
-                .py_2()
-                .text_sm()
-                .text_color(cx.theme().danger)
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(yss_ui::text::translate(error.message())),
-                )
-                .when(error.retryable(), |banner| {
-                    banner.child(
-                        Button::new("retry-result-read")
-                            .small()
-                            .ghost()
-                            .label(yss_ui::text::translate("common.retry"))
-                            .disabled(self.loading)
-                            .on_click(
-                                cx.listener(|view, _, window, cx| view.retry_read(window, cx)),
-                            ),
-                    )
                 })
         })
     }

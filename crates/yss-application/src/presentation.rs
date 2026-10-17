@@ -358,7 +358,7 @@ impl ApplicationState {
                     Kind::Chart => index
                         .charts
                         .iter()
-                        .any(|entry| entry.chart_path.as_str() == resource.id),
+                        .any(|entry| entry.path.as_str() == resource.id),
                     Kind::Mind => index
                         .minds
                         .iter()
@@ -550,10 +550,12 @@ mod tests {
 
     #[test]
     fn gui_and_harness_inspect_the_same_intent_receipt() {
+        use yss_assistant_contract::{
+            AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityInvocationContext,
+        };
         use yss_harness_contract::{
-            AutomationCapabilityRequest, AutomationCapabilityResult, CancellationToken,
-            CapabilityControl, CapabilityInvocationContext, CapabilityInvocationId,
-            HarnessSessionId, PrincipalId, ProjectSessionBinding,
+            CancellationToken, CapabilityControl, CapabilityInvocationId, HarnessSessionId,
+            PrincipalId, ProjectSessionBinding,
         };
         let (application, _, _) = crate::graph::results::report::tests::fixture(12);
         let session = application.capture_session().unwrap();

@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use thiserror::Error;
-use yss_chart_document::{ChartResourcePath, ChartResourcePathError};
 use yss_graph_document::GraphResourcePath;
 use yss_resource_naming::ResourceNameValidationError;
 
@@ -8,8 +7,6 @@ use yss_resource_naming::ResourceNameValidationError;
 pub enum ProjectOperationError {
     #[error("invalid resource name: {0}")]
     InvalidResourceName(#[from] ResourceNameValidationError),
-    #[error("invalid chart resource path: {0}")]
-    InvalidChartResourcePath(#[from] ChartResourcePathError),
     #[error("invalid project root '{}': {message}", path.display())]
     InvalidRoot { path: PathBuf, message: String },
     #[error("graph resource '{path}' is structurally invalid")]
@@ -30,8 +27,8 @@ pub enum ProjectOperationError {
     ResourceRevisionOverflow { resource: String, retained: u64 },
     #[error("resource name conflict: {message}")]
     ResourceNameConflict { message: String },
-    #[error("chart resource '{}' was not found", path.as_str())]
-    ChartNotFound { path: ChartResourcePath },
+    #[error("resource '{path}' was not found")]
+    ResourceNotFound { path: String },
     #[error("resource revision conflict: {message}")]
     ResourceRevisionConflict { message: String },
     #[error("duplicate project operation: {message}")]
@@ -63,10 +60,6 @@ impl ProjectOperationError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidResourceName(source) => resource_name_error_code(source),
-            Self::InvalidChartResourcePath(source) => match source {
-                ChartResourcePathError::InvalidName(source) => resource_name_error_code(source),
-                _ => "invalid_resource_name",
-            },
             Self::InvalidRoot { .. } => "invalid_project_root",
             Self::InvalidGraphDocument { .. } => "invalid_graph_document",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
@@ -75,7 +68,7 @@ impl ProjectOperationError {
             Self::ResultSourceReadFailed { .. } => "result_source_read_failed",
             Self::ResourceRevisionOverflow { .. } => "resource_revision_overflow",
             Self::ResourceNameConflict { .. } => "resource_name_conflict",
-            Self::ChartNotFound { .. } => "resource_not_found",
+            Self::ResourceNotFound { .. } => "resource_not_found",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
             Self::DuplicateOperation { .. } => "duplicate_operation",
             Self::FilesystemTransactionBusy { .. } => "filesystem_transaction_busy",
@@ -158,7 +151,6 @@ impl From<yss_filesystem::FilesystemError> for ProjectOperationError {
 #[cfg(test)]
 mod tests {
     use super::ProjectOperationError;
-    use yss_chart_document::ChartResourcePathError;
     use yss_resource_lifecycle::ResourceLifecycleError;
     use yss_resource_naming::ResourceNameValidationError;
 
@@ -192,18 +184,6 @@ mod tests {
                 code
             );
         }
-    }
-
-    #[test]
-    fn resource_path_errors_preserve_name_error_ipc_codes() {
-        let not_normalized = ProjectOperationError::InvalidChartResourcePath(
-            ChartResourcePathError::InvalidName(ResourceNameValidationError::NotNfc),
-        );
-        let structurally_invalid =
-            ProjectOperationError::InvalidChartResourcePath(ChartResourcePathError::WrongDirectory);
-
-        assert_eq!(not_normalized.code(), "resource_name_not_normalized");
-        assert_eq!(structurally_invalid.code(), "invalid_resource_name");
     }
 
     #[test]

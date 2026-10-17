@@ -24,6 +24,8 @@ Select a model, choose Ask or Write, and add project resource references to make
 
 A useful first request identifies the resource and the question, for example: “Inspect this graph's inputs and explain what prevents it from running.” Start in Ask mode to review the project before allowing changes. Use a copied project for Write-mode experiments.
 
+An empty conversation offers starting points for framing a question, planning data checks, and choosing a method. These buttons fill and focus the draft; they do not send a message or replace text already entered. While a response is running, Enter queues the next message instead of starting another turn. The composer keeps model availability, recovery errors, and a paused queue visible beside their actions.
+
 ## Ask and Write
 
 | Mode  | Allowed behavior                                                                                                                                                                                                                       |
@@ -38,6 +40,10 @@ Reasoning effort offers the model's configured choices, or Low, Medium, and High
 ## Understand tool activity
 
 The Assistant can discover available nodes, inspect graphs and resources, read existing result pages, and use registered editing and execution tools within its permissions. It coordinates a Manager and scoped Workers; task and tool cards show their recorded activity, failures, and outputs.
+
+Reasoning uses a compact excerpt by default; expand it to read the complete Markdown without changing the recorded content. User messages, assistant responses, and system status markers have separate visual roles. Code blocks retain syntax highlighting and a copy action, and wide tables and code scroll within their content region.
+
+Collapsed tool groups list the recorded tools and their states. Expanded groups show safe argument and result previews; technical details and copying remain available on each tool. Cancelled, interrupted, and unknown outcomes are distinct from failures. Collapsed worker cards retain a summary and warning count. Statistical plan cards show the analysis mode, candidate methods, and diagnostic requirements; these are proposals, not evidence of completed execution.
 
 Expand tool details to inspect the target, safe argument summary, result references, or failure code. Distinguish a tool call's status from a graph run's status. Missing timing or token reports mean unknown or incomplete information, not zero work. An outcome marked unknown is not proof that nothing changed: inspect the affected resource before requesting the same change again.
 

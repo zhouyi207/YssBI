@@ -4,11 +4,12 @@ members = ["crates/*"]
 default-members = ["crates/yss-desktop-gpui"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 
 [workspace.dependencies]
-gpui-kit = { version = "=0.7.1", features = [
+gpui-kit = { version = "=0.7.3", features = [
+  "gpui-fast",
   "tree-sitter-bash",
   "tree-sitter-css",
   "tree-sitter-html",
@@ -111,7 +112,7 @@ opt-level = 1
 [profile.dev.package.yss-plugin-ui]
 opt-level = 1
 
-[profile.dev.package.gpui-pre]
+[profile.dev.package.gpui-fast]
 opt-level = 2
 
 [profile.dev.package.gpui-base]
@@ -120,7 +121,7 @@ opt-level = 2
 [profile.dev.package.gpui-component]
 opt-level = 2
 
-[profile.dev.package.gpui-pre-wgpu]
+[profile.dev.package.gpui-fast-wgpu]
 opt-level = 2
 
 # New WGPU windows compile shaders synchronously through Naga.
@@ -131,4 +132,79 @@ opt-level = 2
 opt-level = 2
 
 [profile.dev.package.taffy]
+opt-level = 2
+
+# Text layout runs synchronously during prepaint: Editor soft wrap shapes every
+# line of a document, and CJK font fallback rebuilds shaping plans per run.
+# Unoptimized, opening a 27 KB Chinese Markdown file stalled one frame for 3.5 s.
+[profile.dev.package.cosmic-text]
+opt-level = 2
+
+[profile.dev.package.harfrust]
+opt-level = 2
+
+[profile.dev.package.read-fonts]
+opt-level = 2
+
+[profile.dev.package.skrifa]
+opt-level = 2
+
+[profile.dev.package.font-types]
+opt-level = 2
+
+[profile.dev.package.swash]
+opt-level = 2
+
+[profile.dev.package.ttf-parser]
+opt-level = 2
+
+[profile.dev.package.fontdb]
+opt-level = 2
+
+[profile.dev.package.unicode-bidi]
+opt-level = 2
+
+[profile.dev.package.unicode-linebreak]
+opt-level = 2
+
+[profile.dev.package.unicode-segmentation]
+opt-level = 2
+
+[profile.dev.package.unicode-script]
+opt-level = 2
+
+[profile.dev.package.ropey]
+opt-level = 2
+
+[profile.dev.package.gpui-pre-sum-tree]
+opt-level = 2
+
+# Markdown documents and chat messages up to 4 KB parse on the UI thread, with
+# formulas typeset and code highlighted as part of that parse.
+[profile.dev.package.markdown]
+opt-level = 2
+
+[profile.dev.package.ratex-parser]
+opt-level = 2
+
+[profile.dev.package.ratex-layout]
+opt-level = 2
+
+[profile.dev.package.ratex-svg]
+opt-level = 2
+
+[profile.dev.package.tree-sitter]
+opt-level = 2
+
+[profile.dev.package.tree-sitter-md]
+opt-level = 2
+
+# Icons and formulas rasterize on first paint at each size.
+[profile.dev.package.resvg]
+opt-level = 2
+
+[profile.dev.package.usvg]
+opt-level = 2
+
+[profile.dev.package.tiny-skia]
 opt-level = 2

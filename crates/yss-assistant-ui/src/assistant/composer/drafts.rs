@@ -1,32 +1,37 @@
 use super::*;
 use crate::assistant::ConversationEvent;
-use gpui_kit::{Empty, SharedString, px};
+use gpui_kit::{Empty, FontWeight, SharedString, rems};
 
 impl ConversationPanel {
     pub(super) fn render_drafts(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.unsent.is_none()
-            && self.queue.is_empty()
-            && !self.interrupted()
-            && self.error.is_none()
-            && self.stream_error.is_none()
-        {
+        if self.unsent.is_none() && self.queue.is_empty() && !self.interrupted() {
             return Empty.into_any_element();
         }
-        let mut drafts = div().flex().flex_col().gap_2().flex_shrink_0();
+        let mut drafts = div().flex().flex_col().gap_2().flex_shrink_0().min_w_0();
         if !self.running()
             && let Some(message) = &self.unsent
         {
             drafts = drafts.child(
                 div()
+                    .flex()
+                    .flex_col()
+                    .min_w_0()
+                    .gap_2()
                     .p_2()
                     .rounded_md()
                     .bg(cx.theme().muted)
-                    .text_xs()
-                    .child(yss_ui::text::t("panel.assistantUnsentMessage"))
+                    .text_sm()
                     .child(
                         div()
-                            .max_h(px(60.))
-                            .overflow_hidden()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(yss_ui::text::t("panel.assistantUnsentMessage")),
+                    )
+                    .child(
+                        div()
+                            .id("assistant-unsent-text")
+                            .max_h(rems(6.))
+                            .overflow_y_scroll()
                             .child(message.text.clone()),
                     )
                     .child(self.reference_chips(
@@ -57,11 +62,11 @@ impl ConversationPanel {
                 div()
                     .flex()
                     .flex_wrap()
-                    .gap_1()
+                    .gap_2()
                     .when(self.stream_error.is_some(), |actions| {
                         actions.child(
                             Button::new("assistant-reconnect")
-                                .small()
+                                .xsmall()
                                 .label(yss_ui::text::t("panel.assistantReloadConversations"))
                                 .disabled(self.refreshing)
                                 .on_click(
@@ -72,7 +77,7 @@ impl ConversationPanel {
                     .when(self.interrupted(), |actions| {
                         actions.child(
                             Button::new("assistant-continue")
-                                .small()
+                                .xsmall()
                                 .label(yss_ui::text::t("panel.assistantContinueTask"))
                                 .disabled(!self.can_send())
                                 .on_click(cx.listener(|view, _, window, cx| {
@@ -82,7 +87,7 @@ impl ConversationPanel {
                     })
                     .child(
                         Button::new("assistant-recovery-settings")
-                            .small()
+                            .xsmall()
                             .ghost()
                             .label(yss_ui::text::t("panel.assistantOpenSettings"))
                             .on_click(
@@ -97,31 +102,27 @@ impl ConversationPanel {
     fn render_queue(&self, cx: &mut Context<Self>) -> AnyElement {
         let mut rows = div()
             .id("assistant-queued-messages")
-            .max_h(px(112.))
+            .max_h(rems(9.))
             .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap_1();
+            .gap_2();
         for message in &self.queue {
             let id = message.id;
             rows = rows.child(
                 div()
+                    .id(SharedString::from(format!("queued-message-{id}")))
                     .flex()
                     .gap_2()
                     .items_start()
                     .child(
                         div()
-                            .text_xs()
+                            .text_sm()
                             .flex_1()
                             .min_w_0()
                             .flex()
                             .flex_col()
-                            .child(
-                                div()
-                                    .max_h(px(40.))
-                                    .overflow_hidden()
-                                    .child(message.text.clone()),
-                            )
+                            .child(div().child(message.text.clone()))
                             .child(self.reference_chips(
                                 format!("queued-references-{id}"),
                                 message.resources.iter().map(|r| (r, None)),
@@ -131,7 +132,7 @@ impl ConversationPanel {
                     )
                     .child(
                         Button::new(SharedString::from(format!("queued-{id}")))
-                            .xsmall()
+                            .small()
                             .ghost()
                             .icon(IconName::X)
                             .tooltip(yss_ui::text::t("panel.assistantRemoveQueued"))
@@ -146,7 +147,7 @@ impl ConversationPanel {
         div()
             .flex()
             .flex_col()
-            .gap_1()
+            .gap_2()
             .p_2()
             .rounded_md()
             .bg(cx.theme().muted)
@@ -154,6 +155,8 @@ impl ConversationPanel {
                 div()
                     .flex()
                     .items_center()
+                    .flex_wrap()
+                    .gap_2()
                     .justify_between()
                     .child(div().text_xs().child(yss_ui::text::format(
                         "panel.assistantQueuedMessages",
@@ -162,7 +165,7 @@ impl ConversationPanel {
                     .when(!self.running(), |header| {
                         header.child(
                             Button::new("assistant-send-queued")
-                                .xsmall()
+                                .small()
                                 .ghost()
                                 .label(yss_ui::text::t("panel.assistantSendQueued"))
                                 .disabled(!self.can_send_queued())
@@ -172,6 +175,14 @@ impl ConversationPanel {
                         )
                     }),
             )
+            .when(self.queue_paused, |queue| {
+                queue.child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(yss_ui::text::t("panel.assistantQueuePaused")),
+                )
+            })
             .child(rows)
             .into_any_element()
     }

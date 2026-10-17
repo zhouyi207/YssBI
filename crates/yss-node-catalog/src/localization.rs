@@ -71,8 +71,6 @@ pub struct LocalizedCatalogItem {
     pub parameters: Vec<LocalizedParameter>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_path: Option<CatalogResourcePath>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resource_revision: Option<u64>,
     pub creation: NodeCreation,
 }
 
@@ -402,7 +400,6 @@ impl BuiltinCatalog {
             ports: Self::project_ports(protocol),
             parameters: self.localized_parameters(protocol, locale),
             resource_path: None,
-            resource_revision: None,
             creation,
         }
     }
@@ -440,7 +437,6 @@ impl BuiltinCatalog {
             ports: Self::project_ports(protocol),
             parameters: self.localized_parameters(protocol, locale),
             resource_path: Some(entry.resource_path.clone()),
-            resource_revision: Some(entry.resource_revision),
             creation: NodeCreation::ResourceBound {
                 node_type_id: entry.node_type_id.clone(),
                 resource_path: entry.resource_path.clone(),

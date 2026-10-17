@@ -575,8 +575,23 @@ pub(crate) fn minimize(
                 .zip(&direction)
                 .map(|(b, d)| b + alpha * d)
                 .collect::<Vec<_>>();
+            if trial
+                .iter()
+                .zip(&beta)
+                .all(|(next, current)| next == current)
+            {
+                break;
+            }
             match f(&trial) {
-                Ok(v) if v.is_finite() && v <= value + 1e-4 * alpha * slope => {
+                // Near a stationary point the predicted decrease can be smaller than
+                // objective rounding. Preserve a representable step so the gradient,
+                // not an unchanged parameter vector, still decides convergence.
+                Ok(v)
+                    if v.is_finite()
+                        && v - value
+                            <= 1e-4 * alpha * slope
+                                + 4.0 * f64::EPSILON * value.abs().max(v.abs()) =>
+                {
                     next = Some((trial, v));
                     break;
                 }

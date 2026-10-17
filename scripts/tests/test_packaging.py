@@ -1,10 +1,12 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 
@@ -21,6 +23,56 @@ macos = load("package_macos")
 
 
 class PackagingTests(unittest.TestCase):
+    def test_windows_accepts_msvc_linker_for_native_target(self):
+        for architecture, target in (("x86_64", "x64"), ("aarch64", "arm64")):
+            for host in ("Hostx64", "Hostarm64", "Hostx86"):
+                with self.subTest(architecture=architecture, host=host), tempfile.TemporaryDirectory() as temporary:
+                    toolchain = Path(temporary)
+                    linker = toolchain / "bin" / host / target / "link.exe"
+                    linker.parent.mkdir(parents=True)
+                    linker.write_bytes(b"MSVC linker fixture")
+                    with patch.dict(os.environ, {"VCToolsInstallDir": str(toolchain)}), \
+                            patch.object(packaging.shutil, "which", return_value=str(linker)):
+                        packaging.verify_windows_linker(architecture)
+
+    def test_windows_rejects_git_linker_before_cargo_or_output_creation(self):
+        for architecture, machine in (("x86_64", "AMD64"), ("aarch64", "ARM64")):
+            with self.subTest(architecture=architecture), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                linker = root / "Git/usr/bin/link.exe"
+                linker.parent.mkdir(parents=True)
+                linker.write_bytes(b"GNU link fixture")
+                output = root / "dist"
+                with patch.dict(os.environ, {"VCToolsInstallDir": str(root / "MSVC")}), \
+                        patch.object(packaging.shutil, "which", return_value=str(linker)), \
+                        patch.object(packaging.platform, "system", return_value="Windows"), \
+                        patch.object(packaging.platform, "machine", return_value=machine), \
+                        patch.object(packaging.sys, "argv", ["package.py", "--target", f"{architecture}-pc-windows-msvc", "--output", str(output)]), \
+                        patch.object(packaging, "run") as run:
+                    with self.assertRaisesRegex(ValueError, "Expected MSVC link.exe"):
+                        packaging.main()
+                    run.assert_not_called()
+                    self.assertFalse(output.exists())
+
+    def test_windows_rejects_msvc_linker_for_wrong_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            toolchain = Path(temporary)
+            linker = toolchain / "bin/Hostx64/x64/link.exe"
+            linker.parent.mkdir(parents=True)
+            linker.write_bytes(b"MSVC linker fixture")
+            with patch.dict(os.environ, {"VCToolsInstallDir": str(toolchain)}), \
+                    patch.object(packaging.shutil, "which", return_value=str(linker)):
+                with self.assertRaisesRegex(ValueError, "Expected MSVC link.exe for arm64"):
+                    packaging.verify_windows_linker("aarch64")
+
+    def test_windows_rejects_missing_developer_environment_or_linker(self):
+        for environment, linker in (({}, "link.exe"), ({"VCToolsInstallDir": "MSVC"}, None)):
+            with self.subTest(environment=environment, linker=linker), \
+                    patch.dict(os.environ, environment, clear=True), \
+                    patch.object(packaging.shutil, "which", return_value=linker):
+                with self.assertRaisesRegex(ValueError, "requires the Visual Studio developer environment"):
+                    packaging.verify_windows_linker("x86_64")
+
     def test_wrong_architecture_is_rejected_before_distribution(self):
         with tempfile.TemporaryDirectory() as temporary:
             binary = Path(temporary) / "application"

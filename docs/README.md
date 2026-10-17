@@ -58,15 +58,6 @@ unimplemented proposals are not presented as current product behavior.
   Conditional upstream capabilities remain proposals; selected open work belongs
   in the root `TODO.md`.
 
-## Format and check
-
-From `docs/`, run:
-
-```sh
-npx --yes prettier@3.5.0 . --check
-npx --yes prettier@3.5.0 --parser markdown .rules --check
-```
-
-Replace `--check` with `--write` to format changed documentation. Node.js is only needed for formatting and the existing React reference-data generator, not for the application or mdBook itself.
+## Check the documentation
 
 From the repository root, run `mdbook build docs` and `git diff --check`. Inspect the generated navigation and links, including heading anchors. A successful book build does not validate external URLs or demonstrate that an application workflow has passed acceptance.

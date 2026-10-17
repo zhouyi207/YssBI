@@ -8,6 +8,7 @@ use yss_graph_execution::{
     plan::PlanOutputRef,
     result::{ResultId, ResultReference},
 };
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) struct Source {
     pub reference: ResultReference,
@@ -145,11 +146,13 @@ impl ListDelegate for Results {
             return;
         };
         let address = &entry.address;
-        let _ = self.owner.update(cx, |canvas, cx| {
-            if canvas.can_edit() && Rc::ptr_eq(canvas.result_entries(), &self.catalog) {
-                canvas.inspect_port_result(address, cx);
-            }
-        });
+        self.owner
+            .update(cx, |canvas, cx| {
+                if canvas.can_edit() && Rc::ptr_eq(canvas.result_entries(), &self.catalog) {
+                    canvas.inspect_port_result(address, cx);
+                }
+            })
+            .log_released();
     }
 
     fn render_empty(
@@ -161,12 +164,12 @@ impl ListDelegate for Results {
             .p_3()
             .text_xs()
             .text_color(cx.theme().muted_foreground)
-            .child(yss_ui::text::t(if self.failed {
-                "native.results.unavailable"
-            } else if self.query.trim().is_empty() {
-                "canvas.pinResultSearch.empty"
-            } else {
-                "canvas.pinResultSearch.noMatches"
-            }))
+            .when(!self.failed, |view| {
+                view.child(yss_ui::text::t(if self.query.trim().is_empty() {
+                    "canvas.pinResultSearch.empty"
+                } else {
+                    "canvas.pinResultSearch.noMatches"
+                }))
+            })
     }
 }

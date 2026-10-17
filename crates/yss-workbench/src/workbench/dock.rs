@@ -22,9 +22,7 @@ use gpui_kit::{
 };
 use std::{any::TypeId, cell::Cell, rc::Rc, sync::Arc};
 
-// Match the component TabBar's Small tier, which uses logical pixel dimensions.
-pub(super) const HEADER_HEIGHT: Pixels = px(24.);
-pub(super) const HEADER_BUTTON_SIZE: Pixels = px(20.);
+pub(super) use yss_ui::appearance::HEADER_HEIGHT;
 
 pub(super) fn create(
     workbench: WeakEntity<Workbench>,
@@ -61,6 +59,24 @@ pub(super) struct WorkbenchDock {
 }
 
 impl WorkbenchDock {
+    pub(super) fn render_area(&self, area: &Entity<DockArea>) -> impl IntoElement {
+        div()
+            .relative()
+            .size_full()
+            .child(area.clone())
+            .child(regions::conversation_surface(
+                self.area.clone(),
+                self.workbench.clone(),
+                self.measurements.clone(),
+            ))
+            .child(regions::status_bars(
+                self.area.clone(),
+                self.workbench.clone(),
+                self.measurements.clone(),
+                -self.center_bottom_margin.get(),
+            ))
+    }
+
     pub(super) fn update_style(&self, area: &DockArea, cx: &App) {
         self.navigation_headers.retain_groups(area);
         let hide_strip = !area.is_zoomed()
@@ -88,11 +104,17 @@ fn is_tool_panel(panel: &Arc<dyn BasePanelView>) -> bool {
 
 impl DockAreaRenderer for WorkbenchDock {
     fn frame(&self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
-        self.skin.frame(window, cx).child(zoom_sidebar::Sidebar {
-            area: self.area.clone(),
-            workbench: self.workbench.clone(),
-            navigation_headers: self.navigation_headers.clone(),
-        })
+        let owner = self.workbench.clone();
+        self.skin
+            .frame(window, cx)
+            .on_prepaint(move |bounds, window, cx| {
+                super::layout::fit_window(&owner, bounds.size.width, window, cx);
+            })
+            .child(zoom_sidebar::Sidebar {
+                area: self.area.clone(),
+                workbench: self.workbench.clone(),
+                navigation_headers: self.navigation_headers.clone(),
+            })
     }
 
     fn center_frame(&self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
@@ -104,12 +126,6 @@ impl DockAreaRenderer for WorkbenchDock {
             .mb(self.center_bottom_margin.get())
             .relative()
             .pb(STATUS_BAR_HEIGHT)
-            .child(regions::status_bars(
-                self.area.clone(),
-                self.workbench.clone(),
-                self.measurements.clone(),
-                -self.center_bottom_margin.get(),
-            ))
             .on_prepaint(move |bounds, window, cx| {
                 let has_conversation = area.upgrade().is_some_and(|area| {
                     super::layout::columns::conversation_edge(area.read(cx)).is_some()
@@ -352,7 +368,7 @@ impl TabGroupRenderer for WorkbenchTabs {
                     toolbar.cached(
                         gpui_kit::StyleRefinement::default()
                             .w_full()
-                            .h_8()
+                            .h(HEADER_HEIGHT)
                             .flex_shrink_0(),
                     ),
                 )
@@ -372,7 +388,7 @@ impl TabGroupRenderer for WorkbenchTabs {
         let content = self.skin.render_active_panel(panel, group, window, cx);
         if conversation::matches(group) && !group.is_zoomed() {
             regions::RegionContent::conversation(
-                div()
+                conversation::capture_close(self.skin.frame(group, window, cx), &self.workbench)
                     .relative()
                     .size_full()
                     .flex()

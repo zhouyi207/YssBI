@@ -89,8 +89,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             interface: assembled_interface(
                 ID,
                 vec![
-                    streaming_input("input", "Input series", input_type)?,
-                    streaming_output("output", "Labeled series", output_type, None)?,
+                    data_input("input", "Input series", input_type)?,
+                    data_output("output", "Labeled series", output_type, None)?,
                 ],
                 vec![],
                 vec![],

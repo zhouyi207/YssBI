@@ -7,6 +7,17 @@ use crate::{CapabilityContractError, KnowledgeChunkId, KnowledgeDocumentId, Know
 
 pub const MAX_KNOWLEDGE_RESULTS: u16 = 20;
 
+pub const SEARCH_KNOWLEDGE_TOOL: &str = "search_knowledge";
+pub const READ_KNOWLEDGE_TOOL: &str = "read_knowledge";
+
+pub fn search_knowledge_schema() -> serde_json::Value {
+    serde_json::Value::from(schemars::schema_for!(SearchKnowledgeRequest))
+}
+
+pub fn read_knowledge_schema() -> serde_json::Value {
+    serde_json::Value::from(schemars::schema_for!(ReadKnowledgeRequest))
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchKnowledgeRequest {

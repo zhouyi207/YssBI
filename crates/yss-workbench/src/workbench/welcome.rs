@@ -112,7 +112,7 @@ impl Workbench {
 
     fn render_welcome_recent(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let snapshot = self.recent.read(cx).snapshot();
-        let disabled = self.is_closing(cx);
+        let disabled = self.is_closing(cx) || snapshot.error.is_some();
         let mut recent = div()
             .flex()
             .flex_col()
@@ -130,26 +130,7 @@ impl Workbench {
                     .text_color(cx.theme().muted_foreground)
                     .child(crate::text::t("native.workbench.loadingRecentProjects")),
             );
-        } else if let Some(error) = snapshot.error {
-            recent = recent
-                .child(
-                    div()
-                        .px_2()
-                        .py_3()
-                        .text_sm()
-                        .text_color(cx.theme().danger)
-                        .child(crate::text::translate(error)),
-                )
-                .child(
-                    Button::new("welcome-retry")
-                        .small()
-                        .ghost()
-                        .label(crate::text::t("common.retry"))
-                        .on_click(cx.listener(|view, _, _, cx| {
-                            view.recent.update(cx, |recent, cx| recent.reload(cx))
-                        })),
-                );
-        } else if snapshot.records.is_empty() {
+        } else if snapshot.records.is_empty() && snapshot.error.is_none() {
             recent = recent.child(
                 div()
                     .px_2()

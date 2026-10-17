@@ -6,7 +6,7 @@
 use super::distributions::{chi_squared_sf, normal_two_sided_p};
 
 /// Cholesky 分解 L 使得 A = L L'，L 为下三角，原地覆盖 A 的下三角部分
-fn cholesky_lower_in_place(a: &mut Mat<f64>) -> Result<(), ()> {
+pub(super) fn cholesky_lower_in_place(a: &mut Mat<f64>) -> Result<(), ()> {
     let n = a.nrows();
     if a.ncols() != n {
         return Err(());

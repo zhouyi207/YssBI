@@ -2,6 +2,7 @@
 use super::GraphCanvas;
 use gpui_kit::{Context, point, px};
 use yss_ui::layout_store::Viewport;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub fn bind_viewport(&mut self, project_root: Option<String>) {
@@ -28,24 +29,26 @@ impl GraphCanvas {
             return;
         };
         let snapshot = self.viewport_snapshot();
-        let Some(job) = self.services.layouts.update_viewport(
-            root,
-            self.path(),
-            snapshot,
-            self.services.tasks.executor(),
-        ) else {
+        let Some(job) = self
+            .services
+            .layouts
+            .update_viewport(root, self.path(), snapshot)
+        else {
             return;
         };
         let path = self.path().to_owned();
         cx.spawn(async move |view, cx| {
             if !matches!(job.await, Ok(Ok(()))) {
-                let _ = view.update(cx, |view, cx| {
+                view.update(cx, |view, cx| {
                     if view.path() == path && view.viewport_snapshot() == snapshot {
-                        view.error =
-                            Some(yss_ui::text::translate("native.canvas.viewportSaveFailed"));
+                        view.notifications.error(
+                            yss_ui::text::translate("native.canvas.viewportSaveFailed"),
+                            cx,
+                        );
                         cx.notify();
                     }
-                });
+                })
+                .log_released();
             }
         })
         .detach();

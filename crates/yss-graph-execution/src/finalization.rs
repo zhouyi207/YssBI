@@ -2,12 +2,9 @@
 //!
 //! Execution creates the sealed candidate after result/resource validation.
 //! Application can consume the one-way handoff, but it cannot construct a
-//! candidate, replace one of its results, or detach its grant evidence.
+//! candidate or replace one of its results.
 
-use crate::plan::{
-    PlanId, PlanOutputRef, PlanResourceId, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
-    ResourceKind,
-};
+use crate::plan::{PlanOutputRef, PlanSourceIdentity};
 use crate::result::{ResultId, ResultProvenance, StoredResult};
 use std::sync::Arc;
 
@@ -74,54 +71,6 @@ impl ReadyResult {
     }
 }
 
-/// Execution-private evidence that a candidate was checked against the
-/// prepared resource basis. The fields never cross the Application seam.
-#[derive(Debug)]
-#[allow(
-    dead_code,
-    reason = "grant evidence is retained by the sealed candidate until finalization"
-)]
-pub(crate) struct SealedCandidateGrant {
-    plan_id: PlanId,
-    resource: PlanResourceId,
-    version: PlanResourceVersion,
-    kind: ResourceKind,
-    access: ResourceAccess,
-}
-
-impl SealedCandidateGrant {
-    pub(crate) fn new(
-        plan_id: PlanId,
-        resource: PlanResourceId,
-        version: PlanResourceVersion,
-        kind: ResourceKind,
-        access: ResourceAccess,
-    ) -> Self {
-        Self {
-            plan_id,
-            resource,
-            version,
-            kind,
-            access,
-        }
-    }
-}
-
-#[derive(Debug)]
-#[allow(
-    dead_code,
-    reason = "grant evidence is retained by the sealed candidate until finalization"
-)]
-pub(crate) struct SealedCandidateGrantSet {
-    grants: Box<[SealedCandidateGrant]>,
-}
-
-impl SealedCandidateGrantSet {
-    pub(crate) fn new(grants: Box<[SealedCandidateGrant]>) -> Self {
-        Self { grants }
-    }
-}
-
 /// A neutral request to inspect a committed result.
 ///
 /// The requester is an opaque plan source. It contains no window, panel,
@@ -137,31 +86,24 @@ pub struct ResultObservationIntent {
 ///
 /// There is intentionally no public constructor, `Clone`, `Default`, serde
 /// implementation, type erasure, or public field access. Only an Execution
-/// owner can build this from scheduler-owned sealed evidence.
+/// owner can build this from scheduler-owned results.
 #[must_use = "a successful execution candidate must be finalized or discarded"]
 #[derive(Debug)]
 pub struct SuccessfulExecutionCandidate {
     results: Box<[ReadyResult]>,
     observation_intents: Box<[ResultObservationIntent]>,
-    #[allow(
-        dead_code,
-        reason = "the private grant seal moves with the candidate and handoff"
-    )]
-    resource_grants: SealedCandidateGrantSet,
 }
 
 impl SuccessfulExecutionCandidate {
-    /// Build a candidate from Execution-owned scheduler output and sealed
-    /// resource evidence. The visibility deliberately excludes Application.
+    /// Build a candidate from Execution-owned scheduler output.
+    /// The visibility deliberately excludes Application.
     pub(crate) fn from_scheduler(
         results: Box<[ReadyResult]>,
         observation_intents: Box<[ResultObservationIntent]>,
-        resource_grants: SealedCandidateGrantSet,
     ) -> Self {
         Self {
             results,
             observation_intents,
-            resource_grants,
         }
     }
 
@@ -256,9 +198,6 @@ pub mod test_support {
             )]
             .into_boxed_slice(),
             observation_intents.into_boxed_slice(),
-            SealedCandidateGrantSet {
-                grants: Box::new([]),
-            },
         )
     }
 

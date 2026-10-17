@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-use yss_harness_contract::model::*;
+use yss_assistant_contract::model::*;
 
 fn read(
     f: &mut Fixture,
@@ -62,7 +62,7 @@ fn topic_tools_page_real_tree_content_and_commit_atomic_batches_with_fresh_copy_
             },
         ))
         .unwrap_err();
-    assert_eq!(error.code, CapabilityFailureCode::InvalidRequest);
+    assert_eq!(error.code, CapabilityFailureCode::INVALID_REQUEST);
     assert_eq!(
         read(&mut f, outline.clone(), None).unwrap().version,
         original.version
@@ -173,7 +173,7 @@ fn topic_tools_page_real_tree_content_and_commit_atomic_batches_with_fresh_copy_
             },
         ))
         .unwrap_err();
-    assert_eq!(rejected.code, CapabilityFailureCode::InvalidRequest);
+    assert_eq!(rejected.code, CapabilityFailureCode::INVALID_REQUEST);
     assert_eq!(f.inspect(&resource), before);
     assert_eq!(f.publications.len(), publications);
     let cycle = f
@@ -191,7 +191,7 @@ fn topic_tools_page_real_tree_content_and_commit_atomic_batches_with_fresh_copy_
             },
         ))
         .unwrap_err();
-    assert_eq!(cycle.code, CapabilityFailureCode::InvalidRequest);
+    assert_eq!(cycle.code, CapabilityFailureCode::INVALID_REQUEST);
     assert_eq!(f.publications.len(), publications);
     let copied = f.edit(
         &resource,
@@ -281,7 +281,7 @@ fn topic_tools_page_real_tree_content_and_commit_atomic_batches_with_fresh_copy_
             },
         ))
         .unwrap_err();
-    assert_eq!(forbidden.code, CapabilityFailureCode::InvalidRequest);
+    assert_eq!(forbidden.code, CapabilityFailureCode::INVALID_REQUEST);
     assert_eq!(
         read(&mut f, outline.clone(), None).unwrap().version,
         current.version

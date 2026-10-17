@@ -1,5 +1,12 @@
 //! The gesture owns its candidate query, so cancellation also cancels late delivery.
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::{App, Context, Hsla, MouseButton, MouseDownEvent, Pixels, Point, Task, Window};
@@ -12,6 +19,14 @@ use yss_node_protocol::PortDirection;
 use yss_project::GraphEditVersion;
 
 use crate::canvas::{Gesture, GraphCanvas, GraphCommand};
+
+struct PreviewCancellation(Arc<AtomicBool>);
+
+impl Drop for PreviewCancellation {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
 
 enum Candidates {
     Loading { _task: Task<()> },
@@ -115,7 +130,7 @@ impl GraphCanvas {
         self.selected_connections.clear();
         self.connection_click = None;
         self.palette = None;
-        self.error = None;
+
         window.focus(&self.focus, cx);
         if event.modifiers.alt {
             self.submit(
@@ -181,9 +196,10 @@ impl GraphCanvas {
             return;
         }
         if let Some(ConnectionDecision::Invalid { reason }) = drag.decision(&target) {
-            self.error = Some(yss_ui::text::translate(&format!(
-                "canvas.connection.errors.{reason}"
-            )));
+            self.notifications.error(
+                yss_ui::text::translate(&format!("canvas.connection.errors.{reason}")),
+                cx,
+            );
         } else {
             // Missing preview decisions are neutral, including failed reads.
             // The mutation still validates the captured version and connection.
@@ -221,6 +237,8 @@ impl GraphCanvas {
         let project = self.graph.project.clone();
         let path = self.graph.projection.graph_path.clone();
         let query = source.clone();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let cancellation = PreviewCancellation(cancelled.clone());
         let task = self.services.run(move |services| {
             Ok(services.graph_connection_candidates(
                 &project,
@@ -232,14 +250,23 @@ impl GraphCanvas {
                 } else {
                     ConnectionIntent::Connect
                 },
+                &|| cancelled.load(Ordering::Relaxed),
             )?)
         });
         cx.spawn(async move |view, cx| {
+            // Dropping this read task stops its blocking worker at the next planning boundary.
+            // Mutation tasks deliberately do not share this cancellation path.
+            let _cancellation = cancellation;
             let result = task
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            let result = match result {
+                Ok(Some(candidates)) => Ok(candidates),
+                Ok(None) => return,
+                Err(error) => Err(error),
+            };
+            view.update(cx, |view, cx| {
                 if view.graph.editing.version != version {
                     return;
                 }
@@ -288,7 +315,8 @@ impl GraphCanvas {
                 };
                 drag.update_replaced();
                 cx.notify();
-            });
+            })
+            .log_released();
         })
     }
 }

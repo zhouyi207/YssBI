@@ -1,57 +1,21 @@
-//! Flat Manager–Worker identities, delegation and execution authority.
+//! Manager–Worker identities, delegation and outcomes. Task scopes are extension-defined JSON.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::{
-    AgentDriverFailureCode, AgentRunId, CapabilityContractError, GraphResultReference,
-    ProjectResourceRef, ResourceCreation, ResourceVersion, StatisticalPlan, ToolInvocationId,
-};
+use crate::string_identity;
+use crate::{AgentDriverFailureCode, AgentRunId, ToolInvocationId};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentRole {
-    Manager,
-    Data,
-    Stats,
-    Plot,
-    Report,
-    Review,
-}
+#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
+#[schemars(transparent)]
+pub struct AgentRoleId(String);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentControlTool {
-    DelegateTask,
-    FollowupTask,
-    ProposeStatisticalPlan,
-}
+string_identity!(AgentRoleId, "agent role id");
 
-impl AgentControlTool {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::DelegateTask => "delegate_task",
-            Self::FollowupTask => "followup_task",
-            Self::ProposeStatisticalPlan => "propose_statistical_plan",
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentFollowup {
-    pub run_id: AgentRunId,
-    pub instruction: String,
-    #[serde(default)]
-    pub resource_versions: Vec<AgentResourceVersion>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentResourceVersion {
-    pub resource: ProjectResourceRef,
-    pub version: ResourceVersion,
-}
+pub const DELEGATE_TASK_TOOL: &str = "delegate_task";
+pub const FOLLOWUP_TASK_TOOL: &str = "followup_task";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -60,136 +24,68 @@ pub enum AgentOutputMode {
     FinalResponse,
 }
 
-impl AgentRole {
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Manager => "ManagerAgent",
-            Self::Data => "DataAgent",
-            Self::Stats => "StatsAgent",
-            Self::Plot => "PlotAgent",
-            Self::Report => "ReportAgent",
-            Self::Review => "ReviewAgent",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentResourceOperation {
-    Inspect,
-    Edit,
-    Rename,
-    Duplicate,
-    Delete,
-    Save,
-    Execute,
-    Export,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentResourceAccess {
-    pub resource: ProjectResourceRef,
-    pub version: Option<ResourceVersion>,
-    pub operations: Vec<AgentResourceOperation>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentResultAccess {
-    pub result_ref: crate::ResultRef,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentTaskScope {
-    pub resources: Vec<AgentResourceAccess>,
-    pub results: Vec<AgentResultAccess>,
-    pub creations: Vec<AgentCreationAccess>,
-    pub export_paths: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentCreationAccess {
-    pub specification: ResourceCreation,
-    pub operations: Vec<AgentResourceOperation>,
-}
-
-impl AgentTaskScope {
-    pub fn is_read_only(&self) -> bool {
-        self.creations.is_empty()
-            && self.export_paths.is_empty()
-            && self.resources.iter().all(|access| {
-                access
-                    .operations
-                    .iter()
-                    .all(|op| *op == AgentResourceOperation::Inspect)
-            })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentTask {
-    /// Stable within the user turn. Reusing a key never starts the work twice.
-    pub key: String,
-    pub worker: AgentRole,
-    pub objective: String,
-    pub constraints: String,
-    pub completion_criteria: String,
-    pub depends_on: Vec<AgentRunId>,
-    pub scope: AgentTaskScope,
-}
-
-impl AgentTask {
-    pub fn validate(&self) -> Result<(), CapabilityContractError> {
-        if self.worker == AgentRole::Manager
-            || self.key.trim().is_empty()
-            || self.key.len() > 128
-            || self.objective.trim().is_empty()
-            || self.completion_criteria.trim().is_empty()
-            || (self.worker == AgentRole::Review && !self.scope.is_read_only())
-        {
-            return Err(CapabilityContractError::InvalidField("task"));
-        }
-        for access in &self.scope.resources {
-            crate::validate_resource_id("resourceId", &access.resource.id)?;
-            if access.version.is_none() {
-                return Err(CapabilityContractError::InvalidField(
-                    "scope.resources.version",
-                ));
-            }
-            if !access.operations.contains(&AgentResourceOperation::Inspect)
-                || access.operations.len() > 8
-            {
-                return Err(CapabilityContractError::InvalidField("operations"));
-            }
-        }
-        for creation in &self.scope.creations {
-            crate::ManageResourceRequest::Create {
-                specification: creation.specification.clone(),
-            }
-            .validate()?;
-            if !creation
-                .operations
-                .contains(&AgentResourceOperation::Inspect)
-                || creation.operations.len() > 8
-            {
-                return Err(CapabilityContractError::InvalidField("creation.operations"));
-            }
-        }
-        Ok(())
-    }
+pub struct AgentFollowup {
+    pub run_id: AgentRunId,
+    pub instruction: String,
+    /// Extension facts bound when the run resumed, such as observed resource versions.
+    pub bindings: Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentInvocationScope {
+pub struct AgentTask {
+    /// Stable within the user turn. Reusing a key never starts the work twice.
+    pub key: String,
+    pub worker: AgentRoleId,
+    pub objective: String,
+    pub constraints: String,
+    pub completion_criteria: String,
+    pub depends_on: Vec<AgentRunId>,
+    /// The bound authority granted by the extension's delegation hook.
+    pub scope: Value,
+}
+
+impl AgentTask {
+    pub fn has_valid_text(&self) -> bool {
+        !self.key.trim().is_empty()
+            && self.key.len() <= 128
+            && !self.objective.trim().is_empty()
+            && !self.completion_criteria.trim().is_empty()
+    }
+}
+
+/// The model-facing delegation arguments. The extension owns the scope's schema and binding.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentTaskInput {
+    pub worker: AgentRoleId,
+    pub objective: String,
+    pub constraints: String,
+    pub completion_criteria: String,
+    pub depends_on: Vec<AgentRunId>,
+    pub scope: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentFollowupInput {
     pub run_id: AgentRunId,
-    pub role: AgentRole,
-    /// Only the Manager has project-wide discovery. Workers always receive a scope.
-    pub task: Option<AgentTaskScope>,
+    pub instruction: String,
+}
+
+pub fn followup_task_schema() -> Value {
+    Value::from(schemars::schema_for!(AgentFollowupInput))
+}
+
+impl From<&AgentFollowup> for AgentFollowupInput {
+    fn from(request: &AgentFollowup) -> Self {
+        Self {
+            run_id: request.run_id.clone(),
+            instruction: request.instruction.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -216,22 +112,23 @@ pub enum AgentRunState {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentTaskOutcome {
     pub run_id: AgentRunId,
-    pub role: AgentRole,
+    pub role: AgentRoleId,
     pub state: AgentRunState,
     pub report: Option<WorkerReport>,
     pub failure_code: Option<AgentDriverFailureCode>,
-    /// These facts are collected by Core from actual tool receipts, never from model prose.
-    pub artifacts: Vec<crate::ResourceChange>,
-    pub results: Vec<GraphResultReference>,
     pub evidence: Vec<ToolInvocationId>,
-    pub plan: Option<StatisticalPlan>,
+    /// Extension facts collected from actual tool receipts, never from model prose.
+    pub facts: Value,
     pub invalidated_runs: Vec<AgentRunId>,
 }
 
-pub fn agent_task_schema() -> schemars::Schema {
-    schemars::schema_for!(crate::model::AgentTaskInput)
-}
-
-pub fn agent_followup_schema() -> schemars::Schema {
-    schemars::schema_for!(crate::model::AgentFollowupInput)
+/// One role's static definition. The root role receives user turns and may delegate.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AgentProfile {
+    pub role: AgentRoleId,
+    pub instructions: Vec<String>,
+    pub tools: Vec<crate::ToolSpec>,
+    pub tool_concurrency: usize,
+    pub delegates: bool,
+    pub output_mode: AgentOutputMode,
 }

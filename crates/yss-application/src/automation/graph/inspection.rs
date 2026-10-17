@@ -54,7 +54,7 @@ pub(super) fn inspect(
         &(&identity_query, &version, &hash, &semantic_input_hash),
     )
     .map(hex::encode)
-    .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?;
+    .map_err(|_| graph_failure(CapabilityFailureCode::INTERNAL_FAILURE))?;
     let diagnostics = diagnostics(projection);
     let counts = GraphInspectionCounts {
         nodes: projection.nodes.len(),
@@ -258,11 +258,11 @@ pub(super) fn constants(
     document.constants.iter().skip(offset).take(limit).map(|(id, constant)| {
         let mut value = serde_json::json!({ "id": id, "name": constant.name, "dataType": constant.data_type, "description": constant.description, "tags": constant.tags, "hasTabularData": constant.tabular.is_some() });
         let content_hash = yss_canonical_hash::hash_canonical("yssbi.assistant.graph-constant.v1", constant)
-            .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?;
+            .map_err(|_| graph_failure(CapabilityFailureCode::INTERNAL_FAILURE))?;
         value["contentHash"] = serde_json::json!(hex::encode(content_hash));
         let primitive = match &constant.data_value { yss_data_contract::DataValue::Bool(_) | yss_data_contract::DataValue::Integer(_) | yss_data_contract::DataValue::Decimal(_) | yss_data_contract::DataValue::Null => true, yss_data_contract::DataValue::String(value) => value.len() <= 4096, _ => false };
         value["valueIncluded"] = serde_json::json!(primitive);
-        if primitive { value["dataValue"] = serde_json::to_value(&constant.data_value).map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?; }
+        if primitive { value["dataValue"] = serde_json::to_value(&constant.data_value).map_err(|_| graph_failure(CapabilityFailureCode::INTERNAL_FAILURE))?; }
         Ok((id.to_string(), value))
     }).collect()
 }

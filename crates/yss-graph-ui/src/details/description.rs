@@ -10,6 +10,7 @@ use yss_graph_execution::{
     plan::{PlanGraphId, PlanOutputRef, PlanPortAddress},
     result::{ResultCacheState, ResultReference},
 };
+use yss_ui::lifecycle::LogReleased;
 
 use crate::{
     GraphServices,
@@ -180,7 +181,7 @@ impl NodeDescription {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation || view.current_reference(cx) != Some(reference) {
                     return;
                 }
@@ -193,10 +194,22 @@ impl NodeDescription {
                     ),
                     Ok(Some(Err(()))) => Content::Invalid,
                     Ok(None) => Content::Unavailable,
-                    Err(_) => Content::Failed,
+                    Err(_) => {
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            yss_ui::text::t("native.results.unavailable"),
+                            cx,
+                            move |view, window, cx| {
+                                if view.current_reference(cx) == Some(reference) {
+                                    view.read(window, cx);
+                                }
+                            },
+                        );
+                        Content::Failed
+                    }
                 };
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

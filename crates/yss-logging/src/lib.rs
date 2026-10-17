@@ -16,6 +16,6 @@ pub use collector::{LogFields, LogLevel, LogRecord};
 pub use retention::LogRetentionPolicy;
 pub use store::{LOG_DATABASE_NAME, LogPage, LogQuery, LogStatistics, LogStoreError};
 pub use stream::{
-    FrontendLogEntryDto, LogBatchDto, LogDomain, LogInitializationError, LogOrigin, LogRecordDto,
-    LogRuntime, LogStreamFailure, LogSubscriptionDto, LogsUnavailable, SubmitFrontendLogsError,
+    LogBatchDto, LogDomain, LogInitializationError, LogOrigin, LogRecordDto, LogRuntime,
+    LogStreamFailure, LogSubscriptionDto, LogsUnavailable,
 };

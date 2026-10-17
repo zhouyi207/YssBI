@@ -246,24 +246,24 @@ pub(crate) struct ProjectCatalogResources {
 }
 
 impl ProjectCatalogResources {
-    fn from_index(index: ProjectIndex) -> Result<Self, ProjectCatalogReadSource> {
+    fn from_index(index: &ProjectIndex) -> Result<Self, ProjectCatalogReadSource> {
         let mut functions = BTreeMap::new();
         let mut databases = BTreeMap::new();
         let mut entries = Vec::new();
 
-        for function in index.function_graphs {
-            let signature = function.function_signature;
+        for function in &index.function_graphs {
+            let signature = &function.function_signature;
             let path = GraphResourcePath::new(function.path.clone())
                 .map_err(ProjectCatalogReadSource::invalid_graph_path)?;
             let signature = graph_signature(signature)
                 .map_err(|_| ProjectCatalogReadSource::invalid_function_type())?;
-            if functions.insert(path.clone(), signature).is_some() {
+            if functions.insert(path, signature).is_some() {
                 return Err(ProjectCatalogReadSource::invalid_declaration_facts());
             }
             entries.push(CatalogResourceEntry {
-                name: function.name.into_boxed_str(),
+                name: function.name.clone().into_boxed_str(),
                 node_type_id: node_type("yssbi.project.function.call")?,
-                resource_path: CatalogResourcePath::new(function.path),
+                resource_path: CatalogResourcePath::new(function.path.clone()),
                 resource_revision: function.function_revision.get(),
                 create_args: ResourceBoundCreateArgs::FunctionGraph,
                 technical_terms: vec!["call".into(), "function".into()],
@@ -271,15 +271,16 @@ impl ProjectCatalogResources {
         }
 
         let mut declaration_observations = Vec::new();
-        for database in index.databases {
+        for database in &index.databases {
             let id = DatabaseId::from_existing(database.id.clone().into());
             let declaration = DatabaseDecl {
                 id: id.clone(),
-                engine: database.engine,
+                engine: database.engine.clone(),
                 schema_version: database.schema_version,
                 required: database.required,
                 name: database
                     .name
+                    .clone()
                     .unwrap_or_else(|| database.id.clone())
                     .into_boxed_str(),
             };
@@ -394,12 +395,12 @@ pub(crate) fn capture_localized_project_facts(
         .project()
         .read_project_index(session.project_instance_id())
         .map_err(map_project_catalog_error)?;
-    localized_project_facts_from_index(session, index)
+    localized_project_facts_from_index(session, &index)
 }
 
 pub(crate) fn localized_project_facts_from_index(
     session: &ApplicationSession,
-    index: ProjectIndex,
+    index: &ProjectIndex,
 ) -> Result<LocalizedCatalogProjectFacts, ProjectCatalogReadError> {
     if index.project_instance_id != session.project_instance_id().as_str() {
         return Err(ProjectCatalogReadError::ProjectLifecycleChanged);
@@ -628,7 +629,7 @@ fn map_graph_catalog_error(error: GraphRuntimeCatalogError) -> CatalogQueryAppli
 }
 
 fn graph_signature(
-    signature: yss_project_history::FunctionSignature,
+    signature: &yss_project_history::FunctionSignature,
 ) -> Result<FunctionSignature, ()> {
     let parameters = signature
         .parameters

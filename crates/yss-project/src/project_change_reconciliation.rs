@@ -1,9 +1,17 @@
 use crate::ProjectIndexInvalidation;
 use crate::ProjectOperationError;
 use crate::ProjectState;
+use crate::file_resources::ResourceFile;
+use yss_chart_document::ChartDocument;
 use yss_filesystem::change::FilesystemChange;
 use yss_project_history::{ChartResourceKey, DocResourceKey, MindResourceKey, ResourceKey};
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
+use yss_project_model::{
+    ProjectData,
+    doc::DocDocument,
+    file::{FilePatch, FilePath},
+    mind::MindDocument,
+};
 
 impl ProjectState {
     pub fn reconcile_project_change(
@@ -41,41 +49,10 @@ impl ProjectState {
             None
         };
         let current = self.get_data()?;
-        let mind_changes =
-            match &targeted {
-                None => crate::file_resources::external_changes::<
-                    yss_project_model::mind::MindDocument,
-                >(session.root.as_path(), &current, None)?,
-                Some(ResourceKey::Mind(key)) => {
-                    let path =
-                        yss_project_model::mind::MindPath::parse(&key.0).map_err(|error| {
-                            ProjectOperationError::TransactionPrepareFailed { message: error }
-                        })?;
-                    crate::file_resources::external_changes(
-                        session.root.as_path(),
-                        &current,
-                        Some(&path),
-                    )?
-                }
-                _ => Vec::new(),
-            };
-        let doc_changes =
-            match &targeted {
-                None => crate::file_resources::external_changes::<
-                    yss_project_model::doc::DocDocument,
-                >(session.root.as_path(), &current, None)?,
-                Some(ResourceKey::Doc(key)) => {
-                    let path = yss_project_model::doc::DocPath::parse(&key.0).map_err(|error| {
-                        ProjectOperationError::TransactionPrepareFailed { message: error }
-                    })?;
-                    crate::file_resources::external_changes(
-                        session.root.as_path(),
-                        &current,
-                        Some(&path),
-                    )?
-                }
-                _ => Vec::new(),
-            };
+        let root = session.root.as_path();
+        let mind_changes = file_changes::<MindDocument>(root, &current, targeted.as_ref())?;
+        let doc_changes = file_changes::<DocDocument>(root, &current, targeted.as_ref())?;
+        let chart_changes = file_changes::<ChartDocument>(root, &current, targeted.as_ref())?;
         let mut graph_changes = Vec::new();
         for (path, previous) in &current.graphs {
             if targeted.as_ref().is_some_and(
@@ -116,62 +93,18 @@ impl ProjectState {
                 graph_changes.push((path.clone(), Some(incoming)));
             }
         }
-        let mut chart_changes = Vec::new();
-        match &targeted {
-            None => {
-                let charts = crate::chart_io::load_charts_from_root(session.root.as_path())
-                    .map_err(read_error)?;
-                for (path, incoming) in charts {
-                    if current.charts.get(&path) != Some(&incoming) {
-                        chart_changes.push((path, Some(incoming)));
-                    }
-                }
-                for path in current.charts.keys() {
-                    if !resource_exists(session.root.as_path(), path.as_str())? {
-                        chart_changes.push((path.clone(), None));
-                    }
-                }
-            }
-            Some(ResourceKey::Chart(key)) => {
-                let path =
-                    yss_chart_document::ChartResourcePath::parse(&key.0).map_err(|error| {
-                        ProjectOperationError::TransactionPrepareFailed {
-                            message: error.to_string(),
-                        }
-                    })?;
-                let incoming = if resource_exists(session.root.as_path(), path.as_str())? {
-                    Some(
-                        crate::chart_io::read_chart_document(session.root.as_path(), &path)
-                            .map_err(read_error)?,
-                    )
-                } else {
-                    None
-                };
-                if current.charts.get(&path) != incoming.as_ref() {
-                    chart_changes.push((path, incoming));
-                }
-            }
-            _ => {}
-        }
         let unchanged = graph_changes.is_empty()
             && chart_changes.is_empty()
             && mind_changes.is_empty()
             && doc_changes.is_empty();
         let known_clean = match &targeted {
             Some(ResourceKey::Graph(path)) => current.graphs.contains_key(path),
-            Some(ResourceKey::Chart(path)) => current
-                .charts
-                .keys()
-                .any(|entry| entry.as_str() == path.0.as_ref()),
-            Some(ResourceKey::Doc(path)) => current
-                .docs
-                .iter()
-                .any(|(entry, doc)| entry.as_str() == path.0.as_ref() && !doc.dirty()),
-            Some(ResourceKey::Mind(path)) => current
-                .minds
-                .iter()
-                .any(|(entry, mind)| entry.as_str() == path.0.as_ref() && !mind.dirty()),
-            _ => false,
+            Some(resource) => {
+                clean_file::<MindDocument>(&current, resource)
+                    || clean_file::<DocDocument>(&current, resource)
+                    || clean_file::<ChartDocument>(&current, resource)
+            }
+            None => false,
         };
         if unchanged && known_clean {
             self.validate_project_session(&session)?;
@@ -221,21 +154,19 @@ impl ProjectState {
                 return Ok(Some(invalidation));
             }
             let mut graph_revisions = self.graph_resource_revisions.write().unwrap();
-            let mut chart_revisions = self.chart_revisions.write().unwrap();
             // Prepare all fallible revision advances before publishing any part of the rescan.
             let next_graph_revisions = graph_changes
                 .iter()
                 .map(|(path, _)| next_revision(path.as_str(), graph_revisions.get(path).copied()))
-                .collect::<Result<Vec<_>, _>>()?;
-            let next_chart_revisions = chart_changes
-                .iter()
-                .map(|(path, _)| next_revision(path.as_str(), chart_revisions.get(path).copied()))
                 .collect::<Result<Vec<_>, _>>()?;
             let advance = publication.prepare_resource_revision()?;
             for patch in mind_changes {
                 crate::file_resources::apply_patch(&mut data, patch);
             }
             for patch in doc_changes {
+                crate::file_resources::apply_patch(&mut data, patch);
+            }
+            for patch in chart_changes {
                 crate::file_resources::apply_patch(&mut data, patch);
             }
             for ((path, incoming), revision) in graph_changes.into_iter().zip(next_graph_revisions)
@@ -252,15 +183,6 @@ impl ProjectState {
                     data.graphs.remove(&path);
                 }
                 graph_revisions.insert(path, revision);
-            }
-            for ((path, incoming), revision) in chart_changes.into_iter().zip(next_chart_revisions)
-            {
-                if let Some(document) = incoming {
-                    data.charts.insert(path.clone(), document);
-                } else {
-                    data.charts.remove(&path);
-                }
-                chart_revisions.insert(path, revision);
             }
             publication.commit_prepared(advance);
         }
@@ -283,11 +205,45 @@ fn resource_key(path: &str) -> Option<ResourceKey> {
         Some(ResourceKey::Doc(DocResourceKey(path.into())))
     } else if yss_project_model::mind::MindPath::parse(path).is_ok() {
         Some(ResourceKey::Mind(MindResourceKey(path.into())))
-    } else if yss_chart_document::ChartResourcePath::parse(path).is_ok() {
+    } else if yss_project_model::chart::ChartPath::parse(path).is_ok() {
         Some(ResourceKey::Chart(ChartResourceKey(path.into())))
     } else {
         None
     }
+}
+
+fn targeted_file<T: ResourceFile>(resource: &ResourceKey) -> Option<FilePath<T>> {
+    let path = match resource {
+        ResourceKey::Mind(key) => &key.0,
+        ResourceKey::Doc(key) => &key.0,
+        ResourceKey::Chart(key) => &key.0,
+        _ => return None,
+    };
+    FilePath::<T>::parse(path)
+        .ok()
+        .filter(|path| T::key(path) == *resource)
+}
+
+fn file_changes<T: ResourceFile>(
+    root: &std::path::Path,
+    current: &ProjectData,
+    targeted: Option<&ResourceKey>,
+) -> Result<Vec<FilePatch<T>>, ProjectOperationError> {
+    match targeted {
+        None => crate::file_resources::external_changes::<T>(root, current, None),
+        Some(resource) => match targeted_file::<T>(resource) {
+            Some(path) => crate::file_resources::external_changes(root, current, Some(&path)),
+            None => Ok(Vec::new()),
+        },
+    }
+}
+
+fn clean_file<T: ResourceFile>(current: &ProjectData, resource: &ResourceKey) -> bool {
+    targeted_file::<T>(resource).is_some_and(|path| {
+        T::files(current)
+            .get(&path)
+            .is_some_and(|state| !state.dirty())
+    })
 }
 
 fn read_error(error: crate::ProjectError) -> ProjectOperationError {
@@ -449,7 +405,7 @@ mod tests {
         let state = fixture.state();
         let session = state.capture_project_session().unwrap();
         let document = state
-            .apply_doc_command(
+            .apply_file_command(
                 &session.instance_id,
                 OperationId::new(),
                 DocCommand::Create {
@@ -491,7 +447,7 @@ mod tests {
         );
         assert_eq!(
             state
-                .read_doc(&session.instance_id, &document.path)
+                .read_file(&session.instance_id, &document.path)
                 .unwrap()
                 .content
                 .0,
@@ -522,7 +478,7 @@ mod tests {
         let session = state.capture_project_session().unwrap();
         let documents = ["First", "Second"].map(|name| {
             state
-                .apply_doc_command(
+                .apply_file_command(
                     &session.instance_id,
                     OperationId::new(),
                     DocCommand::Create { name: name.into() },
@@ -559,7 +515,7 @@ mod tests {
         );
         assert_eq!(
             state
-                .read_doc(&session.instance_id, &documents[1].path)
+                .read_file(&session.instance_id, &documents[1].path)
                 .unwrap()
                 .content,
             documents[1].content
@@ -572,7 +528,7 @@ mod tests {
         for document in &documents {
             assert_eq!(
                 state
-                    .read_doc(&session.instance_id, &document.path)
+                    .read_file(&session.instance_id, &document.path)
                     .unwrap()
                     .content
                     .0,
@@ -649,7 +605,7 @@ mod tests {
         )
         .unwrap();
         let document = state
-            .apply_doc_command(
+            .apply_file_command(
                 &session.instance_id,
                 OperationId::new(),
                 DocCommand::Create {
@@ -660,7 +616,7 @@ mod tests {
             .snapshot
             .unwrap();
         let edited = state
-            .apply_doc_command(
+            .apply_file_command(
                 &session.instance_id,
                 OperationId::new(),
                 DocCommand::Edit {
@@ -675,7 +631,7 @@ mod tests {
             .snapshot
             .unwrap();
         let document = state
-            .apply_doc_command(
+            .apply_file_command(
                 &session.instance_id,
                 OperationId::new(),
                 DocCommand::Save {
@@ -802,7 +758,7 @@ mod tests {
             state.unload_graph_resource(path).unwrap();
         }
         let document = state
-            .apply_doc_command(
+            .apply_file_command(
                 &session.instance_id,
                 OperationId::new(),
                 DocCommand::Create {
@@ -901,12 +857,15 @@ mod tests {
             ),
         );
         let (chart, document) = fixtures::chart("Chart", "data");
-        data.charts.insert(chart.clone(), document);
+        data.charts.insert(
+            chart.clone(),
+            yss_project_model::file::FileState::new(document, "chart".into()).unwrap(),
+        );
         let fixture = fixtures::TempProject::activate("external-deletion", data);
         let state = fixture.state();
         let session = state.capture_project_session().unwrap();
         std::fs::remove_file(session.root.as_path().join(graph.as_str())).unwrap();
-        std::fs::remove_file(session.root.as_path().join(chart.relative_path())).unwrap();
+        std::fs::remove_file(session.root.as_path().join(chart.as_str())).unwrap();
         // Index queries must reflect disk membership even before the watcher drains.
         let index = state.read_project_index(&session.instance_id).unwrap();
         assert!(

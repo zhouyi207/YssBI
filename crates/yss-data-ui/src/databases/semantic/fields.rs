@@ -10,6 +10,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{Context, Div, IntoElement, Render, Window, div, prelude::*};
 use yss_data_contract::{ConversionDomain, NumericConstraints, SemanticType};
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::text::translate as t;
 
 impl SemanticDialog {
@@ -255,22 +256,24 @@ impl SemanticDialog {
                             let owner = owner.clone();
                             menu =
                                 menu.item(PopupMenuItem::new(label).on_click(move |_, _, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        if !view.editable() {
-                                            return;
-                                        }
-                                        view.flush_inputs(cx);
-                                        if value.as_ref().is_none_or(|value| {
-                                            view.draft
-                                                .values
-                                                .iter()
-                                                .any(|entry| &entry.value == value)
-                                        }) {
-                                            view.draft.positive_value = value.clone();
-                                            view.clear_feedback();
-                                            cx.notify();
-                                        }
-                                    });
+                                    owner
+                                        .update(cx, |view, cx| {
+                                            if !view.editable() {
+                                                return;
+                                            }
+                                            view.flush_inputs(cx);
+                                            if value.as_ref().is_none_or(|value| {
+                                                view.draft
+                                                    .values
+                                                    .iter()
+                                                    .any(|entry| &entry.value == value)
+                                            }) {
+                                                view.draft.positive_value = value.clone();
+                                                view.clear_feedback();
+                                                cx.notify();
+                                            }
+                                        })
+                                        .log_released();
                                 }));
                         }
                         menu
@@ -306,29 +309,5 @@ impl Render for SemanticDialog {
         view.when(self.loading || self.saving, |view| {
             view.child(div().text_xs().child(t("common.loading")))
         })
-        .when_some(self.error, |view, key| {
-            view.child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().danger)
-                    .child(yss_ui::text::format(
-                        key,
-                        &[("count", self.draft.values.len().to_string())],
-                    )),
-            )
-        })
-        .when(
-            self.error == Some("detail.data.mappingLoadFailed"),
-            |view| {
-                view.child(
-                    Button::new("semantic-retry")
-                        .small()
-                        .outline()
-                        .label(t("common.retry"))
-                        .disabled(self.loading || self.saving)
-                        .on_click(cx.listener(|view, _, window, cx| view.read_values(window, cx))),
-                )
-            },
-        )
     }
 }

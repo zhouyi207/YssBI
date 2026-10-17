@@ -936,8 +936,6 @@ mod nominal_schema_tests {
             cardinality: PortCardinality::Declared,
             connections: ConnectionsPerPort::Single,
             input_binding: None,
-            consumption: Some(InputConsumption::Streaming),
-            production: None,
             editor: PortEditorSpec::Default,
             schema: None,
         }

@@ -2,6 +2,7 @@
 use super::super::Workbench;
 use crate::canvas::GraphCanvas;
 use gpui_kit::{Context, Entity, Window};
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn reveal_graph_intent(
@@ -23,7 +24,7 @@ impl Workbench {
         let canvas = canvas.downgrade();
         cx.spawn_in(window, async move |view, cx| {
             let refreshed = refresh.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle
                     || view.ui_delivery != delivery
                     || view
@@ -50,7 +51,8 @@ impl Workbench {
                             })
                     });
                 view.finish_intent(&intent, applied, window, cx);
-            });
+            })
+            .log_released();
         })
         .detach();
     }

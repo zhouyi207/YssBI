@@ -36,7 +36,8 @@ pub enum ProjectQueryApplicationError {
 }
 
 #[derive(Debug)]
-pub struct ProjectIndexSnapshot {
+#[non_exhaustive]
+pub struct ProjectPresentationSnapshot {
     pub index: ProjectIndex,
     pub activity_panels: Vec<crate::activity_panel::ActivityPanelDocument>,
 }
@@ -45,7 +46,6 @@ pub struct ProjectIndexSnapshot {
 pub struct ProjectActivation {
     pub path: String,
     pub project_instance_id: ProjectInstanceId,
-    pub activation_revision: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -143,7 +143,6 @@ impl ApplicationState {
         &self,
     ) -> Result<ProjectActivation, ProjectQueryApplicationError> {
         let captured = self.capture_session()?;
-        let activation_revision = captured.project().activation_revision();
         let path = captured.project().get_path().ok_or(
             ProjectQueryApplicationError::ProjectIdentityMismatch {
                 requested: captured.project_instance_id().clone(),
@@ -158,7 +157,6 @@ impl ApplicationState {
         Ok(ProjectActivation {
             path: normalize_existing_path(&path).unwrap_or(path),
             project_instance_id: captured.project_instance_id().clone(),
-            activation_revision,
         })
     }
 
@@ -176,36 +174,55 @@ impl ApplicationState {
     pub fn query_project_index(
         &self,
         project_instance_id: ProjectInstanceId,
+    ) -> Result<ProjectIndex, ProjectQueryApplicationError> {
+        self.query_project_index_with(project_instance_id, |_, index| Ok(index))
+    }
+
+    pub fn query_project_presentation(
+        &self,
+        project_instance_id: ProjectInstanceId,
         locale: &str,
-        include_nodes: bool,
-    ) -> Result<ProjectIndexSnapshot, ProjectQueryApplicationError> {
+    ) -> Result<ProjectPresentationSnapshot, ProjectQueryApplicationError> {
+        self.query_project_index_with(project_instance_id, |captured, index| {
+            let facts = crate::graph::catalog::localized_project_facts_from_index(captured, &index)
+                .map_err(crate::graph::catalog::CatalogQueryApplicationError::from)?;
+            let catalog = crate::graph::catalog::localized_node_catalog_from_facts(
+                self, captured, facts, locale,
+            )?;
+            let activity_panels = vec![
+                crate::activity_panel::project_activity_panel(Some(&index)),
+                crate::activity_panel::nodes_activity_panel_from_catalog(catalog),
+            ];
+            Ok(ProjectPresentationSnapshot {
+                index,
+                activity_panels,
+            })
+        })
+    }
+
+    fn query_project_index_with<T>(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        project: impl FnOnce(
+            &Arc<ApplicationSession>,
+            ProjectIndex,
+        ) -> Result<T, ProjectQueryApplicationError>,
+    ) -> Result<T, ProjectQueryApplicationError> {
         let captured = self.capture_project_session(&project_instance_id)?;
         let index = captured
             .project()
             .read_project_index(&project_instance_id)?;
-        let mut activity_panels = vec![crate::activity_panel::project_activity_panel(Some(&index))];
-        if include_nodes {
-            let facts =
-                crate::graph::catalog::localized_project_facts_from_index(&captured, index.clone())
-                    .map_err(crate::graph::catalog::CatalogQueryApplicationError::from)?;
-            let catalog = crate::graph::catalog::localized_node_catalog_from_facts(
-                self, &captured, facts, locale,
-            )?;
-            activity_panels.push(crate::activity_panel::nodes_activity_panel_from_catalog(
-                catalog,
-            ));
-        }
+        let publication_revision = index.publication_revision;
+        let authority_generation = index.authority_generation();
+        let result = project(&captured, index)?;
         captured.project().validate_project_index_version(
             &project_instance_id,
-            index.publication_revision,
-            index.authority_generation(),
+            publication_revision,
+            authority_generation,
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
-        Ok(ProjectIndexSnapshot {
-            index,
-            activity_panels,
-        })
+        Ok(result)
     }
 
     pub fn reveal_project_resource(

@@ -21,7 +21,7 @@ impl ActivityPanel {
         cx: &mut Context<Self>,
     ) {
         if state == ReadState::Loading && self.document.is_some() {
-            // Keep a useful snapshot and any previous failure visible until the read settles.
+            // Keep a useful snapshot until the read settles.
             return;
         }
         if self.read_state != state {
@@ -44,22 +44,21 @@ impl ActivityPanel {
         }
         Some(
             div()
-                .h_7()
-                .px_2()
+                .flex_shrink_0()
                 .flex()
                 .items_center()
-                .justify_end()
                 .gap_1()
                 .children(document.tools.iter().map(|tool| {
                     let expected = document.clone();
                     let id = tool.id.to_owned();
+                    let label = tool.label.resolve_with(translate);
                     Button::new(gpui_kit::SharedString::from(format!("activity-tool-{id}")))
                         .ghost()
                         .small()
-                        .size_5()
                         .icon(tool_icon(tool.icon))
                         .disabled(self.conversation_busy(cx))
-                        .tooltip(tool.label.resolve_with(translate))
+                        .accessibility_label(label.clone())
+                        .tooltip(label)
                         .on_click(cx.listener(move |view, _, _, cx| {
                             if view.accepts(&expected) {
                                 cx.emit(ActivityEvent::Tool(id.clone()));
@@ -87,38 +86,35 @@ impl ActivityPanel {
                     .child(crate::text::translate("common.loading"))
                     .into_any_element(),
             ),
-            ReadState::Failed(key) => Some(
-                div()
-                    .id("activity-error")
-                    .role(gpui_kit::accesskit::Role::Alert)
-                    .px_3()
-                    .py_2()
-                    .flex()
-                    .items_start()
-                    .gap_1()
-                    .text_xs()
-                    .text_color(cx.theme().danger)
-                    .child(div().min_w_0().flex_1().child(crate::text::translate(key)))
-                    .child(
-                        Button::new("activity-retry")
-                            .ghost()
-                            .small()
-                            .size_5()
-                            .icon(IconName::RefreshCw)
-                            .tooltip(crate::text::translate("common.retry"))
-                            .on_click(
-                                cx.listener(|_, _, _, cx| cx.emit(ActivityEvent::RefreshResources)),
-                            ),
-                    )
-                    .into_any_element(),
-            ),
+            ReadState::Failed(_) => None,
             _ if self.rows.is_empty() => {
                 let document = self.document.as_ref()?;
                 let (title, description) = document.empty_state.as_ref()?;
                 let filtered = self
                     .search
                     .as_ref()
-                    .is_some_and(|search| !search.read(cx).value().is_empty());
+                    .is_some_and(|search| !search.read(cx).value().is_empty())
+                    && !document.rows.is_empty();
+                if self.panel_id == "assistant" {
+                    return Some(
+                        div()
+                            .id("activity-empty")
+                            .role(gpui_kit::accesskit::Role::Status)
+                            .flex_1()
+                            .min_h_0()
+                            .child(yss_ui::appearance::empty_state(
+                                IconName::MessageSquareText,
+                                if filtered {
+                                    crate::text::translate("panel.assistantNoMatchingConversations")
+                                } else {
+                                    title.resolve_with(translate)
+                                },
+                                description.resolve_with(translate),
+                                cx,
+                            ))
+                            .into_any_element(),
+                    );
+                }
                 Some(
                     div()
                         .id("activity-empty")

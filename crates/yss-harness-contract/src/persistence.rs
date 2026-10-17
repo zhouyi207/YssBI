@@ -4,11 +4,12 @@ use std::pin::Pin;
 
 use serde::{Deserialize, Serialize};
 
+use serde_json::Value;
+
 use crate::{
-    AgentEvent, ApprovalGrantId, AutomationCapabilityRequest, AutomationCapabilityResult,
-    CapabilityFailure, CapabilityId, HarnessSessionId, HarnessTurnId, IdempotencyKey, PrincipalId,
-    ProjectSessionBinding, SourceHash, ToolInvocationId, UnixMillis, WorkflowId, WorkflowRunId,
-    WorkflowStepId, WorkflowVersion,
+    AgentEvent, ApprovalGrantId, CapabilityFailure, HarnessSessionId, HarnessTurnId,
+    IdempotencyKey, PrincipalId, ProjectSessionBinding, SourceHash, ToolEffect, ToolInvocationId,
+    UnixMillis, WorkflowId, WorkflowRunId, WorkflowStepId, WorkflowVersion,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -69,14 +70,14 @@ pub enum HarnessEvent {
     },
     AgentRunResumed {
         request: crate::AgentFollowup,
-        scope: crate::AgentTaskScope,
-        role: crate::AgentRole,
+        scope: Value,
+        role: crate::AgentRoleId,
         objective: String,
     },
     AgentRunStarted {
         run_id: crate::AgentRunId,
         parent_run_id: Option<crate::AgentRunId>,
-        role: crate::AgentRole,
+        role: crate::AgentRoleId,
         task: Option<Box<crate::AgentTask>>,
     },
     AgentRunOutput {
@@ -160,7 +161,8 @@ pub struct WorkflowDefinition {
 pub struct WorkflowStep {
     pub id: WorkflowStepId,
     pub depends_on: Vec<WorkflowStepId>,
-    pub request: AutomationCapabilityRequest,
+    pub tool: String,
+    pub request: Value,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -216,61 +218,6 @@ pub enum ToolInvocationState {
     Failed,
 }
 
-/// A rejected model intention may never acquire an executable owner request.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(
-    tag = "stage",
-    rename_all = "snake_case",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum ToolInvocationRequest {
-    Bound {
-        request: AutomationCapabilityRequest,
-    },
-    Rejected {
-        capability_id: CapabilityId,
-        /// Only typed business input is retained. Malformed provider payloads are not logged.
-        input: Option<crate::model::CapabilityInput>,
-    },
-}
-
-impl From<AutomationCapabilityRequest> for ToolInvocationRequest {
-    fn from(request: AutomationCapabilityRequest) -> Self {
-        Self::Bound { request }
-    }
-}
-impl ToolInvocationRequest {
-    pub fn capability_id(&self) -> CapabilityId {
-        match self {
-            Self::Bound { request } => request.capability_id(),
-            Self::Rejected { capability_id, .. } => *capability_id,
-        }
-    }
-    pub fn bound(&self) -> Option<&AutomationCapabilityRequest> {
-        match self {
-            Self::Bound { request } => Some(request),
-            Self::Rejected { .. } => None,
-        }
-    }
-    pub fn graph_edit(&self) -> Option<crate::ApplyGraphEditRequest> {
-        self.bound()
-            .and_then(AutomationCapabilityRequest::graph_edit)
-    }
-    pub fn model_input(&self) -> Option<crate::model::CapabilityInput> {
-        match self {
-            Self::Bound { request } => Some(request.into()),
-            Self::Rejected { input, .. } => input.clone(),
-        }
-    }
-    pub fn model_arguments(&self) -> Result<serde_json::Value, serde_json::Error> {
-        Ok(match self.model_input() {
-            Some(input) => serde_json::to_value(input)?["payload"].take(),
-            None => serde_json::json!({}),
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ToolInvocationRecord {
@@ -282,10 +229,14 @@ pub struct ToolInvocationRecord {
     pub workflow_run_id: Option<WorkflowRunId>,
     pub workflow_step_id: Option<WorkflowStepId>,
     pub project: ProjectSessionBinding,
-    pub capability_id: CapabilityId,
-    pub request: ToolInvocationRequest,
+    pub tool: String,
+    pub effect: ToolEffect,
+    /// Normalized model-facing arguments replayed to the provider. Malformed payloads are not retained.
+    pub arguments: Value,
+    /// The extension-bound request. None when the call was rejected before binding.
+    pub request: Option<Value>,
     pub state: ToolInvocationState,
-    pub result: Option<AutomationCapabilityResult>,
+    pub result: Option<Value>,
     pub failure: Option<CapabilityFailure>,
     pub started_at: UnixMillis,
     pub deadline: UnixMillis,
@@ -299,7 +250,7 @@ pub struct ApprovalGrantRecord {
     pub principal_id: PrincipalId,
     pub session_id: HarnessSessionId,
     pub project: ProjectSessionBinding,
-    pub capability_id: CapabilityId,
+    pub tool: String,
     pub request_fingerprint: SourceHash,
     pub issued_at: UnixMillis,
     pub expires_at: UnixMillis,

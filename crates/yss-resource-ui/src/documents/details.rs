@@ -1,15 +1,17 @@
 //! File information uses the editor's current snapshot and draft status.
 use super::DocumentEditor;
-use gpui_kit::component::ActiveTheme;
+use crate::file_session::{FileEditor, file_status};
+use gpui_kit::assets::IconName;
 use gpui_kit::{App, IntoElement, div, prelude::*};
 use std::borrow::Cow;
+use yss_ui::inspector::{self, InspectorHeader, InspectorSection};
+use yss_ui::text::translate;
 
 /// Borrowed inspector fields; retain an owned copy only after the display changes.
 #[derive(PartialEq)]
 pub struct DetailsDisplay<'a> {
     path: Cow<'a, str>,
-    busy: bool,
-    dirty: bool,
+    status: &'static str,
     error: Option<Cow<'a, str>>,
 }
 
@@ -17,8 +19,7 @@ impl DetailsDisplay<'_> {
     pub fn into_owned(self) -> DetailsDisplay<'static> {
         DetailsDisplay {
             path: Cow::Owned(self.path.into_owned()),
-            busy: self.busy,
-            dirty: self.dirty,
+            status: self.status,
             error: self.error.map(|error| Cow::Owned(error.into_owned())),
         }
     }
@@ -29,54 +30,36 @@ impl DocumentEditor {
     pub fn details_state(&self) -> DetailsDisplay<'_> {
         DetailsDisplay {
             path: Cow::Borrowed(self.path()),
-            busy: self.busy(),
-            dirty: self.dirty(),
-            error: self.error.as_deref().map(Cow::Borrowed),
+            status: file_status(self),
+            error: self.file.error().map(|error| Cow::Borrowed(error.as_ref())),
         }
     }
 
     pub fn render_details(&self, cx: &App) -> impl IntoElement + use<> {
+        let status = translate(file_status(self));
         div()
-            .p_4()
+            .min_w_0()
             .flex()
             .flex_col()
-            .gap_3()
             .child(
-                div()
-                    .text_sm()
-                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                    .child(self.snapshot.path.name().to_owned()),
+                InspectorHeader::new(IconName::FileText, self.snapshot().path.name().to_owned())
+                    .detail(translate("native.workbench.markdownDocument")),
             )
             .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::translate("native.workbench.markdownDocument")),
+                InspectorSection::new("document-info", translate("detail.sections.info")).child(
+                    inspector::property_list([
+                        inspector::property_row(
+                            translate("detail.fields.path"),
+                            self.path().to_owned(),
+                            cx,
+                        )
+                        .into_any_element(),
+                        inspector::property_row(translate("detail.fields.status"), status, cx)
+                            .id("document-status")
+                            .role(gpui_kit::accesskit::Role::Status)
+                            .into_any_element(),
+                    ]),
+                ),
             )
-            .child(div().text_sm().child(self.path().to_owned()))
-            .child(
-                div()
-                    .id("document-status")
-                    .role(gpui_kit::accesskit::Role::Status)
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::translate(if self.busy() {
-                        "native.workbench.loadingOrSaving"
-                    } else if self.dirty() {
-                        "native.workbench.unsavedChanges"
-                    } else {
-                        "native.workbench.saved"
-                    })),
-            )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .id("document-error")
-                        .role(gpui_kit::accesskit::Role::Alert)
-                        .text_sm()
-                        .text_color(cx.theme().danger)
-                        .child(error),
-                )
-            })
     }
 }

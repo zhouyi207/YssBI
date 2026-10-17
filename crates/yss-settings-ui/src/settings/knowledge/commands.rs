@@ -6,6 +6,7 @@ use yss_harness_contract::{KnowledgeSourceId, ProjectKnowledgeStatus};
 use yss_project::ProjectIndex;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_model::doc::DocPath;
+use yss_ui::lifecycle::LogReleased;
 
 pub(super) enum Mutation {
     Rebuild(DocPath),
@@ -83,7 +84,7 @@ impl SettingsPanel {
         // The retained settings entity, not its window, owns completion delivery.
         cx.spawn(async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if !view.knowledge.current(&expected, generation) {
                     return;
                 }
@@ -99,9 +100,15 @@ impl SettingsPanel {
                         .filter(|selected| view.knowledge.can_add(selected));
                 } else {
                     view.knowledge.failure = Some(Failure::Load);
+                    view.notifications.error_with_retry(
+                        yss_ui::text::t("settings.knowledge.loadFailed"),
+                        cx,
+                        |view, _, cx| view.refresh_knowledge(cx),
+                    );
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -165,16 +172,20 @@ impl SettingsPanel {
         });
         cx.spawn(async move |view, cx| {
             let success = job.await.is_ok_and(|result| result.is_ok());
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 if !view.knowledge.current(&expected, generation) {
                     return;
                 }
                 view.knowledge.pending = false;
                 view.knowledge.failure = (!success).then_some(Failure::Mutation);
+                if !success {
+                    view.report_error(yss_ui::text::t("settings.knowledge.failed"), false, cx);
+                }
                 // Also re-read after failure: a completed store write may precede a stale-session error.
                 view.refresh_knowledge(cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

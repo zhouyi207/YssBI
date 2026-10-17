@@ -13,6 +13,7 @@ use yss_application::{
     session::{SessionCaptureError, SessionRevalidationError},
 };
 use yss_project_identity::{OperationId, ProjectInstanceId};
+use yss_ui::lifecycle::LogReleased;
 
 struct ProjectObservation {
     active: Option<ProjectInstanceId>,
@@ -33,7 +34,7 @@ fn read_project(
             let language = crate::text::locale();
             let project = services
                 .application
-                .query_project_index(identity.clone(), language, true)
+                .query_project_presentation(identity.clone(), language)
                 .map(|index| Some(DesktopProject::new(identity.clone(), index, language)))
                 .map_err(anyhow::Error::from);
             (Some(identity), project)
@@ -255,7 +256,7 @@ impl Workbench {
             );
             if let Some(path) = observation.opened_path.take()
                 && !matches!(
-                    executor.block_on(watcher.layouts.remember_project(path, &executor)),
+                    executor.block_on(watcher.layouts.remember_project(path)),
                     Ok(Ok(()))
                 )
             {
@@ -271,7 +272,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.lifecycle != lifecycle {
                     return;
                 }
@@ -319,16 +320,21 @@ impl Workbench {
                 if let Some(dialog) = &dialog {
                     if error.is_none() {
                         crate::modal_window::close_child(window, cx);
-                    } else {
-                        let _ = dialog.update(cx, |form, cx| {
+                    } else if dialog
+                        .update(cx, |form, cx| {
                             form.finish(lifecycle, error.clone(), recovery, cx)
-                        });
+                        })
+                        .log_released()
+                        .is_some()
+                    {
+                        error = None;
                     }
                 }
                 view.error = error.take();
                 view.recent.update(cx, |recent, cx| recent.reload(cx));
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -365,9 +371,7 @@ impl Workbench {
             );
         });
         self.assistant_intent = None;
-        self.documents.clear();
-        self.charts.clear();
-        self.minds.clear();
+        self.files.clear();
         self.databases.clear();
         self.result_panels.clear();
         self.opening.clear();

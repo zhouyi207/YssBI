@@ -11,7 +11,7 @@ use crate::finalization::{
 };
 use crate::package_preparation::PreparedExecutionPlan;
 use crate::resource_preparation::{
-    PreparedRunResources, ResourceProviderFactory, RunResourceBindings, RunResourceRequest,
+    ResourceProviderFactory, RunResourceBindings, RunResourceRequest,
 };
 use crate::result::{ResultId, ResultProvenance, ResultRunBasis};
 use std::collections::BTreeMap;
@@ -268,7 +268,6 @@ impl ExecutionRuntimeState {
             control.check(RunPhase::Finalization)?;
             self.prepare_result_candidate(
                 output,
-                prepared_resources,
                 reused_inputs,
                 result_basis,
                 run_id,
@@ -280,7 +279,6 @@ impl ExecutionRuntimeState {
     fn prepare_result_candidate(
         &self,
         output: SchedulerOutput,
-        resources: PreparedRunResources,
         mut result_ids_by_output: BTreeMap<crate::plan::PlanOutputRef, ResultId>,
         result_basis: Option<&crate::result::ResultRunBasis>,
         run_id: crate::run_registry::RunId,
@@ -328,7 +326,6 @@ impl ExecutionRuntimeState {
         Ok(SuccessfulExecutionCandidate::from_scheduler(
             results.into_boxed_slice(),
             observation_intents,
-            resources.finish(),
         ))
     }
 

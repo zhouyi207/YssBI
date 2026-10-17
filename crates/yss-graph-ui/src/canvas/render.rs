@@ -11,6 +11,7 @@ use super::{Gesture, GraphCanvas, commands::*, geometry};
 impl Render for GraphCanvas {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let owner = cx.entity().downgrade();
+        let layout_owner = owner.clone();
         let zoom = self.zoom;
         let offset = self.offset;
         let bounds_cell = self.bounds.clone();
@@ -41,27 +42,32 @@ impl Render for GraphCanvas {
         let activity = running_visible.then(|| self.render_connection_activity(pending.is_some()));
         let projection = self.graph.projection.clone();
         let visible = self.bounds.get().size;
+        let focused_node = self.port_inputs.focused_node(window, cx);
+        let layer = self.connection_layer.borrow();
         let visible_nodes = projection
             .nodes
             .iter()
-            .filter(|node| {
-                let pos = geometry::position(node, &self.preview);
-                let rect = geometry::node_bounds(node, pos);
+            .zip(layer.nodes())
+            .filter_map(|(node, geometry)| {
+                let rect = geometry
+                    .layout
+                    .bounds(geometry::position(node, &self.preview));
                 let top_left = offset + rect.origin * zoom;
-                top_left.x + rect.size.width * zoom >= px(0.)
-                    && top_left.y + rect.size.height * zoom >= px(0.)
-                    && (visible.width == px(0.) || top_left.x <= visible.width)
-                    && (visible.height == px(0.) || top_left.y <= visible.height)
+                (focused_node == Some(node.node_id)
+                    || (top_left.x + rect.size.width * zoom >= px(0.)
+                        && top_left.y + rect.size.height * zoom >= px(0.)
+                        && (visible.width == px(0.) || top_left.x <= visible.width)
+                        && (visible.height == px(0.) || top_left.y <= visible.height)))
+                    .then_some(node)
             })
             .collect::<Vec<_>>();
+        drop(layer);
         self.prepare_port_inputs(&visible_nodes, window, cx);
-        let nodes = visible_nodes
-            .into_iter()
-            .map(|node| self.render_node(node, cx))
-            .collect::<Vec<_>>();
 
         let surface = div()
             .id("graph-canvas")
+            .role(gpui_kit::accesskit::Role::Pane)
+            .aria_label(self.title_text(cx))
             .key_context("GraphCanvas")
             .track_focus(&self.focus)
             .w_full()
@@ -75,32 +81,30 @@ impl Render for GraphCanvas {
                 cx.listener(|view, _: &SaveGraph, _, cx| view.submit(GraphCommand::Save, None, cx)),
             )
             .on_action(cx.listener(|view, _: &UndoGraph, _, cx| {
-                if view.graph.editing.can_undo {
-                    view.submit(GraphCommand::Undo, None, cx);
-                }
+                view.edit(super::GraphEditCommand::Undo, cx);
             }))
             .on_action(cx.listener(|view, _: &RedoGraph, _, cx| {
-                if view.graph.editing.can_redo {
-                    view.submit(GraphCommand::Redo, None, cx);
-                }
+                view.edit(super::GraphEditCommand::Redo, cx);
             }))
-            .on_action(cx.listener(|view, _: &DeleteSelection, _, cx| view.delete_selection(cx)))
+            .on_action(cx.listener(|view, _: &DeleteSelection, _, cx| {
+                view.edit(super::GraphEditCommand::Delete, cx);
+            }))
             .on_action(
                 cx.listener(|view, _: &DuplicateSelection, _, cx| view.duplicate_selection(cx)),
             )
             .on_action(
                 cx.listener(|view, _: &gpui_kit::component::input::Copy, _, cx| {
-                    view.copy_selection(false, cx)
+                    view.edit(super::GraphEditCommand::Copy, cx)
                 }),
             )
             .on_action(
                 cx.listener(|view, _: &gpui_kit::component::input::Cut, _, cx| {
-                    view.copy_selection(true, cx)
+                    view.edit(super::GraphEditCommand::Cut, cx)
                 }),
             )
             .on_action(
                 cx.listener(|view, _: &gpui_kit::component::input::Paste, _, cx| {
-                    view.paste_selection(cx)
+                    view.edit(super::GraphEditCommand::Paste, cx)
                 }),
             )
             .on_action(cx.listener(|view, _: &SelectAll, _, cx| {
@@ -128,6 +132,9 @@ impl Render for GraphCanvas {
                 view.commit_blurred_port_inputs(window, cx);
                 view.emit_selection(cx);
                 cx.notify();
+            }))
+            .on_action(cx.listener(|view, _: &OpenNodePalette, window, cx| {
+                view.open_node_palette(window, cx);
             }))
             .on_action(cx.listener(|view, _: &FrameGraph, window, cx| {
                 view.reveal_graph(window, cx);
@@ -176,8 +183,15 @@ impl Render for GraphCanvas {
             .on_scroll_wheel(cx.listener(Self::zoom_at_pointer))
             .child(
                 canvas(
-                    move |bounds, _, _| {
-                        bounds_cell.set(bounds);
+                    move |bounds, window, _| {
+                        if bounds_cell.replace(bounds).size != bounds.size {
+                            // Culling used the previous layout; settle the newly visible controls.
+                            window.on_next_frame(move |_, cx| {
+                                if let Some(owner) = layout_owner.upgrade() {
+                                    owner.update(cx, |_, cx| cx.notify());
+                                }
+                            });
+                        }
                     },
                     move |bounds, _, window, cx| {
                         Self::register_gesture_events(owner, window);
@@ -210,8 +224,41 @@ impl Render for GraphCanvas {
                 .size_full(),
             )
             .children(activity)
-            .children(nodes)
+            .children(
+                visible_nodes
+                    .into_iter()
+                    .filter_map(|node| self.render_node(node, cx)),
+            )
             .children(feedback)
+            .when(
+                projection.nodes.is_empty() && self.palette.is_none(),
+                |view| {
+                    view.child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .justify_center()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(yss_ui::text::t("native.canvas.emptyGraph")),
+                            )
+                            .child(
+                                Button::new("add-first-node")
+                                    .label(yss_ui::text::t("native.canvas.addNode"))
+                                    .icon(IconName::Plus)
+                                    .disabled(!self.can_edit())
+                                    .on_click(cx.listener(|view, _, window, cx| {
+                                        view.open_node_palette(window, cx);
+                                    })),
+                            ),
+                    )
+                },
+            )
             .when_some(label, |view, label| {
                 view.tooltip(move |window, cx| {
                     gpui_kit::component::tooltip::Tooltip::new(gpui_kit::SharedString::from(
@@ -242,6 +289,7 @@ impl Render for GraphCanvas {
                         .small()
                         .ghost()
                         .icon(IconName::Frame)
+                        .accessibility_label(yss_ui::text::t("native.canvas.resetView"))
                         .tooltip(yss_ui::text::t("native.canvas.resetViewShortcut"))
                         .on_click(cx.listener(|view, _, window, cx| {
                             view.reveal_graph(window, cx);
@@ -265,54 +313,6 @@ impl Render for GraphCanvas {
                     )
                 },
             )
-            .when(self.refresh_failed, |view| {
-                view.child(
-                    div()
-                        .absolute()
-                        .top_2()
-                        .left_2()
-                        .right_2()
-                        .p_2()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .rounded_md()
-                        .bg(cx.theme().background)
-                        .border_1()
-                        .border_color(cx.theme().danger)
-                        .text_color(cx.theme().danger)
-                        .text_sm()
-                        .occlude()
-                        .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-                        .child(
-                            div()
-                                .flex_1()
-                                .child(yss_ui::text::t("native.canvas.refreshFailed")),
-                        )
-                        .child(
-                            Button::new("retry-graph-refresh")
-                                .small()
-                                .label(yss_ui::text::t("common.retry"))
-                                .disabled(self.refresh_task.is_some() || self.busy)
-                                .on_click(cx.listener(|view, _, _, cx| view.refresh(cx))),
-                        ),
-                )
-            })
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .absolute()
-                        .bottom_8()
-                        .left_2()
-                        .right_2()
-                        .p_2()
-                        .rounded_md()
-                        .bg(cx.theme().danger.opacity(0.15))
-                        .text_color(cx.theme().danger)
-                        .text_sm()
-                        .child(error),
-                )
-            })
             .when(self.palette.is_some(), |view| {
                 view.child(self.render_palette(window, cx))
             });

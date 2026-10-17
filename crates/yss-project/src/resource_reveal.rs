@@ -4,11 +4,11 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use thiserror::Error;
 
-use yss_chart_document::{ChartResourcePath, ChartResourcePathError};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
 use yss_graph_document::{GraphResourceKind, GraphResourcePath};
 
-use super::{ProjectError, ProjectState};
+use super::{ProjectError, ProjectState, file_resources::ResourceFile};
+use yss_project_model::file::FilePath;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
@@ -31,7 +31,7 @@ pub enum RevealProjectResourceRequest {
         database_id: String,
     },
     Chart {
-        chart_path: ChartResourcePath,
+        path: yss_project_model::chart::ChartPath,
     },
 }
 
@@ -41,8 +41,6 @@ pub enum RevealProjectResourceError {
     UnknownKind { kind: Box<str> },
     #[error("invalid project file path")]
     InvalidFilePath,
-    #[error("chart resource path is invalid")]
-    InvalidChartPath(#[from] ChartResourcePathError),
 }
 
 impl RevealProjectResourceRequest {
@@ -61,22 +59,26 @@ impl RevealProjectResourceRequest {
                 )?,
             }),
             "mind" => Ok(Self::Mind {
-                path: yss_project_model::mind::MindPath::parse(&resource_id)
-                    .map_err(|_| RevealProjectResourceError::InvalidFilePath)?,
+                path: checked_file_path(&resource_id)?,
             }),
             "doc" => Ok(Self::Doc {
-                path: yss_project_model::doc::DocPath::parse(&resource_id)
-                    .map_err(|_| RevealProjectResourceError::InvalidFilePath)?,
+                path: checked_file_path(&resource_id)?,
             }),
             "database" => Ok(Self::Database {
                 database_id: resource_id,
             }),
-            "chart" => ChartResourcePath::parse(&resource_id)
-                .map(|chart_path| Self::Chart { chart_path })
-                .map_err(RevealProjectResourceError::from),
+            "chart" => Ok(Self::Chart {
+                path: checked_file_path(&resource_id)?,
+            }),
             other => Err(RevealProjectResourceError::UnknownKind { kind: other.into() }),
         }
     }
+}
+
+fn checked_file_path<T: ResourceFile>(
+    value: &str,
+) -> Result<FilePath<T>, RevealProjectResourceError> {
+    FilePath::parse(value).map_err(|_| RevealProjectResourceError::InvalidFilePath)
 }
 
 fn checked_node_path(
@@ -126,38 +128,18 @@ pub fn resolve_reveal_path(
                 .map_err(reveal_error)?;
             absolute_path_for_graph(root, path.as_str())
         }
-        RevealProjectResourceRequest::Mind { path } => state
-            .coherent_project_read(&session, |data, _| {
-                data.minds
-                    .contains_key(&path)
-                    .then(|| root.join(path.as_str()))
-                    .ok_or_else(|| ProjectError::InvalidProjectFormat("file not found".into()))
-            })
-            .map_err(reveal_error)?,
-        RevealProjectResourceRequest::Doc { path } => state
-            .coherent_project_read(&session, |data, _| {
-                data.docs
-                    .contains_key(&path)
-                    .then(|| root.join(path.as_str()))
-                    .ok_or_else(|| ProjectError::InvalidProjectFormat("file not found".into()))
-            })
-            .map_err(reveal_error)?,
+        RevealProjectResourceRequest::Mind { path } => {
+            resident_file_path(state, &session, root, &path)?
+        }
+        RevealProjectResourceRequest::Doc { path } => {
+            resident_file_path(state, &session, root, &path)?
+        }
+        RevealProjectResourceRequest::Chart { path } => {
+            resident_file_path(state, &session, root, &path)?
+        }
         RevealProjectResourceRequest::Database { database_id } => state
             .coherent_project_read(&session, |data, _| {
                 absolute_path_for_database(root, &data.databases, &database_id)
-            })
-            .map_err(reveal_error)?,
-        RevealProjectResourceRequest::Chart { chart_path } => state
-            .coherent_project_read(&session, |data, _| {
-                data.charts
-                    .contains_key(&chart_path)
-                    .then(|| root.join(chart_path.relative_path()))
-                    .ok_or_else(|| {
-                        ProjectError::InvalidProjectFormat(format!(
-                            "Chart '{}' not found",
-                            chart_path.as_str()
-                        ))
-                    })
             })
             .map_err(reveal_error)?,
     }?;
@@ -165,6 +147,22 @@ pub fn resolve_reveal_path(
         .validate_project_session(&session)
         .map_err(reveal_error)?;
     Ok(path)
+}
+
+fn resident_file_path<T: ResourceFile>(
+    state: &ProjectState,
+    session: &crate::ProjectSession,
+    root: &Path,
+    path: &FilePath<T>,
+) -> Result<Result<PathBuf, ProjectError>, ProjectError> {
+    state
+        .coherent_project_read(session, |data, _| {
+            T::files(data)
+                .contains_key(path)
+                .then(|| root.join(path.as_str()))
+                .ok_or_else(|| ProjectError::InvalidProjectFormat("file not found".into()))
+        })
+        .map_err(reveal_error)
 }
 
 pub fn absolute_path_for_graph(root: &Path, graph_path: &str) -> Result<PathBuf, ProjectError> {
@@ -281,9 +279,7 @@ mod tests {
         ));
         assert!(matches!(
             RevealProjectResourceRequest::from_parts("chart", "outside".into()),
-            Err(RevealProjectResourceError::InvalidChartPath(
-                ChartResourcePathError::WrongDirectory
-            ))
+            Err(RevealProjectResourceError::InvalidFilePath)
         ));
     }
 }

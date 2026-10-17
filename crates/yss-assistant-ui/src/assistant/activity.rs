@@ -1,5 +1,6 @@
 //! Current activity is an event projection; presentation reads the current locale.
-use yss_harness_contract::{AgentRuntimePhase, AssistantEventKind as Event, AssistantToolIdentity};
+use yss_assistant_contract::{AssistantEventKind as Event, AssistantToolIdentity};
+use yss_harness_contract::AgentRuntimePhase;
 
 #[derive(Clone)]
 pub(super) enum Activity {
@@ -33,7 +34,9 @@ impl Activity {
                 completed: *completed_bytes,
                 total: *total_bytes,
             }),
-            Event::ToolInvocationStarted { capability_id, .. } => Some(Self::Tool(*capability_id)),
+            Event::ToolInvocationStarted { capability_id, .. } => {
+                Some(Self::Tool(capability_id.clone()))
+            }
             Event::ContextCompacted { .. }
             | Event::ToolInvocationCompleted { .. }
             | Event::ToolInvocationFailed { .. }
@@ -55,7 +58,7 @@ impl Activity {
                 AgentRuntimePhase::Compacting => "panel.assistantToolNames.compacting",
             })
             .into(),
-            Self::Tool(kind) => tool_name(*kind),
+            Self::Tool(kind) => tool_name(kind),
         }
     }
 
@@ -77,11 +80,8 @@ impl Activity {
     }
 }
 
-pub(super) fn tool_name(kind: AssistantToolIdentity) -> String {
-    let code = match kind {
-        AssistantToolIdentity::Capability(kind) => kind.as_str(),
-        AssistantToolIdentity::Control(kind) => kind.as_str(),
-    };
+pub(super) fn tool_name(kind: &AssistantToolIdentity) -> String {
+    let code = kind.name();
     let key = format!("panel.assistantToolNames.{code}");
     let label = yss_ui::text::translate(&key);
     if label == key { code.to_owned() } else { label }

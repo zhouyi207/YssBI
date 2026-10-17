@@ -111,7 +111,7 @@ fn selected_database_tools_page_schema_and_rows_without_losing_identity_or_read_
         read(&mut f, rows(0), Some(overview.version))
             .unwrap_err()
             .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     let current = read(&mut f, rows(0), None).unwrap();
     let DatabaseReadContent::Rows {
@@ -128,7 +128,7 @@ fn selected_database_tools_page_schema_and_rows_without_losing_identity_or_read_
         serde_json::from_value(json!({"database":database,"columns":["missing"]})).unwrap(),
     );
     let error = read(&mut f, invalid, None).unwrap_err();
-    assert_eq!(error.code, CapabilityFailureCode::InvalidRequest);
+    assert_eq!(error.code, CapabilityFailureCode::INVALID_REQUEST);
     assert_eq!(
         error.details.get("column").map(String::as_str),
         Some("missing")
@@ -245,7 +245,7 @@ fn database_profiles_select_metrics_and_import_names_belong_to_the_original_comm
         )
         .unwrap_err()
         .code,
-        CapabilityFailureCode::InvalidRequest
+        CapabilityFailureCode::INVALID_REQUEST
     );
     assert_eq!(
         read(
@@ -261,7 +261,7 @@ fn database_profiles_select_metrics_and_import_names_belong_to_the_original_comm
         )
         .unwrap_err()
         .code,
-        CapabilityFailureCode::InvalidRequest
+        CapabilityFailureCode::INVALID_REQUEST
     );
     let cancellation = CancellationToken::default();
     cancellation.cancel(CancellationReason::User);
@@ -280,6 +280,6 @@ fn database_profiles_select_metrics_and_import_names_belong_to_the_original_comm
             )
             .unwrap_err()
             .code,
-        CapabilityFailureCode::Cancelled
+        CapabilityFailureCode::CANCELLED
     );
 }

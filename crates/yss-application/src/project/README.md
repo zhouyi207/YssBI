@@ -23,7 +23,6 @@
 生命周期的部分提交结果必须按其实际 phase/outcome 结算，不能当作完整失败后重新创建目标。
 扫描与清理的进度是辅助通知，命令返回后仍需重新读取实际登记列表；取消不会撤销已完成的登记或清理。
 原生呈现与输入、进度交付和后续项目导航由 [GPUI host](../../../yss-desktop-gpui/README.md) 拥有。
-`react/` 保留原 parser 与共享 fixture 作为契约参考，不参与原生调用链。
 
 活动项目以一个 application session 为边界：
 
@@ -50,7 +49,7 @@ Application 的 watcher 适配将当前项目检查与监听源启动/停止放�
 
 单窗口仍保留项目生命周期隔离：`ProjectInstanceId` 标识一次 Rust 项目激活并用于类型化请求；
 原生宿主的本地 lifecycle 拒绝切换前的目录选择、读取和界面安装，工作台交付标识拒绝同一项目旧 binding 的通知。
-激活回执中的 activation revision 仍是后端事实，不能用宿主查询代次代替。
+激活回执只携带路径与 `ProjectInstanceId`；Project 内部的 activation generation 继续保护激活期间的并发读写。
 原生切换在后台提交后查询实际激活与索引，再安装对应投影；失败且项目身份未变时保留当前编辑输入。
 Project 替换、宿主生命周期与每个资源自身的版本校验分别由原 owner 负责，不能相互替代。
 

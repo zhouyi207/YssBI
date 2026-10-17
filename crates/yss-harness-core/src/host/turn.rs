@@ -1,4 +1,4 @@
-use crate::conversation::agent_messages;
+use crate::conversation::HistorySources;
 use crate::{HarnessError, HarnessHost};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -63,7 +63,7 @@ impl HarnessHost {
             {
                 return Err(HarnessError::Capability(
                     yss_harness_contract::CapabilityFailure::new(
-                        CapabilityFailureCode::InternalFailure,
+                        CapabilityFailureCode::INTERNAL_FAILURE,
                     ),
                 ));
             }
@@ -138,7 +138,14 @@ impl HarnessHost {
         {
             turn.state = HarnessTurnState::Failed;
             turn.finished_at = Some(self.ports.clock.now());
-            let _ = self.ports.sessions.update_turn(&turn).await;
+            if let Err(update) = self.ports.sessions.update_turn(&turn).await {
+                tracing::warn!(
+                    domain = "Harness",
+                    event = "harness_turn_failure_unrecorded",
+                    code = %update.code,
+                    "Harness could not record a failed turn start"
+                );
+            }
             return Err(error);
         }
 
@@ -153,18 +160,6 @@ impl HarnessHost {
         {
             return self.fail_turn(&mut turn, error).await;
         }
-        let previous = match crate::conversation::history(
-            self.ports.events.as_ref(),
-            self.ports.tool_ledger.as_ref(),
-            session_id,
-            &turn_id,
-            &session.project,
-        )
-        .await
-        {
-            Ok(messages) => messages,
-            Err(error) => return self.fail_turn(&mut turn, error.into()).await,
-        };
         let orchestrator = match crate::orchestration::TurnOrchestrator::new(
             self.ports.clone(),
             resolved.driver,
@@ -172,7 +167,6 @@ impl HarnessHost {
             session.clone(),
             turn_id.clone(),
             self.event_writer(),
-            self.report_writing_skill.clone(),
             cancellation.clone(),
             self.agent_access.clone(),
             options,
@@ -180,18 +174,34 @@ impl HarnessHost {
             Ok(orchestrator) => orchestrator,
             Err(error) => return self.fail_turn(&mut turn, error.into()).await,
         };
-        let result = orchestrator
-            .run(
-                agent_messages(
-                    user_message,
-                    previous.messages,
-                    &resources,
-                    &self.report_writing_skill,
-                    yss_harness_contract::AgentRole::Manager,
-                ),
-                previous.observations,
-            )
-            .await;
+        let hooks = orchestrator.root_hooks();
+        let previous = match crate::conversation::history(
+            HistorySources {
+                events: self.ports.events.as_ref(),
+                ledger: self.ports.tool_ledger.as_ref(),
+                extension: self.ports.extension.as_ref(),
+            },
+            session_id,
+            &turn_id,
+            &session.project,
+            orchestrator.root_role(),
+            hooks.as_ref(),
+        )
+        .await
+        {
+            Ok(messages) => messages,
+            Err(error) => return self.fail_turn(&mut turn, error.into()).await,
+        };
+        let messages = match orchestrator.agent_messages(
+            orchestrator.root_role(),
+            user_message,
+            previous,
+            &resources,
+        ) {
+            Ok(messages) => messages,
+            Err(error) => return self.fail_turn(&mut turn, error.into()).await,
+        };
+        let result = orchestrator.run(messages, hooks).await;
 
         if cancellation.reason() == Some(CancellationReason::DeadlineElapsed) {
             return self
@@ -247,28 +257,30 @@ impl HarnessHost {
         }
         for mut record in self.ports.tool_ledger.load_running_invocations().await? {
             // An interrupted mutation has an unknown effect; do not imply that it rolled back.
-            let failure_code = if record.capability_id.descriptor().effect
-                != yss_harness_contract::ToolEffect::Inspect
-                && record.request.bound().is_some()
+            let failure_code = if record.effect != yss_harness_contract::ToolEffect::Inspect
+                && record.request.is_some()
             {
-                CapabilityFailureCode::OutcomeUnknown
+                CapabilityFailureCode::OUTCOME_UNKNOWN
             } else {
-                CapabilityFailureCode::InternalFailure
+                CapabilityFailureCode::INTERNAL_FAILURE
             };
             record.state = yss_harness_contract::ToolInvocationState::Failed;
             record.finished_at = Some(self.ports.clock.now());
-            record.failure = Some(yss_harness_contract::CapabilityFailure::new(failure_code));
+            record.failure = Some(yss_harness_contract::CapabilityFailure::new(
+                failure_code.clone(),
+            ));
             self.ports.tool_ledger.finish(&record).await?;
             let failed = AgentEvent::ToolInvocationFailed {
                 invocation_id: record.id,
-                capability_id: record.capability_id,
+                tool: record.tool,
                 failure_code,
                 failure_details: None,
             };
             let event = if let Some(run_id) = record.agent_run_id {
+                let root = self.ports.extension.root_role();
                 let manager = self.ports.events.load_events_after(&record.session_id, 0).await?
                     .iter().any(|entry| matches!(&entry.event,
-                        HarnessEvent::AgentRunStarted { run_id: id, role: yss_harness_contract::AgentRole::Manager, .. } if id == &run_id));
+                        HarnessEvent::AgentRunStarted { run_id: id, role, .. } if id == &run_id && role == &root));
                 if manager {
                     HarnessEvent::Agent(failed)
                 } else {

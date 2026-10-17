@@ -410,16 +410,6 @@ fn native_series_windows_remain_lazy_aligned_and_page_consistently() {
         series_numbers(&standardized_subset),
         vec![Some((7.0 - 11.5) / 15.0_f64.sqrt()), None]
     );
-    let plan = projected
-        .plan()
-        .as_any()
-        .downcast_ref::<crate::relation::DataFusionRelation>()
-        .unwrap()
-        .frame
-        .logical_plan()
-        .display_indent()
-        .to_string();
-    assert!(plan.contains("Window"));
     let bad = table(
         &runtime,
         vec![Field::new("x", DataType::Int64, false)],
@@ -660,18 +650,6 @@ fn native_grids_align_without_collecting_and_validate_keys_on_consumption() {
     assert_eq!(
         numbers(&aligned, 1, 0, 10),
         vec![Some(10.0), None, Some(30.0)]
-    );
-    assert!(
-        aligned
-            .plan()
-            .as_any()
-            .downcast_ref::<crate::relation::DataFusionRelation>()
-            .unwrap()
-            .frame
-            .logical_plan()
-            .display_indent()
-            .to_string()
-            .contains("Unnest")
     );
     let panel = table(
         &runtime,

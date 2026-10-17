@@ -90,10 +90,18 @@ struct ShortcutEditor {
     input: Entity<InputState>,
     saved: Option<String>,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
     _subscriptions: Vec<Subscription>,
 }
 
 impl ShortcutEditor {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     fn new(
         action: String,
         context: String,
@@ -137,6 +145,7 @@ impl ShortcutEditor {
             input,
             saved,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
             _subscriptions: vec![subscription, preference_subscription],
         }
     }
@@ -169,7 +178,7 @@ impl ShortcutEditor {
             return;
         }
         if text.is_empty() {
-            self.error = Some(text::translate("preferences.shortcuts.empty"));
+            self.set_error(Some(text::translate("preferences.shortcuts.empty")), cx);
             cx.notify();
             return;
         }
@@ -189,7 +198,7 @@ impl ShortcutEditor {
             ));
         }
         if let Err(error) = keymap::validate_bindings(&bindings, cx) {
-            self.error = Some(error.to_string());
+            self.set_error(Some(error.to_string()), cx);
             cx.notify();
             return;
         }
@@ -217,7 +226,7 @@ impl ShortcutEditor {
             })
             .is_err()
         {
-            self.error = Some(text::translate("preferences.shortcuts.closed"));
+            self.set_error(Some(text::translate("preferences.shortcuts.closed")), cx);
         }
         cx.notify();
     }
@@ -276,8 +285,5 @@ impl Render for ShortcutEditor {
                         "preferences.shortcuts.commitHint"
                     })),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(div().text_sm().text_color(cx.theme().danger).child(error))
-            })
     }
 }

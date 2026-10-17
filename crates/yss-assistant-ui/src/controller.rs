@@ -12,6 +12,7 @@ use yss_application::activity_panel::{ActivityItem, ActivityPanelDocument, Activ
 use yss_desktop_services::resources::ResourceCatalog;
 use yss_harness_contract::{HarnessSessionId, HarnessSessionRecord, ProjectResourceRef};
 use yss_project_identity::ProjectInstanceId;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DirectoryReadState {
@@ -99,9 +100,6 @@ impl AssistantController {
     }
     pub fn is_reopening(&self) -> bool {
         self.reopen
-    }
-    pub fn is_reading(&self) -> bool {
-        self.reading
     }
     pub fn read_state(&self) -> DirectoryReadState {
         self.read_state
@@ -204,7 +202,7 @@ impl AssistantController {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.epoch != epoch || view.generation != generation {
                     return;
                 }
@@ -215,6 +213,15 @@ impl AssistantController {
                 } else {
                     view.read_state =
                         DirectoryReadState::Failed("native.workbench.assistantDirectoryFailed");
+                    yss_ui::notifications::Notifications::new(window).error_with_retry(
+                        yss_ui::text::t("native.workbench.assistantDirectoryFailed"),
+                        cx,
+                        move |view, window, cx| {
+                            if view.epoch == epoch {
+                                view.refresh_directory(window, cx);
+                            }
+                        },
+                    );
                     view.emit(AssistantEventKind::DirectoryChanged, cx);
                     if std::mem::take(&mut view.reopen) && !view.unavailable(cx) {
                         view.emit(AssistantEventKind::PresentDirectory, cx);
@@ -228,7 +235,8 @@ impl AssistantController {
                     view.refresh_directory(window, cx);
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -292,7 +300,7 @@ impl AssistantController {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.epoch != epoch {
                     return;
                 }
@@ -312,7 +320,8 @@ impl AssistantController {
                 }
                 view.invalidate_directory(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();
@@ -338,7 +347,7 @@ impl AssistantController {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.epoch != epoch {
                     return;
                 }
@@ -358,7 +367,8 @@ impl AssistantController {
                 }
                 view.invalidate_directory(window, cx);
                 cx.notify();
-            });
+            })
+            .log_released();
         })
         .detach();
         cx.notify();

@@ -1,6 +1,7 @@
 use super::DatabaseEditor;
 use gpui_kit::{Context, Window};
 use std::time::{Duration, Instant};
+use yss_ui::lifecycle::LogReleased;
 pub struct DatabaseRead {
     pub(super) meta: yss_application::database::DatabaseMetaResult,
     pub(super) edit: yss_database_contract::EditState,
@@ -108,7 +109,7 @@ impl DatabaseEditor {
             .run(move |services| read(services, project, id, revision, offset, page_size, retain));
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
@@ -127,7 +128,8 @@ impl DatabaseEditor {
                     view.reload(true, window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);

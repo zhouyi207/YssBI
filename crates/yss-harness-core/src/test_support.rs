@@ -1,6 +1,87 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
+mod notes;
+pub use notes::{
+    NoteExtension, NoteGate, NoteRun, READ_NOTE, ScriptedDriver, ScriptedStep, WRITE_NOTE,
+    note_specs, role,
+};
+
+/// Ports backed by one in-memory store, a fixed clock at `now` and the note extension.
+pub fn note_ports(
+    store: std::sync::Arc<InMemoryHarnessStore>,
+    models: std::sync::Arc<dyn yss_harness_contract::LanguageModelResolverPort>,
+    extension: NoteExtension,
+    now: u64,
+) -> crate::HarnessPorts {
+    crate::HarnessPorts {
+        resources: std::sync::Arc::new(FixtureResourceResolver),
+        models,
+        extension: std::sync::Arc::new(extension),
+        sessions: store.clone(),
+        events: store.clone(),
+        event_sink: store.clone(),
+        workflows: store.clone(),
+        tool_ledger: store.clone(),
+        knowledge: store.clone(),
+        knowledge_index: std::sync::Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+        approvals: store,
+        clock: std::sync::Arc::new(FixedClock::new(now)),
+        ids: std::sync::Arc::new(SequentialIds::default()),
+    }
+}
+
+/// One agent run of `extension` over a ledger-backed executor, outside any turn orchestration.
+pub fn run_executor(
+    extension: std::sync::Arc<dyn yss_harness_contract::HarnessExtension>,
+    store: std::sync::Arc<InMemoryHarnessStore>,
+    ids: std::sync::Arc<dyn IdGeneratorPort>,
+    run: yss_harness_contract::RunStart,
+) -> (
+    std::sync::Arc<dyn yss_harness_contract::AgentRunHooks>,
+    std::sync::Arc<dyn yss_harness_contract::AgentToolExecutor>,
+) {
+    let hooks = extension.start_run(run.clone());
+    let tools = extension
+        .profile(&run.role)
+        .map(|profile| profile.tools)
+        .unwrap_or_default();
+    let executor = crate::tools::HarnessToolExecutor::new(
+        crate::tools::ToolRegistry::new(tools),
+        crate::tools::ToolServices {
+            extension: extension.clone(),
+            knowledge: std::sync::Arc::new(crate::KnowledgeService::new(
+                store.clone(),
+                std::sync::Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+            )),
+            ledger: store,
+            clock: std::sync::Arc::new(FixedClock::new(1000)),
+            ids,
+        },
+        crate::tools::InvocationScope {
+            principal_id: yss_harness_contract::PrincipalId::try_new("user")
+                .unwrap_or_else(|_| unreachable!("fixture principal is valid")),
+            session_id: HarnessSessionId::try_new("session")
+                .unwrap_or_else(|_| unreachable!("fixture session is valid")),
+            turn_id: HarnessTurnId::try_new("turn")
+                .unwrap_or_else(|_| unreachable!("fixture turn is valid")),
+            project: run.project,
+        },
+        yss_harness_contract::CancellationToken::default(),
+    )
+    .with_run(run.run_id, hooks.clone());
+    let executor =
+        crate::orchestration::RunExecutor::standalone(executor, hooks.clone(), extension);
+    (hooks, std::sync::Arc::new(executor))
+}
+
+pub fn project() -> yss_harness_contract::ProjectSessionBinding {
+    yss_harness_contract::ProjectSessionBinding::new(
+        yss_project_identity::ProjectInstanceId::from_existing("project-1".into()),
+        yss_project_identity::ProjectSessionId::new("project-session-1"),
+    )
+}
+
 pub fn model_identity() -> yss_harness_contract::LanguageModelIdentity {
     yss_harness_contract::LanguageModelIdentity {
         selection: yss_harness_contract::LanguageModelSelection {
@@ -65,16 +146,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput,
-    AgentTurnRequest, AgentTurnResult, ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort,
-    AutomationIdKind, CapabilityFailure, CapabilityFailureCode, CapabilityFuture,
-    CapabilityGatewayPort, CapabilityInvocationContext, ClockPort, HarnessEvent,
+    AgentToolExecutor, AgentTurnRequest, AgentTurnResult, ApprovalGrantId, ApprovalGrantRecord,
+    ApprovalStorePort, AutomationIdKind, CapabilityFailure, ClockPort, HarnessEvent,
     HarnessEventEnvelope, HarnessEventSinkPort, HarnessEventStorePort, HarnessSessionId,
     HarnessSessionRecord, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
     IdGeneratorPort, KnowledgeDocumentRecord, KnowledgeSourceId, KnowledgeSourceRecord,
-    KnowledgeSourceStatus, KnowledgeSourceStorePort, ModelCapabilityExecutor, PersistenceFailure,
-    PersistenceFailureCode, PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort,
-    ToolInvocationRecord, UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId,
-    WorkflowRunRecord, WorkflowRunState, WorkflowStorePort, WorkflowVersion,
+    KnowledgeSourceStatus, KnowledgeSourceStorePort, PersistenceFailure, PersistenceFailureCode,
+    PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort, ToolInvocationRecord,
+    UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId, WorkflowRunRecord, WorkflowRunState,
+    WorkflowStorePort, WorkflowVersion,
 };
 
 pub struct FixedClock {
@@ -138,7 +218,7 @@ impl AgentDriverPort for MockAgentDriver {
     fn run_turn<'a>(
         &'a self,
         _request: AgentTurnRequest,
-        _capabilities: std::sync::Arc<dyn ModelCapabilityExecutor>,
+        _tools: std::sync::Arc<dyn AgentToolExecutor>,
         output: std::sync::Arc<dyn AgentEventOutput>,
         cancellation: yss_harness_contract::CancellationToken,
     ) -> yss_harness_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
@@ -155,59 +235,6 @@ impl AgentDriverPort for MockAgentDriver {
             Ok(AgentTurnResult {
                 final_text: self.final_text.clone(),
             })
-        })
-    }
-}
-
-#[derive(Default)]
-pub struct RejectingCapabilityGateway;
-
-impl CapabilityGatewayPort for RejectingCapabilityGateway {
-    fn invoke<'a>(
-        &'a self,
-        _context: CapabilityInvocationContext,
-        _request: yss_harness_contract::AutomationCapabilityRequest,
-        _control: yss_harness_contract::CapabilityControl,
-    ) -> CapabilityFuture<'a> {
-        Box::pin(async {
-            Err(CapabilityFailure::new(
-                CapabilityFailureCode::InternalFailure,
-            ))
-        })
-    }
-}
-
-pub struct StaticCapabilityGateway {
-    results: Vec<yss_harness_contract::AutomationCapabilityResult>,
-}
-
-impl StaticCapabilityGateway {
-    pub fn new(result: yss_harness_contract::AutomationCapabilityResult) -> Self {
-        Self {
-            results: vec![result],
-        }
-    }
-
-    pub fn with_result(mut self, result: yss_harness_contract::AutomationCapabilityResult) -> Self {
-        self.results.push(result);
-        self
-    }
-}
-
-impl CapabilityGatewayPort for StaticCapabilityGateway {
-    fn invoke<'a>(
-        &'a self,
-        _context: CapabilityInvocationContext,
-        request: yss_harness_contract::AutomationCapabilityRequest,
-        _control: yss_harness_contract::CapabilityControl,
-    ) -> CapabilityFuture<'a> {
-        Box::pin(async move {
-            self.results
-                .iter()
-                .rev()
-                .find(|result| result.accepts_capability(request.capability_id()))
-                .cloned()
-                .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))
         })
     }
 }
@@ -949,7 +976,7 @@ mod tests {
             principal_id: session.principal_id,
             session_id: session.id,
             project: session.project,
-            capability_id: yss_harness_contract::CapabilityId::CreateNodes,
+            tool: "write_note".into(),
             request_fingerprint: SourceHash::try_new("0".repeat(64)).unwrap(),
             issued_at: now,
             expires_at: UnixMillis::from_existing(200),

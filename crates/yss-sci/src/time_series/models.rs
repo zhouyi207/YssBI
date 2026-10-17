@@ -49,21 +49,6 @@ fn multivariate_series(
     }))
 }
 
-pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<VarFit, SciError> {
-    let names = (0..series.len()).map(|i| format!("y{i}")).collect();
-    var_fit_configured(
-        series,
-        vec![],
-        yss_sci_contract::time_series::var::VarOptions {
-            lags: (1..=lags).collect(),
-            constant: true,
-            dfk: false,
-            variable_names: names,
-            exogenous_names: vec![],
-        },
-    )
-}
-
 pub fn var_fit_configured(
     series: Vec<Vec<f64>>,
     exogenous: Vec<Vec<f64>>,
@@ -118,16 +103,6 @@ pub fn var_lag_order(series: Vec<Vec<f64>>, max_lags: usize) -> Result<VARSocRes
     )
     .map_err(|_| computation_failed(SciOperationCode::VarLagOrder))?;
     Ok(result)
-}
-
-pub fn vec_fit(
-    series: Vec<Vec<f64>>,
-    rank: usize,
-    lags: usize,
-    trend: &str,
-) -> Result<VecFit, SciError> {
-    let names = (0..series.len()).map(|i| format!("y{i}")).collect();
-    vec_fit_named(series, rank, lags, trend, names)
 }
 
 pub fn vec_fit_named(

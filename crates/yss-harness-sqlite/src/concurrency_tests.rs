@@ -180,8 +180,8 @@ async fn concurrent_event_append_with_an_insert_failure_keeps_a_contiguous_durab
         .execute(&first.pool)
         .await
         .unwrap();
-    first.pool.close().await;
-    second.pool.close().await;
+    first.close().await;
+    second.close().await;
     let reopened = SqliteHarnessStore::connect(directory.clone())
         .await
         .unwrap();
@@ -198,7 +198,7 @@ async fn concurrent_event_append_with_an_insert_failure_keeps_a_contiguous_durab
             .sequence,
         12
     );
-    reopened.pool.close().await;
+    reopened.close().await;
     std::fs::remove_dir_all(directory).unwrap();
 }
 
@@ -216,11 +216,10 @@ async fn indexed_invocation_identity_cannot_be_replaced_when_finishing() {
         workflow_run_id: None,
         workflow_step_id: None,
         project: session.project,
-        capability_id: CapabilityId::InspectGraph,
-        request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest::overview(
-            "events/Main.yssbi-event",
-        ))
-        .into(),
+        tool: "inspect_graph".into(),
+        effect: ToolEffect::Inspect,
+        arguments: serde_json::json!({}),
+        request: Some(serde_json::json!({"graph": "events/Main.yssbi-event"})),
         state: ToolInvocationState::Running,
         result: None,
         failure: None,
@@ -301,7 +300,7 @@ async fn indexed_approval_consumption_matches_the_inserted_record() {
         principal_id: session.principal_id,
         session_id: session.id,
         project: session.project,
-        capability_id: CapabilityId::ApplyGraphEdit,
+        tool: "apply_graph_edit".into(),
         request_fingerprint: SourceHash::try_new("fingerprint-1").unwrap(),
         issued_at: UnixMillis::from_existing(1),
         expires_at: UnixMillis::from_existing(10),

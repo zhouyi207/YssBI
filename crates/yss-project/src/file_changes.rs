@@ -44,10 +44,6 @@ impl ProjectIndexInvalidation {
     pub fn project_instance_id(&self) -> &ProjectInstanceId {
         &self.project_instance_id
     }
-
-    pub fn into_project_instance_id(self) -> ProjectInstanceId {
-        self.project_instance_id
-    }
 }
 #[cfg(test)]
 mod tests {

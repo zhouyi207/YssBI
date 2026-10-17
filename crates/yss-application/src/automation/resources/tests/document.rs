@@ -1,6 +1,6 @@
 use super::*;
 use serde_json::json;
-use yss_harness_contract::model::*;
+use yss_assistant_contract::model::*;
 
 fn read(
     f: &mut Fixture,
@@ -129,7 +129,7 @@ fn document_structure_reads_long_writes_and_append_preserve_unicode_and_saved_co
         read(&mut f, scoped, Some(structure.version.clone()))
             .unwrap_err()
             .code,
-        CapabilityFailureCode::RevisionConflict
+        CapabilityFailureCode::REVISION_CONFLICT
     );
     let replaced = f.edit(
         &resource,
@@ -166,7 +166,7 @@ fn document_structure_reads_long_writes_and_append_preserve_unicode_and_saved_co
     );
     assert_eq!(
         read(&mut f, invalid, None).unwrap_err().code,
-        CapabilityFailureCode::InvalidRequest
+        CapabilityFailureCode::INVALID_REQUEST
     );
     f.save(&resource);
     assert!(!read(&mut f, outline, None).unwrap().dirty);
@@ -258,7 +258,7 @@ fn markdown_text_edits_preserve_unread_content_and_reject_ambiguous_batches_atom
                 },
             ))
             .unwrap_err();
-        assert_eq!(failure.code, CapabilityFailureCode::InvalidRequest);
+        assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
         assert_eq!(failure.details["reason"], reason);
         assert_eq!(f.inspect(&resource).version, current.version);
     }
@@ -276,7 +276,7 @@ fn markdown_text_edits_preserve_unread_content_and_reject_ambiguous_batches_atom
             },
         ))
         .unwrap_err();
-    assert_eq!(stale.code, CapabilityFailureCode::RevisionConflict);
+    assert_eq!(stale.code, CapabilityFailureCode::REVISION_CONFLICT);
     assert_eq!(f.publications.len(), publications);
     f.save(&resource);
     assert_eq!(

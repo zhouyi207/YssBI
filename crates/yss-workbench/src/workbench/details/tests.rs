@@ -1,4 +1,5 @@
-use super::DetailsPanel;
+use super::super::files::WeakFilePanel;
+use super::{DetailsPanel, DetailsTarget};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
     AnyWindowHandle, AppContext, Context, Entity, IntoElement, Render, Subscription,
@@ -16,6 +17,7 @@ use yss_project_model::{
     file::{FileContent, FileVersion},
 };
 use yss_resource_ui::documents::{DocumentEditor, DocumentSaveOutcome};
+use yss_resource_ui::file_session::FileEditor;
 
 // Compose the production entities; assertions observe actual GPUI notifications, not a
 // second implementation of the routing/equality rules.
@@ -76,7 +78,10 @@ fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<InspectorWindow>) {
         ));
         let graph = Arc::new(GraphServices::new(
             tasks.clone(),
-            Arc::new(yss_ui::layout_store::LayoutStore::new(&std::env::temp_dir())),
+            Arc::new(yss_ui::layout_store::LayoutStore::new(
+                &std::env::temp_dir(),
+                runtime.handle().clone(),
+            )),
         ));
         gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
             cx.new(|cx| {
@@ -96,9 +101,12 @@ fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<InspectorWindow>) {
                         cx,
                     )
                 });
-                let details = cx.new(|cx| DetailsPanel::new(graph, cx));
+                let details = cx.new(|cx| DetailsPanel::new(graph, window, cx));
                 details.update(cx, |details, cx| {
-                    details.set_document(document.downgrade(), cx)
+                    details.set_target(
+                        DetailsTarget::File(WeakFilePanel::Document(document.downgrade())),
+                        cx,
+                    )
                 });
                 let notifications = Rc::new(Cell::new(0));
                 let count = notifications.clone();
@@ -115,27 +123,6 @@ fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<InspectorWindow>) {
             })
         })
         .unwrap()
-    })
-}
-
-pub(in crate::workbench) fn open_overlay_fixture(
-    cx: &mut TestAppContext,
-) -> (
-    AnyWindowHandle,
-    Entity<DocumentEditor>,
-    Entity<DetailsPanel>,
-    Rc<Cell<usize>>,
-) {
-    let (window, view) = open(cx);
-    cx.update(|cx| {
-        let view = view.read(cx);
-        view.notifications.set(0);
-        (
-            window,
-            view.document.clone(),
-            view.details.clone(),
-            view.notifications.clone(),
-        )
     })
 }
 
@@ -224,10 +211,15 @@ fn document_snapshot_identity_is_an_inspector_dependency(cx: &mut TestAppContext
     notifications(&view, cx);
     cx.update_window(window, |_, window, cx| {
         let document = view.read(cx).document.clone();
-        let mut renamed = document.read(cx).snapshot().clone();
-        renamed.path = snapshot("renamed").path;
+        let renamed = snapshot("renamed").path;
         document.update(cx, |document, cx| {
-            document.finish_save(DocumentSaveOutcome::new(Some(renamed), false), window, cx)
+            document.accept_move(
+                renamed,
+                ResourceRevision::INITIAL,
+                ResourceRevision::new(1),
+                window,
+                cx,
+            )
         });
         assert_eq!(document.read(cx).snapshot().path.name(), "renamed");
         assert!(!document.read(cx).busy());
@@ -256,7 +248,10 @@ fn replacing_current_target_unsubscribes_background_editors(cx: &mut TestAppCont
         let target = view.read(cx).other_document.clone();
         let details = view.read(cx).details.clone();
         details.update(cx, |details, cx| {
-            details.set_document(target.downgrade(), cx)
+            details.set_target(
+                DetailsTarget::File(WeakFilePanel::Document(target.downgrade())),
+                cx,
+            )
         });
     });
     assert!(notifications(&view, cx) > 0);
@@ -276,7 +271,10 @@ fn replacing_current_target_unsubscribes_background_editors(cx: &mut TestAppCont
         let target = view.read(cx).other_document.clone();
         let details = view.read(cx).details.clone();
         details.update(cx, |details, cx| {
-            details.set_document(target.downgrade(), cx)
+            details.set_target(
+                DetailsTarget::File(WeakFilePanel::Document(target.downgrade())),
+                cx,
+            )
         });
     });
     assert_eq!(
@@ -293,7 +291,7 @@ fn database_errors_and_overlay_return_follow_current_target(cx: &mut TestAppCont
         let database = view.read(cx).database.clone();
         let details = view.read(cx).details.clone();
         details.update(cx, |details, cx| {
-            details.set_database(database.downgrade(), cx)
+            details.set_target(DetailsTarget::Database(database.downgrade()), cx)
         });
     });
     notifications(&view, cx);
@@ -338,18 +336,78 @@ fn database_errors_and_overlay_return_follow_current_target(cx: &mut TestAppCont
         let database = view.read(cx).database.clone();
         let details = view.read(cx).details.clone();
         details.update(cx, |details, cx| {
-            details.set_database(database.downgrade(), cx)
+            details.set_target(DetailsTarget::Database(database.downgrade()), cx)
         });
         assert!(!details.read(cx).graph.read(cx).showing_node_definition());
         assert!(!details.read(cx).graph_visible(cx));
         assert!(details.read(cx).target_visible(cx));
-        assert_eq!(
-            details.read(cx).database().unwrap().entity_id(),
-            database.entity_id()
-        );
+        assert_eq!(details.read(cx).target_id(), Some(database.entity_id()));
     });
     assert!(
         notifications(&view, cx) > 0,
         "same-target activation must dismiss a covering definition"
     );
+}
+
+#[gpui_kit::test]
+fn document_save_echoes_do_not_reenter_loading_or_block_following_input(cx: &mut TestAppContext) {
+    use yss_project_history::{
+        DocResourceKey, ResourceDeltaEvent, ResourceDocumentPatch, ResourceKey,
+        ResourceLifecycleKind, ResourceLifecyclePatch, ResourceLifecycleState,
+    };
+
+    let (window, view) = open(cx);
+    cx.update_window(window, |_, window, cx| {
+        let document = view.read(cx).document.clone();
+        document.update(cx, |document, cx| document.focus_editor(window, cx));
+        window.render_frame(cx);
+        window.input("saved", cx);
+    })
+    .unwrap();
+    cx.update_window(window, |_, window, cx| {
+        let document = view.read(cx).document.clone();
+        assert!(document.read(cx).dirty());
+        document.update(cx, |document, cx| {
+            assert!(document.prepare_save(cx).is_some());
+            let mut saved = document.snapshot().clone();
+            saved.content = DocDocument("saved".into());
+            saved.version.revision = ResourceRevision::new(2);
+            let state = |revision| ResourceLifecycleState {
+                revision: ResourceRevision::new(revision),
+                path: saved.path.as_str().into(),
+                name: saved.path.name().into(),
+                kind: ResourceLifecycleKind::Doc,
+            };
+            let delta = ResourceDeltaEvent {
+                resource: ResourceKey::Doc(DocResourceKey(saved.path.as_str().into())),
+                from_revision: ResourceRevision::new(1),
+                to_revision: ResourceRevision::new(2),
+                caused_by: None,
+                payload: ResourceDocumentPatch::ResourceLifecycle(ResourceLifecyclePatch {
+                    before: Some(state(1)),
+                    after: Some(state(2)),
+                }),
+            };
+            document.accept_change(&delta, window, cx);
+            document.finish_save(DocumentSaveOutcome::new(Some(saved), false), window, cx);
+            assert!(
+                !document.busy(),
+                "the save receipt already contains the queued revision"
+            );
+            assert!(!document.dirty());
+            document.accept_change(&delta, window, cx);
+            assert!(
+                !document.busy(),
+                "a delayed echo must not make the editor readonly"
+            );
+        });
+        window.render_frame(cx);
+        window.input(" next", cx);
+    })
+    .unwrap();
+    cx.update(|cx| {
+        let document = view.read(cx).document.read(cx);
+        assert!(document.dirty(), "input must remain usable after saving");
+        assert_eq!(document.snapshot().content.0, "saved");
+    });
 }

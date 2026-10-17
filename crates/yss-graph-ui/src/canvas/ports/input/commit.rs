@@ -2,6 +2,7 @@
 use super::*;
 use gpui_kit::EntityId;
 use yss_project::GraphEditVersion;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 pub(in crate::canvas) struct PortEdit {
@@ -66,7 +67,7 @@ impl GraphCanvas {
                 if let Some(version) = task.await
                     && settled.await.ok() == Some(version)
                 {
-                    let _ = view.update_in(cx, |view, window, cx| {
+                    view.update_in(cx, |view, window, cx| {
                         if view.can_edit()
                             && view.refresh_task.is_none()
                             && !view.refresh_pending
@@ -76,7 +77,8 @@ impl GraphCanvas {
                         {
                             show(view, window, cx);
                         }
-                    });
+                    })
+                    .log_released();
                 }
                 drop(observation);
             })
@@ -118,23 +120,36 @@ impl GraphCanvas {
             if !field.dirty {
                 continue;
             }
-            if field.version != version || version != self.graph.editing.version {
+            let current = self
+                .port_details
+                .as_ref()
+                .and_then(|ports| ports.port(address));
+            if version != self.graph.editing.version
+                || field.version.session_id != version.session_id
+                || !current.is_some_and(|port| {
+                    eligible(port) == Some(field.kind) && port.input == field.base
+                })
+            {
                 field.error = Some(InputError::Conflict);
+                self.notifications
+                    .error(yss_ui::text::t("native.canvas.commandFailed"), cx);
                 cx.notify();
                 return None;
             }
             let text = field.input.read(cx).value();
             let value = if field.kind == SemanticType::Text {
                 Ok(Value::String(text.to_string()))
-            } else if matches!(text.as_ref(), "" | "-" | "." | "-.") {
-                Ok(Value::from(0))
             } else {
-                yss_ui::controls::number(&text)
+                yss_ui::input::number(&text)
             };
-            let Ok(value) = value else {
-                field.error = Some(InputError::Number);
-                cx.notify();
-                return None;
+            let value = match value {
+                Ok(value) => value,
+                Err(error) => {
+                    field.error = Some(InputError::Number);
+                    self.notifications.error(error, cx);
+                    cx.notify();
+                    return None;
+                }
             };
             edits.push(PortEdit {
                 address: address.clone(),
@@ -163,6 +178,12 @@ impl GraphCanvas {
                 field.dirty = false;
                 field.pending = None;
                 field.error = None;
+                field.version = self.graph.editing.version;
+                field.base = self
+                    .port_details
+                    .as_ref()
+                    .and_then(|ports| ports.port(&edit.address))
+                    .and_then(|port| port.input.clone());
             }
         }
     }

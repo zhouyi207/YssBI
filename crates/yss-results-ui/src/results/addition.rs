@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use yss_application::graph::results::report::addition::{
     LinearSummaryAddition, ReportAdditionError,
 };
+use yss_ui::lifecycle::LogReleased;
 
 impl ResultPanel {
     pub(super) fn add_contents(
@@ -31,7 +32,7 @@ impl ResultPanel {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.closed || view.reference != reference {
                     return;
                 }
@@ -73,7 +74,8 @@ impl ResultPanel {
                     }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
     }
 

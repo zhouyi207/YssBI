@@ -68,10 +68,8 @@ pub struct PluginsPanel {
     search: Entity<InputState>,
     _search_subscription: Subscription,
     generation: u64,
-    task: Option<std::borrow::Cow<'static, str>>,
+    busy: bool,
     reload_again: bool,
-    error: Option<String>,
-    feedback: Option<String>,
     cursor_stack: Vec<Option<String>>,
 }
 impl PluginsPanel {
@@ -94,15 +92,13 @@ impl PluginsPanel {
             search,
             _search_subscription: subscription,
             generation: 0,
-            task: None,
+            busy: false,
             reload_again: false,
-            error: None,
-            feedback: None,
             cursor_stack: vec![],
         }
     }
     pub fn busy(&self) -> bool {
-        self.task.is_some()
+        self.busy
     }
     fn selected_plugin(&self) -> Option<&InstalledPlugin> {
         self.entries

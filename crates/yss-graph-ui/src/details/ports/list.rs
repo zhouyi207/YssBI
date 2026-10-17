@@ -1,9 +1,8 @@
-//! Input and output groups mirror the reference panel's initially collapsed sections.
+//! Input and output groups keep disclosure state with the inspector owner.
 use super::*;
-use gpui_kit::assets::IconName;
-use gpui_kit::component::collapsible::Collapsible;
 use yss_graph_editor::projection::EditorNodeModel;
-use yss_ui::text::translate;
+use yss_node_protocol::PortDirection;
+use yss_ui::inspector::InspectorSection;
 
 impl GraphDetails {
     pub(in crate::details) fn render_ports(
@@ -15,46 +14,38 @@ impl GraphDetails {
             return div().into_any_element();
         };
         let epoch = self.epoch;
-        let mut groups = div().p_4().flex().flex_col().gap_3();
-        for (section, direction) in [PortDirection::Input, PortDirection::Output]
-            .into_iter()
-            .enumerate()
-        {
+        let mut sections = div().min_w_0().flex().flex_col();
+        for (section, direction, title) in [
+            (0, PortDirection::Input, "detail.nodeDoc.inputs"),
+            (1, PortDirection::Output, "detail.nodeDoc.outputs"),
+        ] {
             let open = self.ports_open[section];
-            let header = Button::new(("port-section", section))
-                .small()
-                .ghost()
-                .w_full()
-                .justify_start()
-                .icon(if open {
-                    IconName::ChevronDown
-                } else {
-                    IconName::ChevronRight
-                })
-                .label(translate(if section == 0 {
-                    "detail.nodeDoc.inputs"
-                } else {
-                    "detail.nodeDoc.outputs"
-                }))
-                .on_click(cx.listener(move |view, _, _, cx| {
-                    if view.epoch == epoch {
-                        view.ports_open[section] = !view.ports_open[section];
-                        if !view.ports_open[section] {
-                            view.connection_picker = None;
-                        }
-                        cx.notify();
-                    }
-                }));
-            groups = groups.child(
-                Collapsible::new()
-                    .open(open)
-                    .child(header)
-                    .when(open, |section| {
-                        section.content(self.render_port_group(node, direction, busy, cx))
+            let count = self
+                .ports
+                .iter()
+                .filter(|field| field.model.direction == direction)
+                .count();
+            sections = sections.child(
+                InspectorSection::new(("port-section", section), translate(title))
+                    .count(count)
+                    .collapsible(
+                        open,
+                        cx.listener(move |view, open: &bool, _, cx| {
+                            if view.epoch == epoch {
+                                view.ports_open[section] = *open;
+                                if !*open {
+                                    view.connection_picker = None;
+                                }
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .when(open, |content| {
+                        content.child(self.render_port_group(node, direction, busy, cx))
                     }),
             );
         }
-        groups.into_any_element()
+        sections.into_any_element()
     }
 
     fn render_port_group(
@@ -66,7 +57,7 @@ impl GraphDetails {
     ) -> AnyElement {
         let epoch = self.epoch;
         let mut empty = true;
-        let mut group = div().flex().flex_col().gap_2();
+        let mut group = div().min_w_0().flex().flex_col().gap_4();
         for (index, field) in self
             .ports
             .iter()
@@ -76,6 +67,7 @@ impl GraphDetails {
             empty = false;
             group = group.child(self.render_port_field(index, field, busy, cx));
         }
+        let mut additions = Vec::new();
         for (index, addition) in node
             .port_instance_additions
             .iter()
@@ -85,33 +77,35 @@ impl GraphDetails {
             empty = false;
             let node_id = node.node_id;
             let template_key = addition.template_key.clone();
-            group = group.child(
-                Button::new(("add-port", index))
-                    .small()
-                    .ghost()
-                    .icon(IconName::Plus)
-                    .label(yss_ui::text::format(
+            additions.push(
+                inspector::add_button(
+                    ("add-port", index),
+                    format(
                         "detail.nodeDoc.addPort",
                         &[("name", addition.label.to_string())],
-                    ))
-                    .disabled(busy || !addition.can_add)
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        if view.accepts_input(epoch, cx) {
-                            view.submit(
-                                GraphCommand::Edit(EditorGraphMutation::AddPortInstance {
-                                    node_id,
-                                    template_key: template_key.clone(),
-                                    placement: PortPlacement::Append,
-                                }),
-                                cx,
-                            );
-                        }
-                    })),
+                    ),
+                )
+                .disabled(busy || !addition.can_add)
+                .on_click(cx.listener(move |view, _, _, cx| {
+                    if view.accepts_input(epoch, cx) {
+                        view.submit(
+                            GraphCommand::Edit(EditorGraphMutation::AddPortInstance {
+                                node_id,
+                                template_key: template_key.clone(),
+                                placement: PortPlacement::Append,
+                            }),
+                            cx,
+                        );
+                    }
+                })),
             );
         }
         group
-            .when(empty, |view| {
-                view.child(controls::hint(
+            .when(!additions.is_empty(), |group| {
+                group.child(div().flex().flex_col().items_start().children(additions))
+            })
+            .when(empty, |group| {
+                group.child(inspector::hint(
                     translate(if direction == PortDirection::Input {
                         "detail.nodeDoc.noInputs"
                     } else {

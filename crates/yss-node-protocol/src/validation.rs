@@ -346,9 +346,8 @@ where
 }
 
 #[derive(Debug)]
-pub struct ParameterValidation<T> {
+pub struct ParameterValidation {
     pub issues: Vec<LocatedParameterIssue>,
-    pub prepared_nominal: std::collections::BTreeMap<ParameterKey, T>,
 }
 
 pub fn validate_parameter_values(
@@ -366,9 +365,8 @@ pub fn validate_and_prepare_parameter_values<T>(
     protocol: &NodeProtocol,
     values: &ParameterValues,
     prepare_nominal: impl Fn(&TypeId, &serde_json::Value) -> Option<Result<T, String>>,
-) -> ParameterValidation<T> {
+) -> ParameterValidation {
     let mut issues = Vec::new();
-    let mut prepared_nominal = std::collections::BTreeMap::new();
     for key in values.keys() {
         if protocol.parameters.get(key).is_none() {
             issues.push(issue(key, ParameterIssueKind::Unknown));
@@ -421,9 +419,7 @@ pub fn validate_and_prepare_parameter_values<T>(
         }
         if let TypeExpr::Concrete(type_id) = &spec.value_type {
             match prepare_nominal(type_id, value) {
-                Some(Ok(prepared)) => {
-                    prepared_nominal.insert(spec.key.clone(), prepared);
-                }
+                Some(Ok(_)) => {}
                 Some(Err(detail)) => issues.push(issue(
                     &spec.key,
                     ParameterIssueKind::InvalidNominal(detail.into()),
@@ -432,10 +428,7 @@ pub fn validate_and_prepare_parameter_values<T>(
             }
         }
     }
-    ParameterValidation {
-        issues,
-        prepared_nominal,
-    }
+    ParameterValidation { issues }
 }
 
 fn issue(key: &ParameterKey, kind: ParameterIssueKind) -> LocatedParameterIssue {

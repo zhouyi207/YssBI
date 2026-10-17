@@ -1,10 +1,11 @@
 //! Node actions reuse the same selection, clipboard, edit and execution entry points.
-use crate::canvas::{GraphCanvas, GraphCommand, commands::*};
+use crate::canvas::{GraphCanvas, GraphCommand, GraphEditCommand, commands::*};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme, Icon, input, menu::PopupMenuItem};
-use gpui_kit::{Action, Context, MouseDownEvent, Pixels, Point, Window, div, prelude::*};
+use gpui_kit::component::{input, menu::PopupMenuItem};
+use gpui_kit::{Action, Context, MouseDownEvent, Pixels, Point, Window, prelude::*};
 use yss_graph_document::{GraphResourceKind, NodeId};
 use yss_graph_editor::EditorGraphMutation;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub(in crate::canvas) fn begin_node_menu(
@@ -48,6 +49,9 @@ impl GraphCanvas {
         self.selected_connections.clear();
         self.located_port = None;
         self.emit_selection(cx);
+        let copy = self.is_edit_command_enabled(GraphEditCommand::Copy);
+        let cut = self.is_edit_command_enabled(GraphEditCommand::Cut);
+        let delete = self.is_edit_command_enabled(GraphEditCommand::Delete);
         let projection = self.graph.projection.clone();
         let version = self.graph.editing.version;
         let language = yss_ui::text::locale();
@@ -57,12 +61,12 @@ impl GraphCanvas {
             for (index, (command, enabled)) in [
                 (NodeAction::Run, run),
                 (NodeAction::RunTo, run),
-                (NodeAction::Copy, modify),
-                (NodeAction::Cut, modify),
+                (NodeAction::Copy, copy),
+                (NodeAction::Cut, cut),
                 (NodeAction::Duplicate, modify),
                 (NodeAction::Disconnect, links),
                 (NodeAction::SelectLinked, links),
-                (NodeAction::Delete, modify),
+                (NodeAction::Delete, delete),
             ]
             .into_iter()
             .enumerate()
@@ -74,38 +78,24 @@ impl GraphCanvas {
                     menu = menu.separator();
                 }
                 let (label, icon, action) = command.presentation();
-                let item = if matches!(command, NodeAction::Delete) {
-                    PopupMenuItem::element(move |_, cx| {
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .text_color(if enabled {
-                                cx.theme().danger
-                            } else {
-                                cx.theme().muted_foreground
-                            })
-                            .child(Icon::new(icon).size_4())
-                            .child(div().flex_1().child(yss_ui::text::t(label)))
-                            .child("Del")
-                    })
-                } else {
-                    PopupMenuItem::new(yss_ui::text::t(label)).icon(icon)
-                }
-                .disabled(!enabled)
-                .when_some(action, |item, action| item.action(action));
+                let item = PopupMenuItem::new(yss_ui::text::t(label))
+                    .icon(icon)
+                    .disabled(!enabled)
+                    .when_some(action, |item, action| item.action(action));
                 let owner = owner.clone();
                 let projection = projection.clone();
                 menu = menu.item(item.on_click(move |_, _, cx| {
-                    let _ = owner.update(cx, |view, cx| {
-                        if enabled
-                            && view.menu_is_current(menu_id, &projection, version, language)
-                            && view.selected.len() == 1
-                            && view.selected.contains(&id)
-                        {
-                            command.invoke(view, id, cx);
-                        }
-                    });
+                    owner
+                        .update(cx, |view, cx| {
+                            if enabled
+                                && view.menu_is_current(menu_id, &projection, version, language)
+                                && view.selected.len() == 1
+                                && view.selected.contains(&id)
+                            {
+                                command.invoke(view, id, cx);
+                            }
+                        })
+                        .log_released();
                 }));
             }
             menu
@@ -168,8 +158,8 @@ impl NodeAction {
         match self {
             Self::Run => view.run_selected(NodeExecutionMode::CurrentInputs, cx),
             Self::RunTo => view.run_selected(NodeExecutionMode::Dependencies, cx),
-            Self::Copy => view.copy_selection(false, cx),
-            Self::Cut => view.copy_selection(true, cx),
+            Self::Copy => view.edit(GraphEditCommand::Copy, cx),
+            Self::Cut => view.edit(GraphEditCommand::Cut, cx),
             Self::Duplicate => view.duplicate_selection(cx),
             Self::Disconnect => view.submit(
                 GraphCommand::Edit(EditorGraphMutation::DisconnectNode { node_id: id }),
@@ -177,7 +167,7 @@ impl NodeAction {
                 cx,
             ),
             Self::SelectLinked => view.select_linked_nodes(id, cx),
-            Self::Delete => view.delete_selection(cx),
+            Self::Delete => view.edit(GraphEditCommand::Delete, cx),
         }
     }
 }

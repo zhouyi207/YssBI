@@ -1,134 +1,88 @@
-use crate::{CompiledWorkflow, HarnessError, HarnessHost, HarnessPorts};
+use crate::{CompiledWorkflow, HarnessError, HarnessHost};
 use yss_harness_contract::*;
 
 use super::*;
-use crate::test_support::{FixedClock, InMemoryHarnessStore, MockAgentDriver, SequentialIds};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::test_support::{
+    InMemoryHarnessStore, MockAgentDriver, NoteExtension, NoteGate, READ_NOTE, WRITE_NOTE,
+    note_ports, project,
+};
+use serde_json::json;
 use std::time::Duration;
 use yss_harness_contract::{
-    CapabilityControl, CapabilityFuture, CapabilityGatewayPort, CapabilityInvocationContext,
-    DatasetSchemaInspection, InspectDatasetSchemaRequest, UnixMillis, WorkflowDefinition,
-    WorkflowId, WorkflowStep, WorkflowStepId, WorkflowStepState, WorkflowVersion,
+    UnixMillis, WorkflowDefinition, WorkflowId, WorkflowStep, WorkflowStepId, WorkflowStepState,
+    WorkflowVersion,
 };
-use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
-
-#[derive(Default)]
-struct BlockingGateway {
-    entered: tokio::sync::Notify,
-    release: tokio::sync::Notify,
-    calls: AtomicUsize,
-    control: Mutex<Option<CapabilityControl>>,
-}
-
-impl CapabilityGatewayPort for BlockingGateway {
-    fn invoke<'a>(
-        &'a self,
-        _: CapabilityInvocationContext,
-        _: AutomationCapabilityRequest,
-        control: CapabilityControl,
-    ) -> CapabilityFuture<'a> {
-        Box::pin(async move {
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            *self.control.lock().unwrap() = Some(control);
-            self.entered.notify_one();
-            // Deliberately return success even after cancellation. The Host must
-            // fence both a late success and the executor's cancellation outcome.
-            self.release.notified().await;
-            Ok(AutomationCapabilityResult::DatasetSchemaInspection(
-                DatasetSchemaInspection {
-                    database_id: "database-1".into(),
-                    runtime_revision: 1,
-                    schema_revision: 1,
-                    columns: vec![],
-                },
-            ))
-        })
-    }
-}
 
 async fn planned() -> (
     Arc<HarnessHost>,
     Arc<InMemoryHarnessStore>,
-    Arc<BlockingGateway>,
+    NoteExtension,
+    Arc<NoteGate>,
     WorkflowRunRecord,
 ) {
     let store = Arc::new(InMemoryHarnessStore::default());
-    let gateway = Arc::new(BlockingGateway::default());
+    let (extension, gate) = NoteExtension::default().with_note("a", "alpha").with_gate();
     let host = Arc::new(
-        HarnessHost::new(HarnessPorts {
-            resources: Arc::new(crate::test_support::FixtureResourceResolver),
-            models: crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("Done"))),
-            capability_gateway: gateway.clone(),
-            sessions: store.clone(),
-            events: store.clone(),
-            event_sink: store.clone(),
-            workflows: store.clone(),
-            tool_ledger: store.clone(),
-            knowledge: store.clone(),
-            knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-            approvals: store.clone(),
-            clock: Arc::new(FixedClock::new(1000)),
-            ids: Arc::new(SequentialIds::default()),
-        })
+        HarnessHost::new(note_ports(
+            store.clone(),
+            crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("Done"))),
+            extension.clone(),
+            1000,
+        ))
         .unwrap(),
     );
     let session = host
-        .create_session(
-            PrincipalId::try_new("user-1").unwrap(),
-            ProjectSessionBinding::new(
-                ProjectInstanceId::from_existing("project-1".into()),
-                ProjectSessionId::new("project-session-1"),
-            ),
-        )
+        .create_session(PrincipalId::try_new("user-1").unwrap(), project())
         .await
         .unwrap();
     let turn = HarnessTurnRecord {
         id: HarnessTurnId::try_new("workflow-turn").unwrap(),
         session_id: session.id.clone(),
         state: HarnessTurnState::Completed,
-        user_message: "Inspect schema".into(),
+        user_message: "Read the note".into(),
         final_text: None,
         started_at: UnixMillis::from_existing(1000),
         finished_at: Some(UnixMillis::from_existing(1000)),
     };
     store.create_turn(&turn).await.unwrap();
-    let compiled = CompiledWorkflow::compile(WorkflowDefinition {
-        id: WorkflowId::try_new("read_schema").unwrap(),
-        version: WorkflowVersion::try_new("1.0.0").unwrap(),
-        steps: vec![WorkflowStep {
-            id: WorkflowStepId::try_new("inspect").unwrap(),
-            depends_on: vec![],
-            request: AutomationCapabilityRequest::InspectDatasetSchema(
-                InspectDatasetSchemaRequest {
-                    database_id: "database-1".into(),
-                },
-            ),
-        }],
-    })
+    let compiled = CompiledWorkflow::compile(
+        WorkflowDefinition {
+            id: WorkflowId::try_new("read_note").unwrap(),
+            version: WorkflowVersion::try_new("1.0.0").unwrap(),
+            steps: vec![WorkflowStep {
+                id: WorkflowStepId::try_new("inspect").unwrap(),
+                depends_on: vec![],
+                tool: READ_NOTE.into(),
+                request: json!({"id": "a"}),
+            }],
+        },
+        &extension,
+    )
     .unwrap();
     let run = host
         .plan_workflow(&session.id, Some(&turn.id), &compiled)
         .await
         .unwrap();
-    (host, store, gateway, run)
+    (host, store, extension, gate, run)
 }
 
 #[tokio::test]
 async fn recovery_terminates_an_interrupted_write_even_when_the_workflow_was_paused() {
-    let (host, store, gateway, read_run) = planned().await;
+    let (host, store, extension, _gate, read_run) = planned().await;
     let step_id = WorkflowStepId::try_new("save").unwrap();
-    let compiled = CompiledWorkflow::compile(WorkflowDefinition {
-        id: WorkflowId::try_new("save_graph").unwrap(),
-        version: WorkflowVersion::try_new("1.0.0").unwrap(),
-        steps: vec![WorkflowStep {
-            id: step_id.clone(),
-            depends_on: vec![],
-            request: AutomationCapabilityRequest::SaveGraph(SaveGraphRequest {
-                graph_path: "events/Main.yssbi-event".into(),
-                graph_hash: "0".repeat(64),
-            }),
-        }],
-    })
+    let compiled = CompiledWorkflow::compile(
+        WorkflowDefinition {
+            id: WorkflowId::try_new("save_note").unwrap(),
+            version: WorkflowVersion::try_new("1.0.0").unwrap(),
+            steps: vec![WorkflowStep {
+                id: step_id.clone(),
+                depends_on: vec![],
+                tool: WRITE_NOTE.into(),
+                request: json!({"id": "a", "text": "saved"}),
+            }],
+        },
+        &extension,
+    )
     .unwrap();
     let mut run = host
         .plan_workflow(&read_run.session_id, read_run.turn_id.as_ref(), &compiled)
@@ -150,43 +104,35 @@ async fn recovery_terminates_an_interrupted_write_even_when_the_workflow_was_pau
     assert_eq!(recovered.steps[&step_id].attempt, 1);
     assert_eq!(host.advance_workflow(&run.id).await.unwrap(), recovered);
     assert!(host.resume_workflow(&run.id).await.is_err());
-    assert_eq!(gateway.calls.load(Ordering::SeqCst), 0);
+    assert_eq!(extension.executions(), 0);
 }
 
 #[tokio::test]
 async fn workflow_cancel_fences_late_results_and_concurrent_advance() {
-    let (host, store, gateway, run) = planned().await;
+    let (host, store, extension, gate, run) = planned().await;
     let advance = {
         let host = host.clone();
         let id = run.id.clone();
         tokio::spawn(async move { host.advance_workflow(&id).await })
     };
-    tokio::time::timeout(Duration::from_secs(5), gateway.entered.notified())
+    tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
         .await
         .unwrap();
     assert!(matches!(
         host.advance_workflow(&run.id).await,
         Err(HarnessError::ConcurrentWorkflow)
     ));
-    assert_eq!(gateway.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(extension.executions(), 0);
     let cancelled = tokio::time::timeout(Duration::from_secs(5), host.cancel_workflow(&run.id))
         .await
         .unwrap()
         .unwrap();
     assert_eq!(cancelled.state, WorkflowRunState::Cancelled);
     assert_eq!(
-        gateway
-            .control
-            .lock()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .check()
-            .unwrap_err()
-            .code,
-        CapabilityFailureCode::Cancelled
+        gate.control().unwrap().check().unwrap_err().code,
+        CapabilityFailureCode::CANCELLED
     );
-    gateway.release.notify_one();
+    gate.release.notify_one();
     let result = tokio::time::timeout(Duration::from_secs(5), advance)
         .await
         .unwrap()
@@ -203,13 +149,13 @@ async fn workflow_cancel_fences_late_results_and_concurrent_advance() {
 #[tokio::test]
 async fn workflow_pause_and_resume_preserve_new_state_while_the_step_settles() {
     for resume_before_completion in [false, true] {
-        let (host, store, gateway, run) = planned().await;
+        let (host, store, extension, gate, run) = planned().await;
         let advance = {
             let host = host.clone();
             let id = run.id.clone();
             tokio::spawn(async move { host.advance_workflow(&id).await })
         };
-        tokio::time::timeout(Duration::from_secs(5), gateway.entered.notified())
+        tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
             .await
             .unwrap();
         let paused = host.pause_workflow(&run.id).await.unwrap();
@@ -221,7 +167,7 @@ async fn workflow_pause_and_resume_preserve_new_state_while_the_step_settles() {
             host.advance_workflow(&run.id).await,
             Err(HarnessError::ConcurrentWorkflow)
         ));
-        gateway.release.notify_one();
+        gate.release.notify_one();
         let settled = tokio::time::timeout(Duration::from_secs(5), advance)
             .await
             .unwrap()
@@ -251,6 +197,6 @@ async fn workflow_pause_and_resume_preserve_new_state_while_the_step_settles() {
             host.advance_workflow(&run.id).await.unwrap().state,
             WorkflowRunState::Completed
         );
-        assert_eq!(gateway.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(extension.executions(), 1);
     }
 }

@@ -1,6 +1,6 @@
 use crate::ProjectOperationError;
+use crate::file_resources::{FileIndexEntry, ResourceFile};
 use crate::{ProjectIndex, ProjectSession, ProjectState};
-use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
@@ -19,7 +19,6 @@ impl ProjectState {
         self.validate_project_session(&session)?;
         self.coherent_project_read(&session, |data, publication| {
             let graph_revisions = self.graph_resource_revisions.read().unwrap();
-            let chart_revisions = self.chart_revisions.read().unwrap();
             let database_revisions = self.database_authority_revisions.read().unwrap();
             if data
                 .databases
@@ -33,7 +32,6 @@ impl ProjectState {
             overlay_authoritative_project_index(
                 data,
                 &graph_revisions,
-                &chart_revisions,
                 &database_revisions,
                 &mut index,
             )?;
@@ -75,31 +73,6 @@ impl ProjectState {
         }
         Ok(())
     }
-
-    pub fn load_chart_document(
-        &self,
-        expected_project_instance_id: &ProjectInstanceId,
-        chart_path: &ChartResourcePath,
-        expected_publication_revision: Option<u64>,
-    ) -> Result<ChartDocument, ProjectOperationError> {
-        let session = expected_session(self, expected_project_instance_id)?;
-        let _lease = self.filesystem().acquire(session.root.clone())?;
-        self.validate_project_session(&session)?;
-        let document = self.coherent_project_read(&session, |data, publication| {
-            if expected_publication_revision
-                .is_some_and(|expected| expected != publication.resource_revision)
-            {
-                return Err(stale_catalog("chart changed during index preparation"));
-            }
-            data.charts.get(chart_path).cloned().ok_or_else(|| {
-                ProjectOperationError::ChartNotFound {
-                    path: chart_path.clone(),
-                }
-            })
-        })??;
-        self.validate_project_session(&session)?;
-        Ok(document)
-    }
 }
 
 fn stale_project_lifecycle(message: impl Into<String>) -> ProjectOperationError {
@@ -136,7 +109,6 @@ fn overlay_authoritative_project_index(
         yss_graph_document::GraphResourcePath,
         ResourceRevision,
     >,
-    chart_revisions: &std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     database_revisions: &std::collections::HashMap<String, u64>,
     index: &mut ProjectIndex,
 ) -> Result<(), ProjectOperationError> {
@@ -158,23 +130,9 @@ fn overlay_authoritative_project_index(
     index
         .databases
         .sort_by(|left, right| left.id.cmp(&right.id));
-    // Disk owns membership; resident revision overrides must never resurrect a deleted file.
-    for entry in &mut index.minds {
-        if let Some(document) = data.minds.get(&entry.path) {
-            entry.revision = document.version.revision;
-        }
-    }
-    for entry in &mut index.docs {
-        if let Some(document) = data.docs.get(&entry.path) {
-            entry.revision = document.version.revision;
-        }
-    }
-    for chart in &mut index.charts {
-        chart.revision = chart_revisions
-            .get(&chart.chart_path)
-            .copied()
-            .unwrap_or(ResourceRevision::INITIAL);
-    }
+    overlay_file_revisions(data, &mut index.minds);
+    overlay_file_revisions(data, &mut index.docs);
+    overlay_file_revisions(data, &mut index.charts);
     for entry in &mut index.event_graphs {
         let path = yss_graph_document::GraphResourcePath::new(&entry.path)
             .map_err(|error| stale_catalog(error.to_string()))?;
@@ -204,6 +162,15 @@ fn overlay_authoritative_project_index(
         }
     }
     Ok(())
+}
+
+// Disk owns membership; resident revision overrides must never resurrect a deleted file.
+fn overlay_file_revisions<T: ResourceFile>(data: &ProjectData, entries: &mut [FileIndexEntry<T>]) {
+    for entry in entries {
+        if let Some(state) = T::files(data).get(&entry.path) {
+            entry.revision = state.version.revision;
+        }
+    }
 }
 
 fn read_error(error: crate::ProjectError) -> ProjectOperationError {

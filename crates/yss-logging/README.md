@@ -11,9 +11,8 @@ Rust 生产者使用普通 `tracing` 宏；`log` facade 由 collector 的 LogTra
 
 ## 组装与生命周期
 
-`LogCollection::initialize(directory)` 安装 process-wide subscriber 和受限 console worker，
-在指定目录打开 `logs.sqlite`，默认保留全部历史。`initialize_with_retention(directory, policy)`
-在暴露历史之前应用首轮保留策略；数据库初始化与维护失败返回宿主，不静默忽略。
+`LogCollection::initialize_with_retention(directory, policy)` 安装 process-wide subscriber 和受限 console worker，
+在指定目录打开 `logs.sqlite`，在暴露历史之前应用首轮保留策略；数据库初始化与维护失败返回宿主，不静默忽略。
 目录为 `None` 时只保留 console 输出，并向宿主表示历史不可用。
 宿主持有 collection 至窗口循环结束；`shutdown` 排空已接收日志并结束 dispatcher，
 Drop 随后停止 console 入队并排空队列。console 关闭等待约 250 ms；sink 拒收或 panic
@@ -22,13 +21,13 @@ Drop 随后停止 console 入队并排空队列。console 关闭等待约 250 ms
 
 `LogRuntime` 提供 typed query、statistics、recent snapshot 和 subscribe/unsubscribe。
 订阅使用中立 sink 回调；关闭释放原 worker。Logs 清空只清视图，不删除持久记录。
-`FrontendLogEntryDto` 是显式 UI 日志输入的数据契约，不引入桌面框架依赖；原生日志呈现与操作由 [GPUI host](../yss-desktop-gpui/README.md) 拥有。
+原生日志呈现与操作由 [GPUI host](../yss-desktop-gpui/README.md) 拥有。
 
 ## 采集与数据最小化
 
 collector 拥有 filter、有界事件捕获、脱敏与 console worker。缺失、空或无效的
 `RUST_LOG` 回退到 INFO；有效配置可以覆盖 Rust 过滤器。`println!`、进程 stdout/stderr
-不属于 tracing 入口。显式 UI 日志输入在校验前同样执行 INFO 阈值。
+不属于 tracing 入口。
 
 生产者只记录发生时的本机钟面时间、捕获有界字段并非阻塞入队。字段键、字段数、
 字符串长度和累计字节提前受限，被屏蔽字段不执行值格式化。dispatcher 专用线程完成
@@ -63,7 +62,7 @@ dispatcher 不等待慢消费者。sink 已关闭、拒收或永久阻塞时不�
 `None` 时不删除、不整理数据库。天数范围为 1–3650，存储目标为 1–10240 MiB。
 `LogRuntime::open_with_retention` 和 collection 构造器在启动时应用策略；
 运行时通过 `LogRuntime::set_retention` 更新。设置、启动都需在阻塞 executor 上执行。
-显示级别只影响宿主过滤，不改变 `RUST_LOG` 或显式 UI 输入的 INFO 采集阈值。
+显示级别只影响宿主过滤，不改变 `RUST_LOG`。
 
 天数按记录的本机钟面时间与当前本机时间比较；严格早于截止时间的记录删除，
 恰好位于截止时间的记录保留。因历史时间戳不含时区，切换时区或系统时钟会相应影响年龄。

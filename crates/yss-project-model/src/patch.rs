@@ -1,6 +1,5 @@
 use crate::GraphResourceDocument;
 use std::collections::{BTreeMap, BTreeSet};
-use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ResourceRevision;
 
@@ -13,6 +12,7 @@ use yss_project_identity::ResourceRevision;
 pub enum ProjectDataPatch {
     Mind(crate::file::FilePatch<crate::mind::MindDocument>),
     Doc(crate::file::FilePatch<crate::doc::DocDocument>),
+    Chart(crate::file::FilePatch<yss_chart_document::ChartDocument>),
     InsertGraph {
         path: GraphResourcePath,
         resource: GraphResourceDocument,
@@ -32,18 +32,5 @@ pub enum ProjectDataPatch {
         moved: GraphResourceDocument,
         referenced_graphs: BTreeMap<GraphResourcePath, GraphResourceDocument>,
         loaded_referenced_graphs: BTreeSet<GraphResourcePath>,
-    },
-    UpsertChart {
-        path: ChartResourcePath,
-        document: ChartDocument,
-    },
-    RemoveChart {
-        path: ChartResourcePath,
-        revision: ResourceRevision,
-    },
-    MoveChart {
-        from: ChartResourcePath,
-        to: ChartResourcePath,
-        moved: ChartDocument,
     },
 }

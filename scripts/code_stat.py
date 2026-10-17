@@ -99,8 +99,6 @@ def analyze_file(path: str):
         return result
 
     lines = source.splitlines(keepends=True)
-    if source and not lines:
-        lines = [source]
     kinds = classify_lines(lines, ext)
     if is_test_file(path, ext):
         test_lines = set(range(len(lines)))

@@ -243,8 +243,8 @@ fn read_error(
         E::Database(D::InvalidInput { field, .. }) => invalid(field),
         other => {
             let failure = database_error(other);
-            if failure.code == CapabilityFailureCode::MutationRejected {
-                CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
+            if failure.code == CapabilityFailureCode::MUTATION_REJECTED {
+                CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
             } else {
                 failure
             }

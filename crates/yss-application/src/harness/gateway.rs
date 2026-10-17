@@ -1,7 +1,10 @@
 use crate::session::ApplicationState;
+use yss_assistant_contract::{
+    AutomationCapabilityRequest, CapabilityFuture, CapabilityGatewayPort,
+    CapabilityInvocationContext,
+};
 use yss_harness_contract::{
-    AutomationCapabilityRequest, CapabilityControl, CapabilityFailure, CapabilityFailureCode,
-    CapabilityFuture, CapabilityGatewayPort, CapabilityInvocationContext, ToolEffect,
+    CapabilityControl, CapabilityFailure, CapabilityFailureCode, ToolEffect,
 };
 
 /// Scheduling adapter for the synchronous Application capability boundary.
@@ -39,10 +42,10 @@ impl CapabilityGatewayPort for ApplicationCapabilityGateway {
     fn recover_graph_edit<'a>(
         &'a self,
         context: CapabilityInvocationContext,
-        request: yss_harness_contract::ApplyGraphEditRequest,
+        request: yss_assistant_contract::ApplyGraphEditRequest,
     ) -> yss_harness_contract::AgentFuture<
         'a,
-        Result<Option<yss_harness_contract::GraphEditReceipt>, CapabilityFailure>,
+        Result<Option<yss_assistant_contract::GraphEditReceipt>, CapabilityFailure>,
     > {
         let application = self.application.clone();
         Box::pin(async move {
@@ -50,7 +53,7 @@ impl CapabilityGatewayPort for ApplicationCapabilityGateway {
                 application.recover_automation_graph_edit(context, request)
             })
             .await
-            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?
+            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::INTERNAL_FAILURE))?
         })
     }
 
@@ -90,11 +93,11 @@ async fn run_on_blocking_pool<T: Send + 'static>(
             result = task => result,
             reason = control.cancellation().cancelled() => return Err(CapabilityFailure::new(
                 if reason == yss_harness_contract::CancellationReason::DeadlineElapsed {
-                    CapabilityFailureCode::DeadlineElapsed
-                } else { CapabilityFailureCode::Cancelled }
+                    CapabilityFailureCode::DEADLINE_ELAPSED
+                } else { CapabilityFailureCode::CANCELLED }
             )),
             _ = tokio::time::sleep_until(control.deadline().into()) => {
-                return Err(CapabilityFailure::new(CapabilityFailureCode::DeadlineElapsed));
+                return Err(CapabilityFailure::new(CapabilityFailureCode::DEADLINE_ELAPSED));
             }
         };
         query_guard.armed = false;
@@ -102,7 +105,7 @@ async fn run_on_blocking_pool<T: Send + 'static>(
     } else {
         task.await
     };
-    outcome.map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?
+    outcome.map_err(|_| CapabilityFailure::new(CapabilityFailureCode::INTERNAL_FAILURE))?
 }
 
 #[cfg(test)]
@@ -110,17 +113,18 @@ mod tests {
     use super::*;
     use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
     use std::{sync::Arc, time::Duration};
+    use yss_assistant_contract::{AutomationCapabilityResult, InspectDatasetProfileRequest};
     use yss_harness_contract::{
-        AutomationCapabilityResult, CancellationToken, CapabilityInvocationId, HarnessSessionId,
-        InspectDatasetProfileRequest, PrincipalId, ProjectSessionBinding,
+        CancellationToken, CapabilityInvocationId, HarnessSessionId, PrincipalId,
+        ProjectSessionBinding,
     };
     use yss_project_identity::OperationId;
 
     #[tokio::test]
     async fn blocking_query_cancellation_timeout_and_panic_have_bounded_outcomes() {
         for (cancel, expected) in [
-            (true, CapabilityFailureCode::Cancelled),
-            (false, CapabilityFailureCode::DeadlineElapsed),
+            (true, CapabilityFailureCode::CANCELLED),
+            (false, CapabilityFailureCode::DEADLINE_ELAPSED),
         ] {
             let control = CapabilityControl::new(
                 CancellationToken::default(),
@@ -164,7 +168,7 @@ mod tests {
         .await;
         assert_eq!(
             result.unwrap_err().code,
-            CapabilityFailureCode::InternalFailure
+            CapabilityFailureCode::INTERNAL_FAILURE
         );
     }
 

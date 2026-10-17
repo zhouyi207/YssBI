@@ -4,6 +4,18 @@ use gpui_kit::{AppContext, Context, Pixels, Point, Window};
 use yss_graph_document::PortAddress;
 
 impl GraphCanvas {
+    pub(super) fn open_node_palette(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.can_edit() || self.palette.is_some() {
+            return;
+        }
+        self.cancel_gesture();
+        window.focus(&self.focus, cx);
+        let bounds = self.bounds.get();
+        let point =
+            bounds.origin + gpui_kit::point(bounds.size.width / 2., bounds.size.height / 2.);
+        self.show_palette(point, None, window, cx);
+    }
+
     pub(super) fn show_palette(
         &mut self,
         point: Point<Pixels>,
@@ -31,6 +43,7 @@ impl GraphCanvas {
         };
         let catalog = (source.is_none() && self.catalog_language == yss_ui::text::locale())
             .then(|| self.catalog.clone());
+        let previous_focus = window.focused(cx);
         let palette =
             cx.new(|cx| NodePalette::new(self.services.clone(), target, catalog, window, cx));
         let subscription =
@@ -46,7 +59,7 @@ impl GraphCanvas {
                     PaletteEvent::ConfigurationChanged => {}
                     PaletteEvent::Dismiss => {
                         view.palette = None;
-                        window.focus(&view.focus, cx);
+                        window.focus(previous_focus.as_ref().unwrap_or(&view.focus), cx);
                     }
                     PaletteEvent::Create {
                         descriptor,

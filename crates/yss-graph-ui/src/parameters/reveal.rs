@@ -5,6 +5,7 @@ use gpui_kit::{
 };
 use std::{cell::Cell, rc::Rc};
 use yss_node_protocol::ParameterKey;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone)]
 pub(super) struct Reveal {
@@ -91,32 +92,36 @@ impl ParameterForm {
                         };
                         let offset = target.scroll.offset();
                         window.on_next_frame(move |window, cx| {
-                            let _ = owner.update(cx, |view, cx| {
-                                if view.epoch != epoch
-                                    || view
-                                        .reveal
-                                        .as_ref()
-                                        .is_none_or(|current| current.focus != target.focus)
-                                {
-                                    return;
-                                }
-                                // Scroll first: off-screen controls are not yet native tab stops.
-                                if window.focused(cx) != target.previous_focus
-                                    || !(view.can_edit)(cx)
-                                {
-                                    view.reveal = None;
-                                    cx.notify();
-                                    return;
-                                }
-                                target.scroll.set_offset(point(offset.x, offset.y + delta));
-                                let owner = cx.entity().downgrade();
-                                window.on_next_frame(move |window, cx| {
-                                    let _ = owner.update(cx, |view, cx| {
-                                        view.focus_revealed(&target, epoch, window, cx)
+                            owner
+                                .update(cx, |view, cx| {
+                                    if view.epoch != epoch
+                                        || view
+                                            .reveal
+                                            .as_ref()
+                                            .is_none_or(|current| current.focus != target.focus)
+                                    {
+                                        return;
+                                    }
+                                    // Scroll first: off-screen controls are not yet native tab stops.
+                                    if window.focused(cx) != target.previous_focus
+                                        || !(view.can_edit)(cx)
+                                    {
+                                        view.reveal = None;
+                                        cx.notify();
+                                        return;
+                                    }
+                                    target.scroll.set_offset(point(offset.x, offset.y + delta));
+                                    let owner = cx.entity().downgrade();
+                                    window.on_next_frame(move |window, cx| {
+                                        owner
+                                            .update(cx, |view, cx| {
+                                                view.focus_revealed(&target, epoch, window, cx)
+                                            })
+                                            .log_released();
                                     });
-                                });
-                                cx.notify();
-                            });
+                                    cx.notify();
+                                })
+                                .log_released();
                         });
                     })
                 },

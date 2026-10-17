@@ -2,9 +2,10 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use yss_assistant_contract::CapabilityGatewayPort;
 use yss_harness_contract::{
-    AutomationIdKind, CapabilityGatewayPort, ClockPort, HarnessEventSinkPort, IdGenerationFailure,
-    IdGeneratorPort, UnixMillis,
+    AutomationIdKind, ClockPort, HarnessEventSinkPort, IdGenerationFailure, IdGeneratorPort,
+    UnixMillis,
 };
 use yss_harness_core::{HarnessHost, HarnessPorts};
 
@@ -27,6 +28,8 @@ pub enum HarnessStartupError {
     Persistence(#[from] yss_harness_contract::PersistenceFailure),
     #[error("Harness application initialization failed: {0}")]
     Application(#[from] crate::harness::HarnessInitializationError),
+    #[error("Assistant extension could not be initialized: {0}")]
+    Extension(#[from] yss_assistant_extension::AssistantExtensionError),
 }
 
 struct SystemHarnessClock;
@@ -72,13 +75,16 @@ pub(super) async fn initialize(
         store.clone(),
         clock.clone(),
     ));
+    let extension = Arc::new(yss_assistant_extension::AssistantExtension::new(
+        transport.capability_gateway,
+    )?);
     let host = application
         .initialize_harness(HarnessPorts {
             models: models.clone(),
             resources: Arc::new(crate::harness::ApplicationResourceResolver(
                 application.clone(),
             )),
-            capability_gateway: transport.capability_gateway,
+            extension,
             sessions: store.clone(),
             events: store.clone(),
             event_sink: transport.event_sink,

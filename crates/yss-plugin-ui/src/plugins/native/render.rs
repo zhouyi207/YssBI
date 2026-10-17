@@ -1,7 +1,7 @@
 use super::{PluginViewPanel, fields::Draft};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
+    Disableable, Sizable,
     button::Button,
     checkbox::Checkbox,
     input::{Input, Textarea},
@@ -9,6 +9,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*};
 use yss_plugin_runtime::{NativeInput, NativeOperation};
+use yss_ui::lifecycle::LogReleased;
 
 impl Render for PluginViewPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -65,16 +66,18 @@ impl Render for PluginViewPanel {
                                         PopupMenuItem::new(option.clone())
                                             .checked(*option == current)
                                             .on_click(move |_, _, cx| {
-                                                let _ = panel.update(cx, |panel, cx| {
-                                                    if !panel.busy
-                                                        && !panel.closed
-                                                        && panel.form_generation == generation
-                                                    {
-                                                        panel.fields[index].draft =
-                                                            Draft::Choice(selected.clone());
-                                                        cx.notify();
-                                                    }
-                                                });
+                                                panel
+                                                    .update(cx, |panel, cx| {
+                                                        if !panel.busy
+                                                            && !panel.closed
+                                                            && panel.form_generation == generation
+                                                        {
+                                                            panel.fields[index].draft =
+                                                                Draft::Choice(selected.clone());
+                                                            cx.notify();
+                                                        }
+                                                    })
+                                                    .log_released();
                                             }),
                                     );
                                 }
@@ -153,16 +156,6 @@ impl Render for PluginViewPanel {
         }
         if self.busy {
             content = content.child(yss_ui::text::t("common.loading"));
-        }
-        if let Some(message) = &self.message {
-            content = content.child(message.clone());
-        }
-        if let Some(error) = &self.error {
-            content = content.child(
-                div()
-                    .text_color(cx.theme().danger)
-                    .child(super::super::failure(error)),
-            );
         }
         content
     }

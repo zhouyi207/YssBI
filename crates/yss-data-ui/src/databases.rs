@@ -64,8 +64,16 @@ pub struct DatabaseEditor {
     read_failed: bool,
     refresh_again: bool,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
 }
 impl DatabaseEditor {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     pub fn new(
         services: Arc<ApplicationTasks>,
         project: ProjectInstanceId,
@@ -117,6 +125,7 @@ impl DatabaseEditor {
             read_failed: false,
             refresh_again: false,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
     pub fn project(&self) -> &ProjectInstanceId {
@@ -146,7 +155,12 @@ impl DatabaseEditor {
     pub fn fail_read(&mut self, cx: &mut Context<Self>) {
         self.ready = false;
         self.read_failed = true;
-        self.error = Some(yss_ui::text::translate("native.databases.readFailed"));
+        let message = yss_ui::text::translate("native.databases.readFailed");
+        self.notifications
+            .error_with_retry(message.clone(), cx, |view, window, cx| {
+                view.reload(true, window, cx)
+            });
+        self.error = Some(message);
         self.changed(cx);
     }
     pub fn focus_table(&self, window: &mut Window, cx: &mut Context<Self>) {
@@ -213,7 +227,10 @@ impl DatabaseEditor {
         self.edit = None;
         self.read_failed = true;
         self.busy = false;
-        self.error = Some(yss_ui::text::t("native.databases.unavailable").into());
+        self.set_error(
+            Some(yss_ui::text::t("native.databases.unavailable").into()),
+            cx,
+        );
         self.changed(cx);
     }
 }
@@ -224,9 +241,15 @@ impl Focusable for DatabaseEditor {
         self.grid.read(cx).focus_handle(cx)
     }
 }
+impl DatabaseEditor {
+    /// The dock factory that restores database editors.
+    pub const PANEL_NAME: &'static str = "database-editor";
+    /// The persisted panel field holding the database ID.
+    pub const ID_KEY: &'static str = "databaseId";
+}
 impl BasePanel for DatabaseEditor {
     fn panel_name(&self) -> &'static str {
-        "database-editor"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         !self.dirty() && !self.busy()
@@ -238,13 +261,16 @@ impl BasePanel for DatabaseEditor {
     }
     fn dump(&self, _: &App) -> PanelState {
         let mut state = PanelState::new(self.panel_name());
-        state.info = PanelInfo::Panel(serde_json::json!({"databaseId": self.id}));
+        state.info = PanelInfo::Panel(serde_json::json!({ (Self::ID_KEY): self.id }));
         state
     }
 }
 impl Panel for DatabaseEditor {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui_kit::IntoElement {
-        format!("{}{}", self.name, if self.dirty() { " *" } else { "" })
+    fn tab_name(&self, _: &App) -> Option<gpui_kit::SharedString> {
+        Some(format!("{}{}", self.name, if self.dirty() { " *" } else { "" }).into())
+    }
+    fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl gpui_kit::IntoElement {
+        self.tab_name(cx).unwrap_or_default()
     }
     fn inner_padding(&self, _: &App) -> bool {
         false

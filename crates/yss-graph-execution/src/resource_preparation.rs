@@ -1,11 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
-use crate::finalization::{SealedCandidateGrant, SealedCandidateGrantSet};
 use crate::package_preparation::PreparedExecutionPlan;
 use crate::plan::{
     PlanProjectSessionId, PlanResourceId, PlanResourceObservedState, PlanResourceRequirement,
-    PlanResourceVersion, ResourceAccess, ResourceKind,
+    PlanResourceVersion, ResourceKind,
 };
 use yss_node_kernel::RuntimeValue;
 
@@ -130,21 +129,17 @@ impl<'a> RunResourceRequest<'a> {
 #[derive(Debug)]
 struct SealedResourceGrant {
     resource: PlanResourceId,
-    version: PlanResourceVersion,
-    kind: ResourceKind,
-    access: ResourceAccess,
     value: RuntimeValue,
 }
 
 #[derive(Debug)]
 pub(crate) struct PreparedRunResources {
-    plan_id: crate::plan::PlanId,
     grants: Box<[SealedResourceGrant]>,
 }
 
 impl PreparedRunResources {
-    fn new(plan_id: crate::plan::PlanId, grants: Box<[SealedResourceGrant]>) -> Self {
-        Self { plan_id, grants }
+    fn new(grants: Box<[SealedResourceGrant]>) -> Self {
+        Self { grants }
     }
 
     pub(crate) fn value(&self, resource: &PlanResourceId) -> Option<&RuntimeValue> {
@@ -152,25 +147,6 @@ impl PreparedRunResources {
             .iter()
             .find(|grant| &grant.resource == resource)
             .map(|grant| &grant.value)
-    }
-
-    pub(crate) fn finish(self) -> SealedCandidateGrantSet {
-        let Self { plan_id, grants } = self;
-        let candidate_grants = grants
-            .into_vec()
-            .into_iter()
-            .map(|grant| {
-                SealedCandidateGrant::new(
-                    plan_id,
-                    grant.resource,
-                    grant.version,
-                    grant.kind,
-                    grant.access,
-                )
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        SealedCandidateGrantSet::new(candidate_grants)
     }
 }
 
@@ -275,9 +251,6 @@ impl ResourceProviderFactory {
             }
             grants.push(SealedResourceGrant {
                 resource,
-                version: binding.version().clone(),
-                kind: requirement.kind(),
-                access: requirement.access(),
                 value: binding.value().clone(),
             });
         }
@@ -293,10 +266,7 @@ impl ResourceProviderFactory {
             }
         }
 
-        Ok(PreparedRunResources::new(
-            request.plan.package().provenance().plan_id(),
-            grants.into_boxed_slice(),
-        ))
+        Ok(PreparedRunResources::new(grants.into_boxed_slice()))
     }
 }
 

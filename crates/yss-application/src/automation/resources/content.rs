@@ -131,8 +131,8 @@ pub(in crate::automation) fn edit_resource(
             &resource,
             &request.version,
             settings,
-            operation,
             control,
+            publish,
         )?,
         edit @ (ResourceEdit::CreateTopics { .. }
         | ResourceEdit::UpdateTopics { .. }

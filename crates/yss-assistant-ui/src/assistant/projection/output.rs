@@ -1,9 +1,9 @@
 //! Ordered output shared by the manager, workers and context-summary calls.
 use super::Tool;
 use crate::assistant::activity::Activity;
+use yss_assistant_contract::{AssistantEventKind as Event, AssistantToolIdentity, StatisticalPlan};
 use yss_harness_contract::{
-    AgentRuntimePhase, AssistantEventKind as Event, AssistantToolIdentity, KnowledgeCitation,
-    ModelCallPurpose, ModelTokenUsage, StatisticalPlan,
+    AgentRuntimePhase, KnowledgeCitation, ModelCallPurpose, ModelTokenUsage,
 };
 
 #[derive(Clone)]
@@ -223,7 +223,7 @@ impl Output {
                 self.tool(
                     id,
                     invocation_id,
-                    yss_harness_contract::CapabilityId::ExecuteGraph.into(),
+                    yss_assistant_contract::CapabilityId::ExecuteGraph.into(),
                 )
                 .executed(at, &status, failure_code);
             }
@@ -255,7 +255,9 @@ impl Output {
                 .iter()
                 .rev()
                 .find_map(|part| match &part.content {
-                    Content::Tool(tool) if tool.running() => Some(Activity::Tool(tool.kind)),
+                    Content::Tool(tool) if tool.running() => {
+                        Some(Activity::Tool(tool.kind.clone()))
+                    }
                     _ => None,
                 });
         }

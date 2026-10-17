@@ -10,7 +10,7 @@ use crate::{
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, Sizable,
+    ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     shimmer::ShimmerText,
 };
@@ -58,20 +58,22 @@ impl Workbench {
             .on_action(cx.listener(|view, _: &OpenRecentProject, window, cx| {
                 view.open_recent_projects(window, cx);
             }))
-            .on_action(cx.listener(|view, _: &RunWholeGraph, _, cx| {
+            .on_action(cx.listener(|view, _: &RunWholeGraph, window, cx| {
                 if !view.busy
                     && !view.closing
-                    && let Some(graph) = view.details.read(cx).graph(cx)
+                    && view.editor_command_panel(window, cx).is_some()
+                    && let Some(graph) = view.active_graph(cx)
                 {
                     graph.update(cx, |graph, cx| {
                         graph.run_graph(yss_application::graph::run::RunDemand::Default, cx)
                     });
                 }
             }))
-            .on_action(cx.listener(|view, _: &CancelRun, _, cx| {
+            .on_action(cx.listener(|view, _: &CancelRun, window, cx| {
                 if !view.busy
                     && !view.closing
-                    && let Some(graph) = view.details.read(cx).graph(cx)
+                    && view.editor_command_panel(window, cx).is_some()
+                    && let Some(graph) = view.active_graph(cx)
                 {
                     graph.update(cx, |graph, cx| graph.cancel_run(cx));
                 }
@@ -96,24 +98,6 @@ impl Workbench {
                     .gap_2()
                     .w_full()
                     .min_w_0()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_shrink_0()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Icon::new(IconName::Workflow)
-                                    .size_4()
-                                    .text_color(cx.theme().primary),
-                            )
-                            .child(
-                                div()
-                                    .text_size(rems(13. / 14.))
-                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
-                                    .child("YssBI"),
-                            ),
-                    )
                     .when(!cfg!(target_os = "macos"), |view| {
                         view.child(
                             div()
@@ -141,6 +125,9 @@ impl Workbench {
                                     .ghost()
                                     .icon(IconName::Settings)
                                     .tooltip(crate::text::t("native.workbench.settingsShortcut"))
+                                    .accessibility_label(crate::text::t(
+                                        "native.workbench.settingsShortcut",
+                                    ))
                                     .disabled(self.is_closing(cx))
                                     .on_click(cx.listener(|view, _, window, cx| {
                                         view.show_settings(window, cx)
@@ -156,7 +143,9 @@ impl Workbench {
                     .min_h_0()
                     .relative()
                     .child(if self.project.is_some() {
-                        self.dock.clone().into_any_element()
+                        self.dock_renderer
+                            .render_area(&self.dock)
+                            .into_any_element()
                     } else {
                         div()
                             .size_full()

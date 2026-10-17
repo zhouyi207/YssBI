@@ -43,6 +43,7 @@ impl MindCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        cx.stop_propagation();
         self.cancel_gesture();
         self.focus_canvas(window, cx);
         if event.button != MouseButton::Left || event.modifiers.alt {
@@ -95,7 +96,7 @@ impl MindCanvas {
                 for node in &self.layout.nodes {
                     if intersects(rect, node.bounds) {
                         self.selected
-                            .insert(self.snapshot.content.nodes[node.index].id.clone());
+                            .insert(self.file.snapshot().content.nodes[node.index].id.clone());
                     }
                 }
             }
@@ -131,7 +132,7 @@ impl MindCanvas {
         let rect = if selection && !self.selected.is_empty() {
             let mut selected = self.layout.nodes.iter().filter(|node| {
                 self.selected
-                    .contains(&self.snapshot.content.nodes[node.index].id)
+                    .contains(&self.file.snapshot().content.nodes[node.index].id)
             });
             let Some(first) = selected.next() else {
                 return;

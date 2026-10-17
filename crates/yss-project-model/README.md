@@ -1,11 +1,11 @@
 # Project model
 
 > Status: Current
-> Scope: ProjectData aggregate and authored Mind/Markdown document contracts
+> Scope: ProjectData aggregate and authored Mind/Markdown/Chart file contracts
 > Canonical owners: This crate owns in-memory models; yss-project owns editing, persistence and publication
 > Update when: ProjectData or authored document shapes and invariants change
 
-`ProjectData` contains typed graph, chart, database, `minds` and `docs` collections.
+`ProjectData` contains typed graph, database, `charts`, `minds` and `docs` collections.
 Event Graph and Function Graph have independent project index entries and application factories.
 The resident `graphs` collection holds their shared node-graph editing contents;
 it is not the project's file classification or navigation index.
@@ -20,8 +20,12 @@ directory and extension. `file.rs` shares typed path mechanics, editing versions
 saved-content fingerprints and patch structure without combining their contents.
 `FileState` keeps the current content fingerprint with its private document; replacement
 updates both together. Dirty-state metadata does not clone or encode the body.
-These models do not depend on a renderer, IPC or the filesystem. Existing graph
-and chart bodies retain their dedicated model owners.
+`chart.rs` binds the `yss-chart-document` format to the same file mechanics as `ChartPath` and
+`ChartState`; `ChartEdit::SetDocument` replaces the whole configuration, which is how both the
+editor draft and Assistant setting changes are submitted. Chart files use
+`charts/<name>.yssbi-chart` and keep the strict document format of that crate.
+These models do not depend on a renderer, IPC or the filesystem. Graph bodies retain their
+dedicated model owner.
 
 Mind files use `minds/<name>.yssbi-mind`, containing UTF-8 JSON with `rootId` and
 `nodes`. Each node has `id`, `parentId` and `content`; optional `reference` identifies a project

@@ -1,15 +1,15 @@
 mod activity;
 mod assistant;
-mod charts;
 mod chrome;
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::name_form;
 mod resources;
 pub(crate) use chrome::{OpenProjectDirectory, OpenRecentProject, SaveAllGraphs, ShowSettings};
 mod databases;
 mod details;
 mod dock;
-mod documents;
 mod events;
+mod files;
 mod graphs;
 mod imports;
 mod intents;
@@ -18,7 +18,6 @@ mod lifecycle;
 mod logs;
 mod menus;
 pub(crate) use menus::{bind_keys as bind_menu_keys, shortcut_commands};
-mod minds;
 mod output;
 mod plugins;
 mod problem_navigation;
@@ -75,7 +74,10 @@ pub struct Workbench {
     assistant_observation: Option<gpui_kit::Subscription>,
     assistant_intent: Option<String>,
     dock: Entity<DockArea>,
+    active_editor: Option<gpui_kit::component::dock::PanelId>,
+    responsive_layout: layout::ResponsiveLayout,
     dock_renderer: std::rc::Rc<dock::WorkbenchDock>,
+    graph_statistics: Entity<status_bar::GraphStatistics>,
     details: Entity<DetailsPanel>,
     problems: Entity<ProblemsPanel>,
     logs: Entity<LogsPanel>,
@@ -84,9 +86,7 @@ pub struct Workbench {
     result_panels: BTreeMap<(uuid::Uuid, u64), WeakEntity<crate::results::ResultPanel>>,
     result_windows: Vec<results::window::ResultWindowHandle>,
     graphs: BTreeMap<String, WeakEntity<GraphCanvas>>,
-    documents: BTreeMap<String, WeakEntity<crate::documents::DocumentEditor>>,
-    charts: BTreeMap<String, WeakEntity<crate::charts::ChartEditor>>,
-    minds: BTreeMap<String, WeakEntity<crate::minds::MindCanvas>>,
+    files: BTreeMap<String, files::WeakFilePanel>,
     databases: BTreeMap<String, WeakEntity<crate::databases::DatabaseEditor>>,
     opening: BTreeSet<String>,
     graph_openings: BTreeMap<String, WeakEntity<graphs::Opening>>,
@@ -123,12 +123,14 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> Self {
         let (dock, dock_renderer) = dock::create(cx.weak_entity(), window, cx);
-        let details = cx.new(|cx| DetailsPanel::new(services.graph.clone(), cx));
+        let owner = cx.weak_entity();
+        let graph_statistics = cx.new(|_| status_bar::GraphStatistics::new(owner));
+        let details = cx.new(|cx| DetailsPanel::new(services.graph.clone(), window, cx));
         let problems = cx.new(ProblemsPanel::new);
         let logs = cx.new(|cx| LogsPanel::new(services.clone(), window, cx));
         let output = cx.new(OutputPanel::new);
         let results = cx.new(ResultsPanel::new);
-        let recent = cx.new(|_| crate::projects::RecentProjects::new(services.clone()));
+        let recent = cx.new(|_| crate::projects::RecentProjects::new(services.clone(), window));
         let plugins =
             cx.new(|cx| crate::plugins::PluginsPanel::new(services.plugins.clone(), window, cx));
         let plugins_sidebar = cx.new(|cx| crate::plugins::PluginsSidebar::new(plugins.clone(), cx));
@@ -165,7 +167,10 @@ impl Workbench {
             assistant_observation: None,
             assistant_intent: None,
             dock,
+            active_editor: None,
+            responsive_layout: layout::ResponsiveLayout::default(),
             dock_renderer,
+            graph_statistics,
             details,
             problems,
             logs,
@@ -174,9 +179,7 @@ impl Workbench {
             result_panels: BTreeMap::new(),
             result_windows: vec![],
             graphs: BTreeMap::new(),
-            documents: BTreeMap::new(),
-            charts: BTreeMap::new(),
-            minds: BTreeMap::new(),
+            files: BTreeMap::new(),
             databases: BTreeMap::new(),
             opening: BTreeSet::new(),
             graph_openings: BTreeMap::new(),
@@ -220,17 +223,20 @@ impl Workbench {
                 // Menu labels and shortcut hints are retained; workspace defaults
                 // intentionally do not mutate the live user-arranged DockArea.
                 view.menu_context = None;
-                view.prepare_menus(cx);
                 cx.notify();
             },
         ));
         cx.on_release(|view, cx| {
             view.close_result_windows(cx);
             if let Some(handle) = view.settings_window {
-                let _ = handle.update(cx, |_, window, _| window.remove_window());
+                handle
+                    .update(cx, |_, window, _| window.remove_window())
+                    .log_released();
             }
             if let Some(handle) = view.logs_window {
-                let _ = handle.update(cx, |_, window, _| window.remove_window());
+                handle
+                    .update(cx, |_, window, _| window.remove_window())
+                    .log_released();
             }
         })
         .detach();
@@ -282,7 +288,7 @@ impl Workbench {
         self.subscriptions.push(
             cx.subscribe_in(&self.results, window, |view, _, event, _, cx| {
                 let ResultsEvent::Open(reference) = event;
-                if let Some(canvas) = view.details.read(cx).graph(cx) {
+                if let Some(canvas) = view.active_graph(cx) {
                     canvas.update(cx, |canvas, cx| canvas.inspect_result(*reference, cx));
                 }
             }),
@@ -313,38 +319,15 @@ impl Workbench {
                 |view, _, event, window, cx| match event {
                     ActivityEvent::RefreshResources => view.refresh_project(window, cx),
                     ActivityEvent::OpenGraph(path) => view.open_graph(path.clone(), window, cx),
-                    ActivityEvent::OpenDocument(path) => {
-                        view.open_document(path.clone(), None, window, cx)
-                    }
-                    ActivityEvent::OpenMind(path) => view.open_mind(path.clone(), None, window, cx),
+                    ActivityEvent::OpenFile(path) => view.open_file(path.clone(), None, window, cx),
                     ActivityEvent::OpenDatabase(id) => {
                         view.open_database(id.clone(), None, window, cx)
                     }
-                    ActivityEvent::OpenChart(path) => {
-                        view.open_chart(path.clone(), None, window, cx)
+                    ActivityEvent::Resource(path, action) => {
+                        view.resource_action(path.clone(), *action, window, cx)
                     }
-                    ActivityEvent::ChartResource(path, action) => {
-                        view.chart_resource_action(path.clone(), *action, window, cx)
-                    }
-                    ActivityEvent::DocumentResource(path, action) => view.file_resource_action(
-                        resources::AuthoredKind::Document,
-                        path.clone(),
-                        *action,
-                        window,
-                        cx,
-                    ),
-                    ActivityEvent::MindResource(path, action) => view.file_resource_action(
-                        resources::AuthoredKind::Mind,
-                        path.clone(),
-                        *action,
-                        window,
-                        cx,
-                    ),
                     ActivityEvent::RevealResource(request) => {
                         view.reveal_resource(request.clone(), window, cx)
-                    }
-                    ActivityEvent::GraphResource(path, action) => {
-                        view.graph_resource_action(path.clone(), *action, window, cx)
                     }
                     ActivityEvent::DatabaseResource(id, action) => {
                         view.database_resource_action(id.clone(), *action, window, cx)
@@ -391,7 +374,7 @@ impl Workbench {
                         if view.is_closing(cx) {
                             return;
                         }
-                        if let Some(graph) = view.details.read(cx).graph(cx) {
+                        if let Some(graph) = view.active_graph(cx) {
                             view.details.update(cx, |details, cx| {
                                 details.show_node_properties(cx);
                             });
@@ -412,15 +395,26 @@ impl Workbench {
         });
     }
 
+    /// File and database editors show their own details; graph selections drive the inspector.
+    fn activate_editor(&mut self, target: details::DetailsTarget, cx: &mut Context<Self>) {
+        let Some(editor) = target.upgrade() else {
+            return;
+        };
+        self.active_editor = Some(editor.entity_id().into());
+        let resource = editor.resource(cx);
+        self.details
+            .update(cx, |details, cx| details.set_target(target, cx));
+        self.activate_file(resource, cx);
+    }
+
     fn activate_file(&mut self, path: String, cx: &mut Context<Self>) {
         self.problems.update(cx, |problems, cx| problems.clear(cx));
         self.output
             .update(cx, |output, cx| output.set_graph(None, cx));
-        self.results.update(cx, |results, cx| {
-            results.set_graph(None);
-            cx.notify();
-        });
+        self.results
+            .update(cx, |results, cx| results.set_graph(None, cx));
         self.mark_project_resource(Some(&path), cx);
+        cx.notify();
     }
 
     fn mark_project_resource(&self, path: Option<&str>, cx: &mut Context<Self>) {
@@ -432,37 +426,22 @@ impl Workbench {
         }
     }
 
-    pub fn has_unsaved(&self, cx: &gpui_kit::App) -> bool {
-        if self.settings.read(cx).dirty() {
-            return true;
-        }
-        if self
-            .charts
-            .values()
-            .filter_map(WeakEntity::upgrade)
-            .any(|chart| chart.read(cx).dirty())
-        {
-            return true;
-        }
+    fn editors(&self) -> impl Iterator<Item = EditorPanel> + '_ {
         self.graphs
             .values()
             .filter_map(WeakEntity::upgrade)
-            .any(|graph| graph.read(cx).dirty())
-            || self
-                .documents
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|document| document.read(cx).dirty())
-            || self
-                .minds
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|mind| mind.read(cx).dirty())
-            || self
-                .databases
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|editor| editor.read(cx).dirty())
+            .map(EditorPanel::Graph)
+            .chain(self.file_panels().map(EditorPanel::File))
+            .chain(
+                self.databases
+                    .values()
+                    .filter_map(WeakEntity::upgrade)
+                    .map(EditorPanel::Database),
+            )
+    }
+
+    pub fn has_unsaved(&self, cx: &gpui_kit::App) -> bool {
+        self.settings.read(cx).dirty() || self.editors().any(|editor| editor.dirty(cx))
     }
 
     pub fn is_closing(&self, cx: &gpui_kit::App) -> bool {
@@ -476,31 +455,137 @@ impl Workbench {
             || self.busy
             || self.plugins.read(cx).busy()
             || self.settings.read(cx).has_pending_operation()
-            || self
-                .charts
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|chart| chart.read(cx).busy())
-            || self
-                .graphs
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|graph| graph.read(cx).busy())
-            || self
-                .documents
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|document| document.read(cx).busy())
-            || self
-                .minds
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|mind| mind.read(cx).busy())
-            || self
-                .databases
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|editor| editor.read(cx).busy())
+            || self.editors().any(|editor| editor.busy(cx))
+    }
+}
+
+/// Any open editor. Each kind keeps its own editing model; this is only the dispatch point.
+enum EditorPanel {
+    Graph(Entity<GraphCanvas>),
+    File(files::FilePanel),
+    Database(Entity<crate::databases::DatabaseEditor>),
+}
+
+impl EditorPanel {
+    fn from_view(view: gpui_kit::AnyView) -> Option<Self> {
+        if let Some(file) = files::FilePanel::from_view(view.clone()) {
+            return Some(Self::File(file));
+        }
+        view.clone()
+            .downcast::<GraphCanvas>()
+            .map(Self::Graph)
+            .or_else(|_| {
+                view.downcast::<crate::databases::DatabaseEditor>()
+                    .map(Self::Database)
+            })
+            .ok()
+    }
+
+    fn entity_id(&self) -> gpui_kit::EntityId {
+        match self {
+            Self::Graph(graph) => graph.entity_id(),
+            Self::File(panel) => panel.entity_id(),
+            Self::Database(editor) => editor.entity_id(),
+        }
+    }
+
+    /// The project tree row of the edited resource: a path, or a database's ID.
+    fn resource(&self, cx: &gpui_kit::App) -> String {
+        match self {
+            Self::Graph(graph) => graph.read(cx).path().to_owned(),
+            Self::File(panel) => panel.path(cx),
+            Self::Database(editor) => editor.read(cx).id().to_owned(),
+        }
+    }
+
+    fn dirty(&self, cx: &gpui_kit::App) -> bool {
+        match self {
+            Self::Graph(graph) => graph.read(cx).dirty(cx),
+            Self::File(panel) => panel.dirty(cx),
+            Self::Database(editor) => editor.read(cx).dirty(),
+        }
+    }
+
+    fn busy(&self, cx: &gpui_kit::App) -> bool {
+        match self {
+            Self::Graph(graph) => graph.read(cx).busy(),
+            Self::File(panel) => panel.busy(cx),
+            Self::Database(editor) => editor.read(cx).busy(),
+        }
+    }
+
+    fn save(&self, window: &mut Window, cx: &mut gpui_kit::App) {
+        match self {
+            Self::Graph(graph) => graph.update(cx, |graph, cx| {
+                graph.submit(crate::canvas::GraphCommand::Save, None, cx)
+            }),
+            Self::File(panel) => panel.save(window, cx),
+            Self::Database(editor) => editor.update(cx, |editor, cx| editor.save(window, cx)),
+        }
+    }
+
+    /// Whether a change to `resource` can alter what the editor shows. Database editors follow
+    /// the index revision that every project refresh delivers.
+    fn shows(&self, resource: &yss_project_history::ResourceKey, cx: &gpui_kit::App) -> bool {
+        match self {
+            Self::Graph(graph) => graph.read(cx).shows(resource),
+            Self::File(panel) => resource.path() == Some(panel.path(cx).as_str()),
+            Self::Database(_) => false,
+        }
+    }
+
+    /// Graphs take the node catalog, charts the dataset catalog and database editors their
+    /// indexed revision and name.
+    fn accept_index(&self, project: &DesktopProject, window: &mut Window, cx: &mut gpui_kit::App) {
+        match self {
+            Self::Graph(graph) => {
+                if let Some(nodes) = project
+                    .panels
+                    .iter()
+                    .find(|panel| panel.panel_id == "nodes")
+                {
+                    let nodes = nodes.clone();
+                    graph.update(cx, |graph, cx| {
+                        graph.set_catalog(nodes, &project.language, cx)
+                    });
+                }
+            }
+            Self::File(files::FilePanel::Chart(chart)) => {
+                let catalog = project.index.clone();
+                chart.update(cx, |chart, cx| chart.replace_catalog(catalog, window, cx));
+            }
+            Self::File(files::FilePanel::Document(_) | files::FilePanel::Mind(_)) => {}
+            Self::Database(editor) => {
+                let id = editor.read(cx).id().to_owned();
+                match project.index.databases.iter().find(|entry| entry.id == id) {
+                    Some(entry) => {
+                        let name = entry.name.clone().unwrap_or(id);
+                        editor.update(cx, |editor, cx| {
+                            editor.replace_index(entry.revision, name, window, cx)
+                        });
+                    }
+                    None => editor.update(cx, |editor, cx| editor.unavailable(cx)),
+                }
+            }
+        }
+    }
+
+    fn refresh(&self, window: &mut Window, cx: &mut gpui_kit::App) {
+        match self {
+            Self::Graph(graph) => graph.update(cx, |graph, cx| graph.refresh(cx)),
+            Self::File(panel) => panel.refresh(window, cx),
+            Self::Database(editor) => {
+                editor.update(cx, |editor, cx| editor.reload(false, window, cx))
+            }
+        }
+    }
+
+    /// Re-reads everything the editor shows, for when committed events may have been missed.
+    fn resync(&self, window: &mut Window, cx: &mut gpui_kit::App) {
+        self.refresh(window, cx);
+        if let Self::Graph(graph) = self {
+            graph.update(cx, |graph, cx| graph.resync_execution(cx));
+        }
     }
 }
 
@@ -512,7 +597,7 @@ impl Render for Workbench {
             });
         }
         self.dock_renderer.update_style(self.dock.read(cx), cx);
-        self.prepare_menus(cx);
+        self.prepare_menus(window, cx);
         self.render_chrome(window, cx)
     }
 }

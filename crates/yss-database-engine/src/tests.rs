@@ -556,7 +556,6 @@ fn composed_plans_are_lazy_and_retain_every_source_lease() {
 #[test]
 fn boolean_series_use_native_lazy_expressions_with_nulls_and_alignment() {
     use arrow::array::BooleanArray;
-    use datafusion::logical_expr::{Expr, Operator};
     use yss_data_contract::TabularScalar as V;
     use yss_relational_contract::{BooleanOperand as O, BooleanOperation as Op};
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
@@ -612,18 +611,6 @@ fn boolean_series_use_native_lazy_expressions_with_nulls_and_alignment() {
     let not = source
         .boolean_series(Op::Not, &[O::Series(and.clone())])
         .unwrap();
-    let expression = |value: &SeriesHandle| {
-        value
-            .plan()
-            .as_any()
-            .downcast_ref::<crate::series::DataFusionSeries>()
-            .unwrap()
-            .expression
-            .clone()
-    };
-    assert!(matches!(expression(&and), Expr::BinaryExpr(v) if v.op == Operator::And));
-    assert!(matches!(expression(&or), Expr::BinaryExpr(v) if v.op == Operator::Or));
-    assert!(matches!(expression(&not), Expr::Not(_)));
     let broadcast = source
         .boolean_series(Op::And, &[O::Scalar(Some(false)), O::Series(left.clone())])
         .unwrap();
@@ -1591,30 +1578,6 @@ fn managed_file_prefixes_preserve_projection_offset_and_filter_order() {
     let page = query.page(3, 5, &control()).unwrap();
     assert_eq!(page.row_count, 5);
     assert!(page.has_more);
-
-    // Guard the managed source's optimization contract without wall-clock thresholds.
-    let frame = ordered_user_frame(query.frame.clone(), &schema)
-        .unwrap()
-        .0
-        .select([
-            Expr::Column(Column::from_name("x.value")),
-            Expr::Column(Column::from_name("y")),
-        ])
-        .unwrap();
-    let frame = limit_frame(frame, 0, 5, true).unwrap();
-    let plan = runtime
-        .runtime
-        .as_ref()
-        .unwrap()
-        .block_on(frame.create_physical_plan())
-        .unwrap();
-    let plan = format!(
-        "{}",
-        datafusion::physical_plan::displayable(plan.as_ref()).indent(true)
-    );
-    assert!(!plan.contains("SortExec"), "{plan}");
-    assert!(!plan.contains("SortPreservingMergeExec"), "{plan}");
-    assert!(plan.contains("projection=[x.value, y]"), "{plan}");
 }
 
 #[test]

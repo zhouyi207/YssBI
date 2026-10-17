@@ -1,20 +1,19 @@
 //! One column draft follows either issued choices or the shared editable text list.
 use super::RelationalDraft;
 use crate::parameters::{
-    ParameterForm, controls,
-    field::{ParameterDraft, list::ListDraft},
+    ParameterForm,
+    field::{
+        ParameterDraft,
+        list::{ListDraft, RowCommand, row_number},
+    },
 };
-use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
-    checkbox::Checkbox,
-};
-use gpui_kit::{AnyElement, Context, IntoElement, Window, div, prelude::*};
+use gpui_kit::component::{ActiveTheme, Disableable, checkbox::Checkbox};
+use gpui_kit::{AnyElement, Context, IntoElement, SharedString, Window, div, prelude::*};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_editor::projection::EditorParameterConfiguration;
 use yss_node_protocol::{ParameterKey, RelationalScalarType};
+use yss_ui::inspector::{self, Pager};
 use yss_ui::text::translate;
 
 const PAGE_SIZE: usize = 50;
@@ -59,6 +58,8 @@ impl ColumnsDraft {
 }
 
 impl ParameterForm {
+    /// Selected columns carry their order and reorder menu in a trailing lane that unselected
+    /// rows keep empty, so names and types stay on the same columns.
     pub(super) fn render_columns(
         &self,
         index: usize,
@@ -74,24 +75,24 @@ impl ParameterForm {
         else {
             return div().into_any_element();
         };
-        let content = div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .children(context_hint.as_deref().map(|text| controls::hint(text, cx)));
-        let ColumnsDraft::Known { selected, page } = draft else {
-            let ColumnsDraft::Manual(draft) = draft else {
-                unreachable!()
-            };
-            return content
-                .child(self.render_list_parameter(
-                    index,
-                    draft,
-                    busy,
-                    "detail.parameterEditor.addColumn",
-                    cx,
-                ))
-                .into_any_element();
+        let content = div().flex().flex_col().gap_2().children(
+            context_hint
+                .as_deref()
+                .map(|text| inspector::hint(text, cx)),
+        );
+        let (selected, page) = match draft {
+            ColumnsDraft::Known { selected, page } => (selected, *page),
+            ColumnsDraft::Manual(draft) => {
+                return content
+                    .child(self.render_list_parameter(
+                        index,
+                        draft,
+                        busy,
+                        "detail.parameterEditor.addColumn",
+                        cx,
+                    ))
+                    .into_any_element();
+            }
         };
         let epoch = self.epoch;
         let eligible = options
@@ -108,141 +109,115 @@ impl ParameterForm {
             .filter(|name| !eligible.contains(name.as_str()));
         let count = options.len() + missing.clone().count();
         let pages = count.div_ceil(PAGE_SIZE).max(1);
-        let page = (*page).min(pages - 1);
+        let page = page.min(pages - 1);
         let rows = options
             .iter()
             .map(|option| (option.name.as_ref(), Some(option.data_type)))
             .chain(missing.map(|name| (name.as_str(), None)));
-        content
-            .child(
+        let mut list = div()
+            .id(("column-options", index))
+            .max_h_64()
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_1();
+        for (row, (name, data_type)) in rows.enumerate().skip(page * PAGE_SIZE).take(PAGE_SIZE) {
+            let position = positions.get(name).copied();
+            let toggle_name = name.to_owned();
+            let order = position.map(|position| {
+                let name = name.to_owned();
                 div()
-                    .id(("column-options", index))
-                    .max_h(gpui_kit::px(256.))
-                    .overflow_y_scroll()
                     .flex()
-                    .flex_col()
+                    .items_center()
                     .gap_1()
-                    .children(rows.enumerate().skip(page * PAGE_SIZE).take(PAGE_SIZE).map(
-                        |(row, (name, data_type))| {
-                            let position = positions.get(name).copied();
-                            let name = name.to_owned();
-                            let toggle_name = name.clone();
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_1()
-                                .child(
-                                    Checkbox::new(gpui_kit::SharedString::from(format!(
-                                        "column-{index}-{row}"
-                                    )))
-                                    .label(name.clone())
-                                    .flex_1()
-                                    .min_w_0()
-                                    .checked(position.is_some())
-                                    .disabled(busy)
-                                    .on_click(cx.listener(move |view, checked: &bool, _, cx| {
-                                        if !view.accepts_input(epoch, cx) {
-                                            return;
-                                        }
-                                        if let ParameterDraft::Relational(
-                                            RelationalDraft::Columns(ColumnsDraft::Known {
-                                                selected,
-                                                ..
-                                            }),
-                                        ) = &mut view.fields[index].draft
-                                        {
-                                            if *checked {
-                                                if !selected.contains(&toggle_name) {
-                                                    selected.push(toggle_name.clone());
-                                                }
-                                            } else {
-                                                selected.retain(|name| name != &toggle_name);
-                                            }
-                                            view.fields[index].error = None;
-                                            view.fields[index].dirty = true;
-                                            cx.notify();
-                                        }
-                                    })),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(if data_type.is_none() {
-                                            cx.theme().danger
-                                        } else {
-                                            cx.theme().muted_foreground
-                                        })
-                                        .child(match data_type {
-                                            Some(RelationalScalarType::Known(kind)) => {
-                                                kind.to_string()
-                                            }
-                                            Some(RelationalScalarType::Unknown) => "?".into(),
-                                            None => translate(
-                                                "detail.parameterEditor.unavailableColumn",
-                                            ),
-                                        }),
-                                )
-                                .child(
-                                    div().w(gpui_kit::px(24.)).text_xs().text_right().child(
-                                        position
-                                            .map(|row| (row + 1).to_string())
-                                            .unwrap_or_default(),
-                                    ),
-                                )
-                                .children(
-                                    [
-                                        (-1, IconName::ChevronUp, "conversion.moveUp"),
-                                        (1, IconName::ChevronDown, "conversion.moveDown"),
-                                    ]
-                                    .into_iter()
-                                    .map(
-                                        |(direction, icon, label)| {
-                                            let name = name.clone();
-                                            Button::new(gpui_kit::SharedString::from(format!(
-                                                "column-move-{index}-{row}-{direction}"
-                                            )))
-                                            .small()
-                                            .ghost()
-                                            .icon(icon)
-                                            .tooltip(translate(label))
-                                            .disabled(
-                                                busy || position.is_none_or(|row| {
-                                                    (direction < 0 && row == 0)
-                                                        || (direction > 0
-                                                            && row + 1 == selected.len())
-                                                }),
-                                            )
-                                            .on_click(cx.listener(move |view, _, _, cx| {
-                                                if !view.accepts_input(epoch, cx) {
-                                                    return;
-                                                }
-                                                if let ParameterDraft::Relational(
-                                                    RelationalDraft::Columns(ColumnsDraft::Known {
-                                                        selected,
-                                                        ..
-                                                    }),
-                                                ) = &mut view.fields[index].draft
-                                                    && let Some(row) = selected
-                                                        .iter()
-                                                        .position(|value| value == &name)
-                                                    && let Some(target) =
-                                                        row.checked_add_signed(direction)
-                                                    && target < selected.len()
-                                                {
-                                                    selected.swap(row, target);
-                                                    view.fields[index].error = None;
-                                                    view.fields[index].dirty = true;
-                                                    cx.notify();
-                                                }
-                                            }))
-                                        },
-                                    ),
-                                )
+                    .child(row_number(position, cx))
+                    .child(self.row_menu(
+                        SharedString::from(format!("column-actions-{index}-{name}")),
+                        (position, selected.len()),
+                        false,
+                        busy,
+                        cx,
+                        move |view, command, _, cx| {
+                            if let RowCommand::Move(direction) = command
+                                && let Some(field) = view.fields.get_mut(index)
+                                && let ParameterDraft::Relational(RelationalDraft::Columns(
+                                    ColumnsDraft::Known { selected, .. },
+                                )) = &mut field.draft
+                                && let Some(row) = selected.iter().position(|value| value == &name)
+                                && let Some(target) = row.checked_add_signed(direction)
+                                && target < selected.len()
+                            {
+                                selected.swap(row, target);
+                                field.error = None;
+                                field.dirty = true;
+                                cx.notify();
+                            }
                         },
-                    )),
-            )
+                    ))
+            });
+            list = list.child(
+                div()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Checkbox::new(SharedString::from(format!("column-{index}-{row}")))
+                            .label(name.to_owned())
+                            .flex_1()
+                            .min_w_0()
+                            .checked(position.is_some())
+                            .disabled(busy)
+                            .on_click(cx.listener(move |view, checked: &bool, _, cx| {
+                                if !view.accepts_input(epoch, cx) {
+                                    return;
+                                }
+                                if let ParameterDraft::Relational(RelationalDraft::Columns(
+                                    ColumnsDraft::Known { selected, .. },
+                                )) = &mut view.fields[index].draft
+                                {
+                                    if *checked {
+                                        if !selected.contains(&toggle_name) {
+                                            selected.push(toggle_name.clone());
+                                        }
+                                    } else {
+                                        selected.retain(|name| name != &toggle_name);
+                                    }
+                                    view.fields[index].error = None;
+                                    view.fields[index].dirty = true;
+                                    cx.notify();
+                                }
+                            })),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .text_xs()
+                            .text_color(if data_type.is_none() {
+                                cx.theme().danger
+                            } else {
+                                cx.theme().muted_foreground
+                            })
+                            .child(match data_type {
+                                Some(RelationalScalarType::Known(kind)) => kind.to_string(),
+                                Some(RelationalScalarType::Unknown) => "?".into(),
+                                None => translate("detail.parameterEditor.unavailableColumn"),
+                            }),
+                    )
+                    .child(
+                        div()
+                            .w_12()
+                            .flex_shrink_0()
+                            .flex()
+                            .justify_end()
+                            .children(order),
+                    ),
+            );
+        }
+        content
+            .when(count > 0, |content| content.child(list))
             .when(options.is_empty(), |content| {
-                content.child(controls::hint(
+                content.child(inspector::hint(
                     translate("detail.parameterEditor.noColumns"),
                     cx,
                 ))
@@ -250,55 +225,36 @@ impl ParameterForm {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
+                    .justify_end()
                     .gap_1()
                     .child(
-                        controls::apply(("columns-apply", index), busy)
-                            .label(translate("native.workbench.applyColumns"))
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                if view.accepts_input(epoch, cx) {
-                                    view.apply_parameter(index, cx);
+                        Pager::new(("column-pager", index), page, pages)
+                            .disabled(busy)
+                            .on_change(cx.listener(move |view, page: &usize, _, cx| {
+                                if view.accepts_input(epoch, cx)
+                                    && let ParameterDraft::Relational(RelationalDraft::Columns(
+                                        ColumnsDraft::Known { page: next, .. },
+                                    )) = &mut view.fields[index].draft
+                                {
+                                    *next = *page;
+                                    cx.notify();
                                 }
                             })),
                     )
-                    .when(pages > 1, |bar| {
-                        bar.children(
-                            [
-                                (-1, IconName::ChevronLeft, "conversion.previousValues"),
-                                (1, IconName::ChevronRight, "conversion.nextValues"),
-                            ]
-                            .into_iter()
-                            .map(|(direction, icon, label)| {
-                                Button::new(gpui_kit::SharedString::from(format!(
-                                    "column-page-{index}-{direction}"
-                                )))
-                                .small()
-                                .ghost()
-                                .icon(icon)
-                                .tooltip(translate(label))
-                                .disabled(
-                                    busy || (direction < 0 && page == 0)
-                                        || (direction > 0 && page + 1 == pages),
-                                )
-                                .on_click(cx.listener(
-                                    move |view, _, _, cx| {
-                                        if view.accepts_input(epoch, cx)
-                                            && let ParameterDraft::Relational(
-                                                RelationalDraft::Columns(ColumnsDraft::Known {
-                                                    page: next,
-                                                    ..
-                                                }),
-                                            ) = &mut view.fields[index].draft
-                                        {
-                                            *next = page.saturating_add_signed(direction);
-                                            cx.notify();
-                                        }
-                                    },
-                                ))
-                            }),
+                    .child(
+                        inspector::commit_button(
+                            ("columns-apply", index),
+                            translate("native.workbench.applyColumns"),
+                            busy,
                         )
-                        .child(div().text_xs().child(format!("{} / {pages}", page + 1)))
-                    }),
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            if view.accepts_input(epoch, cx) {
+                                view.apply_parameter(index, cx);
+                            }
+                        })),
+                    ),
             )
             .into_any_element()
     }

@@ -74,9 +74,6 @@ impl Render for ImportDialog {
                     .child(self.render_navigation(compact, cx))
                     .child(div().flex_1().min_w_0().child(content)),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(div().text_xs().text_color(cx.theme().danger).child(error))
-            })
             .child(
                 div()
                     .flex()
@@ -150,7 +147,7 @@ impl ImportDialog {
                             return;
                         }
                         view.category = index;
-                        view.error = None;
+
                         view.stage = ImportStage::Sources;
                         if index == 2 {
                             view.samples(window, cx);

@@ -3,8 +3,9 @@ use super::{
     ConversationPanel,
     projection::{Timing, Turn, TurnState},
 };
-use gpui_kit::component::{ActiveTheme, tooltip::Tooltip};
-use gpui_kit::{AnyElement, App, Context, SharedString, Window, div, prelude::*, px};
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{ActiveTheme, Icon, Sizable, tooltip::Tooltip};
+use gpui_kit::{AnyElement, App, Context, SharedString, Window, div, prelude::*, rems};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use yss_harness_contract::{HarnessMode, ReasoningEffort};
 
@@ -39,9 +40,15 @@ impl ConversationPanel {
             .flex_wrap()
             .items_center()
             .gap_2()
-            .text_size(px(11.))
+            .text_xs()
             .text_color(cx.theme().muted_foreground)
-            .child(yss_ui::text::t("panel.assistant"))
+            .child(Icon::new(IconName::Sparkles).small())
+            .child(
+                div()
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
+                    .text_color(cx.theme().foreground)
+                    .child(yss_ui::text::t("panel.assistant")),
+            )
             .child(self.elapsed(
                 format!("turn-time-{}", turn.id),
                 Some(turn.timing),
@@ -51,7 +58,7 @@ impl ConversationPanel {
             .child(
                 div()
                     .id(SharedString::from(format!("turn-model-{}", turn.id)))
-                    .max_w(px(208.))
+                    .max_w(rems(13.))
                     .truncate()
                     .tooltip(move |window, cx| Tooltip::new(model_hint.clone()).build(window, cx))
                     .child(turn.model.model_name.clone()),
@@ -116,7 +123,7 @@ pub(super) fn elapsed(id: String, timing: Option<Timing>, active: bool, cx: &App
     };
     div()
         .id(SharedString::from(id))
-        .text_size(px(11.))
+        .text_xs()
         .text_color(cx.theme().muted_foreground)
         .tooltip(move |window, cx| Tooltip::new(timing_hint(timing)).build(window, cx))
         .child(value)

@@ -7,9 +7,6 @@ publish = false
 [dependencies]
 schemars.workspace = true
 serde.workspace = true
-thiserror.workspace = true
-yss-project-layout = { path = "../yss-project-layout" }
-yss-resource-naming = { path = "../yss-resource-naming" }
 
 [dev-dependencies]
 serde_json.workspace = true

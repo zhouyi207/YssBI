@@ -25,11 +25,12 @@ impl Render for NodePalette {
             window,
             cx,
         );
+        // The browser and the creation form each own their inset, so the form's header, sections
+        // and commands share one spine.
         div()
             .id("node-palette")
             .track_focus(&self.focus)
             .size_full()
-            .p_2()
             .rounded_md()
             .bg(cx.theme().popover)
             .text_color(cx.theme().popover_foreground)
@@ -38,7 +39,6 @@ impl Render for NodePalette {
             .shadow_lg()
             .flex()
             .flex_col()
-            .gap_2()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
@@ -62,6 +62,7 @@ impl NodePalette {
         div()
             .size_full()
             .min_h_0()
+            .p_2()
             .flex()
             .flex_col()
             .gap_2()
@@ -72,6 +73,7 @@ impl NodePalette {
                     .gap_1()
                     .child(
                         Input::new(&self.search)
+                            .aria_label(translate("canvas.nodePalette.searchPlaceholder"))
                             .small()
                             .w_full()
                             .prefix(gpui_kit::component::Icon::new(IconName::Search).size_3()),
@@ -86,6 +88,7 @@ impl NodePalette {
                                 IconName::ChevronsUpDown
                             })
                             .tooltip(translate(toggle_label))
+                            .accessibility_label(translate(toggle_label))
                             .disabled(
                                 self.browser.searching()
                                     || self.browser.visible.is_empty()
@@ -110,40 +113,6 @@ impl NodePalette {
             )
             .when(self.loading, |body| {
                 body.child(div().text_xs().child(translate("common.loading")))
-            })
-            .when(!self.current(cx), |body| {
-                body.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(translate("native.workbench.creationChanged")),
-                )
-            })
-            .when_some(self.error, |body, error| {
-                body.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .text_xs()
-                                .text_color(cx.theme().danger)
-                                .child(translate(error)),
-                        )
-                        .when(error == "native.canvas.catalogFailed", |body| {
-                            body.child(
-                                Button::new("palette-retry")
-                                    .ghost()
-                                    .small()
-                                    .label(translate("common.retry"))
-                                    .disabled(self.loading || !self.current(cx))
-                                    .on_click(cx.listener(|view, _, _, cx| view.query(cx))),
-                            )
-                        }),
-                )
             })
             .when(
                 self.browser.visible.is_empty() && !self.loading && self.error.is_none(),

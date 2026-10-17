@@ -1,5 +1,5 @@
 use super::*;
-use yss_harness_contract::model::{ChartResourceRef, ChartSettingsUpdate};
+use yss_assistant_contract::model::{ChartResourceRef, ChartSettingsUpdate};
 
 fn read(f: &mut Fixture, resource: &ProjectResourceRef) -> ChartInspection {
     let AutomationCapabilityResult::ChartInspection(value) = f
@@ -55,7 +55,7 @@ fn chart_updates_preserve_omitted_settings_clear_axes_and_persist_at_the_read_ba
             },
         ))
         .unwrap_err();
-    assert_eq!(stale.code, CapabilityFailureCode::RevisionConflict);
+    assert_eq!(stale.code, CapabilityFailureCode::REVISION_CONFLICT);
     assert_eq!(f.publications.len(), published);
     assert_eq!(read(&mut f, &resource), after);
 
@@ -85,16 +85,20 @@ fn chart_updates_preserve_omitted_settings_clear_axes_and_persist_at_the_read_ba
     );
     assert_eq!(f.publications.len(), published);
     let session = f.application.as_ref().unwrap().capture_session().unwrap();
-    let rejected = f.application.as_ref().unwrap().save_chart_resource(
+    let rejected = f.application.as_ref().unwrap().apply_file_command(
         session.project_instance_id().clone(),
         OperationId::new(),
-        chart_path(&resource).unwrap(),
-        yss_chart_document::ChartDocument::new("stale"),
-        Some(ResourceRevision::new(before.version.revision)),
+        FileCommand::Edit {
+            path: file_path::<ChartDocument>(&resource).unwrap(),
+            version: file_version(&before.version).unwrap(),
+            edits: vec![yss_project_model::chart::ChartEdit::SetDocument {
+                document: ChartDocument::new("stale"),
+            }],
+        },
     );
     assert!(matches!(
         rejected,
-        Err(crate::chart::ChartApplicationError::Project(
+        Err(crate::file_resources::FileApplicationError::Project(
             yss_project::ProjectOperationError::ResourceRevisionConflict { .. }
         ))
     ));

@@ -1,10 +1,6 @@
-use crate::{
-    ProjectOperationError, ProjectState,
-    file_resources::{self, ResourceFile},
-};
+use crate::file_resources::{self, ResourceFile};
 use std::collections::HashMap;
 use yss_project_history::{MindResourceKey, ResourceKey, ResourceLifecycleKind};
-use yss_project_identity::{OperationId, ProjectInstanceId};
 use yss_project_model::{
     ProjectData, ProjectDataPatch,
     file::FilePatch,
@@ -27,22 +23,5 @@ impl ResourceFile for MindDocument {
     }
     fn key(path: &MindPath) -> ResourceKey {
         ResourceKey::Mind(MindResourceKey(path.as_str().into()))
-    }
-}
-impl ProjectState {
-    pub fn read_mind(
-        &self,
-        project: &ProjectInstanceId,
-        path: &MindPath,
-    ) -> Result<MindSnapshot, ProjectOperationError> {
-        self.read_file(project, path)
-    }
-    pub fn apply_mind_command(
-        &self,
-        project: &ProjectInstanceId,
-        operation: OperationId,
-        command: MindCommand,
-    ) -> Result<MindCommandResult, ProjectOperationError> {
-        self.apply_file_command(project, operation, command)
     }
 }

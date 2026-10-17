@@ -1,13 +1,14 @@
 //! Compact graph controls live outside the pointer-interaction surface.
-use super::{GraphCanvas, ResultEntry, commands::*, result_search::Picker};
+use super::{GraphCanvas, GraphEditCommand, ResultEntry, commands::*, result_search::Picker};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
-    menu::DropdownMenu,
+    menu::{DropdownMenu, PopupMenuItem},
 };
 use gpui_kit::{
-    Context, Entity, IntoElement, Render, Subscription, WeakEntity, Window, div, prelude::*, px,
+    App, Context, Entity, IntoElement, Render, Subscription, WeakEntity, Window, div, prelude::*,
+    px,
 };
 use std::rc::Rc;
 use yss_application::graph::run::RunIdentity;
@@ -44,19 +45,19 @@ struct Display {
 }
 
 impl Display {
-    fn new(canvas: &GraphCanvas) -> Self {
+    fn new(canvas: &GraphCanvas, cx: &App) -> Self {
         Self {
             project: canvas.graph.project.clone(),
             path: canvas.graph.projection.graph_path.clone(),
             edit_session: canvas.graph.editing.version.session_id,
             execution_session: canvas.graph.results.execution_session_id,
-            save: canvas.can_edit() && canvas.dirty(),
-            undo: canvas.can_edit() && canvas.graph.editing.can_undo,
-            redo: canvas.can_edit() && canvas.graph.editing.can_redo,
+            save: canvas.can_edit() && canvas.dirty(cx),
+            undo: canvas.is_edit_command_enabled(GraphEditCommand::Undo),
+            redo: canvas.is_edit_command_enabled(GraphEditCommand::Redo),
             editable: canvas.can_edit(),
             run_node: canvas.can_run() && canvas.selected.len() == 1,
             running: canvas.is_running(),
-            run_unavailable: canvas.graph_run_unavailable_reason(),
+            run_unavailable: canvas.graph_run_unavailable_reason(cx),
             sync_status: canvas.execution_sync_status(),
             clear_run: canvas.clearable_run().cloned(),
             inspect: !canvas.graph.results.outputs.is_empty(),
@@ -72,15 +73,15 @@ impl Display {
             && self.execution_session == canvas.graph.results.execution_session_id
     }
 
-    fn matches(&self, canvas: &GraphCanvas) -> bool {
+    fn matches(&self, canvas: &GraphCanvas, cx: &App) -> bool {
         self.same_context(canvas)
-            && self.save == (canvas.can_edit() && canvas.dirty())
-            && self.undo == (canvas.can_edit() && canvas.graph.editing.can_undo)
-            && self.redo == (canvas.can_edit() && canvas.graph.editing.can_redo)
+            && self.save == (canvas.can_edit() && canvas.dirty(cx))
+            && self.undo == canvas.is_edit_command_enabled(GraphEditCommand::Undo)
+            && self.redo == canvas.is_edit_command_enabled(GraphEditCommand::Redo)
             && self.editable == canvas.can_edit()
             && self.run_node == (canvas.can_run() && canvas.selected.len() == 1)
             && self.running == canvas.is_running()
-            && self.run_unavailable == canvas.graph_run_unavailable_reason()
+            && self.run_unavailable == canvas.graph_run_unavailable_reason(cx)
             && self.sync_status == canvas.execution_sync_status()
             && self.clear_run.as_ref() == canvas.clearable_run()
             && self.inspect == !canvas.graph.results.outputs.is_empty()
@@ -102,7 +103,7 @@ impl Toolbar {
                 if toolbar
                     .display
                     .as_ref()
-                    .is_some_and(|display| display.matches(canvas))
+                    .is_some_and(|display| display.matches(canvas, cx))
                 {
                     return;
                 }
@@ -110,7 +111,7 @@ impl Toolbar {
                     .display
                     .as_ref()
                     .is_some_and(|display| !display.same_context(canvas));
-                toolbar.display = Some(Display::new(canvas));
+                toolbar.display = Some(Display::new(canvas, cx));
                 if context_changed {
                     toolbar
                         .picker
@@ -129,8 +130,8 @@ impl Toolbar {
         }
     }
 
-    pub(super) fn initialize(&mut self, canvas: &GraphCanvas) {
-        self.display = Some(Display::new(canvas));
+    pub(super) fn initialize(&mut self, canvas: &GraphCanvas, cx: &App) {
+        self.display = Some(Display::new(canvas, cx));
     }
 }
 
@@ -157,14 +158,16 @@ impl GraphCanvas {
     ) -> impl IntoElement + use<> {
         let run_node = self.can_run() && self.selected.len() == 1;
         let running = self.is_running();
-        let run_unavailable = self.graph_run_unavailable_reason();
+        let run_unavailable = self.graph_run_unavailable_reason(cx);
         let clear_run = self.clearable_run().cloned();
         let event_graph = self.graph.projection.graph_path.kind()
             == yss_graph_document::GraphResourceKind::EventGraph;
         let focus = self.focus.clone();
+        let owner = cx.weak_entity();
+        let inspect = !self.graph.results.outputs.is_empty();
         div()
             .w_full()
-            .h_8()
+            .h(yss_ui::appearance::HEADER_HEIGHT)
             .flex_shrink_0()
             .px_2()
             .flex()
@@ -179,7 +182,8 @@ impl GraphCanvas {
                     .ghost()
                     .icon(IconName::Save)
                     .tooltip(yss_ui::text::t("native.canvas.saveShortcut"))
-                    .disabled(!self.can_edit() || !self.dirty())
+                    .accessibility_label(yss_ui::text::t("native.canvas.saveShortcut"))
+                    .disabled(!self.can_edit() || !self.dirty(cx))
                     .on_click(
                         cx.listener(|view, _, _, cx| view.submit(GraphCommand::Save, None, cx)),
                     ),
@@ -191,10 +195,9 @@ impl GraphCanvas {
                     .ghost()
                     .icon(IconName::Undo2)
                     .tooltip(yss_ui::text::t("native.canvas.undoShortcut"))
-                    .disabled(!self.can_edit() || !self.graph.editing.can_undo)
-                    .on_click(
-                        cx.listener(|view, _, _, cx| view.submit(GraphCommand::Undo, None, cx)),
-                    ),
+                    .accessibility_label(yss_ui::text::t("native.canvas.undoShortcut"))
+                    .disabled(!self.is_edit_command_enabled(GraphEditCommand::Undo))
+                    .on_click(cx.listener(|view, _, _, cx| view.edit(GraphEditCommand::Undo, cx))),
             )
             .child(
                 Button::new("redo-graph")
@@ -202,10 +205,9 @@ impl GraphCanvas {
                     .ghost()
                     .icon(IconName::Redo2)
                     .tooltip(yss_ui::text::t("native.canvas.redoShortcut"))
-                    .disabled(!self.can_edit() || !self.graph.editing.can_redo)
-                    .on_click(
-                        cx.listener(|view, _, _, cx| view.submit(GraphCommand::Redo, None, cx)),
-                    ),
+                    .accessibility_label(yss_ui::text::t("native.canvas.redoShortcut"))
+                    .disabled(!self.is_edit_command_enabled(GraphEditCommand::Redo))
+                    .on_click(cx.listener(|view, _, _, cx| view.edit(GraphEditCommand::Redo, cx))),
             )
             .when(event_graph, |bar| {
                 bar.child(self.result_search(picker, window, cx))
@@ -214,7 +216,7 @@ impl GraphCanvas {
             .when_some(self.execution_sync_status(), |view, status| {
                 view.child(
                     div()
-                        .max_w(px(200.))
+                        .max_w(gpui_kit::rems(12.5))
                         .truncate()
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
@@ -222,22 +224,45 @@ impl GraphCanvas {
                 )
             })
             .child(
-                Button::new("inspect-results")
-                    .small()
-                    .ghost()
-                    .icon(IconName::Table)
-                    .tooltip(yss_ui::text::t("panel.assistantToolNames.inspect_result"))
-                    .disabled(self.graph.results.outputs.is_empty())
-                    .on_click(cx.listener(|view, _, _, cx| view.inspect_results(cx))),
-            )
-            .child(
                 Button::new("graph-options")
                     .small()
                     .ghost()
                     .icon(IconName::Ellipsis)
                     .tooltip(yss_ui::text::t("native.canvas.moreActions"))
+                    .accessibility_label(yss_ui::text::t("native.canvas.moreActions"))
                     .dropdown_menu(move |menu, _, _| {
                         menu.action_context(focus.clone())
+                            .item(
+                                PopupMenuItem::new(yss_ui::text::t(
+                                    "panel.assistantToolNames.inspect_result",
+                                ))
+                                .disabled(!inspect)
+                                .on_click(
+                                    yss_ui::inspector::owner_command(
+                                        owner.clone(),
+                                        |view, _, cx| {
+                                            view.inspect_results(cx);
+                                        },
+                                    ),
+                                ),
+                            )
+                            .item(
+                                PopupMenuItem::new(yss_ui::text::t(
+                                    "canvas.clearExecutionArtifacts",
+                                ))
+                                .disabled(clear_run.is_none())
+                                .on_click(
+                                    yss_ui::inspector::owner_command(owner.clone(), {
+                                        let clear_run = clear_run.clone();
+                                        move |view, _, cx| {
+                                            if let Some(run) = &clear_run {
+                                                view.clear_run_notice(run, cx);
+                                            }
+                                        }
+                                    }),
+                                ),
+                            )
+                            .separator()
                             .when(event_graph, |menu| {
                                 menu.menu_with_enable(
                                     yss_ui::text::t("contextMenu.node.runNode"),
@@ -260,23 +285,6 @@ impl GraphCanvas {
                                 Box::new(FrameGraph),
                             )
                     }),
-            )
-            .child(
-                Button::new("clear-run-notice")
-                    .small()
-                    .ghost()
-                    .icon(gpui_kit::assets::IconName::ListX)
-                    .tooltip(yss_ui::text::t(if clear_run.is_some() {
-                        "canvas.clearExecutionArtifacts"
-                    } else {
-                        "canvas.clearExecutionArtifactsDisabled"
-                    }))
-                    .disabled(clear_run.is_none())
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        if let Some(run) = &clear_run {
-                            view.clear_run_notice(run, cx);
-                        }
-                    })),
             )
             .child(
                 Button::new("run-graph")
@@ -362,7 +370,7 @@ mod tests {
         );
         let catalog = Arc::new(
             application
-                .query_project_index(project, locale, true)
+                .query_project_presentation(project, locale)
                 .unwrap()
                 .activity_panels
                 .into_iter()
@@ -377,7 +385,10 @@ mod tests {
         ));
         let services = Arc::new(crate::GraphServices::new(
             tasks,
-            Arc::new(yss_ui::layout_store::LayoutStore::new(directory.path())),
+            Arc::new(yss_ui::layout_store::LayoutStore::new(
+                directory.path(),
+                runtime.handle().clone(),
+            )),
         ));
         cx.update(|cx| {
             gpui_kit::init(cx);
@@ -389,42 +400,63 @@ mod tests {
                     let mut canvas =
                         GraphCanvas::new(services, graph, catalog, locale.into(), window, cx);
                     canvas.selected.insert(node);
-                    let idle = Display::new(&canvas);
-                    canvas.preview.insert(node, NodePosition { x: 30., y: 40. });
+                    for command in [
+                        GraphEditCommand::Copy,
+                        GraphEditCommand::Cut,
+                        GraphEditCommand::Paste,
+                        GraphEditCommand::Delete,
+                    ] {
+                        assert!(canvas.is_edit_command_enabled(command));
+                    }
+                    let idle = Display::new(&canvas, cx);
+                    canvas.preview = super::super::geometry::NodeMovement::new(
+                        [(node, NodePosition { x: 0., y: 0. })].into(),
+                    );
+                    canvas.preview.set_displacement(point(px(30.), px(40.)));
                     canvas.offset = point(px(20.), px(10.));
                     canvas.zoom *= 1.25;
-                    assert!(idle.matches(&canvas));
+                    assert!(idle.matches(&canvas, cx));
 
                     // Persisted position-only replacement is not itself a display dependency.
                     Arc::make_mut(&mut canvas.graph.projection).nodes[0].position =
                         NodePosition { x: 30., y: 40. };
                     canvas.graph.editing.version.revision =
                         yss_project_identity::ResourceRevision::new(100);
-                    assert!(idle.matches(&canvas));
+                    assert!(idle.matches(&canvas, cx));
 
                     canvas.graph.editing.dirty = true;
-                    assert!(!idle.matches(&canvas));
-                    let dirty = Display::new(&canvas);
+                    assert!(!idle.matches(&canvas, cx));
+                    let dirty = Display::new(&canvas, cx);
                     canvas.graph.editing.can_undo = true;
-                    assert!(!dirty.matches(&canvas));
-                    let undo = Display::new(&canvas);
+                    assert!(!dirty.matches(&canvas, cx));
+                    let undo = Display::new(&canvas, cx);
                     canvas.graph.editing.can_redo = true;
-                    assert!(!undo.matches(&canvas));
-                    let history = Display::new(&canvas);
+                    assert!(!undo.matches(&canvas, cx));
+                    let history = Display::new(&canvas, cx);
                     canvas.selected.clear();
-                    assert!(!history.matches(&canvas));
-                    let unselected = Display::new(&canvas);
+                    assert!(!history.matches(&canvas, cx));
+                    let unselected = Display::new(&canvas, cx);
                     canvas.busy = true;
-                    assert!(!unselected.matches(&canvas));
+                    for command in [
+                        GraphEditCommand::Undo,
+                        GraphEditCommand::Redo,
+                        GraphEditCommand::Copy,
+                        GraphEditCommand::Cut,
+                        GraphEditCommand::Paste,
+                        GraphEditCommand::Delete,
+                    ] {
+                        assert!(!canvas.is_edit_command_enabled(command));
+                    }
+                    assert!(!unselected.matches(&canvas, cx));
                     canvas.busy = false;
-                    assert!(unselected.matches(&canvas));
+                    assert!(unselected.matches(&canvas, cx));
 
                     canvas.graph.editing.version.session_id = uuid::Uuid::new_v4();
                     assert!(!unselected.same_context(&canvas));
-                    let reopened = Display::new(&canvas);
+                    let reopened = Display::new(&canvas, cx);
                     canvas.graph.results.execution_session_id =
                         ExecutionSessionId::new(uuid::Uuid::new_v4());
-                    assert!(!reopened.matches(&canvas));
+                    assert!(!reopened.matches(&canvas, cx));
                     assert!(!reopened.same_context(&canvas));
                     canvas
                 })

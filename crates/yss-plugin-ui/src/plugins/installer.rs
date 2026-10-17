@@ -2,9 +2,10 @@
 use super::{PluginKey, PluginsPanel, failure};
 use crate::PluginServices;
 use gpui_kit::component::{
-    ActiveTheme, Disableable,
+    ActiveTheme, Disableable, WindowExt,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
+    notification::Notification,
 };
 use gpui_kit::{
     AppContext, Context, IntoElement, PathPromptOptions, Render, WeakEntity, Window, div,
@@ -16,6 +17,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use yss_plugin_runtime::{PackageInspection, operation_id};
+use yss_ui::lifecycle::LogReleased;
 
 struct ApprovedPackage {
     path: PathBuf,
@@ -34,8 +36,16 @@ struct PackageInstaller {
     signer_approved: bool,
     busy: bool,
     error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
 }
 impl PackageInstaller {
+    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
+        if let Some(error) = &error {
+            self.notifications.error(error.clone(), cx);
+        }
+        self.error = error;
+    }
+
     fn new(
         services: Arc<PluginServices>,
         owner: WeakEntity<PluginsPanel>,
@@ -55,18 +65,19 @@ impl PackageInstaller {
                 .run(move |services| Ok(services.plugins.inspect(&path)));
             cx.spawn_in(window, async move |view, cx| {
                 let result = job.await.ok().and_then(Result::ok);
-                let _ = view.update(cx, |view, cx| {
+                view.update(cx, |view, cx| {
                     view.busy = false;
                     match result {
                         Some(Ok(inspection)) => view.inspection = Some(inspection),
-                        Some(Err(error)) => view.error = Some(failure(&error)),
-                        None => {
-                            view.error =
-                                Some(yss_ui::text::t("native.plugins.packageReadFailed").into())
-                        }
+                        Some(Err(error)) => view.set_error(Some(failure(&error)), cx),
+                        None => view.set_error(
+                            Some(yss_ui::text::t("native.plugins.packageReadFailed").into()),
+                            cx,
+                        ),
                     }
                     cx.notify();
-                });
+                })
+                .log_released();
             })
             .detach();
         });
@@ -80,6 +91,7 @@ impl PackageInstaller {
             signer_approved: false,
             busy: true,
             error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
     fn signer_changed(&self) -> bool {
@@ -98,7 +110,10 @@ impl PackageInstaller {
             return;
         };
         let Some(operation) = self.operation.clone() else {
-            self.error = Some(yss_ui::text::t("native.plugins.confirmationFailed").into());
+            self.set_error(
+                Some(yss_ui::text::t("native.plugins.confirmationFailed").into()),
+                cx,
+            );
             cx.notify();
             return;
         };
@@ -134,11 +149,16 @@ impl PackageInstaller {
                 })
                 .unwrap_or(false);
             if !accepted {
-                let _ = failure.update(cx, |wizard, cx| {
-                    wizard.busy = false;
-                    wizard.error = Some(yss_ui::text::t("native.plugins.installationBusy").into());
-                    cx.notify();
-                });
+                failure
+                    .update(cx, |wizard, cx| {
+                        wizard.busy = false;
+                        wizard.set_error(
+                            Some(yss_ui::text::t("native.plugins.installationBusy").into()),
+                            cx,
+                        );
+                        cx.notify();
+                    })
+                    .log_released();
             }
         });
         cx.notify();
@@ -282,9 +302,6 @@ impl Render for PackageInstaller {
                     .max_h(px(520.))
                     .overflow_y_scroll(),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(div().text_sm().text_color(cx.theme().danger).child(error))
-            })
             .child(
                 div()
                     .flex()
@@ -315,7 +332,7 @@ impl PluginsPanel {
         if self.busy() {
             return;
         }
-        self.task = Some(yss_ui::text::t("native.plugins.choosingPackage"));
+        self.busy = true;
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
         let prompt = cx.prompt_for_paths(PathPromptOptions {
@@ -326,11 +343,11 @@ impl PluginsPanel {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = prompt.await;
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
-                view.task = None;
+                view.busy = false;
                 match result {
                     Ok(Ok(Some(paths))) => {
                         if let Some(path) = paths.into_iter().next() {
@@ -356,13 +373,14 @@ impl PluginsPanel {
                         }
                     }
                     Ok(Ok(None)) => {}
-                    _ => {
-                        view.error =
-                            Some(yss_ui::text::t("native.plugins.packagePickerFailed").into())
-                    }
+                    _ => window.push_notification(
+                        Notification::error(yss_ui::text::t("native.plugins.packagePickerFailed")),
+                        cx,
+                    ),
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);
@@ -379,9 +397,7 @@ impl PluginsPanel {
         }
         self.generation = self.generation.wrapping_add(1);
         let generation = self.generation;
-        self.task = Some(yss_ui::text::t("native.plugins.installing"));
-        self.error = None;
-        self.feedback = None;
+        self.busy = true;
         let job = self.services.run(move |services| {
             let result = services.plugins.install(
                 &package.path,
@@ -394,15 +410,17 @@ impl PluginsPanel {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, window, cx| {
+            view.update_in(cx, |view, window, cx| {
                 if view.generation != generation {
                     return;
                 }
-                view.task = None;
+                view.busy = false;
                 let (installed, error) = if let Some((result, entries)) = result {
                     match entries {
                         Ok(entries) => view.install_entries(entries),
-                        Err(error) => view.error = Some(failure(&error)),
+                        Err(error) => {
+                            window.push_notification(Notification::error(failure(&error)), cx);
+                        }
                     }
                     match result {
                         Ok(plugin) => {
@@ -418,15 +436,15 @@ impl PluginsPanel {
                     )
                 };
                 if installed {
-                    view.feedback = Some(yss_ui::text::t("native.plugins.installed").into());
                     yss_ui::modal_window::close_child(window, cx);
                 } else if let Some(error) = error {
-                    view.error = Some(error.clone());
-                    let _ = wizard.update(cx, |wizard, cx| {
-                        wizard.busy = false;
-                        wizard.error = Some(error);
-                        cx.notify();
-                    });
+                    wizard
+                        .update(cx, |wizard, cx| {
+                            wizard.busy = false;
+                            wizard.set_error(Some(error), cx);
+                            cx.notify();
+                        })
+                        .log_released();
                 }
                 view.cursor_stack = vec![None];
                 if view.reload_again {
@@ -436,7 +454,8 @@ impl PluginsPanel {
                     view.read_details(key, None, window, cx);
                 }
                 view.changed(cx);
-            });
+            })
+            .log_released();
         })
         .detach();
         self.changed(cx);

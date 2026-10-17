@@ -41,6 +41,7 @@ pub(crate) fn bind_keys(cx: &mut App) {
             ("shift-s", MenuCommand::SaveProjectAs),
             ("z", MenuCommand::Edit(EditCommand::Undo)),
             ("y", MenuCommand::Edit(EditCommand::Redo)),
+            ("shift-z", MenuCommand::Edit(EditCommand::Redo)),
             ("x", MenuCommand::Edit(EditCommand::Cut)),
             ("c", MenuCommand::Edit(EditCommand::Copy)),
             ("v", MenuCommand::Edit(EditCommand::Paste)),
@@ -190,13 +191,13 @@ impl Workbench {
             MenuCommand::ImportData => self.import_dialog(window, cx),
             MenuCommand::NewGraph(kind) => self.create_graph(*kind, window, cx),
             MenuCommand::NewDocument => {
-                self.create_file_dialog(super::super::resources::AuthoredKind::Document, window, cx)
+                self.create_file_dialog(super::super::files::FileKind::Document, window, cx)
             }
             MenuCommand::NewMind => {
-                self.create_file_dialog(super::super::resources::AuthoredKind::Mind, window, cx)
+                self.create_file_dialog(super::super::files::FileKind::Mind, window, cx)
             }
             MenuCommand::NewChart => {
-                self.create_file_dialog(super::super::resources::AuthoredKind::Chart, window, cx)
+                self.create_file_dialog(super::super::files::FileKind::Chart, window, cx)
             }
             MenuCommand::ShowPanel(panel) => {
                 let keep_conversation =

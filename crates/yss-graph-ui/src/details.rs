@@ -1,4 +1,3 @@
-use yss_ui::controls;
 mod connections;
 mod description;
 mod diagnostics;
@@ -34,6 +33,7 @@ pub struct GraphDetails {
     )>,
     ports_open: [bool; 2],
     diagnostics_open: bool,
+    technical_open: bool,
     diagnostics_page: usize,
     diagnostics_scroll: gpui_kit::ScrollHandle,
     scroll: gpui_kit::ScrollHandle,
@@ -52,14 +52,15 @@ pub struct GraphDetails {
     _parameter_subscription: gpui_kit::Subscription,
     ports: Vec<PortField>,
     epoch: u64,
-    error: Option<String>,
+    notifications: yss_ui::notifications::Notifications,
 }
 
 impl GraphDetails {
-    pub fn new(services: Arc<GraphServices>, cx: &mut Context<Self>) -> Self {
+    pub fn new(services: Arc<GraphServices>, window: &Window, cx: &mut Context<Self>) -> Self {
         let properties =
-            cx.new(|_| super::graph_properties::GraphProperties::new(services.clone()));
-        let documentation = cx.new(|_| documentation::NodeDocumentation::new(services.clone()));
+            cx.new(|_| super::graph_properties::GraphProperties::new(services.clone(), window));
+        let documentation =
+            cx.new(|_| documentation::NodeDocumentation::new(services.clone(), window));
         let description = cx.new(|_| description::NodeDescription::new(services.clone()));
         let properties_observer = cx.observe(&properties, |_, _, cx| cx.notify());
         let host = cx.entity();
@@ -74,30 +75,20 @@ impl GraphDetails {
                         view.accepts_input(view.epoch, cx)
                     })
                 },
+                window,
                 cx,
             )
         });
         let parameter_subscription =
             cx.subscribe(&parameters, |view, _, event: &ParameterChange, cx| {
-                if !view.accepts_input(view.epoch, cx) {
-                    return;
-                }
-                if let Some(node) = view.node() {
-                    view.submit(
-                        GraphCommand::SetParameter {
-                            node_id: node.node_id,
-                            key: event.key.clone(),
-                            value: event.value.clone(),
-                        },
-                        cx,
-                    );
-                }
+                view.parameter_changed(event, cx);
             });
         Self {
             services,
             connection_picker: None,
-            ports_open: [false; 2],
-            diagnostics_open: true,
+            ports_open: [true, false],
+            diagnostics_open: false,
+            technical_open: false,
             diagnostics_page: 0,
             diagnostics_scroll: gpui_kit::ScrollHandle::new(),
             scroll: gpui_kit::ScrollHandle::new(),
@@ -116,7 +107,7 @@ impl GraphDetails {
             _parameter_subscription: parameter_subscription,
             ports: vec![],
             epoch: 0,
-            error: None,
+            notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
 
@@ -145,8 +136,9 @@ impl GraphDetails {
         self.description
             .update(cx, |description, cx| description.clear(cx));
         self.connection_picker = None;
-        self.ports_open = [false; 2];
-        self.diagnostics_open = true;
+        self.ports_open = [true, false];
+        self.diagnostics_open = false;
+        self.technical_open = false;
         self.diagnostics_page = 0;
         self.diagnostics_scroll
             .set_offset(gpui_kit::Point::default());
@@ -155,13 +147,10 @@ impl GraphDetails {
         self.projection = None;
         self.selected.clear();
         self.version = None;
-        self.parameters
-            .update(cx, |parameters, cx| parameters.clear(cx));
         self.ports.clear();
         self.properties
             .update(cx, |properties, cx| properties.clear(cx));
         self.epoch = self.epoch.wrapping_add(1);
-        self.error = None;
         cx.notify();
     }
 
@@ -218,8 +207,9 @@ impl GraphDetails {
                 .is_some_and(|current| current.entity_id() == graph.entity_id());
         self.connection_picker = None;
         if !same_node {
-            self.ports_open = [false; 2];
-            self.diagnostics_open = true;
+            self.ports_open = [true, false];
+            self.diagnostics_open = false;
+            self.technical_open = false;
             self.diagnostics_page = 0;
             self.diagnostics_scroll
                 .set_offset(gpui_kit::Point::default());
@@ -228,7 +218,6 @@ impl GraphDetails {
         self.selected = nodes;
         self.projection = Some(projection.clone());
         self.version = Some(version);
-        self.error = None;
         self.epoch = self.epoch.wrapping_add(1);
         let node = self.node_in(&projection);
         let diagnostics_page = self.diagnostics_page.min(node.map_or(0, |node| {
@@ -239,7 +228,51 @@ impl GraphDetails {
                 .set_offset(gpui_kit::Point::default());
         }
         self.diagnostics_page = diagnostics_page;
-        self.parameters.update(cx, |parameters, cx| {
+        if let Some(node_id) = self
+            .selected
+            .first()
+            .copied()
+            .filter(|_| self.selected.len() == 1)
+            && let Some(graph_entity) = graph.upgrade()
+        {
+            let retained = graph_entity.read(cx).parameter_form(node_id);
+            let parameters = retained.unwrap_or_else(|| {
+                let host = cx.entity();
+                let owner = host.downgrade();
+                let graph_id = graph.entity_id();
+                let form = cx.new(|cx| {
+                    ParameterForm::new(
+                        self.properties.clone(),
+                        &host,
+                        move |cx| {
+                            owner.upgrade().is_some_and(|owner| {
+                                let details = owner.read(cx);
+                                details.selected.as_slice() == [node_id]
+                                    && details
+                                        .graph
+                                        .as_ref()
+                                        .is_some_and(|graph| graph.entity_id() == graph_id)
+                                    && details.accepts_input(details.epoch, cx)
+                            })
+                        },
+                        window,
+                        cx,
+                    )
+                });
+                graph_entity.update(cx, |canvas, cx| {
+                    canvas.retain_parameter_form(node_id, form.clone(), cx);
+                });
+                form
+            });
+            self._parameter_subscription = cx
+                .subscribe(&parameters, |view, _, event: &ParameterChange, cx| {
+                    view.parameter_changed(event, cx)
+                });
+            self.parameters = parameters;
+        }
+        if node.is_some() {
+            self.parameters.update(cx, |parameters, cx| {
+            parameters.bind_session(version);
             parameters.install(
                 node.as_ref()
                     .map_or(&[], |node| node.parameter_groups.as_ref()),
@@ -247,11 +280,12 @@ impl GraphDetails {
                     .filter(|diagnostic| matches!(&diagnostic.location,
                         yss_graph_analysis_contract::DiagnosticLocation::Parameter {node_id, ..} if *node_id == node.node_id))
                     .cloned().collect()),
-                same_node,
+                true,
                 window,
                 cx,
             );
         });
+        }
         let mut ports: BTreeMap<_, _> = if same_node {
             std::mem::take(&mut self.ports)
                 .into_iter()
@@ -314,6 +348,23 @@ impl GraphDetails {
             })
     }
 
+    fn parameter_changed(&self, event: &ParameterChange, cx: &mut Context<Self>) {
+        if !self.accepts_input(self.epoch, cx) {
+            return;
+        }
+        if let Some(node) = self.node() {
+            self.submit(
+                GraphCommand::SetParameter {
+                    node_id: node.node_id,
+                    key: event.key.clone(),
+                    value: event.value.clone(),
+                    base: event.base.clone(),
+                },
+                cx,
+            );
+        }
+    }
+
     fn submit(&self, command: GraphCommand, cx: &mut Context<Self>) {
         if let Some(graph) = self.graph.as_ref().and_then(WeakEntity::upgrade) {
             graph.update(cx, |view, cx| view.submit(command, self.version, cx));
@@ -344,6 +395,8 @@ impl Render for GraphDetails {
         let content = if self.graph().is_some() {
             if let Some(node) = self.node() {
                 self.render_node_details(node, cx).into_any_element()
+            } else if self.selected.len() == 1 && self.parameters.read(cx).dirty() {
+                self.parameters.clone().into_any_element()
             } else {
                 self.properties.clone().into_any_element()
             }
@@ -356,19 +409,6 @@ impl Render for GraphDetails {
             )
             .into_any_element()
         };
-        panel
-            .child(content)
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .m_3()
-                        .p_3()
-                        .rounded_md()
-                        .text_sm()
-                        .text_color(cx.theme().danger)
-                        .child(error),
-                )
-            })
-            .into_any_element()
+        panel.child(content).into_any_element()
     }
 }

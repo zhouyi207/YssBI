@@ -154,29 +154,29 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
                 KernelId::new(format!("yssbi.statistics.{method}").into()).expect("regression ID"),
                 std::num::NonZeroU32::new(match method {
                     "regression.glm" => 10,
+                    "regression.negative_binomial"
+                    | "regression.zero_inflated_poisson"
+                    | "regression.zero_inflated_negative_binomial"
+                    | "regression.tobit"
+                    | "regression.logit.conditional"
+                    | "regression.logit.ordinal"
+                    | "regression.beta" => 8,
                     "regression.curve" => 8,
                     "regression.hierarchical" | "regression.stepwise" => 8,
                     "regression.robust"
                     | "regression.logit.firth"
                     | "regression.poisson"
-                    | "regression.negative_binomial"
-                    | "regression.zero_inflated_poisson"
-                    | "regression.zero_inflated_negative_binomial"
-                    | "regression.tobit"
-                    | "regression.logit.conditional"
                     | "regression.quantile"
                     | "regression.gamma"
                     | "regression.inverse_gaussian"
                     | "regression.cloglog"
-                    | "regression.beta"
                     | "regression.fractional_response" => 7,
                     "regression.threshold"
                     | "workflow.regression.baseline"
                     | "workflow.regression.univariate_multivariable"
                     | "workflow.regression.grouped"
                     | "transform.rcs" => 7,
-                    "regression.logit.multinomial" => 6,
-                    "regression.logit.ordinal" => 7,
+                    "regression.logit.multinomial" => 7,
                     "regression.ridge" | "regression.lasso" | "regression.pls" => 5,
                     "regression.nonlinear" | "regression.nonlinear_formula" => 6,
                     "regression.deming" => 5,

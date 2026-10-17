@@ -1,8 +1,4 @@
-use super::{
-    ChartEditor, SaveChart,
-    details::chart_type_label,
-    query::{PreviewData, PreviewFailure},
-};
+use super::{ChartEditor, SaveChart, details::chart_type_label, query::PreviewData};
 use crate::plots::{cartesian::CartesianPlot, histogram};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
@@ -10,6 +6,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants},
 };
 use gpui_kit::{AnyElement, Context, IntoElement, Render, Window, div, prelude::*, px};
+use yss_resource_ui::file_session::FileEditor;
 use yss_ui::appearance;
 
 impl Render for ChartEditor {
@@ -28,10 +25,12 @@ impl Render for ChartEditor {
             )
             .child(
                 div()
+                    .h(appearance::HEADER_HEIGHT)
+                    .flex_shrink_0()
                     .flex()
                     .items_center()
                     .gap_2()
-                    .p_3()
+                    .px_3()
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .child(Icon::new(IconName::ChartLine).size_4())
@@ -47,15 +46,15 @@ impl Render for ChartEditor {
                             .small()
                             .ghost()
                             .label(yss_ui::text::t("common.refresh"))
-                            .disabled(self.busy())
-                            .on_click(cx.listener(|view, _, window, cx| view.refresh(window, cx))),
+                            .disabled(self.busy() || self.file.removed())
+                            .on_click(cx.listener(|view, _, window, cx| view.reload(window, cx))),
                     )
                     .child(
                         Button::new("chart-save")
                             .small()
                             .primary()
                             .label(yss_ui::text::t("common.save"))
-                            .disabled(self.busy() || !self.available || !self.dirty())
+                            .disabled(self.busy() || !self.dirty())
                             .on_click(cx.listener(|view, _, window, cx| view.save(window, cx))),
                     ),
             )
@@ -67,66 +66,11 @@ impl Render for ChartEditor {
                     .relative()
                     .child(self.render_preview(cx)),
             )
-            .when_some(self.error.clone(), |view, error| {
-                view.child(
-                    div()
-                        .px_3()
-                        .py_2()
-                        .text_xs()
-                        .text_color(cx.theme().danger)
-                        .child(error),
-                )
-            })
     }
 }
 impl ChartEditor {
-    fn render_preview_failure(
-        &self,
-        failure: &PreviewFailure,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        div()
-            .id("chart-preview-error")
-            .size_full()
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .gap_3()
-            .p_4()
-            .role(gpui_kit::Role::Alert)
-            .child(
-                Icon::new(IconName::TriangleAlert)
-                    .size_6()
-                    .text_color(cx.theme().danger),
-            )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().danger)
-                    .child(failure.summary()),
-            )
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::translate("common.errorCode"))
-                    .child(failure.code()),
-            )
-            .child(
-                Button::new("chart-preview-retry")
-                    .small()
-                    .outline()
-                    .label(yss_ui::text::translate("common.retry"))
-                    .disabled(self.busy() || !self.available)
-                    .on_click(cx.listener(|view, _, window, cx| view.refresh(window, cx))),
-            )
-            .into_any_element()
-    }
     fn render_preview(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.preview_loading || self.reading {
+        if self.preview_loading || self.file.reading() {
             return appearance::empty_state(
                 IconName::ChartLine,
                 yss_ui::text::t("native.charts.loading"),
@@ -152,7 +96,7 @@ impl ChartEditor {
                 cx,
             )
             .into_any_element(),
-            PreviewData::Failed(failure) => self.render_preview_failure(failure, cx),
+            PreviewData::Failed(_) => div().into_any_element(),
             PreviewData::Histogram {
                 bins,
                 column,

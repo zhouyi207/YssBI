@@ -7,6 +7,7 @@ use yss_graph_document::PortAddress;
 use yss_graph_editor::projection::EditorPortModel;
 use yss_graph_execution::result::{ResultReference, ResultRetentionError};
 use yss_node_protocol::PortDirection;
+use yss_ui::lifecycle::LogReleased;
 
 impl GraphCanvas {
     pub(super) fn port_result_outputs(&self, port: &EditorPortModel) -> Vec<PortAddress> {
@@ -67,7 +68,7 @@ impl GraphCanvas {
             })
             .collect::<Vec<_>>();
         self.cancel_gesture();
-        self.error = None;
+
         let projection = self.graph.projection.clone();
         let project = self.graph.project.clone();
         let version = self.graph.editing.version;
@@ -114,7 +115,7 @@ impl GraphCanvas {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update(cx, |view, cx| {
+            view.update(cx, |view, cx| {
                 view.read_task = None;
                 if !view.can_edit()
                     || view.graph.editing.version != version
@@ -134,16 +135,17 @@ impl GraphCanvas {
                         if current {
                             cx.emit(CanvasEvent::InspectResult(lease));
                         } else {
-                            view.error =
-                                Some(yss_ui::text::translate("native.results.unavailable"));
+                            view.notifications
+                                .error(yss_ui::text::translate("native.results.unavailable"), cx);
                         }
                     }
-                    Ok(None) | Err(_) => {
-                        view.error = Some(yss_ui::text::translate("native.results.unavailable"))
-                    }
+                    Ok(None) | Err(_) => view
+                        .notifications
+                        .error(yss_ui::text::translate("native.results.unavailable"), cx),
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }

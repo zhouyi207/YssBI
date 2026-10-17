@@ -1,5 +1,6 @@
 mod worker;
-pub use worker::{GraphCommandOutcome, GraphCommandRequest};
+use worker::GraphCommandRequest;
+pub use worker::{GraphCommandOutcome, GraphSaveRequest};
 
 use gpui_kit::{Context, actions};
 use yss_application::graph::editing::{GraphEditRequest, GraphEditResponse};
@@ -21,6 +22,7 @@ actions!(
         CancelGesture,
         FrameGraph,
         FrameSelection,
+        OpenNodePalette,
         RunWholeGraph,
         CancelRun,
         RunCurrentNode,
@@ -31,7 +33,7 @@ actions!(
 
 pub enum GraphCommand {
     CommitPortInputs,
-    RunAfterPortInputs(yss_application::graph::run::RunDemand),
+    RunAfterInputs(yss_application::graph::run::RunDemand),
     Edit(EditorGraphMutation),
     Undo,
     Redo,
@@ -44,6 +46,7 @@ pub enum GraphCommand {
         node_id: yss_graph_document::NodeId,
         key: yss_node_protocol::ParameterKey,
         value: serde_json::Value,
+        base: yss_graph_editor::projection::EditorParameterModel,
     },
     UpdateConstant {
         id: yss_graph_document::ConstantId,
@@ -74,6 +77,8 @@ impl GraphCanvas {
         let creation = self.palette.as_ref().map(|palette| palette.view.clone());
         if !self.can_edit() {
             if let Some(creation) = creation {
+                self.notifications
+                    .error(yss_ui::text::t("canvas.nodePalette.createFailed"), cx);
                 creation.update(cx, |creation, cx| creation.creation_failed(cx));
             }
             return;
@@ -92,14 +97,16 @@ impl GraphCanvas {
         creation: Option<gpui_kit::Entity<super::palette::NodePalette>>,
         cx: &mut Context<Self>,
     ) -> Option<gpui_kit::Task<Option<GraphEditVersion>>> {
-        let Some(request) = self.capture_command(command, version, cx) else {
+        let Some(request) = self.capture_command(&command, version, cx) else {
             if let Some(creation) = creation {
+                self.notifications
+                    .error(yss_ui::text::t("canvas.nodePalette.createFailed"), cx);
                 creation.update(cx, |creation, cx| creation.creation_failed(cx));
             }
             return None;
         };
         let reroute_selection = if matches!(
-            &request.command,
+            &command,
             GraphCommand::Edit(EditorGraphMutation::InsertReroute { .. })
         ) {
             self.connection_click.take()
@@ -108,7 +115,7 @@ impl GraphCanvas {
             None
         };
         let insertion_selection = matches!(
-            &request.command,
+            &command,
             GraphCommand::Paste { .. }
                 | GraphCommand::Edit(EditorGraphMutation::DuplicateSubgraph { .. })
         )
@@ -117,14 +124,14 @@ impl GraphCanvas {
             self.palette = None;
         }
         self.begin_command(cx);
-        let run_after = if let GraphCommand::RunAfterPortInputs(demand) = &request.command {
+        let run_after = if let GraphCommand::RunAfterInputs(demand) = &command {
             Some(demand.clone())
         } else {
             None
         };
         let task = self
             .services
-            .run(move |services| Ok(request.commit(services)));
+            .run(move |services| Ok(request.commit(services, command)));
         let task = cx.spawn(async move |view, cx| {
             let result = task
                 .await
@@ -183,12 +190,77 @@ impl GraphCanvas {
 
     fn capture_command(
         &mut self,
-        command: GraphCommand,
+        command: &GraphCommand,
         version: Option<GraphEditVersion>,
         cx: &mut Context<Self>,
     ) -> Option<GraphCommandRequest> {
         if !self.can_edit() {
             return None;
+        }
+        let mut parameters = Vec::new();
+        if matches!(
+            command,
+            GraphCommand::Save | GraphCommand::RunAfterInputs(_)
+        ) {
+            for (node_id, (form, _)) in &self.parameter_forms {
+                let node = self
+                    .graph
+                    .projection
+                    .nodes
+                    .iter()
+                    .find(|node| node.node_id == *node_id);
+                let Some(values) = form.update(cx, |form, cx| {
+                    form.bind_session(self.graph.editing.version);
+                    form.prepare(node, cx)
+                }) else {
+                    self.selected = [*node_id].into_iter().collect();
+                    self.emit_selection(cx);
+                    cx.emit(CanvasEvent::RevealNodeDetails);
+                    self.notifications
+                        .error(yss_ui::text::t("native.workbench.pendingInputsInvalid"), cx);
+                    return None;
+                };
+                if !values.is_empty() {
+                    parameters.push(worker::ParameterEdit {
+                        node_id: *node_id,
+                        values,
+                    });
+                }
+            }
+        }
+        if let GraphCommand::SetParameter {
+            node_id,
+            key,
+            value,
+            base,
+        } = command
+        {
+            let current = self
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .find(|node| node.node_id == *node_id)
+                .into_iter()
+                .flat_map(|node| node.parameter_groups.iter())
+                .flat_map(|group| group.parameters.iter())
+                .find(|model| model.key == *key);
+            if current != Some(base) {
+                if let Some((form, _)) = self.parameter_forms.get(node_id) {
+                    form.update(cx, |form, cx| {
+                        form.set_error(
+                            key,
+                            yss_ui::text::translate("native.workbench.parameterDraftConflict"),
+                            cx,
+                        )
+                    });
+                }
+                return None;
+            }
+            parameters.push(worker::ParameterEdit {
+                node_id: *node_id,
+                values: [(key.clone(), value.clone())].into_iter().collect(),
+            });
         }
         let inputs = self.prepare_port_edits(version, cx)?;
         if inputs.is_empty() && matches!(command, GraphCommand::CommitPortInputs) {
@@ -203,7 +275,7 @@ impl GraphCanvas {
                 locale: yss_ui::text::locale().into(),
             },
             inputs,
-            command,
+            parameters,
         })
     }
 
@@ -219,37 +291,67 @@ impl GraphCanvas {
             self.emit_selection(cx);
         }
         self.busy = true;
-        self.error = None;
+
         cx.notify();
     }
 
-    pub fn prepare_save(&mut self, cx: &mut Context<Self>) -> Option<GraphCommandRequest> {
-        let request = self.capture_command(GraphCommand::Save, None, cx)?;
+    pub fn prepare_save(&mut self, cx: &mut Context<Self>) -> Option<GraphSaveRequest> {
+        let request = self.capture_command(&GraphCommand::Save, None, cx)?;
         self.palette = None;
         self.connection_click = None;
         self.begin_command(cx);
-        Some(request)
+        Some(GraphSaveRequest(request))
     }
 
-    pub fn finish_command(&mut self, outcome: GraphCommandOutcome, cx: &mut Context<Self>) -> bool {
+    pub fn finish_command(
+        &mut self,
+        mut outcome: GraphCommandOutcome,
+        cx: &mut Context<Self>,
+    ) -> bool {
         self.busy = false;
-        self.accept_port_edits(&outcome.inputs[..outcome.applied_inputs]);
-        self.cancel_port_edits();
+        self.finish_change_delivery(&outcome.applied_operations);
         self.refresh_pending |= outcome.language != yss_ui::text::locale();
-        let mut completed = outcome.error.is_none();
-        if let Some(response) = outcome.response {
-            completed &= self.install_response(response, &outcome.language, cx);
+        let installed = outcome
+            .response
+            .take()
+            .is_none_or(|response| self.install_response(response, &outcome.language, cx));
+        if outcome.applied_drafts && installed {
+            self.accept_port_edits(&outcome.inputs);
+            for edit in &outcome.parameters {
+                if let Some((form, _)) = self.parameter_forms.get(&edit.node_id) {
+                    form.update(cx, |form, cx| form.accept(&edit.values, cx));
+                }
+            }
+        } else if outcome.error.is_some() {
+            for edit in &outcome.parameters {
+                if let Some((form, _)) = self.parameter_forms.get(&edit.node_id) {
+                    form.update(cx, |form, cx| {
+                        for key in edit.values.keys() {
+                            form.set_error(
+                                key,
+                                yss_ui::text::translate("native.canvas.commandFailed"),
+                                cx,
+                            );
+                        }
+                    });
+                }
+            }
         }
+        self.cancel_port_edits();
+        let completed = outcome.error.is_none() && installed;
         if let Some(error) = outcome.error {
             tracing::error!(
                 code = "native_graph_command_failed",
                 "Native graph command failed"
             );
-            self.error = Some(yss_ui::text::translate(
-                error
-                    .downcast_ref::<yss_ui::constant_values::InputError>()
-                    .map_or("native.canvas.commandFailed", |error| error.key()),
-            ));
+            self.notifications.error(
+                yss_ui::text::translate(
+                    error
+                        .downcast_ref::<yss_ui::constant_values::InputError>()
+                        .map_or("native.canvas.commandFailed", |error| error.key()),
+                ),
+                cx,
+            );
         }
         if !completed {
             self.preview.clear();
@@ -264,6 +366,7 @@ impl GraphCanvas {
 
     pub fn cancel_prepared_save(&mut self, cx: &mut Context<Self>) {
         self.busy = false;
+        self.finish_change_delivery(&[]);
         self.cancel_port_edits();
         if self.refresh_pending {
             self.refresh(cx);
@@ -291,16 +394,26 @@ impl GraphCanvas {
             self.refresh_pending = true;
             return false;
         }
+        let preserve_presentation = self.graph.language == language
+            && self.graph.results == response.result_state
+            && super::presentation::same_content(
+                &self.graph.projection,
+                &response.update.projection_replacement.projection,
+            );
         if let Err(_error) = self.graph.install_edit(response, language) {
-            self.error = Some(yss_ui::text::t("native.canvas.updateFailed").into());
+            self.notifications
+                .error(yss_ui::text::t("native.canvas.updateFailed"), cx);
             return false;
         }
         self.refresh_pending |= self.graph.language != yss_ui::text::locale();
         self.refresh_task = None;
         self.refresh_failed = false;
-        *self.connection_layer.borrow_mut() =
-            super::connections::ConnectionLayer::new(&self.graph.projection);
-        self.refresh_presentation();
+        self.connection_layer
+            .borrow_mut()
+            .install(&self.graph.projection);
+        if !preserve_presentation {
+            self.refresh_presentation();
+        }
         self.retain_located();
         self.selected.retain(|id| {
             self.graph

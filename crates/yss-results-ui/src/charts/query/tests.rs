@@ -1,11 +1,16 @@
-use super::{ChartEditor, ChartRead};
+use super::ChartEditor;
 use gpui_kit::{AppContext, TestAppContext, WindowOptions};
 use std::sync::Arc;
 use yss_application::session::{ApplicationSessionSlot, ApplicationState, NodeComponents};
-use yss_chart_document::{ChartDocument, ChartResourcePath, ChartType};
+use yss_chart_document::{ChartDocument, ChartType};
 use yss_desktop_services::{ApplicationTasks, DesktopEvents};
-use yss_project::{ProjectChartIndexEntry, ProjectDatabaseIndexEntry};
+use yss_project::{ProjectDatabaseIndexEntry, charts::ChartIndexEntry, charts::ChartSnapshot};
 use yss_project_identity::{ProjectResourcePath, ResourceRevision};
+use yss_project_model::{
+    chart::ChartPath,
+    file::{FileContent, FileVersion},
+};
+use yss_resource_ui::file_session::FileEditor;
 
 #[gpui_kit::test]
 fn chart_callbacks_track_dataset_dependencies_not_unrelated_publications(cx: &mut TestAppContext) {
@@ -16,12 +21,11 @@ fn chart_callbacks_track_dataset_dependencies_not_unrelated_publications(cx: &mu
     let state = fixture.state();
     let project = state.capture_project_session().unwrap().instance_id;
     let mut catalog = state.read_project_index(&project).unwrap();
-    let path = ChartResourcePath::parse("charts/Inspector.yssbi-chart").unwrap();
-    catalog.charts.push(ProjectChartIndexEntry {
-        chart_path: path.clone(),
+    let path = ChartPath::parse("charts/Inspector.yssbi-chart").unwrap();
+    catalog.charts.push(ChartIndexEntry {
+        path: path.clone(),
+        kind: ChartDocument::KIND,
         name: "Inspector".into(),
-        database_id: "data".into(),
-        chart_type: ChartType::Histogram,
         revision: ResourceRevision::INITIAL,
     });
     catalog.databases.push(ProjectDatabaseIndexEntry {
@@ -48,17 +52,23 @@ fn chart_callbacks_track_dataset_dependencies_not_unrelated_publications(cx: &mu
     let (window, editor) = cx.update(|cx| {
         gpui_kit::init(cx);
         yss_ui::init(cx);
-        gpui_kit::open_window(WindowOptions::default(), cx, |_, cx| {
+        gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
             cx.new(|cx| {
                 ChartEditor::new(
                     tasks,
-                    ChartRead {
-                        project,
+                    ChartSnapshot {
+                        project_instance_id: project,
                         path,
-                        revision: ResourceRevision::INITIAL,
-                        catalog: Arc::new(catalog.clone()),
-                        document: ChartDocument::new("data"),
+                        version: FileVersion {
+                            session_id: "inspector".into(),
+                            revision: ResourceRevision::INITIAL,
+                        },
+                        kind: ChartDocument::KIND,
+                        content: ChartDocument::new("data"),
+                        dirty: false,
                     },
+                    Arc::new(catalog.clone()),
+                    window,
                     cx,
                 )
             })

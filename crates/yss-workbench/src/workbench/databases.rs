@@ -1,8 +1,10 @@
 //! Data routing consumes the current index and revision-bound Application queries.
 use super::Workbench;
+use super::details::DetailsTarget;
 use crate::databases::{DatabaseEditor, DatabaseEvent, query};
 use gpui_kit::component::dock::{DockPlacement, panel_handle};
 use gpui_kit::{AppContext, Context, Window};
+use yss_ui::lifecycle::LogReleased;
 impl Workbench {
     pub(super) fn open_database(
         &mut self,
@@ -76,43 +78,45 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = task.await.ok().and_then(Result::ok);
-            let _ =
-                view.update_in(cx, |view, window, cx| {
-                    if view.lifecycle != lifecycle
-                        || view
-                            .project
-                            .as_ref()
-                            .is_none_or(|project| project.identity != expected)
-                    {
-                        return;
-                    }
-                    view.opening.remove(&key);
-                    if intent
-                        .as_deref()
-                        .is_some_and(|id| !view.is_current_intent(id))
-                    {
-                        return;
-                    }
-                    if page_size != crate::preferences::current(cx).tables.page_size {
-                        view.open_database(entry.id, intent, window, cx);
-                        return;
-                    }
-                    if view.project.as_ref().is_none_or(|project| {
-                        !project.index.databases.iter().any(|current| {
-                            current.id == entry.id && current.revision == entry.revision
-                        })
-                    }) {
-                        view.open_database(entry.id, intent, window, cx);
-                        return;
-                    }
-                    let applied = result.is_some();
-                    view.install_database(entry, result, window, cx)
-                        .update(cx, |editor, cx| editor.focus_table(window, cx));
-                    if let Some(intent) = intent {
-                        view.finish_intent(&intent, applied, window, cx);
-                    }
-                    cx.notify();
-                });
+            view.update_in(cx, |view, window, cx| {
+                if view.lifecycle != lifecycle
+                    || view
+                        .project
+                        .as_ref()
+                        .is_none_or(|project| project.identity != expected)
+                {
+                    return;
+                }
+                view.opening.remove(&key);
+                if intent
+                    .as_deref()
+                    .is_some_and(|id| !view.is_current_intent(id))
+                {
+                    return;
+                }
+                if page_size != crate::preferences::current(cx).tables.page_size {
+                    view.open_database(entry.id, intent, window, cx);
+                    return;
+                }
+                if view.project.as_ref().is_none_or(|project| {
+                    !project
+                        .index
+                        .databases
+                        .iter()
+                        .any(|current| current.id == entry.id && current.revision == entry.revision)
+                }) {
+                    view.open_database(entry.id, intent, window, cx);
+                    return;
+                }
+                let applied = result.is_some();
+                view.install_database(entry, result, window, cx)
+                    .update(cx, |editor, cx| editor.focus_table(window, cx));
+                if let Some(intent) = intent {
+                    view.finish_intent(&intent, applied, window, cx);
+                }
+                cx.notify();
+            })
+            .log_released();
         })
         .detach();
     }
@@ -174,10 +178,7 @@ impl Workbench {
                 }
                 match event {
                     DatabaseEvent::Activated => {
-                        view.details.update(cx, |details, cx| {
-                            details.set_database(editor.downgrade(), cx)
-                        });
-                        view.activate_file(editor.read(cx).id().to_owned(), cx);
+                        view.activate_editor(DetailsTarget::Database(editor.downgrade()), cx)
                     }
                     DatabaseEvent::SessionChanged => {
                         view.rebind_session(window, cx);
@@ -194,27 +195,5 @@ impl Workbench {
             cx,
         );
         editor
-    }
-    pub(super) fn refresh_databases(&self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(project) = &self.project else {
-            return;
-        };
-        for (id, editor) in &self.databases {
-            let Some(editor) = editor.upgrade() else {
-                continue;
-            };
-            if let Some(entry) = project.index.databases.iter().find(|entry| &entry.id == id) {
-                editor.update(cx, |editor, cx| {
-                    editor.replace_index(
-                        entry.revision,
-                        entry.name.clone().unwrap_or_else(|| id.clone()),
-                        window,
-                        cx,
-                    )
-                });
-            } else {
-                editor.update(cx, |editor, cx| editor.unavailable(cx));
-            }
-        }
     }
 }

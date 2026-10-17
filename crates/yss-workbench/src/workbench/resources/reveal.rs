@@ -2,6 +2,7 @@
 use super::super::Workbench;
 use gpui_kit::{Context, Window};
 use yss_project::RevealProjectResourceRequest;
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(in crate::workbench) fn reveal_resource(
@@ -29,7 +30,7 @@ impl Workbench {
         });
         cx.spawn_in(window, async move |view, cx| {
             let result = job.await.ok().and_then(Result::ok);
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, _, cx| {
                 if view.lifecycle != lifecycle
                     || view
                         .project
@@ -46,7 +47,8 @@ impl Workbench {
                     ));
                     cx.notify();
                 }
-            });
+            })
+            .log_released();
         })
         .detach();
     }

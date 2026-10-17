@@ -10,10 +10,6 @@ use crate::plots::{
     cartesian::{CartesianData, CartesianPlot},
     correlogram::{Correlogram, CorrelogramData},
 };
-use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
-};
 use gpui_kit::{Context, Entity, IntoElement, Render, Window, div, prelude::*, px};
 use query::AnalysisData;
 pub(super) use query::series;
@@ -21,6 +17,7 @@ use std::sync::Arc;
 use yss_application::graph::results::report::ResultAnalysisRequest;
 use yss_desktop_services::ApplicationTasks;
 use yss_graph_execution::result::ResultReference;
+use yss_ui::lifecycle::LogReleased;
 
 #[derive(Clone, Copy)]
 pub(super) enum AnalysisKind {
@@ -85,7 +82,7 @@ impl AnalysisView {
                 .await
                 .map_err(anyhow::Error::from)
                 .and_then(|result| result);
-            let _ = view.update_in(cx, |view, _, cx| {
+            view.update_in(cx, |view, window, cx| {
                 view.loading = false;
                 match result {
                     Ok(mut data) => {
@@ -118,10 +115,18 @@ impl AnalysisView {
                         }
                         view.data = Some(data);
                     }
-                    Err(_) => view.error = true,
+                    Err(_) => {
+                        view.error = true;
+                        yss_ui::notifications::Notifications::new(window).error_with_retry(
+                            yss_ui::text::t("native.reports.analysisFailed"),
+                            cx,
+                            |view, window, cx| view.load(window, cx),
+                        );
+                    }
                 }
                 cx.notify();
-            });
+            })
+            .log_released();
         }));
         cx.notify();
     }
@@ -199,28 +204,6 @@ impl Render for AnalysisView {
         }
         body.when(self.loading, |body| {
             body.child(yss_ui::text::translate("common.loading"))
-        })
-        .when(self.error, |body| {
-            body.child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        div()
-                            .text_color(cx.theme().danger)
-                            .child(yss_ui::text::translate("native.reports.analysisFailed")),
-                    )
-                    .child(
-                        Button::new("retry-analysis")
-                            .small()
-                            .ghost()
-                            .label(yss_ui::text::translate("common.retry"))
-                            .disabled(self.loading)
-                            .on_click(cx.listener(|view, _, window, cx| view.load(window, cx))),
-                    ),
-            )
         })
     }
 }

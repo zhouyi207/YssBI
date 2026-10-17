@@ -5,7 +5,7 @@ use crate::session::{ApplicationSession, ApplicationState};
 use std::sync::Arc;
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
-use yss_graph_document_edit::{prepare_graph_document_patch, validate_graph_document};
+use yss_graph_document_edit::{apply_graph_document_patch, validate_graph_document};
 use yss_graph_editor::projection::{EditorProjectionInput, build_editor_projection};
 use yss_graph_editor::{
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
@@ -37,7 +37,7 @@ fn capture_editor_context(
     let index = captured
         .project()
         .read_project_index(captured.project_instance_id())?;
-    let project = super::catalog::localized_project_facts_from_index(captured, index)
+    let project = super::catalog::localized_project_facts_from_index(captured, &index)
         .map_err(ResourceMutationApplicationError::Catalog)?;
     let catalog = project
         .resources()
@@ -161,51 +161,45 @@ impl<'a> GraphDocumentEditor<'a> {
             self.context
                 .include_functions(self.captured, &self.document)?;
         }
-        let (patch, copied) =
-            if let EditorGraphMutation::DuplicateSubgraph { node_ids, offset } = mutation {
-                let duplicated = yss_graph_editor::duplicate_subgraph(
-                    self.graph,
-                    &self.document,
-                    self.captured.graph().registry(),
-                    &self.catalog,
-                    node_ids,
-                    offset,
-                )
-                .map_err(ResourceMutationApplicationError::Mutation)?;
-                (duplicated.patch, Some(duplicated.identities))
-            } else {
-                (
-                    self.captured
-                        .graph()
-                        .plan_editor_mutation(
-                            self.graph,
-                            &self.document,
-                            mutation,
-                            &self.catalog,
-                            || {
-                                self.context.resolve(
-                                    self.captured,
-                                    self.graph,
-                                    &self.document,
-                                    self.locale,
-                                )
-                            },
-                        )
-                        .map_err(ResourceMutationApplicationError::Mutation)?,
-                    None,
-                )
-            };
-        if !patch.is_empty() {
-            self.document = Arc::new(
-                prepare_graph_document_patch(self.document.as_ref().clone(), &patch).map_err(
-                    |error| {
+        let (patch, copied) = if let EditorGraphMutation::DuplicateSubgraph { node_ids, offset } =
+            mutation
+        {
+            let duplicated = yss_graph_editor::duplicate_subgraph(
+                self.graph,
+                &self.document,
+                self.captured.graph().registry(),
+                &self.catalog,
+                node_ids,
+                offset,
+            )
+            .map_err(ResourceMutationApplicationError::Mutation)?;
+            if !duplicated.patch.is_empty() {
+                apply_graph_document_patch(Arc::make_mut(&mut self.document), &duplicated.patch)
+                    .map_err(|error| {
                         ResourceMutationApplicationError::Mutation(MutationConflict::Document(
                             error,
                         ))
-                    },
-                )?,
-            );
-        }
+                    })?;
+            }
+            (duplicated.patch, Some(duplicated.identities))
+        } else {
+            (
+                self.captured
+                    .graph()
+                    .apply_editor_mutation(
+                        self.graph,
+                        &mut self.document,
+                        mutation,
+                        &self.catalog,
+                        |document| {
+                            self.context
+                                .resolve(self.captured, self.graph, document, self.locale)
+                        },
+                    )
+                    .map_err(ResourceMutationApplicationError::Mutation)?,
+                None,
+            )
+        };
         self.patch.operations.extend(patch.operations);
         Ok(copied)
     }
@@ -238,6 +232,7 @@ impl<'a> GraphDocumentEditor<'a> {
 }
 
 impl ApplicationState {
+    /// Reads a complete preview or `None` when superseded, without cancelling any committed edit.
     pub fn graph_connection_candidates(
         &self,
         project: &ProjectInstanceId,
@@ -245,23 +240,54 @@ impl ApplicationState {
         version: yss_project::GraphEditVersion,
         source: &yss_graph_document::PortAddress,
         intent: yss_graph_editor::projection::ConnectionIntent,
-    ) -> Result<yss_graph_editor::projection::ConnectionCandidates, ResourceMutationApplicationError>
-    {
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<
+        Option<yss_graph_editor::projection::ConnectionCandidates>,
+        ResourceMutationApplicationError,
+    > {
+        if cancelled() {
+            return Ok(None);
+        }
         let captured = self.capture_resource_session(project)?;
         let document = self.current_graph_document(project, graph, version)?;
+        if cancelled() {
+            return Ok(None);
+        }
         let (mut context, catalog) = capture_editor_context(&captured, &document)?;
+        if cancelled() {
+            return Ok(None);
+        }
         context.include_functions(&captured, &document)?;
+        if cancelled() {
+            return Ok(None);
+        }
         let analysis = context.resolve(&captured, graph, &document, "en-US");
         let candidates = captured
             .graph()
-            .connection_candidates(graph, &document, source, intent, &catalog, &analysis)
+            .connection_candidates(
+                yss_graph_runtime::ConnectionCandidatesInput {
+                    graph,
+                    document: &document,
+                    source,
+                    intent,
+                    catalog: &catalog,
+                    analysis: &analysis,
+                },
+                cancelled,
+            )
             .map_err(ResourceMutationApplicationError::Mutation)?;
+        if candidates.is_none() || cancelled() {
+            return Ok(None);
+        }
         context.revalidate(&captured)?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
         // Candidate computation may race an edit or history operation. A read
         // never grants permission to use a result from the preceding revision.
         self.current_graph_document(project, graph, version)?;
+        if cancelled() {
+            return Ok(None);
+        }
         Ok(candidates)
     }
 
@@ -279,7 +305,7 @@ impl ApplicationState {
             .read_project_index(captured.project_instance_id())?;
         let publication_revision = index.publication_revision;
         let authority_generation = index.authority_generation();
-        let project = super::catalog::localized_project_facts_from_index(&captured, index)
+        let project = super::catalog::localized_project_facts_from_index(&captured, &index)
             .map_err(ResourceMutationApplicationError::Catalog)?;
         let catalog = project
             .resources()

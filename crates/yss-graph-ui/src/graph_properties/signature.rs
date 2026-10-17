@@ -1,11 +1,14 @@
-use super::{GraphProperties, value::type_picker};
+use super::{GraphProperties, value::type_menu};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::{Button, ButtonVariants},
+    Disableable, Sizable,
+    checkbox::Checkbox,
     input::{Input, InputState},
+    menu::{DropdownMenu, PopupMenuItem},
 };
-use gpui_kit::{AnyElement, Context, Entity, IntoElement, Window, div, prelude::*};
+use gpui_kit::{
+    Anchor, AnyElement, Context, ElementId, Entity, IntoElement, Window, div, prelude::*,
+};
 use yss_data_contract::ValueType;
 use yss_graph_document::FunctionParameterId;
 use yss_project_history::{
@@ -13,7 +16,7 @@ use yss_project_history::{
     FunctionSignature, MutationRequest, ResourceKey,
 };
 use yss_project_identity::OperationId;
-use yss_ui::controls;
+use yss_ui::inspector::{self, InspectorSection};
 
 struct ParameterDraft {
     id: FunctionParameterId,
@@ -110,7 +113,8 @@ impl GraphProperties {
         let after = match draft.value(cx) {
             Ok(value) => value,
             Err(_) => {
-                self.error = Some(yss_ui::text::t("native.workbench.invalidType").into());
+                self.notifications
+                    .error(yss_ui::text::t("native.workbench.invalidType"), cx);
                 cx.notify();
                 return;
             }
@@ -124,7 +128,7 @@ impl GraphProperties {
             OperationId::new(),
             FunctionDocumentPatch::new(draft.baseline.signature.clone(), after),
         );
-        self.error = None;
+
         graph.update(cx, |graph, cx| graph.submit_signature(request, version, cx));
         cx.notify();
     }
@@ -136,175 +140,88 @@ impl GraphProperties {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let generation = self.generation;
-        div()
-            .flex()
-            .flex_col()
-            .gap_3()
-            .pb_4()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_sm()
-                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                            .child(yss_ui::text::t("native.workbench.functionInterface")),
-                    )
-                    .child(
-                        Button::new("restore-function-signature")
-                            .small()
-                            .ghost()
-                            .icon(IconName::Undo2)
-                            .tooltip(yss_ui::text::translate("common.restore"))
-                            .disabled(busy)
-                            .on_click(cx.listener(move |view, _, window, cx| {
-                                if view.accepts_input(generation, cx)
-                                    && let Some(draft) = &view.signature
-                                {
-                                    view.signature = Some(SignatureDraft::new(
-                                        draft.baseline.clone(),
-                                        window,
-                                        cx,
-                                    ));
-                                    view.error = None;
-                                    cx.notify();
-                                }
-                            })),
-                    )
-                    .child(
-                        controls::apply("apply-function-signature", busy)
-                            .label(yss_ui::text::t("native.workbench.applyInterface"))
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                if view.accepts_input(generation, cx) {
-                                    view.apply_signature(cx);
-                                }
-                            })),
-                    ),
+        let mut section = InspectorSection::new(
+            "function-interface",
+            yss_ui::text::translate("native.workbench.functionInterface"),
+        )
+        .description(yss_ui::text::translate(
+            "native.workbench.functionInterfaceHint",
+        ))
+        .tool(
+            inspector::action_button(
+                "restore-function-signature",
+                IconName::RotateCcw,
+                yss_ui::text::translate("common.restore"),
             )
-            .child(controls::hint(
-                yss_ui::text::t("native.workbench.functionInterfaceHint"),
+            .disabled(busy)
+            .on_click(cx.listener(move |view, _, window, cx| {
+                if view.accepts_input(generation, cx)
+                    && let Some(draft) = &view.signature
+                {
+                    view.signature = Some(SignatureDraft::new(draft.baseline.clone(), window, cx));
+
+                    cx.notify();
+                }
+            })),
+        );
+        if draft.parameters.is_empty() {
+            section = section.child(inspector::hint(
+                yss_ui::text::translate("detail.pinEditor.noInputs"),
                 cx,
-            ))
-            .when(draft.parameters.is_empty(), |view| {
-                view.child(controls::hint(
-                    yss_ui::text::translate("detail.pinEditor.noInputs"),
-                    cx,
-                ))
-            })
-            .children(draft.parameters.iter().enumerate().map(|(row, parameter)| {
-                let id = parameter.id.clone();
-                let choose_id = id.clone();
-                let remove_id = id.clone();
-                let up_id = id.clone();
-                let down_id = id;
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .p_2()
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .rounded_md()
-                    .child(Input::new(&parameter.name).small().disabled(busy))
+            ));
+        }
+        for (row, parameter) in draft.parameters.iter().enumerate() {
+            let choose_id = parameter.id.clone();
+            section = section.child(
+                inspector::record(cx)
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap_1()
                             .child(
-                                Input::new(&parameter.data_type)
+                                Input::new(&parameter.name)
                                     .small()
                                     .flex_1()
                                     .min_w_0()
                                     .disabled(busy),
                             )
-                            .child(
-                                div()
-                                    .w(gpui_kit::px(62.))
-                                    .flex_shrink_0()
-                                    .child(type_picker(
-                                        ("function-parameter-type", row),
-                                        yss_ui::text::t("detail.fields.type").into(),
-                                        Some(parameter.data_type.read(cx).value().to_string()),
-                                        busy,
-                                        cx.listener(move |view, value: &String, window, cx| {
-                                            if view.accepts_input(generation, cx)
-                                                && let Some(draft) = &mut view.signature
-                                                && let Some(parameter) = draft
-                                                    .parameters
-                                                    .iter()
-                                                    .find(|parameter| parameter.id == choose_id)
-                                            {
-                                                parameter.data_type.update(cx, |input, cx| {
-                                                    input.set_value(value.clone(), window, cx)
-                                                });
-                                            }
-                                        }),
-                                    )),
-                            ),
+                            .child(self.render_parameter_menu(
+                                row,
+                                draft.parameters.len(),
+                                parameter.id.clone(),
+                                busy,
+                                cx,
+                            )),
                     )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_1()
-                            .child(
-                                Button::new(("signature-up", row))
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::ChevronUp)
-                                    .tooltip(yss_ui::text::t("native.workbench.moveParameterUp"))
-                                    .disabled(busy || row == 0)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        if view.accepts_input(generation, cx) {
-                                            view.move_parameter(&up_id, -1, cx);
-                                        }
-                                    })),
-                            )
-                            .child(
-                                Button::new(("signature-down", row))
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::ChevronDown)
-                                    .tooltip(yss_ui::text::t("native.workbench.moveParameterDown"))
-                                    .disabled(busy || row + 1 == draft.parameters.len())
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        if view.accepts_input(generation, cx) {
-                                            view.move_parameter(&down_id, 1, cx);
-                                        }
-                                    })),
-                            )
-                            .child(
-                                Button::new(("signature-remove", row))
-                                    .small()
-                                    .ghost()
-                                    .icon(IconName::Close)
-                                    .tooltip(yss_ui::text::t("native.workbench.removeParameter"))
-                                    .disabled(busy)
-                                    .on_click(cx.listener(move |view, _, _, cx| {
-                                        if view.accepts_input(generation, cx)
-                                            && let Some(draft) = &mut view.signature
-                                        {
-                                            draft
-                                                .parameters
-                                                .retain(|parameter| parameter.id != remove_id);
-                                            cx.notify();
-                                        }
-                                    })),
-                            ),
-                    )
-            }))
+                    .child(type_row(
+                        &parameter.data_type,
+                        ("function-parameter-type", row),
+                        busy,
+                        cx,
+                        cx.listener(move |view, value: &String, window, cx| {
+                            if view.accepts_input(generation, cx)
+                                && let Some(draft) = &mut view.signature
+                                && let Some(parameter) = draft
+                                    .parameters
+                                    .iter()
+                                    .find(|parameter| parameter.id == choose_id)
+                            {
+                                parameter.data_type.update(cx, |input, cx| {
+                                    input.set_value(value.clone(), window, cx)
+                                });
+                            }
+                        }),
+                    )),
+            );
+        }
+        section
             .child(
-                Button::new("signature-add")
-                    .small()
-                    .ghost()
-                    .icon(IconName::Plus)
-                    .label(yss_ui::text::t("native.workbench.addInputParameter"))
+                div().flex().flex_col().items_start().child(
+                    inspector::add_button(
+                        "signature-add",
+                        yss_ui::text::translate("native.workbench.addInputParameter"),
+                    )
                     .disabled(busy)
                     .on_click(cx.listener(move |view, _, window, cx| {
                         if view.accepts_input(generation, cx)
@@ -327,12 +244,11 @@ impl GraphProperties {
                             cx.notify();
                         }
                     })),
+                ),
             )
             .child(
-                gpui_kit::component::checkbox::Checkbox::new("signature-has-return")
-                    .label(gpui_kit::SharedString::from(yss_ui::text::t(
-                        "native.workbench.returnValue",
-                    )))
+                Checkbox::new("signature-has-return")
+                    .label(yss_ui::text::translate("native.workbench.returnValue"))
                     .checked(draft.has_return)
                     .disabled(busy)
                     .on_click(cx.listener(move |view, value: &bool, _, cx| {
@@ -344,39 +260,95 @@ impl GraphProperties {
                         }
                     })),
             )
-            .when(draft.has_return, |view| {
-                view.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-                        .child(
-                            Input::new(&draft.return_type)
-                                .small()
-                                .flex_1()
-                                .min_w_0()
-                                .disabled(busy),
-                        )
-                        .child(
-                            div()
-                                .w(gpui_kit::px(62.))
-                                .flex_shrink_0()
-                                .child(type_picker(
-                                    "function-return-type",
-                                    yss_ui::text::t("detail.fields.type").into(),
-                                    Some(draft.return_type.read(cx).value().to_string()),
-                                    busy,
-                                    cx.listener(move |view, value: &String, window, cx| {
-                                        if view.accepts_input(generation, cx)
-                                            && let Some(draft) = &view.signature
-                                        {
-                                            draft.return_type.update(cx, |input, cx| {
-                                                input.set_value(value.clone(), window, cx)
-                                            });
-                                        }
-                                    }),
-                                )),
-                        ),
+            .when(draft.has_return, |section| {
+                section.child(type_row(
+                    &draft.return_type,
+                    "function-return-type",
+                    busy,
+                    cx,
+                    cx.listener(move |view, value: &String, window, cx| {
+                        if view.accepts_input(generation, cx)
+                            && let Some(draft) = &view.signature
+                        {
+                            draft
+                                .return_type
+                                .update(cx, |input, cx| input.set_value(value.clone(), window, cx));
+                        }
+                    }),
+                ))
+            })
+            .child(
+                div().flex().justify_end().child(
+                    inspector::commit_button(
+                        "apply-function-signature",
+                        yss_ui::text::translate("native.workbench.applyInterface"),
+                        busy,
+                    )
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        if view.accepts_input(generation, cx) {
+                            view.apply_signature(cx);
+                        }
+                    })),
+                ),
+            )
+            .into_any_element()
+    }
+
+    fn render_parameter_menu(
+        &self,
+        row: usize,
+        count: usize,
+        id: FunctionParameterId,
+        busy: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let generation = self.generation;
+        let owner = cx.entity().downgrade();
+        inspector::overflow_button(("signature-actions", row))
+            .disabled(busy)
+            .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, _, _| {
+                let reorder = |direction: isize, label: &str, icon: IconName, disabled: bool| {
+                    let id = id.clone();
+                    PopupMenuItem::new(yss_ui::text::translate(label))
+                        .icon(icon)
+                        .disabled(disabled)
+                        .on_click(inspector::owner_command(
+                            owner.clone(),
+                            move |view: &mut GraphProperties, _, cx| {
+                                if view.accepts_input(generation, cx) {
+                                    view.move_parameter(&id, direction, cx);
+                                }
+                            },
+                        ))
+                };
+                let remove = id.clone();
+                menu.item(reorder(
+                    -1,
+                    "native.workbench.moveParameterUp",
+                    IconName::ArrowUp,
+                    row == 0,
+                ))
+                .item(reorder(
+                    1,
+                    "native.workbench.moveParameterDown",
+                    IconName::ArrowDown,
+                    row + 1 >= count,
+                ))
+                .separator()
+                .item(
+                    PopupMenuItem::new(yss_ui::text::translate("native.workbench.removeParameter"))
+                        .icon(IconName::Trash)
+                        .on_click(inspector::owner_command(
+                            owner.clone(),
+                            move |view: &mut GraphProperties, _, cx| {
+                                if view.accepts_input(generation, cx)
+                                    && let Some(draft) = &mut view.signature
+                                {
+                                    draft.parameters.retain(|parameter| parameter.id != remove);
+                                    cx.notify();
+                                }
+                            },
+                        )),
                 )
             })
             .into_any_element()
@@ -400,4 +372,30 @@ impl GraphProperties {
             cx.notify();
         }
     }
+}
+
+/// A free-form type name with a menu of the common types beside it.
+fn type_row(
+    input: &Entity<InputState>,
+    id: impl Into<ElementId>,
+    busy: bool,
+    cx: &Context<GraphProperties>,
+    on_choose: impl Fn(&String, &mut Window, &mut gpui_kit::App) + 'static,
+) -> gpui_kit::Div {
+    let current = input.read(cx).value().to_string();
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .child(Input::new(input).small().flex_1().min_w_0().disabled(busy))
+        .child(type_menu(
+            inspector::action_button(
+                id,
+                IconName::ChevronDown,
+                yss_ui::text::translate("detail.fields.type"),
+            )
+            .disabled(busy),
+            Some(current),
+            on_choose,
+        ))
 }
