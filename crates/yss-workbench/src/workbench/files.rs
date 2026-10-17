@@ -646,12 +646,6 @@ impl Workbench {
         self.persist_layout(cx);
     }
 
-    pub(in crate::workbench) fn refresh_files(&self, window: &mut Window, cx: &mut Context<Self>) {
-        for panel in self.file_panels().collect::<Vec<_>>() {
-            panel.refresh(window, cx);
-        }
-    }
-
     pub(in crate::workbench) fn refresh_file_resources(
         &self,
         resources: &[ResourceKey],

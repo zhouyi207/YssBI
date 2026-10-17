@@ -9,7 +9,6 @@ pub(crate) use commands::bind_keys;
 pub(crate) use commands::shortcut_commands;
 
 use super::Workbench;
-use crate::canvas::GraphCommand;
 use gpui_kit::component::dock::{BasePanelView, DockPlacement, PanelId, panel_handle};
 use gpui_kit::{App, Context, Menu, Window};
 use std::sync::Arc;
@@ -33,19 +32,11 @@ impl Workbench {
         if self.is_closing(cx) || self.editor_command_panel(window, cx).is_none() {
             return;
         }
-        let Some(panel) = self.active_editor_panel(cx) else {
-            return;
-        };
-        let editor = panel.view();
-        if let Some(file) = super::files::FilePanel::from_view(editor.clone()) {
-            file.save(window, cx);
-        } else if let Ok(database) = editor
-            .clone()
-            .downcast::<crate::databases::DatabaseEditor>()
+        if let Some(editor) = self
+            .active_editor_panel(cx)
+            .and_then(|panel| super::EditorPanel::from_view(panel.view()))
         {
-            database.update(cx, |editor, cx| editor.save(window, cx));
-        } else if let Ok(graph) = editor.downcast::<crate::canvas::GraphCanvas>() {
-            graph.update(cx, |graph, cx| graph.submit(GraphCommand::Save, None, cx));
+            editor.save(window, cx);
         }
     }
 

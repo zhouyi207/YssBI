@@ -417,19 +417,22 @@ impl Workbench {
         }
     }
 
+    fn editors(&self) -> impl Iterator<Item = EditorPanel> + '_ {
+        self.graphs
+            .values()
+            .filter_map(WeakEntity::upgrade)
+            .map(EditorPanel::Graph)
+            .chain(self.file_panels().map(EditorPanel::File))
+            .chain(
+                self.databases
+                    .values()
+                    .filter_map(WeakEntity::upgrade)
+                    .map(EditorPanel::Database),
+            )
+    }
+
     pub fn has_unsaved(&self, cx: &gpui_kit::App) -> bool {
-        self.settings.read(cx).dirty()
-            || self
-                .graphs
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|graph| graph.read(cx).dirty(cx))
-            || self.file_panels().any(|panel| panel.dirty(cx))
-            || self
-                .databases
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|editor| editor.read(cx).dirty())
+        self.settings.read(cx).dirty() || self.editors().any(|editor| editor.dirty(cx))
     }
 
     pub fn is_closing(&self, cx: &gpui_kit::App) -> bool {
@@ -443,17 +446,70 @@ impl Workbench {
             || self.busy
             || self.plugins.read(cx).busy()
             || self.settings.read(cx).has_pending_operation()
-            || self
-                .graphs
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|graph| graph.read(cx).busy())
-            || self.file_panels().any(|panel| panel.busy(cx))
-            || self
-                .databases
-                .values()
-                .filter_map(WeakEntity::upgrade)
-                .any(|editor| editor.read(cx).busy())
+            || self.editors().any(|editor| editor.busy(cx))
+    }
+}
+
+/// Any open editor. Each kind keeps its own editing model; this is only the dispatch point.
+enum EditorPanel {
+    Graph(Entity<GraphCanvas>),
+    File(files::FilePanel),
+    Database(Entity<crate::databases::DatabaseEditor>),
+}
+
+impl EditorPanel {
+    fn from_view(view: gpui_kit::AnyView) -> Option<Self> {
+        if let Some(file) = files::FilePanel::from_view(view.clone()) {
+            return Some(Self::File(file));
+        }
+        view.clone()
+            .downcast::<GraphCanvas>()
+            .map(Self::Graph)
+            .or_else(|_| {
+                view.downcast::<crate::databases::DatabaseEditor>()
+                    .map(Self::Database)
+            })
+            .ok()
+    }
+
+    fn dirty(&self, cx: &gpui_kit::App) -> bool {
+        match self {
+            Self::Graph(graph) => graph.read(cx).dirty(cx),
+            Self::File(panel) => panel.dirty(cx),
+            Self::Database(editor) => editor.read(cx).dirty(),
+        }
+    }
+
+    fn busy(&self, cx: &gpui_kit::App) -> bool {
+        match self {
+            Self::Graph(graph) => graph.read(cx).busy(),
+            Self::File(panel) => panel.busy(cx),
+            Self::Database(editor) => editor.read(cx).busy(),
+        }
+    }
+
+    fn save(&self, window: &mut Window, cx: &mut gpui_kit::App) {
+        match self {
+            Self::Graph(graph) => graph.update(cx, |graph, cx| {
+                graph.submit(crate::canvas::GraphCommand::Save, None, cx)
+            }),
+            Self::File(panel) => panel.save(window, cx),
+            Self::Database(editor) => editor.update(cx, |editor, cx| editor.save(window, cx)),
+        }
+    }
+
+    /// Re-reads everything the editor shows, for when committed events may have been missed.
+    fn resync(&self, window: &mut Window, cx: &mut gpui_kit::App) {
+        match self {
+            Self::Graph(graph) => graph.update(cx, |graph, cx| {
+                graph.refresh(cx);
+                graph.resync_execution(cx);
+            }),
+            Self::File(panel) => panel.refresh(window, cx),
+            Self::Database(editor) => {
+                editor.update(cx, |editor, cx| editor.reload(false, window, cx))
+            }
+        }
     }
 }
 

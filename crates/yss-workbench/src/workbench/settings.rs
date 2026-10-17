@@ -30,6 +30,8 @@ impl Workbench {
                         language = crate::text::locale();
                         view.menu_context = None;
                         view.refresh_project(window, cx);
+                        // Graph projections are read in the active language; other editors
+                        // translate while rendering.
                         view.refresh_graphs(cx);
                         cx.notify();
                     }

@@ -63,15 +63,7 @@ impl Workbench {
                             .update_in(cx, |view, window, cx| {
                                 view.close_stale_result_windows(cx);
                                 view.refresh_project(window, cx);
-                                view.refresh_graphs(cx);
-                                view.refresh_files(window, cx);
-                                for graph in view
-                                    .graphs
-                                    .values()
-                                    .filter_map(gpui_kit::WeakEntity::upgrade)
-                                {
-                                    graph.update(cx, |graph, cx| graph.resync_execution(cx));
-                                }
+                                view.resync_editors(window, cx);
                                 view.resync_intents(window, cx);
                             })
                             .is_err()
@@ -133,8 +125,7 @@ impl Workbench {
                     }
                     self.refresh_file_resources(resources, window, cx);
                 } else {
-                    self.refresh_graphs(cx);
-                    self.refresh_files(window, cx);
+                    self.resync_editors(window, cx);
                 }
             }
             DesktopEvent::Resource(mutation) if mutation.project_instance_id == project.identity => {
@@ -175,6 +166,12 @@ impl Workbench {
         }
     }
 
+    fn resync_editors(&self, window: &mut Window, cx: &mut Context<Self>) {
+        for editor in self.editors().collect::<Vec<_>>() {
+            editor.resync(window, cx);
+        }
+    }
+
     pub(super) fn refresh_graphs(&self, cx: &mut Context<Self>) {
         for graph in self
             .graphs
@@ -192,22 +189,7 @@ impl Workbench {
         });
         self.connect_events(window, cx);
         self.refresh_project(window, cx);
-        self.refresh_graphs(cx);
-        self.refresh_files(window, cx);
-        for editor in self
-            .databases
-            .values()
-            .filter_map(gpui_kit::WeakEntity::upgrade)
-        {
-            editor.update(cx, |editor, cx| editor.reload(false, window, cx));
-        }
-        for graph in self
-            .graphs
-            .values()
-            .filter_map(gpui_kit::WeakEntity::upgrade)
-        {
-            graph.update(cx, |graph, cx| graph.resync_execution(cx));
-        }
+        self.resync_editors(window, cx);
     }
 
     pub(super) fn install_project_index(

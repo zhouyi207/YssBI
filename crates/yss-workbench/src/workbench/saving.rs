@@ -1,6 +1,6 @@
 //! Native save capture and receipt installation; each domain owner commits its own file.
-use super::Workbench;
 use super::files::{FilePanel, FileSave, FileSaved};
+use super::{EditorPanel, Workbench};
 use crate::{
     canvas::{GraphCanvas, GraphCommandOutcome, GraphSaveRequest},
     databases::{DatabaseEditor, DatabaseSaveOutcome, DatabaseSaveRequest},
@@ -28,6 +28,15 @@ pub(super) enum SaveOutcome {
     File(FileSaved),
     Database(DatabaseSaveOutcome),
     Settings(SettingsSaveOutcome),
+}
+impl From<EditorPanel> for SaveTarget {
+    fn from(editor: EditorPanel) -> Self {
+        match editor {
+            EditorPanel::Graph(view) => Self::Graph(view),
+            EditorPanel::File(panel) => Self::File(panel),
+            EditorPanel::Database(view) => Self::Database(view),
+        }
+    }
 }
 impl SaveRequest {
     pub fn commit(self, owner: &NativeServices) -> SaveOutcome {
@@ -142,23 +151,9 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> Option<(Vec<SaveTarget>, Vec<SaveRequest>)> {
         let targets = self
-            .graphs
-            .values()
-            .filter_map(gpui_kit::WeakEntity::upgrade)
-            .filter(|view| view.read(cx).dirty(cx))
-            .map(SaveTarget::Graph)
-            .chain(
-                self.file_panels()
-                    .filter(|panel| panel.dirty(cx))
-                    .map(SaveTarget::File),
-            )
-            .chain(
-                self.databases
-                    .values()
-                    .filter_map(gpui_kit::WeakEntity::upgrade)
-                    .filter(|view| view.read(cx).dirty())
-                    .map(SaveTarget::Database),
-            )
+            .editors()
+            .filter(|editor| editor.dirty(cx))
+            .map(SaveTarget::from)
             .chain(
                 self.settings
                     .read(cx)
