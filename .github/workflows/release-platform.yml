@@ -94,7 +94,7 @@ jobs:
           for asset in assets:
               with asset.open('rb') as stream:
                   digest = hashlib.file_digest(stream, 'sha256').hexdigest()
-              if asset.stat().st_size == 0 or asset.with_name(asset.name + '.sha256').read_text().strip() != f'{digest}  {asset.name}':
+              if asset.stat().st_size == 0 or asset.with_name(asset.name + '.sha256').read_text(encoding='utf-8').strip() != f'{digest}  {asset.name}':
                   raise SystemExit('Invalid asset checksum: ' + asset.name)
           def smoke(binary, samples, cwd):
               for name in ('README.md', 'sources.json', 'catalog.json'):

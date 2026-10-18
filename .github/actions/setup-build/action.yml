@@ -85,7 +85,7 @@ runs:
       env:
         BUILD_TARGET: ${{ inputs.target }}
       run: |
-        toolchain="$(python -c 'import pathlib,tomllib; print(tomllib.loads(pathlib.Path("rust-toolchain.toml").read_text())["toolchain"]["channel"])')"
+        toolchain="$(python -c 'import pathlib,tomllib; print(tomllib.loads(pathlib.Path("rust-toolchain.toml").read_text(encoding="utf-8"))["toolchain"]["channel"])')"
         rustup set default-host "$BUILD_TARGET"
         rustup toolchain install "$toolchain" --profile minimal --component rustfmt
         rustup target add --toolchain "$toolchain" "$BUILD_TARGET"

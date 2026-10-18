@@ -117,7 +117,7 @@ def linux_libraries(binary):
 def dependency_notices(target, destination):
     metadata = json.loads(run(
         ["cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform", target],
-        capture_output=True, text=True,
+        stdout=subprocess.PIPE, encoding="utf-8",
     ).stdout)
     packages = {package["id"]: package for package in metadata["packages"]}
     nodes = {node["id"]: node for node in metadata["resolve"]["nodes"]}
@@ -238,7 +238,7 @@ def main():
         parser.error("Output already exists; choose an empty output directory")
     if not arguments.skip_build and arguments.binary is None:
         run(["cargo", "build", "--locked", "--release", "-p", "yss-desktop-gpui", "--bin", "yss-desktop-gpui", "--target", arguments.target])
-    metadata = json.loads(run(["cargo", "metadata", "--no-deps", "--format-version", "1"], capture_output=True, text=True).stdout)
+    metadata = json.loads(run(["cargo", "metadata", "--no-deps", "--format-version", "1"], stdout=subprocess.PIPE, encoding="utf-8").stdout)
     suffix = ".exe" if system == "windows" else ""
     binary = (arguments.binary or Path(metadata["target_directory"]) / arguments.target / "release" / f"yss-desktop-gpui{suffix}").resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="yssbi-package-") as temporary:
@@ -263,7 +263,7 @@ def main():
     for asset in expected:
         if not asset.is_file() or asset.stat().st_size == 0:
             raise ValueError(f"Packager did not produce {asset}")
-        asset.with_name(asset.name + ".sha256").write_text(f"{sha256(asset)}  {asset.name}\n", encoding="utf-8")
+        asset.with_name(asset.name + ".sha256").write_text(f"{sha256(asset)}  {asset.name}\n", encoding="utf-8", newline="\n")
         print(f"Packaged: {asset}")
 
 

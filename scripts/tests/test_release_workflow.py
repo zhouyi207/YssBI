@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 
-WORKFLOW = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text()
+WORKFLOW = (Path(__file__).resolve().parents[2] / ".github/workflows/release.yml").read_text(encoding="utf-8")
 
 
 def workflow_python(step_name):

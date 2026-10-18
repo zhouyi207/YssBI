@@ -38,7 +38,7 @@ jobs:
         run: |
           python - <<'PY'
           import os, pathlib, re, subprocess, tomllib
-          version = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['workspace']['package']['version']
+          version = tomllib.loads(pathlib.Path('Cargo.toml').read_text(encoding='utf-8'))['workspace']['package']['version']
           if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?', version):
               raise SystemExit('Workspace version is not a release version')
           if os.environ['GITHUB_REF'] != f'refs/tags/app-v{version}':
@@ -123,7 +123,7 @@ jobs:
         run: |
           python - <<'PY'
           import hashlib, json, os, pathlib, tomllib, urllib.error, urllib.parse, urllib.request
-          version = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['workspace']['package']['version']
+          version = tomllib.loads(pathlib.Path('Cargo.toml').read_text(encoding='utf-8'))['workspace']['package']['version']
           tag = f'app-v{version}'
           if version != os.environ['PACKAGE_VERSION'] or os.environ['GITHUB_REF'] != f'refs/tags/{tag}':
               raise SystemExit('Release tag and workspace version disagree')
@@ -150,7 +150,7 @@ jobs:
               with path.open('rb') as stream:
                   digest = hashlib.file_digest(stream, 'sha256').hexdigest()
               line = f'{digest}  {name}'
-              if (directory / (name + '.sha256')).read_text().strip() != line:
+              if (directory / (name + '.sha256')).read_text(encoding='utf-8').strip() != line:
                   raise SystemExit('Checksum mismatch: ' + name)
               checksums.append(line)
           (directory / 'SHA256SUMS').write_text('\n'.join(checksums) + '\n', encoding='utf-8')
