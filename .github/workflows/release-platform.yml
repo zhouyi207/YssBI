@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import hashlib, os, pathlib, subprocess, tarfile, tempfile, zipfile
+          import hashlib, os, pathlib, subprocess, tarfile, tempfile, time, zipfile
           platform = os.environ['PACKAGE_PLATFORM']
           base = 'yssbi-{PACKAGE_VERSION}-{PACKAGE_PLATFORM}-{PACKAGE_ARCH}'.format(**os.environ)
           extensions = {'linux': ['tar.gz', 'rpm'], 'macos': ['dmg'], 'windows': ['exe', 'zip']}[platform]
@@ -128,6 +128,13 @@ jobs:
                       smoke(installed / 'yss-desktop-gpui.exe', installed / 'resources/samples', root)
                   finally:
                       subprocess.run([str(installed / 'unins000.exe'), '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], check=True, timeout=120)
+                      # Inno's uninstaller returns before its TEMP clone deletes unins000.exe; wait
+                      # so the temporary directory cleanup does not race it for locked files.
+                      deadline = time.monotonic() + 60
+                      while (installed / 'unins000.exe').exists():
+                          if time.monotonic() > deadline:
+                              raise SystemExit('Uninstaller did not finish removing itself')
+                          time.sleep(1)
           PY
       - name: Smoke RPM payload and relocated executable
         if: runner.os == 'Linux'

@@ -68,15 +68,28 @@ runs:
           'CC_aarch64_pc_windows_msvc=clang-cl' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           'CXX_aarch64_pc_windows_msvc=clang-cl' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
         }
-        $inno = @("${env:ProgramFiles(x86)}\Inno Setup 6", "$env:ProgramFiles\Inno Setup 6") |
-          Where-Object { Test-Path (Join-Path $_ 'ISCC.exe') } | Select-Object -First 1
-        if (!$inno) {
-          choco install innosetup --yes --no-progress
-          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
-          $inno = @("${env:ProgramFiles(x86)}\Inno Setup 6", "$env:ProgramFiles\Inno Setup 6") |
-            Where-Object { Test-Path (Join-Path $_ 'ISCC.exe') } | Select-Object -First 1
+        # ISCC.exe has a 0.0.0.0 PE version resource; the installer's uninstall entry is the
+        # reliable version source. Images may preinstall a release older than yssbi.iss needs.
+        function Find-Inno {
+          $keys = @('HKLM:\SOFTWARE\WOW6432Node', 'HKLM:\SOFTWARE', 'HKCU:\SOFTWARE') |
+            ForEach-Object { "$_\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1" }
+          foreach ($key in $keys) {
+            $entry = Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue
+            if (!$entry -or !$entry.InstallLocation) { continue }
+            $innoVersion = $null
+            if (![version]::TryParse([string]$entry.DisplayVersion, [ref]$innoVersion)) { continue }
+            $directory = $entry.InstallLocation.TrimEnd('\')
+            Write-Host "Found Inno Setup $innoVersion at $directory"
+            if ($innoVersion -ge [version]'6.3' -and (Test-Path (Join-Path $directory 'ISCC.exe'))) { return $directory }
+          }
         }
-        if (!$inno) { throw 'Inno Setup compiler not found' }
+        $inno = Find-Inno
+        if (!$inno) {
+          choco upgrade innosetup --version 6.7.1 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          $inno = Find-Inno
+        }
+        if (!$inno) { throw 'Inno Setup 6.3 or newer not found' }
         $inno | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
         $fxc = Get-Command fxc.exe -ErrorAction Stop
         "GPUI_FXC_PATH=$($fxc.Source)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8

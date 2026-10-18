@@ -68,13 +68,11 @@ if (@(Get-ChildItem -LiteralPath $Samples -Filter '*.parquet' -File -Recurse).Co
 }
 $programFilesX86 = [Environment]::GetFolderPath('ProgramFilesX86')
 $programFiles = [Environment]::GetFolderPath('ProgramFiles')
+# ISCC.exe ships with a 0.0.0.0 PE version resource, so yssbi.iss enforces the
+# minimum compiler version through the preprocessor's Ver instead.
 $iscc = Find-Program 'ISCC.exe' @(
     "$programFilesX86\Inno Setup 6\ISCC.exe", "$programFiles\Inno Setup 6\ISCC.exe"
 )
-$innoVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($iscc)
-if ([version]::new($innoVersion.FileMajorPart, $innoVersion.FileMinorPart) -lt [version]'6.3') {
-    throw 'Inno Setup 6.3 or newer is required.'
-}
 $vswhere = Find-Program 'vswhere.exe' @("$programFilesX86\Microsoft Visual Studio\Installer\vswhere.exe")
 $vsRoots = @(& $vswhere -latest -products '*' -property installationPath)
 if ($LASTEXITCODE -ne 0) { throw "vswhere failed ($LASTEXITCODE)" }
@@ -106,8 +104,8 @@ $systemDlls = @(
     'crypt32.dll', 'cryptbase.dll', 'cryptnet.dll', 'cryptsp.dll', 'd2d1.dll',
     'd3d11.dll', 'd3d12.dll', 'd3dcompiler_47.dll', 'dcomp.dll', 'dbghelp.dll',
     'dbgcore.dll', 'dinput8.dll', 'dnsapi.dll', 'dwmapi.dll', 'dwrite.dll', 'dxgi.dll',
-    'gdi32.dll', 'hid.dll', 'imm32.dll', 'iphlpapi.dll', 'kernel32.dll', 'kernelbase.dll',
-    'mf.dll', 'mfplat.dll', 'mfreadwrite.dll', 'mfuuid.dll', 'mmdevapi.dll',
+    'gdi32.dll', 'gdiplus.dll', 'hid.dll', 'icuuc.dll', 'imm32.dll', 'iphlpapi.dll',
+    'kernel32.dll', 'kernelbase.dll', 'mf.dll', 'mfplat.dll', 'mfreadwrite.dll', 'mfuuid.dll', 'mmdevapi.dll',
     'mpr.dll', 'msimg32.dll', 'msvcrt.dll', 'ncrypt.dll', 'netapi32.dll', 'normaliz.dll',
     'ntdll.dll', 'ole32.dll', 'oleacc.dll', 'oleaut32.dll', 'opengl32.dll',
     'powrprof.dll', 'profapi.dll', 'propsys.dll', 'psapi.dll', 'rpcrt4.dll',
@@ -122,6 +120,8 @@ function Add-RuntimeDependencies([string]$Payload) {
     $queue = [Collections.Generic.Queue[string]]::new()
     $queue.Enqueue((Join-Path $Payload 'yss-desktop-gpui.exe'))
     $visited = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    # Report every unbundled import at once; each CI attempt costs a full release build.
+    $unbundled = [Collections.Generic.List[string]]::new()
     while ($queue.Count -gt 0) {
         $file = $queue.Dequeue()
         if (-not $visited.Add($file)) { continue }
@@ -133,7 +133,8 @@ function Add-RuntimeDependencies([string]$Payload) {
             $name = $Matches[1].ToLowerInvariant()
             if ($name -match '^(api-ms-win-|ext-ms-win-)' -or $name -in $systemDlls) { continue }
             if ($name -notmatch '^(vcruntime140(?:_1|_threads)?|msvcp140(?:_[a-z0-9_]+)?|concrt140)\.dll$') {
-                throw "Unbundled non-system dependency '$name' imported by '$file'. Add an explicit, architecture-checked runtime source before shipping."
+                $unbundled.Add("'$name' imported by '$file'")
+                continue
             }
             $destination = Join-Path $Payload $name
             if (-not (Test-Path -LiteralPath $destination)) {
@@ -149,6 +150,9 @@ function Add-RuntimeDependencies([string]$Payload) {
             }
             $queue.Enqueue($destination)
         }
+    }
+    if ($unbundled.Count -gt 0) {
+        throw "Unbundled non-system dependencies (add an explicit, architecture-checked runtime source before shipping):`n  " + ($unbundled -join "`n  ")
     }
 }
 
