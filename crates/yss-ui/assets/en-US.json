@@ -90,15 +90,20 @@
       "applyFailed": "Log retention was saved but maintenance could not be applied. Check disk space and database access."
     },
     "shortcuts": {
-      "scope": "%{action} · Context: %{context} · Defaults: %{defaults}",
       "unbound": "Unassigned",
-      "placeholder": "For example ctrl-k ctrl-s",
-      "remove": "Remove",
-      "reset": "Reset",
-      "empty": "Enter a shortcut, or use Remove to disable this command.",
+      "areas": {
+        "general": "General",
+        "graph": "Event graph",
+        "mind": "Mind map",
+        "document": "Documents",
+        "database": "Data tables",
+        "chart": "Charts",
+        "assistant": "AI assistant",
+        "settings": "Settings",
+        "other": "Other"
+      },
+      "empty": "Enter a shortcut, or clear the field to disable this command's shortcut.",
       "closed": "Settings closed before this shortcut could be saved. Reopen Settings and try again.",
-      "disabled": "Shortcut disabled",
-      "commitHint": "Press Enter or leave the field to apply. Separate chord steps with spaces.",
       "actions": {
         "CancelResponse": "Stop response",
         "OpenProjectDirectory": "Open project…",
@@ -1178,6 +1183,10 @@
         "label": "CSV",
         "description": "Comma-separated text for tabular data"
       },
+      "parquet": {
+        "label": "Parquet",
+        "description": "Columnar file with preserved column types"
+      },
       "xlsx": {
         "label": "Excel",
         "description": "Workbook or single sheet"
@@ -1207,7 +1216,6 @@
       "subtitle": "Import a built-in sample into your project to edit and analyze it. All samples work offline.",
       "loading": "Loading samples…",
       "empty": "No sample datasets are available.",
-      "import": "Import into project",
       "importing": "Importing sample…",
       "retry": "Reload",
       "dimensions": "%{rows} rows · %{columns} columns",
@@ -1242,9 +1250,7 @@
         }
       }
     },
-    "sheetHint": "Select the sheet to import",
     "selectTable": "Select Table",
-    "tableHint": "Select the table to import",
     "host": "Host",
     "port": "Port",
     "username": "Username",
@@ -1511,16 +1517,10 @@
       "keepEditing": "Keep editing",
       "import": "Import",
       "back": "Back",
-      "importHint": "Imported data is stored as an independent resource in the current project.",
       "choosingFile": "Choosing file…",
       "readingSource": "Reading source…",
       "localFile": "Local file",
       "databaseConnection": "Database connection",
-      "csvDescription": "Import a text table with configurable delimiter, headers, and type inference rows.",
-      "parquetDescription": "Import a Parquet file and preserve source column types.",
-      "excelDescription": "Read a workbook and select worksheets to import.",
-      "sqliteDescription": "Choose a local SQLite file, then select a table.",
-      "sqlDescription": "Enter connection settings or a connection string, then select a table.",
       "projectName": "Name in project",
       "chooseAnotherFile": "Choose another file…",
       "delimiter": "Delimiter",
@@ -1534,7 +1534,6 @@
       "invalidFilePath": "File path not recognized. Use a valid text path.",
       "noTables": "No importable tables or worksheets found. Check the source.",
       "readFailed": "Could not read the source. Your input is preserved. Check the file, connection settings, or access permissions.",
-      "databaseName": "Database name",
       "invalidConnectionString": "Enter a valid connection string.",
       "connectionTypeMismatch": "The connection string does not match the selected database type.",
       "invalidPort": "Enter a port between 1 and 65535.",

@@ -1,12 +1,12 @@
 //! The same virtual selector serves Excel sheets and local or remote SQL tables.
 use super::{ImportDialog, ImportKind, ImportStage, SourceLocation};
+use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable,
+    ActiveTheme, Disableable, Icon,
     button::{Button, ButtonVariants},
     tooltip::Tooltip,
 };
-use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*, px, uniform_list};
-use yss_ui::text::translate as t;
+use gpui_kit::{AnyElement, Context, IntoElement, SharedString, div, prelude::*, uniform_list};
 
 impl ImportDialog {
     pub(super) fn render_selection(
@@ -15,73 +15,114 @@ impl ImportDialog {
         choices: &[String],
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (title, hint) = if matches!(source, SourceLocation::Excel(_)) {
-            ("importModal.selectSheet", "importModal.sheetHint")
+        let icon = if matches!(source, SourceLocation::Excel(_)) {
+            IconName::Sheet
         } else {
-            ("importModal.selectTable", "importModal.tableHint")
+            IconName::Table
         };
         let (label, detail) = source_caption(source);
         let generation = self.generation;
         div()
+            .flex_1()
+            .min_h_0()
             .flex()
             .flex_col()
-            .gap_3()
-            .child(div().text_sm().child(t(title)))
+            .gap_4()
+            .child(self.name_field())
             .child(
                 div()
-                    .id("import-source-caption")
-                    .min_w_0()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .truncate()
-                    .child(label)
-                    .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx)),
-            )
-            .child(self.name_field(cx))
-            .child(
-                uniform_list(
-                    "import-source-choices",
-                    choices.len(),
-                    cx.processor(move |view, range: std::ops::Range<usize>, _, cx| {
-                        let ImportStage::Selection { choices, .. } = &view.stage else {
-                            return vec![];
-                        };
-                        range
-                            .map(|index| {
-                                let name = choices[index].clone();
-                                div()
-                                    .px_1()
-                                    .py_1()
-                                    .child(
-                                        Button::new(("source-table", index))
-                                            .w_full()
-                                            .ghost()
-                                            .label(name.clone())
-                                            .disabled(view.busy())
-                                            .on_click(cx.listener(move |view, _, window, cx| {
-                                                view.select_table(
-                                                    name.clone(),
-                                                    generation,
-                                                    window,
-                                                    cx,
-                                                )
-                                            })),
-                                    )
-                                    .into_any_element()
-                            })
-                            .collect()
-                    }),
-                )
-                .h(px(320.)),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(t(hint)),
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .id("import-source-caption")
+                            .min_w_0()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .truncate()
+                            .child(label)
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(detail.clone()).build(window, cx)
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .p_1()
+                            .rounded(cx.theme().radius)
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .child(
+                                uniform_list(
+                                    "import-source-choices",
+                                    choices.len(),
+                                    cx.processor(
+                                        move |view, range: std::ops::Range<usize>, _, cx| {
+                                            let ImportStage::Selection { choices, .. } =
+                                                &view.stage
+                                            else {
+                                                return vec![];
+                                            };
+                                            choices
+                                                .get(range)
+                                                .unwrap_or_default()
+                                                .iter()
+                                                .map(|name| {
+                                                    choice_row(
+                                                        name.clone(),
+                                                        icon,
+                                                        generation,
+                                                        view.busy(),
+                                                        cx,
+                                                    )
+                                                })
+                                                .collect()
+                                        },
+                                    ),
+                                )
+                                .size_full(),
+                            ),
+                    ),
             )
             .into_any_element()
     }
+}
+
+fn choice_row(
+    name: String,
+    icon: IconName,
+    generation: u64,
+    busy: bool,
+    cx: &mut Context<ImportDialog>,
+) -> AnyElement {
+    Button::new(SharedString::from(format!("source-table-{name}")))
+        .ghost()
+        .w_full()
+        .accessibility_label(name.clone())
+        .disabled(busy)
+        .child(
+            div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    Icon::new(icon)
+                        .size_4()
+                        .flex_shrink_0()
+                        .text_color(cx.theme().muted_foreground),
+                )
+                .child(div().min_w_0().truncate().child(name.clone())),
+        )
+        .on_click(cx.listener(move |view, _, window, cx| {
+            view.select_table(name.clone(), generation, window, cx)
+        }))
+        .into_any_element()
 }
 
 fn source_caption(source: &SourceLocation) -> (String, String) {

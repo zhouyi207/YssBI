@@ -58,12 +58,15 @@ impl SettingsPanel {
         let project = scope.identity.clone();
         let mut groups = vec![
             SettingGroup::new()
-                .item(self.render_field(
-                    t("settings.knowledge.document"),
-                    t("settings.knowledge.description"),
-                    move |view, cx| view.knowledge_documents(&project, cx),
-                    cx,
-                ))
+                .item(
+                    self.render_field(
+                        t("settings.knowledge.document"),
+                        t("settings.knowledge.description"),
+                        move |view, cx| view.knowledge_documents(&project, cx),
+                        cx,
+                    )
+                    .layout(gpui_kit::Axis::Vertical),
+                )
                 .footer(|_, _| t("settings.knowledge.builtin")),
         ];
         if !self.knowledge.sources.is_empty() {
@@ -110,7 +113,6 @@ impl SettingsPanel {
         let owner = cx.weak_entity();
         let expected = project.clone();
         let selector = Button::new("knowledge-document")
-            .w_full()
             .label(label)
             .disabled(self.knowledge_busy() || choices.is_empty())
             .dropdown_menu(move |mut menu, _, _| {
@@ -137,14 +139,11 @@ impl SettingsPanel {
         let expected = project.clone();
         div()
             .flex()
-            .flex_col()
-            .items_start()
+            .items_center()
             .gap_2()
             .child(selector)
             .child(
                 Button::new("knowledge-add")
-                    .small()
-                    .primary()
                     .icon(IconName::Plus)
                     .label(t("settings.knowledge.add"))
                     .disabled(self.knowledge_busy() || self.knowledge.selected.is_none())

@@ -1,7 +1,7 @@
 use super::{DocumentEditor, SaveDocument, ToggleDocumentPreview};
 use crate::file_session::FileEditor;
 use gpui_kit::component::{
-    ActiveTheme, ElementExt, Sizable,
+    ActiveTheme, ElementExt, Sizable, Size,
     button::{Button, ButtonVariants},
     input::Editor,
 };
@@ -79,14 +79,30 @@ impl Render for DocumentEditor {
                         )
                         .into_any_element()
                 } else {
-                    Editor::new(&self.input)
+                    // The editor frame keeps a fixed, unscrolled inset above line one and offers no
+                    // way to remove it; lift the frame by that inset so line one meets the header.
+                    div()
                         .size_full()
-                        .bordered(false)
-                        .appearance(false)
-                        .readonly(
-                            (self.file.committing() && !self.autosave_in_flight)
-                                || self.file.reading()
-                                || self.file.removed(),
+                        .relative()
+                        .overflow_hidden()
+                        .child(
+                            div()
+                                .absolute()
+                                .top(-Size::default().input_py())
+                                .bottom_0()
+                                .left_0()
+                                .right_0()
+                                .child(
+                                    Editor::new(&self.input)
+                                        .size_full()
+                                        .bordered(false)
+                                        .appearance(false)
+                                        .readonly(
+                                            (self.file.committing() && !self.autosave_in_flight)
+                                                || self.file.reading()
+                                                || self.file.removed(),
+                                        ),
+                                ),
                         )
                         .into_any_element()
                 },

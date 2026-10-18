@@ -116,6 +116,31 @@ impl Workbench {
         cx.notify();
     }
 
+    /// Closing a tab reports no removal for most editors, so drop the context that still
+    /// names an editor the dock no longer holds. A neighbor tab that becomes active
+    /// re-establishes its own context through its activation event.
+    fn release_closed_editor(&mut self, cx: &mut Context<Self>) {
+        let closed =
+            |id: Option<PanelId>| id.is_some_and(|id| self.panel_placement(id, cx).is_none());
+        let details = self.details.read(cx);
+        let subject = details
+            .target_id()
+            .or_else(|| details.graph(cx).map(|graph| graph.entity_id()))
+            .map(PanelId::from);
+        if closed(subject) {
+            self.clear_graph_context(cx);
+        } else if closed(self.active_editor) {
+            self.active_editor = None;
+            self.mark_project_resource(None, cx);
+            self.problems.update(cx, |panel, cx| panel.clear(cx));
+            self.output
+                .update(cx, |panel, cx| panel.set_graph(None, cx));
+            self.results
+                .update(cx, |panel, cx| panel.set_graph(None, cx));
+            cx.notify();
+        }
+    }
+
     pub(in crate::workbench) fn active_editor_panel(
         &self,
         cx: &App,
@@ -268,6 +293,7 @@ impl Workbench {
                     columns::maintain_editor_space(dock, window, cx)
                 });
                 view.sync_active_conversation(cx);
+                view.release_closed_editor(cx);
             });
             let timer = cx.background_executor().timer(Duration::from_millis(300));
             view.layout_task = Some(cx.spawn(async move |view, cx| {

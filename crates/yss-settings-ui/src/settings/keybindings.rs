@@ -1,84 +1,112 @@
 //! Shortcut rows retain drafts by command/context, independently of settings search ordering.
 use super::SettingsPanel;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Sizable,
-    button::Button,
-    h_flex,
     input::{Input, InputEvent, InputState},
-    setting::{SettingField, SettingGroup, SettingItem},
-    v_flex,
+    setting::{SettingGroup, SettingItem},
 };
 use gpui_kit::{
     App, AppContext, Context, Entity, IntoElement, Render, SharedString, Subscription, WeakEntity,
-    Window, div, prelude::*,
+    Window, prelude::*,
 };
+use std::rc::Rc;
 use yss_settings::KeyBindingOverride;
+use yss_ui::lifecycle::LogReleased;
 use yss_ui::{
     keymap, preferences,
     text::{self, t},
 };
 
+/// Areas in display order, keyed by the first identifier of a command's context.
+const AREAS: [(&str, &str); 9] = [
+    ("Workbench", "preferences.shortcuts.areas.general"),
+    ("GraphCanvas", "preferences.shortcuts.areas.graph"),
+    ("MindCanvas", "preferences.shortcuts.areas.mind"),
+    ("DocumentEditor", "preferences.shortcuts.areas.document"),
+    ("DatabaseEditor", "preferences.shortcuts.areas.database"),
+    ("ChartEditor", "preferences.shortcuts.areas.chart"),
+    (
+        "AssistantConversation",
+        "preferences.shortcuts.areas.assistant",
+    ),
+    ("Settings", "preferences.shortcuts.areas.settings"),
+    ("", "preferences.shortcuts.areas.other"),
+];
+
+fn area(context: &str) -> usize {
+    let root = context
+        .split(|character: char| !character.is_alphanumeric())
+        .next()
+        .unwrap_or_default();
+    let root = root.strip_suffix("Breadcrumb").unwrap_or(root);
+    AREAS
+        .iter()
+        .position(|(name, _)| *name == root)
+        .unwrap_or(AREAS.len() - 1)
+}
+
 impl SettingsPanel {
-    pub(super) fn keybindings(&self, cx: &mut Context<Self>) -> SettingGroup {
+    pub(super) fn keybindings(&self, cx: &mut Context<Self>) -> Vec<SettingGroup> {
         let owner = cx.weak_entity();
-        let mut group = SettingGroup::new();
+        let mut items: [Vec<SettingItem>; AREAS.len()] = Default::default();
         for command in keymap::commands(cx) {
             let id = command.id().to_owned();
             let context = command.context().to_owned();
             let defaults = command.defaults().to_vec();
-            let current = preferences::current(cx).keybindings.iter().find(|binding| {
-                binding.action == id && binding.context.as_deref() == Some(&context)
-            });
-            let effective = current
-                .map(|binding| binding.keystroke.clone())
-                .unwrap_or_else(|| defaults.join(" / "));
-            let description = text::format(
-                "preferences.shortcuts.scope",
-                &[
-                    ("action", id.clone()),
-                    ("context", context.clone()),
-                    (
-                        "defaults",
-                        if defaults.is_empty() {
-                            text::translate("preferences.shortcuts.unbound")
-                        } else {
-                            defaults.join(" / ")
-                        },
-                    ),
-                ],
-            );
             let identity = SharedString::from(format!("shortcut:{id}:{context}"));
             let owner = owner.clone();
-            let keywords = vec![id.clone(), context.clone(), effective, defaults.join(" ")];
-            group = group.item(
-                SettingItem::new(
-                    command.label(),
-                    SettingField::render(move |options, window, cx| {
-                        let editor = window.use_keyed_state(identity.clone(), cx, |window, cx| {
-                            ShortcutEditor::new(
-                                id.clone(),
-                                context.clone(),
-                                defaults.clone(),
-                                owner.clone(),
-                                window,
-                                cx,
-                            )
-                        });
-                        div()
-                            .w_64()
-                            .max_w_full()
-                            .when(options.layout() == gpui_kit::Axis::Vertical, |field| {
-                                field.w_full()
+            let label: SharedString = command.label().into();
+            let keywords = vec![
+                label.clone(),
+                id.clone().into(),
+                context.clone().into(),
+                defaults.join(" ").into(),
+            ];
+            let Some(area_items) = items.get_mut(area(&context)) else {
+                continue;
+            };
+            area_items.push(
+                super::fields::resettable_item(label, None, move |_, window, cx| {
+                    let editor = window.use_keyed_state(identity.clone(), cx, |window, cx| {
+                        ShortcutEditor::new(
+                            id.clone(),
+                            context.clone(),
+                            defaults.clone(),
+                            owner.clone(),
+                            window,
+                            cx,
+                        )
+                    });
+                    let overridden = owner.upgrade().is_some_and(|owner| {
+                        owner
+                            .read(cx)
+                            .preference_values(cx)
+                            .keybindings
+                            .iter()
+                            .any(|binding| {
+                                binding.action == id
+                                    && binding.context.as_deref() == Some(context.as_str())
                             })
-                            .child(editor)
-                    }),
-                )
-                .description(description)
+                    });
+                    let reset = overridden.then(|| {
+                        let editor = editor.downgrade();
+                        Rc::new(move |cx: &mut App| {
+                            editor
+                                .update(cx, |editor, cx| editor.change(None, cx))
+                                .log_released();
+                        }) as super::fields::Reset
+                    });
+                    (reset, editor.into_any_element())
+                })
                 .keywords(keywords)
-                .layout(gpui_kit::Axis::Vertical),
+                .disabled(self.loading || self.task.is_some() || self.knowledge.pending),
             );
         }
-        group
+        AREAS
+            .iter()
+            .zip(items)
+            .filter(|(_, items)| !items.is_empty())
+            .map(|((_, title), items)| SettingGroup::new().title(t(title)).items(items))
+            .collect()
     }
 }
 
@@ -89,19 +117,11 @@ struct ShortcutEditor {
     owner: WeakEntity<SettingsPanel>,
     input: Entity<InputState>,
     saved: Option<String>,
-    error: Option<String>,
     notifications: yss_ui::notifications::Notifications,
     _subscriptions: Vec<Subscription>,
 }
 
 impl ShortcutEditor {
-    fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
-        if let Some(error) = &error {
-            self.notifications.error(error.clone(), cx);
-        }
-        self.error = error;
-    }
-
     fn new(
         action: String,
         context: String,
@@ -111,29 +131,25 @@ impl ShortcutEditor {
         cx: &mut Context<Self>,
     ) -> Self {
         let saved = Self::saved(&action, &context, cx);
-        let value = saved
-            .clone()
-            .unwrap_or_else(|| defaults.last().cloned().unwrap_or_default());
+        let value = Self::effective(saved.as_deref(), &defaults).to_owned();
         let input = cx.new(|cx| {
             InputState::new(window, cx)
                 .default_value(value)
-                .placeholder(text::translate("preferences.shortcuts.placeholder"))
+                .placeholder(text::translate("preferences.shortcuts.unbound"))
         });
-        let subscription = cx.subscribe_in(&input, window, |this, _, event, _, cx| match event {
-            InputEvent::PressEnter { .. } | InputEvent::Blur => this.commit(cx),
-            InputEvent::Change => {
-                this.error = None;
-                cx.notify();
+        let subscription = cx.subscribe_in(&input, window, |this, _, event, _, cx| {
+            if matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur) {
+                this.commit(cx);
             }
-            _ => {}
         });
         let preference_subscription =
             cx.observe_global_in::<preferences::Preferences>(window, |this, window, cx| {
                 let saved = Self::saved(&this.action, &this.context, cx);
                 if this.saved != saved {
                     this.saved = saved;
-                    this.error = None;
-                    this.sync_input(window, cx);
+                    let value = Self::effective(this.saved.as_deref(), &this.defaults).to_owned();
+                    this.input
+                        .update(cx, |input, cx| input.set_value(value, window, cx));
                 }
                 cx.notify();
             });
@@ -144,7 +160,6 @@ impl ShortcutEditor {
             owner,
             input,
             saved,
-            error: None,
             notifications: yss_ui::notifications::Notifications::new(window),
             _subscriptions: vec![subscription, preference_subscription],
         }
@@ -158,28 +173,16 @@ impl ShortcutEditor {
             .map(|binding| binding.keystroke.clone())
     }
 
-    fn sync_input(&self, window: &mut Window, cx: &mut Context<Self>) {
-        let value = self
-            .saved
-            .clone()
-            .unwrap_or_else(|| self.defaults.last().cloned().unwrap_or_default());
-        self.input
-            .update(cx, |input, cx| input.set_value(value, window, cx));
+    fn effective<'a>(saved: Option<&'a str>, defaults: &'a [String]) -> &'a str {
+        saved
+            .or_else(|| defaults.last().map(String::as_str))
+            .unwrap_or_default()
     }
 
+    /// An empty shortcut is saved as an override, which disables the command's defaults.
     fn commit(&mut self, cx: &mut Context<Self>) {
         let text = self.input.read(cx).value().trim().to_owned();
-        let effective = self
-            .saved
-            .as_deref()
-            .or_else(|| self.defaults.last().map(String::as_str))
-            .unwrap_or_default();
-        if text == effective {
-            return;
-        }
-        if text.is_empty() {
-            self.set_error(Some(text::translate("preferences.shortcuts.empty")), cx);
-            cx.notify();
+        if text == Self::effective(self.saved.as_deref(), &self.defaults) {
             return;
         }
         self.change(Some(text), cx);
@@ -198,11 +201,10 @@ impl ShortcutEditor {
             ));
         }
         if let Err(error) = keymap::validate_bindings(&bindings, cx) {
-            self.set_error(Some(error.to_string()), cx);
+            self.notifications.error(error.to_string(), cx);
             cx.notify();
             return;
         }
-        self.error = None;
         let action = self.action.clone();
         let context = self.context.clone();
         if self
@@ -226,7 +228,8 @@ impl ShortcutEditor {
             })
             .is_err()
         {
-            self.set_error(Some(text::translate("preferences.shortcuts.closed")), cx);
+            self.notifications
+                .error(text::translate("preferences.shortcuts.closed"), cx);
         }
         cx.notify();
     }
@@ -238,52 +241,6 @@ impl Render for ShortcutEditor {
             .owner
             .upgrade()
             .is_none_or(|owner| owner.read(cx).busy());
-        v_flex()
-            .w_full()
-            .min_w_0()
-            .gap_1()
-            .child(
-                h_flex()
-                    .w_full()
-                    .gap_2()
-                    .flex_wrap()
-                    .child(Input::new(&self.input).small().w_full().disabled(busy))
-                    .child(
-                        Button::new("remove")
-                            .small()
-                            .label(t("preferences.shortcuts.remove"))
-                            .disabled(
-                                busy || self.saved.as_deref() == Some("")
-                                    || (self.saved.is_none() && self.defaults.is_empty()),
-                            )
-                            .on_click(
-                                cx.listener(|this, _, _, cx| this.change(Some(String::new()), cx)),
-                            ),
-                    )
-                    .child(
-                        Button::new("reset")
-                            .small()
-                            .label(t("preferences.shortcuts.reset"))
-                            .disabled(busy || self.saved.is_none())
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.change(None, cx);
-                                if this.error.is_none() {
-                                    let value = this.defaults.last().cloned().unwrap_or_default();
-                                    this.input
-                                        .update(cx, |input, cx| input.set_value(value, window, cx));
-                                }
-                            })),
-                    ),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(t(if self.saved.as_deref() == Some("") {
-                        "preferences.shortcuts.disabled"
-                    } else {
-                        "preferences.shortcuts.commitHint"
-                    })),
-            )
+        Input::new(&self.input).w_64().max_w_full().disabled(busy)
     }
 }

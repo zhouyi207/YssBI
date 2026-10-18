@@ -1,11 +1,10 @@
 use super::SettingsPanel;
-use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    Disableable, Sizable,
-    button::{Button, ButtonVariants},
+    Disableable,
+    button::Button,
     input::{InputEvent, InputState, NumberInput},
     menu::{DropdownMenu, PopupMenuItem},
-    setting::{SettingField, SettingItem},
+    setting::SettingItem,
     switch::Switch,
 };
 use gpui_kit::{
@@ -58,46 +57,37 @@ impl SettingsPanel {
                 }
             }
         });
-        SettingItem::new(
-            t(key),
-            SettingField::render(move |options, window, cx| {
+        super::fields::resettable_item(
+            t(key).into(),
+            Some(t(description).into()),
+            move |options, window, cx| {
                 let value = owner
                     .upgrade()
                     .map(|owner| get(owner.read(cx).preference_values(cx)))
                     .unwrap_or_else(|| get(preferences::current(cx)));
-                let disabled = options.is_disabled();
-                let unchanged = value == default;
-                let reset = default.clone();
-                let reset_change = change.clone();
-                div()
+                let reset = (value != default).then(|| {
+                    let default = default.clone();
+                    let change = change.clone();
+                    Rc::new(move |cx: &mut App| change(default.clone(), cx)) as super::fields::Reset
+                });
+                let control = div()
                     .id(key)
                     .w_64()
                     .max_w_full()
                     .when(options.layout() == Axis::Vertical, |field| field.w_full())
                     .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(div().flex_1().min_w_0().flex().justify_end().child(control(
+                    .justify_end()
+                    .child(control(
                         value,
                         change.clone(),
-                        disabled,
+                        options.is_disabled(),
                         window,
                         cx,
-                    )))
-                    .child(
-                        Button::new("reset-preference")
-                            .small()
-                            .ghost()
-                            .icon(IconName::Undo2)
-                            .accessibility_label(t("preferences.reset"))
-                            .tooltip(t("preferences.reset"))
-                            .disabled(disabled || unchanged)
-                            .on_click(move |_, _, cx| reset_change(reset.clone(), cx)),
-                    )
-            }),
+                    ))
+                    .into_any_element();
+                (reset, control)
+            },
         )
-        .description(SharedString::from(t(description)))
-        .keywords([key])
         .disabled(self.loading || self.task.is_some() || self.knowledge.pending)
     }
 

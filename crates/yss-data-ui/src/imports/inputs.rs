@@ -20,14 +20,9 @@ impl ConnectionInputs {
             kind: ImportKind::Postgres,
             host: cx.new(|cx| InputState::new(window, cx).default_value("localhost")),
             port: cx.new(|cx| InputState::new(window, cx).default_value("5432")),
-            user: cx.new(|cx| {
-                InputState::new(window, cx).placeholder(yss_ui::text::t("importModal.username"))
-            }),
+            user: cx.new(|cx| InputState::new(window, cx)),
             password: cx.new(|cx| InputState::new(window, cx).masked(true)),
-            database: cx.new(|cx| {
-                InputState::new(window, cx)
-                    .placeholder(yss_ui::text::t("native.imports.databaseName"))
-            }),
+            database: cx.new(|cx| InputState::new(window, cx)),
             raw_url: cx.new(|cx| InputState::new(window, cx).masked(true)),
             raw: false,
         }

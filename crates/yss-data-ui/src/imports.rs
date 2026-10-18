@@ -71,12 +71,33 @@ impl ImportKind {
     fn label(self) -> std::borrow::Cow<'static, str> {
         match self {
             Self::Csv => yss_ui::text::t("importModal.types.csv.label"),
-            Self::Parquet => "Parquet".into(),
+            Self::Parquet => yss_ui::text::t("importModal.types.parquet.label"),
             Self::Excel => yss_ui::text::t("importModal.types.xlsx.label"),
             Self::Sqlite => yss_ui::text::t("importModal.types.sqlite.label"),
             Self::Postgres => yss_ui::text::t("importModal.types.postgres.label"),
             Self::Mysql => yss_ui::text::t("importModal.types.mysql.label"),
             Self::Mariadb => yss_ui::text::t("importModal.types.mariadb.label"),
+        }
+    }
+    fn description(self) -> std::borrow::Cow<'static, str> {
+        yss_ui::text::t(match self {
+            Self::Csv => "importModal.types.csv.description",
+            Self::Parquet => "importModal.types.parquet.description",
+            Self::Excel => "importModal.types.xlsx.description",
+            Self::Sqlite => "importModal.types.sqlite.description",
+            Self::Postgres => "importModal.types.postgres.description",
+            Self::Mysql => "importModal.types.mysql.description",
+            Self::Mariadb => "importModal.types.mariadb.description",
+        })
+    }
+    fn icon(self) -> gpui_kit::assets::IconName {
+        use gpui_kit::assets::IconName;
+        match self {
+            Self::Csv => IconName::FileText,
+            Self::Parquet => IconName::Layers,
+            Self::Excel => IconName::FileSpreadsheet,
+            Self::Sqlite => IconName::Database,
+            Self::Postgres | Self::Mysql | Self::Mariadb => IconName::Server,
         }
     }
     fn remote(self) -> bool {
@@ -143,7 +164,6 @@ pub struct ImportDialog {
     services: Arc<DataServices>,
     scope: ImportScope,
     stage: ImportStage,
-    category: usize,
     task: Option<ImportTask>,
     generation: u64,
     name: Entity<InputState>,
@@ -165,7 +185,6 @@ impl ImportDialog {
             services,
             scope,
             stage: ImportStage::Sources,
-            category: 0,
             task: None,
             generation: 0,
             name: cx.new(|cx| {

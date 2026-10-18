@@ -50,12 +50,9 @@ impl Render for SettingsPanel {
                 t("settings.knowledge.rebuild"),
             ]),
         );
-        let knowledge = [
-            category_header("settings.knowledge.title"),
-            knowledge_status,
-        ]
-        .into_iter()
-        .chain(self.knowledge_page(cx));
+        let knowledge = std::iter::once(category_header("settings.knowledge.title"))
+            .chain(self.knowledge_page(cx))
+            .chain([knowledge_status]);
         let appearance = self.appearance_preferences(cx);
         let documents = self.document_preferences(cx);
         let data = self.data_preferences(cx);
@@ -115,7 +112,7 @@ impl Render for SettingsPanel {
                         SettingPage::new(t("preferences.sections.keybindings"))
                             .header_style(&hidden_header)
                             .group(category_header("preferences.sections.keybindings"))
-                            .group(keybindings),
+                            .groups(keybindings),
                     ]),
                 ),
             )
@@ -124,7 +121,7 @@ impl Render for SettingsPanel {
 
 impl SettingsPanel {
     fn header(&self, cx: &mut Context<Self>) -> AnyElement {
-        let mut breadcrumb = Breadcrumb::new().flex_1().min_w_0();
+        let mut breadcrumb = Breadcrumb::new().text_lg().flex_1().min_w_0();
         let mut overview = BreadcrumbItem::new(t("settings.sections.ai"));
         if self.page != Page::Overview {
             overview =
@@ -219,7 +216,6 @@ impl SettingsPanel {
                     |view, cx| {
                         Button::new("configure-providers")
                             .label(t("settings.models.configure"))
-                            .icon(IconName::ChevronRight)
                             .disabled(view.busy())
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.navigate(Page::Providers, window, cx)
@@ -347,7 +343,11 @@ impl SettingsPanel {
 fn category_header(key: &'static str) -> SettingGroup {
     SettingGroup::new().item(
         SettingItem::render(move |_, _, _| {
-            breadcrumb_row().child(Breadcrumb::new().child(BreadcrumbItem::new(t(key))))
+            breadcrumb_row().child(
+                Breadcrumb::new()
+                    .text_lg()
+                    .child(BreadcrumbItem::new(t(key))),
+            )
         })
         .keywords([t(key)]),
     )

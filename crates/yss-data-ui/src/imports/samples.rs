@@ -1,11 +1,8 @@
 //! Sample metadata is a read projection; only identity and version enter the import request.
 use super::{ImportDialog, ImportRequest, ImportStage, ImportTask};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, Sizable,
-    button::{Button, ButtonVariants},
-};
-use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*, px};
+use gpui_kit::component::{ActiveTheme, Disableable, Icon, Sizable, button::Button};
+use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
 use yss_application::database::samples::SampleDataset;
 use yss_ui::text::translate as t;
 
@@ -17,43 +14,47 @@ impl ImportDialog {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let loading = matches!(self.task, Some(ImportTask::Discovery));
-        let mut content = div()
+        let muted = cx.theme().muted_foreground;
+        let mut list = div()
             .id("import-sample-list")
-            .max_h(px(390.))
+            .flex_1()
+            .min_h_0()
             .overflow_y_scroll()
             .flex()
-            .flex_col()
-            .gap_3()
-            .child(
+            .flex_col();
+        if loading || entries.is_empty() {
+            list = list.child(
                 div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(t("importModal.samples.subtitle")),
-            );
-        if loading || (!load_failed && entries.is_empty()) {
-            content = content.child(
-                div()
-                    .py_4()
+                    .flex_1()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .gap_3()
                     .text_sm()
-                    .text_color(cx.theme().muted_foreground)
+                    .text_color(muted)
                     .child(t(if loading {
                         "importModal.samples.loading"
+                    } else if load_failed {
+                        "importModal.samples.errors.sample_resource_unavailable"
                     } else {
                         "importModal.samples.empty"
-                    })),
+                    }))
+                    .when(load_failed && !loading, |state| {
+                        state.child(
+                            Button::new("sample-retry")
+                                .small()
+                                .icon(IconName::RefreshCw)
+                                .label(t("importModal.samples.retry"))
+                                .disabled(self.busy())
+                                .on_click(
+                                    cx.listener(|view, _, window, cx| view.samples(window, cx)),
+                                ),
+                        )
+                    }),
             );
         }
-        if load_failed {
-            content = content.child(
-                Button::new("sample-retry")
-                    .small()
-                    .ghost()
-                    .label(t("importModal.samples.retry"))
-                    .disabled(self.busy())
-                    .on_click(cx.listener(|view, _, window, cx| view.samples(window, cx))),
-            );
-        }
-        for sample in entries {
+        for (index, sample) in entries.iter().enumerate() {
             let id = sample.id.clone();
             let version = sample.version;
             let pending = matches!(self.task.as_ref(), Some(ImportTask::ImportSample(current)) if current == &id);
@@ -69,80 +70,83 @@ impl ImportDialog {
             } else {
                 format!("{} KB", sample.byte_size.div_ceil(1_000))
             };
-            content = content.child(
+            let metadata = format!(
+                "{} · {size}",
+                yss_ui::text::format(
+                    "importModal.samples.dimensions",
+                    &[
+                        ("rows", sample.row_count.to_string()),
+                        ("columns", sample.column_count.to_string()),
+                    ],
+                )
+            );
+            list = list.child(
                 div()
                     .py_3()
-                    .border_b_1()
+                    .when(index > 0, |row| row.border_t_1())
                     .border_color(cx.theme().border)
                     .flex()
-                    .items_start()
+                    .items_center()
                     .gap_3()
-                    .child(Icon::new(IconName::Database).size_4())
+                    .child(
+                        Icon::new(IconName::Database)
+                            .size_5()
+                            .flex_shrink_0()
+                            .text_color(muted),
+                    )
                     .child(
                         div()
                             .flex_1()
                             .min_w_0()
                             .flex()
                             .flex_col()
-                            .gap_2()
+                            .gap_0p5()
                             .child(div().text_sm().child(name))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(description),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_wrap()
-                                    .gap_2()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(yss_ui::text::format(
-                                        "importModal.samples.dimensions",
-                                        &[
-                                            ("rows", sample.row_count.to_string()),
-                                            ("columns", sample.column_count.to_string()),
-                                        ],
-                                    ))
-                                    .child(size),
-                            )
-                            .child(
-                                div().child(
-                                    Button::new(gpui_kit::SharedString::from(id.clone()))
-                                        .small()
-                                        .label(t(if pending {
-                                            "importModal.samples.importing"
-                                        } else {
-                                            "importModal.samples.import"
-                                        }))
-                                        .loading(pending)
-                                        .disabled(self.busy())
-                                        .on_click(cx.listener(move |view, _, window, cx| {
-                                            let ImportStage::Samples { entries, .. } = &view.stage
-                                            else {
-                                                return;
-                                            };
-                                            if !entries.iter().any(|sample| {
-                                                sample.id == id && sample.version == version
-                                            }) {
-                                                return;
-                                            }
-                                            view.submit(
-                                                ImportRequest::Sample {
-                                                    id: id.clone(),
-                                                    version,
-                                                },
-                                                window,
-                                                cx,
-                                            )
-                                        })),
-                                ),
-                            ),
+                            .child(div().text_xs().text_color(muted).child(description))
+                            .child(div().text_xs().text_color(muted).child(metadata)),
+                    )
+                    .child(
+                        Button::new(gpui_kit::SharedString::from(format!("sample-{id}")))
+                            .small()
+                            .outline()
+                            .label(t("native.imports.import"))
+                            .loading(pending)
+                            .disabled(self.busy())
+                            .on_click(cx.listener(move |view, _, window, cx| {
+                                let ImportStage::Samples { entries, .. } = &view.stage else {
+                                    return;
+                                };
+                                if !entries
+                                    .iter()
+                                    .any(|sample| sample.id == id && sample.version == version)
+                                {
+                                    return;
+                                }
+                                view.submit(
+                                    ImportRequest::Sample {
+                                        id: id.clone(),
+                                        version,
+                                    },
+                                    window,
+                                    cx,
+                                )
+                            })),
                     ),
             );
         }
+        let content = div()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(muted)
+                    .child(t("importModal.samples.subtitle")),
+            )
+            .child(list);
         content.into_any_element()
     }
 }

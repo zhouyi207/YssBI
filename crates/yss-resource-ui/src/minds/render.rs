@@ -27,10 +27,14 @@ impl Render for MindCanvas {
             .iter()
             .map(|node| (node.index, node.bounds))
             .collect::<HashMap<_, _>>();
+        // Until the canvas has been measured and fitted, topics would flash at the initial
+        // offset and then jump; draw only the background for that first frame.
+        let fitted = !self.fit_pending;
         let edges = self
             .layout
             .nodes
             .iter()
+            .filter(|_| fitted)
             .filter_map(|node| {
                 let parent = anchors.get(&node.parent?)?;
                 Some((
@@ -50,6 +54,7 @@ impl Render for MindCanvas {
             .layout
             .nodes
             .iter()
+            .filter(|_| fitted)
             .filter(|node| {
                 let top = offset + node.bounds.origin * zoom;
                 top.x + node.bounds.size.width * zoom >= px(0.)

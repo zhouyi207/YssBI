@@ -90,15 +90,20 @@
       "applyFailed": "日志保留设置已保存，但未能应用清理策略。请检查磁盘空间和数据库访问权限。"
     },
     "shortcuts": {
-      "scope": "%{action} · 上下文：%{context} · 默认：%{defaults}",
       "unbound": "未分配",
-      "placeholder": "例如 ctrl-k ctrl-s",
-      "remove": "移除",
-      "reset": "重置",
-      "empty": "请输入快捷键，或点击“移除”停用此命令的快捷键。",
+      "areas": {
+        "general": "通用",
+        "graph": "事件图",
+        "mind": "思维导图",
+        "document": "文档",
+        "database": "数据表",
+        "chart": "图表",
+        "assistant": "AI 助手",
+        "settings": "设置",
+        "other": "其他"
+      },
+      "empty": "请输入快捷键；清空输入框可停用此命令的快捷键。",
       "closed": "保存快捷键前设置已关闭，请重新打开设置后重试。",
-      "disabled": "快捷键已停用",
-      "commitHint": "按 Enter 或离开输入框即可应用，组合快捷键的各步骤以空格分隔。",
       "actions": {
         "CancelResponse": "停止回答",
         "OpenProjectDirectory": "打开项目…",
@@ -1178,6 +1183,10 @@
         "label": "CSV",
         "description": "逗号分隔文本，适合表格型数据"
       },
+      "parquet": {
+        "label": "Parquet",
+        "description": "列式存储文件，保留字段类型"
+      },
       "xlsx": {
         "label": "Excel",
         "description": "工作簿或单 Sheet 表格"
@@ -1207,7 +1216,6 @@
       "subtitle": "选择内置示例，导入到当前项目后即可自由编辑和分析。所有示例均可离线使用。",
       "loading": "正在加载示例…",
       "empty": "暂无可用的示例数据。",
-      "import": "导入到当前项目",
       "importing": "正在导入示例…",
       "retry": "重新加载",
       "dimensions": "%{rows} 行 · %{columns} 列",
@@ -1242,9 +1250,7 @@
         }
       }
     },
-    "sheetHint": "选择要导入的 Sheet",
     "selectTable": "选择表",
-    "tableHint": "选择要导入的表",
     "host": "主机",
     "port": "端口",
     "username": "用户名",
@@ -1511,16 +1517,10 @@
       "keepEditing": "继续编辑",
       "import": "导入",
       "back": "返回",
-      "importHint": "导入后，数据作为独立资源保存在当前项目中。",
       "choosingFile": "正在选择文件…",
       "readingSource": "正在读取来源…",
       "localFile": "本地文件",
       "databaseConnection": "数据库连接",
-      "csvDescription": "文本表格，可设置分隔符、表头和类型推断行数。",
-      "parquetDescription": "导入 Parquet 文件，保留来源的字段类型。",
-      "excelDescription": "读取工作簿并选择需要导入的工作表。",
-      "sqliteDescription": "选择本地 SQLite 文件，再选择数据表。",
-      "sqlDescription": "填写连接配置或连接字符串，再选择数据表。",
       "projectName": "项目中的名称",
       "chooseAnotherFile": "选择其他文件…",
       "delimiter": "分隔符",
@@ -1534,7 +1534,6 @@
       "invalidFilePath": "文件路径无法识别，请使用有效的文字路径。",
       "noTables": "没有发现可导入的表或工作表。请检查来源。",
       "readFailed": "来源未读取，输入已保留。请检查文件、连接配置或访问权限。",
-      "databaseName": "数据库名称",
       "invalidConnectionString": "请输入有效的连接字符串。",
       "connectionTypeMismatch": "连接字符串与所选数据库类型不匹配。",
       "invalidPort": "请输入 1 到 65535 之间的端口。",
