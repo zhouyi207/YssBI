@@ -1,7 +1,6 @@
 name: CI
 
 on:
-  workflow_call:
   pull_request:
   push:
     branches: [gpui, main]
@@ -13,18 +12,9 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: '0'
-  CARGO_BUILD_JOBS: '2'
-  CARGO_PROFILE_DEV_DEBUG: '0'
-  CARGO_PROFILE_TEST_DEBUG: '0'
-
 jobs:
   check:
-    name: Check (${{ matrix.target }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    name: ${{ matrix.target }}
     strategy:
       fail-fast: false
       matrix:
@@ -35,23 +25,7 @@ jobs:
             target: aarch64-apple-darwin
           - runner: windows-2022
             target: x86_64-pc-windows-msvc
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up build tools
-        uses: ./.github/actions/setup-build
-        with:
-          target: ${{ matrix.target }}
-      - name: Check formatting
-        if: runner.os == 'Linux'
-        run: cargo fmt --all -- --check
-      - name: Check workspace
-        run: cargo check --locked --workspace --all-targets
-      - name: Run focused portable unit tests
-        run: cargo test --locked -p yss-resource-naming -p yss-project-layout -p yss-canonical-hash --lib
-      - name: Test installed resource discovery
-        run: cargo test --locked -p yss-workbench --lib services::paths::tests
-      - name: Test packaging scripts
-        run: python -m unittest discover -s scripts/tests -p 'test_*.py'
+    uses: ./.github/workflows/check-platform.yml
+    with:
+      runner: ${{ matrix.runner }}
+      target: ${{ matrix.target }}

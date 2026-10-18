@@ -62,8 +62,10 @@ python scripts/package.py --target x86_64-unknown-linux-gnu --binary target/rele
 ```
 
 The driver uses `cargo build --locked --release`, then runs the existing
-`build_samples --check --stage` example on the host. It verifies every Parquet size and
-SHA-256 against the catalog and includes dataset provenance. `THIRD_PARTY_NOTICES.txt`
+`build_samples --check --stage` example with the same explicit native `--target` and
+release profile, so Cargo can reuse matching dependency artifacts instead of building
+a separate implicit-host copy. It verifies every Parquet size and SHA-256 against the
+catalog and includes dataset provenance. `THIRD_PARTY_NOTICES.txt`
 contains resolved Rust dependency metadata and available license/notice files. This is
 not a legal compliance certification: the application has no declared distribution license,
 and maintainers must review application, bundled native library, and dataset redistribution
@@ -131,9 +133,34 @@ SHA-256 sidecars verify integrity, not publisher identity.
 
 ### GitHub setup and release procedure
 
-CI runs on pull requests and pushes to `gpui`/`main`, and is reused as a release gate.
-It checks workspace formatting and locked compilation on Linux/macOS/Windows, focused
-portable unit tests, native resource discovery, and packaging regression tests.
+CI runs on pull requests and pushes to `gpui`/`main`. `check-platform.yml` owns the
+shared checks: workspace formatting and locked compilation on Linux/macOS/Windows,
+focused portable unit tests, native resource discovery, and packaging regression tests.
+Installed sample discovery belongs to the dependency-free `yss-installation-paths` crate;
+`cargo test --locked -p yss-installation-paths --lib` covers executable-adjacent resources,
+checkout fallback, and macOS bundle precedence without compiling the Workbench test binary.
+
+Release preflight uses `scripts/release_ci.py` with read-only Actions access to find a
+successful `ci.yml` **push** run for the exact release commit on this repository's
+`gpui` or `main` branch. All three native check jobs must have completed successfully
+in the same run attempt. PR/fork runs, other commits, and missing, skipped, failed or
+cancelled checks cannot authorize reuse. The selected run URL and attempt are written
+to the job summary. An API error fails preflight rather than bypassing checks.
+If no qualifying run exists (including when CI is still running), each platform runs
+fresh checks. Linux, macOS and Windows then start their own two architecture builds
+independently; one platform does not wait for another platform's checks. Publication
+still requires all three platform workflows and all six packages to succeed.
+
+The shared build setup uses pinned `Swatinem/rust-cache` dependency caching, separated
+by OS, architecture, native target, check/release profile and the action's Rust/environment
+and manifest fingerprints. Workspace crate outputs and Cargo-installed binaries are
+not saved. PRs restore caches but do not save them. GitHub ref scoping still applies:
+default-branch caches are available to releases, but one release tag cannot restore
+another tag's private cache, and check artifacts do not replace optimized release
+artifacts. Cold release builds remain possible; same-tag retries can reuse their cache.
+Compilation is capped at four jobs on Linux and two on macOS/Windows, bounded by the
+available logical CPU count to retain memory headroom on hosted runners.
+
 Actions are pinned to commit SHAs; Dependabot tracks Cargo and GitHub Actions weekly.
 Checkout credentials are not persisted. Only the final draft publication job receives
 `contents: write`, using GitHub's automatically supplied token.
@@ -147,7 +174,9 @@ After committing and pushing the workflow and application changes to `gpui`:
 2. Create and push the matching tag, for example `app-v0.4.0`. A mismatched tag fails preflight.
    Alternatively, dispatch `release.yml` with an existing matching `app-v<version>` tag as its ref,
    not a branch. The tag must point to a commit containing this release workflow.
-3. CI and all six native build jobs must pass: two Linux, two macOS and two Windows jobs
+3. Allow preflight to reuse successful same-commit branch CI, or let each platform run
+   its checks. To avoid duplicate checks, wait for branch CI to succeed before tagging.
+   All six native build jobs must pass: two Linux, two macOS and two Windows jobs
    produce twelve bundles. Each target runs packaged `--help` checks.
    DEB is installed directly on its ephemeral Ubuntu build runner with normal APT dependency
    resolution; resource hashes, notices, launcher ownership, removal, reinstallation, purge

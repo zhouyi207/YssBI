@@ -18,6 +18,7 @@ directories = "6"
 open = "5.4.1"
 chrono.workspace = true
 yss-ui = { path = "../yss-ui" }
+yss-installation-paths = { path = "../yss-installation-paths" }
 yss-desktop-services = { path = "../yss-desktop-services" }
 yss-graph-ui = { path = "../yss-graph-ui" }
 yss-assistant-ui = { path = "../yss-assistant-ui" }

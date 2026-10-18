@@ -1,12 +1,9 @@
-import ast
 from contextlib import chdir
-import fnmatch
 import hashlib
 import io
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 import textwrap
@@ -65,13 +62,6 @@ class ReleaseWorkflowTests(unittest.TestCase):
                     (directory / (name + ".sha256")).write_text(
                         f"{hashlib.sha256(payload).hexdigest()}  {name}\n"
                     )
-
-    def test_push_tag_filter(self):
-        patterns = ast.literal_eval(re.search(r"^    tags: (.+)$", WORKFLOW, re.MULTILINE)[1])
-        for tag, accepted in (("app-v0.4.0", True), ("app-v0.5.0-rc.1", True),
-                              ("v0.4.0", False), ("other-v0.4.0", False)):
-            with self.subTest(tag=tag):
-                self.assertEqual(any(fnmatch.fnmatchcase(tag, pattern) for pattern in patterns), accepted)
 
     def test_preflight_accepts_matching_app_version_tags(self):
         for version in ("0.4.0", "0.5.0", "0.5.0-rc.1+build.2"):

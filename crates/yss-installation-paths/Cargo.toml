@@ -1,0 +1,11 @@
+[package]
+name = "yss-installation-paths"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+path = "src/installation_paths.rs"
+
+[dev-dependencies]
+tempfile = "3"

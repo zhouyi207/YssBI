@@ -244,7 +244,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="yssbi-package-") as temporary:
         staging = Path(temporary)
         samples = staging / "samples"
-        run(["cargo", "run", "--locked", "--release", "-p", "yss-application", "--example", "build_samples", "--", "--check", "--stage", samples])
+        run(["cargo", "run", "--locked", "--release", "--target", arguments.target, "-p", "yss-application", "--example", "build_samples", "--", "--check", "--stage", samples])
         verify_samples(samples)
         notices = staging / "THIRD_PARTY_NOTICES.txt"
         dependency_notices(arguments.target, notices)

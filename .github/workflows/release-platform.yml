@@ -1,0 +1,147 @@
+name: Package native platform
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      check-runner:
+        required: true
+        type: string
+      check-target:
+        required: true
+        type: string
+      targets:
+        description: Native runner, target and architecture matrix as JSON
+        required: true
+        type: string
+      reuse-ci:
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  CARGO_PROFILE_RELEASE_DEBUG: '0'
+
+jobs:
+  check:
+    if: ${{ !inputs.reuse-ci }}
+    uses: ./.github/workflows/check-platform.yml
+    with:
+      runner: ${{ inputs.check-runner }}
+      target: ${{ inputs.check-target }}
+
+  package:
+    name: Package (${{ matrix.target }})
+    needs: check
+    if: ${{ !cancelled() && (needs.check.result == 'success' || (inputs.reuse-ci && needs.check.result == 'skipped')) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.targets) }}
+    env:
+      BUILD_TARGET: ${{ matrix.target }}
+      PACKAGE_PLATFORM: ${{ inputs.platform }}
+      PACKAGE_ARCH: ${{ matrix.arch }}
+      PACKAGE_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up build tools
+        uses: ./.github/actions/setup-build
+        with:
+          target: ${{ matrix.target }}
+          cache-profile: release
+      - name: Build Linux archive, DEB and RPM
+        if: runner.os == 'Linux'
+        shell: bash
+        run: python scripts/package.py --target "$BUILD_TARGET" --output dist --linux-format tar.gz --linux-format deb --linux-format rpm
+      - name: Build macOS packages
+        if: runner.os == 'macOS'
+        shell: bash
+        run: python scripts/package.py --target "$BUILD_TARGET" --output dist
+      - name: Build Windows packages
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python scripts/package.py --target "$env:BUILD_TARGET" --output dist
+      - name: Validate assets and smoke packaged native applications
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, os, pathlib, subprocess, tarfile, tempfile, zipfile
+          platform = os.environ['PACKAGE_PLATFORM']
+          base = 'yssbi-{PACKAGE_VERSION}-{PACKAGE_PLATFORM}-{PACKAGE_ARCH}'.format(**os.environ)
+          extensions = {'linux': ['tar.gz', 'rpm'], 'macos': ['dmg'], 'windows': ['exe', 'zip']}[platform]
+          directory = pathlib.Path('dist').resolve()
+          assets = [directory / f'{base}.{extension}' for extension in extensions]
+          if platform == 'linux':
+              assets.append(directory / 'yssbi-{PACKAGE_VERSION}-ubuntu24.04-{PACKAGE_ARCH}.deb'.format(**os.environ))
+          expected = {path.name for path in assets} | {path.name + '.sha256' for path in assets}
+          if {path.name for path in directory.iterdir()} != expected:
+              raise SystemExit('Unexpected or missing platform assets')
+          for asset in assets:
+              with asset.open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              if asset.stat().st_size == 0 or asset.with_name(asset.name + '.sha256').read_text().strip() != f'{digest}  {asset.name}':
+                  raise SystemExit('Invalid asset checksum: ' + asset.name)
+          def smoke(binary, samples, cwd):
+              for name in ('README.md', 'sources.json', 'catalog.json'):
+                  if not (samples / name).is_file():
+                      raise SystemExit('Missing packaged sample resource: ' + name)
+              subprocess.run([str(binary), '--help'], cwd=cwd, check=True, timeout=30)
+          with tempfile.TemporaryDirectory(prefix='yssbi-smoke-') as temporary:
+              root = pathlib.Path(temporary)
+              if platform == 'linux':
+                  with tarfile.open(assets[0]) as archive:
+                      archive.extractall(root, filter='data')
+                  app = root / 'yssbi.app'
+                  smoke(app / 'bin/yssbi', app / 'libexec/resources/samples', root)
+              elif platform == 'macos':
+                  mount = root / 'volume'
+                  mount.mkdir()
+                  subprocess.run(['hdiutil', 'attach', str(assets[0]), '-readonly', '-nobrowse', '-mountpoint', str(mount)], check=True)
+                  try:
+                      app = mount / 'YssBI.app/Contents'
+                      smoke(app / 'MacOS/yss-desktop-gpui', app / 'Resources/samples', root)
+                  finally:
+                      subprocess.run(['hdiutil', 'detach', str(mount)], check=True)
+              else:
+                  portable = root / 'portable'
+                  with zipfile.ZipFile(directory / f'{base}.zip') as archive:
+                      archive.extractall(portable)
+                  smoke(portable / 'yss-desktop-gpui.exe', portable / 'resources/samples', root)
+                  installed = root / 'installed'
+                  subprocess.run([str(directory / f'{base}.exe'), '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', f'/DIR={installed}'], check=True, timeout=120)
+                  try:
+                      smoke(installed / 'yss-desktop-gpui.exe', installed / 'resources/samples', root)
+                  finally:
+                      subprocess.run([str(installed / 'unins000.exe'), '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], check=True, timeout=120)
+          PY
+      - name: Smoke RPM payload and relocated executable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: python scripts/linux_package_smoke.py rpm-contents "dist/yssbi-${PACKAGE_VERSION}-linux-${PACKAGE_ARCH}.rpm"
+      - name: Smoke native Ubuntu DEB installation and removal
+        if: runner.os == 'Linux'
+        shell: bash
+        run: sudo python3 scripts/linux_package_smoke.py deb "dist/yssbi-${PACKAGE_VERSION}-ubuntu24.04-${PACKAGE_ARCH}.deb"
+      - name: Upload validated platform assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

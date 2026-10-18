@@ -4,6 +4,9 @@ inputs:
   target:
     description: Native Rust target triple
     required: true
+  cache-profile:
+    description: Separate check and release dependency artifacts
+    default: check
 runs:
   using: composite
   steps:
@@ -86,3 +89,21 @@ runs:
         rustup set default-host "$BUILD_TARGET"
         rustup toolchain install "$toolchain" --profile minimal --component rustfmt
         rustup target add --toolchain "$toolchain" "$BUILD_TARGET"
+    - name: Set bounded compilation parallelism
+      shell: bash
+      run: |
+        python - <<'PY'
+        import os, platform
+        # Keep headroom for DataFusion and native compiler processes on hosted runners.
+        limit = 4 if platform.system() == 'Linux' else 2
+        with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+            output.write(f'CARGO_BUILD_JOBS={min(os.cpu_count() or 1, limit)}\n')
+        PY
+    - name: Restore Rust dependencies
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      with:
+        shared-key: ${{ runner.os }}-${{ runner.arch }}-${{ inputs.target }}-${{ inputs.cache-profile }}
+        env-vars: CC CXX MACOSX_DEPLOYMENT_TARGET
+        cache-bin: 'false'
+        cache-workspace-crates: 'false'
+        save-if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/app-v')) }}

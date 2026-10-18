@@ -13318,6 +13318,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-installation-paths"
+version = "0.5.0"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "yss-logging"
 version = "0.1.0"
 dependencies = [
@@ -13795,6 +13802,7 @@ dependencies = [
  "yss-graph-execution",
  "yss-graph-ui",
  "yss-harness-contract",
+ "yss-installation-paths",
  "yss-logging",
  "yss-node-catalog",
  "yss-node-protocol",
