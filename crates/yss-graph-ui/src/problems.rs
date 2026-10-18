@@ -46,6 +46,8 @@ pub struct ProblemsPanel {
 }
 
 impl ProblemsPanel {
+    pub const PANEL_NAME: &'static str = "problems";
+
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus: cx.focus_handle(),
@@ -179,7 +181,7 @@ impl Focusable for ProblemsPanel {
 }
 impl BasePanel for ProblemsPanel {
     fn panel_name(&self) -> &'static str {
-        "problems"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         false

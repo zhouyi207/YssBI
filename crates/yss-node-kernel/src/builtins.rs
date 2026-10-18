@@ -678,6 +678,33 @@ fn execute_kernel(
     Ok(vec![value])
 }
 
+pub(crate) fn text<'a>(
+    invocation: &'a KernelInvocation<'_>,
+    key: &str,
+) -> Result<&'a str, KernelError> {
+    match invocation.parameter(key).map(RuntimeValue::unannotated) {
+        Some(RuntimeValue::Scalar(TabularScalar::String(value))) => Ok(value),
+        _ => Err(KernelError::InvalidParameter),
+    }
+}
+
+pub(crate) fn boolean(invocation: &KernelInvocation<'_>, key: &str) -> Result<bool, KernelError> {
+    match invocation.parameter(key).map(RuntimeValue::unannotated) {
+        Some(RuntimeValue::Scalar(TabularScalar::Bool(value))) => Ok(*value),
+        _ => Err(KernelError::InvalidParameter),
+    }
+}
+
+pub(crate) fn integer(invocation: &KernelInvocation<'_>, key: &str) -> Result<i64, KernelError> {
+    match invocation.parameter(key).map(RuntimeValue::unannotated) {
+        Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) => Ok(*value),
+        Some(RuntimeValue::Scalar(TabularScalar::Unsigned(value))) => {
+            i64::try_from(*value).map_err(|_| KernelError::InvalidParameter)
+        }
+        _ => Err(KernelError::InvalidParameter),
+    }
+}
+
 pub(crate) fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelError> {
     match value {
         Some(RuntimeValue::Scalar(TabularScalar::Integer(value)))

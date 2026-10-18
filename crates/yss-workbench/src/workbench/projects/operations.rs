@@ -266,7 +266,9 @@ impl Workbench {
             }
             if let Some(identity) = &observation.active {
                 delivery.send_replace(ProjectStage::Watching);
-                let _ = watcher.watch_project(identity);
+                if let Err(error) = watcher.watch_project(identity) {
+                    tracing::warn!(%error, "project change watching failed to start");
+                }
             }
             Ok(observation)
         });

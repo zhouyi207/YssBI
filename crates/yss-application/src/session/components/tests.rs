@@ -210,11 +210,9 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
             &[],
             "en-US",
         );
-        let semantics = analysis
-            .semantic_snapshot()
-            .clone()
-            .with_execution_kernel_support(&|id| kernels.supports(id));
-        analysis.with_semantic_snapshot(semantics)
+        analysis.map_semantic_snapshot(|semantics| {
+            semantics.with_execution_kernel_support(&|id| kernels.supports(id))
+        })
     };
     let analysis = resolve(&basis, session.execution().kernels());
     let plan_session =

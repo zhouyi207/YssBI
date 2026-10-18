@@ -343,7 +343,7 @@ pub(crate) fn execute(
             let RuntimeValue::Scalar(TabularScalar::Integer(rows)) = parameter("rows")? else {
                 return Err(KernelError::Failed);
             };
-            let offset = super::transforms::integer(invocation, "offset")?;
+            let offset = super::integer(invocation, "offset")?;
             relation.limit(
                 usize::try_from(offset).map_err(|_| KernelError::InvalidParameter)?,
                 usize::try_from(*rows).map_err(|_| KernelError::Failed)?,

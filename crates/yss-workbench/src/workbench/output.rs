@@ -30,6 +30,8 @@ pub struct OutputPanel {
 }
 
 impl OutputPanel {
+    pub const PANEL_NAME: &'static str = "output";
+
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus: cx.focus_handle(),
@@ -136,7 +138,7 @@ impl Focusable for OutputPanel {
 }
 impl BasePanel for OutputPanel {
     fn panel_name(&self) -> &'static str {
-        "output"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         false

@@ -10,7 +10,6 @@ use yss_project_model::{
 pub type ChartSnapshot = file_resources::FileSnapshot<ChartDocument>;
 pub type ChartIndexEntry = file_resources::FileIndexEntry<ChartDocument>;
 pub type ChartCommand = file_resources::FileCommand<ChartDocument>;
-pub type ChartCommandResult = file_resources::FileCommandResult<ChartDocument>;
 impl ResourceFile for ChartDocument {
     const LIFECYCLE_KIND: ResourceLifecycleKind = ResourceLifecycleKind::Chart;
     fn files(data: &ProjectData) -> &HashMap<ChartPath, ChartState> {

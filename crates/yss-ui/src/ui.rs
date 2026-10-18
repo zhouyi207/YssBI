@@ -17,6 +17,9 @@ pub mod text;
 pub mod tool_panel;
 pub mod window_chrome;
 
+/// Desktop application identity shared by window app IDs and per-user data directories.
+pub const APPLICATION_ID: &str = "com.zjy.yssbi";
+
 /// Install shared presentation after GPUI Kit and before application keybindings or windows.
 pub fn init(cx: &mut gpui_kit::App) {
     preferences::init(cx);

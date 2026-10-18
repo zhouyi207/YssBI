@@ -419,7 +419,13 @@ impl Workbench {
             let mut conversations = vec![];
             for id in layout
                 .as_ref()
-                .map(|state| resource_paths(state, "assistant-conversation", "sessionId"))
+                .map(|state| {
+                    resource_paths(
+                        state,
+                        yss_assistant_ui::ConversationPanel::PANEL_NAME,
+                        "sessionId",
+                    )
+                })
                 .unwrap_or_default()
             {
                 if let Ok(id) = yss_harness_contract::HarnessSessionId::try_new(id)
@@ -578,58 +584,87 @@ impl Workbench {
     }
 
     fn register_layout_panels(&self, cx: &mut Context<Self>) {
-        register_panel(cx, "empty-editor", |_, _, cx| {
+        register_panel(cx, super::dock::EmptyEditor::PANEL_NAME, |_, _, cx| {
             panel_handle(cx.new(super::dock::EmptyEditor::new))
         });
-        register_fixed("details", self.details.downgrade(), cx);
-        register_fixed("problems", self.problems.downgrade(), cx);
-        register_fixed("output", self.output.downgrade(), cx);
-        register_fixed("results", self.results.downgrade(), cx);
-        register_fixed("logs", self.logs.downgrade(), cx);
-        register_fixed("plugins", self.plugins.downgrade(), cx);
-        register_fixed("plugins-directory", self.plugins_sidebar.downgrade(), cx);
+        register_fixed(
+            super::details::DetailsPanel::PANEL_NAME,
+            self.details.downgrade(),
+            cx,
+        );
+        register_fixed(
+            super::ProblemsPanel::PANEL_NAME,
+            self.problems.downgrade(),
+            cx,
+        );
+        register_fixed(super::OutputPanel::PANEL_NAME, self.output.downgrade(), cx);
+        register_fixed(
+            super::ResultsPanel::PANEL_NAME,
+            self.results.downgrade(),
+            cx,
+        );
+        register_fixed(super::LogsPanel::PANEL_NAME, self.logs.downgrade(), cx);
+        register_fixed(
+            crate::plugins::PluginsPanel::PANEL_NAME,
+            self.plugins.downgrade(),
+            cx,
+        );
+        register_fixed(
+            crate::plugins::PluginsSidebar::PANEL_NAME,
+            self.plugins_sidebar.downgrade(),
+            cx,
+        );
         let services = self.services.plugins.clone();
         let plugins = self.plugins.clone();
-        register_panel(cx, "plugin-view", move |context, window, cx| {
-            if let PanelInfo::Panel(info) = context.info()
-                && let Some(plugin_id) = info.get("pluginId").and_then(serde_json::Value::as_str)
-                && let Some(view_id) = info.get("viewId").and_then(serde_json::Value::as_str)
-            {
-                let panel = cx.new(|cx| {
-                    crate::plugins::PluginViewPanel::new(
-                        services.clone(),
-                        plugin_id.into(),
-                        view_id.into(),
-                        None,
-                        window,
-                        cx,
+        register_panel(
+            cx,
+            crate::plugins::PluginViewPanel::PANEL_NAME,
+            move |context, window, cx| {
+                if let PanelInfo::Panel(info) = context.info()
+                    && let Some(plugin_id) =
+                        info.get("pluginId").and_then(serde_json::Value::as_str)
+                    && let Some(view_id) = info.get("viewId").and_then(serde_json::Value::as_str)
+                {
+                    let panel = cx.new(|cx| {
+                        crate::plugins::PluginViewPanel::new(
+                            services.clone(),
+                            plugin_id.into(),
+                            view_id.into(),
+                            None,
+                            window,
+                            cx,
+                        )
+                    });
+                    let plugins = plugins.clone();
+                    cx.subscribe(
+                        &panel,
+                        move |_, event: &crate::plugins::OpenNativeView, cx| {
+                            plugins.update(cx, |_, cx| {
+                                cx.emit(event.clone());
+                            });
+                        },
                     )
-                });
-                let plugins = plugins.clone();
-                cx.subscribe(
-                    &panel,
-                    move |_, event: &crate::plugins::OpenNativeView, cx| {
-                        plugins.update(cx, |_, cx| {
-                            cx.emit(event.clone());
-                        });
-                    },
-                )
-                .detach();
-                return panel_handle(panel);
-            }
-            panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
-        });
+                    .detach();
+                    return panel_handle(panel);
+                }
+                panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
+            },
+        );
         let assistant = self.assistant.downgrade();
-        register_panel(cx, "assistant-conversation", move |context, _, cx| {
-            if let PanelInfo::Panel(info) = context.info()
-                && let Some(id) = info.get("sessionId").and_then(serde_json::Value::as_str)
-                && let Some(assistant) = assistant.upgrade()
-                && let Some(panel) = assistant.read(cx).conversation(id).cloned()
-            {
-                return panel_handle(panel);
-            }
-            panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
-        });
+        register_panel(
+            cx,
+            yss_assistant_ui::ConversationPanel::PANEL_NAME,
+            move |context, _, cx| {
+                if let PanelInfo::Panel(info) = context.info()
+                    && let Some(id) = info.get("sessionId").and_then(serde_json::Value::as_str)
+                    && let Some(assistant) = assistant.upgrade()
+                    && let Some(panel) = assistant.read(cx).conversation(id).cloned()
+                {
+                    return panel_handle(panel);
+                }
+                panel_handle(cx.new(|cx| MissingPanel::new(context.state().clone(), cx)))
+            },
+        );
         for (name, panel) in &self.activities {
             register_fixed(name, panel.clone(), cx);
         }
@@ -743,7 +778,7 @@ mod responsive_tests {
             true,
         );
         let right = DockState::new(
-            PanelState::new("details"),
+            PanelState::new(crate::workbench::DetailsPanel::PANEL_NAME),
             DockPlacement::Right,
             px(300.),
             true,
@@ -778,7 +813,7 @@ mod responsive_tests {
     fn user_visibility_override_is_persisted_instead_of_previous_preference() {
         let mut state = DockAreaState {
             right_dock: Some(DockState::new(
-                PanelState::new("details"),
+                PanelState::new(crate::workbench::DetailsPanel::PANEL_NAME),
                 DockPlacement::Right,
                 px(350.),
                 false,

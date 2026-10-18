@@ -15,10 +15,7 @@ pub(super) fn execute(
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
     let mut conversion = SemanticConversion::new(target, NumericRepresentation::Auto);
-    let text = |name| match invocation.parameter(name) {
-        Some(RuntimeValue::Scalar(TabularScalar::String(value))) => Ok(value.as_ref()),
-        _ => Err(KernelError::InvalidParameter),
-    };
+    let text = |name| super::text(invocation, name);
     match target {
         SemanticType::Numeric => {
             conversion.numeric = NumericRepresentation::from_parameter(text("numeric_mode")?)

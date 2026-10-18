@@ -45,6 +45,8 @@ pub(in crate::workbench) struct EmptyEditor {
 }
 
 impl EmptyEditor {
+    pub const PANEL_NAME: &'static str = "empty-editor";
+
     pub(in crate::workbench) fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus: cx.focus_handle(),
@@ -62,7 +64,7 @@ impl Focusable for EmptyEditor {
 
 impl BasePanel for EmptyEditor {
     fn panel_name(&self) -> &'static str {
-        "empty-editor"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         false

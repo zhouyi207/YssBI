@@ -338,7 +338,7 @@ impl ApplicationState {
         let captured = self.capture_resource_session(&project_instance_id)?;
         let mut editor =
             GraphDocumentEditor::new(&captured, &graph_path, &locale, Arc::new(document))?;
-        let _ = editor.apply(mutation)?;
+        editor.apply(mutation)?;
         let result = editor.finish(self)?;
         captured
             .execution()

@@ -198,6 +198,9 @@ impl LayoutStore {
 
 // Execution results belong to this process. Filter only the persisted snapshot;
 // the live DockArea must keep its panels and leases when users rearrange them.
+/// Result panels are transient views of in-memory results and never enter a saved layout.
+pub const RESULT_PANEL_NAME: &str = "result";
+
 fn persistent_layout(mut state: DockAreaState) -> DockAreaState {
     if !retain_persistent_panels(&mut state.center) {
         state.center = PanelState {
@@ -225,11 +228,11 @@ fn persistent_layout(mut state: DockAreaState) -> DockAreaState {
 }
 
 fn contains_result_panel(state: &PanelState) -> bool {
-    state.panel_name == "result" || state.children.iter().any(contains_result_panel)
+    state.panel_name == RESULT_PANEL_NAME || state.children.iter().any(contains_result_panel)
 }
 
 fn retain_persistent_panels(state: &mut PanelState) -> bool {
-    if state.panel_name == "result" {
+    if state.panel_name == RESULT_PANEL_NAME {
         return false;
     }
     if state.children.is_empty() {

@@ -45,7 +45,7 @@ Generic filesystem primitives are a foundation for Project and Application. `yss
 | Execution identity, results and provenance                          | Execution and ResultStore         | Retain result references and query leases |
 | Numerical algorithms                                                | SCI or an external compute plugin | Present returned reports and plots        |
 | Plugin authorization, installation and task ledger                  | Plugin Manager                    | Present management views                  |
-| Assistant conversations, turns and workflows                        | Harness and its persistence ports | Subscribe to projections and events       |
+| Assistant conversations and turns                                   | Harness and its persistence ports | Subscribe to projections and events       |
 | Panel placement, ordering, selection, edge sizes and collapse state | Root GPUI `DockArea`              | Use the component's topology              |
 | Viewport, dragging, selection and uncommitted input                 | Owning desktop view               | Keep transient interaction state          |
 
@@ -93,7 +93,7 @@ Node dragging retains shared original positions plus a displacement. Pointer mov
 
 Documents, mind maps and charts are authored files with one editing session (`yss-resource-ui::file_session`): the session owns the file snapshot, save and refresh state, conflicts with a newer version and removal, while each editor keeps only its draft. Graphs keep their own editing model, but Workbench treats every open editor alike where the concern is shared: one route (`CommittedResourceMutation::routes`) delivers each committed receipt — moves, deletions and changes, whether from the GUI, the Assistant or an external writer — to the open graph or file editor, one flow renames, duplicates and deletes graphs and files, and unsaved/busy checks, saving, edit commands, index delivery and resynchronisation dispatch through one editor handle. Captured file, database and chart saves use their `ApplicationTasks` owner; Workbench save requests use its private `NativeServices`. They do not accept a second Application instance or runtime handle. Operation identities, session/version checks and edited snapshots on persistence failure remain part of the save contract.
 
-Analysis graphs express data ports and dependencies. Control flow, effects and sequencing belong to Workflow owners. Execution captures the document and semantic identity, prepares a matching immutable plan internally, and returns run facts and result references. Plan caches are backend details, not a second frontend lifecycle.
+Analysis graphs express data ports and dependencies. Control flow, effects and sequencing are not graph nodes. Execution captures the document and semantic identity, prepares a matching immutable plan internally, and returns run facts and result references. Plan caches are backend details, not a second frontend lifecycle.
 
 Result views use Application leases and bounded page queries rather than recomputing statistics. Closing a result panel releases its lease; remounting it during a drag preserves its reading identity. An ordinary rerun does not replace the execution referenced by an already-open result.
 

@@ -23,6 +23,8 @@ pub struct PluginsSidebar {
 }
 
 impl PluginsSidebar {
+    pub const PANEL_NAME: &'static str = "plugins-directory";
+
     pub fn new(owner: Entity<PluginsPanel>, cx: &mut Context<Self>) -> Self {
         let subscription = cx.observe(&owner, |_, _, cx| cx.notify());
         Self {
@@ -41,7 +43,7 @@ impl Focusable for PluginsSidebar {
 }
 impl BasePanel for PluginsSidebar {
     fn panel_name(&self) -> &'static str {
-        "plugins-directory"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         false

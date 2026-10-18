@@ -82,11 +82,9 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
                 analysis.semantic_snapshot(),
                 analysis.clone().semantic_snapshot()
             ));
-            let semantics = analysis
-                .semantic_snapshot()
-                .clone()
-                .with_execution_kernel_support(&|_| supported);
-            analysis.with_semantic_snapshot(semantics)
+            analysis.map_semantic_snapshot(|semantics| {
+                semantics.with_execution_kernel_support(&|_| supported)
+            })
         };
     let first = resolve(&document, &resources, true);
     let first_package = execution

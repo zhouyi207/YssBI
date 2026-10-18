@@ -13,5 +13,4 @@ thiserror.workspace = true
 yss-chart-document = { path = "../yss-chart-document" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-harness-contract = { path = "../yss-harness-contract" }
-yss-project-identity = { path = "../yss-project-identity" }
 yss-ui-contract = { path = "../yss-ui-contract" }

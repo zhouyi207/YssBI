@@ -185,7 +185,7 @@ fn open_pending(
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             window_min_size: Some(size(px(320.), px(180.))),
             is_minimizable: false,
-            app_id: Some("com.zjy.yssbi".into()),
+            app_id: Some(crate::APPLICATION_ID.into()),
             ..TitleBar::window_options()
         },
         move |window, cx| {

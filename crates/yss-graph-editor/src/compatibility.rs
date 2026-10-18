@@ -83,7 +83,7 @@ pub(crate) fn resource_path_is_valid(
     match create_args {
         ResourceBoundCreateArgs::FunctionGraph => {
             GraphResourcePath::new(path).is_ok_and(|canonical| {
-                canonical.as_str() == path && canonical.as_str().starts_with("functions/")
+                canonical.as_str() == path && canonical.kind() == GraphResourceKind::FunctionGraph
             })
         }
         ResourceBoundCreateArgs::Database => path

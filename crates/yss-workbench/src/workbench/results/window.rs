@@ -93,7 +93,7 @@ impl Workbench {
                         ..TitleBar::title_bar_options()
                     }),
                     window_decorations: Some(WindowDecorations::Client),
-                    app_id: Some("com.zjy.yssbi".into()),
+                    app_id: Some(yss_ui::APPLICATION_ID.into()),
                     window_min_size: Some(size(px(480.), px(360.))),
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     ..TitleBar::window_options()

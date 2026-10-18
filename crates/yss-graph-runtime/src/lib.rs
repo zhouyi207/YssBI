@@ -203,7 +203,8 @@ impl GraphRuntimeState {
         self.components.registry.as_ref()
     }
 
-    pub fn plan_editor_mutation(
+    #[cfg(test)]
+    fn plan_editor_mutation(
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
@@ -212,29 +213,12 @@ impl GraphRuntimeState {
         resolve: impl FnOnce() -> GraphAnalysis,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         let analysis = (!mutation.referenced_ports(document).is_empty()).then(resolve);
-        self.plan_editor_mutation_with_analysis(
-            graph_path,
-            document,
-            mutation,
-            catalog,
-            analysis.as_ref(),
-        )
-    }
-
-    fn plan_editor_mutation_with_analysis(
-        &self,
-        graph_path: &GraphResourcePath,
-        document: &GraphDocument,
-        mutation: EditorGraphMutation,
-        catalog: &CatalogMutationValidationSnapshot,
-        analysis: Option<&GraphAnalysis>,
-    ) -> Result<GraphDocumentPatch, MutationConflict> {
         mutations::EditorMutationPlanner::new(
             graph_path,
             document,
             self.registry(),
             catalog,
-            analysis,
+            analysis.as_ref(),
         )
         .plan(mutation)
     }

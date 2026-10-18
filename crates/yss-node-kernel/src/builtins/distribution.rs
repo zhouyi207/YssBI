@@ -1,3 +1,4 @@
+use super::integer;
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use yss_data_contract::TabularScalar;
 use yss_sci_contract::distribution::{SampleValue, SamplingDistribution};
@@ -28,16 +29,6 @@ pub(crate) enum DistributionKernel {
     NegativeBinomial,
     DiscreteUniform,
     Hypergeometric,
-}
-
-fn integer(invocation: &KernelInvocation<'_>, key: &str) -> Result<i64, KernelError> {
-    match invocation.parameter(key) {
-        Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) => Ok(*value),
-        Some(RuntimeValue::Scalar(TabularScalar::Unsigned(value))) => {
-            i64::try_from(*value).map_err(|_| KernelError::InvalidParameter)
-        }
-        _ => Err(KernelError::InvalidParameter),
-    }
 }
 
 pub(crate) fn execute(

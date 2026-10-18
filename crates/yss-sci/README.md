@@ -944,7 +944,7 @@ option. OLS/WLS/GLS and Prais construct this metadata once with the fitted resul
 
 `regression::linear::ols` owns the model, its fitted result and its errors:
 
-- `mod.rs`: `OLS`, `OlsFit` and `OlsFitError`.
+- `ols.rs`: `OLS`, `OlsFit` and `OlsFitError`.
 - `fit.rs`: least-squares numerical work and the intermediate solution.
 - `inference.rs`: covariance, degrees of freedom, tests and confidence intervals.
 

@@ -1,6 +1,6 @@
 //! Grid alignment is a native range/unnest/join plan.
 use super::relational::kernel_error;
-use super::transforms::{integer, text};
+use super::{integer, text};
 use crate::{
     KernelContract, KernelError, KernelId, KernelInputSpec, KernelInvocation, KernelParameterKey,
     KernelRegistryBuilder, RuntimeValue,

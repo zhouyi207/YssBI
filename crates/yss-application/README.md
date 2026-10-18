@@ -39,7 +39,7 @@ Application 的 `runtime` 消费中立路径和 Harness 端口。普通用例模
 
 项目生命周期见 [project](src/project/README.md)，数据用例见 [database](src/database/README.md)，图用例见 [graph](src/graph/README.md)。
 
-数据库显示名分配由私有 `src/display_naming.rs` 负责，保留精确匹配与最小可用后缀语义；不再维护只有本 crate 消费的独立 `yss-display-naming` 包。
+数据库显示名分配由私有 `src/display_naming.rs` 负责，保留精确匹配与最小可用后缀语义。
 
 Mind/Markdown 的 Application 用例分别位于 `src/minds.rs` 和 `src/docs.rs`，负责捕获和重验应用会话；
 正文编辑、路径校验和文件事务由 [Project](../yss-project/README.md) 与
@@ -61,8 +61,8 @@ Agent 的角色与任务授权由 `yss-assistant-extension` 拥有；Harness Cor
 | 会话管理             | 组合当前项目的运行时，协调任务准入、项目切换、旧任务清理和失败恢复               | [session_slot](src/session/slot.rs)、[session_factory](src/session/factory.rs)                                                                             |
 | 项目与资源操作       | 组织打开、新建、另存为、项目登记、资源创建删除、图保存和函数签名修改             | [project_lifecycle](src/project/lifecycle.rs)、[resource_mutation](src/graph/resources.rs)、[project_change](src/project/change.rs)                        |
 | 图运行准备与执行用例 | 捕获资源事实、重验版本、构建和转换执行包、准备资源并协调执行结果提交             | [graph_inputs](src/graph/inputs.rs)、[graph_contracts](../yss-graph-execution/src/graph_preparation.rs)、[run_graph](src/graph/run.rs)                     |
-| 数据业务用例         | 协调导入导出、编辑、存储提交、数据库运行时更新和 Project 发布                    | [database](src/database/mod.rs)、[database_mutation](src/database/mutation.rs)、[database_session](src/session/database.rs)                                |
-| 查询与应用投影       | 组织资源目录、数据库页面、图表数据、结果报告和活动面板，并检查查询结果是否仍有效 | [catalog_query](src/graph/catalog.rs)、[result_query](src/graph/results/mod.rs)、[chart_plot](src/chart/query.rs)、[activity_panel](src/activity_panel.rs) |
+| 数据业务用例         | 协调导入导出、编辑、存储提交、数据库运行时更新和 Project 发布                    | [database](src/database.rs)、[database_mutation](src/database/mutation.rs)、[database_session](src/session/database.rs)                                |
+| 查询与应用投影       | 组织资源目录、数据库页面、图表数据、结果报告和活动面板，并检查查询结果是否仍有效 | [catalog_query](src/graph/catalog.rs)、[result_query](src/graph/results.rs)、[chart_plot](src/chart/query.rs)、[activity_panel](src/activity_panel.rs) |
 | 自动化与插件接入     | 校验调用上下文，提供图操作、数据快照和插件结果提交能力                           | [automation](src/automation.rs)、[plugins](src/plugins.rs)                                                                                                 |
 
 节点目录与兼容节点目录共用 `activity_panel::nodes_activity_panel_from_catalog` 的只读树投影。

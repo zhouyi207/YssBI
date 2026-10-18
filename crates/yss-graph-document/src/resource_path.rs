@@ -57,7 +57,11 @@ impl GraphResourcePath {
     }
 
     pub fn kind(&self) -> GraphResourceKind {
-        if self.0.starts_with("events/") {
+        if self
+            .0
+            .split_once('/')
+            .is_some_and(|(directory, _)| directory == EVENT_GRAPHS_DIR)
+        {
             GraphResourceKind::EventGraph
         } else {
             GraphResourceKind::FunctionGraph

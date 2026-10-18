@@ -7,7 +7,7 @@ Keep only open work here. Current behavior belongs to source and module READMEs;
 ## Active tasks
 
 - [ ] 完善线性回归报告的变量与配置元数据：当前 `yss-sci-runtime/src/regression/report.rs` 使用固定的 response 名称，报告仅携带协方差类型，需按实际展示需求传递训练列名及 HAC/Newey 等配置；沿用现有模型和报告契约局部扩展。
-- [ ] 核对并修正线性回归配置对 Newey lag=0 的限制：`yss-node-catalog/src/statistics/mod.rs` 当前使用最小值为 1 的正整数参数，应与 SCI 支持的非负滞后范围一致。
+- [ ] 核对并修正线性回归配置对 Newey lag=0 的限制：`yss-node-catalog/src/statistics.rs` 当前使用最小值为 1 的正整数参数，应与 SCI 支持的非负滞后范围一致。
 
 - [ ] clippy::too_many_arguments 需要处理
 - [ ] 按 [Node Kernel 当前边界](crates/yss-node-kernel/README.md) 测量完整静态调度缓存、紧凑数值缓冲及目录重复装配的收益；矩阵分解中途取消与工作区硬限额需在 SCI/Linalg 所有者内另行设计。

@@ -141,7 +141,7 @@ impl Focusable for ResultPanel {
 }
 impl BasePanel for ResultPanel {
     fn panel_name(&self) -> &'static str {
-        "result"
+        yss_ui::layout_store::RESULT_PANEL_NAME
     }
     fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
         if active {

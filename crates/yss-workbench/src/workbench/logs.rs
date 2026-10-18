@@ -64,6 +64,8 @@ pub struct LogsPanel {
 }
 
 impl LogsPanel {
+    pub const PANEL_NAME: &'static str = "logs";
+
     pub fn new(services: Arc<NativeServices>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| {
             InputState::new(window, cx).placeholder(crate::text::translate("log.searchPlaceholder"))
@@ -164,7 +166,7 @@ impl Focusable for LogsPanel {
 }
 impl BasePanel for LogsPanel {
     fn panel_name(&self) -> &'static str {
-        "logs"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         false

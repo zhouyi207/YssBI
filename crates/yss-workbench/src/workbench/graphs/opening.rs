@@ -84,17 +84,7 @@ impl BasePanel for Opening {
 }
 impl Panel for Opening {
     fn tab_name(&self, _: &App) -> Option<gpui_kit::SharedString> {
-        Some(
-            self.path
-                .as_str()
-                .rsplit('/')
-                .next()
-                .unwrap_or(self.path.as_str())
-                .trim_end_matches(".yssbi-event")
-                .trim_end_matches(".yssbi-function")
-                .to_owned()
-                .into(),
-        )
+        Some(self.path.display_name().to_owned().into())
     }
     fn title(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.tab_name(cx).unwrap_or_default()

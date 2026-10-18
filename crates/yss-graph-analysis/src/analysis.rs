@@ -41,11 +41,6 @@ impl GraphAnalysis {
         &self.semantic_snapshot
     }
 
-    pub fn with_semantic_snapshot(mut self, snapshot: GraphSemanticSnapshot) -> Self {
-        self.semantic_snapshot = std::sync::Arc::new(snapshot);
-        self
-    }
-
     pub fn map_semantic_snapshot(
         mut self,
         transform: impl FnOnce(GraphSemanticSnapshot) -> GraphSemanticSnapshot,

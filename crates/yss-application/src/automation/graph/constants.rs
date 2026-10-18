@@ -268,7 +268,7 @@ pub(super) fn create(
         description: declaration.description,
         tags: declaration.tags,
     };
-    let _ = editor
+    editor
         .apply(EditorGraphMutation::SetConstant {
             id,
             constant: Some(constant),
@@ -296,7 +296,7 @@ pub(super) fn create(
             },
             &[],
         )?;
-        let _ = editor.apply(mutation).map_err(map_graph_error)?;
+        editor.apply(mutation).map_err(map_graph_error)?;
         let created = *editor
             .document()
             .nodes
@@ -304,7 +304,7 @@ pub(super) fn create(
             .find(|id| !before.contains(id))
             .ok_or_else(|| graph_failure(CapabilityFailureCode::MUTATION_REJECTED))?;
         if let Some(label) = node.label {
-            let _ = editor
+            editor
                 .apply(EditorGraphMutation::SetNodeLabel {
                     node_id: created,
                     label: Some(label),
@@ -342,7 +342,7 @@ pub(super) fn update(
     if let Some(tags) = update.tags {
         constant.tags = tags;
     }
-    let _ = editor
+    editor
         .apply(EditorGraphMutation::SetConstant {
             id,
             constant: Some(constant),

@@ -1,5 +1,7 @@
 //! Data-preparation adapters reuse native plans, binding independent operands by position.
-use super::{numeric_input, relational::kernel_error, series::SeriesKernel};
+use super::{
+    boolean, integer, numeric_input, relational::kernel_error, series::SeriesKernel, text,
+};
 use crate::{
     KernelContract, KernelError, KernelId, KernelInputSpec as Input, KernelInvocation,
     KernelParameterKey, KernelRegistryBuilder, RuntimeValue,
@@ -270,32 +272,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-pub(super) fn text<'a>(inv: &'a KernelInvocation<'_>, key: &str) -> Result<&'a str, KernelError> {
-    match inv.parameter(key).map(RuntimeValue::unannotated) {
-        Some(RuntimeValue::Scalar(TabularScalar::String(s))) => Ok(s),
-        _ => Err(KernelError::InvalidParameter),
-    }
-}
-pub(super) fn integer(inv: &KernelInvocation<'_>, key: &str) -> Result<i64, KernelError> {
-    match inv.parameter(key).map(RuntimeValue::unannotated) {
-        Some(RuntimeValue::Scalar(TabularScalar::Integer(v))) => Ok(*v),
-        Some(RuntimeValue::Scalar(TabularScalar::Unsigned(v))) => {
-            i64::try_from(*v).map_err(|_| KernelError::InvalidParameter)
-        }
-        _ => Err(KernelError::InvalidParameter),
-    }
-}
 fn positive(inv: &KernelInvocation<'_>, key: &str) -> Result<usize, KernelError> {
     usize::try_from(integer(inv, key)?)
         .ok()
         .filter(|v| *v > 0)
         .ok_or(KernelError::InvalidParameter)
-}
-fn boolean(inv: &KernelInvocation<'_>, key: &str) -> Result<bool, KernelError> {
-    match inv.parameter(key).map(RuntimeValue::unannotated) {
-        Some(RuntimeValue::Scalar(TabularScalar::Bool(v))) => Ok(*v),
-        _ => Err(KernelError::InvalidParameter),
-    }
 }
 fn strings(inv: &KernelInvocation<'_>, key: &str) -> Result<Vec<Box<str>>, KernelError> {
     match inv.parameter(key).map(RuntimeValue::unannotated) {

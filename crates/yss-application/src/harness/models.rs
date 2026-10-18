@@ -163,8 +163,10 @@ impl LanguageModelService {
             });
             candidate.reconcile_default();
             if let Err(error) = state.commit(candidate) {
-                if let Some(key) = created_key {
-                    let _ = state.credentials.remove(&key);
+                if let Some(key) = created_key
+                    && let Err(error) = state.credentials.remove(&key)
+                {
+                    tracing::warn!(%error, "orphaned model credential was not removed");
                 }
                 return Err(error);
             }

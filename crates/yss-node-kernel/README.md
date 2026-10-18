@@ -85,7 +85,7 @@ AHP/FAHP、DEMATEL 与 ISM，按方阵分解和完整关系输出预算，不限
 聚类推断保留 SCI 的形状、样本不足与数据定义域分类；不足两个聚类返回数值输入错误，
 不归为参数错误。`inference.cluster_robust` 复用 SCI 的稳定 Student-t 尾概率与临界值。
 共享设计准备的样本不足与不可辨识数据保留为数值输入错误，非法 tuning/迭代设置仍为参数错误。
-能力版本由实际 Rust 注册入口拥有：[中央 install](src/builtins/statistics/mod.rs)、
+能力版本由实际 Rust 注册入口拥有：[中央 install](src/builtins/statistics.rs)、
 [模型注册](src/builtins/statistics/regression_models.rs) 和
 [关联注册](src/builtins/statistics/association.rs)。共享数值行为变化时更新实际消费者；
 README 描述计算职责和契约，不复制这些版本表。Ridge/Lasso/PLS 不输出系数 p 值。
@@ -264,10 +264,10 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 | [invocation](src/invocation.rs)                | 中立调用、输出元数据、取消/deadline 和计算预算            |
 | [value](src/value.rs)                          | 标量、列表、记录、关系/数列句柄与原生线性回归 运行值      |
 | [registry](src/registry.rs)                    | 注册一致性、冻结指纹、能力查询、执行契约与输出数量检查    |
-| [builtins](src/builtins/mod.rs)                | 内置注册装配及逻辑、常量、转换等适配                      |
+| [builtins](src/builtins.rs)                | 内置注册装配及逻辑、常量、转换等适配                      |
 | [numeric](src/builtins/numeric.rs)             | 已有标量/数列四则运算                                     |
 | [relational](src/builtins/relational.rs)       | 已有 DataFrame/数列关系操作和按输出 Schema 拆列           |
-| [statistics](src/builtins/statistics/mod.rs)   | 按回归、因果、面板、时间序列和诊断分类的 SCI Runtime 适配 |
+| [statistics](src/builtins/statistics.rs)   | 按回归、因果、面板、时间序列和诊断分类的 SCI Runtime 适配 |
 | [visualization](src/builtins/visualization.rs) | 可视化数值输入准备与 SCI 绘图数据适配                     |
 | [alignment](src/builtins/alignment.rs)         | 数据帧时间网格与面板对齐的原生关系计划请求                |
 | [transforms](src/builtins/transforms.rs)       | 数列变换、排序、筛选、重塑与标量聚合结果消费              |
@@ -330,7 +330,7 @@ Boxplot and violin use stable shared quantile midpoints.
 可选性，运行时拒绝未知参数及缺少必需参数。Graph 在准备计划时解析默认值并排除不适用的条件参数；
 内核按所选算法检查适用字段。可选参数集合进入能力指纹，分布、比较、整数范围和线性 Fit 的实现 revision 已随调用契约更新。
 
-`with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖共享输入准备的实现版本以及排序后的 ID、revision、输入布局、参数键和输出数量。共享版本由 [series](src/builtins/series.rs) 拥有，叶实现版本仍由各注册入口拥有。具体已安装能力以 [builtins](src/builtins/mod.rs) 的注册表为准；未安装的节点仍返回缺少执行能力的诊断。
+`with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖共享输入准备的实现版本以及排序后的 ID、revision、输入布局、参数键和输出数量。共享版本由 [series](src/builtins/series.rs) 拥有，叶实现版本仍由各注册入口拥有。具体已安装能力以 [builtins](src/builtins.rs) 的注册表为准；未安装的节点仍返回缺少执行能力的诊断。
 
 新增节点时在对应方法族模块实现适配，再加入内置装配或由应用 provider 注册；实际算法放回 SCI 或相应数据所有者。执行函数只使用已经解析的类型和资源，不重新求解图类型，也不自行读取项目资源。
 
@@ -559,7 +559,7 @@ measurements by their current positions. Database series from independent source
 materialized lists may be mixed. Shared row domains retain the joint-projection fast
 path; independent inputs are read under a cumulative memory budget. Independent-sample
 tests read groups separately and allow different sample sizes. Kernel revisions
-come from the [statistical registration owner](src/builtins/statistics/mod.rs).
+come from the [statistical registration owner](src/builtins/statistics.rs).
 
 `builtins/statistics/meta/` owns study-input alignment, numeric conversion,
 workspace admission and output relations. Registrations, effect preparation,

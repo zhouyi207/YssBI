@@ -3,8 +3,7 @@ use directories::BaseDirs;
 use std::path::PathBuf;
 use yss_application::runtime::ApplicationPaths;
 use yss_installation_paths::samples_directory;
-
-const APPLICATION_ID: &str = "com.zjy.yssbi";
+use yss_ui::APPLICATION_ID;
 
 pub(crate) struct NativePaths {
     pub application: ApplicationPaths,

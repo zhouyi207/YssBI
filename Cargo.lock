@@ -12736,7 +12736,6 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "uuid",
  "yss-assistant-contract",
  "yss-assistant-extension",
@@ -12745,7 +12744,6 @@ dependencies = [
  "yss-data-contract",
  "yss-database-arrow",
  "yss-database-contract",
- "yss-database-engine",
  "yss-database-io",
  "yss-database-runtime",
  "yss-database-schema",
@@ -12783,7 +12781,6 @@ dependencies = [
  "yss-project-registry-contract",
  "yss-project-registry-sqlite",
  "yss-relational-contract",
- "yss-resource-naming",
  "yss-sci-contract",
  "yss-ui-contract",
 ]
@@ -12800,7 +12797,6 @@ dependencies = [
  "yss-chart-document",
  "yss-data-contract",
  "yss-harness-contract",
- "yss-project-identity",
  "yss-ui-contract",
 ]
 
@@ -12810,7 +12806,6 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "schemars",
- "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
@@ -13260,7 +13255,6 @@ name = "yss-harness-core"
 version = "0.1.0"
 dependencies = [
  "hex",
- "petgraph",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
@@ -13419,7 +13413,6 @@ dependencies = [
 name = "yss-plugin-runtime"
 version = "0.1.0"
 dependencies = [
- "arrow",
  "atomicwrites",
  "ed25519-dalek",
  "hex",

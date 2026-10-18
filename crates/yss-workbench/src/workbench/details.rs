@@ -55,6 +55,8 @@ pub struct DetailsPanel {
 }
 
 impl DetailsPanel {
+    pub const PANEL_NAME: &'static str = "details";
+
     pub fn new(services: Arc<GraphServices>, window: &Window, cx: &mut Context<Self>) -> Self {
         let graph = cx.new(|cx| GraphDetails::new(services, window, cx));
         let observer = cx.observe(&graph, |view: &mut Self, _, cx| {
@@ -268,7 +270,7 @@ impl Focusable for DetailsPanel {
 }
 impl BasePanel for DetailsPanel {
     fn panel_name(&self) -> &'static str {
-        "details"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         false

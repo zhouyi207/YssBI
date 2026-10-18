@@ -20,28 +20,9 @@ pub(super) use tables::{matrix_table, numeric_table, scalar_table};
 pub(in crate::builtins) const STRUCTURED_VALUE_BYTES: usize = 128;
 pub(in crate::builtins) const STRUCTURED_VALUE_COPIES: usize = 3;
 
-pub(crate) fn text<'a>(inv: &'a KernelInvocation<'_>, key: &str) -> Result<&'a str, KernelError> {
-    match inv.parameter(key) {
-        Some(RuntimeValue::Scalar(TabularScalar::String(v))) => Ok(v),
-        _ => Err(KernelError::InvalidParameter),
-    }
-}
-pub(in crate::builtins) fn boolean(
-    inv: &KernelInvocation<'_>,
-    key: &str,
-) -> Result<bool, KernelError> {
-    match inv.parameter(key) {
-        Some(RuntimeValue::Scalar(TabularScalar::Bool(v))) => Ok(*v),
-        _ => Err(KernelError::InvalidParameter),
-    }
-}
+pub(crate) use super::super::{boolean, text};
 pub(crate) fn integer(inv: &KernelInvocation<'_>, key: &str) -> Result<usize, KernelError> {
-    match inv.parameter(key) {
-        Some(RuntimeValue::Scalar(TabularScalar::Integer(v))) => {
-            usize::try_from(*v).map_err(|_| KernelError::InvalidParameter)
-        }
-        _ => Err(KernelError::InvalidParameter),
-    }
+    usize::try_from(super::super::integer(inv, key)?).map_err(|_| KernelError::InvalidParameter)
 }
 pub(in crate::builtins) fn number(
     inv: &KernelInvocation<'_>,

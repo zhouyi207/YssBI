@@ -393,12 +393,7 @@ impl GraphCanvas {
     pub fn title_text(&self, cx: &App) -> String {
         format!(
             "{}{}",
-            self.path()
-                .rsplit('/')
-                .next()
-                .unwrap_or(self.path())
-                .trim_end_matches(".yssbi-event")
-                .trim_end_matches(".yssbi-function"),
+            self.resource_path().display_name(),
             if self.dirty(cx) { " *" } else { "" }
         )
     }
@@ -448,12 +443,11 @@ impl BasePanel for GraphCanvas {
             cx.notify();
         }
     }
-    fn dump(&self, cx: &App) -> gpui_kit::component::dock::PanelState {
+    fn dump(&self, _: &App) -> gpui_kit::component::dock::PanelState {
         let mut state = gpui_kit::component::dock::PanelState::new(self.panel_name());
         state.info = gpui_kit::component::dock::PanelInfo::Panel(
             serde_json::json!({ (Self::PATH_KEY): self.path() }),
         );
-        let _ = cx;
         state
     }
 }

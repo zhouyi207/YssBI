@@ -386,7 +386,7 @@ impl ApplicationState {
             Arc::clone(&operation.document),
         )?;
         for mutation in mutations {
-            let _ = editor.apply(mutation)?;
+            editor.apply(mutation)?;
         }
         let update = editor.finish(self)?;
         let receipt = captured

@@ -72,6 +72,8 @@ pub struct PluginViewPanel {
 }
 
 impl PluginViewPanel {
+    pub const PANEL_NAME: &'static str = "plugin-view";
+
     fn show_error(&self, error: PluginFailure, cx: &mut Context<Self>) {
         self.notifications.error(super::failure(&error), cx);
     }
@@ -236,7 +238,7 @@ impl Focusable for PluginViewPanel {
 }
 impl BasePanel for PluginViewPanel {
     fn panel_name(&self) -> &'static str {
-        "plugin-view"
+        Self::PANEL_NAME
     }
     fn dump(&self, _: &App) -> PanelState {
         let mut state = PanelState::new(self.panel_name());

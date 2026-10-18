@@ -9,7 +9,6 @@ use yss_project_model::{
 pub type DocSnapshot = file_resources::FileSnapshot<DocDocument>;
 pub type DocIndexEntry = file_resources::FileIndexEntry<DocDocument>;
 pub type DocCommand = file_resources::FileCommand<DocDocument>;
-pub type DocCommandResult = file_resources::FileCommandResult<DocDocument>;
 impl ResourceFile for DocDocument {
     const LIFECYCLE_KIND: ResourceLifecycleKind = ResourceLifecycleKind::Doc;
     fn files(data: &ProjectData) -> &HashMap<DocPath, DocState> {

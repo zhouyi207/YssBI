@@ -73,6 +73,8 @@ pub struct PluginsPanel {
     cursor_stack: Vec<Option<String>>,
 }
 impl PluginsPanel {
+    pub const PANEL_NAME: &'static str = "plugins";
+
     pub fn new(services: Arc<PluginServices>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let search = cx.new(|cx| {
             InputState::new(window, cx).placeholder(yss_ui::text::t("native.plugins.search"))
@@ -153,7 +155,7 @@ impl Focusable for PluginsPanel {
 }
 impl BasePanel for PluginsPanel {
     fn panel_name(&self) -> &'static str {
-        "plugins"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         !self.busy()

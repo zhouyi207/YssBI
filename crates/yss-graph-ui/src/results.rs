@@ -22,6 +22,8 @@ pub enum ResultsEvent {
 }
 
 impl ResultsPanel {
+    pub const PANEL_NAME: &'static str = "results";
+
     pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus: cx.focus_handle(),
@@ -101,7 +103,7 @@ impl Focusable for ResultsPanel {
 }
 impl BasePanel for ResultsPanel {
     fn panel_name(&self) -> &'static str {
-        "results"
+        Self::PANEL_NAME
     }
     fn closable(&self, _: &App) -> bool {
         false

@@ -44,7 +44,7 @@ fn main() -> Result<()> {
                         ..TitleBar::title_bar_options()
                     }),
                     window_decorations: Some(WindowDecorations::Client),
-                    app_id: Some("com.zjy.yssbi".into()),
+                    app_id: Some(yss_ui::APPLICATION_ID.into()),
                     window_min_size: Some(size(px(900.), px(620.))),
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     ..TitleBar::window_options()

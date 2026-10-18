@@ -157,7 +157,7 @@ Schema 也按当前输入字段与 lineage 恢复，并跟随字段类型变化�
 引用补全按节点收集新增端口，保持首次引用顺序，再一次追加到该节点原有端口事实；不为每个缺失引用复制完整端口表。
 端口去重与已有端口诊断索引仅用于本次补全，连接计数继续读取本次文档索引，最终端口和诊断仍统一归入语义快照。
 
-Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用属于 Workflow。
+Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用不属于分析图。
 
 统计节点的 `result` 输出统一支持数值与 JSON 报告。线性 Summary 的类别保留原生分页/分析查询身份，其余统计 `result` 使用通用结构化报告类别；不再按统计方法分派专用报告页面。Fit 的 `model`、`fitted`、`residuals` 仍是普通数据，KDE 等绘图输出使用各自图形契约。
 

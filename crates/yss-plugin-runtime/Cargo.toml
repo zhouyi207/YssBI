@@ -33,4 +33,3 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
-arrow.workspace = true

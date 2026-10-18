@@ -11,6 +11,8 @@ pub(super) struct MissingPanel {
 }
 
 impl MissingPanel {
+    pub const PANEL_NAME: &'static str = "unavailable-resource";
+
     pub fn new(state: PanelState, cx: &mut Context<Self>) -> Self {
         Self {
             state,
@@ -38,7 +40,7 @@ impl Focusable for MissingPanel {
 }
 impl BasePanel for MissingPanel {
     fn panel_name(&self) -> &'static str {
-        "unavailable-resource"
+        Self::PANEL_NAME
     }
     fn dump(&self, _: &App) -> PanelState {
         self.state.clone()

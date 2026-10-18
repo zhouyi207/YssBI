@@ -1,9 +1,8 @@
 use super::super::numeric_input;
 use super::super::series::numeric_columns as columns;
-use super::common::computation_error;
+use super::common::{boolean, computation_error, integer, text};
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use std::sync::Arc;
-use yss_data_contract::TabularScalar;
 use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::regression::linear::{LinearRegressionMethod, LinearRegressionRequest};
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
@@ -74,16 +73,10 @@ pub(crate) fn execute(
             vec![RuntimeValue::List(prediction.into())]
         }
         LinearKernel::Fit => {
-            let constant = match invocation.parameter("constant") {
-                Some(RuntimeValue::Scalar(TabularScalar::Bool(value))) => *value,
-                _ => return Err(KernelError::InvalidParameter),
-            };
-            let method = match invocation.parameter("method") {
-                Some(RuntimeValue::Scalar(TabularScalar::String(value))) => value.as_ref(),
-                _ => return Err(KernelError::InvalidParameter),
-            };
+            let constant = boolean(invocation, "constant")?;
+            let method = text(invocation, "method")?;
             let clusters = group(invocation, "clusters");
-            let clustered = matches!(invocation.parameter("covariance"), Some(RuntimeValue::Scalar(TabularScalar::String(v))) if v.as_ref() == "cluster");
+            let clustered = text(invocation, "covariance").is_ok_and(|value| value == "cluster");
             if (clustered && clusters.len() != 1) || (!clustered && !clusters.is_empty()) {
                 return Err(KernelError::InvalidParameter);
             }
@@ -245,11 +238,7 @@ fn summary_options(
         ("serial_tests", &mut options.serial_tests),
         ("hypothesis_test", &mut options.hypothesis_test),
     ] {
-        let Some(RuntimeValue::Scalar(TabularScalar::Bool(value))) = invocation.parameter(key)
-        else {
-            return Err(KernelError::InvalidParameter);
-        };
-        *target = *value;
+        *target = boolean(invocation, key)?;
     }
     for (key, enabled, target) in [
         ("acf_max_lag", options.acf_pacf, &mut options.acf_max_lag),
@@ -260,45 +249,23 @@ fn summary_options(
         ),
     ] {
         if enabled {
-            let Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) =
-                invocation.parameter(key)
-            else {
-                return Err(KernelError::InvalidParameter);
-            };
-            *target = usize::try_from(*value).map_err(|_| KernelError::InvalidParameter)?;
+            *target = integer(invocation, key)?;
         }
     }
     if options.serial_tests {
-        let Some(RuntimeValue::Scalar(TabularScalar::Bool(value))) =
-            invocation.parameter("bg_nomiss0")
-        else {
-            return Err(KernelError::InvalidParameter);
-        };
-        options.bg_nomiss0 = *value;
+        options.bg_nomiss0 = boolean(invocation, "bg_nomiss0")?;
     }
     if options.hypothesis_test {
-        let Some(RuntimeValue::Scalar(TabularScalar::String(value))) =
-            invocation.parameter("hypothesis")
-        else {
-            return Err(KernelError::InvalidParameter);
-        };
-        options.hypothesis = value.to_string();
+        options.hypothesis = text(invocation, "hypothesis")?.to_string();
     }
     Ok(options)
 }
 
 pub(super) fn covariance(invocation: &KernelInvocation<'_>) -> Result<OlsCovariance, KernelError> {
-    let integer = |key: &str| match invocation.parameter(key) {
-        Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) => {
-            usize::try_from(*value).map_err(|_| KernelError::InvalidParameter)
-        }
-        _ => Err(KernelError::InvalidParameter),
+    let non_negative = |key: &str| {
+        i64::try_from(integer(invocation, key)?).map_err(|_| KernelError::InvalidParameter)
     };
-    let string = |key: &str| match invocation.parameter(key) {
-        Some(RuntimeValue::Scalar(TabularScalar::String(value))) => Ok(value.clone()),
-        _ => Err(KernelError::InvalidParameter),
-    };
-    Ok(match string("covariance")?.as_ref() {
+    Ok(match text(invocation, "covariance")? {
         "nonrobust" => OlsCovariance::NonRobust,
         "HC0" => OlsCovariance::Hc0,
         "HC1" => OlsCovariance::Hc1,
@@ -308,13 +275,11 @@ pub(super) fn covariance(invocation: &KernelInvocation<'_>) -> Result<OlsCovaria
             scale: numeric_input(invocation.parameter("scale"))?,
         },
         "HAC" => OlsCovariance::Hac {
-            kernel: string("kernel")?.into_string(),
-            bandwidth: Some(
-                i64::try_from(integer("bandwidth")?).map_err(|_| KernelError::InvalidParameter)?,
-            ),
+            kernel: text(invocation, "kernel")?.to_owned(),
+            bandwidth: Some(non_negative("bandwidth")?),
         },
         "newey" => OlsCovariance::Newey {
-            lag: Some(i64::try_from(integer("lag")?).map_err(|_| KernelError::InvalidParameter)?),
+            lag: Some(non_negative("lag")?),
         },
         _ => return Err(KernelError::InvalidParameter),
     })
@@ -350,6 +315,7 @@ mod tests {
         sync::atomic::AtomicBool,
         time::{Duration, Instant},
     };
+    use yss_data_contract::TabularScalar;
 
     fn run(
         kind: &str,

@@ -474,11 +474,13 @@ impl Drop for GraphCanvas {
         if !active.is_empty() {
             self.services.run(move |services| {
                 for identity in active {
-                    let _ = cancel_run(
+                    if let Err(error) = cancel_run(
                         services,
                         *identity.execution_session_id(),
                         identity.run_id(),
-                    );
+                    ) {
+                        tracing::warn!(%error, "closing graph run was not cancelled");
+                    }
                 }
                 Ok(())
             });

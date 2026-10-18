@@ -95,6 +95,8 @@ pub struct ConversationPanel {
     stream_error: Option<String>,
 }
 impl ConversationPanel {
+    pub const PANEL_NAME: &'static str = "assistant-conversation";
+
     fn set_error(&mut self, error: String, cx: &mut Context<Self>) {
         self.notifications.error(error.clone(), cx);
         self.error = Some(error);
@@ -256,7 +258,7 @@ impl Focusable for ConversationPanel {
 }
 impl BasePanel for ConversationPanel {
     fn panel_name(&self) -> &'static str {
-        "assistant-conversation"
+        Self::PANEL_NAME
     }
     fn dump(&self, _: &App) -> PanelState {
         let mut state = PanelState::new(self.panel_name());
