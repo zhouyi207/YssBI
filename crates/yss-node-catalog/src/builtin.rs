@@ -720,7 +720,6 @@ fn concrete(id: &str) -> Result<TypeExpr, BuiltinAssemblyError> {
 fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
-        cache: CachePolicy::PerRun,
     }
 }
 

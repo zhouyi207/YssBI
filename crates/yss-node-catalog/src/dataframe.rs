@@ -117,7 +117,6 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         },
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
-            cache: CachePolicy::PerRun,
         },
         typing: if spec.interface == InterfaceKind::SeriesSelect {
             NodeTypingSpec::ColumnOutput {

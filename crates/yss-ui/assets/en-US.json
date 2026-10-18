@@ -713,11 +713,9 @@
       "graph_draft_changed": "The graph or its dependencies changed. Run the current graph again.",
       "graph_not_ready": "Resolve the graph's blocking problems before running it.",
       "inputResultUnavailable": "An upstream result is missing or stale. Run its source first, or choose Run to Here.",
-      "execution_input_result_unavailable": "An upstream result is missing or stale. Run its source first, or choose Run to Here.",
       "graph_resolution_failed": "Could not check the graph. Use the diagnostic reference for technical details.",
       "graph_plan_failed": "Could not prepare the execution plan. Use the diagnostic reference for technical details.",
-      "stale_project_lifecycle": "The project state changed. Run the graph again in the current project.",
-      "execution_channel_failed": "Run event delivery failed, so complete results could not be confirmed. Try again and check the logs."
+      "stale_project_lifecycle": "The project state changed. Run the graph again in the current project."
     },
     "phases": {
       "admission": "Phase: starting run",
@@ -1027,8 +1025,6 @@
         "graph_connection_order_required": "This connection requires an order",
         "graph_connection_order_forbidden": "This connection does not accept an order",
         "graph_connection_already_exists": "These ports are already connected",
-        "graph_edit_changed": "The graph has changed. Please try again.",
-        "graph_edit_busy": "The graph is processing another edit. Please try again shortly.",
         "graph_connection_move_source_empty": "The source port has no connections to move",
         "graph_connection_move_same_port": "Choose a different destination port",
         "graph_mutation_empty_targets": "Select at least one graph item",

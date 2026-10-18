@@ -113,12 +113,6 @@ fn mark_recovery(marker: &Option<RecoveryMarker>, error: &FilesystemError) {
     }
 }
 
-fn prepare_error(error: impl std::fmt::Display) -> FilesystemError {
-    FilesystemError::TransactionPrepareFailed {
-        message: error.to_string(),
-    }
-}
-
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilesystemFaultPoint {

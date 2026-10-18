@@ -667,7 +667,6 @@ fn linear_parameters() -> Result<Vec<Parameter>, BuiltinAssemblyError> {
 fn execution() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
-        cache: CachePolicy::PerRun,
     }
 }
 fn data_input(

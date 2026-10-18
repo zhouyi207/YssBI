@@ -25,12 +25,6 @@ pub struct ResourceCatalog {
     pub resources: Vec<ResourceMetadata>,
 }
 
-fn read_error(error: impl ToString) -> ProjectOperationError {
-    ProjectOperationError::TransactionPrepareFailed {
-        message: error.to_string(),
-    }
-}
-
 impl ProjectState {
     /// Scans paths only. Does not load closed graphs, clone document bodies or read data rows.
     pub fn read_resource_catalog(
@@ -46,15 +40,15 @@ impl ProjectState {
         }
         let _lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
-        let graphs =
-            crate::scan_graph_resource_index(session.root.as_path()).map_err(read_error)?;
+        let graphs = crate::scan_graph_resource_index(session.root.as_path())
+            .map_err(ProjectOperationError::prepare_failed)?;
         let charts =
             crate::file_resources::scan_file_paths::<ChartDocument>(session.root.as_path())
-                .map_err(read_error)?;
+                .map_err(ProjectOperationError::prepare_failed)?;
         let minds = crate::file_resources::scan_file_paths::<MindDocument>(session.root.as_path())
-            .map_err(read_error)?;
+            .map_err(ProjectOperationError::prepare_failed)?;
         let docs = crate::file_resources::scan_file_paths::<DocDocument>(session.root.as_path())
-            .map_err(read_error)?;
+            .map_err(ProjectOperationError::prepare_failed)?;
         self.validate_project_session(&session)?;
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != project.as_str() {
@@ -98,8 +92,8 @@ impl ProjectState {
         append_files(&mut resources, &data, docs, Kind::Doc);
         for entry in &mut resources {
             if entry.resource.kind == Kind::Mind {
-                let path =
-                    FilePath::<MindDocument>::parse(&entry.resource.id).map_err(read_error)?;
+                let path = FilePath::<MindDocument>::parse(&entry.resource.id)
+                    .map_err(ProjectOperationError::prepare_failed)?;
                 entry.root_topic_id = data
                     .minds
                     .get(&path)
@@ -108,10 +102,9 @@ impl ProjectState {
         }
         let database_revisions = self.database_authority_revisions.read().unwrap();
         for (id, declaration) in &data.databases {
-            let revision = database_revisions
-                .get(id)
-                .copied()
-                .ok_or_else(|| read_error("database authority unavailable"))?;
+            let revision = database_revisions.get(id).copied().ok_or_else(|| {
+                ProjectOperationError::prepare_failed("database authority unavailable")
+            })?;
             resources.push(ResourceMetadata {
                 resource: ProjectResourceRef {
                     kind: Kind::Database,

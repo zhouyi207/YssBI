@@ -244,7 +244,6 @@ pub enum PortEditorSpec {
 #[serde(deny_unknown_fields)]
 pub struct ExecutionSemantics {
     pub determinism: Determinism,
-    pub cache: CachePolicy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,13 +251,6 @@ pub enum Determinism {
     Deterministic,
     EnvironmentDependent,
     NonDeterministic,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CachePolicy {
-    Disabled,
-    PerRun,
-    PerSession,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -286,7 +278,6 @@ pub enum ProtocolError {
         reason: &'static str,
     },
     InvalidPortMemberGroup(&'static str),
-    InvalidExecutionSemantics(&'static str),
 }
 
 impl std::fmt::Display for ProtocolError {
@@ -302,9 +293,6 @@ impl std::fmt::Display for ProtocolError {
             }
             Self::InvalidPortMemberGroup(reason) => {
                 write!(f, "invalid port member group: {reason}")
-            }
-            Self::InvalidExecutionSemantics(reason) => {
-                write!(f, "invalid execution semantics: {reason}")
             }
         }
     }
@@ -418,17 +406,6 @@ fn validate_port_contract(port: &PortSpec) -> Result<(), ProtocolError> {
     Ok(())
 }
 
-pub fn validate_execution(execution: ExecutionSemantics) -> Result<(), ProtocolError> {
-    if execution.determinism == Determinism::NonDeterministic
-        && execution.cache != CachePolicy::Disabled
-    {
-        return Err(ProtocolError::InvalidExecutionSemantics(
-            "non-deterministic nodes cannot cache outputs",
-        ));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,30 +487,5 @@ mod tests {
             ordered: true,
         };
         assert!(NodeInterfaceProtocol::new(vec![port], vec![]).is_err());
-    }
-
-    #[test]
-    fn effective_cache_policy_serde_uses_canonical_names() {
-        assert_eq!(
-            serde_json::to_string(&CachePolicy::Disabled).unwrap(),
-            "\"Disabled\""
-        );
-        assert_eq!(
-            serde_json::to_string(&CachePolicy::PerSession).unwrap(),
-            "\"PerSession\""
-        );
-        assert_eq!(
-            serde_json::from_str::<CachePolicy>("\"PerSession\"").unwrap(),
-            CachePolicy::PerSession
-        );
-    }
-
-    #[test]
-    fn rejects_caching_for_non_deterministic_nodes() {
-        let non_deterministic = ExecutionSemantics {
-            determinism: Determinism::NonDeterministic,
-            cache: CachePolicy::PerRun,
-        };
-        assert!(validate_execution(non_deterministic).is_err());
     }
 }

@@ -1,4 +1,4 @@
-use super::{StagedFilesystemMutation, TRANSACTION_DIRECTORY, prepare_error};
+use super::{StagedFilesystemMutation, TRANSACTION_DIRECTORY};
 use crate::{FilesystemError, RelativePath};
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Component, Path, PathBuf};
@@ -31,7 +31,7 @@ pub(super) fn validate_mutation_paths(
                     matches!(component, Component::Normal(name) if portable_path_key(Path::new(name)) != TRANSACTION_DIRECTORY)
                 });
             if !valid {
-                return Err(prepare_error(format!(
+                return Err(FilesystemError::prepare_failed(format!(
                     "invalid transaction target '{}'",
                     relative.display()
                 )));
@@ -98,7 +98,7 @@ fn register_portable_path(
                 entry.insert(PortablePathOwner::RewritePairComplete);
                 return Ok(());
             }
-            Err(prepare_error(format!(
+            Err(FilesystemError::prepare_failed(format!(
                 "duplicate portable path '{}' in filesystem transaction",
                 relative.display()
             )))
@@ -237,17 +237,17 @@ pub(super) fn validate_move_preconditions(
     let StagedFilesystemMutation::MoveFile { from, to } = mutation else {
         return Ok(());
     };
-    validate_regular_file(&root.join(from)).map_err(prepare_error)?;
+    validate_regular_file(&root.join(from)).map_err(FilesystemError::prepare_failed)?;
     let target_parent = to.parent().unwrap_or_else(|| Path::new(""));
-    let target_name = to
-        .file_name()
-        .ok_or_else(|| prepare_error(format!("move target '{}' has no file name", to.display())))?;
+    let target_name = to.file_name().ok_or_else(|| {
+        FilesystemError::prepare_failed(format!("move target '{}' has no file name", to.display()))
+    })?;
     let source_key = portable_path_key(from);
     let target_key = portable_path_key(to);
     let directory = root.join(target_parent);
     if directory.exists() {
-        for entry in std::fs::read_dir(&directory).map_err(prepare_error)? {
-            let entry = entry.map_err(prepare_error)?;
+        for entry in std::fs::read_dir(&directory).map_err(FilesystemError::prepare_failed)? {
+            let entry = entry.map_err(FilesystemError::prepare_failed)?;
             let candidate = target_parent.join(entry.file_name());
             if entry
                 .file_name()
@@ -266,7 +266,7 @@ pub(super) fn validate_move_preconditions(
             if candidate == *from && source_key == target_key {
                 continue;
             }
-            return Err(prepare_error(format!(
+            return Err(FilesystemError::prepare_failed(format!(
                 "move target '{}' has an existing portable conflict at '{}'",
                 to.display(),
                 candidate.display()

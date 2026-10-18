@@ -32,7 +32,7 @@ impl ProjectState {
         let _lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
         crate::project_io::read_project_manifest_from_root(session.root.as_path())
-            .map_err(read_error)?;
+            .map_err(ProjectOperationError::prepare_failed)?;
         let targeted = match &change {
             FilesystemChange::File(file) => file
                 .relative_path()
@@ -44,7 +44,10 @@ impl ProjectState {
         // A retained single-file hint is a resource boundary. Only authoritative rescan
         // and unclassified metadata/database/directory hints inspect other resources.
         let index = if targeted.is_none() {
-            Some(crate::scan_graph_resource_index(session.root.as_path()).map_err(read_error)?)
+            Some(
+                crate::scan_graph_resource_index(session.root.as_path())
+                    .map_err(ProjectOperationError::prepare_failed)?,
+            )
         } else {
             None
         };
@@ -73,13 +76,15 @@ impl ProjectState {
                 session.root.as_path(),
                 std::path::Path::new(path.as_str()),
             )
-            .map_err(|error| read_error(error.into()))?;
+            .map_err(|error| {
+                ProjectOperationError::prepare_failed(crate::ProjectError::from(error))
+            })?;
             let document = crate::project_io::parse_graph_resource_document(
                 &contents,
                 &session.root.as_path().join(path.as_str()),
                 path.kind(),
             )
-            .map_err(read_error)?;
+            .map_err(ProjectOperationError::prepare_failed)?;
             let mut incoming = yss_project_model::GraphResourceDocument {
                 name: path.display_name().to_owned(),
                 kind: document.kind,
@@ -194,7 +199,9 @@ fn resource_exists(root: &std::path::Path, path: &str) -> Result<bool, ProjectOp
     match std::fs::symlink_metadata(root.join(path)) {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(read_error(error.into())),
+        Err(error) => Err(ProjectOperationError::prepare_failed(
+            crate::ProjectError::from(error),
+        )),
     }
 }
 
@@ -244,12 +251,6 @@ fn clean_file<T: ResourceFile>(current: &ProjectData, resource: &ResourceKey) ->
             .get(&path)
             .is_some_and(|state| !state.dirty())
     })
-}
-
-fn read_error(error: crate::ProjectError) -> ProjectOperationError {
-    ProjectOperationError::TransactionPrepareFailed {
-        message: error.to_string(),
-    }
 }
 
 fn next_revision(

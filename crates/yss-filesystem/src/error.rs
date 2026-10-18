@@ -19,6 +19,22 @@ pub enum FilesystemError {
 }
 
 impl FilesystemError {
+    pub(crate) fn invalid_root(
+        path: impl AsRef<std::path::Path>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::InvalidRoot {
+            path: path.as_ref().to_path_buf(),
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn prepare_failed(error: impl ToString) -> Self {
+        Self::TransactionPrepareFailed {
+            message: error.to_string(),
+        }
+    }
+
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidRoot { .. } => "invalid_filesystem_root",

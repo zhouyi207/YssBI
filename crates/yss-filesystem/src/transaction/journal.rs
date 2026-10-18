@@ -1,9 +1,9 @@
+use super::StagedFilesystemMutation;
 use super::mutation::ReplacementFile;
 use super::paths::{
     create_missing_directories, create_missing_parents, metadata_is_redirect,
     validate_real_directory, validate_secure_path,
 };
-use super::{StagedFilesystemMutation, prepare_error};
 use crate::{FilesystemError, FilesystemLeaseSet};
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -59,27 +59,27 @@ fn capture_before_image(
     let path = root.join(relative_path);
     let before = match std::fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.is_file() => {
-            BeforeImage::File(std::fs::read(&path).map_err(prepare_error)?)
+            BeforeImage::File(std::fs::read(&path).map_err(FilesystemError::prepare_failed)?)
         }
         Ok(metadata) if metadata.is_dir() => {
             let children = std::fs::read_dir(&path)
-                .map_err(prepare_error)?
+                .map_err(FilesystemError::prepare_failed)?
                 .map(|entry| {
                     entry
                         .map(|entry| PathBuf::from(entry.file_name()))
-                        .map_err(prepare_error)
+                        .map_err(FilesystemError::prepare_failed)
                 })
                 .collect::<Result<BTreeSet<_>, _>>()?;
             BeforeImage::Directory { children }
         }
         Ok(_) => {
-            return Err(prepare_error(format!(
+            return Err(FilesystemError::prepare_failed(format!(
                 "unsupported transaction target '{}'",
                 relative_path.display()
             )));
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => BeforeImage::Absent,
-        Err(error) => return Err(prepare_error(error)),
+        Err(error) => return Err(FilesystemError::prepare_failed(error)),
     };
     Ok(JournalEntry {
         relative_path: relative_path.to_path_buf(),

@@ -26,16 +26,15 @@ pub(super) fn capture_function_dependents(
     }
     let root = snapshot.session.root.as_path();
     let mut index = None;
-    let prepare_error =
-        |error: crate::ProjectError| crate::ProjectOperationError::TransactionPrepareFailed {
-            message: error.to_string(),
-        };
     while let Some(path) = capture.pending.pop_first() {
         if !visited.insert(path.clone()) {
             continue;
         }
         if index.is_none() {
-            index = Some(crate::scan_graph_resource_index(root).map_err(prepare_error)?);
+            index = Some(
+                crate::scan_graph_resource_index(root)
+                    .map_err(crate::ProjectOperationError::prepare_failed)?,
+            );
         }
         let Some(entry) = index
             .as_ref()
@@ -46,7 +45,7 @@ pub(super) fn capture_function_dependents(
         // Reuse the captured path index. Reading a dependency must not install it as resident.
         let graph =
             crate::project_io::read_graph_document(&root.join(entry.path.as_str()), entry.kind)
-                .map_err(prepare_error)?;
+                .map_err(crate::ProjectOperationError::prepare_failed)?;
         capture.record_document(&path, &graph.document);
     }
     Ok(capture.affected_graphs())

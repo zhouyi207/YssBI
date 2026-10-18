@@ -10,7 +10,7 @@ pub struct FileInventory {
 pub fn ensure_directory(root: &Path) -> Result<bool, FilesystemError> {
     let created = !root.exists();
     if created {
-        std::fs::create_dir_all(root).map_err(prepare_error)?;
+        std::fs::create_dir_all(root).map_err(FilesystemError::prepare_failed)?;
     }
     Ok(created)
 }
@@ -25,23 +25,35 @@ pub fn validate_destination_policy(root: &Path) -> Result<(), FilesystemError> {
     if !root.exists() {
         let parent = root
             .parent()
-            .ok_or_else(|| invalid_root(root, "destination has no parent"))?;
-        let metadata = std::fs::symlink_metadata(parent).map_err(prepare_error)?;
+            .ok_or_else(|| FilesystemError::invalid_root(root, "destination has no parent"))?;
+        let metadata =
+            std::fs::symlink_metadata(parent).map_err(FilesystemError::prepare_failed)?;
         if metadata_is_redirect(&metadata) || !metadata.is_dir() {
-            return Err(invalid_root(
+            return Err(FilesystemError::invalid_root(
                 root,
                 "destination parent is not a real directory",
             ));
         }
         return Ok(());
     }
-    let metadata = std::fs::symlink_metadata(root).map_err(prepare_error)?;
+    let metadata = std::fs::symlink_metadata(root).map_err(FilesystemError::prepare_failed)?;
     if metadata_is_redirect(&metadata) || !metadata.is_dir() {
-        return Err(invalid_root(root, "destination is not a real directory"));
+        return Err(FilesystemError::invalid_root(
+            root,
+            "destination is not a real directory",
+        ));
     }
-    let mut entries = std::fs::read_dir(root).map_err(prepare_error)?;
-    if entries.next().transpose().map_err(prepare_error)?.is_some() {
-        return Err(invalid_root(root, "destination directory must be empty"));
+    let mut entries = std::fs::read_dir(root).map_err(FilesystemError::prepare_failed)?;
+    if entries
+        .next()
+        .transpose()
+        .map_err(FilesystemError::prepare_failed)?
+        .is_some()
+    {
+        return Err(FilesystemError::invalid_root(
+            root,
+            "destination directory must be empty",
+        ));
     }
     Ok(())
 }
@@ -62,19 +74,20 @@ fn collect_source_files(
     directory: &Path,
     tree: &mut FileInventory,
 ) -> Result<(), FilesystemError> {
-    for entry in std::fs::read_dir(directory).map_err(prepare_error)? {
-        let entry = entry.map_err(prepare_error)?;
+    for entry in std::fs::read_dir(directory).map_err(FilesystemError::prepare_failed)? {
+        let entry = entry.map_err(FilesystemError::prepare_failed)?;
         let relative = entry
             .path()
             .strip_prefix(source_root)
-            .map_err(prepare_error)?
+            .map_err(FilesystemError::prepare_failed)?
             .to_path_buf();
         if relative.starts_with(".yssbi-transaction") {
             continue;
         }
-        let metadata = std::fs::symlink_metadata(entry.path()).map_err(prepare_error)?;
+        let metadata =
+            std::fs::symlink_metadata(entry.path()).map_err(FilesystemError::prepare_failed)?;
         if metadata_is_redirect(&metadata) {
-            return Err(prepare_error(format!(
+            return Err(FilesystemError::prepare_failed(format!(
                 "copy source '{}' is a redirect",
                 relative.display()
             )));
@@ -85,24 +98,11 @@ fn collect_source_files(
         } else if metadata.is_file() {
             tree.files.insert(relative);
         } else {
-            return Err(prepare_error(format!(
+            return Err(FilesystemError::prepare_failed(format!(
                 "copy source '{}' is not a regular file or directory",
                 relative.display()
             )));
         }
     }
     Ok(())
-}
-
-fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> FilesystemError {
-    FilesystemError::InvalidRoot {
-        path: path.as_ref().to_path_buf(),
-        message: message.into(),
-    }
-}
-
-fn prepare_error(error: impl ToString) -> FilesystemError {
-    FilesystemError::TransactionPrepareFailed {
-        message: error.to_string(),
-    }
 }

@@ -276,7 +276,6 @@ pub(crate) fn resource_parameter(key: &'static str) -> Result<Parameter, Builtin
 fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::EnvironmentDependent,
-        cache: CachePolicy::PerRun,
     }
 }
 

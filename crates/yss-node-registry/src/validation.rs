@@ -299,12 +299,6 @@ fn validate_node(
     nominal_type_ids: &BuiltinNominalTypeIds,
 ) -> Result<(), RegistryValidationError> {
     let protocol = &node.protocol;
-    validate_execution(protocol.execution).map_err(|source| {
-        RegistryValidationError::InvalidNodeProtocol {
-            node: protocol.type_id.clone(),
-            source,
-        }
-    })?;
     let fail = |reason: String| RegistryValidationError::InvalidNode {
         node: protocol.type_id.clone(),
         reason,

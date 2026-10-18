@@ -12,9 +12,6 @@ pub enum ProjectError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("project file not found: {0}")]
-    FileNotFound(PathBuf),
-
     #[error("invalid project format: {0}")]
     InvalidProjectFormat(String),
 

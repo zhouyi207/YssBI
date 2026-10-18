@@ -55,6 +55,12 @@ pub enum ProjectOperationError {
 }
 
 impl ProjectOperationError {
+    pub(crate) fn prepare_failed(error: impl ToString) -> Self {
+        Self::TransactionPrepareFailed {
+            message: error.to_string(),
+        }
+    }
+
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidResourceName(source) => resource_name_error_code(source),

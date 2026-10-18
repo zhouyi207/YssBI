@@ -99,7 +99,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             instance_display: NodeInstanceDisplaySpec::Static,
             execution: ExecutionSemantics {
                 determinism: Determinism::Deterministic,
-                cache: CachePolicy::PerRun,
             },
             typing: NodeTypingSpec::ShapePreservingConversion {
                 input: sid("input", PortKey::new)?,

@@ -72,10 +72,8 @@ impl std::fmt::Display for ProjectResourceId {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ProjectResourceKind {
-    DatabaseConnection,
     DataFrame,
     File,
-    Plot,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -392,11 +390,6 @@ pub enum ProjectExecutionPreparationError {
         requested: ProjectResourceKind,
         actual: ProjectResourceKind,
     },
-    #[error("resource kind is not owned by Project: {resource}")]
-    UnsupportedResourceKind {
-        resource: ProjectResourceId,
-        kind: ProjectResourceKind,
-    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
@@ -454,7 +447,6 @@ enum ResourceIdentity {
 enum ResourceResolutionFailure {
     InvalidIdentity,
     UnknownResource,
-    UnsupportedKind,
     KindMismatch { actual: ProjectResourceKind },
     Unavailable,
     RevisionUnavailable,
@@ -489,26 +481,13 @@ fn validate_requested_kind(
     identity: &ResourceIdentity,
     requested: ProjectResourceKind,
 ) -> Result<(), ResourceResolutionFailure> {
-    if requested == ProjectResourceKind::Plot {
-        return Err(ResourceResolutionFailure::UnsupportedKind);
-    }
-    let family = resource_family_kind(identity);
-    let valid = match family {
-        ResourceFamilyKind::Database => {
-            matches!(
-                requested,
-                ProjectResourceKind::DatabaseConnection | ProjectResourceKind::DataFrame
-            )
-        }
-        ResourceFamilyKind::File => requested == ProjectResourceKind::File,
-    };
-    if valid {
-        return Ok(());
-    }
-    let actual = match family {
-        ResourceFamilyKind::Database => ProjectResourceKind::DatabaseConnection,
+    let actual = match resource_family_kind(identity) {
+        ResourceFamilyKind::Database => ProjectResourceKind::DataFrame,
         ResourceFamilyKind::File => ProjectResourceKind::File,
     };
+    if requested == actual {
+        return Ok(());
+    }
     Err(ResourceResolutionFailure::KindMismatch { actual })
 }
 
@@ -579,12 +558,6 @@ fn preparation_resolution_error(
                 actual,
             }
         }
-        ResourceResolutionFailure::UnsupportedKind => {
-            ProjectExecutionPreparationError::UnsupportedResourceKind {
-                resource: resource.clone(),
-                kind: requirement.kind,
-            }
-        }
         ResourceResolutionFailure::RevisionUnavailable => {
             ProjectExecutionPreparationError::ResourceRevisionUnavailable {
                 resource: resource.clone(),
@@ -615,8 +588,7 @@ fn current_resolution_error(
         }
         ResourceResolutionFailure::Unavailable
         | ResourceResolutionFailure::InvalidIdentity
-        | ResourceResolutionFailure::UnknownResource
-        | ResourceResolutionFailure::UnsupportedKind => {
+        | ResourceResolutionFailure::UnknownResource => {
             ProjectEffectCommitError::ResourceUnavailable {
                 resource: resource.clone(),
             }

@@ -450,7 +450,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
-            cache: CachePolicy::PerRun,
         },
         typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,

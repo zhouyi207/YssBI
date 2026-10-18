@@ -99,7 +99,6 @@ fn definition() -> NodeProtocol {
         instance_display: Default::default(),
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
-            cache: CachePolicy::PerSession,
         },
         typing: Default::default(),
         scope: NodeScope::Any,

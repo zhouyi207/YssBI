@@ -513,7 +513,6 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::NonDeterministic,
-            cache: CachePolicy::Disabled,
         },
         typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,

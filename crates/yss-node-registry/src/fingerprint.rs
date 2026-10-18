@@ -209,7 +209,6 @@ mod tests {
             instance_display: NodeInstanceDisplaySpec::Static,
             execution: ExecutionSemantics {
                 determinism: Determinism::Deterministic,
-                cache: CachePolicy::PerRun,
             },
             typing: NodeTypingSpec::Fixed,
             scope: NodeScope::Any,

@@ -387,7 +387,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             instance_display: NodeInstanceDisplaySpec::Static,
             execution: ExecutionSemantics {
                 determinism: Determinism::Deterministic,
-                cache: CachePolicy::PerRun,
             },
             typing: NodeTypingSpec::Fixed,
             scope: NodeScope::Any,

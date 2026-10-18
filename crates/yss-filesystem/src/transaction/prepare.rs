@@ -8,7 +8,7 @@ use super::paths::{
 use super::workspace::TransactionWorkspace;
 use super::{
     FilesystemTransaction, PreparedFilesystemTransaction, StagedFilesystemMutation,
-    TransactionContext, prepare_error,
+    TransactionContext,
 };
 use crate::{FilesystemError, FilesystemLeaseSet};
 use std::collections::BTreeSet;
@@ -49,7 +49,7 @@ impl FilesystemTransaction {
         }
         validate_mutation_paths(&mutations)?;
         let root = context.root.as_path().to_path_buf();
-        validate_real_directory(&root).map_err(prepare_error)?;
+        validate_real_directory(&root).map_err(FilesystemError::prepare_failed)?;
         for mutation in &mutations {
             if let StagedFilesystemMutation::CopyFile {
                 relative_path,
@@ -58,15 +58,16 @@ impl FilesystemTransaction {
             } = mutation
             {
                 if !lease.contains(source_root) || root.join(relative_path).exists() {
-                    return Err(prepare_error(
+                    return Err(FilesystemError::prepare_failed(
                         "copy requires a leased source and an absent destination",
                     ));
                 }
                 validate_copy_source(source_root.as_path(), source_relative_path)
-                    .map_err(prepare_error)?;
+                    .map_err(FilesystemError::prepare_failed)?;
             }
             for relative_path in mutation.relative_paths() {
-                validate_secure_path(&root, relative_path, true).map_err(prepare_error)?;
+                validate_secure_path(&root, relative_path, true)
+                    .map_err(FilesystemError::prepare_failed)?;
             }
             validate_move_preconditions(&root, mutation)?;
         }
@@ -93,7 +94,7 @@ impl FilesystemTransaction {
     ) -> Result<(), FilesystemError> {
         let root = self.workspace.context.root.as_path();
         let prepared_root = self.workspace.staging_root.join("prepared");
-        create_secure_directories(root, &prepared_root).map_err(prepare_error)?;
+        create_secure_directories(root, &prepared_root).map_err(FilesystemError::prepare_failed)?;
         for mutation in &self.mutations {
             let relative_path = match mutation {
                 StagedFilesystemMutation::Write { relative_path, .. }
@@ -106,48 +107,57 @@ impl FilesystemTransaction {
                 .lease
                 .take_fault(FilesystemFaultPoint::StagedSerialization)
             {
-                return Err(prepare_error("injected staged serialization failure"));
+                return Err(FilesystemError::prepare_failed(
+                    "injected staged serialization failure",
+                ));
             }
             let staged_path = prepared_root.join(relative_path);
             if let Some(parent) = staged_path.parent() {
-                create_secure_directories(root, parent).map_err(prepare_error)?;
+                create_secure_directories(root, parent).map_err(FilesystemError::prepare_failed)?;
             }
             let mut staged = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(&staged_path)
-                .map_err(prepare_error)?;
+                .map_err(FilesystemError::prepare_failed)?;
             match mutation {
-                StagedFilesystemMutation::Write { contents, .. } => {
-                    staged.write_all(contents).map_err(prepare_error)?
-                }
+                StagedFilesystemMutation::Write { contents, .. } => staged
+                    .write_all(contents)
+                    .map_err(FilesystemError::prepare_failed)?,
                 StagedFilesystemMutation::CopyFile {
                     source_root,
                     source_relative_path,
                     ..
                 } => {
                     let source = validate_copy_source(source_root.as_path(), source_relative_path)
-                        .map_err(prepare_error)?;
-                    let mut source_file = std::fs::File::open(source).map_err(prepare_error)?;
-                    let before = source_file.metadata().map_err(prepare_error)?;
-                    let copied =
-                        std::io::copy(&mut source_file, &mut staged).map_err(prepare_error)?;
-                    let after = source_file.metadata().map_err(prepare_error)?;
+                        .map_err(FilesystemError::prepare_failed)?;
+                    let mut source_file =
+                        std::fs::File::open(source).map_err(FilesystemError::prepare_failed)?;
+                    let before = source_file
+                        .metadata()
+                        .map_err(FilesystemError::prepare_failed)?;
+                    let copied = std::io::copy(&mut source_file, &mut staged)
+                        .map_err(FilesystemError::prepare_failed)?;
+                    let after = source_file
+                        .metadata()
+                        .map_err(FilesystemError::prepare_failed)?;
                     validate_copy_source(source_root.as_path(), source_relative_path)
-                        .map_err(prepare_error)?;
+                        .map_err(FilesystemError::prepare_failed)?;
                     if copied != before.len()
                         || before.len() != after.len()
                         || before.modified().ok() != after.modified().ok()
                     {
-                        return Err(prepare_error("copy source changed during preparation"));
+                        return Err(FilesystemError::prepare_failed(
+                            "copy source changed during preparation",
+                        ));
                     }
                 }
                 _ => unreachable!("only file writes enter staging"),
             }
-            staged.sync_all().map_err(prepare_error)?;
+            staged.sync_all().map_err(FilesystemError::prepare_failed)?;
             drop(staged);
-            validate_regular_file(&staged_path).map_err(prepare_error)?;
-            validator(relative_path, &staged_path).map_err(prepare_error)?;
+            validate_regular_file(&staged_path).map_err(FilesystemError::prepare_failed)?;
+            validator(relative_path, &staged_path).map_err(FilesystemError::prepare_failed)?;
         }
 
         Ok(())

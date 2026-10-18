@@ -175,7 +175,6 @@ pub(crate) fn data_series(element: &'static str) -> Result<TypeExpr, BuiltinAsse
 pub(crate) fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
-        cache: CachePolicy::PerRun,
     }
 }
 

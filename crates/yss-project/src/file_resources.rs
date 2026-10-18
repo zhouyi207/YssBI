@@ -121,11 +121,6 @@ pub struct FileCommandResult<T: FileContent> {
     pub mutation: ProjectResourceMutationFacts,
 }
 
-fn error(message: impl ToString) -> ProjectOperationError {
-    ProjectOperationError::TransactionPrepareFailed {
-        message: message.to_string(),
-    }
-}
 fn not_found<T: FileContent>(path: &FilePath<T>) -> ProjectOperationError {
     ProjectOperationError::ResourceNotFound {
         path: path.as_str().into(),
@@ -168,7 +163,7 @@ pub(crate) fn publication_deltas<T: ResourceFile>(
         FilePatch::Remove { path } => {
             let previous = T::files(data)
                 .get(path)
-                .ok_or_else(|| error("document not found"))?
+                .ok_or_else(|| ProjectOperationError::prepare_failed("document not found"))?
                 .version
                 .revision;
             let next = crate::project_state::checked_resource_revision(path.as_str(), previous)?;
@@ -185,7 +180,7 @@ pub(crate) fn publication_deltas<T: ResourceFile>(
         FilePatch::Move { from, to, document } => {
             let previous = T::files(data)
                 .get(from)
-                .ok_or_else(|| error("document not found"))?
+                .ok_or_else(|| ProjectOperationError::prepare_failed("document not found"))?
                 .version
                 .revision;
             (
@@ -247,8 +242,13 @@ impl ProjectState {
             let state = T::files(&data).get(path).ok_or_else(|| not_found(path))?;
             (state.saved_hash.clone(), state.version.clone())
         };
-        let persisted = read_file_content::<T>(session.root.as_path(), path).map_err(error)?;
-        if persisted.fingerprint().map_err(error)? != saved_hash {
+        let persisted = read_file_content::<T>(session.root.as_path(), path)
+            .map_err(ProjectOperationError::prepare_failed)?;
+        if persisted
+            .fingerprint()
+            .map_err(ProjectOperationError::prepare_failed)?
+            != saved_hash
+        {
             return Err(ProjectOperationError::ResourceRevisionConflict {
                 message: "document file changed externally".into(),
             });
@@ -345,10 +345,12 @@ impl ProjectState {
         let unique_path = |name: &str| -> Result<FilePath<T>, ProjectOperationError> {
             let requested = ResourceName::parse(name).map_err(ProjectOperationError::from)?;
             let names = scan_file_paths::<T>(session.root.as_path())
-                .map_err(error)?
+                .map_err(ProjectOperationError::prepare_failed)?
                 .iter()
                 .chain(resident_paths.iter())
-                .map(|path| ResourceName::parse(path.name()).map_err(error))
+                .map(|path| {
+                    ResourceName::parse(path.name()).map_err(ProjectOperationError::prepare_failed)
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(FilePath::<T>::from_name(&allocate_unique_resource_name(
                 &requested,
@@ -361,7 +363,7 @@ impl ProjectState {
                 let path = unique_path(&name)?;
                 let initial = T::initial(path.name(), &self.project_data.read().unwrap());
                 let document = FileState::<T>::new(initial, uuid::Uuid::new_v4().to_string())
-                    .map_err(error)?;
+                    .map_err(ProjectOperationError::prepare_failed)?;
                 absent.insert(key(&path));
                 writes.push(write(&path, &document)?);
                 result_snapshot = Some(snapshot(project, &path, &document));
@@ -373,8 +375,8 @@ impl ProjectState {
                 let body = source
                     .content()
                     .duplicate(&mut || uuid::Uuid::new_v4().to_string());
-                let document =
-                    FileState::<T>::new(body, uuid::Uuid::new_v4().to_string()).map_err(error)?;
+                let document = FileState::<T>::new(body, uuid::Uuid::new_v4().to_string())
+                    .map_err(ProjectOperationError::prepare_failed)?;
                 absent.insert(key(&path));
                 writes.push(write(&path, &document)?);
                 result_snapshot = Some(snapshot(project, &path, &document));
@@ -396,9 +398,13 @@ impl ProjectState {
                     FileCommand::Discard { .. } => {
                         match read_file_content(session.root.as_path(), &path) {
                             Ok(body) => {
-                                document.replace_content(body).map_err(error)?;
-                                document.saved_hash =
-                                    document.content().fingerprint().map_err(error)?;
+                                document
+                                    .replace_content(body)
+                                    .map_err(ProjectOperationError::prepare_failed)?;
+                                document.saved_hash = document
+                                    .content()
+                                    .fingerprint()
+                                    .map_err(ProjectOperationError::prepare_failed)?;
                                 result_snapshot = Some(snapshot(project, &path, &document));
                                 FilePatch::Put { path, document }
                             }
@@ -407,7 +413,7 @@ impl ProjectState {
                             {
                                 FilePatch::Remove { path }
                             }
-                            Err(cause) => return Err(error(cause)),
+                            Err(cause) => return Err(ProjectOperationError::prepare_failed(cause)),
                         }
                     }
                     FileCommand::Rename { name, .. } => {
@@ -416,7 +422,7 @@ impl ProjectState {
                         let target = FilePath::<T>::from_name(&name);
                         if target != path {
                             if scan_file_paths::<T>(session.root.as_path())
-                                .map_err(error)?
+                                .map_err(ProjectOperationError::prepare_failed)?
                                 .iter()
                                 .chain(resident_paths.iter())
                                 .any(|other| {
@@ -450,25 +456,33 @@ impl ProjectState {
                         match command {
                             FileCommand::Edit { edits, .. } => {
                                 if edits.is_empty() || edits.len() > 512 {
-                                    return Err(error("invalid document edit batch size"));
+                                    return Err(ProjectOperationError::prepare_failed(
+                                        "invalid document edit batch size",
+                                    ));
                                 }
                                 let mut content = document.content().clone();
                                 for edit in edits {
-                                    content.apply(edit).map_err(error)?;
+                                    content
+                                        .apply(edit)
+                                        .map_err(ProjectOperationError::prepare_failed)?;
                                 }
-                                document.replace_content(content).map_err(error)?;
+                                document
+                                    .replace_content(content)
+                                    .map_err(ProjectOperationError::prepare_failed)?;
                             }
                             FileCommand::Save { .. } => {
                                 if read_file_content(session.root.as_path(), &path)
-                                    .map_err(error)?
+                                    .map_err(ProjectOperationError::prepare_failed)?
                                     .fingerprint()
-                                    .map_err(error)?
+                                    .map_err(ProjectOperationError::prepare_failed)?
                                     != document.saved_hash
                                 {
                                     return Err(ProjectOperationError::ResourceRevisionConflict { message: "saved document changed externally; discard or reopen before saving".into() });
                                 }
-                                document.saved_hash =
-                                    document.content().fingerprint().map_err(error)?;
+                                document.saved_hash = document
+                                    .content()
+                                    .fingerprint()
+                                    .map_err(ProjectOperationError::prepare_failed)?;
                                 writes.push(write(&path, &document)?);
                             }
                             _ => unreachable!(),
@@ -527,7 +541,10 @@ fn write<T: ResourceFile>(
 ) -> Result<StagedFilesystemMutation, ProjectOperationError> {
     Ok(StagedFilesystemMutation::Write {
         relative_path: path.as_str().into(),
-        contents: document.content().encode().map_err(error)?,
+        contents: document
+            .content()
+            .encode()
+            .map_err(ProjectOperationError::prepare_failed)?,
     })
 }
 
@@ -632,7 +649,8 @@ pub(crate) fn external_changes<T: ResourceFile>(
         let previous = T::files(data).get(path);
         match std::fs::symlink_metadata(root.join(path.as_str())) {
             Ok(_) => {
-                let content = read_file_content(root, path).map_err(error)?;
+                let content =
+                    read_file_content(root, path).map_err(ProjectOperationError::prepare_failed)?;
                 if previous
                     .is_some_and(|previous| previous.dirty() || previous.content() == &content)
                 {
@@ -642,7 +660,8 @@ pub(crate) fn external_changes<T: ResourceFile>(
                     || uuid::Uuid::new_v4().to_string(),
                     |previous| previous.version.session_id.clone(),
                 );
-                let mut document = FileState::<T>::new(content, session).map_err(error)?;
+                let mut document = FileState::<T>::new(content, session)
+                    .map_err(ProjectOperationError::prepare_failed)?;
                 if let Some(previous) = previous {
                     document.version.revision = crate::project_state::checked_resource_revision(
                         path.as_str(),
@@ -661,10 +680,10 @@ pub(crate) fn external_changes<T: ResourceFile>(
                     .into_iter()
                     .collect());
             }
-            Err(io) => return Err(error(io)),
+            Err(io) => return Err(ProjectOperationError::prepare_failed(io)),
         }
     }
-    let incoming = load_files::<T>(root).map_err(error)?;
+    let incoming = load_files::<T>(root).map_err(ProjectOperationError::prepare_failed)?;
     let removed = T::files(data)
         .iter()
         .filter(|(path, previous)| !incoming.contains_key(*path) && !previous.dirty())

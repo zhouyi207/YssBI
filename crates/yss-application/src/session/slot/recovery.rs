@@ -81,12 +81,8 @@ pub enum SessionRecoveryError {
     AlreadyInProgress,
     #[error("session recovery is in the wrong phase")]
     WrongPhase,
-    #[error("session recovery authority is ambiguous")]
-    AuthorityAmbiguous,
     #[error("database recovery claim failed")]
     DatabaseClaim,
-    #[error("database compensation failed")]
-    DatabaseCompensation,
     #[error("session recovery attempt identifiers are exhausted")]
     AttemptIdExhausted,
     #[error("session recovery deadline elapsed during {phase:?}")]

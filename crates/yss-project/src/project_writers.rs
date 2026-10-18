@@ -111,12 +111,6 @@ pub(crate) fn context(
     }
 }
 
-fn prepare_error(error: impl ToString) -> ProjectOperationError {
-    ProjectOperationError::TransactionPrepareFailed {
-        message: error.to_string(),
-    }
-}
-
 pub(crate) fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
     match path.extension().and_then(|extension| extension.to_str()) {
         Some("yssbi-event" | "yssbi-function") => {
@@ -242,7 +236,7 @@ impl ProjectState {
             {
                 Ok(_) => true,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-                Err(error) => return Err(prepare_error(error)),
+                Err(error) => return Err(ProjectOperationError::prepare_failed(error)),
             };
             if present != must_exist {
                 return Err(ProjectOperationError::ResourceRevisionConflict {

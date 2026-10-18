@@ -44,9 +44,7 @@ impl ProjectState {
                 session.root.as_path().to_string_lossy().as_ref(),
                 graph_path,
             )
-            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                message: error.to_string(),
-            })?,
+            .map_err(ProjectOperationError::prepare_failed)?,
         };
         self.validate_project_session(&session)?;
         Ok(resource)
@@ -154,9 +152,7 @@ impl ProjectState {
                 snapshot.session.root.as_path().to_string_lossy().as_ref(),
                 source_path,
             )
-            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                message: error.to_string(),
-            })?,
+            .map_err(ProjectOperationError::prepare_failed)?,
         };
         let index =
             crate::scan_graph_resource_index(snapshot.session.root.as_path()).map_err(|error| {
@@ -326,9 +322,7 @@ impl ProjectState {
             session.root.as_path().to_string_lossy().as_ref(),
             graph_path,
         )
-        .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-            message: error.to_string(),
-        })?;
+        .map_err(ProjectOperationError::prepare_failed)?;
         self.run_graph_load_after_read_test_hook();
         self.validate_resource_lifecycle_operation(&operation)?;
 
@@ -561,9 +555,7 @@ impl ProjectState {
             &index,
             graph_path,
         )
-        .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-            message: error.to_string(),
-        })?;
+        .map_err(ProjectOperationError::prepare_failed)?;
         let mut source = current_graphs
             .get(graph_path)
             .unwrap_or(&persisted_source)
@@ -633,12 +625,9 @@ impl ProjectState {
         )? {
             editing_updates.push(update);
         }
-        let target_contents = crate::project_io::serialize_graph_resource_document(
-            &persisted_source,
-        )
-        .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-            message: error.to_string(),
-        })?;
+        let target_contents =
+            crate::project_io::serialize_graph_resource_document(&persisted_source)
+                .map_err(ProjectOperationError::prepare_failed)?;
 
         let paths = index
             .entries()
@@ -656,9 +645,7 @@ impl ProjectState {
                 &index,
                 &path,
             )
-            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                message: error.to_string(),
-            })?;
+            .map_err(ProjectOperationError::prepare_failed)?;
             let mut changed = current_graphs.get(&path).unwrap_or(&persisted).clone();
             let current_changed = remap_document(
                 Arc::make_mut(&mut changed.document),
@@ -694,9 +681,7 @@ impl ProjectState {
                 editing_updates.push(update);
             }
             let contents = crate::project_io::serialize_graph_resource_document(&persisted)
-                .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                })?;
+                .map_err(ProjectOperationError::prepare_failed)?;
             referenced.push((path, changed, contents));
         }
 

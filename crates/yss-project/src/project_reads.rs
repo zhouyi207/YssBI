@@ -15,7 +15,7 @@ impl ProjectState {
         let _lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
         let mut index = crate::project_io::read_project_index_from_root(session.root.as_path())
-            .map_err(read_error)?;
+            .map_err(ProjectOperationError::prepare_failed)?;
         self.validate_project_session(&session)?;
         self.coherent_project_read(&session, |data, publication| {
             let graph_revisions = self.graph_resource_revisions.read().unwrap();
@@ -156,9 +156,7 @@ fn overlay_authoritative_project_index(
             entry.function_revision = function.revision;
             entry.function_signature = function.signature.clone();
             entry.function_editor_projection = FunctionEditorProjection::try_from(function)
-                .map_err(|message| ProjectOperationError::TransactionPrepareFailed {
-                    message: message.to_string(),
-                })?;
+                .map_err(ProjectOperationError::prepare_failed)?;
         }
     }
     Ok(())
@@ -170,11 +168,5 @@ fn overlay_file_revisions<T: ResourceFile>(data: &ProjectData, entries: &mut [Fi
         if let Some(state) = T::files(data).get(&entry.path) {
             entry.revision = state.version.revision;
         }
-    }
-}
-
-fn read_error(error: crate::ProjectError) -> ProjectOperationError {
-    ProjectOperationError::TransactionPrepareFailed {
-        message: error.to_string(),
     }
 }

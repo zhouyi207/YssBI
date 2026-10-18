@@ -116,7 +116,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 } else {
                     Determinism::Deterministic
                 },
-                cache: CachePolicy::PerRun,
             },
             typing: NodeTypingSpec::Fixed,
             scope: NodeScope::Any,

@@ -339,9 +339,7 @@ impl ProjectState {
             }
             history_changed = true;
             entry.bytes = serde_json::to_vec(&entry.patch)
-                .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                })?
+                .map_err(ProjectOperationError::prepare_failed)?
                 .len();
         }
         if source == target && !history_changed && !documents_changed {

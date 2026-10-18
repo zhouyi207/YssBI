@@ -6,10 +6,8 @@ use super::identity::{
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ResourceKind {
-    DatabaseConnection,
     DataFrame,
     File,
-    Plot,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

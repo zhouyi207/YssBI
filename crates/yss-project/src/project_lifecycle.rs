@@ -172,7 +172,7 @@ impl ProjectState {
         let committed = prepared.commit()?;
         root_guard.binding.revalidate()?;
         yss_database_store::DatasetStore::create(destination_root.as_path())
-            .map_err(prepare_error)?;
+            .map_err(ProjectOperationError::prepare_failed)?;
         committed.finalize();
         root_guard.disarm();
         Ok(CreatedProject {
@@ -213,7 +213,7 @@ fn new_project_mutations(
         .collect::<Vec<_>>();
     mutations.extend([write_mutation(
         PROJECT_METADATA_FILE,
-        crate::serialize_project_manifest(data).map_err(prepare_error)?,
+        crate::serialize_project_manifest(data).map_err(ProjectOperationError::prepare_failed)?,
     )]);
     Ok(mutations)
 }
@@ -224,7 +224,7 @@ fn copy_mutations(
 ) -> Result<Vec<StagedFilesystemMutation>, ProjectOperationError> {
     let catalog = yss_database_store::DatasetStore::open(source)
         .and_then(|store| store.catalog_snapshot())
-        .map_err(prepare_error)?;
+        .map_err(ProjectOperationError::prepare_failed)?;
     let source_tree = read_file_inventory(source)?;
     let mut directories = source_tree.directories;
     directories.extend(PROJECT_CONTENT_DIRECTORIES.map(PathBuf::from));
@@ -253,12 +253,13 @@ fn copy_mutations(
         PathBuf::from(PROJECT_METADATA_FILE),
         write_mutation(
             PROJECT_METADATA_FILE,
-            crate::serialize_project_manifest(authority).map_err(prepare_error)?,
+            crate::serialize_project_manifest(authority)
+                .map_err(ProjectOperationError::prepare_failed)?,
         ),
     );
     for graph_path in authority.graphs.keys() {
-        let (path, contents) =
-            crate::serialize_graph_document(authority, graph_path).map_err(prepare_error)?;
+        let (path, contents) = crate::serialize_graph_document(authority, graph_path)
+            .map_err(ProjectOperationError::prepare_failed)?;
         files.insert(path.clone(), write_mutation(path, contents));
     }
     resident_file_writes(&mut files, &authority.charts)?;
@@ -279,7 +280,10 @@ fn resident_file_writes<T: FileContent>(
 ) -> Result<(), ProjectOperationError> {
     for (path, state) in resident {
         let path = PathBuf::from(path.as_str());
-        let contents = state.content().encode().map_err(prepare_error)?;
+        let contents = state
+            .content()
+            .encode()
+            .map_err(ProjectOperationError::prepare_failed)?;
         files.insert(path.clone(), write_mutation(path, contents));
     }
     Ok(())
@@ -330,11 +334,5 @@ fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> ProjectOp
 fn stale(message: impl Into<String>) -> ProjectOperationError {
     ProjectOperationError::StaleProjectLifecycle {
         message: message.into(),
-    }
-}
-
-fn prepare_error(error: impl ToString) -> ProjectOperationError {
-    ProjectOperationError::TransactionPrepareFailed {
-        message: error.to_string(),
     }
 }

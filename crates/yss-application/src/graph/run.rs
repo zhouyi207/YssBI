@@ -664,12 +664,8 @@ fn map_project_resource_facts(
         let resource = PlanResourceId::new(grant.resource().as_str().to_owned().into_boxed_str())
             .map_err(|_| ResourceBindingError::Identity(InvalidPlanIdentity::Empty))?;
         let kind = match grant.kind() {
-            ProjectResourceKind::DatabaseConnection => {
-                yss_graph_execution::plan::ResourceKind::DatabaseConnection
-            }
             ProjectResourceKind::DataFrame => yss_graph_execution::plan::ResourceKind::DataFrame,
             ProjectResourceKind::File => yss_graph_execution::plan::ResourceKind::File,
-            ProjectResourceKind::Plot => yss_graph_execution::plan::ResourceKind::Plot,
         };
         let access = match grant.access() {
             ProjectResourceAccess::Shared => yss_graph_execution::plan::ResourceAccess::Shared,
