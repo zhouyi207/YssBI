@@ -2,9 +2,8 @@ use yss_harness_contract::*;
 
 use super::*;
 use yss_harness_contract::{
-    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, HarnessEvent, HarnessSessionState,
-    IdempotencyKey, PrincipalId, ProjectSessionBinding, SourceHash, ToolInvocationId,
-    ToolInvocationState, UnixMillis,
+    HarnessEvent, HarnessSessionState, IdempotencyKey, PrincipalId, ProjectSessionBinding,
+    ToolInvocationId, ToolInvocationState, UnixMillis,
 };
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
@@ -35,37 +34,6 @@ async fn connect_preserves_literal_percent_encoded_directory_names() {
         "the database must use the literal directory name"
     );
     assert!(!decoded_exists, "a filesystem path must not be URL-decoded");
-}
-
-#[tokio::test]
-async fn capability_workflow_definitions_round_trip_and_reject_version_replacement() {
-    let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
-    let definition: WorkflowDefinition = serde_json::from_value(serde_json::json!({
-        "id": "dataset_quality_review",
-        "version": "1.0.0",
-        "steps": [{
-            "id": "inspect_schema",
-            "dependsOn": [],
-            "tool": "inspect_dataset_schema",
-            "request": {"databaseId": "dataset-1"}
-        }]
-    }))
-    .unwrap();
-    store.save_definition(&definition).await.unwrap();
-    store.save_definition(&definition).await.unwrap();
-    let mut conflicting = definition.clone();
-    conflicting.steps[0].request = serde_json::json!({"databaseId": "dataset-2"});
-    assert_eq!(
-        store.save_definition(&conflicting).await.unwrap_err().code,
-        PersistenceFailureCode::Conflict
-    );
-    assert_eq!(
-        store
-            .load_definition(&definition.id, &definition.version)
-            .await
-            .unwrap(),
-        Some(definition)
-    );
 }
 
 #[tokio::test]
@@ -179,8 +147,6 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
         idempotency_key: IdempotencyKey::try_new("idem-1").unwrap(),
         session_id: session.id.clone(),
         turn_id: yss_harness_contract::HarnessTurnId::try_new("turn-1").unwrap(),
-        workflow_run_id: None,
-        workflow_step_id: None,
         project,
         tool: "inspect_graph".into(),
         effect: yss_harness_contract::ToolEffect::Inspect,
@@ -279,36 +245,5 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
     assert_eq!(
         store.load_session(&session.id).await.unwrap(),
         Some(session.clone())
-    );
-
-    let grant = ApprovalGrantRecord {
-        id: ApprovalGrantId::try_new("approval-1").unwrap(),
-        principal_id: session.principal_id.clone(),
-        session_id: session.id,
-        project: invocation.project.clone(),
-        tool: "apply_graph_edit".into(),
-        request_fingerprint: SourceHash::try_new("fingerprint-1").unwrap(),
-        issued_at: UnixMillis::from_existing(13),
-        expires_at: UnixMillis::from_existing(100),
-        consumed_at: None,
-    };
-    ApprovalStorePort::insert(&store, &grant).await.unwrap();
-    assert!(
-        ApprovalStorePort::consume(&store, &grant.id, UnixMillis::from_existing(14))
-            .await
-            .unwrap()
-    );
-    assert!(
-        !ApprovalStorePort::consume(&store, &grant.id, UnixMillis::from_existing(15))
-            .await
-            .unwrap()
-    );
-    assert_eq!(
-        ApprovalStorePort::load(&store, &grant.id)
-            .await
-            .unwrap()
-            .unwrap()
-            .consumed_at,
-        Some(UnixMillis::from_existing(14))
     );
 }

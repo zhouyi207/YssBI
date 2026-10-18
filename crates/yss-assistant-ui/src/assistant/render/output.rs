@@ -162,26 +162,13 @@ impl ConversationPanel {
                 cx.entity().downgrade(),
             )
             .into_any_element(),
-            Content::Status { event, error } => Marker::new()
+            Content::Status { phase, attempt } => Marker::new()
                 .id(SharedString::from(format!("event-status-{id}")))
                 .role(Role::Status)
                 .text_xs()
-                .text_color(if *error {
-                    cx.theme().danger
-                } else {
-                    cx.theme().muted_foreground
-                })
-                .icon(
-                    MarkerIcon::new().child(
-                        Icon::new(if *error {
-                            IconName::CircleAlert
-                        } else {
-                            IconName::Info
-                        })
-                        .small(),
-                    ),
-                )
-                .content(MarkerContent::new().text(status_text(event)))
+                .text_color(cx.theme().muted_foreground)
+                .icon(MarkerIcon::new().child(Icon::new(IconName::Info).small()))
+                .content(MarkerContent::new().text(status_text(*phase, *attempt)))
                 .into_any_element(),
             Content::Failure(code) => self.failure_card(id, code, cx),
             Content::Usage(usage) => self.usage_card(id, usage, cx),
@@ -370,101 +357,24 @@ pub(super) fn markdown(
     .into_any_element()
 }
 
-/// Localize status events at presentation time, preserving all authored/model text verbatim.
-pub(super) fn status_text(event: &yss_assistant_contract::AssistantEventKind) -> String {
-    use yss_assistant_contract::AssistantEventKind as Event;
+/// Localize runtime status at presentation time.
+pub(super) fn status_text(phase: yss_harness_contract::AgentRuntimePhase, attempt: u32) -> String {
     use yss_harness_contract::AgentRuntimePhase;
     use yss_ui::text::{format, t};
-    let (key, run_id, step_id, retriable) = match event {
-        Event::RuntimeStatus { phase, attempt } => {
-            let label = t(match phase {
-                AgentRuntimePhase::CheckingDelivery => "native.assistant.inspectDelivery",
-                AgentRuntimePhase::Reconnecting => "panel.assistantReloadConversations",
-                AgentRuntimePhase::Compacting => "native.assistant.compactContext",
-            });
-            return if *attempt == 0 {
-                label.into_owned()
-            } else {
-                format(
-                    "native.assistant.attempt",
-                    &[
-                        ("label", label.into_owned()),
-                        ("attempt", attempt.to_string()),
-                    ],
-                )
-            };
-        }
-        Event::ContextCompactionProgress {
-            completed_bytes,
-            total_bytes,
-        } => {
-            return format(
-                "native.assistant.compactionProgress",
-                &[
-                    ("completed_bytes", completed_bytes.to_string()),
-                    ("total_bytes", total_bytes.to_string()),
-                ],
-            );
-        }
-        Event::WorkflowPlanned { run_id } => {
-            ("native.assistant.workflowPlanned", run_id, None, false)
-        }
-        Event::WorkflowStarted { run_id } => {
-            ("native.assistant.workflowStarted", run_id, None, false)
-        }
-        Event::WorkflowStepStarted { run_id, step_id } => (
-            "native.assistant.workflowStepStarted",
-            run_id,
-            Some(step_id),
-            false,
-        ),
-        Event::WorkflowStepCompleted { run_id, step_id } => (
-            "native.assistant.workflowStepCompleted",
-            run_id,
-            Some(step_id),
-            false,
-        ),
-        Event::WorkflowStepFailed {
-            run_id,
-            step_id,
-            retriable,
-        } => (
-            "native.assistant.workflowStepFailed",
-            run_id,
-            Some(step_id),
-            *retriable,
-        ),
-        Event::WorkflowCompleted { run_id } => {
-            ("native.assistant.workflowCompleted", run_id, None, false)
-        }
-        Event::WorkflowPaused { run_id } => {
-            ("native.assistant.workflowPaused", run_id, None, false)
-        }
-        Event::WorkflowResumed { run_id } => {
-            ("native.assistant.workflowResumed", run_id, None, false)
-        }
-        Event::WorkflowCancelled { run_id } => {
-            ("native.assistant.workflowCancelled", run_id, None, false)
-        }
-        _ => unreachable!("only status events are stored as presentation notices"),
-    };
-    format(
-        key,
-        &[
-            ("run_id", run_id.to_string()),
-            (
-                "step_id",
-                step_id.map(ToString::to_string).unwrap_or_default(),
-            ),
-            (
-                "value0",
-                if retriable {
-                    t("native.assistant.retryable")
-                } else {
-                    "".into()
-                }
-                .into_owned(),
-            ),
-        ],
-    )
+    let label = t(match phase {
+        AgentRuntimePhase::CheckingDelivery => "native.assistant.inspectDelivery",
+        AgentRuntimePhase::Reconnecting => "panel.assistantReloadConversations",
+        AgentRuntimePhase::Compacting => "native.assistant.compactContext",
+    });
+    if attempt == 0 {
+        label.into_owned()
+    } else {
+        format(
+            "native.assistant.attempt",
+            &[
+                ("label", label.into_owned()),
+                ("attempt", attempt.to_string()),
+            ],
+        )
+    }
 }

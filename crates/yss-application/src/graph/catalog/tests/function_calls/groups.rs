@@ -62,7 +62,6 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
         app.open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap()

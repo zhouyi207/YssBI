@@ -90,15 +90,6 @@ impl AssistantController {
                             cx,
                         );
                     }
-                    Ok(Err(HarnessSessionError::Host(HarnessError::ConcurrentWorkflow))) => {
-                        view.emit(
-                            AssistantEventKind::Error(Some(
-                                yss_ui::text::t("native.workbench.conversationWorkflowActive")
-                                    .into(),
-                            )),
-                            cx,
-                        );
-                    }
                     _ => {
                         view.emit(
                             AssistantEventKind::Error(Some(

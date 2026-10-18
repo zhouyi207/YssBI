@@ -234,7 +234,7 @@ impl ProjectState {
     ) -> Result<FileSnapshot<T>, ProjectOperationError> {
         self.ensure_project_operational()?;
         let session = self.capture_project_session()?;
-        let _lease = self.filesystem().acquire(session.root.clone())?;
+        let _lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
         let (saved_hash, version) = {
             let publication = self.mutation_publication.lock().unwrap();
@@ -311,7 +311,7 @@ impl ProjectState {
                 (source, resident_paths)
             })?;
         let reservation = self.reserve_resource_operation(project, operation_id)?;
-        let lease = self.filesystem().acquire(session.root.clone())?;
+        let lease = self.filesystem().acquire(session.root.clone());
         let empty_context = context(
             self,
             session.clone(),

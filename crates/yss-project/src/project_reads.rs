@@ -12,7 +12,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
     ) -> Result<ProjectIndex, ProjectOperationError> {
         let session = expected_session(self, expected_project_instance_id)?;
-        let _lease = self.filesystem().acquire(session.root.clone())?;
+        let _lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
         let mut index = crate::project_io::read_project_index_from_root(session.root.as_path())
             .map_err(read_error)?;

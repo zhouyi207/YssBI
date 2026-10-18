@@ -1012,8 +1012,6 @@ async fn recovery_preserves_committed_worker_receipts_without_repeating_the_task
         session_id: session.id.clone(),
         turn_id: turn_id.clone(),
         agent_run_id: Some(worker_id.clone()),
-        workflow_run_id: None,
-        workflow_step_id: None,
         project: session.project.clone(),
         tool: CapabilityId::SaveResource.as_str().into(),
         effect: ToolEffect::Mutate,

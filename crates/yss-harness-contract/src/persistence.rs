@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -7,9 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    AgentEvent, ApprovalGrantId, CapabilityFailure, HarnessSessionId, HarnessTurnId,
-    IdempotencyKey, PrincipalId, ProjectSessionBinding, SourceHash, ToolEffect, ToolInvocationId,
-    UnixMillis, WorkflowId, WorkflowRunId, WorkflowStepId, WorkflowVersion,
+    AgentEvent, CapabilityFailure, HarnessSessionId, HarnessTurnId, IdempotencyKey, PrincipalId,
+    ProjectSessionBinding, ToolEffect, ToolInvocationId, UnixMillis,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -105,37 +103,6 @@ pub enum HarnessEvent {
     KnowledgeCited {
         citation: crate::KnowledgeCitation,
     },
-    WorkflowPlanned {
-        run_id: WorkflowRunId,
-    },
-    WorkflowStarted {
-        run_id: WorkflowRunId,
-    },
-    WorkflowStepStarted {
-        run_id: WorkflowRunId,
-        step_id: WorkflowStepId,
-    },
-    WorkflowStepCompleted {
-        run_id: WorkflowRunId,
-        step_id: WorkflowStepId,
-    },
-    WorkflowStepFailed {
-        run_id: WorkflowRunId,
-        step_id: WorkflowStepId,
-        retriable: bool,
-    },
-    WorkflowCompleted {
-        run_id: WorkflowRunId,
-    },
-    WorkflowPaused {
-        run_id: WorkflowRunId,
-    },
-    WorkflowResumed {
-        run_id: WorkflowRunId,
-    },
-    WorkflowCancelled {
-        run_id: WorkflowRunId,
-    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -146,68 +113,6 @@ pub struct HarnessEventEnvelope {
     pub turn_id: Option<HarnessTurnId>,
     pub occurred_at: UnixMillis,
     pub event: HarnessEvent,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WorkflowDefinition {
-    pub id: WorkflowId,
-    pub version: WorkflowVersion,
-    pub steps: Vec<WorkflowStep>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WorkflowStep {
-    pub id: WorkflowStepId,
-    pub depends_on: Vec<WorkflowStepId>,
-    pub tool: String,
-    pub request: Value,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorkflowRunState {
-    Planned,
-    Ready,
-    Running,
-    Paused,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WorkflowStepState {
-    Pending,
-    Running,
-    Succeeded,
-    RetriableFailure,
-    TerminalFailure,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WorkflowStepRecord {
-    pub state: WorkflowStepState,
-    pub attempt: u32,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WorkflowRunRecord {
-    pub id: WorkflowRunId,
-    pub revision: u64,
-    pub session_id: HarnessSessionId,
-    pub turn_id: Option<HarnessTurnId>,
-    pub definition_id: WorkflowId,
-    pub definition_version: WorkflowVersion,
-    pub project: ProjectSessionBinding,
-    pub state: WorkflowRunState,
-    pub steps: BTreeMap<WorkflowStepId, WorkflowStepRecord>,
-    pub created_at: UnixMillis,
-    pub updated_at: UnixMillis,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -226,8 +131,6 @@ pub struct ToolInvocationRecord {
     pub session_id: HarnessSessionId,
     pub turn_id: HarnessTurnId,
     pub agent_run_id: Option<crate::AgentRunId>,
-    pub workflow_run_id: Option<WorkflowRunId>,
-    pub workflow_step_id: Option<WorkflowStepId>,
     pub project: ProjectSessionBinding,
     pub tool: String,
     pub effect: ToolEffect,
@@ -241,20 +144,6 @@ pub struct ToolInvocationRecord {
     pub started_at: UnixMillis,
     pub deadline: UnixMillis,
     pub finished_at: Option<UnixMillis>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ApprovalGrantRecord {
-    pub id: ApprovalGrantId,
-    pub principal_id: PrincipalId,
-    pub session_id: HarnessSessionId,
-    pub project: ProjectSessionBinding,
-    pub tool: String,
-    pub request_fingerprint: SourceHash,
-    pub issued_at: UnixMillis,
-    pub expires_at: UnixMillis,
-    pub consumed_at: Option<UnixMillis>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -321,9 +210,9 @@ pub trait HarnessSessionStorePort: Send + Sync {
         record: &'a HarnessSessionRecord,
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
 
-    /// Atomically remove the session and its turns, events, invocations, runs and grants.
-    /// Shared workflow definitions and project resources are retained. Missing sessions
-    /// return NotFound; the caller must exclude active work before deleting.
+    /// Atomically remove the session and its turns, events and invocations. Project
+    /// resources are retained. Missing sessions return NotFound; the caller must exclude
+    /// active work before deleting.
     fn delete_session<'a>(
         &'a self,
         session_id: &'a HarnessSessionId,
@@ -375,42 +264,6 @@ pub trait HarnessEventSinkPort: Send + Sync {
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
 }
 
-pub trait WorkflowStorePort: Send + Sync {
-    /// Includes planned runs that have not started yet, as well as ready, running and paused work.
-    fn has_unfinished_runs<'a>(
-        &'a self,
-        session_id: &'a HarnessSessionId,
-    ) -> PersistenceFuture<'a, Result<bool, PersistenceFailure>>;
-
-    fn save_definition<'a>(
-        &'a self,
-        definition: &'a WorkflowDefinition,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
-
-    fn load_definition<'a>(
-        &'a self,
-        id: &'a WorkflowId,
-        version: &'a WorkflowVersion,
-    ) -> PersistenceFuture<'a, Result<Option<WorkflowDefinition>, PersistenceFailure>>;
-
-    /// None inserts revision zero; Some(r) compares r and returns revision r + 1.
-    /// A missing/changed row or duplicate creation returns Conflict.
-    fn save_run<'a>(
-        &'a self,
-        run: &'a WorkflowRunRecord,
-        expected_revision: Option<u64>,
-    ) -> PersistenceFuture<'a, Result<WorkflowRunRecord, PersistenceFailure>>;
-
-    fn load_run<'a>(
-        &'a self,
-        id: &'a WorkflowRunId,
-    ) -> PersistenceFuture<'a, Result<Option<WorkflowRunRecord>, PersistenceFailure>>;
-
-    fn load_recoverable_runs<'a>(
-        &'a self,
-    ) -> PersistenceFuture<'a, Result<Vec<WorkflowRunRecord>, PersistenceFailure>>;
-}
-
 pub trait ToolInvocationLedgerPort: Send + Sync {
     fn load_invocation<'a>(
         &'a self,
@@ -431,22 +284,4 @@ pub trait ToolInvocationLedgerPort: Send + Sync {
         &'a self,
         record: &'a ToolInvocationRecord,
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
-}
-
-pub trait ApprovalStorePort: Send + Sync {
-    fn insert<'a>(
-        &'a self,
-        record: &'a ApprovalGrantRecord,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>>;
-
-    fn load<'a>(
-        &'a self,
-        id: &'a ApprovalGrantId,
-    ) -> PersistenceFuture<'a, Result<Option<ApprovalGrantRecord>, PersistenceFailure>>;
-
-    fn consume<'a>(
-        &'a self,
-        id: &'a ApprovalGrantId,
-        consumed_at: UnixMillis,
-    ) -> PersistenceFuture<'a, Result<bool, PersistenceFailure>>;
 }

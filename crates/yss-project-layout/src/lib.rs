@@ -4,9 +4,31 @@
 //! delivery, and document schemas remain in their respective owners.
 
 use std::ffi::OsStr;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
+
+/// The project directory named by `path`, which may point at the directory or at its
+/// metadata file.
+pub fn project_root_from_path(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
+    let path = path
+        .to_str()
+        .map(|text| PathBuf::from(text.trim()))
+        .unwrap_or_else(|| path.to_path_buf());
+    let is_metadata_file = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case(PROJECT_METADATA_FILE));
+    if path.is_file() || is_metadata_file {
+        path.parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .unwrap_or(path)
+    } else {
+        path
+    }
+}
 
 pub const EVENT_GRAPHS_DIR: &str = "events";
 pub const EVENT_GRAPH_EXTENSION: &str = "yssbi-event";

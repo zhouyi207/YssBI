@@ -552,15 +552,6 @@ pub fn column_distributions(
     session.read_physical_column_distributions(&database, columns)
 }
 
-pub fn dataset_overview_with_control(
-    session: &DatabaseRuntimeSession,
-    database: DatabaseId,
-    control: &yss_relational_contract::RelationControl,
-) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
-    let (_lease, _) = session.capture_database_operation(DatabaseOperation::Query, &database)?;
-    session.read_physical_dataset_overview(&database, control)
-}
-
 pub fn column_values(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,

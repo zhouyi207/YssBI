@@ -1,5 +1,4 @@
 use crate::SqliteHarnessStore;
-use std::collections::BTreeMap;
 use yss_harness_contract::*;
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
@@ -37,37 +36,6 @@ async fn populate(store: &SqliteHarnessStore, id: &str) -> HarnessSessionRecord 
         .append_event(&session.id, None, now, HarnessEvent::SessionCreated)
         .await
         .unwrap();
-    let definition = WorkflowDefinition {
-        id: WorkflowId::try_new("shared-workflow").unwrap(),
-        version: WorkflowVersion::try_new("1.0.0").unwrap(),
-        steps: vec![WorkflowStep {
-            id: WorkflowStepId::try_new("inspect").unwrap(),
-            depends_on: vec![],
-            tool: "inspect_graph".into(),
-            request: serde_json::json!({"graph": "events/Main.yssbi-event"}),
-        }],
-    };
-    store.save_definition(&definition).await.unwrap();
-    let run = WorkflowRunRecord {
-        id: WorkflowRunId::try_new(format!("run-{id}")).unwrap(),
-        revision: 0,
-        session_id: session.id.clone(),
-        turn_id: Some(turn.id.clone()),
-        definition_id: definition.id.clone(),
-        definition_version: definition.version.clone(),
-        project: session.project.clone(),
-        state: WorkflowRunState::Completed,
-        steps: BTreeMap::from([(
-            definition.steps[0].id.clone(),
-            WorkflowStepRecord {
-                state: WorkflowStepState::Succeeded,
-                attempt: 1,
-            },
-        )]),
-        created_at: now,
-        updated_at: now,
-    };
-    store.save_run(&run, None).await.unwrap();
     store
         .begin(&ToolInvocationRecord {
             id: ToolInvocationId::try_new(format!("tool-{id}")).unwrap(),
@@ -75,13 +43,11 @@ async fn populate(store: &SqliteHarnessStore, id: &str) -> HarnessSessionRecord 
             agent_run_id: None,
             session_id: session.id.clone(),
             turn_id: turn.id,
-            workflow_run_id: Some(run.id),
-            workflow_step_id: Some(definition.steps[0].id.clone()),
             project: session.project.clone(),
-            tool: definition.steps[0].tool.clone(),
+            tool: "inspect_graph".into(),
             effect: ToolEffect::Inspect,
-            arguments: definition.steps[0].request.clone(),
-            request: Some(definition.steps[0].request.clone()),
+            arguments: serde_json::json!({"graph": "events/Main.yssbi-event"}),
+            request: Some(serde_json::json!({"graph": "events/Main.yssbi-event"})),
             state: ToolInvocationState::Failed,
             result: None,
             failure: Some(CapabilityFailure::new(
@@ -90,20 +56,6 @@ async fn populate(store: &SqliteHarnessStore, id: &str) -> HarnessSessionRecord 
             started_at: now,
             deadline: now,
             finished_at: Some(now),
-        })
-        .await
-        .unwrap();
-    store
-        .insert(&ApprovalGrantRecord {
-            id: ApprovalGrantId::try_new(format!("grant-{id}")).unwrap(),
-            principal_id: session.principal_id.clone(),
-            session_id: session.id.clone(),
-            project: session.project.clone(),
-            tool: "inspect_graph".into(),
-            request_fingerprint: SourceHash::try_new("0".repeat(64)).unwrap(),
-            issued_at: now,
-            expires_at: now,
-            consumed_at: Some(now),
         })
         .await
         .unwrap();
@@ -117,8 +69,6 @@ async fn owned_records(store: &SqliteHarnessStore, id: &HarnessSessionId) -> Vec
         "SELECT payload_json FROM assistant_turn WHERE session_id = ? ORDER BY rowid",
         "SELECT payload_json FROM assistant_event WHERE session_id = ? ORDER BY rowid",
         "SELECT payload_json FROM tool_invocation WHERE session_id = ? ORDER BY rowid",
-        "SELECT payload_json FROM workflow_run WHERE json_extract(payload_json, '$.sessionId') = ? ORDER BY rowid",
-        "SELECT payload_json FROM approval_grant WHERE json_extract(payload_json, '$.sessionId') = ? ORDER BY rowid",
     ] {
         records.push(
             sqlx::query_scalar::<_, String>(query)
@@ -132,7 +82,7 @@ async fn owned_records(store: &SqliteHarnessStore, id: &HarnessSessionId) -> Vec
 }
 
 #[tokio::test]
-async fn deletion_is_atomic_and_keeps_other_sessions_and_shared_definitions() {
+async fn deletion_is_atomic_and_keeps_other_sessions() {
     let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
     let deleted = populate(&store, "deleted").await;
     let kept = populate(&store, "kept").await;
@@ -163,16 +113,6 @@ async fn deletion_is_atomic_and_keeps_other_sessions_and_shared_definitions() {
             .await
             .unwrap(),
         [kept]
-    );
-    assert!(
-        store
-            .load_definition(
-                &WorkflowId::try_new("shared-workflow").unwrap(),
-                &WorkflowVersion::try_new("1.0.0").unwrap(),
-            )
-            .await
-            .unwrap()
-            .is_some()
     );
     assert_eq!(
         store.delete_session(&deleted.id).await.unwrap_err().code,

@@ -89,6 +89,8 @@ pub struct Workbench {
     databases: BTreeMap<String, WeakEntity<crate::databases::DatabaseEditor>>,
     opening: BTreeSet<String>,
     graph_openings: BTreeMap<String, WeakEntity<graphs::Opening>>,
+    /// The latest open or unload of each graph; the next one waits for it.
+    graph_jobs: BTreeMap<String, gpui_kit::Task<()>>,
     subscriptions: Vec<gpui_kit::Subscription>,
     activities: BTreeMap<&'static str, WeakEntity<ActivityPanel>>,
     event_task: Option<gpui_kit::Task<()>>,
@@ -181,6 +183,7 @@ impl Workbench {
             databases: BTreeMap::new(),
             opening: BTreeSet::new(),
             graph_openings: BTreeMap::new(),
+            graph_jobs: BTreeMap::new(),
             subscriptions: vec![],
             activities: BTreeMap::new(),
             event_task: None,

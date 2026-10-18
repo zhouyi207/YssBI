@@ -85,7 +85,7 @@ Graph、Chart、Mind、Doc 和 Database 的复制接受可选目标名称，在�
 事务提交，复用路径检查、回滚、暂存清理与 Project 恢复标记。准备后重验会话和目标缺席，
 提交后再确认当前会话；失败不能留下半份结果或沿目录跳转在项目之外创建目录。
 
-项目文档写入在暂存阶段显式调用 Project 的文档校验器；通用 FS prepare 默认不限制文件格式。项目删除前对 metadata.yssbi 的校验也由 Project 执行。FilesystemError 在 Project 边界映射为既有业务错误类别，前端错误 wire 不变。
+项目文档写入在暂存阶段显式调用 Project 的文档校验器；通用 FS prepare 默认不限制文件格式。FilesystemError 在 Project 边界映射为既有业务错误类别，前端错误 wire 不变。
 
 创建、Save As 与资源 Writer 共用同一个文档校验入口。图文件复用正式读取解析器，
 同时核对路径种类、函数文档形态和常量定义；未加载图的复制也必须通过校验，
@@ -115,7 +115,7 @@ Manifest 只接受当前 `schemaVersion`、`projectName` 和 `exportTime` 字段
 
 因此该索引仍属于当前业务契约。原生宿主直接接收类型化投影，并不改变 Rust 事务内部的资源版本校验；Graph Save 通过编辑版本读取当前文档，而非让界面提交另一份正文。
 
-以下字段不能互相替代：`ResourceRevision` 标识已提交资源版本；frontend lifecycle token 拒绝旧 editor 请求；编辑版本标识当前文档；semantic input hash 标识语义内容与分析输入，供运行校验和计划复用。单独的 revision 也不能替代 Project instance/session identity。若以后合并 revision 的存储位置，必须同时迁移以上使用方，保持提交前重验与事务/执行资源校验语义。
+以下字段不能互相替代：`ResourceRevision` 标识已提交资源版本；资源生命周期登记（加载、卸载、重命名）以同一资源最新的登记为准，被取代的登记在提交前失效；编辑版本标识当前文档；semantic input hash 标识语义内容与分析输入，供运行校验和计划复用。单独的 revision 也不能替代 Project instance/session identity。若以后合并 revision 的存储位置，必须同时迁移以上使用方，保持提交前重验与事务/执行资源校验语义。
 
 Graph 编辑、Save 和 Execute 的当前流程见 [Graph 与 Execution](../yss-application/src/graph/README.md)。
 

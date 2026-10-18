@@ -157,13 +157,12 @@ pub fn read_frame(reader: &mut impl Read) -> io::Result<Option<Vec<u8>>> {
     reader.read_exact(&mut data)?;
     Ok(Some(data))
 }
-pub fn write_frame(writer: &mut impl Write, value: &impl Serialize) -> io::Result<()> {
-    let data = serde_json::to_vec(value)?;
+pub fn write_frame(writer: &mut impl Write, data: &[u8]) -> io::Result<()> {
     if data.is_empty() || data.len() > MAX_FRAME_BYTES {
         return Err(io::ErrorKind::InvalidData.into());
     }
     writer.write_all(&(data.len() as u32).to_be_bytes())?;
-    writer.write_all(&data)?;
+    writer.write_all(data)?;
     writer.flush()
 }
 
@@ -174,7 +173,7 @@ mod tests {
     fn frames_preserve_null_success_and_reject_oversized_lengths_before_payload_read() {
         let response = RpcResponse::from_result("request".into(), Ok(Value::Null));
         let mut bytes = Vec::new();
-        write_frame(&mut bytes, &response).unwrap();
+        write_frame(&mut bytes, &serde_json::to_vec(&response).unwrap()).unwrap();
         let frame = read_frame(&mut std::io::Cursor::new(bytes))
             .unwrap()
             .unwrap();

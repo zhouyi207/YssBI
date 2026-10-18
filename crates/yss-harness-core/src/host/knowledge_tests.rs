@@ -181,11 +181,9 @@ fn ports(
         sessions: store.clone(),
         events: store.clone(),
         event_sink: store.clone(),
-        workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
         knowledge_index: index,
-        approvals: store,
         clock: Arc::new(FixedClock::new(1000)),
         ids: Arc::new(SequentialIds::default()),
     }

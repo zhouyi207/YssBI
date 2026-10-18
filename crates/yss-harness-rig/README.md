@@ -26,7 +26,7 @@ return model feedback. Fatal lifecycle or persistence failures stop sampling.
 Failure observations use fixed categories and structural counts. Unknown tool
 names supplied by the provider are not included in logs.
 
-Internal workflow operations have no callable model schema. Their current
+Internal owner operations have no callable model schema. Their current
 receipts can still appear in conversation history, where the shared Contract
 projection retains business facts without exposing consistency fields. Replaying
 those receipts does not grant permission to invoke the internal operation.

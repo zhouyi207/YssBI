@@ -1,21 +1,15 @@
 //! Session and turn entry points and their shared runtime state.
 
 use crate::events::EventWriter;
-use crate::tools::ToolServices;
 use crate::{HarnessError, HarnessPorts};
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex, Weak};
-use yss_harness_contract::{
-    CancellationToken, HarnessEventEnvelope, HarnessSessionId, WorkflowRunId,
-};
+use std::sync::{Arc, Mutex};
+use yss_harness_contract::{CancellationToken, HarnessEventEnvelope, HarnessSessionId};
 
-mod approval;
 mod session;
 mod turn;
-mod workflow;
 
 pub use session::HarnessSessionAccess;
-use workflow::WorkflowControl;
 
 pub struct HarnessHost {
     ports: HarnessPorts,
@@ -23,7 +17,6 @@ pub struct HarnessHost {
     active_turns: Arc<Mutex<BTreeMap<HarnessSessionId, CancellationToken>>>,
     session_access: tokio::sync::Mutex<()>,
     event_publication: Arc<tokio::sync::Mutex<()>>,
-    workflow_controls: Mutex<BTreeMap<WorkflowRunId, Weak<WorkflowControl>>>,
     agent_access: Arc<tokio::sync::RwLock<()>>,
 }
 
@@ -64,19 +57,8 @@ impl HarnessHost {
             active_turns: Arc::new(Mutex::new(BTreeMap::new())),
             session_access: tokio::sync::Mutex::new(()),
             event_publication: Arc::new(tokio::sync::Mutex::new(())),
-            workflow_controls: Mutex::new(BTreeMap::new()),
             agent_access: Arc::new(tokio::sync::RwLock::new(())),
         })
-    }
-
-    fn tool_services(&self) -> ToolServices {
-        ToolServices {
-            extension: Arc::clone(&self.ports.extension),
-            knowledge: Arc::clone(&self.knowledge),
-            ledger: Arc::clone(&self.ports.tool_ledger),
-            clock: Arc::clone(&self.ports.clock),
-            ids: Arc::clone(&self.ports.ids),
-        }
     }
 
     fn event_writer(&self) -> EventWriter {
@@ -101,8 +83,6 @@ impl HarnessHost {
     }
 }
 
-#[cfg(test)]
-mod concurrency_tests;
 #[cfg(test)]
 mod knowledge_tests;
 #[cfg(test)]

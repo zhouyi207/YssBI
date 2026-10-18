@@ -209,12 +209,6 @@ fn dataset_reads_bind_owner_resource_versions_and_reject_a_changed_runtime() {
         kind: ProjectResourceKind::Database,
         id: "survey".into(),
     };
-    let schema = |runtime_revision| DatasetSchemaInspection {
-        database_id: resource.id.clone(),
-        runtime_revision,
-        schema_revision: 7,
-        columns: vec![],
-    };
     let inspection = |runtime, revision| ResourceInspection {
         resource: resource.clone(),
         name: "Survey".into(),
@@ -230,24 +224,22 @@ fn dataset_reads_bind_owner_resource_versions_and_reject_a_changed_runtime() {
     };
     let mut observations = ResourceObservations::default();
     observations.record(
-        &AutomationCapabilityResult::DatasetSchemaInspection(schema(12)),
+        &AutomationCapabilityResult::ResourceInspection(inspection(12, 799)),
         true,
     );
-    assert!(observations.version(&resource, false).unwrap().is_none());
     assert!(observations.needs_database_binding(&resource));
     assert_eq!(
         observations.bind(&inspection(12, 800)).unwrap().revision,
         800
     );
     observations.record(
-        &AutomationCapabilityResult::DatasetSchemaInspection(schema(13)),
+        &AutomationCapabilityResult::ResourceInspection(inspection(13, 801)),
         true,
     );
     assert_eq!(
         observations.bind(&inspection(14, 802)).unwrap_err().code,
         CapabilityFailureCode::REVISION_CONFLICT
     );
-    assert!(observations.version(&resource, false).unwrap().is_none());
     observations.record(
         &AutomationCapabilityResult::ResourceInspection(inspection(14, 802)),
         true,

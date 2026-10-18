@@ -227,10 +227,11 @@ pub(in crate::automation) fn export_database(
             request.resource.id.clone(),
             request.path.clone(),
             match request.format {
-                DatasetExportFormat::Csv => "csv",
-                DatasetExportFormat::Parquet => "parquet",
-            }
-            .into(),
+                DatasetExportFormat::Csv => yss_database_contract::DatabaseExportFormat::Csv,
+                DatasetExportFormat::Parquet => {
+                    yss_database_contract::DatabaseExportFormat::Parquet
+                }
+            },
             Some(ResourceRevision::new(request.version.revision)),
         )
         .map_err(database_error)?;

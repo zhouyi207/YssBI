@@ -625,7 +625,7 @@ mod tests {
                     instance.clone(),
                     id.clone(),
                     export.to_string_lossy().into(),
-                    "csv".into(),
+                    yss_database_contract::DatabaseExportFormat::Csv,
                     Some(expected),
                 ),
                 expected,

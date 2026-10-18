@@ -9,14 +9,13 @@ use std::time::Duration;
 
 use serde_json::Value;
 use yss_harness_contract::{
-    AgentEvent, AgentEventOutput, AgentRunHooks, AgentRunId, ApprovalGrantId, AutomationIdKind,
-    CancellationToken, CapabilityControl, CapabilityFailure, CapabilityFailureCode,
-    CapabilityInvocationId, ClockPort, HarnessExtension, HarnessMode, HarnessSessionId,
-    HarnessTurnId, IdGeneratorPort, IdempotencyKey, PreparedToolCall, PrincipalId,
-    ProjectSessionBinding, READ_KNOWLEDGE_TOOL, SEARCH_KNOWLEDGE_TOOL, ToolEffect, ToolExecution,
-    ToolInvocationBegin, ToolInvocationContext, ToolInvocationId, ToolInvocationLedgerPort,
-    ToolInvocationOutcome, ToolInvocationRecord, ToolInvocationState, ToolRecovery, ToolSpec,
-    UnixMillis, WorkflowRunId, WorkflowStepId,
+    AgentEvent, AgentEventOutput, AgentRunHooks, AgentRunId, AutomationIdKind, CancellationToken,
+    CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityInvocationId, ClockPort,
+    HarnessExtension, HarnessMode, HarnessSessionId, HarnessTurnId, IdGeneratorPort,
+    IdempotencyKey, PreparedToolCall, PrincipalId, ProjectSessionBinding, READ_KNOWLEDGE_TOOL,
+    SEARCH_KNOWLEDGE_TOOL, ToolEffect, ToolExecution, ToolInvocationBegin, ToolInvocationContext,
+    ToolInvocationId, ToolInvocationLedgerPort, ToolInvocationOutcome, ToolInvocationRecord,
+    ToolInvocationState, ToolRecovery, ToolSpec, UnixMillis,
 };
 
 /// The tools one run may call, keyed by their model-facing names.
@@ -77,9 +76,6 @@ pub(crate) struct HarnessToolExecutor {
     services: ToolServices,
     scope: InvocationScope,
     cancellation: CancellationToken,
-    workflow_run_id: Option<WorkflowRunId>,
-    workflow_step_id: Option<WorkflowStepId>,
-    approval_grant_id: Option<ApprovalGrantId>,
     output: Option<Arc<dyn AgentEventOutput>>,
     run: Option<(AgentRunId, Arc<dyn AgentRunHooks>)>,
 }
@@ -96,23 +92,9 @@ impl HarnessToolExecutor {
             services,
             scope,
             cancellation,
-            workflow_run_id: None,
-            workflow_step_id: None,
-            approval_grant_id: None,
             output: None,
             run: None,
         }
-    }
-
-    pub(crate) fn for_workflow(mut self, run_id: WorkflowRunId, step_id: WorkflowStepId) -> Self {
-        self.workflow_run_id = Some(run_id);
-        self.workflow_step_id = Some(step_id);
-        self
-    }
-
-    pub(crate) fn approved(mut self, grant_id: ApprovalGrantId) -> Self {
-        self.approval_grant_id = Some(grant_id);
-        self
     }
 
     pub(crate) fn with_output(mut self, output: Arc<dyn AgentEventOutput>) -> Self {
@@ -276,8 +258,6 @@ impl HarnessToolExecutor {
             session_id: self.scope.session_id.clone(),
             turn_id: self.scope.turn_id.clone(),
             agent_run_id: run_id,
-            workflow_run_id: self.workflow_run_id.clone(),
-            workflow_step_id: self.workflow_step_id.clone(),
             project: self.scope.project.clone(),
             tool: tool.clone(),
             effect,
@@ -445,7 +425,6 @@ impl HarnessToolExecutor {
             CapabilityInvocationId::try_new(key.as_str()).map_err(|_| persistence_unavailable())?,
             self.scope.project.clone(),
         );
-        context.approval_grant_id = self.approval_grant_id.clone();
         context.agent_run_id = self.run.as_ref().map(|(run_id, _)| run_id.clone());
         Ok(context)
     }

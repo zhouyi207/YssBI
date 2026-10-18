@@ -91,7 +91,6 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         app.open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap()
@@ -237,7 +236,6 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
                 .open_graph(crate::graph::open::OpenGraphRequest::new(
                     cold_instance.clone(),
                     graph.clone(),
-                    0,
                     "en-US",
                 ))
                 .unwrap()
@@ -435,7 +433,6 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         .open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap();

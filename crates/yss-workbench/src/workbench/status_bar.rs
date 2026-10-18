@@ -124,13 +124,10 @@ impl Workbench {
         let dock = self.dock.read(cx);
         let has_project = self.project.is_some();
         let conversation_zoomed = columns::conversation_zoomed(dock);
-        let left_visible = has_project
-            && dock.is_dock_open(DockPlacement::Left)
-            && (!dock.is_zoomed() || conversation_zoomed);
+        let left_visible = has_project && columns::dock_shown(dock, DockPlacement::Left);
         let conversation_visible =
             has_project && (conversation_zoomed || columns::conversation_edge(dock).is_some());
-        let right_visible =
-            has_project && dock.is_dock_open(DockPlacement::Right) && !dock.is_zoomed();
+        let right_visible = has_project && columns::dock_shown(dock, DockPlacement::Right);
 
         let bar = StatusBar::new();
         match column {
@@ -310,12 +307,7 @@ impl Workbench {
             .icon(Icon::new(icon).size_3())
             .accessibility_label(tooltip.clone())
             .tooltip(tooltip)
-            .selected(
-                self.project.is_some()
-                    && dock.is_dock_open(placement)
-                    && (!dock.is_zoomed()
-                        || placement == DockPlacement::Left && columns::conversation_zoomed(dock)),
-            )
+            .selected(self.project.is_some() && columns::dock_shown(dock, placement))
             .disabled(self.project.is_none() || !dock.has_dock(placement) || self.is_closing(cx))
             .on_click(cx.listener(move |view, _, window, cx| {
                 view.toggle_dock_region(placement, window, cx);
@@ -546,7 +538,7 @@ mod tests {
         let locale = crate::text::locale();
         let graph = yss_graph_ui::OpenedGraph::from_open(
             application
-                .open_graph(OpenGraphRequest::new(project.clone(), path, 0, locale))
+                .open_graph(OpenGraphRequest::new(project.clone(), path, locale))
                 .unwrap(),
             locale,
         );

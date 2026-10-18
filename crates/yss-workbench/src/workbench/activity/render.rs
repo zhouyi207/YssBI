@@ -161,9 +161,7 @@ impl ActivityPanel {
 
 fn row_label(content: &ActivityRowContent) -> String {
     match content {
-        ActivityRowContent::Category { label, .. }
-        | ActivityRowContent::Message { label, .. }
-        | ActivityRowContent::Item(ActivityItem::Command { label, .. }) => {
+        ActivityRowContent::Category { label, .. } | ActivityRowContent::Message { label, .. } => {
             label.resolve_with(translate)
         }
         ActivityRowContent::Item(ActivityItem::Conversation { title, .. }) if title.is_empty() => {

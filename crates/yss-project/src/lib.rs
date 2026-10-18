@@ -58,9 +58,9 @@ use yss_graph_document::GraphResourcePath;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fixtures {
     use super::{GraphResourcePath, ProjectError};
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use yss_chart_document::ChartDocument;
-    use yss_project_model::{ProjectData, chart::ChartPath, file::FileContent};
+    use yss_project_model::{ProjectData, chart::ChartPath};
 
     pub struct TempProject {
         state: Option<super::ProjectState>,
@@ -118,23 +118,5 @@ pub mod fixtures {
     pub fn chart(name: &str, database_id: &str) -> (ChartPath, ChartDocument) {
         let name = yss_resource_naming::ResourceName::parse(name).unwrap();
         (ChartPath::from_name(&name), ChartDocument::new(database_id))
-    }
-
-    pub fn write_chart(
-        root: &Path,
-        path: &ChartPath,
-        document: &ChartDocument,
-    ) -> Result<(), ProjectError> {
-        let target = root.join(path.as_str());
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(
-            target,
-            document
-                .encode()
-                .map_err(ProjectError::InvalidProjectFormat)?,
-        )?;
-        Ok(())
     }
 }

@@ -112,8 +112,6 @@ pub enum DatabaseOperationError {
         requested_rows: usize,
         max_rows: usize,
     },
-    #[error("database export format is unsupported")]
-    ExportUnsupported { format: String },
     #[error("SQL engine is unsupported")]
     SqlEngineUnsupported { engine: String },
     #[error("database name is invalid")]
@@ -154,14 +152,6 @@ pub enum DatabaseOperationError {
 }
 
 impl DatabaseOperationError {
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn internal_for_test(
-        operation: DatabaseApplicationOperation,
-        message: impl Into<String>,
-    ) -> Self {
-        Self::internal_message(operation, message)
-    }
-
     pub(super) fn from_project_filesystem(
         source: ProjectOperationError,
         operation: DatabaseApplicationOperation,

@@ -1,63 +1,15 @@
 use super::*;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use yss_filesystem::RootBinding;
 use yss_project::{ProjectState, fixtures};
 use yss_project_model::ProjectData;
 use yss_project_registry::ProjectRegistry;
-use yss_project_registry_contract::{
-    ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRegistryStoreFuture,
-};
-
-static DELETE_TEST_LOCK: Mutex<()> = Mutex::new(());
+use yss_project_registry_contract::ProjectRecord;
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new()
         .expect("test runtime is available")
         .block_on(future)
-}
-
-struct FailingRemoveProjectRegistryStore {
-    inner: yss_project_registry_sqlite::SqliteProjectRegistryStore,
-}
-
-impl ProjectRegistryStore for FailingRemoveProjectRegistryStore {
-    fn get_by_id(
-        &self,
-        registration: &yss_project_identity::ProjectRegistrationId,
-    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
-    {
-        self.inner.get_by_id(registration)
-    }
-
-    fn get_by_path(
-        &self,
-        path: &str,
-    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
-    {
-        self.inner.get_by_path(path)
-    }
-
-    fn load(
-        &self,
-    ) -> ProjectRegistryStoreFuture<'_, Result<Box<[ProjectRecord]>, ProjectRegistryStoreError>>
-    {
-        self.inner.load()
-    }
-
-    fn upsert(
-        &self,
-        record: &ProjectRecord,
-    ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
-        self.inner.upsert(record)
-    }
-
-    fn remove(
-        &self,
-        _registration: &yss_project_identity::ProjectRegistrationId,
-    ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
-        Box::pin(async { Err(ProjectRegistryStoreError::StorageFailed) })
-    }
 }
 
 struct TestDirectory {
@@ -79,15 +31,6 @@ impl TestDirectory {
 impl Drop for TestDirectory {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);
-    }
-}
-
-struct DeleteHookReset;
-
-impl Drop for DeleteHookReset {
-    fn drop(&mut self) {
-        set_before_registry_remove_test_hook(None);
-        yss_project::set_recycle_bin_test_hook(None);
     }
 }
 
@@ -113,15 +56,6 @@ async fn initialize_registry(directory: &TestDirectory) -> ProjectRegistry {
     .await
     .unwrap();
     ProjectRegistry::new(Arc::new(store))
-}
-
-async fn initialize_registry_with_remove_failure(directory: &TestDirectory) -> ProjectRegistry {
-    let store = yss_project_registry_sqlite::SqliteProjectRegistryStore::connect(
-        directory.child("registry"),
-    )
-    .await
-    .unwrap();
-    ProjectRegistry::new(Arc::new(FailingRemoveProjectRegistryStore { inner: store }))
 }
 
 async fn register_root(registry: &ProjectRegistry, root: &Path, name: &str) -> ProjectRecord {
@@ -242,50 +176,30 @@ fn late_watcher_lifecycle_tails_preserve_the_current_project_source() {
 }
 
 #[test]
-fn closing_project_releases_session_before_registered_deletion() {
-    let _serial = DELETE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _reset = DeleteHookReset;
-    block_on(async {
-        let directory = TestDirectory::new("close-then-delete-project");
-        let registry = initialize_registry(&directory).await;
-        let root = directory.child("project");
-        write_named_project(&root, "Close me");
-        let record = register_root(&registry, &root, "Close me").await;
-        let application = ApplicationState::initialize().unwrap();
-        let activation = application
-            .load_project_for_application(root.to_str().unwrap())
-            .unwrap();
-        let old = application.capture_session().unwrap();
-
-        assert!(
-            application
-                .clear_project_for_application(&ProjectInstanceId::new())
-                .is_err()
-        );
-        assert!(application.revalidate_captured_session(&old).is_ok());
-        application
-            .clear_project_for_application(&activation.project_instance_id)
-            .unwrap();
-        assert!(application.revalidate_captured_session(&old).is_err());
-        drop(old);
-        assert!(root.exists());
-        let current = application.capture_session().unwrap();
-        assert!(current.project().capture_project_session().is_err());
-        let deleted = delete_registered_project(
-            current.project(),
-            &registry,
-            record.id.as_str(),
-            None,
-            OperationId::new(),
-        )
-        .await
+fn closing_project_releases_its_session() {
+    let directory = TestDirectory::new("close-project");
+    let root = directory.child("project");
+    write_named_project(&root, "Close me");
+    let application = ApplicationState::initialize().unwrap();
+    let activation = application
+        .load_project_for_application(root.to_str().unwrap())
         .unwrap();
-        assert_eq!(deleted.outcome, ProjectLifecycleOutcome::Committed);
-        assert!(!deleted.invalidation.project);
-        assert!(!root.exists());
-    });
+    let old = application.capture_session().unwrap();
+
+    assert!(
+        application
+            .clear_project_for_application(&ProjectInstanceId::new())
+            .is_err()
+    );
+    assert!(application.revalidate_captured_session(&old).is_ok());
+    application
+        .clear_project_for_application(&activation.project_instance_id)
+        .unwrap();
+    assert!(application.revalidate_captured_session(&old).is_err());
+    drop(old);
+    assert!(root.exists());
+    let current = application.capture_session().unwrap();
+    assert!(current.project().capture_project_session().is_err());
 }
 
 #[test]
@@ -467,258 +381,5 @@ fn registry_failure_reports_preserved_created_project() {
                 .is_file()
         );
         assert!(destination.join(yss_project_layout::DATABASE_DIR).is_dir());
-    });
-}
-
-#[test]
-fn recycle_bin_failure_leaves_project_and_registry_for_retry() {
-    let _serial = DELETE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _reset = DeleteHookReset;
-    block_on(async {
-        let directory = TestDirectory::new("delete-application-replacement-failure");
-        let registry = initialize_registry(&directory).await;
-        let root = directory.child("project");
-        let state = activate_named_project(&root, "Registered");
-        let session = state.capture_project_session().unwrap();
-        let record = register_root(&registry, &root, "Registered").await;
-        let session_before = session.clone();
-        let operation_id = OperationId::new();
-        yss_project::set_recycle_bin_test_hook(Some(Arc::new(|_| {
-            Err("injected recycle-bin failure".into())
-        })));
-
-        let error = delete_registered_project(
-            &state,
-            &registry,
-            record.id.as_str(),
-            Some(session.instance_id),
-            operation_id,
-        )
-        .await
-        .unwrap_err();
-
-        assert!(matches!(
-            error,
-            ProjectLifecycleError::AuthorityFailed(error)
-                if error.code() == "transaction_commit_failed"
-        ));
-        assert_eq!(state.capture_project_session().unwrap(), session_before);
-        assert!(
-            root.join(yss_project_layout::PROJECT_METADATA_FILE)
-                .is_file()
-        );
-        assert!(
-            registry
-                .fetch_by_id(record.id.as_str())
-                .await
-                .unwrap()
-                .is_some()
-        );
-    });
-}
-
-#[test]
-fn registered_deletion_returns_committed_receipt_after_recycle_bin_move() {
-    let _serial = DELETE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _reset = DeleteHookReset;
-    block_on(async {
-        let directory = TestDirectory::new("delete-application-success");
-        let registry = initialize_registry(&directory).await;
-        let root = directory.child("project");
-        let state = activate_named_project(&root, "Registered");
-        let session = state.capture_project_session().unwrap();
-        let record = register_root(&registry, &root, "Registered").await;
-        let normalized = RootBinding::for_existing(&root)
-            .unwrap()
-            .normalized()
-            .clone();
-        let operation_id = OperationId::new();
-        let expected = ProjectLifecycleApplicationEvent {
-            operation_id,
-            kind: ProjectLifecycleKind::Delete,
-            old_project_instance_id: Some(session.instance_id.clone()),
-            new_project_instance_id: None,
-            phase: ProjectLifecyclePhase::AuthorityCommitted,
-            outcome: ProjectLifecycleOutcome::Committed,
-            record: Some(record.clone()),
-            path: Some(
-                normalized
-                    .as_path()
-                    .to_string_lossy()
-                    .into_owned()
-                    .into_boxed_str(),
-            ),
-            recovery: None,
-            invalidation: LifecycleInvalidation {
-                project: true,
-                registry: true,
-            },
-        };
-
-        let result = delete_registered_project(
-            &state,
-            &registry,
-            record.id.as_str(),
-            Some(session.instance_id),
-            operation_id,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(result, expected);
-        assert!(state.capture_project_session().is_err());
-        assert!(!root.exists());
-        assert!(
-            registry
-                .fetch_by_id(record.id.as_str())
-                .await
-                .unwrap()
-                .is_none()
-        );
-        assert_eq!(
-            state
-                .filesystem_for_test()
-                .lifecycle_state_for_test(&normalized),
-            (false, false, 0)
-        );
-    });
-}
-
-#[test]
-fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() {
-    let _serial = DELETE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _reset = DeleteHookReset;
-    block_on(async {
-        let directory = TestDirectory::new("delete-application-registry-panic");
-        let registry = initialize_registry(&directory).await;
-        let root = directory.child("project");
-        let state = activate_named_project(&root, "Registered");
-        let session = state.capture_project_session().unwrap();
-        let record = register_root(&registry, &root, "Registered").await;
-        let identity = record.deletion_identity().unwrap().clone();
-        let operation_id = OperationId::new();
-        let normalized = RootBinding::for_existing(&root)
-            .unwrap()
-            .normalized()
-            .clone();
-        let expected = ProjectLifecycleApplicationEvent {
-            operation_id,
-            kind: ProjectLifecycleKind::Delete,
-            old_project_instance_id: Some(session.instance_id.clone()),
-            new_project_instance_id: None,
-            phase: ProjectLifecyclePhase::AuthorityCommitted,
-            outcome: ProjectLifecycleOutcome::RegistryPending,
-            record: Some(record.clone()),
-            path: Some(
-                normalized
-                    .as_path()
-                    .to_string_lossy()
-                    .into_owned()
-                    .into_boxed_str(),
-            ),
-            recovery: Some(LifecycleRecovery {
-                required: true,
-                action: LifecycleRecoveryAction::RemoveRegistryRecord,
-                path: None,
-                identity: Some(identity.as_str().to_owned().into_boxed_str()),
-            }),
-            invalidation: LifecycleInvalidation {
-                project: true,
-                registry: true,
-            },
-        };
-        let filesystem = state.filesystem_for_test().clone();
-        let root_during_registry = normalized.clone();
-        set_before_registry_remove_test_hook(Some(Arc::new(move || {
-            assert_eq!(
-                filesystem.lifecycle_state_for_test(&root_during_registry),
-                (false, false, 0)
-            );
-            panic!("injected registry future panic")
-        })));
-
-        let result = delete_registered_project(
-            &state,
-            &registry,
-            record.id.as_str(),
-            Some(session.instance_id),
-            operation_id,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(result, expected);
-        assert!(state.capture_project_session().is_err());
-        assert_eq!(
-            state
-                .filesystem_for_test()
-                .lifecycle_state_for_test(&normalized),
-            (false, false, 0)
-        );
-        drop(state.filesystem_for_test().acquire(normalized).unwrap());
-        assert!(
-            registry
-                .fetch_by_id(record.id.as_str())
-                .await
-                .unwrap()
-                .is_some()
-        );
-    });
-}
-
-#[test]
-fn registry_failure_commits_clear_and_returns_registry_pending_with_released_ownership() {
-    let _serial = DELETE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _reset = DeleteHookReset;
-    block_on(async {
-        let directory = TestDirectory::new("delete-application-registry-failure");
-        let registry = initialize_registry_with_remove_failure(&directory).await;
-        let root = directory.child("project");
-        let state = activate_named_project(&root, "Registered");
-        let session = state.capture_project_session().unwrap();
-        let record = register_root(&registry, &root, "Registered").await;
-        let normalized = RootBinding::for_existing(&root)
-            .unwrap()
-            .normalized()
-            .clone();
-        let result = delete_registered_project(
-            &state,
-            &registry,
-            record.id.as_str(),
-            Some(session.instance_id),
-            OperationId::new(),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(result.outcome, ProjectLifecycleOutcome::RegistryPending);
-        assert_eq!(
-            result.recovery.as_ref().unwrap().action,
-            LifecycleRecoveryAction::RemoveRegistryRecord
-        );
-        assert!(!root.exists());
-        assert!(state.capture_project_session().is_err());
-        assert_eq!(
-            state
-                .filesystem_for_test()
-                .lifecycle_state_for_test(&normalized),
-            (false, false, 0)
-        );
-        drop(state.filesystem_for_test().acquire(normalized).unwrap());
-        assert!(
-            registry
-                .fetch_by_id(record.id.as_str())
-                .await
-                .unwrap()
-                .is_some()
-        );
     });
 }

@@ -729,7 +729,11 @@ fn conditional_graph_reads_bind_query_pages_and_current_edit_and_dependency_iden
     let captured = f.application.as_ref().unwrap().capture_session().unwrap();
     captured
         .project()
-        .unload_graph_resource(&GraphResourcePath::new(&f.path).unwrap())
+        .unload_graph_resource(
+            captured.project_instance_id(),
+            &GraphResourcePath::new(&f.path).unwrap(),
+            None,
+        )
         .unwrap();
     let reopened = query(&mut f, request);
     assert_ne!(reopened.version.session_id, edited.version.session_id);

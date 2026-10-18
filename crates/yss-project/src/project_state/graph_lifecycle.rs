@@ -21,7 +21,6 @@ pub struct GraphResourceRenameRequest<'a> {
     pub graph_path: &'a GraphResourcePath,
     pub expected_revision: ResourceRevision,
     pub new_name: &'a str,
-    pub lifecycle_token: u64,
     pub operation_id: yss_project_identity::OperationId,
 }
 
@@ -64,7 +63,7 @@ impl ProjectState {
             self.capture_writer_input(expected_project_instance_id, |_| ())?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(session.root.clone())?;
+        let lease = self.filesystem().acquire(session.root.clone());
         // Application has already allocated the shell's identity. Never silently rename it here.
         let name = ResourceName::parse(name)?;
         let path = renamed_graph_path(&name, resource.kind)?;
@@ -136,7 +135,7 @@ impl ProjectState {
         let snapshot = self.capture_graph_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let lease = self.filesystem().acquire(snapshot.session.root.clone());
         let mut mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -242,7 +241,7 @@ impl ProjectState {
             self.capture_writer_input(expected_project_instance_id, |_| ())?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let lease = self.filesystem().acquire(session.root.clone())?;
+        let lease = self.filesystem().acquire(session.root.clone());
         let mutation_context = context(
             self,
             session,
@@ -290,7 +289,6 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-        lifecycle_token: u64,
     ) -> Result<Arc<GraphDocument>, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -316,26 +314,13 @@ impl ProjectState {
             return Ok(document);
         }
 
-        let lifecycle_token = if lifecycle_token == 0 {
-            let guard = self.resource_lifecycle.allocate_and_register(
-                &session.instance_id,
-                graph_path,
-                ResourceLifecycleIntent::Load,
-            )?;
-            let token = guard.owner().token;
-            drop(guard);
-            token
-        } else {
-            lifecycle_token
-        };
         let mut lifecycle_guard = self.resource_lifecycle.register(
             &session.instance_id,
             graph_path,
-            lifecycle_token,
             ResourceLifecycleIntent::Load,
         )?;
         let operation = ResourceLifecycleOperation::from_guard(session.clone(), &lifecycle_guard);
-        let _filesystem_lease = self.filesystem().acquire(session.root.clone())?;
+        let _filesystem_lease = self.filesystem().acquire(session.root.clone());
         self.validate_resource_lifecycle_operation(&operation)?;
         let loaded = crate::project_io::load_project_graph_document_from_file(
             session.root.as_path().to_string_lossy().as_ref(),
@@ -390,11 +375,12 @@ impl ProjectState {
         Ok(document)
     }
 
-    pub fn unload_graph_resource_for_lifecycle(
+    /// Returns false and keeps the graph resident while it has unsaved edits other than
+    /// `discard_version`.
+    pub fn unload_graph_resource(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-        token: u64,
         discard_version: Option<super::GraphEditVersion>,
     ) -> Result<bool, ProjectOperationError> {
         let session = self.capture_project_session()?;
@@ -406,7 +392,6 @@ impl ProjectState {
         let mut guard = self.resource_lifecycle.register(
             &session.instance_id,
             graph_path,
-            token,
             ResourceLifecycleIntent::Unload,
         )?;
         let operation = ResourceLifecycleOperation::from_guard(session, &guard);
@@ -480,7 +465,7 @@ impl ProjectState {
                 message: "graph allocation project instance is stale".into(),
             });
         }
-        let _lease = self.filesystem().acquire(session.root.clone())?;
+        let _lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
         let index = crate::scan_graph_resource_index(session.root.as_path()).map_err(|error| {
             ProjectOperationError::TransactionPrepareFailed {
@@ -516,40 +501,10 @@ impl ProjectState {
         Ok((path, allocated.as_str().to_owned()))
     }
 
-    pub fn unload_graph_resource(
-        &self,
-        graph_path: &GraphResourcePath,
-    ) -> Result<(), ProjectOperationError> {
-        let project_instance_id = self.capture_project_session()?.instance_id;
-        let _ = self.unload_graph_resource_for_lifecycle(
-            &project_instance_id,
-            graph_path,
-            self.next_lifecycle_token(graph_path)?,
-            None,
-        )?;
-        Ok(())
-    }
-
-    fn next_lifecycle_token(
-        &self,
-        graph_path: &GraphResourcePath,
-    ) -> Result<u64, ProjectOperationError> {
-        let session = self.capture_project_session()?;
-        let guard = self.resource_lifecycle.allocate_and_register(
-            &session.instance_id,
-            graph_path,
-            ResourceLifecycleIntent::Unload,
-        )?;
-        let token = guard.owner().token;
-        drop(guard);
-        Ok(token)
-    }
-
     pub(crate) fn acquire_resource_rename_ownership(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         resource_path: &GraphResourcePath,
-        lifecycle_token: u64,
     ) -> Result<crate::ResourceRenameOwnershipLease, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -557,20 +512,11 @@ impl ProjectState {
                 message: "resource rename project instance is stale".into(),
             });
         }
-        let guard = if lifecycle_token == 0 {
-            self.resource_lifecycle.allocate_and_register(
-                &session.instance_id,
-                resource_path,
-                ResourceLifecycleIntent::Rename,
-            )?
-        } else {
-            self.resource_lifecycle.register(
-                &session.instance_id,
-                resource_path,
-                lifecycle_token,
-                ResourceLifecycleIntent::Rename,
-            )?
-        };
+        let guard = self.resource_lifecycle.register(
+            &session.instance_id,
+            resource_path,
+            ResourceLifecycleIntent::Rename,
+        )?;
         let operation = ResourceLifecycleOperation::from_guard(session, &guard);
         Ok(crate::ResourceRenameOwnershipLease::new(operation, guard))
     }
@@ -593,7 +539,6 @@ impl ProjectState {
             graph_path,
             expected_revision,
             new_name,
-            lifecycle_token,
             operation_id,
         } = request;
         self.ensure_project_operational()?;
@@ -601,13 +546,10 @@ impl ProjectState {
         let session = snapshot.session.clone();
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let mut ownership = self.acquire_resource_rename_ownership(
-            expected_project_instance_id,
-            graph_path,
-            lifecycle_token,
-        )?;
+        let mut ownership =
+            self.acquire_resource_rename_ownership(expected_project_instance_id, graph_path)?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
-        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
+        let filesystem_lease = self.filesystem().acquire(session.root.clone());
         let current_graphs = &snapshot.graphs;
         let index = crate::scan_graph_resource_index(session.root.as_path()).map_err(|error| {
             ProjectOperationError::TransactionPrepareFailed {
@@ -1061,7 +1003,13 @@ mod tests {
         let file = session.root.as_path().join(path.as_str());
         let bytes = std::fs::read(&file).unwrap();
         // An unloaded graph still owns its disk path and committed revision.
-        state.unload_graph_resource(&path).unwrap();
+        state
+            .unload_graph_resource(
+                &state.capture_project_session().unwrap().instance_id,
+                &path,
+                None,
+            )
+            .unwrap();
         assert!(matches!(
             create(),
             Err(ProjectOperationError::ResourceRevisionConflict { .. })
@@ -1103,7 +1051,7 @@ mod tests {
             .into(),
             Default::default(),
         );
-        let _lease = state.filesystem().acquire(session.root.clone()).unwrap();
+        let _lease = state.filesystem().acquire(session.root.clone());
         state
             .validate_writer_context(&context, snapshot.authority_generation)
             .unwrap();
@@ -1183,7 +1131,6 @@ mod tests {
                     graph_path: &function,
                     expected_revision: ResourceRevision::INITIAL,
                     new_name: "Renamed",
-                    lifecycle_token: 1,
                     operation_id: yss_project_identity::OperationId::new(),
                 },
             )

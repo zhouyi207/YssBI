@@ -20,4 +20,6 @@ yss-database-engine = { path = "../yss-database-engine" }
 yss-relational-contract = { path = "../yss-relational-contract" }
 
 [dev-dependencies]
+yss-database-io = { path = "../yss-database-io", features = ["test-support"] }
+yss-database-engine = { path = "../yss-database-engine", features = ["test-support"] }
 yss-dataset-profile = { path = "../yss-dataset-profile" }

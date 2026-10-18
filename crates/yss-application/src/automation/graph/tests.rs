@@ -263,7 +263,7 @@ fn assistant_discovers_edits_and_saves_graphs_without_open_editor_panels() {
     f.application
         .as_ref()
         .unwrap()
-        .unload_graph_resource(project.clone(), path.clone(), 100, None)
+        .unload_graph_resource(project.clone(), path.clone(), None)
         .unwrap();
     assert!(!captured.project().has_resident_graph(&path).unwrap());
 
@@ -373,14 +373,17 @@ fn assistant_discovers_edits_and_saves_graphs_without_open_editor_panels() {
         .unwrap();
     assert!(!redo.editing.dirty);
     assert_eq!(std::fs::read(&saved_path).unwrap(), saved_edit);
-    captured.project().unload_graph_resource(&path).unwrap();
+    captured
+        .project()
+        .unload_graph_resource(captured.project_instance_id(), &path, None)
+        .unwrap();
     assert!(!captured.project().has_resident_graph(&path).unwrap());
     let opened = f
         .application
         .as_ref()
         .unwrap()
         .open_graph(crate::graph::open::OpenGraphRequest::new(
-            project, path, 0, "en-US",
+            project, path, "en-US",
         ))
         .unwrap();
     let created =

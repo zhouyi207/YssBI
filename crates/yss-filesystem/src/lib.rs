@@ -12,7 +12,7 @@ pub mod watcher;
 #[cfg(windows)]
 mod windows_path_identity;
 
-pub use coordinator::{FilesystemCoordinator, FilesystemLeaseSet, RootLifecycleGuard};
+pub use coordinator::{FilesystemCoordinator, FilesystemLeaseSet};
 pub use error::FilesystemError;
 pub use lifecycle::{
     FileInventory, ensure_directory, read_file_inventory, remove_directory_if_created,

@@ -209,44 +209,16 @@ fn project_database_query_rejects_an_unpublished_declaration() {
     let app = application(Arc::clone(&project));
     let captured = app.capture_session().unwrap();
     let declarations = project.read_database_snapshot().unwrap();
-    let publication_revision = || {
-        project
-            .read_project_index(captured.project_instance_id())
-            .unwrap()
-            .publication_revision
-    };
     let other = yss_project_identity::ProjectInstanceId::from_existing("other-project".into());
-    for result in [
-        app.query_project_path(other.clone()).map(|_| ()),
-        app.query_project_databases(other, publication_revision())
-            .map(|_| ()),
-    ] {
-        assert!(matches!(
-            result,
-            Err(
-                crate::project::query::ProjectQueryApplicationError::ProjectIdentityMismatch { .. }
-            )
-        ));
-    }
     assert!(matches!(
-        app.query_project_databases(
-            captured.project_instance_id().clone(),
-            publication_revision() + 1,
-        ),
-        Err(
-            crate::project::query::ProjectQueryApplicationError::Project(
-                ProjectOperationError::CatalogResourceStale { .. }
-            )
-        )
+        app.query_project_path(other),
+        Err(crate::project::query::ProjectQueryApplicationError::ProjectIdentityMismatch { .. })
     ));
     assert!(
-        app.query_project_databases(
-            captured.project_instance_id().clone(),
-            publication_revision()
-        )
-        .unwrap()
-        .databases()
-        .is_empty()
+        app.query_project_databases_in_session(&captured)
+            .unwrap()
+            .databases()
+            .is_empty()
     );
 
     project
@@ -268,11 +240,7 @@ fn project_database_query_rejects_an_unpublished_declaration() {
         Err(ProjectOperationError::CatalogResourceStale { .. })
     ));
     assert!(
-        app.query_project_databases(
-            captured.project_instance_id().clone(),
-            publication_revision()
-        )
-        .is_err(),
+        app.query_project_databases_in_session(&captured).is_err(),
         "a declaration must not be combined with another runtime catalog basis"
     );
     project
@@ -285,16 +253,13 @@ fn project_database_query_rejects_an_unpublished_declaration() {
         .unwrap();
     app.rebuild_application_session(&captured).unwrap();
     assert!(
-        app.query_project_databases(
-            captured.project_instance_id().clone(),
-            publication_revision()
-        )
-        .unwrap()
-        .databases()
-        .is_empty()
+        app.query_project_databases_in_session(&app.capture_session().unwrap())
+            .unwrap()
+            .databases()
+            .is_empty()
     );
     assert!(matches!(
-        app.query_project_databases_in_session(&captured, None),
+        app.query_project_databases_in_session(&captured),
         Err(crate::project::query::ProjectQueryApplicationError::SessionChanged(_))
     ));
 }

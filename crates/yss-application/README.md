@@ -194,7 +194,7 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 各用例已有的返回前或提交前重验继续保留。
 数据快照的声明存在性检查复用 Project 的单项读取，并在该读取内核对捕获的项目身份，不复制整份 ProjectData；缺失数据库与过期上下文继续保留各自的错误分类。
 
-[harness](src/harness.rs) 接收已有 `HarnessPorts`，安装内置知识、构造 Host，并依次恢复中断 turn、协调当前项目绑定、恢复 workflow。创建 Harness 会话也通过 Application 捕获项目绑定并协调旧会话；Harness Core 继续拥有具体状态和恢复规则。这些用例不选择具体适配器；SQLite 和 Rig 的默认选择在 runtime，事件交付由宿主注入的中立端口提供。`harness::ApplicationCapabilityGateway` 与 `ApplicationResourceResolver` 使用 Tokio blocking pool 接通同步业务用例，供桌面与无界面测量共用；宿主只注入提交事件发布回调。
+[harness](src/harness.rs) 接收已有 `HarnessPorts`，安装内置知识、构造 Host，并依次恢复中断 turn、协调当前项目绑定。创建 Harness 会话也通过 Application 捕获项目绑定并协调旧会话；Harness Core 继续拥有具体状态和恢复规则。这些用例不选择具体适配器；SQLite 和 Rig 的默认选择在 runtime，事件交付由宿主注入的中立端口提供。`harness::ApplicationCapabilityGateway` 与 `ApplicationResourceResolver` 使用 Tokio blocking pool 接通同步业务用例，供桌面与无界面测量共用；宿主只注入提交事件发布回调。
 
 `cargo run -p yss-application --example measure_harness -- <configuration.json>` 通过 [独立测量入口](examples/measure_harness/README.md) 运行真实模型任务，使用独立 SQLite 账本及项目，按公开结果投影统计工具调用、体积、失败、重复读取、模型实际 token 和耗时。该入口不操作桌面，也不替代 Assistant 的人工验收。
 

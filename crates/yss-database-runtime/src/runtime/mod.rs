@@ -173,6 +173,7 @@ impl DatabaseRuntimeRegistry {
         Self
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn open_session(
         &self,
         request: DatabaseSessionOpenRequest,
@@ -379,14 +380,6 @@ impl DatabaseRuntimeSession {
         control: &yss_relational_contract::RelationControl,
     ) -> Result<crate::profile_query::DatabaseProfileSnapshot, DatabaseError> {
         self.physical.read_profile(database, query, control)
-    }
-
-    pub(crate) fn read_physical_dataset_overview(
-        &self,
-        database: &DatabaseId,
-        control: &yss_relational_contract::RelationControl,
-    ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
-        self.physical.read_dataset_overview(database, control)
     }
 
     pub(crate) fn read_physical_column_values(

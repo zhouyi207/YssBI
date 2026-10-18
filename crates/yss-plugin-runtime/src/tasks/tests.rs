@@ -577,18 +577,6 @@ mod observation {
     #[test]
     fn fault_teardown_survives_poisoned_runtime_state() {
         let fixture = Fixture::new(Arc::new(|_, _| Err(fail("plugin_method_unknown"))));
-        {
-            let mut state = fixture.manager.inner.state.lock().unwrap();
-            for index in 0..3 {
-                state.exports.insert(
-                    format!("export-{index}"),
-                    (
-                        format!("context-{index}"),
-                        fixture.root.join(format!("lease-{index}")),
-                    ),
-                );
-            }
-        }
         let poisoned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _state = fixture.manager.inner.state.lock().unwrap();
             panic!("runtime-state fault fixture");
@@ -622,9 +610,6 @@ mod observation {
         assert!(!state.contexts.contains_key("context-0"));
         assert!(!state.contexts.contains_key("context-1"));
         assert!(state.contexts.contains_key("context-2"));
-        assert!(!state.exports.contains_key("export-0"));
-        assert!(!state.exports.contains_key("export-1"));
-        assert!(state.exports.contains_key("export-2"));
     }
 
     #[test]

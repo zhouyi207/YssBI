@@ -18,7 +18,7 @@ pub(super) fn export_database_in_captured_session(
     captured: &Arc<ApplicationSession>,
     id: &str,
     path: &str,
-    format: &str,
+    export_format: DatabaseExportFormat,
     expected_revision: Option<ResourceRevision>,
 ) -> Result<(), DatabaseUseCaseError> {
     if let Some(revision) = expected_revision {
@@ -29,11 +29,6 @@ pub(super) fn export_database_in_captured_session(
             DatabaseApplicationOperation::ExportRead,
         )?;
     }
-    let export_format = format.parse::<DatabaseExportFormat>().map_err(|_| {
-        DatabaseOperationError::ExportUnsupported {
-            format: format.to_owned(),
-        }
-    })?;
     let database = database_id(id);
     let basis = captured
         .database()
@@ -180,7 +175,7 @@ impl ApplicationState {
         project_instance_id: ProjectInstanceId,
         id: String,
         path: String,
-        format: String,
+        format: DatabaseExportFormat,
         expected_revision: Option<ResourceRevision>,
     ) -> Result<(), DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
@@ -189,7 +184,7 @@ impl ApplicationState {
             &captured,
             &id,
             &path,
-            &format,
+            format,
             expected_revision,
         )?;
         self.revalidate_captured_session(&captured)

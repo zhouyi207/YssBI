@@ -31,7 +31,7 @@ pub struct ProjectRecord {
 }
 
 impl ProjectRecord {
-    pub fn deletion_identity(&self) -> Option<&ProjectRootIdentity> {
+    pub fn valid_root_identity(&self) -> Option<&ProjectRootIdentity> {
         (self.root_identity_state == ProjectRootIdentityState::Valid
             && !self.root_identity.as_str().is_empty())
         .then_some(&self.root_identity)
@@ -115,11 +115,11 @@ mod tests {
     fn invalid_or_empty_root_identity_is_never_authorized_for_deletion() {
         let mut invalid = record();
         invalid.root_identity_state = ProjectRootIdentityState::Invalid;
-        assert_eq!(invalid.deletion_identity(), None);
+        assert_eq!(invalid.valid_root_identity(), None);
 
         invalid.root_identity_state = ProjectRootIdentityState::Valid;
         invalid.root_identity = ProjectRootIdentity::from_canonical(String::new());
-        assert_eq!(invalid.deletion_identity(), None);
+        assert_eq!(invalid.valid_root_identity(), None);
     }
 
     #[test]

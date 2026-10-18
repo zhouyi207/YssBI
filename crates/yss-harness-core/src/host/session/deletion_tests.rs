@@ -2,7 +2,7 @@ use crate::test_support::{
     FixedClock, FixtureResourceResolver, InMemoryHarnessStore, MockAgentDriver, SequentialIds,
     fixed_model,
 };
-use crate::{CompiledWorkflow, HarnessError, HarnessHost, HarnessPorts};
+use crate::{HarnessError, HarnessHost, HarnessPorts};
 use std::sync::Arc;
 use yss_harness_contract::*;
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
@@ -17,11 +17,9 @@ async fn deletion_requires_the_owner_and_an_idle_session_and_prevents_reopening(
         sessions: store.clone(),
         events: store.clone(),
         event_sink: store.clone(),
-        workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
         knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-        approvals: store.clone(),
         clock: Arc::new(FixedClock::new(1000)),
         ids: Arc::new(SequentialIds::default()),
     })
@@ -61,36 +59,6 @@ async fn deletion_requires_the_owner_and_an_idle_session_and_prevents_reopening(
     ));
     drop(admission);
 
-    let workflow = CompiledWorkflow::compile(
-        WorkflowDefinition {
-            id: WorkflowId::try_new("inspect").unwrap(),
-            version: WorkflowVersion::try_new("1.0.0").unwrap(),
-            steps: vec![WorkflowStep {
-                id: WorkflowStepId::try_new("read").unwrap(),
-                depends_on: vec![],
-                tool: crate::test_support::READ_NOTE.into(),
-                request: serde_json::json!({"id": "data"}),
-            }],
-        },
-        &crate::test_support::NoteExtension::default(),
-    )
-    .unwrap();
-    let run = host
-        .plan_workflow(&session.id, None, &workflow)
-        .await
-        .unwrap();
-    assert!(matches!(
-        host.session_access()
-            .await
-            .delete_conversation(&session.id, &principal, "project-key",)
-            .await,
-        Err(HarnessError::ConcurrentWorkflow)
-    ));
-    assert_eq!(
-        store.load_session(&session.id).await.unwrap(),
-        Some(session.clone())
-    );
-    host.cancel_workflow(&run.id).await.unwrap();
     host.session_access()
         .await
         .delete_conversation(&session.id, &principal, "project-key")
@@ -120,10 +88,6 @@ async fn deletion_requires_the_owner_and_an_idle_session_and_prevents_reopening(
             Default::default(),
         )
         .await,
-        Err(HarnessError::SessionNotFound)
-    ));
-    assert!(matches!(
-        host.plan_workflow(&session.id, None, &workflow).await,
         Err(HarnessError::SessionNotFound)
     ));
 }

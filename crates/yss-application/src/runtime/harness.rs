@@ -51,9 +51,7 @@ impl IdGeneratorPort for HarnessIdGenerator {
             AutomationIdKind::HarnessSession => "session",
             AutomationIdKind::HarnessTurn => "turn",
             AutomationIdKind::AgentRun => "agent",
-            AutomationIdKind::WorkflowRun => "workflow",
             AutomationIdKind::ToolInvocation => "tool",
-            AutomationIdKind::ApprovalGrant => "approval",
         };
         Ok(format!("{prefix}-{}", uuid::Uuid::new_v4()))
     }
@@ -88,11 +86,9 @@ pub(super) async fn initialize(
             sessions: store.clone(),
             events: store.clone(),
             event_sink: transport.event_sink,
-            workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: knowledge.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-            approvals: store,
             clock,
             ids: Arc::new(HarnessIdGenerator),
         })

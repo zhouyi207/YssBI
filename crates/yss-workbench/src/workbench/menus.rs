@@ -150,10 +150,7 @@ impl Workbench {
         .map(|placement| {
             (
                 dock.has_dock(placement),
-                dock.is_dock_open(placement)
-                    && (!dock.is_zoomed()
-                        || placement == DockPlacement::Left
-                            && super::layout::columns::conversation_zoomed(dock)),
+                super::layout::columns::dock_shown(dock, placement),
             )
         });
         let zoomed = dock.is_zoomed();

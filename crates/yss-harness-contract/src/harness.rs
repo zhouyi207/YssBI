@@ -24,26 +24,6 @@ pub struct AgentRunId(String);
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 #[schemars(transparent)]
-pub struct WorkflowId(String);
-
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-#[schemars(transparent)]
-pub struct WorkflowVersion(String);
-
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-#[schemars(transparent)]
-pub struct WorkflowRunId(String);
-
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-#[schemars(transparent)]
-pub struct WorkflowStepId(String);
-
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-#[schemars(transparent)]
 pub struct ToolInvocationId(String);
 
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
@@ -81,17 +61,8 @@ pub struct KnowledgeChunkId(String);
 #[schemars(transparent)]
 pub struct SourceHash(String);
 
-#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-#[schemars(transparent)]
-pub struct ApprovalGrantId(String);
-
 string_identity!(HarnessTurnId, "harness turn id");
 string_identity!(AgentRunId, "agent run id");
-string_identity!(WorkflowId, "workflow id");
-string_identity!(WorkflowVersion, "workflow version");
-string_identity!(WorkflowRunId, "workflow run id");
-string_identity!(WorkflowStepId, "workflow step id");
 string_identity!(ToolInvocationId, "tool invocation id");
 string_identity!(IdempotencyKey, "idempotency key");
 string_identity!(SkillId, "skill id");
@@ -100,7 +71,6 @@ string_identity!(KnowledgeSourceId, "knowledge source id");
 string_identity!(KnowledgeDocumentId, "knowledge document id");
 string_identity!(KnowledgeChunkId, "knowledge chunk id");
 string_identity!(SourceHash, "source hash");
-string_identity!(ApprovalGrantId, "approval grant id");
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -459,9 +429,7 @@ pub enum AutomationIdKind {
     HarnessSession,
     HarnessTurn,
     AgentRun,
-    WorkflowRun,
     ToolInvocation,
-    ApprovalGrant,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]

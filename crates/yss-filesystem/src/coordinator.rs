@@ -1,12 +1,10 @@
-use crate::{FilesystemError, NormalizedRoot};
-use std::collections::{BTreeMap, BTreeSet};
+use crate::NormalizedRoot;
+use std::collections::BTreeSet;
 use std::sync::{Arc, Condvar, Mutex};
 
 #[derive(Default)]
 struct RootLeaseState {
     reserved: BTreeSet<NormalizedRoot>,
-    lifecycle_closed: BTreeSet<NormalizedRoot>,
-    admitted: BTreeMap<NormalizedRoot, usize>,
 }
 
 #[derive(Default)]
@@ -33,73 +31,25 @@ pub struct FilesystemCoordinator {
 }
 
 impl FilesystemCoordinator {
-    pub fn acquire(&self, root: NormalizedRoot) -> Result<FilesystemLeaseSet, FilesystemError> {
+    pub fn acquire(&self, root: NormalizedRoot) -> FilesystemLeaseSet {
         self.acquire_many([root])
     }
 
-    pub fn acquire_many<I>(&self, roots: I) -> Result<FilesystemLeaseSet, FilesystemError>
+    pub fn acquire_many<I>(&self, roots: I) -> FilesystemLeaseSet
     where
         I: IntoIterator<Item = NormalizedRoot>,
     {
         let roots = roots.into_iter().collect::<BTreeSet<_>>();
         let mut state = self.lock_state();
-        if let Some(root) = roots
-            .iter()
-            .find(|root| state.lifecycle_closed.contains(*root))
-        {
-            return Err(admission_closed(root));
-        }
-        for root in &roots {
-            *state.admitted.entry(root.clone()).or_default() += 1;
-        }
         state = self.wait_until_available(state, &roots);
         state.reserved.extend(roots.iter().cloned());
         drop(state);
 
-        Ok(FilesystemLeaseSet {
-            coordinator: self.clone(),
-            roots: roots.into_iter().collect(),
-            owns_admission: true,
-        })
-    }
-
-    pub fn begin_root_lifecycle(
-        &self,
-        root: NormalizedRoot,
-    ) -> Result<RootLifecycleGuard, FilesystemError> {
-        let mut state = self.lock_state();
-        if !state.lifecycle_closed.insert(root.clone()) {
-            return Err(admission_closed(&root));
-        }
-        let roots = BTreeSet::from([root.clone()]);
-        state = self.wait_until_available(state, &roots);
-        state.reserved.insert(root.clone());
-        drop(state);
-
-        Ok(RootLifecycleGuard {
-            coordinator: self.clone(),
-            root: root.clone(),
-            lease: Some(FilesystemLeaseSet {
-                coordinator: self.clone(),
-                roots: vec![root],
-                owns_admission: false,
-            }),
-        })
-    }
-
-    fn acquire_lifecycle_lease(&self, root: &NormalizedRoot) -> FilesystemLeaseSet {
-        let roots = BTreeSet::from([root.clone()]);
-        let mut state = self.lock_state();
-        state = self.wait_until_available(state, &roots);
-        state.reserved.insert(root.clone());
-        drop(state);
         FilesystemLeaseSet {
             coordinator: self.clone(),
-            roots: vec![root.clone()],
-            owns_admission: false,
+            roots: roots.into_iter().collect(),
         }
     }
-
     fn lock_state(&self) -> std::sync::MutexGuard<'_, RootLeaseState> {
         self.registry
             .state
@@ -195,22 +145,11 @@ impl FilesystemCoordinator {
             hook();
         }
     }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn lifecycle_state_for_test(&self, root: &NormalizedRoot) -> (bool, bool, usize) {
-        let state = self.lock_state();
-        (
-            state.lifecycle_closed.contains(root),
-            state.reserved.contains(root),
-            state.admitted.get(root).copied().unwrap_or(0),
-        )
-    }
 }
 
 pub struct FilesystemLeaseSet {
     coordinator: FilesystemCoordinator,
     roots: Vec<NormalizedRoot>,
-    owns_admission: bool,
 }
 
 impl FilesystemLeaseSet {
@@ -249,67 +188,8 @@ impl Drop for FilesystemLeaseSet {
         let mut state = self.coordinator.lock_state();
         for root in self.roots.iter().rev() {
             state.reserved.remove(root);
-            if self.owns_admission
-                && let Some(count) = state.admitted.get_mut(root)
-            {
-                *count -= 1;
-                if *count == 0 {
-                    state.admitted.remove(root);
-                }
-            }
         }
         drop(state);
         self.coordinator.registry.available.notify_all();
-    }
-}
-
-pub struct RootLifecycleGuard {
-    coordinator: FilesystemCoordinator,
-    root: NormalizedRoot,
-    lease: Option<FilesystemLeaseSet>,
-}
-
-impl RootLifecycleGuard {
-    pub fn release_initial_and_drain(&mut self) {
-        self.lease.take();
-        let mut state = self.coordinator.lock_state();
-        while state.admitted.get(&self.root).copied().unwrap_or(0) != 0 {
-            state = self
-                .coordinator
-                .registry
-                .available
-                .wait(state)
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-        }
-    }
-
-    pub fn acquire_final(&mut self) {
-        if self.lease.is_none() {
-            self.lease = Some(self.coordinator.acquire_lifecycle_lease(&self.root));
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn holds_lease(&self) -> bool {
-        self.lease.is_some()
-    }
-}
-
-impl Drop for RootLifecycleGuard {
-    fn drop(&mut self) {
-        self.lease.take();
-        let mut state = self.coordinator.lock_state();
-        state.lifecycle_closed.remove(&self.root);
-        drop(state);
-        self.coordinator.registry.available.notify_all();
-    }
-}
-
-fn admission_closed(root: &NormalizedRoot) -> FilesystemError {
-    FilesystemError::RootAdmissionClosed {
-        message: format!(
-            "new operations are rejected for '{}'",
-            root.as_path().display()
-        ),
     }
 }

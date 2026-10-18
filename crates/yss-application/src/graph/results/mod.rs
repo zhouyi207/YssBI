@@ -332,32 +332,6 @@ impl ApplicationState {
             .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
         Ok(results)
     }
-
-    pub fn query_graph_result_state(
-        &self,
-        graph: GraphResourcePath,
-        semantic_input_hash: [u8; 32],
-    ) -> Result<Option<GraphResultState>, ResultQueryApplicationError> {
-        let captured = self.capture_session()?;
-        let result = with_current_graph_results(&captured, &graph, |_| {
-            let Some(cache) = captured
-                .execution()
-                .query_result_cache_states(graph.as_str(), &semantic_input_hash)
-            else {
-                return Ok(None);
-            };
-            Ok(Some(GraphResultState {
-                revision: cache.revision,
-                execution_session_id: captured.execution_session_id(),
-                semantic_input_hash,
-                outputs: cache.outputs,
-                connections: cache.connections,
-            }))
-        });
-        self.revalidate_captured_session(&captured)
-            .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
-        result
-    }
 }
 
 #[cfg(test)]

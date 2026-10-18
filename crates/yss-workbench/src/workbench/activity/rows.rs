@@ -39,9 +39,7 @@ impl ActivityPanel {
                     conversations::title(title).to_lowercase().contains(&query)
                         || session_id.to_lowercase().contains(&query)
                 }
-                ActivityRowContent::Item(
-                    ActivityItem::Command { .. } | ActivityItem::Plugin { .. },
-                ) => false,
+                ActivityRowContent::Item(ActivityItem::Plugin { .. }) => false,
                 ActivityRowContent::Item(_) => true,
             };
             if visible {

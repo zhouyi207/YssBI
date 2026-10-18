@@ -11,7 +11,7 @@ use crate::{
     AgentDriverFailure, AgentFuture, AgentProfile, AgentRoleId, AgentRunId, AgentTask,
     AgentTaskInput, AgentTaskOutcome, CapabilityControl, CapabilityFailure, HarnessMode,
     ProjectSessionBinding, ToolCall, ToolInvocationContext, ToolInvocationOutcome,
-    ToolInvocationRecord, ToolSpec,
+    ToolInvocationRecord,
 };
 
 /// A call bound by the extension. `request` is persisted and must be deterministic for retries.
@@ -217,9 +217,6 @@ pub trait HarnessExtension: Send + Sync {
 
     fn project_result(&self, tool: &str, result: &Value) -> Result<Value, CapabilityFailure>;
 
-    /// Model-facing arguments for a request bound outside a model call.
-    fn project_arguments(&self, tool: &str, request: &Value) -> Value;
-
     fn project_failure(&self, failure: &CapabilityFailure) -> Value;
 
     fn project_task_facts(&self, facts: &Value) -> Value;
@@ -227,25 +224,6 @@ pub trait HarnessExtension: Send + Sync {
     /// See `AgentToolExecutor::summary_projection`.
     fn summary_projection(&self, _tool: &str, _output: &Value) -> Option<Value> {
         None
-    }
-
-    /// Tool declarations for calls issued outside an agent run, such as workflows and approvals.
-    fn tool_spec(&self, tool: &str) -> Option<ToolSpec>;
-
-    fn validate_request(&self, tool: &str, request: &Value) -> Result<(), CapabilityFailure>;
-
-    /// Whether a failed workflow step may be attempted again.
-    fn failure_is_transient(&self, failure: &CapabilityFailure) -> bool {
-        use crate::CapabilityFailureCode as Code;
-        [
-            Code::PROJECT_SESSION_UNAVAILABLE,
-            Code::PROJECT_SESSION_CHANGED,
-            Code::RESULT_UNAVAILABLE,
-            Code::DEADLINE_ELAPSED,
-            Code::PERSISTENCE_UNAVAILABLE,
-            Code::INTERNAL_FAILURE,
-        ]
-        .contains(&failure.code)
     }
 
     /// Execute a pre-bound request outside an agent run.

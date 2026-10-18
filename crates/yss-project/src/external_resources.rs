@@ -96,9 +96,7 @@ impl ProjectState {
         if captured.instance_id != *instance {
             return Err(invalid());
         }
-        let filesystem = self
-            .acquire_filesystem_lease(captured.root.clone())
-            .map_err(|_| invalid())?;
+        let filesystem = self.acquire_filesystem_lease(captured.root.clone());
         self.validate_project_session(&captured)
             .map_err(|_| invalid())?;
         if self.project_session_id() != *session {
@@ -411,19 +409,5 @@ mod tests {
             ),
             Err(ProjectError::Deserialize(_))
         ));
-        let _lifecycle = state
-            .filesystem_for_test()
-            .begin_root_lifecycle(session.root.clone())
-            .unwrap();
-        assert!(
-            state
-                .commit_external_artifacts(
-                    &session.instance_id,
-                    &project_session,
-                    provenance,
-                    artifacts()
-                )
-                .is_err()
-        );
     }
 }

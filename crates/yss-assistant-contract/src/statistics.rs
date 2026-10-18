@@ -3,8 +3,6 @@ use std::collections::BTreeSet;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::WorkflowId;
-
 #[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 #[schemars(transparent)]
@@ -16,7 +14,13 @@ pub struct StatisticalMethodId(String);
 pub struct MethodVersion(String);
 
 yss_harness_contract::string_identity!(StatisticalMethodId, "statistical method id");
+#[derive(Clone, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
+#[schemars(transparent)]
+pub struct StatisticalWorkflowId(String);
+
 yss_harness_contract::string_identity!(MethodVersion, "method version");
+yss_harness_contract::string_identity!(StatisticalWorkflowId, "statistical workflow id");
 
 #[derive(
     Clone, Copy, Debug, Eq, Hash, JsonSchema, Ord, PartialEq, PartialOrd, Serialize, Deserialize,
@@ -133,7 +137,7 @@ pub struct StatisticalPlan {
     /// A short workflow identifier, e.g. "ols_model_and_diagnostics" (nonblank, at most
     /// 128 UTF-8 bytes). Put the analysis description in researchQuestion, not in this ID.
     #[schemars(length(min = 1, max = 128))]
-    pub selected_workflow: WorkflowId,
+    pub selected_workflow: StatisticalWorkflowId,
     pub required_diagnostics: Vec<DiagnosticRequirement>,
     pub robustness_checks: Vec<RobustnessCheck>,
     pub reporting_contract: ReportingContract,

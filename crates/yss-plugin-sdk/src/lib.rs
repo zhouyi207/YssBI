@@ -9,7 +9,9 @@ use std::{
     },
     time::Duration,
 };
-use yss_plugin_protocol::{PluginFailure, ResourceBudget, RpcRequest, RpcResponse, read_frame};
+use yss_plugin_protocol::{
+    PluginFailure, ResourceBudget, RpcRequest, RpcResponse, read_frame, write_frame,
+};
 
 pub type Handler = Arc<dyn Fn(&Peer, RpcRequest) -> Result<Value, PluginFailure> + Send + Sync>;
 type Pending = BTreeMap<String, mpsc::SyncSender<Result<Value, PluginFailure>>>;
@@ -44,10 +46,7 @@ impl Peer {
         std::thread::spawn(move || {
             let mut output = output;
             while let Ok(bytes) = outgoing_receiver.recv() {
-                let result = output
-                    .write_all(&(bytes.len() as u32).to_be_bytes())
-                    .and_then(|()| output.write_all(&bytes))
-                    .and_then(|()| output.flush());
+                let result = write_frame(&mut output, &bytes);
                 outgoing_bytes.fetch_sub(bytes.len(), Ordering::AcqRel);
                 if result.is_err() {
                     if let Some(peer) = weak_writer.upgrade() {

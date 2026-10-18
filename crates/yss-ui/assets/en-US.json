@@ -87,11 +87,7 @@
       "daysHint": "0 disables age eviction; 1–3650 days. Uses recorded local time and bounded background passes. Deletion cannot be undone.",
       "storage": "History storage target",
       "storageHint": "0 disables size eviction; 1–10240 MiB of SQLite pages. Deletes oldest records first. Background reclamation, WAL, readers and fragmentation can leave files above this target. Deletion cannot be undone.",
-      "applyFailed": "Log retention was saved but maintenance could not be applied. Check disk space and database access.",
-      "visibleLevelsDescription": "Filter displayed records only. This does not change log collection; Rust uses RUST_LOG and explicit UI logs collect INFO and above.",
-      "retentionDaysDescription": "Delete records older than this many days, using their recorded local time. Disabled keeps all ages. Cleanup continues in bounded background passes.",
-      "maxStorageDescription": "Target for allocated SQLite history pages, including indexes. Oldest records are removed first; free pages and WAL space are reclaimed gradually. Readers, fragmentation and pending work may keep files above this target. This is not a hard file-size cap.",
-      "retentionDisabled": "Keep all history"
+      "applyFailed": "Log retention was saved but maintenance could not be applied. Check disk space and database access."
     },
     "shortcuts": {
       "scope": "%{action} · Context: %{context} · Defaults: %{defaults}",
@@ -161,40 +157,25 @@
     }
   },
   "documents": {
-    "newFile": "New File",
     "minds": "Mind Maps",
     "docs": "Documents",
     "newMind": "New Mind Map",
     "newDoc": "New Document",
     "noMinds": "No mind maps yet",
     "noDocs": "No documents yet",
-    "rename": "Rename File",
     "delete": "Delete File",
     "deleteMessage": "Delete “%{name}”? Unsaved changes will also be lost.",
-    "operationFailed": "File operation failed: %{error}",
-    "markdown": "Markdown source",
     "preview": "Preview",
-    "edit": "Edit",
-    "nodeText": "Topic text",
     "newTopic": "New topic",
     "addChild": "Add child topic",
-    "addSibling": "Add sibling topic",
     "expand": "Expand branch",
     "collapse": "Collapse branch",
     "parent": "Parent topic",
-    "moveUp": "Move up",
-    "moveDown": "Move down",
     "deleteBranch": "Delete branch"
   },
   "theil": {
     "individual": "Individual",
     "grouped": "Grouped"
-  },
-  "reference": {
-    "loadFailed": "This PDF could not be previewed. Try opening it in your browser.",
-    "reload": "Reload reference",
-    "openExternal": "Open in browser",
-    "previewHint": "If the document does not appear, use Open in browser above."
   },
   "tableComposition": {
     "by_name": "By name (fill missing columns with null)",
@@ -270,15 +251,8 @@
   },
   "common": {
     "loading": "Loading...",
-    "initializing": "Initializing...",
-    "ready": "Ready",
-    "idle": "Idle",
-    "error": "Error",
     "running": "Running",
     "completed": "Completed",
-    "restoreDefaults": "Restore Defaults",
-    "restoreAllDefaults": "Restore All Defaults",
-    "restoring": "Restoring...",
     "minimize": "Minimize",
     "maximize": "Maximize",
     "restore": "Restore",
@@ -287,67 +261,20 @@
     "retry": "Retry",
     "save": "Save",
     "export": "Export",
-    "reset": "Reset",
     "undo": "Undo",
     "redo": "Redo",
     "delete": "Delete",
-    "search": "Search",
     "cancel": "Cancel",
     "confirm": "OK",
-    "incidentId": "Incident ID",
-    "errorCode": "Error code",
-    "unexpectedError": "An unexpected error occurred",
-    "filePublicationUncertain": "The target file may have been updated, but saving could not be confirmed. Check the target file before retrying.",
     "listSeparator": ", "
   },
   "notifications": {
-    "databaseEditor": {
-      "saveFailed": "Failed to save changes: %{error}",
-      "forceCastFailed": "Failed to force-convert column type: %{error}",
-      "pasteFailed": "Paste could not be completed (%{appliedCount} cells applied): %{error}"
-    },
     "editor": {
-      "chartSaveFailed": "Failed to save chart: %{error}",
-      "graphSaveFailed": "Failed to save graph: %{error}",
-      "documentSaveFailed": "Failed to save “%{title}”: %{error}",
       "resourceCatalogRefreshing": "The resource catalog is stale. Refreshing before node creation."
     },
     "parameter": {
-      "updateFailed": "Failed to update parameter: %{error}",
-      "stale": "The edit became stale; the latest value was restored",
-      "conflict": "The edit conflicted with a newer value; the latest value was restored",
-      "rejected": "The edit was rejected (%{code}); the latest value was restored",
       "enterNumber": "Enter a number",
-      "enterFiniteNumber": "Enter a finite number",
-      "enterSupportedInteger": "Enter an integer within the supported range",
       "unsupportedNumericType": "Unsupported numeric value type"
-    },
-    "project": {
-      "notLoaded": "No project is loaded",
-      "closeFailed": "Could not close project: %{error}",
-      "saveAsFailed": "Could not save project as: %{error}",
-      "openResourceBeforeSaving": "Open an editable file before saving",
-      "saveFailed": "Could not save: %{error}",
-      "problemsBlockExecution": "Resolve the graph's blocking problems before running it",
-      "executionStateUnknown": "Execution status is unknown because synchronization was interrupted. The computation may still be running; it has not been restarted.",
-      "executionRejected": "The execution request was not accepted",
-      "executionStatusUnknown": "Run status unknown",
-      "loadFailed": "Could not load project"
-    },
-    "chart": {
-      "createFailed": "Could not create chart: %{error}",
-      "duplicateFailed": "Could not duplicate chart: %{error}"
-    },
-    "projectPicker": {
-      "refreshFailed": "Could not refresh projects: %{error}",
-      "scanFailed": "Could not scan for projects: %{error}",
-      "cleanupFailed": "Could not clean up invalid projects: %{error}",
-      "createRecovery": "Project %{name} requires recovery: %{outcome}",
-      "openFailed": "Could not open project: %{error}",
-      "importFailed": "Could not import project: %{error}",
-      "removeFailed": "Could not remove project from the list: %{error}",
-      "deleteRecovery": "Project files deleted; recovery is required: %{outcome}",
-      "favoriteFailed": "Could not update favorite status: %{error}"
     },
     "externalUrl": {
       "openFailed": "Could not open external link."
@@ -355,37 +282,18 @@
     "julia": {
       "runtime": {
         "title": "Julia runtime",
-        "description": "Julia runtime and worker status",
-        "openBayes": "Open Bayesian analysis"
-      },
-      "statusFailed": "Could not retrieve Julia status: %{error}",
-      "installFailed": "Could not install Julia: %{error}"
-    },
-    "newProject": {
-      "defaultPathFailed": "Could not determine the default project location: %{error}",
-      "browseFailed": "Could not select a project location: %{error}",
-      "createFailed": "Could not create project: %{error}"
-    },
-    "sidebar": {
-      "actionFailed": "Sidebar action failed: %{error}"
+        "description": "Julia runtime and worker status"
+      }
     }
   },
   "editor": {
-    "initializationFailed": "Initialization failed: %{error}",
     "close": {
-      "dirtyTitle": "Save changes?",
-      "dirtyMessage": "“%{name}” has unsaved changes.",
-      "save": "Save",
-      "discard": "Discard",
-      "cancel": "Cancel",
-      "failed": "The panel could not be closed."
+      "discard": "Discard"
     }
   },
   "panel": {
     "assistant": "Assistant",
-    "assistantEmptyTitle": "Statistical analysis assistant",
     "assistantStartTitle": "Start with a research question",
-    "assistantStarterHint": "Choose a starting point, then edit the draft before sending.",
     "assistantStarterQuestionLabel": "Frame a question",
     "assistantStarterQuestionPrompt": "Help me turn my research goal into a clear, testable question. Ask about the outcome, population, and available data before proposing an analysis.",
     "assistantStarterQualityLabel": "Plan data checks",
@@ -393,10 +301,7 @@
     "assistantStarterMethodLabel": "Choose a method",
     "assistantStarterMethodPrompt": "Help me choose an analysis method. First clarify my research question, study design, variable types, and assumptions, then explain suitable methods and diagnostics.",
     "assistantComposerStop": "Stop",
-    "assistantComposerSendKeys": "Enter to send · Shift+Enter for a new line",
-    "assistantComposerQueueKeys": "Enter to queue · Shift+Enter for a new line",
     "assistantQueuePaused": "Queue paused. Send the next message when you are ready.",
-    "assistantAllowEdits": "Allow edits for the next turn",
     "assistantToolResultPreview": "Result: %{preview}",
     "assistantToolResources": "%{artifacts} resource changes · %{results} computation results",
     "assistantPreviewItems": "%{count} items",
@@ -423,11 +328,9 @@
     "assistantDurationMinutes": "%{minutes} m %{seconds} s",
     "assistantDurationHours": "%{hours} h %{minutes} m %{seconds} s",
     "assistantTimingUnconfirmed": "Timing awaiting sync",
-    "assistantStopping": "Stopping; waiting for admitted operations…",
     "assistantRecoveryAttempt": "Reconnect attempt %{count}",
     "assistantLoadingDetails": "Loading details…",
     "assistantDetailsFailed": "Could not load tool details.",
-    "assistantRetryDetails": "Reload details",
     "assistantTechnicalDetails": "Technical details",
     "assistantAttachResource": "Reference project resources (@)",
     "assistantFindResource": "Search resource names or paths",
@@ -452,12 +355,7 @@
     "assistantContinueTask": "Check progress and continue",
     "assistantContinuePrompt": "First inspect the completed operations and actual results of the current task, then continue the unfinished work without repeating committed changes.",
     "assistantOpenSettings": "Model settings",
-    "assistantConfigureModel": "Configure model",
-    "assistantSearchConversations": "Search conversations…",
     "assistantRenameConversation": "Rename conversation",
-    "assistantSaveName": "Save",
-    "assistantCancelEdit": "Cancel",
-    "assistantLoadEarlier": "Load earlier messages (%{count} remaining)",
     "assistantToolFacts": {
       "reason": "Reason",
       "category": "Error type",
@@ -562,8 +460,6 @@
     },
     "assistantEmptyDescription": "Build reproducible analyses around research questions, data quality, assumptions, and diagnostics.",
     "assistantComposerLabel": "Assistant message draft",
-    "assistantComposerPlaceholder": "Message the assistant, @ to reference resources · Ctrl+Enter to send",
-    "assistantSendUnavailable": "Configure a model provider to send messages.",
     "assistantSend": "Send message",
     "assistantCopy": "Copy response",
     "assistantCopied": "Copied",
@@ -572,14 +468,11 @@
     "assistantCode": "Code",
     "assistantOpenSource": "Open original document",
     "assistantSource": "Source",
-    "assistantTool": "Tool call",
     "assistantScrollToBottom": "Jump to latest message",
     "assistantCancel": "Stop the current analysis",
     "assistantStatusInitializing": "Initializing conversation…",
-    "assistantStatusReady": "Press Ctrl+Enter to send",
     "assistantReplyInterrupted": "This response was interrupted. Completed operations are preserved. You can ask me to check the current progress and continue.",
     "assistantReplyStopped": "Stopped this response. Completed operations are preserved, and we can continue when you are ready.",
-    "assistantStatusRunning": "Analyzing…",
     "assistantStatusError": "Assistant is temporarily unavailable",
     "assistantConversations": "Conversations",
     "assistantNoConversations": "No conversations yet",
@@ -599,7 +492,6 @@
       "ask": "Read existing resources and answer questions",
       "write": "Edit and execute within existing permissions"
     },
-    "assistantReadOnly": "Use read-only mode for the next turn",
     "assistantReasoningEffort": "Reasoning effort",
     "assistantEffort": {
       "low": "Low",
@@ -624,12 +516,6 @@
     },
     "assistantUsageHint": "Totals include workers and compaction. Cache is part of input; reasoning is part of output. The ring shows only the main conversation’s latest request input.",
     "assistantUsagePartial": "Some requests did not report complete usage. Only reported counters are included.",
-    "assistantExpandPanel": "Expand conversation",
-    "assistantRestorePanel": "Restore conversation size",
-    "assistantExpandInput": "Expand input",
-    "assistantCollapseInput": "Collapse input",
-    "assistantConversationMenu": "Conversation actions",
-    "assistantCloseConversation": "Close this conversation panel",
     "assistantReloadConversations": "Reconnect",
     "assistantErrors": {
       "assistant_resource_read_required": "Read the resource's current contents before continuing the task.",
@@ -661,7 +547,6 @@
       "project_session_unavailable": "The project is not ready. Open a project and try again.",
       "harness_session_not_active": "The assistant session has expired. Reopen the assistant panel."
     },
-    "assistantActivity": "Running: %{activity}",
     "assistantAgentRoles": {
       "manager": "Coordination",
       "data": "Data preparation",
@@ -694,7 +579,6 @@
     "assistantToolsFinished": "Tool calls finished · %{count}",
     "assistantToolsFailed": "%{count} unsuccessful",
     "assistantToolArguments": "Arguments",
-    "assistantToolArgumentsUnavailable": "Arguments were not provided for this call",
     "assistantGraphSucceeded": "Graph computation succeeded",
     "assistantGraphFailed": "Graph computation failed",
     "assistantToolNames": {
@@ -789,26 +673,20 @@
     "output": "Outputs",
     "results": "Results",
     "problems": "Problems",
-    "problemsLocate": "Reveal problem location",
-    "problemsRelated": "Related",
     "problemsRelatedLocation": "Related: %{location}",
     "problemsBlocking": "Blocks execution",
     "outputNoGraph": "Open a graph to view its program output",
     "outputEmpty": "The current graph has no run failure",
-    "outputClear": "Clear run failure",
     "problemsNoGraph": "Open a graph to view its problems",
-    "problemsEmpty": "No problems were reported for the current graph",
-    "problemsLocateNode": "Locate problem node"
+    "problemsEmpty": "No problems were reported for the current graph"
   },
   "runFailure": {
     "title": "Execution failed",
-    "unknown": "The run could not finish. Check the logs using the error code and diagnostic reference.",
     "node": "Locate node: %{name}",
     "group": "Group %{ordinal} · %{function}",
     "emptyGroupProbe": "Empty-input schema probe · %{function}",
     "run": "Run #%{id}",
     "code": "Error code: %{code}",
-    "incident": "Diagnostic reference: %{id}",
     "causes": {
       "shapeMismatch": "Input column lengths or matrix dimensions do not match.",
       "invalidParameter": "Node parameters are invalid. Check the method and its configuration.",
@@ -844,10 +722,6 @@
       "finalization": "Phase: result commit"
     }
   },
-  "nodeCatalog": {
-    "loadError": "The node catalog is unavailable",
-    "invalidSource": "The selected pin cannot be used to create a connection"
-  },
   "contextMenu": {
     "sidebar": {
       "open": "Open",
@@ -856,14 +730,11 @@
       "delete": "Delete",
       "newChart": "New Chart",
       "importData": "Import Data",
-      "revealInExplorer": "Reveal in File Explorer",
-      "revealInExplorerFailed": "Could not reveal in file explorer: %{error}"
+      "revealInExplorer": "Reveal in File Explorer"
     },
     "dialog": {
       "createSubmit": "Create",
-      "renameGraphTitle": "Rename",
       "renameChartTitle": "Rename Chart",
-      "renameDataTitle": "Rename Dataset",
       "renameSubmit": "Rename"
     },
     "connection": {
@@ -889,112 +760,28 @@
   },
   "projectPicker": {
     "title": "Project Management",
-    "heading": "Choose a YssBI Project",
     "description": "Continue from recent projects, or create / open a metadata.yssbi project.",
-    "newProject": "New Project",
-    "openProject": "Open Project",
-    "importProject": "Import Project",
-    "importing": "Importing Project…",
-    "importSuccess": "Added \"%{name}\" to the project list",
-    "createSuccess": "Created \"%{name}\" and added it to the list",
-    "scanProjects": "Scan Projects",
-    "scanFolderTitle": "Choose a folder to scan",
-    "scanning": "Scanning Projects…",
-    "scanNoneFound": "No YssBI projects found in the selected folder",
-    "scanSuccess": "Found %{found} project(s), added %{added} to the list",
-    "scanAlreadyRegistered": "Found %{found} project(s); all are already in the list",
-    "scanCancelled": "Scan cancelled",
-    "cleanupProjects": "Clean Up Projects",
-    "cleaningUp": "Cleaning Up Projects…",
-    "cleanupNone": "No invalid projects in the list",
-    "cleanupSuccess": "Removed %{count} invalid project(s) from the list",
-    "creating": "Creating...",
-    "opening": "Opening...",
-    "searchPlaceholder": "Filter projects...",
-    "clearSearch": "Clear filter",
-    "sortLabel": "Sort",
-    "sortRecent": "Recent",
-    "sortName": "Name",
-    "emptyTitle": "No Recent Projects",
-    "emptyDescription": "Open an existing metadata.yssbi project or create an empty project to show it here.",
-    "noMatchesTitle": "No Matching Projects",
-    "noMatchesDescription": "Try adjusting the filter text.",
-    "actionsTitle": "Project Actions",
-    "noSelection": "Select a project on the left to enter or manage it",
-    "enter": "Enter Project",
-    "favorite": "Favorite Project",
-    "unfavorite": "Unfavorite Project",
-    "removeFromList": "Remove from List",
-    "deleteProjectFiles": "Move to Recycle Bin…",
     "deleteProjectConfirm": {
       "title": "Move project to Recycle Bin?",
-      "description": "All files and folders for \"%{name}\" will be moved to the Recycle Bin. You can restore them from there later.",
-      "pathLabel": "Project path",
-      "confirm": "Move to Recycle Bin",
-      "deleting": "Moving…",
-      "success": "Project moved to Recycle Bin",
-      "failed": "Failed to move project to Recycle Bin"
+      "description": "All files and folders for \"%{name}\" will be moved to the Recycle Bin. You can restore them from there later."
     },
     "issues": {
-      "retry": "Retry",
-      "staleTitle": "The project context changed",
-      "stale": "This operation belongs to an older project context and was safely ignored.",
       "errors": {
         "unknown": "The operation could not be completed.",
         "invalidPath": "The selected path is not a valid YssBI project location.",
-        "projectNotFound": "The project could not be found. It may have been moved or deleted.",
         "invalidProject": "The selected project metadata is invalid or damaged.",
-        "loadFailed": "The project could not be loaded.",
         "busy": "Another project operation is still in progress. Try again shortly.",
         "recoveryRequired": "The project requires recovery before this operation can continue.",
-        "filesystem": "The project files could not be updated safely.",
-        "transport": "The application backend could not be reached.",
-        "unexpectedResponse": "The backend returned an unexpected response.",
-        "internal": "An internal error occurred. Use the incident ID when reporting this problem."
-      },
-      "recovery": {
-        "registerDestination": "The project was created, but its new location could not be registered.",
-        "activateDestination": "The project was created, but the new location could not be activated.",
-        "cleanupRegistry": "The project files changed, but the project list still requires cleanup.",
-        "removeRegistryRecord": "The project files were removed, but its project-list entry could not be removed.",
-        "unknown": "The operation completed only partially and requires recovery."
+        "filesystem": "The project files could not be updated safely."
       }
     },
-    "localOnlyHint": "This list is stored in the local app data directory and does not delete project files from disk.",
-    "settingsDescription": "Adjust preferences for the project picker.",
     "loading": {
       "creating": "Creating Project",
-      "opening": "Opening Project",
-      "scanning": "Scanning for projects",
-      "scanningFolder": "Searching for metadata.yssbi…",
-      "scanFoundProjects": "Found %{count} project(s)",
-      "scanRegistering": "Registering projects (%{current} / %{total})…",
-      "cleanup": "Cleaning up invalid projects",
-      "cleanupChecking": "Checking projects (%{current} / %{total})…",
-      "cleanupRemoving": "Removed %{removed} invalid project(s)…",
-      "cleanupCancelled": "Cleanup cancelled",
-      "readingFile": "Reading project file…",
-      "loadingData": "Loading project data…",
-      "preparingEditor": "Preparing editor…",
-      "done": "Done"
+      "opening": "Opening Project"
     },
     "newProjectModal": {
-      "title": "New Project",
-      "nameLabel": "Project Name",
-      "pathLabel": "Project Folder Path",
-      "browse": "Browse",
-      "browseTitle": "Choose Project Folder",
-      "create": "Create",
-      "validating": "Validating path...",
-      "nameRequired": "Please enter a project name.",
-      "pathRequired": "Please enter a project folder path.",
-      "invalidPath": "Invalid project path.",
-      "fixErrors": "Validation failed. Please check the highlighted fields."
+      "title": "New Project"
     }
-  },
-  "language": {
-    "zhCN": "简体中文",
-    "enUS": "English"
   },
   "menubar": {
     "file": "File",
@@ -1022,8 +809,6 @@
     "githubRepository": "GitHub Repository",
     "reportIssue": "Report Issue",
     "about": "About YssBI",
-    "switchToDark": "Switch to dark theme",
-    "switchToLight": "Switch to light theme",
     "run": "Run",
     "new": "New",
     "eventGraph": "Event Graph",
@@ -1056,338 +841,41 @@
   },
   "bayes": {
     "title": "Bayesian Parameter Estimation",
-    "openWindow": "Open Bayesian Parameter Estimation",
     "tabs": {
-      "model": "Model",
-      "results": "Results"
+      "model": "Model"
     },
     "actions": {
-      "run": "Run",
-      "running": "Running…",
-      "cancel": "Cancel",
-      "edit": "Edit",
-      "save": "Save",
-      "close": "Close"
-    },
-    "issue": {
-      "column": "Column: %{column}",
-      "row": "Row: %{row}",
-      "parameter": "Parameter: %{parameter}",
-      "path": "Field: %{path}"
+      "run": "Run"
     },
     "errors": {
-      "title": "Bayesian inference failed",
-      "fallback": "The Bayesian operation could not be completed.",
-      "unknown": "The Bayesian operation could not be completed (code: %{code}).",
-      "unexpected": "The Bayesian operation could not be completed because of an unexpected application error.",
-      "bayes_expression_parse_failed": "The model formula could not be parsed.",
-      "bayes_inference_failed": "Bayesian inference failed.",
-      "bayes_request_failed": "The Bayesian inference request failed.",
-      "bayes_validation_request_failed": "The model validation request failed.",
-      "bayes_validation_failed": "Fix the model validation issues before running inference.",
-      "bayes_task_not_found": "The inference task is no longer available.",
-      "bayes_task_active": "The inference task is still running and cannot be cleared.",
-      "bayes_cancel_failed": "The inference task could not be cancelled.",
-      "bayes_result_not_found": "The inference result is not available.",
-      "bayes_result_artifact_read_failed": "A result artifact could not be read.",
-      "bayes_artifact_not_found": "The requested result artifact is not available.",
-      "bayes_artifact_export_unsupported": "This result artifact cannot be exported as CSV.",
-      "bayes_artifact_export_failed": "The result artifact could not be exported.",
-      "bayes_samples_not_found": "This result does not include posterior samples.",
-      "bayes_samples_invalid": "The posterior sample data is invalid.",
-      "bayes_posterior_predictive_not_found": "This result does not include posterior predictive data.",
-      "bayes_posterior_predictive_invalid": "The posterior predictive data is invalid.",
-      "bayes_service_lock_poisoned": "An internal Bayesian service error occurred. Use the incident ID when reporting it.",
-      "bayes_input_empty": "The selected data source contains no rows.",
-      "bayes_input_response_non_finite": "The response contains a missing or non-finite value.",
-      "bayes_input_predictor_non_finite": "A predictor contains a missing or non-finite value.",
-      "bayes_input_column_not_numeric": "A required model column is not numeric.",
-      "bayes_input_column_missing": "A required model column is missing.",
-      "bayes_input_response_binding_invalid": "The response expression is not bound to exactly one data column.",
-      "bayes_input_response_parameter_forbidden": "The response expression cannot contain model parameters.",
-      "bayes_input_response_division_by_zero": "The response expression divides by zero.",
-      "bayes_input_response_ln_domain": "The response expression applies ln to a value that is not greater than zero.",
-      "bayes_input_response_sqrt_domain": "The response expression applies sqrt to a negative value.",
-      "bayes_input_response_result_non_finite": "The response expression produced a non-finite value.",
-      "bayes_input_bernoulli_response_invalid": "A Bernoulli response must contain only boolean or 0/1 values.",
-      "bayes_input_poisson_response_negative": "A Poisson response cannot contain negative counts.",
-      "bayes_input_poisson_response_not_integer": "A Poisson response must contain integer counts.",
-      "bayes_backend_not_configured": "The Bayesian inference backend is not configured.",
-      "julia_bayes_runtime_unavailable": "Julia is unavailable. Check the Julia installation and try again.",
-      "julia_bayes_package_unavailable": "The required Julia Bayesian packages are unavailable.",
-      "julia_bayes_model_unsupported": "The current Julia backend does not support this model.",
-      "julia_bayes_invalid_data": "The selected data is not valid for the Julia Bayesian backend.",
-      "julia_bayes_sampling_failed": "Julia could not complete posterior sampling.",
-      "julia_bayes_result_missing": "Julia did not produce an inference result.",
-      "julia_bayes_result_invalid": "Julia produced an invalid inference result.",
-      "julia_bayes_backend_failed": "The Julia Bayesian backend failed."
+      "title": "Bayesian inference failed"
     },
     "validation": {
-      "title": "Review the model",
-      "unknown": "The model contains an issue that must be reviewed (code: %{code}).",
-      "path": "Field: %{path}",
-      "issues": {
-        "formula_required": "Enter a model formula.",
-        "formula_not_parsed": "Parse the model formula before continuing.",
-        "dataset_required": "Select a data source.",
-        "dependent_symbol_required": "Configure exactly one dependent symbol.",
-        "response_required": "Select a response column.",
-        "response_symbol_required": "Bind the response expression to a data symbol.",
-        "response_column_unknown": "The selected response column no longer exists.",
-        "response_binding_required": "Bind the dependent symbol to a response column.",
-        "data_column_unknown": "A selected predictor column no longer exists.",
-        "data_binding_required": "Bind every independent symbol to a data column.",
-        "response_expression_required": "Bind the response expression before continuing.",
-        "response_parameter_forbidden": "The response expression cannot reference model parameters.",
-        "response_data_symbol_count_invalid": "The response expression must reference exactly one data symbol.",
-        "response_binding_mismatch": "The response expression and response-column binding do not match.",
-        "likelihood_response_transform_unsupported": "This likelihood does not support a transformed response.",
-        "predictor_required": "Parse and bind the predictor expression before continuing.",
-        "predictor_not_bound": "Confirm the roles of all predictor symbols.",
-        "predictor_data_symbol_unconfigured": "Configure every data symbol used by the predictor.",
-        "predictor_parameter_unconfigured": "Configure every parameter used by the predictor.",
-        "expression_number_invalid": "The model expression contains an invalid number.",
-        "expression_function_arity_invalid": "A function in the model expression has the wrong number of arguments.",
-        "likelihood_response_type_invalid": "The response column type is incompatible with the selected likelihood.",
-        "likelihood_sigma_constraint_warning": "Use a positive constraint for the Normal sigma parameter.",
-        "likelihood_sigma_parameter_required": "Configure the sigma parameter required by the Normal likelihood.",
-        "poisson_response_non_negative_unchecked": "Poisson responses must be non-negative; values will be checked before sampling.",
-        "predictor_column_type_invalid": "Predictor columns must be numeric.",
-        "no_parameters": "The current model does not contain any unknown parameters.",
-        "parameter_name_required": "Every parameter must have a name.",
-        "parameter_name_duplicated": "Parameter names must be unique.",
-        "parameter_bounds_invalid": "A parameter lower bound must be less than its upper bound.",
-        "parameter_prior_args_invalid": "A prior contains invalid distribution parameters.",
-        "parameter_prior_constraint_mismatch": "A prior may not match its parameter constraint.",
-        "sampler_chains_invalid": "The number of chains must be greater than zero.",
-        "sampler_samples_invalid": "The number of samples must be greater than zero.",
-        "sampler_target_accept_invalid": "Target accept must be between 0 and 1.",
-        "sampler_max_tree_depth_invalid": "Maximum tree depth must be greater than zero.",
-        "low_sample_count": "A low sample count may produce unstable diagnostics."
-      }
-    },
-    "common": {
-      "none": "None"
+      "title": "Review the model"
     },
     "formula": {
-      "title": "1. Model formula",
-      "responseExpression": "Response expression",
-      "distribution": "Distribution",
-      "meanPredictor": "Mean / predictor",
-      "standardDeviationSigma": "Standard deviation / sigma",
-      "logit": "Logit",
-      "logRate": "Log rate",
-      "recognizedSymbols": "Recognized symbols"
+      "title": "1. Model formula"
     },
     "symbols": {
-      "title": "2. Symbol configuration",
-      "symbol": "Symbol",
-      "role": "Role",
-      "data": "Data",
-      "column": "Column",
-      "prior": "Prior",
-      "bounds": "Bounds",
-      "actions": "Actions",
-      "selectDataColumn": "Select a data column",
-      "configurationTitle": "Symbol configuration"
-    },
-    "roles": {
-      "dependent": "Dependent",
-      "independent": "Independent",
-      "parameter": "Parameter"
-    },
-    "constraints": {
-      "parameterConstraint": "Parameter constraint",
-      "constraint": "Constraint",
-      "real": "Real",
-      "positive": "Positive",
-      "unit": "Unit interval",
-      "bounded": "Bounded",
-      "lowerBound": "Lower bound",
-      "upperBound": "Upper bound",
-      "includeLower": "Include lower",
-      "includeUpper": "Include upper",
-      "true": "True",
-      "false": "False"
+      "title": "2. Symbol configuration"
     },
     "prior": {
-      "title": "Prior",
-      "distribution": "Prior distribution",
-      "selectDistribution": "Select a distribution",
-      "recommended": "Recommended",
-      "notSet": "No distribution set",
-      "args": {
-        "mean": "Mean",
-        "standardDeviation": "Standard deviation",
-        "logMean": "Log mean",
-        "logStandardDeviation": "Log standard deviation",
-        "lowerBound": "Lower bound",
-        "upperBound": "Upper bound",
-        "alpha": "Alpha",
-        "beta": "Beta",
-        "shape": "Shape",
-        "scale": "Scale",
-        "degreesOfFreedom": "Degrees of freedom",
-        "location": "Location"
-      }
+      "title": "Prior"
     },
     "dataBinding": {
-      "title": "Data binding",
-      "dataSource": "Data source",
-      "dataColumn": "Data column",
-      "selectDataSource": "Select a data source",
-      "noDataSources": "No data source is available in this project. Import data first.",
-      "noColumns": "The selected data source has no column metadata yet. Wait for synchronization or refresh it.",
-      "noDataSelected": "No data selected",
-      "unknownDataSource": "Unknown data source",
-      "unboundColumn": "Unbound column"
+      "title": "Data binding"
     },
     "sampler": {
-      "title": "3. Sampler",
-      "nutsOnlyDescription": "Only NUTS is currently supported",
-      "algorithm": "Algorithm",
-      "chains": "Chains",
-      "samples": "Samples",
-      "warmup": "Warmup",
-      "seed": "Seed",
-      "targetAccept": "Target accept",
-      "maxTreeDepth": "Max tree depth"
-    },
-    "progress": {
-      "stageElapsed": "Stage %{duration}",
-      "totalElapsed": "Total %{duration}",
-      "remainingAndTotal": "Remaining %{remaining} · Total %{total}",
-      "stages": {
-        "queued": "Waiting",
-        "running": "Starting",
-        "materializingData": "Preparing data",
-        "loadingModel": "Starting Julia task",
-        "loadingData": "Loading model and data",
-        "preparingResponse": "Preparing response",
-        "loadingKernels": "Loading generated compute kernels",
-        "preparingKernels": "Preparing predictor kernel",
-        "buildingModel": "Building priors and Turing model",
-        "initializingNuts": "Specializing model and initializing NUTS",
-        "warmup": "NUTS warmup",
-        "sampling": "Posterior sampling",
-        "summarizing": "Computing parameter summaries",
-        "writingSamples": "Writing posterior samples",
-        "posteriorPredictive": "Computing posterior predictive",
-        "finalizing": "Finalizing diagnostics and artifacts",
-        "readingResult": "Reading result",
-        "writingArtifacts": "Computing result data",
-        "renderingResult": "Computing and rendering result data",
-        "cancelling": "Cancelling"
-      }
+      "title": "3. Sampler"
     },
     "results": {
       "titles": {
-        "summary": "Result Summary",
-        "posteriorTrace": "Posterior Trace",
-        "posteriorDensity": "Posterior Density",
-        "autocorrelation": "Autocorrelation",
-        "posteriorPredictive": "Posterior Predictive"
-      },
-      "actions": {
-        "exportCsv": "Export CSV",
-        "openFolder": "Open result folder"
-      },
-      "messages": {
-        "exportSuccess": "CSV exported successfully"
-      },
-      "errors": {
-        "exportCsv": "Failed to export CSV: %{error}",
-        "openFolder": "Failed to open result folder: %{error}",
-        "plot": "Failed to load plot data: %{error}",
-        "predictivePlot": "Failed to load predictive interval chart: %{error}"
-      },
-      "loading": {
-        "plot": "Loading plot data…"
-      },
-      "metrics": {
-        "chains": "Chains",
-        "drawsPerChain": "Draws / chain",
-        "warmupPerChain": "Warmup / chain",
-        "divergences": "Divergences",
-        "treeDepthHits": "Tree-depth hits"
-      },
-      "table": {
-        "status": "Status",
-        "parameter": "Parameter",
-        "mean": "Mean",
-        "sd": "SD"
-      },
-      "controls": {
-        "parameter": "Parameter",
-        "scale": "Scale",
-        "originalScale": "Original",
-        "modelScale": "Model (%{transform})",
-        "chain": "Chain",
-        "allChains": "All chains",
-        "pooled": "Pooled",
-        "chainNumber": "Chain %{chain}"
-      },
-      "chart": {
-        "value": "Value",
-        "density": "Density",
-        "autocorrelation": "Autocorrelation",
-        "observation": "Observation",
-        "response": "Response",
-        "responseModelScale": "Response (model scale)",
-        "drawStride": "Draw, stride %{stride}",
-        "lagMax": "Lag, max %{maxLag}"
+        "summary": "Result Summary"
       },
       "empty": {
-        "summary": "Parameter summaries appear after the run completes.",
-        "plots": "Plot data appears after the run completes.",
-        "posteriorSamples": "This result does not contain posterior samples, so trace, density, and autocorrelation plots cannot be generated. Enable sample saving in the sampler and run again.",
-        "parameters": "There are no parameters to plot.",
-        "trace": "No trace data.",
-        "density": "No density data.",
-        "autocorrelation": "No autocorrelation data.",
-        "posteriorPredictive": "Posterior predictive results appear after the run completes.",
-        "posteriorPredictiveData": "This result does not contain posterior predictive data."
-      },
-      "ratings": {
-        "unavailable": "Unavailable",
-        "excellent": "Excellent",
-        "recommended": "Recommended",
-        "concerning": "Concerning",
-        "untrustworthy": "Untrustworthy",
-        "notConverged": "Not converged",
-        "veryGood": "Very good",
-        "good": "Good",
-        "acceptable": "Acceptable",
-        "low": "Low",
-        "unreliable": "Unreliable"
-      },
-      "status": {
-        "ok": "OK",
-        "check_rhat": "Check R-hat",
-        "low_ess": "Low ESS",
-        "unknown": "Unknown"
-      },
-      "severity": {
-        "good": "Good",
-        "warning": "Warning",
-        "bad": "Bad",
-        "unknown": "Unknown"
+        "summary": "Parameter summaries appear after the run completes."
       },
       "diagnostics": {
-        "ratingPrefix": "Rating: %{rating}",
-        "suggestionPrefix": "Suggestion: %{suggestion}",
-        "rhatDescription": "Measures whether multiple MCMC chains converged to the same posterior distribution. Values closer to 1 generally indicate better mixing.",
-        "essDescription": "Bulk ESS is shown on the left and Tail ESS on the right. The cell color and overall rating use the lower value.",
-        "essDetail": "%{metric}: %{value} (%{rating})",
-        "metricValue": "%{metric}: %{value} (threshold %{threshold})",
-        "suggestedNextSteps": "Suggested next steps",
-        "warningsExplained": "Diagnostic warning details",
-        "suggestions": {
-          "checkMetrics": "Review R-hat, ESS, divergences, and tree-depth metrics.",
-          "saveSamples": "Enable sample saving to inspect trace, density, and autocorrelation plots.",
-          "increaseSampling": "Increase warmup and sample counts when necessary.",
-          "inspectPlots": "Use trace plots and posterior predictive checks to assess model stability."
-        },
         "assessment": {
           "good": {
             "title": "Diagnostics look good",
@@ -1408,19 +896,13 @@
         },
         "warnings": {
           "rhat_too_high": {
-            "title": "High R-hat for %{parameter}",
-            "explanation": "The chains have not mixed sufficiently, so the posterior summary may be unstable.",
-            "suggestion": "Increase warmup or samples, check for over-parameterization, or tighten overly broad priors."
+            "title": "High R-hat for %{parameter}"
           },
           "ess_too_low": {
-            "title": "Low effective sample size for %{parameter}",
-            "explanation": "There are too few effectively independent samples, so means, quantiles, and credible intervals may have substantial Monte Carlo error.",
-            "suggestion": "Increase samples and inspect autocorrelation; standardize the predictor or reparameterize the model when necessary."
+            "title": "Low effective sample size for %{parameter}"
           },
           "unknown": {
-            "title": "Diagnostic warning (%{code})",
-            "explanation": "The backend reported a structured diagnostic warning for this result.",
-            "suggestion": "Review the metric and result plots before using the estimate."
+            "title": "Diagnostic warning (%{code})"
           }
         }
       }
@@ -1428,133 +910,28 @@
   },
   "julia": {
     "menu": {
-      "title": "Julia compute engine",
-      "install": "Install latest Julia…",
-      "refresh": "Refresh status",
-      "managedRuntime": "System Julia"
-    },
-    "status": {
-      "notInstalled": "Not installed",
-      "installing": "Installing…",
-      "ready": "Ready · Julia %{version}",
-      "invalid": "Runtime is invalid or cannot start"
-    },
-    "worker": {
-      "checking": "Checking Julia",
-      "checkingDetail": "Checking the Julia compute engine status",
-      "starting": "Loading Julia",
-      "startingDetail": "Preparing dependencies and starting the Julia compute engine",
-      "ready": "Julia ready",
-      "readyDetail": "The Julia compute engine is loaded and ready for scientific computing",
-      "unavailable": "Julia unavailable",
-      "unavailableDetail": "The Julia compute engine is not running",
-      "statusFailed": "Unable to read the Julia compute engine status"
+      "title": "Julia compute engine"
     },
     "install": {
-      "title": "Install Julia Runtime",
-      "message": "Julia provides optional advanced scientific computing for YssBI. YssBI uses the system Julia and installs the latest Julia release when it is missing.",
-      "confirm": "Install latest",
-      "preparing": "Installing Julia",
-      "preparingDetail": "Checking the system Julia installation…",
-      "success": "Julia %{version} is ready",
-      "failed": "Julia installation did not complete"
+      "title": "Install Julia Runtime"
     }
   },
   "aboutModal": {
     "title": "About %{appName}",
-    "version": "Version %{version}",
     "description": "Statistical computing and visualization workbench"
   },
   "bottomBar": {
     "openConversation": "Open conversation window",
-    "closeConversation": "Close conversation window",
-    "nodes": "%{count} Nodes",
-    "links": "%{count} Links",
-    "selected": "%{count} Selected",
-    "nodeCount": "Node count",
-    "connectionCount": "Connection count",
-    "selectedNodes": "Selected nodes",
-    "executionStatus": "Execution status",
-    "canvasViewport": "Canvas viewport",
-    "resetViewport": "Reset canvas viewport",
-    "ariaLabel": "Status bar"
-  },
-  "workbench": {
-    "layoutError": {
-      "notReady": "The workbench is not ready yet.",
-      "invalidPanel": "This panel cannot be opened.",
-      "groupUnavailable": "The target editor group is unavailable.",
-      "openFailed": "The panel could not be opened.",
-      "restoreFailed": "The workbench layout could not be restored."
-    }
+    "closeConversation": "Close conversation window"
   },
   "plugins": {
-    "signerChangeTitle": "Plugin signing identity changed",
-    "signerChangeMessage": "Previous fingerprint: %{previous}\nNew fingerprint: %{next}\nContinue only after confirming this key change with the publisher you trust.",
-    "approveSignerChange": "Approve signer change",
-    "maintenance": "Manage %{name}",
-    "maintenanceDescription": "Inspect task history and diagnostics, and remove regenerable caches. Published project results are retained.",
-    "manageData": "History, storage and diagnostics",
-    "storage": "Private storage",
-    "storageUsage": "%{used} used / %{budget} granted; %{cache} in caches",
-    "softBudget": "This is an application soft limit. Native plugins still run as your user. Close plugin views and finish tasks before clearing caches.",
-    "clearCache": "Clear listed cache directories",
-    "collectPackages": "Collect unreferenced packages",
-    "taskHistory": "Finished tasks",
-    "clearHistory": "Clear history view and result cache",
-    "historyRetention": "History and idempotency receipts are retained for 30 days. Clearing the view preserves receipts within that period and does not repeat old requests.",
-    "loadMore": "Load more",
-    "diagnostics": "Plugin process diagnostics",
-    "diagnosticsDescription": "Bounded recent stderr output, tagged with the process and its active tasks.",
-    "noDiagnostics": "No diagnostic output",
-    "diagnosticsTruncated": "Earlier output was removed at the capacity limit.",
     "taskStates": {
-      "admitted": "Admitted",
-      "running": "Running",
-      "cancelRequested": "Cancelling",
-      "succeeded": "Succeeded",
-      "failed": "Failed",
-      "cancelled": "Cancelled",
-      "outcomeUnknown": "Outcome unknown"
+      "cancelled": "Cancelled"
     },
     "installPackage": "Install from package",
-    "loadFailed": "Could not read extension status. Try checking again.",
-    "operationFailed": "The extension operation did not complete. Cancel active tasks or wait for them to finish.",
-    "missingView": "This extension is not installed. Its view will return here after installation.",
-    "disabledView": "This extension is disabled. Enable it in Extensions.",
-    "viewFailed": "Could not load this extension view. Check its status and try again.",
-    "viewReleaseFailed": "The previous view session could not be released. Retry will finish cleanup before allocating another view.",
-    "viewNavigationBlocked": "Unexpected navigation revoked this view's connection. Reload the view to reconnect safely.",
-    "viewBusy": "The extension is being installed, updated or stopped. Try again shortly.",
-    "viewCapacityReached": "This extension has reached its view limit. Close an unused extension view and retry.",
-    "viewProcessUnavailable": "The extension process could not become ready or its connection was lost. Reconnect to try again.",
-    "viewSessionExpired": "The view's project or extension session has expired. Reconnect to continue.",
-    "viewConnectionFailed": "The extension view could not connect. Check its status using the error code below.",
-    "disabled": "Disabled",
     "enable": "Enable",
-    "disable": "Disable",
-    "open": "Open view",
-    "manage": "Manage %{name}",
-    "uninstall": "Uninstall",
-    "uninstallTitle": "Uninstall %{name}",
-    "uninstallMessage": "Uninstall this extension and close all its panels and tabs. Unsaved view state will be lost. Projects, saved results and private extension data will be retained.",
-    "trustTitle": "Install %{name}",
-    "trustMessage": "This extension contains a native executable that runs with your user permissions.\n\nPublisher: %{publisher}\nRequested capabilities: %{permissions}\nSigning key fingerprint: %{fingerprint}\n\nInstall only from a source you trust.",
-    "available": "Available",
-    "availableEmpty": "No other extensions available",
-    "install": "Install",
-    "openJuliaPanel": "Open Julia sidebar",
-    "juliaName": "Julia Computing Support",
-    "juliaDescription": "Julia runtime and Bayesian analysis support.",
-    "builtin": "Built-in",
-    "installRuntime": "Install runtime",
-    "openBayes": "Open Bayesian analysis",
     "recheck": "Check again",
-    "environmentUnavailable": "Julia is installed, but the compute environment is not ready. Review the runtime logs and check again.",
-    "installed": "Installed",
-    "recommended": "Recommended",
-    "recommendedEmpty": "No recommendations yet",
-    "catalogUnavailable": "The extension marketplace is not connected. Online search and recommendations are not available yet."
+    "installed": "Installed"
   },
   "settings": {
     "knowledge": {
@@ -1587,26 +964,16 @@
       "modelProvidersDescription": "Manage AI service connections, API keys, and available models.",
       "configure": "Configure",
       "providers": "Providers",
-      "noConfiguredProviders": "No providers added yet.",
       "searchProviders": "Search providers…",
       "noMatchingProviders": "No matching providers found.",
-      "connection": "Connection settings",
-      "newModel": "New model",
       "title": "Models and providers",
       "chooseModel": "Choose a model",
       "nextTurn": "Changes apply to messages sent afterwards",
       "unavailable": "Selected model unavailable",
       "needsKey": "API key needed",
-      "manage": "Manage models",
-      "failed": "Model settings could not be updated",
       "defaultModel": "Default model",
-      "defaultModelDescription": "Choose the AI model used by default for new conversations.",
-      "modelCount": "%{count} models",
       "discoveryAdded": "Added %{count} new models to the draft. Save the configuration to apply them.",
-      "keyStored": "API key saved",
-      "edit": "Edit",
       "addProvider": "Add provider",
-      "closeEditor": "Close editor",
       "providerName": "Provider name",
       "customName": "Custom name",
       "customNameDescription": "Distinguish accounts in provider lists and model pickers. Leave blank to use the provider name.",
@@ -1615,77 +982,24 @@
       "enterKey": "Enter API key",
       "keyHint": "Keys are kept in your system credential store and used only with the service URL you configure.",
       "newProviderKeyHint": "Enter the API key for the newly selected provider.",
-      "models": "Available models",
-      "discovering": "Fetching…",
-      "discover": "Fetch models",
-      "addModel": "Add manually",
       "modelId": "Model ID",
       "displayName": "Display name",
-      "contextWindow": "Context window (tokens)",
-      "reasoningEfforts": "Reasoning effort options",
-      "reasoningHint": "Leave unchecked to offer Low, Medium and High. Checking levels restricts the choices. A default declared in additional parameters stays available and is marked as default. Support depends on the model; configure native additional parameters if thinking must be enabled separately.",
-      "providerDefault": "Service default",
-      "maxOutput": "Maximum output (tokens)",
-      "required": "Required by this protocol",
-      "removeModel": "Remove model",
-      "saving": "Saving…",
-      "save": "Save configuration",
       "removeProvider": "Delete provider",
       "authentication": "Authentication",
       "noAuthentication": "No authentication",
-      "endpointHint": "Use the service API root. You can change its region or use your own gateway. Azure resource endpoints must end with /openai/v1.",
-      "toolsHint": "The statistical assistant needs a model with tool calling. If discovery is unavailable, add a model or deployment ID from the provider documentation.",
-      "advanced": "Advanced generation parameters",
-      "temperature": "Temperature",
-      "samplingHint": "Leave blank to use service defaults. Supported sampling and reasoning parameters depend on the model.",
-      "additionalParameters": "Provider parameters (JSON object)",
-      "parametersInvalid": "Enter a valid JSON object",
-      "parametersHint": "Configure supported reasoning, thinking, seed, stop and other generation options. Gemini Interactions uses generation_config. Do not include credentials, messages, tools, or duplicate sampling and output limits."
+      "endpointHint": "Use the service API root. You can change its region or use your own gateway. Azure resource endpoints must end with /openai/v1."
     },
-    "close": "Close settings",
     "title": "Settings",
-    "breadcrumb": "Settings location",
-    "noResults": "No matching settings categories",
-    "noResultsHint": "Try another keyword or clear the search to see all settings.",
-    "clearSearch": "Clear search",
     "sections": {
       "ai": "AI",
       "appearance": "Appearance"
     },
-    "searchPlaceholder": "Search settings",
-    "loading": "Loading settings...",
-    "restorePreferences": "Restore preferences",
-    "confirmResetAllTitle": "Restore preferences",
-    "confirmResetAllMessage": "Restore the default appearance and language preferences?",
-    "confirmResetTitle": "Restore Defaults",
-    "confirmResetMessage": "Restore defaults for %{section}?",
-    "restoredAll": "All defaults restored",
-    "restoreAllFailed": "Failed to restore defaults: %{error}",
-    "restoredSection": "%{section} defaults restored",
-    "restoreSectionFailed": "Failed to restore %{section} defaults: %{error}",
     "labels": {
-      "colorTheme": "Color Theme",
-      "language": "Language",
-      "smoothScroll": "Smooth Scroll",
-      "titleBarStyle": "Title Bar Style"
+      "language": "Language"
     },
     "descriptions": {
-      "colorTheme": "Use a theme to control colors across the workbench, nodes, charts, and tables.",
-      "language": "Controls the application interface language.",
-      "smoothScroll": "Enable smooth scrolling for scroll areas (lists, settings, sidebars).",
-      "titleBarStyle": "Use custom in-app title bar or the native OS window frame."
-    },
-    "options": {
-      "darkModern": "Dark Modern (Default)",
-      "oledBlack": "OLED Black",
-      "lightModern": "Light Modern",
-      "left": "Left",
-      "right": "Right",
-      "hidden": "Hidden",
-      "titleBarCustom": "Custom",
-      "titleBarNative": "Native"
-    },
-    "applyHint": "Changes apply automatically"
+      "language": "Controls the application interface language."
+    }
   },
   "graphDiagnostics": {
     "sidebarTooltip": "%{count} problem(s) in this graph"
@@ -1722,12 +1036,9 @@
       "close": "Close pin result search",
       "empty": "No pin results yet — run the graph first",
       "searchPlaceholder": "Filter by node, pin, or result title…",
-      "noMatches": "No matching pin results",
-      "unknownNode": "Unknown node",
-      "unknownPin": "Unknown pin"
+      "noMatches": "No matching pin results"
     },
     "graphState": {
-      "new": "No matching result",
       "unexecuted": "Not yet run",
       "running": "In the current run",
       "error": "Blocking problem or execution failure",
@@ -1736,30 +1047,19 @@
       "partial": "Some results available"
     },
     "resultCount": "%{valid} / %{total} outputs available",
-    "cancelExecution": "Cancel execution",
     "clearExecutionArtifacts": "Clear run notice",
     "clearExecutionArtifactsDisabled": "No run notice to clear",
-    "executionArtifactsCleared": "Run notice cleared",
-    "executionArtifactsClearFailed": "Failed to clear run notice: %{message}",
-    "executionCancelled": "Execution cancelled",
     "executing": "Running...",
     "functionRunUnavailable": "Function graphs run through their consumers",
     "problemsBlockExecution": "Resolve blocking graph problems before running",
-    "executeCurrentGraph": "Run current graph",
-    "savingGraph": "Saving graph, please wait",
     "newEventGraph": "New Event Graph",
     "newFunctionGraph": "New Function Graph",
-    "coreLogic": "Core logic",
-    "reusableRoutine": "Reusable routine",
-    "openFile": "Open file",
-    "showAllCommands": "Show all commands",
     "nodePalette": {
       "configureFirst": "Configure before creating",
       "pinCounts": "Pin counts",
       "derivedPins": "Automatic",
       "create": "Create node",
       "back": "Back to nodes",
-      "noParameters": "This node has no configurable parameters.",
       "createFailed": "The node could not be created. Check the parameters, connection or target graph and retry.",
       "unavailable": "Unavailable",
       "searchPlaceholder": "Search nodes...",
@@ -1771,18 +1071,13 @@
   "activityBar": {
     "plugins": "Plugins",
     "project": "Project",
-    "nodes": "Nodes",
-    "commands": "Commands"
+    "nodes": "Nodes"
   },
   "chartsSidebar": {
-    "charts": "Charts",
     "noCharts": "No charts yet",
     "configuration": "Configuration",
-    "openChartHint": "Open or create a chart to configure the chart.",
-    "dataset": "Dataset",
     "chartType": "Chart Type",
     "encodingX": "X Axis",
-    "encodingY": "Y Axis / Column",
     "columns": "Columns",
     "noColumns": "No columns available",
     "chartTypes": {
@@ -1792,35 +1087,10 @@
     }
   },
   "chart": {
-    "created": "Chart created",
-    "createFailed": "Failed to create chart",
-    "saved": "Chart saved",
-    "noActiveChart": "No chart selected",
     "previewEmpty": "Select columns to preview the chart",
     "previewEmptyHint": "Choose a dataset, chart type, and encodings in the Detail panel",
     "previewLoadFailed": "The chart preview could not be loaded",
-    "previewColumnNotFound": "Column “%{column}” is no longer available",
-    "refresh": "Refresh",
-    "refreshing": "Refreshing…"
-  },
-  "did": {
-    "fakeGroup": {
-      "methodology": "Entity-level random assignment ran %{nPerm} permutations, assigning %{nTreatedEntities} fake-treated entities among %{nEntities} units each time; %{nPermValid} fits succeeded. The two-sided randomization-inference p-value compares the absolute permuted coefficient with the observed coefficient under the same two-way fixed-effects specification.",
-      "unavailable": {
-        "no_treated_entities": "This test requires at least one treated entity.",
-        "all_entities_treated": "This test requires at least one untreated entity.",
-        "insufficient_valid_permutations": "Only %{nPermValid} of %{nPerm} permutations produced valid fits; at least %{minValidPermutations} are required."
-      },
-      "errors": {
-        "internal_error": "The randomization test failed internally.",
-        "ipc_transport_failure": "The randomization test service could not be reached.",
-        "ipc_malformed_error": "The randomization test returned an invalid error response.",
-        "did_fake_group_request_failed": "The randomization test request failed.",
-        "did_fake_group_invalid_response": "The randomization test returned an invalid result.",
-        "did_fake_group_invalid_initial_result": "The saved randomization-test result is invalid.",
-        "unknown": "The randomization test failed (code: %{code})."
-      }
-    }
+    "previewColumnNotFound": "Column “%{column}” is no longer available"
   },
   "sidebar": {
     "open": "Open",
@@ -1834,30 +1104,12 @@
       }
     },
     "noNodes": "No nodes available",
-    "noActiveGraph": "No active graph open",
-    "noActiveGraphDescription": "Open an event graph or function graph to view command status",
     "noData": "No data yet",
     "noEventGraphs": "No event graphs",
     "noFunctionGraphs": "No function graphs",
     "dataLoadFailed": "Failed to load data",
-    "noCommandHistory": "No command history",
-    "noBuiltinNodes": "No built-in nodes",
-    "deleteDataTitle": "Delete Dataset",
-    "deleteDataMessage": "Delete dataset \"%{name}\"? This cannot be undone.",
     "sections": {
-      "event_graph": "Event Graph",
-      "function_graph": "Function Graph",
-      "local": "Local",
-      "global": "Global",
       "data": "Data"
-    },
-    "commands": {
-      "MoveNodes": "Move Nodes",
-      "SetPinValue": "Set Pin Value",
-      "ConnectPins": "Connect Pins",
-      "CreateNode": "Create Node",
-      "DeleteNodes": "Delete Nodes",
-      "Composite": "Composite"
     }
   },
   "databaseEditor": {
@@ -1868,53 +1120,25 @@
     "previousPage": "Previous page",
     "nextPage": "Next page",
     "fetchTime": "Fetch time",
-    "loadingProjectData": "Loading project data...",
-    "noDataFrameSelected": "No DataFrame Selected",
     "cellPreviewPlaceholder": "Selected cell value appears here",
     "nullCellPlaceholder": "NULL (missing value)",
-    "emptyStringPlaceholder": "Empty string (\"\")",
-    "columns": "Columns",
-    "rows": "Rows",
-    "editCell": "Edit Cell",
-    "insertRowAbove": "Insert Row Above",
-    "insertRowBelow": "Insert Row Below",
-    "deleteRows": "Delete %{count} Rows",
-    "deleteRow": "Delete Row",
-    "renameColumn": "Rename Column",
-    "addColumn": "Add Column",
-    "deleteColumn": "Delete Column \"%{name}\""
+    "emptyStringPlaceholder": "Empty string (\"\")"
   },
   "sourceInspector": {
-    "inspectRows": "Inspect data (%{count} rows)",
-    "viewMode": "View mode",
     "numericView": "Values",
     "reportView": "Report",
     "previous": "Previous",
     "next": "Next",
-    "title": "Source Inspector",
-    "loading": "Loading…",
-    "missingResultId": "Missing result ID in URL",
-    "noSource": "No result found",
-    "loadFailed": "Failed to load result"
+    "title": "Source Inspector"
   },
   "plot": {
     "title": "Plot",
-    "boxplot": "Box plot",
-    "violin": "Violin plot",
-    "coefficient": "Coefficient plot",
-    "errorbar": "Error bar plot",
-    "pareto": "Pareto chart",
-    "combination": "Combination chart",
-    "heatmap": "Heatmap",
-    "wordcloud": "Word cloud",
     "median": "Median",
     "outliers": "Outliers",
     "frequency": "Frequency",
     "cumulative": "Cumulative share",
     "bars": "Bars",
     "line": "Line",
-    "minimum": "Minimum",
-    "maximum": "Maximum",
     "observations": "Observations: %{observations}",
     "sampled": "Showing %{displayed} points from %{observations} observations (sampled)",
     "rocCounts": "Positive %{positives} · Negative %{negatives}",
@@ -1922,24 +1146,13 @@
     "normalReference": "Normal reference: mean %{mean} · SD %{sd}",
     "quadrantCounts": "Upper-right / upper-left / lower-left / lower-right: %{counts}",
     "wordCounts": "Showing %{displayed} / %{unique} terms from %{observations} occurrences",
-    "failedInitialize": "Failed to initialize window",
-    "noData": "No data available for this window",
-    "invalidData": "Invalid plot data format",
-    "readyTitle": "Plot window is ready",
-    "readyHint": "Run a visualization node, then open its result output to view the chart."
-  },
-  "info": {
-    "regressionResults": "Regression Results",
-    "missingDataKey": "Missing data key in URL",
-    "noData": "No data available for this window",
-    "failedInitialize": "Failed to initialize window"
+    "invalidData": "Invalid plot data format"
   },
   "log": {
     "title": "Logs",
     "refresh": "Refresh logs",
     "autoScrollEnabled": "Auto scroll enabled",
     "autoScrollDisabled": "Auto scroll disabled",
-    "filter": "Filters",
     "searchPlaceholder": "Search log content...",
     "level": "Level",
     "domains": {
@@ -1951,23 +1164,14 @@
       "data": "Data",
       "ui": "UI"
     },
-    "clear": "Clear logs",
     "noLogs": "No logs",
     "noMatches": "No matching logs",
-    "runGraphHint": "Run a graph to show logs",
     "adjustFilterHint": "Try adjusting filters"
   },
   "importModal": {
     "title": "Import Data",
-    "subtitle": "Choose a source to import as a project dataset",
-    "close": "Close",
-    "comingSoon": "Coming soon",
-    "developing": "In development",
     "categories": {
-      "file": "File",
-      "sql": "SQL Database",
-      "samples": "Sample Data",
-      "other": "Other"
+      "samples": "Sample Data"
     },
     "types": {
       "csv": {
@@ -1995,7 +1199,6 @@
         "description": "Remote MariaDB database"
       },
       "api": {
-        "label": "REST API",
         "description": "Fetch data from a remote API"
       }
     },
@@ -2007,7 +1210,6 @@
       "import": "Import into project",
       "importing": "Importing sample…",
       "retry": "Reload",
-      "failed": "This operation could not be completed. Please try again later.",
       "dimensions": "%{rows} rows · %{columns} columns",
       "defaultDescription": "A built-in dataset for browsing, editing and analysis.",
       "errors": {
@@ -2015,10 +1217,7 @@
         "sample_version_mismatch": "The sample version changed. Reopen the import dialog.",
         "sample_integrity_failed": "Sample verification failed. Repair the application resources and try again.",
         "sample_catalog_invalid": "The sample catalog could not be read. Repair the application resources and try again.",
-        "sample_resource_unavailable": "The sample file is unavailable. Repair the application resources and try again.",
-        "stale_project_lifecycle": "The current project changed. Reopen the import dialog.",
-        "project_lifecycle_admission_closed": "The project is switching. Please try again shortly.",
-        "project_recovery_required": "The project requires recovery. Reopen it before continuing."
+        "sample_resource_unavailable": "The sample file is unavailable. Repair the application resources and try again."
       },
       "datasets": {
         "iris": {
@@ -2046,39 +1245,15 @@
     "sheetHint": "Select the sheet to import",
     "selectTable": "Select Table",
     "tableHint": "Select the table to import",
-    "connect": "Connect",
-    "connectTo": "Connect %{name}",
-    "formConfig": "Form",
-    "connectionString": "Connection String",
     "host": "Host",
     "port": "Port",
     "username": "Username",
     "password": "Password",
-    "database": "Database",
-    "connectionRequired": "Please fill in the connection information",
-    "connectionFieldsInvalid": "One or more connection fields contain invalid text",
-    "discardConnectionTitle": "Discard connection settings?",
-    "discardConnectionConfirm": "Discard Settings",
-    "discardConnectionMessage": "Closing will discard the connection settings you entered."
+    "database": "Database"
   },
   "dataOperation": {
     "importing": "Importing data…",
-    "reading": "Reading…",
-    "importingCsv": "Parsing CSV and writing to project database",
-    "importingExcel": "Importing sheet \"%{sheet}\"",
-    "importingSqlite": "Importing SQLite table \"%{table}\"",
-    "importingRemote": "Importing %{label} table \"%{table}\"",
-    "readingSqlite": "Reading SQLite table list",
-    "readingExcel": "Reading Excel sheet list",
-    "readingRemote": "Connecting to %{label} and listing tables",
-    "importFailed": "Import failed: %{error}",
-    "deleteFailed": "Delete failed: %{error}",
-    "renameFailed": "Rename failed: %{error}",
-    "connectFailed": "%{label} connection failed: %{error}",
-    "noSqliteTables": "No user tables in this database",
-    "noRemoteTables": "No user tables found in this database",
-    "noExcelSheets": "No sheets in this Excel file",
-    "comingSoon": "%{type} import is not available yet"
+    "reading": "Reading…"
   },
   "detail": {
     "data": {
@@ -2096,8 +1271,6 @@
       "categoryHint": "Map original values to internal semantic labels. The data view keeps original values; codes do not imply an order.",
       "ordinalHint": "List levels from lowest to highest. Use the arrows to set their explicit order.",
       "binaryHint": "Configure exactly two distinct allowed values. Missing values are not a category.",
-      "value": "Stored value %{index}",
-      "label": "Label %{index}",
       "labelPlaceholder": "Semantic label",
       "removeValue": "Remove value %{index}",
       "addValue": "Add value",
@@ -2108,17 +1281,8 @@
       "maximum": "Maximum",
       "updateFailed": "Could not apply settings. Check the value range, precision, allowed values, and compatibility between the current Semantic and Physical settings."
     },
-    "result": {
-      "readFailedTitle": "Result unavailable",
-      "expandPlot": "Open in window",
-      "expandFailedTitle": "Could not open plot window",
-      "expandFailed": "The plot preview is still available in this Result tab.",
-      "invalidPlot": "This result does not contain valid plot data."
-    },
     "noSelection": "No selection",
     "noSelectionHint": "Select an item from the sidebar or canvas",
-    "loadFailed": "Could not load file details.",
-    "unavailable": "Details for this file are currently unavailable.",
     "sections": {
       "info": "Info",
       "diagnostics": "Problems",
@@ -2138,27 +1302,18 @@
     },
     "parameterEditor": {
       "column": "Column",
-      "enterColumn": "Enter one column name",
       "addColumn": "Add column",
       "unavailableColumn": "Unavailable in the current input",
       "unavailableChoice": "Currently unavailable",
       "noColumns": "The current input has no eligible columns",
       "operator": "Operator",
       "valueType": "Value type",
-      "selectColumn": "Select %{column}",
       "moveColumnUp": "Move %{column} up",
-      "moveColumnDown": "Move %{column} down",
-      "predicateColumn": "Predicate column",
-      "predicateOperator": "Predicate operator",
-      "predicateValueType": "Predicate value type",
-      "predicateValue": "Predicate value"
+      "moveColumnDown": "Move %{column} down"
     },
     "fields": {
       "name": "Name",
       "type": "Type",
-      "elementType": "Element Type",
-      "category": "Category",
-      "graph": "Graph",
       "value": "Value",
       "columns": "Columns",
       "rows": "Rows",
@@ -2166,7 +1321,6 @@
       "time": "Time",
       "level": "Level",
       "message": "Message",
-      "column": "Column",
       "stream": "Stream",
       "sequence": "Sequence",
       "origin": "Origin",
@@ -2178,8 +1332,6 @@
       "reference": "Reference"
     },
     "itemTypes": {
-      "event_graph": "Event Graph",
-      "function_graph": "Function Graph",
       "data": "Dataset",
       "chart": "Chart",
       "mind": "Mind map"
@@ -2189,41 +1341,20 @@
     },
     "callSites": {
       "title": "Referenced by (%{count})",
-      "loading": "Loading…",
-      "empty": "Not referenced by any other graphs",
-      "references": "%{count} calls"
-    },
-    "callFunction": {
-      "openTarget": "Open target function",
-      "missingTarget": "Missing function: %{path}",
-      "target": "Target function",
-      "changeTarget": "Change target"
+      "empty": "Not referenced by any other graphs"
     },
     "counts": {
-      "columns": "%{count} columns",
       "rows": "%{count} rows"
     },
     "constants": {
       "title": "Constants",
-      "defaultName": "Constant",
       "add": "Add constant",
-      "updateFailed": "Could not update the constant. Please try again.",
-      "dragToCanvas": "Drag %{name} onto the canvas",
-      "remove": "Delete constant %{name}",
       "empty": "Add a value to reuse in this graph.",
       "choose": "Choose a constant"
     },
     "constantValue": {
       "edit": "Edit",
       "empty": "(empty)",
-      "clear": "Clear",
-      "jsonLabel": "JSON",
-      "title": {
-        "Array": "Edit Array Value",
-        "Object": "Edit Object Value",
-        "DataFrame": "Edit DataFrame Value",
-        "DataSeries": "Edit DataSeries Value"
-      },
       "description": {
         "Array": "Edit elements as a JSON array. Element types follow the constant type.",
         "Object": "Edit key-value pairs as a JSON object.",
@@ -2234,34 +1365,14 @@
         "invalidJson": "Invalid JSON",
         "invalidValue": "The value is invalid for the selected type",
         "notArray": "Expected a JSON array",
-        "notObject": "Expected a JSON object",
-        "notDataFrameContent": "DataFrame expects an object mapping column names to equal-length value arrays",
-        "notDataSeriesContent": "DataSeries expects a single-column object {\"col\":[...]}"
+        "notObject": "Expected a JSON object"
       }
     },
     "delete": {
-      "title": "Delete %{itemType}",
-      "message": "Are you sure you want to delete %{itemType} '%{name}'?",
-      "button": "Delete %{itemType}"
+      "title": "Delete %{itemType}"
     },
     "pinEditor": {
-      "inputs": "Inputs",
-      "outputs": "Outputs",
-      "noInputs": "No inputs",
-      "noOutputs": "No outputs",
-      "newPin": "NewPin",
-      "containerTooltip": "Container: %{container} (click to cycle)",
-      "containerNone": "none"
-    },
-    "log": {
-      "types": {
-        "application": "APP",
-        "execution": "EXEC",
-        "system": "SYS",
-        "graph": "GRAPH",
-        "data": "DATA",
-        "ui": "UI"
-      }
+      "noInputs": "No inputs"
     },
     "description": {
       "result": "Result",
@@ -2293,21 +1404,17 @@
       "noInputs": "No inputs",
       "noOutputs": "No outputs",
       "unconnected": "Not connected",
-      "selectInput": "Select input",
       "addConnection": "Add connection",
       "removeConnection": "Remove connection",
       "connectionFailed": "Could not update the connection",
       "addPort": "Add %{name} pin",
-      "removePort": "Remove %{name} pin",
-      "portInstanceFailed": "Could not update the pin",
       "documentation": "Documentation",
       "unnamed": "(unnamed)"
     }
   },
   "native": {
     "markdown": {
-      "copyFormula": "Copy formula source",
-      "invalidSize": "Invalid formula dimensions"
+      "copyFormula": "Copy formula source"
     },
     "main": {
       "usage": "Usage: cargo run -- [project directory] [resource relative path or database ID]",
@@ -2325,27 +1432,11 @@
       "columnUpdateFailed": "Column settings were not submitted. Check types, mappings, or the resource version.",
       "exportFailed": "Export did not complete. Check the destination path and current data version.",
       "loadingMetadata": "Reading metadata…",
-      "dimensions": "%{value0} rows · %{value1} columns",
       "checkpointHint": "Column settings are already written to the project. Saving creates a checkpoint; closing does not undo applied settings.",
       "selectionHint": "%{value0} rows × %{value1} columns selected · %{value2} cells; Ctrl/Cmd+C copies the selection on this page.",
-      "cellPosition": "Row %{value0} · %{value1}",
       "unset": "Not set",
       "storageType": "Storage type",
       "semantics": "Data semantics",
-      "convertConfirmation": "Convert “%{column}” from %{before} to %{dtype}. The operation will fail if any values cannot be converted.",
-      "convert": "Convert",
-      "columnSemantics": "Column semantics",
-      "changedWhileEditing": "Data changed. Close and reopen column settings.",
-      "valuesFailed": "Could not read column values. Close and retry.",
-      "changed": "Data changed. Reopen settings.",
-      "binaryValuesRequired": "Binary semantics requires exactly two values.",
-      "semanticsFailed": "Semantic settings were not submitted. Your input is preserved. Check constraints or data changes.",
-      "integersOnly": "Integers only",
-      "minimum": "Minimum (optional)",
-      "maximum": "Maximum (optional)",
-      "valuesPage": "%{value0} values · Page %{value1}",
-      "choosePositive": "Choose positive value",
-      "loadingValues": "Reading all column values…",
       "submitting": "Submitting…"
     },
     "project": {
@@ -2378,43 +1469,8 @@
       "configureModelHint": "Choose an available model or open Model settings in the model picker.",
       "waitingForStop": "Stop requested. Waiting for the current operation to finish…",
       "processing": "Processing…",
-      "loadEarlier": "Load earlier messages",
-      "copyMessage": "Copy message",
       "generating": "Generating",
-      "stopped": "Stopped",
-      "operationsPreserved": "Completed project operations are preserved.",
-      "toolDetailsUnavailable": "Tool details are no longer available.",
-      "toolDetailsFailed": "Could not read tool details.",
-      "toolDetails": "Tool details",
-      "target": "Target: %{target}",
-      "started": "Started: %{value0}",
-      "finished": "Finished: %{value0}",
-      "failure": "Failure: %{failure}",
-      "toolOutput": "Tool output",
-      "toolOutputUnavailable": "Tool output unavailable",
-      "copyDetails": "Copy details",
-      "citationChanged": "The cited source changed or is unavailable.",
-      "citationUnavailable": "Cited source unavailable.",
-      "citationFailed": "Could not read the citation.",
-      "openSource": "Open source",
       "timeUnavailable": "Time unavailable",
-      "unconfirmedInput": "The unconfirmed original message is preserved. Check history before deciding to resend.",
-      "restoreInput": "Restore to input",
-      "removeReference": "Remove resource reference",
-      "queuedModel": "Queued · %{value0}",
-      "referenceResource": "Reference project resource",
-      "queueMessage": "Add to send queue",
-      "stopping": "Stopping",
-      "stopGenerating": "Stop generating",
-      "queueHint": "Add to send queue (Shift+Enter for a new line)",
-      "sendHint": "Send message (Shift+Enter for a new line)",
-      "configureModel": "Configure model…",
-      "conversationMode": "Conversation mode",
-      "askMode": "Ask · Read-only questions",
-      "writeMode": "Write · Edit project",
-      "default": "Default",
-      "inheritModelSettings": "Inherit model settings",
-      "defaultSuffix": "(default)",
       "submitUnconfirmed": "Submission unconfirmed. Refresh the conversation and check history; your original message is preserved.",
       "modelUnconfirmed": "Model selection unconfirmed. Refresh the conversation.",
       "sessionChanged": "The project session changed. Reopen the conversation.",
@@ -2430,37 +1486,17 @@
       "inspectDelivery": "Inspect delivery",
       "compactContext": "Compact context",
       "attempt": "%{label} · Attempt %{attempt}",
-      "compactionProgress": "Compacting context · %{completed_bytes}/%{total_bytes}",
-      "workflowPlanned": "Workflow %{run_id} · Planned",
-      "workflowStarted": "Workflow %{run_id} · Started",
-      "workflowStepStarted": "Workflow %{run_id} · %{step_id} · Started",
-      "workflowStepCompleted": "Workflow %{run_id} · %{step_id} · Completed",
-      "workflowStepFailed": "Workflow %{run_id} · %{step_id} · Failed%{value0}",
-      "retryable": "(retryable)",
-      "workflowCompleted": "Workflow %{run_id} · Completed",
-      "workflowPaused": "Workflow %{run_id} · Paused",
-      "workflowResumed": "Workflow %{run_id} · Resumed",
-      "workflowCancelled": "Workflow %{run_id} · Cancelled",
       "previousAttemptOutput": "Output before retry",
       "thinking": "Thinking",
-      "characterCount": "%{label} · %{value0} characters",
-      "statisticalPlan": "Statistical plan",
-      "planMarkdown": "**Research question**\n\n%{value0}\n\n**Design**\n\n%{value1}\n\n**Method**\n\n%{value2}",
-      "completePlan": "Complete plan",
-      "planUnavailable": "Plan details unavailable",
       "collapse": "Collapse",
       "expandFullOutput": "Expand full output",
-      "inspectToolHint": "View tool parameters, output, and execution details",
       "notReturned": "Not returned",
       "modelCallCompleted": "Model call completed",
       "summaryCallCompleted": "Summary call completed",
       "tokenSummary": "%{title} · Input %{value0} · Output %{value1}",
       "tokenDetails": "Tokens · Cache read %{value0} · Cache write %{value1} · Reasoning %{value2} · Context capacity %{value3}",
       "inProgress": "In progress",
-      "compactionStatus": "Compacting context · %{state} · %{value0}/%{value1}",
-      "expired": "Expired",
-      "blocked": "Blocked",
-      "taskOutputCount": "%{value0} · %{state} · %{value1} output entries"
+      "compactionStatus": "Compacting context · %{state} · %{value0}/%{value1}"
     },
     "text": {
       "diagnosticCode": "Graph issue (%{code}).",
@@ -2473,13 +1509,7 @@
       "closeTitle": "Close import window?",
       "closeMessage": "Unsaved import configuration and connection inputs will be discarded.",
       "keepEditing": "Keep editing",
-      "selectSheet": "Select worksheet",
-      "selectTable": "Select table",
-      "selectionCount": "%{title} · %{count} items",
-      "sourcePreserved": "Selected data will be copied into the project. The source stays unchanged.",
-      "sampleSize": "%{value0} rows · %{value1} columns · %{value2} MB",
       "import": "Import",
-      "reloadSamples": "Reload samples",
       "back": "Back",
       "importHint": "Imported data is stored as an independent resource in the current project.",
       "choosingFile": "Choosing file…",
@@ -2504,7 +1534,6 @@
       "invalidFilePath": "File path not recognized. Use a valid text path.",
       "noTables": "No importable tables or worksheets found. Check the source.",
       "readFailed": "Could not read the source. Your input is preserved. Check the file, connection settings, or access permissions.",
-      "samplesFailed": "Could not read the sample catalog. Check the installed resources and retry.",
       "databaseName": "Database name",
       "invalidConnectionString": "Enter a valid connection string.",
       "connectionTypeMismatch": "The connection string does not match the selected database type.",
@@ -2519,14 +1548,7 @@
       "invalidInferenceRows": "Type inference rows must be a positive integer."
     },
     "workbench": {
-      "diagnosticError": "Error",
-      "diagnosticWarning": "Warning",
-      "diagnosticInformation": "Information",
       "openGraphFirst": "Open an event or function graph before adding nodes.",
-      "openGraphForRun": "Open a graph to view run status",
-      "groupRun": "Group %{ordinal} · %{value0}",
-      "emptySchemaProbe": "Empty-input schema probe · %{value0}",
-      "locateFailedNode": "Locate failed node",
       "toggleLeftSidebar": "Toggle left sidebar",
       "properties": "Properties",
       "toggleRightSidebar": "Toggle right sidebar",
@@ -2548,7 +1570,6 @@
       "finiteNumberRequired": "Enter a finite number",
       "settingsShortcut": "Settings · Ctrl+,",
       "mindOpenFailed": "Could not open the mind map. Check the current project resource.",
-      "databaseOpenFailed": "Could not open data. Refresh the project explorer and retry.",
       "chartOpenFailed": "Could not open the chart. Refresh the project and retry.",
       "nodeCatalog": "Node catalog",
       "collapseAll": "Collapse all",
@@ -2556,13 +1577,7 @@
       "switchPanel": "Switch panel in this area",
       "restoreLayout": "Restore layout",
       "clearDisplay": "Clear display",
-      "entryCount": "%{value0} entries",
       "logsEmpty": "Application activity will appear here",
-      "connecting": "Connecting…",
-      "noGraphDiagnostics": "No graph diagnostics",
-      "graphChecks": "Graph checks",
-      "graphChecksPassed": "The current graph has no diagnostics to address",
-      "graphChecksHint": "Open a graph to view type and connection checks",
       "settingsWindowTitle": "Settings",
       "settingsWindowFailed": "Could not open the settings window. Try again.",
       "settingsWindowDirtyTitle": "Settings •",
@@ -2584,7 +1599,6 @@
       "renameSession": "Rename conversation",
       "renameSessionFailed": "Could not rename the conversation. Refresh the directory and retry.",
       "invalidGraphPath": "Invalid graph path",
-      "graphOpenFailed": "Could not open the graph. Check project resources.",
       "openRecentProject": "Open recent project",
       "searchProjects": "Search project names or paths…",
       "copyName": "%{value0} copy",
@@ -2597,19 +1611,12 @@
       "continueWithoutSaving": "Continue without saving",
       "unsavedChangesTitle": "Unsaved changes",
       "cancelledInputPreserved": "Operation cancelled. Your input is preserved.",
-      "importFailed": "Import did not complete. Check the source and project directory.",
       "documentOpenFailed": "Could not open the Markdown document. Check the current project resource.",
       "saveBlocked": "Saving has not started. Resolve file version conflicts or pending operations first.",
       "searchConversations": "Search conversations",
       "deleteConversation": "Delete conversation",
-      "copyRelativePath": "Copy relative path",
-      "deleteGraph": "Delete graph",
       "addToGraph": "Add to current graph",
       "copyResourcePath": "Copy resource path",
-      "deleteDatabase": "Delete database",
-      "rename": "Rename…",
-      "copyChart": "Copy chart",
-      "delete": "Delete…",
       "newEventGraph": "New event graph",
       "newFunctionGraph": "New function graph",
       "graphCreated": "Graph created. Refresh the project explorer to open it.",
@@ -2620,14 +1627,8 @@
       "loadingOrSaving": "Reading or saving…",
       "unsavedChanges": "Unsaved changes",
       "saved": "Saved",
-      "nodeProperties": "Node properties",
-      "selectedNodes": "%{value0} nodes selected",
-      "selectNodeHint": "Select a node on the canvas to view parameters and ports",
-      "multipleNodesHint": "Drag to move together; Esc cancels the current operation",
       "loadingNodeDocumentation": "Reading node documentation…",
       "nodeDocumentationFailed": "Could not read node documentation. Try again.",
-      "connectPort": "Connect port",
-      "addPort": "Add %{value0} · %{value1}",
       "portSourceExpired": "Source expired. Remove this port and reconnect",
       "trueValue": "True",
       "connectedValueHint": "Using the connection value; literal override is retained but inactive",
@@ -2639,23 +1640,15 @@
       "removePort": "Remove this port and its connections",
       "movePortUp": "Move port up",
       "movePortDown": "Move port down",
-      "code": "Code",
       "invalidDomainMapping": "Check duplicate codes, positive value selection, and mapping lengths",
       "domainMappingFailed": "Could not submit code mapping",
-      "positiveValue": "Positive value · %{value0}",
-      "noPositiveValue": "No positive value",
-      "domainMappingHint": "Enter a code and label for each item; order determines ordinal mapping",
       "remove": "Remove",
-      "addMapping": "Add mapping",
       "applyMapping": "Apply complete mapping",
       "invalidStructuredValue": "Enter a valid structured value",
       "chooseParameter": "Choose a parameter value",
       "noParameters": "This node requires no parameter configuration",
       "choose": "Choose",
-      "optionUnavailable": "The current option is unavailable. Choose again",
-      "noOptions": "No available options",
       "constantUnavailable": "Constant unavailable",
-      "chooseConstant": "Choose graph constant",
       "noConstants": "This graph has no constants",
       "resetParameter": "Restore default or clear parameter",
       "chooseComparison": "Choose a comparison",
@@ -2697,12 +1690,9 @@
       "deleteConversationTitle": "Delete conversation “%{title}”?",
       "deleteConversationMessage": "This conversation, its message history, and unsent content will be permanently deleted. Project files and data will be kept.",
       "conversationRunning": "This conversation is still running. Stop it and wait for completion before deleting.",
-      "conversationWorkflowActive": "This conversation has an unfinished workflow. Finish the task before deleting.",
       "conversationDeleteFailed": "Could not delete the conversation. Refresh the directory and retry.",
       "projectRegistrationFailed": "Project files were written, but registration failed. Open the created project.",
       "projectCopyOpenFailed": "The copy was written and registered but not opened. Open the created project.",
-      "projectTrashPartial": "The project was moved to the trash, but its registration has not been updated. Check the recent projects list.",
-      "projectWriteUnconfirmed": "Project files may have been written, but opening failed. Check the destination directory before continuing.",
       "projectOperationFailed": "Project operation did not complete. Your input is preserved. Check the name, directory, or current project.",
       "recentProjectsUpdateFailed": "The project is open, but recent projects could not be updated. Reopen this directory later to update the record.",
       "projectContentFailed": "Project switched, but content was not read. Reopen the project directory.",
@@ -2716,7 +1706,6 @@
       "stopGraphBeforeEditing": "Stop the graph before modifying its resource.",
       "deleteResourceTitle": "Delete “%{value0}”?",
       "deleteGraphMessage": "The graph file and unsaved changes will be deleted. Nodes calling or referencing this graph will need reconfiguration.",
-      "renamedGraphUnavailable": "Graph renamed, but its view could not be restored. Reopen it from the project explorer.",
       "graphResourceFailed": "Could not modify the graph resource; it may have changed. Refresh the directory and retry.",
       "deleteDatabaseMessage": "This database and its data will be deleted. Graph nodes referencing it will need another resource selection.",
       "renameDatabase": "Rename database",
@@ -2725,16 +1714,10 @@
       "renameGraph": "Rename graph",
       "newMarkdown": "New Markdown document",
       "fileCreateFailed": "Could not create the file. Check its name and the current project.",
-      "graphConstants": "Graph constants",
       "constantsHint": "Add constants to insert reference nodes on the canvas",
-      "typedJsonHint": "Typed JSON: use strings for integers and decimals to preserve precision",
       "editConstantValue": "Edit value · %{value0}",
-      "applyConstant": "Apply constant changes",
       "insertConstantReference": "Insert a reference node at the canvas center",
       "deleteConstant": "Delete constant and keep reference nodes",
-      "unavailableColumn": "%{name} · Unavailable",
-      "outputColumnOrder": "Output column order",
-      "unknownSchemaHint": "Input columns are not yet known; enter column names first",
       "applyColumns": "Apply column selection",
       "equal": "Equal to",
       "notEqual": "Not equal to",
@@ -2746,7 +1729,6 @@
       "isNotNull": "Is not null",
       "boolean": "Boolean",
       "decimal": "Decimal",
-      "columnUnavailable": "The current column is unavailable. Choose again",
       "comparison": "Comparison",
       "applyFilter": "Apply filter",
       "revealResourceFailed": "Could not locate the resource. Refresh the project and try again.",
@@ -2863,14 +1845,11 @@
       "addNode": "Add node…",
       "catalogFailed": "Unable to load the node catalog. Try again.",
       "resetViewShortcut": "Reset view · Home",
-      "loadingCompatibleNodes": "Loading compatible nodes…",
       "signatureFailed": "Could not update the function signature. Refresh properties and retry.",
       "saveShortcut": "Save · Ctrl+S",
       "undoShortcut": "Undo · Ctrl+Z",
       "redoShortcut": "Redo · Ctrl+Shift+Z",
       "moreActions": "More graph actions",
-      "runNode": "Run this node",
-      "runToNode": "Run to this node",
       "refreshRun": "Refresh run status",
       "resetView": "Reset view",
       "cancelShortcut": "Cancel run · Shift+F5",
@@ -2898,7 +1877,6 @@
     },
     "settings": {
       "newProvider": "New provider",
-      "loadingModels": "Reading model settings…",
       "noDefaultModel": "No default model selected",
       "defaultModelHint": "Used for new conversations without a specific model selection.",
       "providersEmpty": "Add a provider to configure its connection and models.",
@@ -2920,7 +1898,6 @@
       "savingModels": "Saving model settings…",
       "modelsSaved": "Model settings saved.",
       "discoveringModels": "Fetching models from the service…",
-      "modelsDiscovered": "Fetched %{value0} models. Add them and save the configuration.",
       "settingDefault": "Setting default model…",
       "defaultUpdated": "Default model updated.",
       "deleteProviderTitle": "Delete provider?",
@@ -2938,16 +1915,8 @@
       "connectionFailed": "Could not connect to the service. Check the network and URL.",
       "timedOut": "Service request timed out. Try again later.",
       "serviceFailed": "Service request did not complete. Check the connection and service status.",
-      "providerNameHint": "Distinguishes configuration sources.",
-      "customNameHint": "Optional display name used in model selection and conversations.",
-      "protocolAndAdapter": "Protocol and adapter",
-      "protocolHint": "The connection uses the provider's native protocol.",
-      "baseUrlHint": "Enter the complete API root URL, including any required path.",
-      "storedKeyHint": "Key saved. Leave blank to keep it, or enter a new value and save to replace it.",
-      "keyStorageHint": "Stored in the system credential store.",
       "fetchModels": "Fetch models",
       "addModel": "Add model",
-      "noAuthenticationHint": "Local OpenAI-compatible services may use no authentication.",
       "noModels": "No models added yet.",
       "modelIdHint": "The exact model identifier used by the service.",
       "modelNameHint": "Name shown in the model picker.",
@@ -2960,11 +1929,7 @@
       "parametersHint": "JSON generation parameters; cannot replace messages, tools, or authentication.",
       "cancelModelEdit": "Cancel model edit",
       "applyToDraft": "Apply to draft",
-      "serviceModels": "Service models",
-      "added": "Added",
-      "add": "Add",
       "preferencesReadFailed": "Could not read the language preference. Simplified Chinese is in use. Select a language to save your preference.",
-      "savingPreferences": "Saving language preference…",
       "preferencesSaveFailed": "Could not save the language preference. Check the application data directory and retry. The current language is unchanged."
     },
     "projects": {
@@ -3022,17 +1987,10 @@
       "unnamedTopic": "Unnamed topic"
     },
     "charts": {
-      "selectColumnsHint": "Select a dataset and plot columns in the properties panel",
-      "distributionHint": "Select a column to view its numeric or categorical distribution",
-      "axesHint": "Select X and Y columns to view a scatter or line plot",
-      "dataFailed": "Could not read plot data for the current configuration. Select columns again or refresh.",
-      "previewFailed": "Could not read the chart preview. Check the dataset, column types, or current resource state.",
       "loading": "Reading chart",
       "preparingData": "Data is prepared in the background",
       "previewUnavailable": "Preview unavailable",
       "refreshHint": "Check properties and refresh the chart",
-      "configure": "Configure chart",
-      "previewNotLoaded": "Preview not loaded",
       "noDistribution": "No distribution data",
       "chooseValidColumn": "Select a column with valid values and retry",
       "frequency": "%{column} · Frequency",

@@ -12,13 +12,8 @@ impl ProjectState {
     pub fn acquire_filesystem_lease(
         &self,
         root: NormalizedRoot,
-    ) -> Result<yss_filesystem::FilesystemLeaseSet, ProjectOperationError> {
-        self.filesystem.acquire(root).map_err(Into::into)
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn filesystem_for_test(&self) -> &FilesystemCoordinator {
-        &self.filesystem
+    ) -> yss_filesystem::FilesystemLeaseSet {
+        self.filesystem.acquire(root)
     }
 
     #[cfg(any(test, feature = "test-support"))]

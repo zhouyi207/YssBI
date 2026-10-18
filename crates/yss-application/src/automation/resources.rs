@@ -28,7 +28,6 @@ mod tests;
 pub(super) use content::{edit_resource, inspect_resource};
 pub(super) use database::export_database;
 pub(super) use database::read_database;
-pub(super) use database::semantic_to_contract;
 
 type Publication<'a> = &'a mut dyn FnMut(&CommittedResourceMutation);
 type Result<T> = std::result::Result<T, CapabilityFailure>;
@@ -476,7 +475,7 @@ pub(super) fn manage_resource(
             let path = graph_path(resource)?;
             match request {
                 ManageResourceRequest::Rename { name, .. } => application
-                    .rename_graph_resource(project, path, expected, name, 0, operation)
+                    .rename_graph_resource(project, path, expected, name, operation)
                     .map_err(graph_error)?,
                 ManageResourceRequest::Duplicate { name, .. } => application
                     .duplicate_graph_resource(project, path, expected, operation, name)
@@ -558,9 +557,7 @@ fn project_error(error: yss_project::ProjectOperationError) -> CapabilityFailure
         E::StaleResourceLifecycle { .. }
         | E::CatalogResourceStale { .. }
         | E::ResourceRevisionConflict { .. } => CapabilityFailureCode::REVISION_CONFLICT,
-        E::ProjectLifecycleAdmissionClosed { .. } | E::ProjectRecoveryRequired { .. } => {
-            CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE
-        }
+        E::ProjectRecoveryRequired { .. } => CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE,
         E::ResourceNotFound { .. } => CapabilityFailureCode::RESOURCE_UNAVAILABLE,
         E::TransactionCommitFailed { .. } | E::TransactionRollbackFailed { .. } => {
             CapabilityFailureCode::OUTCOME_UNKNOWN

@@ -164,7 +164,8 @@ mod tests {
     use super::*;
     use crate::contract::{
         AnalysisMode, DiagnosticRequirement, Estimand, ReportingContract, RobustnessCheck,
-        RobustnessCheckKind, StatisticalPlan, StudyDesign, VariableRoleAssignment, WorkflowId,
+        RobustnessCheckKind, StatisticalPlan, StatisticalWorkflowId, StudyDesign,
+        VariableRoleAssignment,
     };
 
     #[test]
@@ -194,7 +195,7 @@ mod tests {
                 },
             ],
             candidate_methods: vec![StatisticalMethodId::try_new("yssbi.statistics.ols").unwrap()],
-            selected_workflow: WorkflowId::try_new("ols_model_and_diagnostics").unwrap(),
+            selected_workflow: StatisticalWorkflowId::try_new("ols_model_and_diagnostics").unwrap(),
             required_diagnostics: vec![
                 DiagnosticRequirement::MeasurementScale,
                 DiagnosticRequirement::Missingness,

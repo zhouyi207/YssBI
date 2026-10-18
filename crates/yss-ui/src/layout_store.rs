@@ -85,7 +85,7 @@ impl LayoutStore {
             return Ok(None);
         }
         let binding = RootBinding::for_existing(&self.directory)?;
-        let _lease = self.coordinator.acquire(binding.normalized().clone())?;
+        let _lease = self.coordinator.acquire(binding.normalized().clone());
         let path = self.directory.join(file_name);
         match std::fs::read(path) {
             Ok(bytes) => Ok(Some(serde_json::from_slice(&bytes)?)),
@@ -173,7 +173,7 @@ impl LayoutStore {
         std::fs::create_dir_all(&self.directory)?;
         let binding = RootBinding::for_existing(&self.directory)?;
         let root = binding.normalized().clone();
-        let lease = self.coordinator.acquire(root.clone())?;
+        let lease = self.coordinator.acquire(root.clone());
         // Tasks can acquire their file lease out of issue order. Never let an older snapshot
         // overwrite a newer requested one, including after the window has closed.
         if !current() {

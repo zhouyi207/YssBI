@@ -139,17 +139,6 @@ impl ResourceCatalog {
         self.entries.get(*self.positions.get(resource)?)
     }
 
-    /// Advances a retained catalog entry without rebuilding names, order or search rows.
-    pub fn set_resource_revision(&mut self, kind: Kind, id: &str, revision: ResourceRevision) {
-        if let Some(entry) = self
-            .entries
-            .iter_mut()
-            .find(|entry| entry.resource.kind == kind && entry.resource.id == id)
-        {
-            entry.revision = revision;
-        }
-    }
-
     pub fn matches(&self, query: &str) -> Vec<usize> {
         let query = query.trim().to_lowercase();
         self.search

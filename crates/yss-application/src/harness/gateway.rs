@@ -113,7 +113,12 @@ mod tests {
     use super::*;
     use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
     use std::{sync::Arc, time::Duration};
-    use yss_assistant_contract::{AutomationCapabilityResult, InspectDatasetProfileRequest};
+    use yss_assistant_contract::model::{
+        DatabaseProfileMetric, DatabaseReadInput, DatabaseResourceRef, ProfileDatabaseInput,
+    };
+    use yss_assistant_contract::{
+        AutomationCapabilityResult, DatabaseReadContent, DatabaseReadRequest, DatabaseReadResult,
+    };
     use yss_harness_contract::{
         CancellationToken, CapabilityInvocationId, HarnessSessionId, PrincipalId,
         ProjectSessionBinding,
@@ -239,16 +244,26 @@ mod tests {
         let result = runtime
             .block_on(gateway.invoke(
                 context,
-                AutomationCapabilityRequest::InspectDatasetProfile(InspectDatasetProfileRequest {
-                    database_id: dataset.id,
+                AutomationCapabilityRequest::ReadDatabase(DatabaseReadRequest {
+                    input: DatabaseReadInput::Profile(ProfileDatabaseInput {
+                        database: DatabaseResourceRef::new(dataset.id),
+                        columns: vec!["x".into(), "label".into()],
+                        metrics: vec![DatabaseProfileMetric::Completeness],
+                    }),
+                    version: None,
                 }),
                 control.clone(),
             ))
             .unwrap();
         control.check().unwrap();
-        let AutomationCapabilityResult::DatasetProfileInspection(profile) = result else {
+        let AutomationCapabilityResult::DatabaseRead(DatabaseReadResult {
+            content: DatabaseReadContent::Profile { metrics, .. },
+            ..
+        }) = result
+        else {
             panic!("wrong capability result")
         };
+        let profile = metrics.completeness.expect("completeness was requested");
         assert_eq!(
             (
                 profile.row_count,

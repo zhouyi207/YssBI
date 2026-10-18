@@ -34,11 +34,6 @@ impl StaticCapabilityGateway {
             results: vec![result],
         }
     }
-
-    pub fn with_result(mut self, result: AutomationCapabilityResult) -> Self {
-        self.results.push(result);
-        self
-    }
 }
 
 impl CapabilityGatewayPort for StaticCapabilityGateway {

@@ -328,7 +328,10 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
             .unwrap();
     assert!(captured.function_document(&function).is_some());
     assert!(captured.function_document(&nested).is_some());
-    session.project().unload_graph_resource(&function).unwrap();
+    session
+        .project()
+        .unload_graph_resource(session.project_instance_id(), &function, None)
+        .unwrap();
     assert!(
         session
             .project()
@@ -336,7 +339,10 @@ fn registered_calls_capture_transitive_bodies_and_invalidate_signature_consumers
             .unwrap()
             .is_none()
     );
-    session.project().unload_graph_resource(&unused).unwrap();
+    session
+        .project()
+        .unload_graph_resource(session.project_instance_id(), &unused, None)
+        .unwrap();
     // An unrelated, unloaded body is outside the dependency capture's read set.
     std::fs::write(
         project.root.join(unused.as_str()),
@@ -485,7 +491,6 @@ fn connection_candidates_are_read_only_and_reject_an_obsolete_graph_version() {
     app.open_graph(crate::graph::open::OpenGraphRequest::new(
         instance.clone(),
         graph.clone(),
-        0,
         "en-US",
     ))
     .unwrap();
@@ -649,7 +654,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
     let instance = session.session.project_instance_id().clone();
     session
         .application
-        .unload_graph_resource(instance.clone(), caller.clone(), 100, None)
+        .unload_graph_resource(instance.clone(), caller.clone(), None)
         .unwrap();
     session
         .application
@@ -658,7 +663,6 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
             function,
             ResourceRevision::INITIAL,
             "G".into(),
-            200,
             OperationId::new(),
         )
         .unwrap();
@@ -680,7 +684,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
     let projection = session
         .application
         .open_graph(crate::graph::open::OpenGraphRequest::new(
-            instance, caller, 300, "en-US",
+            instance, caller, "en-US",
         ))
         .unwrap();
     let projected = projection
@@ -734,7 +738,7 @@ fn node_creation_form_is_read_only_and_preserves_protocol_defaults_and_condition
     let instance = session.session.project_instance_id();
     session
         .application
-        .unload_graph_resource(instance.clone(), path.clone(), 100, None)
+        .unload_graph_resource(instance.clone(), path.clone(), None)
         .unwrap();
     assert!(!session.session.project().has_resident_graph(&path).unwrap());
     let before = session
@@ -1398,7 +1402,6 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
         .open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap();
@@ -1454,7 +1457,6 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
         .open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap()
@@ -1483,8 +1485,10 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
     )
     .unwrap();
     let query = |hash| {
-        app.query_graph_result_state(graph.clone(), hash)
+        app.capture_session()
             .unwrap()
+            .execution()
+            .query_result_cache_states(graph.as_str(), &hash)
             .expect("current graph cache state")
     };
     let initial = query(semantic_input_hash);
@@ -1655,7 +1659,6 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
         .open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap();

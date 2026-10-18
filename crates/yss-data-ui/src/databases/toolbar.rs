@@ -7,6 +7,7 @@ use gpui_kit::component::{
     menu::{DropdownMenu, PopupMenuItem},
 };
 use gpui_kit::{Context, IntoElement, div, prelude::*};
+use yss_database_contract::DatabaseExportFormat;
 use yss_ui::lifecycle::LogReleased;
 use yss_ui::text::translate as t;
 
@@ -62,8 +63,8 @@ impl DatabaseEditor {
                     .disabled(!self.can_export())
                     .dropdown_menu(move |mut menu, _, _| {
                         for (label, format) in [
-                            (t("importModal.types.csv.label"), "csv"),
-                            ("Parquet".into(), "parquet"),
+                            (t("importModal.types.csv.label"), DatabaseExportFormat::Csv),
+                            (t("menubar.parquet"), DatabaseExportFormat::Parquet),
                         ] {
                             let owner = owner.clone();
                             menu = menu.item(PopupMenuItem::new(label).on_click(

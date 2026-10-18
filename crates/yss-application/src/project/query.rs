@@ -66,19 +66,9 @@ impl ProjectDatabasesSnapshot {
 }
 
 impl ApplicationState {
-    pub fn query_project_databases(
-        &self,
-        project_instance_id: ProjectInstanceId,
-        expected_publication_revision: u64,
-    ) -> Result<ProjectDatabasesSnapshot, ProjectQueryApplicationError> {
-        let captured = self.capture_project_session(&project_instance_id)?;
-        self.query_project_databases_in_session(&captured, Some(expected_publication_revision))
-    }
-
     pub(crate) fn query_project_databases_in_session(
         &self,
         captured: &Arc<ApplicationSession>,
-        expected_publication_revision: Option<u64>,
     ) -> Result<ProjectDatabasesSnapshot, ProjectQueryApplicationError> {
         self.revalidate_captured_session(captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
@@ -90,15 +80,10 @@ impl ApplicationState {
                 requested: captured.project_instance_id().clone(),
             });
         }
-        let revalidate_project = || match expected_publication_revision {
-            Some(revision) => captured.project().validate_project_index_version(
-                captured.project_instance_id(),
-                revision,
-                declarations.authority_generation(),
-            ),
-            None => captured
+        let revalidate_project = || {
+            captured
                 .project()
-                .revalidate_database_snapshot(&declarations),
+                .revalidate_database_snapshot(&declarations)
         };
         revalidate_project()?;
         let catalog = yss_database_runtime::session_api::catalog_snapshot(captured.database())?;

@@ -2,14 +2,12 @@
 
 #![forbid(unsafe_code)]
 
-mod approval;
 mod codec;
 mod events;
 mod knowledge;
 mod ledger;
 mod schema;
 mod session;
-mod workflow;
 
 use codec::{invalid_record, unavailable};
 use schema::SCHEMA;

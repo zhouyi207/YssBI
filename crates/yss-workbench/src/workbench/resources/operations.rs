@@ -92,7 +92,6 @@ impl ResourceTarget {
                 path,
                 self.revision,
                 name.unwrap_or_default(),
-                0,
                 OperationId::new(),
             )?,
             ResourceAction::Duplicate => application.duplicate_graph_resource(

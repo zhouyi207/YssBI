@@ -12,7 +12,7 @@ mod session;
 pub use declaration::DatabaseDecl;
 pub use edit_state::EditState;
 pub use engine::{DatabaseEngine, DatabaseEngineSql, DatabaseImportSource};
-pub use export::{DatabaseExportFormat, DatabaseExportFormatParseError};
+pub use export::DatabaseExportFormat;
 pub use identity::{DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseId};
 pub use observation::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,

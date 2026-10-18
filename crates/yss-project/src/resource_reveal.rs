@@ -1,23 +1,17 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
-use thiserror::Error;
-
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
 use yss_graph_document::{GraphResourceKind, GraphResourcePath};
 
 use super::{ProjectError, ProjectState, file_resources::ResourceFile};
 use yss_project_model::file::FilePath;
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
+#[derive(Debug, Clone)]
 pub enum RevealProjectResourceRequest {
-    #[serde(rename = "event_graph")]
     EventGraph {
         path: GraphResourcePath,
     },
-    #[serde(rename = "function_graph")]
     FunctionGraph {
         path: GraphResourcePath,
     },
@@ -35,68 +29,14 @@ pub enum RevealProjectResourceRequest {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum RevealProjectResourceError {
-    #[error("unknown project resource kind '{kind}'")]
-    UnknownKind { kind: Box<str> },
-    #[error("invalid project file path")]
-    InvalidFilePath,
-}
-
-impl RevealProjectResourceRequest {
-    pub fn from_parts(kind: &str, resource_id: String) -> Result<Self, RevealProjectResourceError> {
-        match kind {
-            "event_graph" => Ok(Self::EventGraph {
-                path: checked_node_path(
-                    resource_id,
-                    yss_graph_document::GraphResourceKind::EventGraph,
-                )?,
-            }),
-            "function_graph" => Ok(Self::FunctionGraph {
-                path: checked_node_path(
-                    resource_id,
-                    yss_graph_document::GraphResourceKind::FunctionGraph,
-                )?,
-            }),
-            "mind" => Ok(Self::Mind {
-                path: checked_file_path(&resource_id)?,
-            }),
-            "doc" => Ok(Self::Doc {
-                path: checked_file_path(&resource_id)?,
-            }),
-            "database" => Ok(Self::Database {
-                database_id: resource_id,
-            }),
-            "chart" => Ok(Self::Chart {
-                path: checked_file_path(&resource_id)?,
-            }),
-            other => Err(RevealProjectResourceError::UnknownKind { kind: other.into() }),
-        }
-    }
-}
-
-fn checked_file_path<T: ResourceFile>(
-    value: &str,
-) -> Result<FilePath<T>, RevealProjectResourceError> {
-    FilePath::parse(value).map_err(|_| RevealProjectResourceError::InvalidFilePath)
-}
-
-fn checked_node_path(
-    value: String,
-    kind: GraphResourceKind,
-) -> Result<GraphResourcePath, RevealProjectResourceError> {
-    let path =
-        GraphResourcePath::new(value).map_err(|_| RevealProjectResourceError::InvalidFilePath)?;
-    validate_node_path_kind(&path, kind)?;
-    Ok(path)
-}
-
 fn validate_node_path_kind(
     path: &GraphResourcePath,
     kind: GraphResourceKind,
-) -> Result<(), RevealProjectResourceError> {
+) -> Result<(), ProjectError> {
     if path.kind() != kind {
-        return Err(RevealProjectResourceError::InvalidFilePath);
+        return Err(reveal_error(
+            "graph path does not match the requested graph kind",
+        ));
     }
     Ok(())
 }
@@ -110,22 +50,18 @@ pub fn resolve_reveal_path(
     request: RevealProjectResourceRequest,
 ) -> Result<PathBuf, ProjectError> {
     let session = state.capture_project_session().map_err(reveal_error)?;
-    let _filesystem_lease = state
-        .filesystem()
-        .acquire(session.root.clone())
-        .map_err(reveal_error)?;
+    let _filesystem_lease = state.filesystem().acquire(session.root.clone());
     state
         .validate_project_session(&session)
         .map_err(reveal_error)?;
     let root = session.root.as_path();
     let path = match request {
         RevealProjectResourceRequest::EventGraph { path } => {
-            validate_node_path_kind(&path, GraphResourceKind::EventGraph).map_err(reveal_error)?;
+            validate_node_path_kind(&path, GraphResourceKind::EventGraph)?;
             absolute_path_for_graph(root, path.as_str())
         }
         RevealProjectResourceRequest::FunctionGraph { path } => {
-            validate_node_path_kind(&path, GraphResourceKind::FunctionGraph)
-                .map_err(reveal_error)?;
+            validate_node_path_kind(&path, GraphResourceKind::FunctionGraph)?;
             absolute_path_for_graph(root, path.as_str())
         }
         RevealProjectResourceRequest::Mind { path } => {
@@ -199,7 +135,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reveal_checks_the_graph_kind_of_direct_and_deserialized_requests() {
+    fn reveal_checks_the_requested_graph_kind() {
         use yss_graph_document::GraphResourceKind;
         use yss_project_model::{GraphResourceDocument, ProjectData};
 
@@ -217,9 +153,20 @@ mod tests {
         let fixture = crate::fixtures::TempProject::activate("reveal-graph-kind", data);
         let state = fixture.state();
         let session = state.capture_project_session().unwrap();
-        for (kind, path) in [("event_graph", &event), ("function_graph", &function)] {
-            let request =
-                RevealProjectResourceRequest::from_parts(kind, path.as_str().into()).unwrap();
+        for (request, path) in [
+            (
+                RevealProjectResourceRequest::EventGraph {
+                    path: event.clone(),
+                },
+                &event,
+            ),
+            (
+                RevealProjectResourceRequest::FunctionGraph {
+                    path: function.clone(),
+                },
+                &function,
+            ),
+        ] {
             assert_eq!(
                 resolve_reveal_path(state, request).unwrap(),
                 session.root.as_path().join(path.as_str())
@@ -232,14 +179,6 @@ mod tests {
             RevealProjectResourceRequest::FunctionGraph {
                 path: event.clone(),
             },
-            serde_json::from_value(serde_json::json!({
-                "kind": "event_graph", "path": function.as_str()
-            }))
-            .unwrap(),
-            serde_json::from_value(serde_json::json!({
-                "kind": "function_graph", "path": event.as_str()
-            }))
-            .unwrap(),
         ] {
             assert!(matches!(
                 resolve_reveal_path(state, request),
@@ -269,17 +208,5 @@ mod tests {
             absolute
         );
         assert!(state.get_data().unwrap().graphs.is_empty());
-    }
-
-    #[test]
-    fn reveal_request_rejects_invalid_parts_with_typed_errors() {
-        assert!(matches!(
-            RevealProjectResourceRequest::from_parts("unknown", "resource".into()),
-            Err(RevealProjectResourceError::UnknownKind { kind }) if kind.as_ref() == "unknown"
-        ));
-        assert!(matches!(
-            RevealProjectResourceRequest::from_parts("chart", "outside".into()),
-            Err(RevealProjectResourceError::InvalidFilePath)
-        ));
     }
 }

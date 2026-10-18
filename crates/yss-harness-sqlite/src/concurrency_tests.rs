@@ -1,8 +1,6 @@
 use super::*;
 use yss_harness_contract::*;
-use yss_harness_contract::{
-    PrincipalId, ProjectSessionBinding, WorkflowStepId, WorkflowStepRecord, WorkflowStepState,
-};
+use yss_harness_contract::{PrincipalId, ProjectSessionBinding};
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
 fn session() -> HarnessSessionRecord {
@@ -56,55 +54,6 @@ async fn stale_conversations_remain_loadable_and_can_be_reactivated() {
     session.updated_at = UnixMillis::from_existing(3);
     store.update_session(&session).await.unwrap();
     assert_eq!(store.load_active_sessions().await.unwrap(), vec![session]);
-}
-
-#[tokio::test]
-async fn workflow_save_rejects_a_stale_completion_after_cancellation() {
-    let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
-    let session = session();
-    store.create_session(&session).await.unwrap();
-    let run = WorkflowRunRecord {
-        id: WorkflowRunId::try_new("run-1").unwrap(),
-        revision: 0,
-        session_id: session.id,
-        turn_id: None,
-        project: session.project,
-        definition_id: WorkflowId::try_new("workflow").unwrap(),
-        definition_version: WorkflowVersion::try_new("1.0.0").unwrap(),
-        state: WorkflowRunState::Running,
-        steps: [(
-            WorkflowStepId::try_new("step").unwrap(),
-            WorkflowStepRecord {
-                state: WorkflowStepState::Running,
-                attempt: 1,
-            },
-        )]
-        .into(),
-        created_at: UnixMillis::from_existing(1),
-        updated_at: UnixMillis::from_existing(1),
-    };
-    let mut stale = store.save_run(&run, None).await.unwrap();
-    assert_eq!(
-        store.save_run(&run, None).await.unwrap_err().code,
-        PersistenceFailureCode::Conflict
-    );
-    let mut cancelled = stale.clone();
-    cancelled.state = WorkflowRunState::Cancelled;
-    let committed = store
-        .save_run(&cancelled, Some(cancelled.revision))
-        .await
-        .unwrap();
-    assert_eq!(committed.revision, 1);
-    stale.state = WorkflowRunState::Completed;
-    assert_eq!(
-        store
-            .save_run(&stale, Some(stale.revision))
-            .await
-            .unwrap_err()
-            .code,
-        PersistenceFailureCode::Conflict
-    );
-    assert_eq!(store.load_run(&run.id).await.unwrap(), Some(committed));
 }
 
 #[tokio::test]
@@ -213,8 +162,6 @@ async fn indexed_invocation_identity_cannot_be_replaced_when_finishing() {
         session_id: session.id.clone(),
         turn_id: HarnessTurnId::try_new("turn-1").unwrap(),
         agent_run_id: None,
-        workflow_run_id: None,
-        workflow_step_id: None,
         project: session.project,
         tool: "inspect_graph".into(),
         effect: ToolEffect::Inspect,
@@ -289,54 +236,4 @@ async fn indexed_turn_parent_cannot_change_during_an_update() {
     changed.session_id = original.session_id;
     store.update_turn(&changed).await.unwrap();
     assert_eq!(store.load_turn(&changed.id).await.unwrap(), Some(changed));
-}
-
-#[tokio::test]
-async fn indexed_approval_consumption_matches_the_inserted_record() {
-    let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
-    let session = session();
-    let grant = ApprovalGrantRecord {
-        id: ApprovalGrantId::try_new("already-consumed").unwrap(),
-        principal_id: session.principal_id,
-        session_id: session.id,
-        project: session.project,
-        tool: "apply_graph_edit".into(),
-        request_fingerprint: SourceHash::try_new("fingerprint-1").unwrap(),
-        issued_at: UnixMillis::from_existing(1),
-        expires_at: UnixMillis::from_existing(10),
-        consumed_at: Some(UnixMillis::from_existing(2)),
-    };
-    ApprovalStorePort::insert(&store, &grant).await.unwrap();
-    let consumed: Option<i64> =
-        sqlx::query_scalar("SELECT consumed_at FROM approval_grant WHERE id = ?")
-            .bind(grant.id.as_str())
-            .fetch_one(&store.pool)
-            .await
-            .unwrap();
-    assert_eq!(consumed, Some(2));
-    assert!(
-        !ApprovalStorePort::consume(&store, &grant.id, UnixMillis::from_existing(3))
-            .await
-            .unwrap()
-    );
-    assert_eq!(
-        ApprovalStorePort::load(&store, &grant.id).await.unwrap(),
-        Some(grant.clone())
-    );
-    let mut invalid = grant;
-    invalid.id = ApprovalGrantId::try_new("unrepresentable-time").unwrap();
-    invalid.consumed_at = Some(UnixMillis::from_existing(u64::MAX));
-    assert_eq!(
-        ApprovalStorePort::insert(&store, &invalid)
-            .await
-            .unwrap_err()
-            .code,
-        PersistenceFailureCode::InvalidRecord
-    );
-    assert!(
-        ApprovalStorePort::load(&store, &invalid.id)
-            .await
-            .unwrap()
-            .is_none()
-    );
 }

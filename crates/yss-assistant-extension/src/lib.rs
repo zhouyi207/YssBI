@@ -163,6 +163,25 @@ impl AssistantExtension {
     }
 }
 
+impl AssistantExtension {
+    fn validate_request(&self, tool: &str, request: &Value) -> Result<(), CapabilityFailure> {
+        let request = decode_request(request).map_err(|_| {
+            CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
+                .with_detail("capabilityId", tool)
+        })?;
+        let capability = request.capability_id();
+        if capability.as_str() != tool {
+            return Err(
+                CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
+                    .with_detail("capabilityId", tool),
+            );
+        }
+        request
+            .validate()
+            .map_err(|error| contract_failure(error, capability))
+    }
+}
+
 impl HarnessExtension for AssistantExtension {
     fn root_role(&self) -> AgentRoleId {
         AgentRole::Manager.id()
@@ -267,22 +286,6 @@ impl HarnessExtension for AssistantExtension {
         project_tool_result(tool, result).map_err(|_| internal_failure())
     }
 
-    fn project_arguments(&self, tool: &str, request: &Value) -> Value {
-        decode_request(request)
-            .map_err(|_| internal_failure())
-            .and_then(|request| run::model_arguments(&(&request).into()))
-            .unwrap_or_else(|failure| {
-                tracing::warn!(
-                    domain = "Assistant",
-                    event = "assistant_request_arguments_unavailable",
-                    tool,
-                    code = %failure.code,
-                    "Assistant could not project request arguments"
-                );
-                Value::Object(Default::default())
-            })
-    }
-
     fn project_failure(&self, failure: &CapabilityFailure) -> Value {
         let mut projected = model::failure(failure);
         if let Some(methods) = failure.details.get("availableMethods")
@@ -310,42 +313,6 @@ impl HarnessExtension for AssistantExtension {
 
     fn summary_projection(&self, tool: &str, output: &Value) -> Option<Value> {
         summary::projection(tool, output)
-    }
-
-    fn tool_spec(&self, tool: &str) -> Option<ToolSpec> {
-        tools::capability(tool).map(tools::capability_spec)
-    }
-
-    fn validate_request(&self, tool: &str, request: &Value) -> Result<(), CapabilityFailure> {
-        let request = decode_request(request).map_err(|_| {
-            CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
-                .with_detail("capabilityId", tool)
-        })?;
-        let capability = request.capability_id();
-        if capability.as_str() != tool {
-            return Err(
-                CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
-                    .with_detail("capabilityId", tool),
-            );
-        }
-        request
-            .validate()
-            .map_err(|error| contract_failure(error, capability))
-    }
-
-    fn failure_is_transient(&self, failure: &CapabilityFailure) -> bool {
-        [
-            CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE,
-            CapabilityFailureCode::PROJECT_SESSION_CHANGED,
-            failure_code::GRAPH_UNAVAILABLE,
-            failure_code::DATABASE_UNAVAILABLE,
-            failure_code::CATALOG_UNAVAILABLE,
-            CapabilityFailureCode::RESULT_UNAVAILABLE,
-            CapabilityFailureCode::DEADLINE_ELAPSED,
-            CapabilityFailureCode::PERSISTENCE_UNAVAILABLE,
-            CapabilityFailureCode::INTERNAL_FAILURE,
-        ]
-        .contains(&failure.code)
     }
 
     fn execute<'a>(

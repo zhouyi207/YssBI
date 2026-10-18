@@ -2,7 +2,7 @@ use crate::{
     ContextBinding, PluginManager, RuntimeState, fail, package, read_bounded, resolve_data_file,
 };
 use serde_json::{Value, json};
-use std::{fs, path::PathBuf, time::Duration};
+use std::{fs, time::Duration};
 use yss_plugin_protocol::{
     CallContext, MAX_NATIVE_VIEW_BYTES, NativeCommandReply, NativeView, PluginFailure, RpcRequest,
     ViewScope, ViewSession,
@@ -140,9 +140,6 @@ impl PluginManager {
                 binding.window == window && binding.context.task_id.is_none()
             }) {
                 state.contexts.remove(session_id);
-                state
-                    .exports
-                    .retain(|_, (context, _)| context != session_id);
                 true
             } else {
                 false
@@ -152,37 +149,6 @@ impl PluginManager {
             self.inner.services.release_context(session_id);
         }
         Ok(())
-    }
-    pub fn grant_export(
-        &self,
-        session_id: &str,
-        window: &str,
-        path: PathBuf,
-    ) -> Result<String, PluginFailure> {
-        let binding = self.context(session_id)?;
-        if binding.window != window
-            || !path.is_absolute()
-            || !self
-                .manifest(&binding.context.plugin_id)?
-                .permissions
-                .iter()
-                .any(|permission| permission == "files.export")
-        {
-            return Err(fail("plugin_permission_denied"));
-        }
-        let id = uuid::Uuid::new_v4().to_string();
-        let mut state = self
-            .inner
-            .state
-            .lock()
-            .map_err(|_| fail("plugin_state_unavailable"))?;
-        // Detach and process failure revoke contexts under this same lock.
-        state.active_context(session_id)?;
-        if state.exports.len() >= 16 {
-            return Err(fail("plugin_resource_exhausted"));
-        }
-        state.exports.insert(id.clone(), (session_id.into(), path));
-        Ok(id)
     }
     pub(super) fn context(&self, id: &str) -> Result<ContextBinding, PluginFailure> {
         let binding = {
@@ -219,7 +185,6 @@ impl PluginManager {
         let permission = match request.method.as_str() {
             "data.list" | "data.snapshot" | "data.release" => "data.read",
             "results.commit" => "results.write",
-            "files.export" => "files.export",
             _ => return Err(fail("plugin_method_unknown")),
         };
         let entry = self.registration(plugin)?;
@@ -233,53 +198,6 @@ impl PluginManager {
             .any(|value| value == permission)
         {
             return Err(fail("plugin_permission_denied"));
-        }
-        if request.method == "files.export" {
-            let grant = request.params["input"]["grant"]
-                .as_str()
-                .ok_or_else(|| fail("plugin_permission_denied"))?;
-            let target = {
-                let mut state = self
-                    .inner
-                    .state
-                    .lock()
-                    .map_err(|_| fail("plugin_state_unavailable"))?;
-                if state
-                    .exports
-                    .get(grant)
-                    .is_none_or(|(owner, _)| owner != context_id)
-                {
-                    return Err(fail("plugin_permission_denied"));
-                }
-                state
-                    .exports
-                    .remove(grant)
-                    .map(|(_, path)| path)
-                    .ok_or_else(|| fail("plugin_permission_denied"))?
-            };
-            let source = resolve_data_file(
-                &self.inner.root.join("data").join(plugin),
-                request.params["input"]["source"]
-                    .as_str()
-                    .ok_or_else(|| fail("plugin_path_invalid"))?,
-            )?;
-            if fs::metadata(&source)
-                .map_err(|_| fail("plugin_file_unavailable"))?
-                .len()
-                > binding.context.granted_budget.snapshot_bytes
-            {
-                return Err(fail("plugin_resource_exhausted"));
-            }
-            let temporary = target.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
-            if fs::copy(source, &temporary).is_err() {
-                let _ = fs::remove_file(&temporary);
-                return Err(fail("plugin_export_failed"));
-            }
-            package::finish_file_publication(
-                &temporary,
-                atomicwrites::replace_atomic(&temporary, &target),
-            )?;
-            return Ok(Value::Null);
         }
         let response = self.inner.services.invoke(
             &binding.context,
@@ -351,28 +269,6 @@ impl PluginManager {
                 self.enforce_private_budget(id, incoming.saturating_sub(previous))?;
                 package::atomic_bytes(&path, &encoded)?;
                 Ok(Value::Null)
-            }
-            "system.save_file" => {
-                if !manifest
-                    .permissions
-                    .iter()
-                    .any(|permission| permission == "files.export")
-                {
-                    return Err(fail("plugin_permission_denied"));
-                }
-                Ok(json!({"hostUi":{"kind":"saveFile","options":input}}))
-            }
-            "system.reveal_artifact" => {
-                let path = input["path"]
-                    .as_str()
-                    .ok_or_else(|| fail("plugin_path_invalid"))?;
-                let root = fs::canonicalize(self.inner.root.join("data").join(id))
-                    .map_err(|_| fail("plugin_path_invalid"))?;
-                let path = fs::canonicalize(path).map_err(|_| fail("plugin_path_invalid"))?;
-                if !path.starts_with(&root) {
-                    return Err(fail("plugin_permission_denied"));
-                }
-                Ok(json!({"hostUi":{"kind":"reveal","path":path}}))
             }
             "data.list" => self.host_request(
                 id,

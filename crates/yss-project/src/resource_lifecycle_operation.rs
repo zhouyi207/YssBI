@@ -96,7 +96,7 @@ mod tests {
             .unwrap() = Some(Arc::new(move || {
             replacement.activate_project_fixture(root.clone(), data.clone());
         }));
-        let result = state.load_graph_document(&session.instance_id, &path, 0);
+        let result = state.load_graph_document(&session.instance_id, &path);
         state
             .test_hooks
             .graph_load_after_session_test_hook
@@ -141,7 +141,7 @@ mod tests {
             replacement_state.activate_project_fixture("project-b".into(), project_b.clone());
         }));
 
-        let result = state.load_graph_document(&project_instance_id, &graph_path, 1);
+        let result = state.load_graph_document(&project_instance_id, &graph_path);
         state
             .test_hooks
             .graph_load_after_read_test_hook

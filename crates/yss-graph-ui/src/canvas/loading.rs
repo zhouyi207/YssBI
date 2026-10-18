@@ -191,7 +191,6 @@ impl GraphCanvas {
         let request = yss_application::graph::open::OpenGraphRequest::new(
             self.graph.project.clone(),
             path.clone(),
-            0,
             language,
         );
         let task = self.services.run(move |services| {

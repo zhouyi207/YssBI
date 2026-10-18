@@ -56,7 +56,6 @@ impl Fixture {
             .open_graph(OpenGraphRequest::new(
                 project.clone(),
                 graph.clone(),
-                0,
                 "en-US",
             ))
             .unwrap();
@@ -103,7 +102,6 @@ impl Fixture {
             .open_graph(OpenGraphRequest::new(
                 self.project.clone(),
                 self.graph.clone(),
-                0,
                 "en-US",
             ))
             .unwrap();
@@ -197,7 +195,6 @@ fn additions_merge_current_parameters_reuse_fit_and_transfer_only_complete_resul
         .open_graph(OpenGraphRequest::new(
             fixture.project.clone(),
             fixture.graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap();
@@ -228,7 +225,6 @@ fn cancelled_and_superseded_deliveries_keep_the_original_report_and_release_new_
         .open_graph(OpenGraphRequest::new(
             fixture.project.clone(),
             fixture.graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap();

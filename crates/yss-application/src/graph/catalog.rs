@@ -148,8 +148,6 @@ pub enum ProjectCatalogReadError {
     ProjectLifecycleChanged,
     #[error("catalog resource changed during catalog query")]
     CatalogResourceStale { resource: GraphResourceId },
-    #[error("project lifecycle admission is closed")]
-    AdmissionClosed,
     #[error("project recovery is required")]
     RecoveryRequired,
     #[error("project filesystem transaction is busy")]
@@ -606,9 +604,6 @@ fn map_project_catalog_error(error: ProjectOperationError) -> ProjectCatalogRead
             ProjectCatalogReadError::CatalogResourceStale {
                 resource: GraphResourceId::new("project/catalog"),
             }
-        }
-        ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
-            ProjectCatalogReadError::AdmissionClosed
         }
         ProjectOperationError::ProjectRecoveryRequired { .. } => {
             ProjectCatalogReadError::RecoveryRequired

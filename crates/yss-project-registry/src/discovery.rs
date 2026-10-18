@@ -171,7 +171,7 @@ mod tests {
 
         let registry = ProjectTaskCancellationRegistry::new();
         let cancellation = registry.begin();
-        registry.cancel_active();
+        registry.begin();
         let error = discover_project_metadata_files(root.path(), &cancellation).unwrap_err();
         assert!(matches!(error, ProjectDiscoveryError::Cancelled));
 
@@ -181,7 +181,7 @@ mod tests {
             next_metadata_file(&mut entries, &cancellation).unwrap(),
             Some(root.path().join(PROJECT_METADATA_FILE))
         );
-        registry.cancel_active();
+        registry.begin();
         assert!(matches!(
             next_metadata_file(&mut entries, &cancellation),
             Err(ProjectDiscoveryError::Cancelled)

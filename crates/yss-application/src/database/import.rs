@@ -99,7 +99,7 @@ pub(super) fn duplicate_database_in_captured_session(
         captured,
         id,
         &temporary.0.to_string_lossy(),
-        "parquet",
+        yss_database_contract::DatabaseExportFormat::Parquet,
         Some(expected_revision),
     )?;
     import_in_captured_session(captured, operation_id, move |_| {
@@ -226,8 +226,7 @@ pub(super) fn import_in_captured_session(
         .map_err(import_error)?;
     let lease = captured
         .project()
-        .acquire_filesystem_lease(session.root.clone())
-        .map_err(import_error)?;
+        .acquire_filesystem_lease(session.root.clone());
     captured
         .project()
         .validate_project_session(&session)

@@ -68,6 +68,11 @@ pub enum CanvasEvent {
     InspectResult(Arc<yss_application::graph::results::ResultLease>),
     ShowOutput,
     OpenGraph(String),
+    /// The canvas left the dock; its graph may no longer need to stay resident.
+    Removed {
+        project: yss_project_identity::ProjectInstanceId,
+        path: yss_graph_document::GraphResourcePath,
+    },
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -427,6 +432,12 @@ impl BasePanel for GraphCanvas {
     }
     fn closable(&self, cx: &App) -> bool {
         !self.dirty(cx) && !self.busy && !self.execution.running()
+    }
+    fn on_removed(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        cx.emit(CanvasEvent::Removed {
+            project: self.graph.project.clone(),
+            path: self.graph.projection.graph_path.clone(),
+        });
     }
     fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<Self>) {
         if active {

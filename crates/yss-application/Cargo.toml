@@ -73,6 +73,8 @@ yss-database-io = { path = "../yss-database-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
+yss-graph-editor = { path = "../yss-graph-editor", features = ["test-support"] }
+yss-database-io = { path = "../yss-database-io", features = ["test-support"] }
 jsonschema.workspace = true
 tempfile = "3"
 yss-harness-core = { path = "../yss-harness-core", features = ["test-support"] }

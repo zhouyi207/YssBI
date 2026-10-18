@@ -7,8 +7,7 @@
 
 `ProjectRecord` carries a registration ID, canonical metadata path, presentation fields and
 native root identity with its validity state. Serialization uses camelCase and rejects unknown
-fields. `deletion_identity` requires a valid, nonempty identity; lifecycle owners perform the
-remaining deletion checks.
+fields. `valid_root_identity` returns the identity only when it is valid and nonempty.
 
 `ProjectRegistryStore` loads the complete catalog for listing and cleanup, reads individual
 records by registration ID or canonical metadata path, and upserts or removes records.

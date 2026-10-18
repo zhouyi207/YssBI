@@ -1,7 +1,7 @@
 //! The Application authority envelope for one Assistant capability invocation.
 
 use crate::{
-    AgentInvocationScope, ApprovalGrantId, CapabilityInvocationId, HarnessSessionId, PrincipalId,
+    AgentInvocationScope, CapabilityInvocationId, HarnessSessionId, PrincipalId,
     ProjectSessionBinding, ToolInvocationContext,
 };
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,6 @@ pub struct CapabilityInvocationContext {
     harness_session_id: HarnessSessionId,
     invocation_id: CapabilityInvocationId,
     project: ProjectSessionBinding,
-    approval_grant_id: Option<ApprovalGrantId>,
     agent: Option<AgentInvocationScope>,
     graph_observation: Option<String>,
 }
@@ -30,7 +29,6 @@ impl CapabilityInvocationContext {
             harness_session_id,
             invocation_id,
             project,
-            approval_grant_id: None,
             agent: None,
             graph_observation: None,
         }
@@ -79,12 +77,8 @@ impl From<ToolInvocationContext> for CapabilityInvocationContext {
             harness_session_id,
             invocation_id,
             project,
-            approval_grant_id,
             agent_run_id: _,
         } = context;
-        Self {
-            approval_grant_id,
-            ..Self::new(principal_id, harness_session_id, invocation_id, project)
-        }
+        Self::new(principal_id, harness_session_id, invocation_id, project)
     }
 }

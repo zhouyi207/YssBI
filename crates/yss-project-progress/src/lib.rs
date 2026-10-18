@@ -81,17 +81,6 @@ impl ProjectTaskCancellationRegistry {
         cancellation
     }
 
-    pub fn cancel_active(&self) {
-        if let Some(cancellation) = self
-            .active
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .as_ref()
-        {
-            cancellation.cancel();
-        }
-    }
-
     pub fn end(&self, cancellation: &ProjectTaskCancellation) {
         let mut active = self
             .active
@@ -117,27 +106,23 @@ mod tests {
     use super::ProjectTaskCancellationRegistry;
 
     #[test]
-    fn active_task_can_be_cancelled_and_ended() {
+    fn beginning_a_task_cancels_the_previous_one() {
         let registry = ProjectTaskCancellationRegistry::new();
-        let cancellation = registry.begin();
-        assert!(!cancellation.is_cancelled());
+        let first = registry.begin();
+        let second = registry.begin();
 
-        registry.cancel_active();
-        assert!(cancellation.is_cancelled());
-
-        registry.end(&cancellation);
-        let next = registry.begin();
-        assert!(!next.is_cancelled());
+        assert!(first.is_cancelled());
+        assert!(!second.is_cancelled());
     }
 
     #[test]
-    fn ending_current_task_removes_it_from_active_registry() {
+    fn an_ended_task_is_not_cancelled_by_the_next_one() {
         let registry = ProjectTaskCancellationRegistry::new();
-        let cancellation = registry.begin();
+        let first = registry.begin();
+        registry.end(&first);
+        let second = registry.begin();
 
-        registry.end(&cancellation);
-        registry.cancel_active();
-
-        assert!(!cancellation.is_cancelled());
+        assert!(!first.is_cancelled());
+        assert!(!second.is_cancelled());
     }
 }

@@ -1,4 +1,4 @@
-use crate::{ApprovalError, KnowledgeError, WorkflowCompileError, WorkflowRuntimeError};
+use crate::KnowledgeError;
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AutomationIdentityError, CapabilityFailure,
     IdGenerationFailure, PersistenceFailure,
@@ -14,8 +14,6 @@ pub enum HarnessError {
     Persistence(#[from] PersistenceFailure),
     #[error("harness knowledge retrieval failed")]
     Knowledge(#[from] KnowledgeError),
-    #[error("harness approval operation failed")]
-    Approval(#[from] ApprovalError),
     #[error("harness capability execution failed")]
     Capability(#[from] CapabilityFailure),
     #[error("harness session was not found")]
@@ -30,24 +28,6 @@ pub enum HarnessError {
     Agent(AgentDriverFailureCode),
     #[error("harness turn was cancelled")]
     Cancelled,
-    #[error("workflow already has an active execution owner")]
-    ConcurrentWorkflow,
-    #[error("workflow compilation failed")]
-    WorkflowCompile(#[from] WorkflowCompileError),
-    #[error("workflow state transition failed")]
-    WorkflowRuntime(#[from] WorkflowRuntimeError),
-    #[error("workflow run was not found")]
-    WorkflowNotFound,
-    #[error("workflow immutable definition was not found")]
-    WorkflowDefinitionNotFound,
-    #[error("workflow originating turn was not found")]
-    WorkflowTurnNotFound,
-    #[error("workflow originating turn belongs to another session")]
-    WorkflowTurnMismatch,
-    #[error("workflow project binding changed")]
-    WorkflowProjectChanged,
-    #[error("workflow is paused")]
-    WorkflowWaiting,
 }
 
 impl From<AgentDriverFailure> for HarnessError {

@@ -115,7 +115,6 @@ impl ApplicationState {
         let opened = self.open_graph(OpenGraphRequest::new(
             project.clone(),
             graph.clone(),
-            0,
             locale,
         ))?;
         let output = opened

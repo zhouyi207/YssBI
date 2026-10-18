@@ -61,7 +61,7 @@ impl SettingsStore {
         std::fs::create_dir_all(&self.directory)?;
         let binding = RootBinding::for_existing(&self.directory)?;
         let root = binding.normalized().clone();
-        let lease = self.coordinator.acquire(root.clone())?;
+        let lease = self.coordinator.acquire(root.clone());
         let transaction = FilesystemTransaction::prepare(
             TransactionContext {
                 root,

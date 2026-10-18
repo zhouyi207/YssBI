@@ -33,7 +33,7 @@
     "type": "tool_invocation_started",
     "payload": {
       "invocationId": "tool-1",
-      "capabilityId": "inspect_dataset_schema"
+      "capabilityId": "inspect_database_schema"
     }
   },
   {
@@ -49,29 +49,17 @@
   {
     "sequence": 5,
     "sessionId": "session-1",
-    "turnId": null,
-    "occurredAt": 1000,
-    "type": "workflow_step_failed",
-    "payload": {
-      "runId": "workflow-1",
-      "stepId": "schema",
-      "retriable": true
-    }
-  },
-  {
-    "sequence": 6,
-    "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
     "type": "tool_invocation_failed",
     "payload": {
       "invocationId": "tool-2",
-      "capabilityId": "inspect_dataset_profile",
+      "capabilityId": "profile_database",
       "failureCode": "deadline_elapsed"
     }
   },
   {
-    "sequence": 7,
+    "sequence": 6,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -83,7 +71,7 @@
     }
   },
   {
-    "sequence": 8,
+    "sequence": 7,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -94,7 +82,7 @@
     }
   },
   {
-    "sequence": 9,
+    "sequence": 8,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -104,7 +92,7 @@
     }
   },
   {
-    "sequence": 10,
+    "sequence": 9,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -114,7 +102,7 @@
     }
   },
   {
-    "sequence": 11,
+    "sequence": 10,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -126,7 +114,7 @@
     }
   },
   {
-    "sequence": 12,
+    "sequence": 11,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -136,7 +124,7 @@
     }
   },
   {
-    "sequence": 13,
+    "sequence": 12,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -155,7 +143,7 @@
     }
   },
   {
-    "sequence": 14,
+    "sequence": 13,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -168,7 +156,7 @@
     }
   },
   {
-    "sequence": 15,
+    "sequence": 14,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,
@@ -178,7 +166,7 @@
     }
   },
   {
-    "sequence": 16,
+    "sequence": 15,
     "sessionId": "session-1",
     "turnId": "turn-1",
     "occurredAt": 1000,

@@ -174,7 +174,6 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
         app.open_graph(crate::graph::open::OpenGraphRequest::new(
             instance.clone(),
             graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap()

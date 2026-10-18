@@ -494,9 +494,6 @@ impl PluginManager {
                 .map(|(id, _)| id.clone())
                 .collect::<BTreeSet<_>>();
             state.contexts.retain(|id, _| !removed.contains(id));
-            state
-                .exports
-                .retain(|_, (context, _)| !removed.contains(context));
             (removed, unavailable)
         };
         let publication = self.record_instance_failure(plugin, &process.instance_id, error);

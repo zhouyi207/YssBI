@@ -21,7 +21,6 @@ use yss_graph_editor::projection::{
 pub struct OpenGraphRequest {
     project_instance_id: ProjectInstanceId,
     graph_path: GraphResourcePath,
-    lifecycle_token: u64,
     locale: Box<str>,
 }
 
@@ -29,13 +28,11 @@ impl OpenGraphRequest {
     pub fn new(
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        lifecycle_token: u64,
         locale: impl Into<Box<str>>,
     ) -> Self {
         Self {
             project_instance_id,
             graph_path,
-            lifecycle_token,
             locale: locale.into(),
         }
     }
@@ -46,10 +43,6 @@ impl OpenGraphRequest {
 
     pub fn graph_path(&self) -> &GraphResourcePath {
         &self.graph_path
-    }
-
-    pub const fn lifecycle_token(&self) -> u64 {
-        self.lifecycle_token
     }
 
     pub fn locale(&self) -> &str {
@@ -94,8 +87,6 @@ pub enum OpenGraphProjectError {
     StaleProjectAuthority { graph: GraphResourcePath },
     #[error("graph resource lifecycle changed")]
     ResourceLifecycleChanged { graph: GraphResourcePath },
-    #[error("project lifecycle admission is closed")]
-    AdmissionClosed,
     #[error("project recovery is required")]
     RecoveryRequired,
     #[error("graph document is invalid")]
@@ -224,11 +215,7 @@ pub(crate) fn open_graph_in_session(
     if !already_resident {
         captured
             .project()
-            .load_graph_document(
-                captured.project_instance_id(),
-                request.graph_path(),
-                request.lifecycle_token(),
-            )
+            .load_graph_document(captured.project_instance_id(), request.graph_path())
             .map_err(|error| map_project_open_error(request.graph_path(), error))?;
     }
 
@@ -336,7 +323,6 @@ fn map_project_facts_open_error(
             }
             .into()
         }
-        ProjectCatalogReadError::AdmissionClosed => OpenGraphProjectError::AdmissionClosed.into(),
         ProjectCatalogReadError::RecoveryRequired => OpenGraphProjectError::RecoveryRequired.into(),
         error => {
             OpenGraphProjectError::PrepareFailed(OpenGraphProjectSource::catalog(error)).into()
@@ -366,9 +352,6 @@ fn map_project_open_error(
                 graph: graph.clone(),
             }
             .into()
-        }
-        ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
-            OpenGraphProjectError::AdmissionClosed.into()
         }
         ProjectOperationError::ProjectRecoveryRequired { .. } => {
             OpenGraphProjectError::RecoveryRequired.into()

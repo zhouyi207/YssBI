@@ -103,13 +103,12 @@ impl ApplicationState {
         let current_project = self.harness_project_binding()?;
         install_builtin_statistical_knowledge(ports.knowledge.clone(), ports.clock.now()).await?;
         let host = Arc::new(HarnessHost::new(ports)?);
-        // Recover interrupted work before reconciling project bindings and workflow state.
+        // Recover interrupted work before reconciling project bindings.
         host.recover_interrupted_turns().await?;
         host.session_access()
             .await
             .reconcile_project_session(&current_project)
             .await?;
-        host.recover_workflows().await?;
         Ok(host)
     }
 
@@ -277,11 +276,9 @@ mod tests {
             sessions: store.clone(),
             events: store.clone(),
             event_sink: Arc::new(InMemoryHarnessStore::default()),
-            workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-            approvals: store,
             clock,
             ids,
         }
@@ -609,11 +606,9 @@ mod tests {
             sessions: store.clone(),
             events: store.clone(),
             event_sink: store.clone(),
-            workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-            approvals: store.clone(),
             clock: Arc::new(FixedClock::new(2_000)),
             ids: Arc::new(SequentialIds::default()),
         };

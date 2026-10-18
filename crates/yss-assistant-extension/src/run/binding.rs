@@ -137,11 +137,6 @@ impl AssistantRun {
 
             Input::InspectNodes(value) => Request::InspectNodes(value),
             Input::FindConnections(value) => Request::FindConnections(value),
-            Input::InspectDatasetSchema(_) | Input::InspectDatasetProfile(_) => {
-                return Err(CapabilityFailure::new(
-                    CapabilityFailureCode::INVALID_REQUEST,
-                ));
-            }
             Input::InspectDatabase(value) => {
                 self.bind_database_read(model::DatabaseReadInput::Overview(value))
             }

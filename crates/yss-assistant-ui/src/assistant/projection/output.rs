@@ -36,7 +36,10 @@ pub(in crate::assistant) enum Content {
     Plan(Box<StatisticalPlan>),
     Citation(KnowledgeCitation),
     Failure(String),
-    Status { event: Box<Event>, error: bool },
+    Status {
+        phase: yss_harness_contract::AgentRuntimePhase,
+        attempt: u32,
+    },
     Usage(Usage),
     Compaction(Box<Compaction>),
 }
@@ -171,8 +174,8 @@ impl Output {
                         }
                     }
                 }
-                let event = Event::RuntimeStatus { phase, attempt };
-                self.status(id, event, false);
+                // Kept unlocalized so changing language redraws history without replaying it.
+                self.push(id, Content::Status { phase, attempt });
             }
             Event::ContextCompactionProgress {
                 completed_bytes,
@@ -227,15 +230,6 @@ impl Output {
                 )
                 .executed(at, &status, failure_code);
             }
-            event @ (Event::WorkflowPlanned { .. }
-            | Event::WorkflowStarted { .. }
-            | Event::WorkflowStepStarted { .. }
-            | Event::WorkflowStepCompleted { .. }
-            | Event::WorkflowCompleted { .. }
-            | Event::WorkflowPaused { .. }
-            | Event::WorkflowResumed { .. }
-            | Event::WorkflowCancelled { .. }) => self.status(id, event, false),
-            event @ Event::WorkflowStepFailed { .. } => self.status(id, event, true),
             // Lifecycle events belong to Transcript/Turn, never inside an agent's output.
             Event::SessionCreated
             | Event::TurnStarted { .. }
@@ -331,15 +325,5 @@ impl Output {
             unreachable!()
         };
         value
-    }
-    fn status(&mut self, id: u64, event: Event, error: bool) {
-        // Keep the native event so changing language can redraw history without replaying it.
-        self.push(
-            id,
-            Content::Status {
-                event: Box::new(event),
-                error,
-            },
-        );
     }
 }

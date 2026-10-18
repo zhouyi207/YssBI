@@ -24,7 +24,7 @@ pub(in crate::automation) fn inspect_resource(
             let path = graph_path(&request.resource)?;
             session
                 .project()
-                .load_graph_document(&project, &path, 0)
+                .load_graph_document(&project, &path)
                 .map_err(project_error)?;
             let current = session
                 .project()
@@ -300,7 +300,6 @@ fn graph_request(
         .open_graph(crate::graph::open::OpenGraphRequest::new(
             session.project_instance_id().clone(),
             path.clone(),
-            0,
             "en-US",
         ))
         .map_err(|_| unavailable())?;

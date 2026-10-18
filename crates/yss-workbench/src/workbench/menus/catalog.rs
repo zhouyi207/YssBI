@@ -1,8 +1,7 @@
 //! Menus index existing commands: each item dispatches the action its toolbar, context menu
 //! or shortcut uses, and stays in place while disabled.
 use super::{
-    EditorKind, MenuCommand, MenuContext, WorkbenchPanel, commands::DatasetFormat,
-    editing::EditCommand, help::HelpPage,
+    EditorKind, MenuCommand, MenuContext, WorkbenchPanel, editing::EditCommand, help::HelpPage,
 };
 use crate::{
     canvas::{self, SaveGraph},
@@ -16,6 +15,7 @@ use crate::{
 };
 use gpui_kit::component::{Placement, dock::DockPlacement};
 use gpui_kit::{Action, Menu, MenuItem, SystemMenuType};
+use yss_database_contract::DatabaseExportFormat;
 use yss_graph_document::GraphResourceKind;
 use yss_settings::ThemeMode;
 
@@ -296,12 +296,12 @@ fn data_menu(context: &MenuContext) -> Menu {
             [
                 item(
                     "importModal.types.csv.label",
-                    MenuCommand::ExportDataset(DatasetFormat::Csv),
+                    MenuCommand::ExportDataset(DatabaseExportFormat::Csv),
                     export_disabled,
                 ),
                 item(
                     "menubar.parquet",
-                    MenuCommand::ExportDataset(DatasetFormat::Parquet),
+                    MenuCommand::ExportDataset(DatabaseExportFormat::Parquet),
                     export_disabled,
                 ),
             ],

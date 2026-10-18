@@ -20,17 +20,12 @@ mod spill;
 mod table_transform;
 mod windows;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use arrow::array::{Array, Float64Array, Int64Array, StringArray};
-use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use arrow::datatypes::{DataType, Field, Schema};
 use datafusion::common::Column;
 use datafusion::dataframe::DataFrame;
-use datafusion::datasource::file_format::parquet::ParquetFormat;
-use datafusion::datasource::listing::{
-    ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
-};
 use datafusion::execution::runtime_env::{RuntimeEnv, RuntimeEnvBuilder};
 use datafusion::logical_expr::Expr;
 use datafusion::prelude::{SessionConfig, SessionContext};
@@ -173,13 +168,18 @@ impl DataFusionRuntime {
 
     /// The caller supplies catalog-committed immutable files/schema and a lease that prevents
     /// their removal. Planning never discovers datasets from a directory or scans their rows.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn parquet_relation(
         self: &Arc<Self>,
         binding: RelationBinding,
-        schema: SchemaRef,
-        files: &[PathBuf],
+        schema: arrow::datatypes::SchemaRef,
+        files: &[std::path::PathBuf],
         lease: Arc<dyn Send + Sync>,
     ) -> Result<RelationHandle, RelationError> {
+        use datafusion::datasource::file_format::parquet::ParquetFormat;
+        use datafusion::datasource::listing::{
+            ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
+        };
         if files.is_empty() || binding.project_session.is_empty() || binding.snapshot.is_empty() {
             return Err(RelationError::InvalidInput);
         }
@@ -220,6 +220,7 @@ impl DataFusionRuntime {
     }
 
     /// Useful at the already-materialized literal boundary; external imports use batch readers.
+    #[cfg(test)]
     pub fn batch_relation(
         self: &Arc<Self>,
         binding: RelationBinding,

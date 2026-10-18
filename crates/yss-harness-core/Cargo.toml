@@ -5,7 +5,11 @@ edition = "2024"
 publish = false
 
 [features]
-test-support = ["dep:yss-harness-tantivy", "dep:yss-project-identity"]
+test-support = [
+  "dep:yss-harness-tantivy",
+  "dep:yss-project-identity",
+  "yss-harness-contract/test-support",
+]
 
 [dependencies]
 hex.workspace = true
@@ -20,5 +24,6 @@ yss-harness-tantivy = { path = "../yss-harness-tantivy", optional = true }
 yss-project-identity = { path = "../yss-project-identity", optional = true }
 
 [dev-dependencies]
+yss-harness-contract = { path = "../yss-harness-contract", features = ["test-support"] }
 yss-harness-tantivy = { path = "../yss-harness-tantivy" }
 yss-project-identity = { path = "../yss-project-identity" }

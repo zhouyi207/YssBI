@@ -10,7 +10,7 @@
 | 模块                          | 职责                                                             |
 | ----------------------------- | ---------------------------------------------------------------- |
 | `root` / `identity`           | 路径规范化、原生目录身份、RootBinding 重验、独立的 TransactionId |
-| `coordinator`                 | 按根目录排序的访问 lease、关闭准入、排空和最终 lease             |
+| `coordinator`                 | 按根目录排序的访问 lease                                         |
 | `transaction` / `recovery`    | 暂存、提交、显式/Drop 回滚、恢复标记与故障注入                   |
 | `lifecycle`                   | 安全文件清单枚举和目录操作策略                                   |
 | `change`                      | 安全 RelativePath、FileChange 与 RescanRequired                  |
@@ -60,10 +60,9 @@ fn write_bytes(directory: &std::path::Path) -> Result<(), FilesystemError> {
 }
 ```
 
-同一协调范围应复用同一个 FilesystemCoordinator，以共享 lease 和准入状态。文件树读取会跳过本库的事务暂存目录 `.yssbi-transaction`；该目录保留原有名称以维持已有暂存区排除行为。
+同一协调范围应复用同一个 FilesystemCoordinator，以共享 lease 状态。文件树读取会跳过本库的事务暂存目录 `.yssbi-transaction`；该目录保留原有名称以维持已有暂存区排除行为。
 
-RootLifecycleGuard 在关闭新准入后允许已准入操作排空，再取得最终 lease；这一取得过程只等待现有持有者，
-不返回没有实际失败分支的 Result。lease 对外只提供根身份的包含性检查，不暴露内部根列表。
+取得 lease 只等待同一根目录的现有持有者，没有失败分支，因此不返回 Result。lease 对外只提供根身份的包含性检查，不暴露内部根列表。
 
 `NotifyFileWatcher::new()` 默认观察所有安全的根内文件变化。`with_filter` 接收调用方定义的相对路径过滤器；根目录变化和后端 rescan 请求仍交付重扫信号。原生事件按有界队列合并为 RescanRequired，满队列不会丢掉“仍需重扫”的事实。WatcherState 负责新旧会话 epoch 隔离及可重试排空，不更新任何业务状态。
 

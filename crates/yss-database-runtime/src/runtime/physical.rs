@@ -302,16 +302,6 @@ impl DatabaseRuntimePhysicalState {
         read().map_err(|error| failure(database, DatabaseOperation::Query, error))
     }
 
-    pub(crate) fn read_dataset_overview(
-        &self,
-        database: &DatabaseId,
-        control: &yss_relational_contract::RelationControl,
-    ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
-        self.required_instance(database)?
-            .query()
-            .and_then(|query| query.dataset_overview(control).map_err(Into::into))
-            .map_err(|error| failure(database, DatabaseOperation::Query, error))
-    }
     pub(crate) fn read_edit_state(
         &self,
         database: &DatabaseId,

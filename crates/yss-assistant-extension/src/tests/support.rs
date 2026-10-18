@@ -193,11 +193,9 @@ pub(crate) fn ports(
         sessions: store.clone(),
         events: store.clone(),
         event_sink: store.clone(),
-        workflows: store.clone(),
         tool_ledger: store.clone(),
         knowledge: store.clone(),
         knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-        approvals: store,
         clock: Arc::new(yss_harness_core::test_support::FixedClock::new(1000)),
         ids: Arc::new(yss_harness_core::test_support::SequentialIds::default()),
     }

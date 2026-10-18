@@ -35,8 +35,6 @@ pub enum ProjectOperationError {
     DuplicateOperation { message: String },
     #[error("project filesystem transaction is busy: {message}")]
     FilesystemTransactionBusy { message: String },
-    #[error("project lifecycle admission is closed: {message}")]
-    ProjectLifecycleAdmissionClosed { message: String },
     #[error("project activation generation is exhausted")]
     ActivationGenerationExhausted,
     #[error("project authority generation is exhausted")]
@@ -72,7 +70,6 @@ impl ProjectOperationError {
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
             Self::DuplicateOperation { .. } => "duplicate_operation",
             Self::FilesystemTransactionBusy { .. } => "filesystem_transaction_busy",
-            Self::ProjectLifecycleAdmissionClosed { .. } => "project_lifecycle_admission_closed",
             Self::ActivationGenerationExhausted => "project_activation_generation_exhausted",
             Self::AuthorityGenerationExhausted => "project_authority_generation_exhausted",
             Self::PublicationRevisionExhausted => "publication_revision_exhausted",
@@ -124,9 +121,6 @@ impl From<yss_filesystem::FilesystemError> for ProjectOperationError {
         match error {
             yss_filesystem::FilesystemError::InvalidRoot { path, message } => {
                 Self::InvalidRoot { path, message }
-            }
-            yss_filesystem::FilesystemError::RootAdmissionClosed { message } => {
-                Self::ProjectLifecycleAdmissionClosed { message }
             }
             yss_filesystem::FilesystemError::RecoveryRequired { message } => {
                 Self::ProjectRecoveryRequired { message }

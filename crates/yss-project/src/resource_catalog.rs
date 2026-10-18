@@ -44,7 +44,7 @@ impl ProjectState {
                 message: "resource catalog project changed".into(),
             });
         }
-        let _lease = self.filesystem().acquire(session.root.clone())?;
+        let _lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
         let graphs =
             crate::scan_graph_resource_index(session.root.as_path()).map_err(read_error)?;

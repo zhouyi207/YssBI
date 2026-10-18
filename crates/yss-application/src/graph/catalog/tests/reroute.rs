@@ -84,7 +84,6 @@ fn open(
         .open_graph(OpenGraphRequest::new(
             session.session.project_instance_id().clone(),
             graph.clone(),
-            0,
             "en-US",
         ))
         .unwrap()

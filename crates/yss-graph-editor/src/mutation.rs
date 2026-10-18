@@ -270,6 +270,7 @@ impl EditorGraphMutation {
         }
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn into_patch(
         self,
         graph_path: &GraphResourcePath,

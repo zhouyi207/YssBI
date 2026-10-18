@@ -205,7 +205,6 @@ impl ApplicationState {
         graph_path: GraphResourcePath,
         expected_revision: ResourceRevision,
         new_name: String,
-        lifecycle_token: u64,
         operation_id: OperationId,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
@@ -216,7 +215,6 @@ impl ApplicationState {
                 graph_path: &graph_path,
                 expected_revision,
                 new_name: &new_name,
-                lifecycle_token,
                 operation_id,
             },
         )?;
@@ -228,23 +226,24 @@ impl ApplicationState {
         Ok(committed_resource_mutation_from_project(result))
     }
 
+    /// Releases a resident graph. A graph with unsaved edits stays resident unless
+    /// `discard_version` confirms them; only discarded edits make its results stale.
     pub fn unload_graph_resource(
         &self,
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        lifecycle_token: u64,
         discard_version: Option<yss_project::GraphEditVersion>,
     ) -> Result<bool, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        let removed = captured.project().unload_graph_resource_for_lifecycle(
+        let discarding = discard_version.is_some();
+        let removed = captured.project().unload_graph_resource(
             &project_instance_id,
             &graph_path,
-            lifecycle_token,
             discard_version,
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
-        if removed {
+        if removed && discarding {
             captured
                 .execution()
                 .invalidate_graph_results(graph_path.as_str());

@@ -20,17 +20,6 @@ pub(crate) const SCHEMA: &[&str] = &[
         PRIMARY KEY(session_id, sequence),
         FOREIGN KEY(session_id) REFERENCES assistant_session(id)
     )"#,
-    r#"CREATE TABLE workflow_definition (
-        id TEXT NOT NULL,
-        version TEXT NOT NULL,
-        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
-        PRIMARY KEY(id, version)
-    )"#,
-    r#"CREATE TABLE workflow_run (
-        id TEXT PRIMARY KEY NOT NULL,
-        state TEXT NOT NULL,
-        payload_json TEXT NOT NULL CHECK(json_valid(payload_json))
-    )"#,
     r#"CREATE TABLE tool_invocation (
         id TEXT PRIMARY KEY NOT NULL,
         idempotency_key TEXT NOT NULL UNIQUE,
@@ -49,10 +38,5 @@ pub(crate) const SCHEMA: &[&str] = &[
         source_id TEXT NOT NULL,
         payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         FOREIGN KEY(source_id) REFERENCES knowledge_source(id)
-    )"#,
-    r#"CREATE TABLE approval_grant (
-        id TEXT PRIMARY KEY NOT NULL,
-        consumed_at INTEGER,
-        payload_json TEXT NOT NULL CHECK(json_valid(payload_json))
     )"#,
 ];

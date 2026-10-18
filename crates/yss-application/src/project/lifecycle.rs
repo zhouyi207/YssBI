@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -27,26 +26,10 @@ use super::registry::ProjectManagement;
 pub enum ProjectLifecycleError {
     #[error("project path is invalid")]
     InvalidPath,
-    #[error("registered project was not found")]
-    ProjectNotFound,
     #[error("project load failed")]
     LoadFailed(#[source] ProjectOperationError),
     #[error("project lifecycle authority operation failed")]
     AuthorityFailed(#[source] ProjectOperationError),
-    #[error("project registry lookup failed")]
-    RegistryLookupFailed(#[source] ProjectRegistryFailure),
-}
-
-pub struct ProjectRegistryFailure {
-    diagnostic: Box<str>,
-}
-
-impl ProjectRegistryFailure {
-    fn new(diagnostic: impl std::fmt::Display) -> Self {
-        Self {
-            diagnostic: diagnostic.to_string().into_boxed_str(),
-        }
-    }
 }
 
 #[derive(Debug, Error)]
@@ -161,42 +144,6 @@ impl ApplicationState {
         }
         Ok(result)
     }
-
-    pub async fn delete_registered_project_for_application(
-        &self,
-        projects: &ProjectManagement,
-        id: &str,
-        expected_active_instance_id: Option<ProjectInstanceId>,
-        operation_id: OperationId,
-    ) -> Result<ProjectLifecycleApplicationEvent, ApplicationProjectLifecycleError> {
-        let captured = self.capture_session()?;
-        let replacement = expected_active_instance_id
-            .as_ref()
-            .filter(|expected| *expected == captured.project_instance_id())
-            .map(|_| begin_replacement(self, &captured))
-            .transpose()?;
-        let project = replacement
-            .as_ref()
-            .map_or_else(|| captured.project(), ProjectReplacement::project);
-        let result = delete_registered_project(
-            project,
-            &projects.registry,
-            id,
-            expected_active_instance_id,
-            operation_id,
-        )
-        .await?;
-        if let Some(replacement) = replacement {
-            finish_replacement(self, replacement)?;
-        } else if result.invalidation.project {
-            self.rebuild_application_session(&captured)
-                .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
-        } else {
-            self.revalidate_captured_session(&captured)
-                .map_err(ApplicationProjectLifecycleError::SessionChanged)?;
-        }
-        Ok(result)
-    }
 }
 
 fn begin_replacement(
@@ -220,23 +167,6 @@ fn finish_replacement(
         .finish_project_replacement(replacement)
         .map_err(ApplicationProjectLifecycleError::SessionRefresh)
 }
-
-impl std::fmt::Debug for ProjectRegistryFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("ProjectRegistryFailure")
-            .field("diagnostic", &self.diagnostic)
-            .finish()
-    }
-}
-
-impl std::fmt::Display for ProjectRegistryFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("project registry operation failed")
-    }
-}
-
-impl std::error::Error for ProjectRegistryFailure {}
 
 pub fn clear_project(state: &ProjectState) -> Result<(), ProjectLifecycleError> {
     state
@@ -359,131 +289,6 @@ pub async fn create_project(
     };
     Ok(result)
 }
-
-pub async fn delete_registered_project(
-    state: &ProjectState,
-    registry: &ProjectRegistry,
-    id: &str,
-    expected_active_instance_id: Option<ProjectInstanceId>,
-    operation_id: OperationId,
-) -> Result<ProjectLifecycleApplicationEvent, ProjectLifecycleError> {
-    let record = registry
-        .fetch_by_id(id)
-        .await
-        .map_err(|error| {
-            ProjectLifecycleError::RegistryLookupFailed(ProjectRegistryFailure::new(error))
-        })?
-        .ok_or(ProjectLifecycleError::ProjectNotFound)?;
-
-    let Some(identity) = record.deletion_identity().cloned() else {
-        return delete_registry_only_record(
-            registry,
-            record,
-            expected_active_instance_id.is_some(),
-            operation_id,
-        )
-        .await;
-    };
-
-    let prepared = state
-        .prepare_project_deletion(
-            Path::new(&record.path),
-            Some(&identity),
-            expected_active_instance_id.as_ref(),
-        )
-        .map_err(ProjectLifecycleError::AuthorityFailed)?;
-    let post_activation_failed = prepared.post_activation_failed();
-    let deleted = state.commit_project_deletion(prepared);
-    let registry_removed = if post_activation_failed {
-        false
-    } else {
-        catch_future_unwind(async {
-            #[cfg(test)]
-            run_before_registry_remove_test_hook();
-            registry.remove_project(record.id.as_str()).await
-        })
-        .await
-        .is_ok_and(|result| result.is_ok())
-    };
-
-    let recovery = (!registry_removed).then(|| LifecycleRecovery {
-        required: true,
-        action: LifecycleRecoveryAction::RemoveRegistryRecord,
-        path: None,
-        identity: Some(identity.as_str().to_owned().into_boxed_str()),
-    });
-    let project_invalidated = deleted.cleared_project_instance_id.is_some();
-
-    Ok(ProjectLifecycleApplicationEvent {
-        operation_id,
-        kind: ProjectLifecycleKind::Delete,
-        old_project_instance_id: deleted.cleared_project_instance_id,
-        new_project_instance_id: None,
-        phase: ProjectLifecyclePhase::AuthorityCommitted,
-        outcome: if registry_removed {
-            ProjectLifecycleOutcome::Committed
-        } else {
-            ProjectLifecycleOutcome::RegistryPending
-        },
-        record: Some(record),
-        path: Some(
-            deleted
-                .deleted_root
-                .as_path()
-                .to_string_lossy()
-                .into_owned()
-                .into_boxed_str(),
-        ),
-        recovery,
-        invalidation: LifecycleInvalidation {
-            project: project_invalidated,
-            registry: true,
-        },
-    })
-}
-
-async fn delete_registry_only_record(
-    registry: &ProjectRegistry,
-    record: ProjectRecord,
-    active_delete_rejected: bool,
-    operation_id: OperationId,
-) -> Result<ProjectLifecycleApplicationEvent, ProjectLifecycleError> {
-    let remove_result = if active_delete_rejected {
-        Err(())
-    } else {
-        registry
-            .remove_project(record.id.as_str())
-            .await
-            .map_err(|_| ())
-    };
-    let registry_changed = remove_result.is_ok();
-
-    Ok(ProjectLifecycleApplicationEvent {
-        operation_id,
-        kind: ProjectLifecycleKind::RegistryCleanup,
-        old_project_instance_id: None,
-        new_project_instance_id: None,
-        phase: ProjectLifecyclePhase::RegistryCommitted,
-        outcome: if registry_changed {
-            ProjectLifecycleOutcome::Committed
-        } else {
-            ProjectLifecycleOutcome::RegistryFailed
-        },
-        record: Some(record),
-        path: None,
-        recovery: remove_result.err().map(|_| LifecycleRecovery {
-            required: true,
-            action: LifecycleRecoveryAction::CleanupRegistry,
-            path: None,
-            identity: None,
-        }),
-        invalidation: LifecycleInvalidation {
-            project: false,
-            registry: true,
-        },
-    })
-}
-
 #[allow(
     clippy::too_many_arguments,
     reason = "a lifecycle failure event is published as one complete immutable fact envelope"
@@ -518,41 +323,6 @@ fn lifecycle_failure_result(
             project: project_invalidation,
             registry: true,
         },
-    }
-}
-
-async fn catch_future_unwind<F>(future: F) -> Result<F::Output, Box<dyn std::any::Any + Send>>
-where
-    F: Future,
-{
-    let mut future = Box::pin(future);
-    std::future::poll_fn(|context| {
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            future.as_mut().poll(context)
-        })) {
-            Ok(std::task::Poll::Ready(output)) => std::task::Poll::Ready(Ok(output)),
-            Ok(std::task::Poll::Pending) => std::task::Poll::Pending,
-            Err(payload) => std::task::Poll::Ready(Err(payload)),
-        }
-    })
-    .await
-}
-
-#[cfg(test)]
-static BEFORE_REGISTRY_REMOVE_HOOK: std::sync::Mutex<
-    Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
-> = std::sync::Mutex::new(None);
-
-#[cfg(test)]
-fn set_before_registry_remove_test_hook(hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>) {
-    *BEFORE_REGISTRY_REMOVE_HOOK.lock().unwrap() = hook;
-}
-
-#[cfg(test)]
-fn run_before_registry_remove_test_hook() {
-    let hook = BEFORE_REGISTRY_REMOVE_HOOK.lock().unwrap().clone();
-    if let Some(hook) = hook {
-        hook();
     }
 }
 

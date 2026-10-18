@@ -21,11 +21,9 @@ pub fn note_ports(
         sessions: store.clone(),
         events: store.clone(),
         event_sink: store.clone(),
-        workflows: store.clone(),
         tool_ledger: store.clone(),
-        knowledge: store.clone(),
+        knowledge: store,
         knowledge_index: std::sync::Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-        approvals: store,
         clock: std::sync::Arc::new(FixedClock::new(now)),
         ids: std::sync::Arc::new(SequentialIds::default()),
     }
@@ -146,15 +144,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput,
-    AgentToolExecutor, AgentTurnRequest, AgentTurnResult, ApprovalGrantId, ApprovalGrantRecord,
-    ApprovalStorePort, AutomationIdKind, CapabilityFailure, ClockPort, HarnessEvent,
-    HarnessEventEnvelope, HarnessEventSinkPort, HarnessEventStorePort, HarnessSessionId,
-    HarnessSessionRecord, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
-    IdGeneratorPort, KnowledgeDocumentRecord, KnowledgeSourceId, KnowledgeSourceRecord,
-    KnowledgeSourceStatus, KnowledgeSourceStorePort, PersistenceFailure, PersistenceFailureCode,
-    PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort, ToolInvocationRecord,
-    UnixMillis, WorkflowDefinition, WorkflowId, WorkflowRunId, WorkflowRunRecord, WorkflowRunState,
-    WorkflowStorePort, WorkflowVersion,
+    AgentToolExecutor, AgentTurnRequest, AgentTurnResult, AutomationIdKind, CapabilityFailure,
+    ClockPort, HarnessEvent, HarnessEventEnvelope, HarnessEventSinkPort, HarnessEventStorePort,
+    HarnessSessionId, HarnessSessionRecord, HarnessSessionStorePort, HarnessTurnId,
+    HarnessTurnRecord, IdGeneratorPort, KnowledgeDocumentRecord, KnowledgeSourceId,
+    KnowledgeSourceRecord, KnowledgeSourceStatus, KnowledgeSourceStorePort, PersistenceFailure,
+    PersistenceFailureCode, PersistenceFuture, ToolInvocationBegin, ToolInvocationLedgerPort,
+    ToolInvocationRecord, UnixMillis,
 };
 
 pub struct FixedClock {
@@ -193,9 +189,7 @@ impl IdGeneratorPort for SequentialIds {
             AutomationIdKind::HarnessSession => "session",
             AutomationIdKind::HarnessTurn => "turn",
             AutomationIdKind::AgentRun => "agent",
-            AutomationIdKind::WorkflowRun => "workflow",
             AutomationIdKind::ToolInvocation => "tool",
-            AutomationIdKind::ApprovalGrant => "approval",
         };
         let value = self.next.fetch_add(1, Ordering::AcqRel) + 1;
         Ok(format!("{prefix}-{value}"))
@@ -250,14 +244,11 @@ struct InMemoryState {
     turns: BTreeMap<HarnessTurnId, HarnessTurnRecord>,
     events: BTreeMap<HarnessSessionId, Vec<HarnessEventEnvelope>>,
     published: Vec<HarnessEventEnvelope>,
-    definitions: BTreeMap<(WorkflowId, WorkflowVersion), WorkflowDefinition>,
-    runs: BTreeMap<WorkflowRunId, WorkflowRunRecord>,
     invocations: BTreeMap<yss_harness_contract::IdempotencyKey, ToolInvocationRecord>,
     knowledge_generation: u64,
     knowledge_sources: BTreeMap<KnowledgeSourceId, KnowledgeSourceRecord>,
     knowledge_documents:
         BTreeMap<yss_harness_contract::KnowledgeDocumentId, KnowledgeDocumentRecord>,
-    approvals: BTreeMap<ApprovalGrantId, ApprovalGrantRecord>,
 }
 
 impl InMemoryHarnessStore {
@@ -396,10 +387,6 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
             state
                 .invocations
                 .retain(|_, invocation| &invocation.session_id != session_id);
-            state.runs.retain(|_, run| &run.session_id != session_id);
-            state
-                .approvals
-                .retain(|_, grant| &grant.session_id != session_id);
             Ok(())
         })
     }
@@ -531,131 +518,6 @@ impl HarnessEventSinkPort for InMemoryHarnessStore {
     }
 }
 
-impl WorkflowStorePort for InMemoryHarnessStore {
-    fn has_unfinished_runs<'a>(
-        &'a self,
-        session_id: &'a HarnessSessionId,
-    ) -> PersistenceFuture<'a, Result<bool, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .runs
-                .values()
-                .any(|run| {
-                    &run.session_id == session_id
-                        && matches!(
-                            run.state,
-                            WorkflowRunState::Planned
-                                | WorkflowRunState::Ready
-                                | WorkflowRunState::Running
-                                | WorkflowRunState::Paused
-                        )
-                }))
-        })
-    }
-
-    fn save_definition<'a>(
-        &'a self,
-        definition: &'a WorkflowDefinition,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            let key = (definition.id.clone(), definition.version.clone());
-            if state
-                .definitions
-                .get(&key)
-                .is_some_and(|existing| existing != definition)
-            {
-                return Err(conflict());
-            }
-            state.definitions.insert(key, definition.clone());
-            Ok(())
-        })
-    }
-
-    fn load_definition<'a>(
-        &'a self,
-        id: &'a WorkflowId,
-        version: &'a WorkflowVersion,
-    ) -> PersistenceFuture<'a, Result<Option<WorkflowDefinition>, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .definitions
-                .get(&(id.clone(), version.clone()))
-                .cloned())
-        })
-    }
-
-    fn save_run<'a>(
-        &'a self,
-        run: &'a WorkflowRunRecord,
-        expected_revision: Option<u64>,
-    ) -> PersistenceFuture<'a, Result<WorkflowRunRecord, PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            let mut committed = run.clone();
-            match expected_revision {
-                Some(expected)
-                    if run.revision == expected
-                        && state
-                            .runs
-                            .get(&run.id)
-                            .is_some_and(|current| current.revision == expected) =>
-                {
-                    committed.revision = expected.checked_add(1).ok_or_else(invalid_record)?;
-                }
-                None if run.revision == 0 && !state.runs.contains_key(&run.id) => {}
-                _ => return Err(conflict()),
-            }
-            state.runs.insert(run.id.clone(), committed.clone());
-            Ok(committed)
-        })
-    }
-
-    fn load_run<'a>(
-        &'a self,
-        id: &'a WorkflowRunId,
-    ) -> PersistenceFuture<'a, Result<Option<WorkflowRunRecord>, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .runs
-                .get(id)
-                .cloned())
-        })
-    }
-
-    fn load_recoverable_runs<'a>(
-        &'a self,
-    ) -> PersistenceFuture<'a, Result<Vec<WorkflowRunRecord>, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .runs
-                .values()
-                .filter(|run| {
-                    matches!(
-                        run.state,
-                        WorkflowRunState::Running
-                            | WorkflowRunState::Paused
-                            | WorkflowRunState::Ready
-                    )
-                })
-                .cloned()
-                .collect())
-        })
-    }
-}
-
 impl ToolInvocationLedgerPort for InMemoryHarnessStore {
     fn load_invocation<'a>(
         &'a self,
@@ -719,57 +581,6 @@ impl ToolInvocationLedgerPort for InMemoryHarnessStore {
                 .invocations
                 .insert(record.idempotency_key.clone(), record.clone());
             Ok(())
-        })
-    }
-}
-
-impl ApprovalStorePort for InMemoryHarnessStore {
-    fn insert<'a>(
-        &'a self,
-        record: &'a ApprovalGrantRecord,
-    ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            match state.approvals.entry(record.id.clone()) {
-                std::collections::btree_map::Entry::Vacant(entry) => {
-                    entry.insert(record.clone());
-                    Ok(())
-                }
-                std::collections::btree_map::Entry::Occupied(_) => Err(conflict()),
-            }
-        })
-    }
-
-    fn load<'a>(
-        &'a self,
-        id: &'a ApprovalGrantId,
-    ) -> PersistenceFuture<'a, Result<Option<ApprovalGrantRecord>, PersistenceFailure>> {
-        Box::pin(async move {
-            Ok(self
-                .state
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .approvals
-                .get(id)
-                .cloned())
-        })
-    }
-
-    fn consume<'a>(
-        &'a self,
-        id: &'a ApprovalGrantId,
-        consumed_at: UnixMillis,
-    ) -> PersistenceFuture<'a, Result<bool, PersistenceFailure>> {
-        Box::pin(async move {
-            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            let Some(record) = state.approvals.get_mut(id) else {
-                return Err(not_found());
-            };
-            if record.consumed_at.is_some() {
-                return Ok(false);
-            }
-            record.consumed_at = Some(consumed_at);
-            Ok(true)
         })
     }
 }
@@ -917,12 +728,12 @@ fn not_found() -> PersistenceFailure {
 mod tests {
     use super::*;
     use yss_harness_contract::{
-        HarnessSessionState, HarnessTurnState, PrincipalId, ProjectSessionBinding, SourceHash,
+        HarnessSessionState, HarnessTurnState, PrincipalId, ProjectSessionBinding,
     };
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
     #[tokio::test]
-    async fn duplicate_creation_preserves_original_session_turn_and_approval_records() {
+    async fn duplicate_creation_preserves_original_session_and_turn_records() {
         let store = InMemoryHarnessStore::default();
         let now = UnixMillis::from_existing(100);
         let session = HarnessSessionRecord {
@@ -970,25 +781,5 @@ mod tests {
             PersistenceFailureCode::Conflict
         );
         assert_eq!(store.load_turn(&turn.id).await.unwrap(), Some(turn));
-
-        let approval = ApprovalGrantRecord {
-            id: ApprovalGrantId::try_new("approval").unwrap(),
-            principal_id: session.principal_id,
-            session_id: session.id,
-            project: session.project,
-            tool: "write_note".into(),
-            request_fingerprint: SourceHash::try_new("0".repeat(64)).unwrap(),
-            issued_at: now,
-            expires_at: UnixMillis::from_existing(200),
-            consumed_at: None,
-        };
-        store.insert(&approval).await.unwrap();
-        let mut conflicting_approval = approval.clone();
-        conflicting_approval.consumed_at = Some(now);
-        assert_eq!(
-            store.insert(&conflicting_approval).await.unwrap_err().code,
-            PersistenceFailureCode::Conflict
-        );
-        assert_eq!(store.load(&approval.id).await.unwrap(), Some(approval));
     }
 }

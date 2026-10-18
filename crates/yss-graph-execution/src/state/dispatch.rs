@@ -1,9 +1,11 @@
 //! Coordinate admission, resource preparation, execution and the finalization handoff.
+#[cfg(any(test, feature = "test-support"))]
+use super::RunExecutionControl;
 use super::scheduler::{
     PreparedPlanExecution, PreparedPlanExecutor, SchedulerOutput, execution_producers,
     select_execution,
 };
-use super::{ActiveExecutionRun, ExecutionRuntimeState, RunExecutionControl};
+use super::{ActiveExecutionRun, ExecutionRuntimeState};
 use crate::error::{ExecutePreparedError, OperationExecutionError, RunPhase};
 use crate::finalization::{
     ExecutionFinalizationHandoff, ReadyPinResult, ReadyResult, ResultObservationIntent,
@@ -29,11 +31,13 @@ struct PreparedExecutionDispatch<'a> {
     on_event: Option<&'a mut dyn FnMut(PreparedExecutionEvent)>,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 struct ExecutedPreparedCandidate {
     run_id: crate::run_registry::RunId,
     candidate: SuccessfulExecutionCandidate,
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl ExecutedPreparedCandidate {
     #[cfg(test)]
     fn candidate(self) -> SuccessfulExecutionCandidate {
@@ -69,10 +73,6 @@ impl ExecutedPreparedRun {
     pub fn handoff(&self) -> &ExecutionFinalizationHandoff {
         &self.handoff
     }
-
-    pub fn into_handoff(self) -> ExecutionFinalizationHandoff {
-        self.handoff
-    }
 }
 
 impl ExecutionRuntimeState {
@@ -101,6 +101,7 @@ impl ExecutionRuntimeState {
         Ok(executed.candidate())
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn execute_prepared_handoff(
         &self,
         plan: &PreparedExecutionPlan,
@@ -125,6 +126,7 @@ impl ExecutionRuntimeState {
         .map(ExecutedPreparedCandidate::into_executed_run)
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     fn execute_prepared_inner(
         &self,
         plan: &PreparedExecutionPlan,

@@ -71,15 +71,6 @@ impl HarnessSessionAccess<'_> {
             .conversation(session_id, principal, project_key)
             .await?;
         let (_cancel, _admission) = self.host.admit_turn(session_id)?;
-        if self
-            .host
-            .ports
-            .workflows
-            .has_unfinished_runs(session_id)
-            .await?
-        {
-            return Err(HarnessError::ConcurrentWorkflow);
-        }
         self.host.ports.sessions.delete_session(session_id).await?;
         Ok(())
     }

@@ -156,6 +156,7 @@ impl ExecutionRuntimeState {
         self.results.capture_run_basis(graph, inputs)
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn query_result_cache_states(
         &self,
         graph: &str,

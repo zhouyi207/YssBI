@@ -128,11 +128,9 @@ fn host(sessions: &Arc<PausedSessions>) -> Arc<HarnessHost> {
             sessions: sessions.clone(),
             events: store.clone(),
             event_sink: store.clone(),
-            workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-            approvals: store.clone(),
             clock: Arc::new(FixedClock::new(1_000)),
             ids: Arc::new(SequentialIds::default()),
         })

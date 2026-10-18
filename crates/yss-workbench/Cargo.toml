@@ -46,6 +46,7 @@ yss-assistant-contract = { path = "../yss-assistant-contract" }
 yss-ui-contract = { path = "../yss-ui-contract" }
 yss-filesystem = { path = "../yss-filesystem" }
 yss-settings = { path = "../yss-settings" }
+yss-database-contract = { path = "../yss-database-contract" }
 yss-logging = { path = "../yss-logging" }
 
 [dev-dependencies]

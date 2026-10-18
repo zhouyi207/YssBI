@@ -1,4 +1,4 @@
-use crate::{ApprovalError, HarnessError, HarnessHost};
+use crate::{HarnessError, HarnessHost};
 use yss_harness_contract::*;
 
 use std::sync::{Arc, Mutex};
@@ -369,8 +369,6 @@ async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
         idempotency_key: IdempotencyKey::try_new("tool-interrupted").unwrap(),
         session_id: session.id.clone(),
         turn_id: turn.id.clone(),
-        workflow_run_id: None,
-        workflow_step_id: None,
         project: session.project.clone(),
         tool: READ_NOTE.into(),
         effect: ToolEffect::Inspect,
@@ -456,8 +454,6 @@ async fn interrupted_unbound_and_bound_writes_have_distinct_recovered_outcomes()
             idempotency_key: IdempotencyKey::try_new("write-interrupted").unwrap(),
             session_id: session.id.clone(),
             turn_id: turn.id.clone(),
-            workflow_run_id: None,
-            workflow_step_id: None,
             project: session.project.clone(),
             tool: WRITE_NOTE.into(),
             effect: ToolEffect::Mutate,
@@ -477,100 +473,6 @@ async fn interrupted_unbound_and_bound_writes_have_distinct_recovered_outcomes()
     assert_eq!(
         store.tool_invocations()[0].failure.as_ref().unwrap().code,
         CapabilityFailureCode::OUTCOME_UNKNOWN
-    );
-}
-
-#[tokio::test]
-async fn workflow_persists_and_completes_its_ordered_tool_steps() {
-    let store = Arc::new(InMemoryHarnessStore::default());
-    let extension = NoteExtension::default().with_note("a", "alpha");
-    let host = HarnessHost::new(note_ports(
-        store.clone(),
-        crate::test_support::fixed_model(Arc::new(MockAgentDriver::new("Plan ready."))),
-        extension.clone(),
-        2_000,
-    ))
-    .unwrap();
-    let session = host
-        .create_session(PrincipalId::try_new("user-1").unwrap(), project())
-        .await
-        .unwrap();
-    host.submit_turn(
-        &session.id,
-        &session.project,
-        "Review notes.".to_owned(),
-        vec![],
-        None,
-        Default::default(),
-    )
-    .await
-    .unwrap();
-    let turn_id = host.events_after(&session.id, 0).await.unwrap()[1]
-        .turn_id
-        .clone()
-        .unwrap();
-    let read_step = WorkflowStepId::try_new("read").unwrap();
-    let workflow = crate::CompiledWorkflow::compile(
-        WorkflowDefinition {
-            id: WorkflowId::try_new("note-review-test").unwrap(),
-            version: WorkflowVersion::try_new("1.0.0").unwrap(),
-            steps: vec![
-                WorkflowStep {
-                    id: read_step.clone(),
-                    depends_on: Vec::new(),
-                    tool: READ_NOTE.into(),
-                    request: json!({"id": "a"}),
-                },
-                WorkflowStep {
-                    id: WorkflowStepId::try_new("write").unwrap(),
-                    depends_on: vec![read_step],
-                    tool: WRITE_NOTE.into(),
-                    request: json!({"id": "a", "text": "reviewed"}),
-                },
-            ],
-        },
-        &extension,
-    )
-    .unwrap();
-    let planned = host
-        .plan_workflow(&session.id, Some(&turn_id), &workflow)
-        .await
-        .unwrap();
-
-    let running = host.advance_workflow(&planned.id).await.unwrap();
-    assert_eq!(running.state, WorkflowRunState::Running);
-    let completed = host.advance_workflow(&planned.id).await.unwrap();
-
-    assert_eq!(completed.state, WorkflowRunState::Completed);
-    assert_eq!(extension.note("a").unwrap().1, "reviewed");
-    assert!(
-        host.events_after(&session.id, 0)
-            .await
-            .unwrap()
-            .iter()
-            .any(|event| matches!(event.event, HarnessEvent::WorkflowCompleted { .. }))
-    );
-    let records = store.tool_invocations();
-    assert!(
-        records
-            .iter()
-            .all(|record| record.workflow_run_id.as_ref() == Some(&planned.id))
-    );
-    assert!(
-        crate::CompiledWorkflow::compile(
-            WorkflowDefinition {
-                id: WorkflowId::try_new("unknown-tool").unwrap(),
-                version: WorkflowVersion::try_new("1.0.0").unwrap(),
-                steps: vec![WorkflowStep {
-                    id: WorkflowStepId::try_new("missing").unwrap(),
-                    depends_on: Vec::new(),
-                    tool: "missing_tool".into(),
-                    request: json!({"id": "a"}),
-                }],
-            },
-            &extension,
-        )
-        .is_err()
     );
 }
 
@@ -600,74 +502,6 @@ async fn project_session_reconciliation_stales_old_active_sessions() {
     assert_eq!(
         store.load_session(&old.id).await.unwrap().unwrap().state,
         HarnessSessionState::Stale
-    );
-}
-
-#[tokio::test]
-async fn approved_capability_is_ledgered_and_cannot_reuse_its_grant() {
-    let store = Arc::new(InMemoryHarnessStore::default());
-    let host = host(
-        &store,
-        Arc::new(MockAgentDriver::new("Ready for approval.")),
-    );
-    let session = host
-        .create_session(PrincipalId::try_new("user-1").unwrap(), project())
-        .await
-        .unwrap();
-    host.submit_turn(
-        &session.id,
-        &session.project,
-        "Rewrite the note.".to_owned(),
-        vec![],
-        None,
-        Default::default(),
-    )
-    .await
-    .unwrap();
-    let turn_id = host.events_after(&session.id, 0).await.unwrap()[1]
-        .turn_id
-        .clone()
-        .unwrap();
-    let request = json!({"id": "a", "text": "approved"});
-    assert!(matches!(
-        host.issue_capability_approval(
-            &session.id,
-            &turn_id,
-            READ_NOTE,
-            &json!({"id": "a"}),
-            1_000
-        )
-        .await,
-        Err(HarnessError::Approval(ApprovalError::NotRequired))
-    ));
-    let grant = host
-        .issue_capability_approval(&session.id, &turn_id, WRITE_NOTE, &request, 1_000)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        host.execute_approved_capability(
-            &session.id,
-            &turn_id,
-            &grant.id,
-            WRITE_NOTE,
-            request.clone()
-        )
-        .await
-        .unwrap(),
-        json!({"id": "a", "revision": 2})
-    );
-    assert!(matches!(
-        host.execute_approved_capability(&session.id, &turn_id, &grant.id, WRITE_NOTE, request)
-            .await,
-        Err(HarnessError::Approval(ApprovalError::AlreadyConsumed))
-    ));
-    assert!(
-        store
-            .tool_invocations()
-            .iter()
-            .any(|record| record.tool == WRITE_NOTE
-                && record.state == ToolInvocationState::Succeeded)
     );
 }
 

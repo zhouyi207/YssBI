@@ -130,8 +130,8 @@ fn capability_registry_is_closed_and_schema_generation_is_available() {
         ToolEffect::Mutate
     );
     assert_eq!(
-        CapabilityId::InspectDatasetSchema.descriptor().id,
-        CapabilityId::InspectDatasetSchema
+        CapabilityId::SaveGraph.descriptor().id,
+        CapabilityId::SaveGraph
     );
     let _request_schema = schemars::schema_for!(AutomationCapabilityRequest);
     let _result_schema = schemars::schema_for!(AutomationCapabilityResult);

@@ -159,14 +159,6 @@ impl NoteExtension {
             .get(id)
             .cloned()
     }
-
-    /// Change a note outside the Harness, as another editor would.
-    pub fn edit_externally(&self, id: &str, text: &str) {
-        let mut notes = self.state.notes.lock().unwrap_or_else(|e| e.into_inner());
-        let entry = notes.entry(id.into()).or_insert((0, String::new()));
-        entry.0 += 1;
-        entry.1 = text.into();
-    }
 }
 
 pub fn note_specs(write: bool) -> Vec<ToolSpec> {
@@ -279,30 +271,12 @@ impl HarnessExtension for NoteExtension {
         Ok(result.clone())
     }
 
-    fn project_arguments(&self, _tool: &str, request: &Value) -> Value {
-        request.clone()
-    }
-
     fn project_failure(&self, failure: &CapabilityFailure) -> Value {
         json!({"code": failure.code, "details": failure.details})
     }
 
     fn project_task_facts(&self, facts: &Value) -> Value {
         json!({"changed": facts["changed"]})
-    }
-
-    fn tool_spec(&self, tool: &str) -> Option<ToolSpec> {
-        note_specs(true).into_iter().find(|spec| spec.name == tool)
-    }
-
-    fn validate_request(&self, _tool: &str, request: &Value) -> Result<(), CapabilityFailure> {
-        if request["id"].as_str().is_some_and(|id| !id.is_empty()) {
-            Ok(())
-        } else {
-            Err(CapabilityFailure::new(
-                CapabilityFailureCode::INVALID_REQUEST,
-            ))
-        }
     }
 
     fn execute<'a>(

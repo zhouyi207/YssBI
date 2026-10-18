@@ -376,6 +376,7 @@ impl Workbench {
         self.result_panels.clear();
         self.opening.clear();
         self.graph_openings.clear();
+        self.graph_jobs.clear();
         self.subscriptions.clear();
         self.activities.clear();
         self.layout_task = None;

@@ -26,19 +26,6 @@ pub fn capability_result(result: &AutomationCapabilityResult) -> Result<Value, s
         ResourceEdited(value) => ("resource_edited", mutation(value)),
         GraphInspection(value) => ("graph_inspection", graph(value)),
         GraphInspectionPage(value) => ("graph_inspection_page", graph_page(value)),
-        DatasetSchemaInspection(value) => ("dataset_schema_inspection", dataset_schema(value)),
-        DatasetProfileInspection(value) => (
-            "dataset_profile_inspection",
-            json!({
-                "databaseId": value.database_id, "rowCount": value.row_count,
-                "columnCount": value.column_count, "estimatedMemoryBytes": value.estimated_memory_bytes,
-                "duplicatedRows": value.duplicated_rows, "numericColumns": value.numeric_columns,
-                "categoricalColumns": value.categorical_columns, "stringColumns": value.string_columns,
-                "temporalColumns": value.temporal_columns, "booleanColumns": value.boolean_columns,
-                "totalNulls": value.total_nulls, "nullRatio": value.null_ratio,
-                "columnsWithNulls": value.columns_with_nulls, "rowsWithNulls": value.rows_with_nulls,
-            }),
-        ),
         ProjectInspection(value) => (
             "project_inspection",
             json!({
@@ -146,10 +133,6 @@ fn mutation(value: &ResourceMutationReceipt) -> Value {
             "resource": change.resource, "deleted": change.deleted,
         })).collect::<Vec<_>>(),
     })
-}
-
-fn dataset_schema(value: &DatasetSchemaInspection) -> Value {
-    json!({ "databaseId": value.database_id, "columns": value.columns })
 }
 
 fn graph(value: &GraphInspection) -> Value {

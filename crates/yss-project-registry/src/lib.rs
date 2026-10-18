@@ -6,7 +6,7 @@
 mod discovery;
 
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -15,7 +15,7 @@ use discovery::{
 };
 use yss_filesystem::RootBinding;
 use yss_project_identity::ProjectRegistrationId;
-use yss_project_layout::PROJECT_METADATA_FILE;
+use yss_project_layout::{PROJECT_METADATA_FILE, project_root_from_path};
 use yss_project_model::normalize_project_name;
 use yss_project_progress::{
     ProjectCleanupProgress, ProjectProgress, ProjectProgressSink, ProjectScanProgress,
@@ -37,29 +37,6 @@ pub struct ScanProjectsResult {
     pub discovered: usize,
     pub newly_registered: usize,
     pub projects: Vec<ProjectRecord>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ProjectPathValidationError {
-    Empty,
-    NotDirectory,
-    AlreadyContainsProject,
-    NotEmpty,
-    InvalidParent,
-    ParentUnavailable,
-}
-
-impl ProjectPathValidationError {
-    pub const fn code(self) -> &'static str {
-        match self {
-            Self::Empty => "project_path_empty",
-            Self::NotDirectory => "project_path_not_directory",
-            Self::AlreadyContainsProject => "project_path_already_contains_project",
-            Self::NotEmpty => "project_path_not_empty",
-            Self::InvalidParent => "project_parent_path_invalid",
-            Self::ParentUnavailable => "project_parent_unavailable",
-        }
-    }
 }
 
 #[derive(Debug, Error)]
@@ -145,7 +122,7 @@ impl ProjectRegistry {
             .revalidate()
             .map_err(|_| ProjectRegistryError::IdentityChanged)?;
         if record.as_ref().is_some_and(|record| {
-            record.deletion_identity().map(|value| value.as_str()) != Some(identity.as_str())
+            record.valid_root_identity().map(|value| value.as_str()) != Some(identity.as_str())
         }) {
             return Err(ProjectRegistryError::IdentityChanged);
         }
@@ -157,7 +134,7 @@ impl ProjectRegistry {
         name: &str,
         path: &str,
     ) -> Result<ProjectRecord, ProjectRegistryError> {
-        let binding = RootBinding::for_existing(project_root_path(path))
+        let binding = RootBinding::for_existing(project_root_from_path(path))
             .map_err(|_| ProjectRegistryError::InvalidPath)?;
         let root_identity = binding
             .identity()
@@ -249,7 +226,7 @@ impl ProjectRegistry {
                 }));
             }
             let current_identity = (project.root_identity_state == ProjectRootIdentityState::Valid)
-                .then(|| RootBinding::for_existing(project_root_path(&project.path)).ok())
+                .then(|| RootBinding::for_existing(project_root_from_path(&project.path)).ok())
                 .flatten()
                 .and_then(|binding| binding.identity().cloned());
             if project.root_identity_state == ProjectRootIdentityState::Valid
@@ -314,7 +291,7 @@ impl ProjectRegistry {
             let path = metadata_path.to_string_lossy().into_owned();
             let normalized =
                 normalize_existing_path(&path).map_err(|_| ProjectRegistryError::ScanFailed)?;
-            let binding = RootBinding::for_existing(project_root_path(metadata_path))
+            let binding = RootBinding::for_existing(project_root_from_path(metadata_path))
                 .map_err(|_| ProjectRegistryError::ScanFailed)?;
             let existing = self.fetch_by_root(&binding, &normalized).await?;
             let (record, is_new) = match existing {
@@ -365,59 +342,6 @@ pub fn default_project_parent_directory() -> Result<String, std::env::VarError> 
     Ok(dunce::simplified(directory).to_string_lossy().into_owned())
 }
 
-pub fn validate_new_project_path(path: &str) -> Result<(), ProjectPathValidationError> {
-    let path = path.trim();
-    if path.is_empty() {
-        return Err(ProjectPathValidationError::Empty);
-    }
-    let pb = PathBuf::from(path);
-    if pb.exists() {
-        if pb.is_file() {
-            return Err(ProjectPathValidationError::NotDirectory);
-        }
-        if pb.join(PROJECT_METADATA_FILE).exists() {
-            return Err(ProjectPathValidationError::AlreadyContainsProject);
-        }
-        if directory_has_entries(&pb) {
-            return Err(ProjectPathValidationError::NotEmpty);
-        }
-        return Ok(());
-    }
-    let Some(parent) = pb.parent().filter(|parent| !parent.as_os_str().is_empty()) else {
-        return Err(ProjectPathValidationError::InvalidParent);
-    };
-    if !parent.exists() || !parent.is_dir() {
-        return Err(ProjectPathValidationError::ParentUnavailable);
-    }
-    Ok(())
-}
-
-fn directory_has_entries(path: &Path) -> bool {
-    std::fs::read_dir(path).map_or(true, |mut entries| entries.next().is_some())
-}
-
-fn trim_path(path: &Path) -> PathBuf {
-    path.to_str()
-        .map(|text| PathBuf::from(text.trim()))
-        .unwrap_or_else(|| path.to_path_buf())
-}
-
-fn project_root_path(path: impl AsRef<Path>) -> PathBuf {
-    let path = trim_path(path.as_ref());
-    let is_metadata_file = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.eq_ignore_ascii_case(PROJECT_METADATA_FILE));
-    if path.is_file() || is_metadata_file {
-        path.parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .map(Path::to_path_buf)
-            .unwrap_or(path)
-    } else {
-        path
-    }
-}
-
 pub fn normalize_existing_path(path: &str) -> Result<String, ProjectRegistryError> {
     let path = path.trim();
     if path.is_empty() {
@@ -447,10 +371,7 @@ pub fn normalize_existing_path(path: &str) -> Result<String, ProjectRegistryErro
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ProjectPathValidationError, ProjectRegistry, ProjectRegistryError, normalize_existing_path,
-        validate_new_project_path,
-    };
+    use super::{ProjectRegistry, ProjectRegistryError, normalize_existing_path};
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex};
     use yss_project_identity::{ProjectRegistrationId, ProjectRootIdentity};
@@ -772,7 +693,7 @@ mod tests {
         let registry = registry(Vec::new());
         let cancellations = ProjectTaskCancellationRegistry::new();
         let cancellation = cancellations.begin();
-        cancellations.cancel_active();
+        cancellations.begin();
 
         assert!(matches!(
             registry.scan_directory("ignored", None, cancellation).await,
@@ -807,7 +728,7 @@ mod tests {
                         yss_project_progress::ProjectCleanupProgress::Removing { .. }
                     )
                 ) {
-                    self.0.cancel_active();
+                    self.0.begin();
                 }
             }
         }
@@ -845,8 +766,10 @@ mod tests {
         std::fs::rename(&root, directory.child("original-root")).unwrap();
         std::fs::create_dir(&root).unwrap();
         std::fs::write(root.join(PROJECT_METADATA_FILE), "{}").unwrap();
-        let binding =
-            yss_filesystem::RootBinding::for_existing(super::project_root_path(&root)).unwrap();
+        let binding = yss_filesystem::RootBinding::for_existing(
+            yss_project_layout::project_root_from_path(&root),
+        )
+        .unwrap();
         assert_ne!(
             binding.identity().map(|identity| identity.as_str()),
             Some(original.root_identity.as_str())
@@ -866,45 +789,5 @@ mod tests {
             Err(ProjectRegistryError::IdentityChanged)
         ));
         assert_eq!(registry.list_projects().await.unwrap(), [original]);
-    }
-
-    #[test]
-    fn new_project_path_validation_distinguishes_conflict_kinds() {
-        let directory = TestDirectory::new("path-validation");
-        let target = directory.child("target");
-        std::fs::create_dir_all(&target).expect("create empty target");
-
-        assert_eq!(
-            validate_new_project_path(""),
-            Err(ProjectPathValidationError::Empty)
-        );
-        assert_eq!(
-            validate_new_project_path(target.to_string_lossy().as_ref()),
-            Ok(())
-        );
-
-        std::fs::write(target.join("occupied.txt"), b"occupied").expect("occupy target");
-        assert_eq!(
-            validate_new_project_path(target.to_string_lossy().as_ref()),
-            Err(ProjectPathValidationError::NotEmpty)
-        );
-        std::fs::remove_file(target.join("occupied.txt")).expect("clear target");
-        std::fs::write(target.join(PROJECT_METADATA_FILE), b"{}").expect("write metadata");
-        assert_eq!(
-            validate_new_project_path(target.to_string_lossy().as_ref()),
-            Err(ProjectPathValidationError::AlreadyContainsProject)
-        );
-
-        let future = directory.child("future");
-        assert_eq!(
-            validate_new_project_path(future.to_string_lossy().as_ref()),
-            Ok(())
-        );
-        let unavailable = directory.child("missing-parent").join("future");
-        assert_eq!(
-            validate_new_project_path(unavailable.to_string_lossy().as_ref()),
-            Err(ProjectPathValidationError::ParentUnavailable)
-        );
-        assert!(directory.path().is_dir());
     }
 }

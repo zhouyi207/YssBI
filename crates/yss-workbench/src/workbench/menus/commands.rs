@@ -10,23 +10,9 @@ use crate::{
 };
 use gpui_kit::component::{Placement, dock::DockPlacement};
 use gpui_kit::{Action, App, Context, KeyBinding, Window};
+use yss_database_contract::DatabaseExportFormat;
 use yss_graph_document::GraphResourceKind;
 use yss_settings::ThemeMode;
-
-#[derive(Clone, Copy, PartialEq)]
-pub(in crate::workbench) enum DatasetFormat {
-    Csv,
-    Parquet,
-}
-
-impl DatasetFormat {
-    fn extension(self) -> &'static str {
-        match self {
-            Self::Csv => "csv",
-            Self::Parquet => "parquet",
-        }
-    }
-}
 
 #[derive(Clone, PartialEq, gpui_kit::Action)]
 #[action(namespace = native_workbench, no_json)]
@@ -35,7 +21,7 @@ pub(in crate::workbench) enum MenuCommand {
     SaveProjectAs,
     CloseProject,
     ImportData,
-    ExportDataset(DatasetFormat),
+    ExportDataset(DatabaseExportFormat),
     NewGraph(GraphResourceKind),
     NewDocument,
     NewMind,
@@ -106,12 +92,12 @@ pub(crate) fn shortcut_commands() -> Vec<crate::keymap::ShortcutCommand> {
         (
             "ExportCsv",
             "menubar.exportCsv",
-            MenuCommand::ExportDataset(DatasetFormat::Csv),
+            MenuCommand::ExportDataset(DatabaseExportFormat::Csv),
         ),
         (
             "ExportParquet",
             "menubar.exportParquet",
-            MenuCommand::ExportDataset(DatasetFormat::Parquet),
+            MenuCommand::ExportDataset(DatabaseExportFormat::Parquet),
         ),
         (
             "NewEventGraph",
@@ -320,9 +306,8 @@ impl Workbench {
                         .downcast::<crate::databases::DatabaseEditor>()
                         .ok()
                 }) {
-                    editor.update(cx, |editor, cx| {
-                        editor.export(format.extension(), window, cx)
-                    });
+                    let format = *format;
+                    editor.update(cx, |editor, cx| editor.export(format, window, cx));
                 }
             }
             MenuCommand::NewGraph(kind) => self.create_graph(*kind, window, cx),

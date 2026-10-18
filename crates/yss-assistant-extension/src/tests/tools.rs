@@ -247,13 +247,8 @@ fn model_capabilities_hide_concurrency_fields_in_schemas_calls_and_live_replay_r
             );
         }
     }
-    // Current workflow operations can appear in history without admitting model calls.
-    for internal in [
-        CapabilityId::ApplyGraphEdit,
-        CapabilityId::SaveGraph,
-        CapabilityId::InspectDatasetSchema,
-        CapabilityId::InspectDatasetProfile,
-    ] {
+    // Internal owner operations are never admitted as model calls.
+    for internal in [CapabilityId::ApplyGraphEdit, CapabilityId::SaveGraph] {
         let schema = serde_json::to_value(capability_input_schema(internal)).unwrap();
         assert_eq!(schema, json!(false));
         assert!(decode_request(internal, json!({}), &schema).is_err());

@@ -293,12 +293,6 @@ impl From<ToolInvocationRecord> for AssistantToolInspection {
                     }
                 }
                 Request::ExportDatabase(request) => dto.target = Some(request.resource.id.clone()),
-                Request::InspectDatasetSchema(request) => {
-                    dto.target = Some(request.database_id.clone())
-                }
-                Request::InspectDatasetProfile(request) => {
-                    dto.target = Some(request.database_id.clone())
-                }
                 Request::BrowseNodes(request) => {
                     dto.parameters.insert("query".into(), json!(request.query));
                     dto.parameters.insert("limit".into(), json!(request.limit));
@@ -538,7 +532,7 @@ mod tests {
         });
         let base: ToolInvocationRecord = serde_json::from_value(json!({
             "id":"tool-1", "idempotencyKey":"tool-1", "sessionId":"session-1",
-            "turnId":"turn-1", "agentRunId":null, "workflowRunId":null, "workflowStepId":null,
+            "turnId":"turn-1", "agentRunId":null,
             "project":{"projectInstanceId":"project-1", "projectSessionId":"project-session-1"},
             "tool":"write_document", "effect":"mutate", "arguments":{}, "request":null,
             "state":"failed", "result":null, "failure":{"code":"invalid_request", "details":{
@@ -589,7 +583,7 @@ mod tests {
         });
         let mut record: ToolInvocationRecord = serde_json::from_value(json!({
             "id": "tool-1", "idempotencyKey": "operation-1", "sessionId": "session-1", "turnId": "turn-1",
-            "agentRunId": null, "workflowRunId": null, "workflowStepId": null,
+            "agentRunId": null,
             "project": { "projectInstanceId": "00000000-0000-0000-0000-000000000001", "projectSessionId": "00000000-0000-0000-0000-000000000002" },
             "tool": "import_database", "effect": "mutate", "arguments": {}, "request": encode_request(&request).unwrap(), "state": "running", "result": null, "failure": null,
             "startedAt": 1000, "deadline": 31000, "finishedAt": null,

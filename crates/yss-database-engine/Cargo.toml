@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+test-support = []
+
 [dependencies]
 arrow.workspace = true
 datafusion.workspace = true
@@ -17,5 +20,5 @@ yss-database-arrow = { path = "../yss-database-arrow" }
 yss-data-contract = { path = "../yss-data-contract" }
 
 [dev-dependencies]
+yss-database-io = { path = "../yss-database-io", features = ["test-support"] }
 yss-database-contract = { path = "../yss-database-contract" }
-yss-database-io = { path = "../yss-database-io" }

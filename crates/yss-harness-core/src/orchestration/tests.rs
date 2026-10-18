@@ -487,8 +487,6 @@ async fn startup_recovery_finishes_unsettled_runs_from_their_receipts() {
             session_id: session.id.clone(),
             turn_id: turn.id.clone(),
             agent_run_id: Some(run_id.clone()),
-            workflow_run_id: None,
-            workflow_step_id: None,
             project: session.project.clone(),
             tool: WRITE_NOTE.into(),
             effect: ToolEffect::Mutate,

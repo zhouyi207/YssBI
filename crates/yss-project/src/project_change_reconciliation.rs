@@ -29,7 +29,7 @@ impl ProjectState {
                 message: "watched project is no longer active".into(),
             });
         }
-        let _lease = self.filesystem().acquire(session.root.clone())?;
+        let _lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
         crate::project_io::read_project_manifest_from_root(session.root.as_path())
             .map_err(read_error)?;
@@ -598,7 +598,13 @@ mod tests {
         let clean_before = state
             .read_graph_editing(&session.instance_id, &clean)
             .unwrap();
-        state.unload_graph_resource(&unloaded).unwrap();
+        state
+            .unload_graph_resource(
+                &state.capture_project_session().unwrap().instance_id,
+                &unloaded,
+                None,
+            )
+            .unwrap();
         std::fs::write(
             session.root.as_path().join(unloaded.as_str()),
             b"unrelated unreadable body",
@@ -755,7 +761,13 @@ mod tests {
         let state = fixture.state();
         let session = state.capture_project_session().unwrap();
         for path in [&retained, &removed] {
-            state.unload_graph_resource(path).unwrap();
+            state
+                .unload_graph_resource(
+                    &state.capture_project_session().unwrap().instance_id,
+                    path,
+                    None,
+                )
+                .unwrap();
         }
         let document = state
             .apply_file_command(

@@ -34,18 +34,6 @@ pub struct InspectNodeTypeRequest {
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct InspectDatasetSchemaRequest {
-    pub database_id: String,
-}
-
-#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct InspectDatasetProfileRequest {
-    pub database_id: String,
-}
-
-#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ListResourcesRequest {
     #[serde(default)]
     pub kinds: Vec<crate::ProjectResourceKind>,
@@ -167,36 +155,6 @@ pub struct DatasetColumnSchema {
     pub physical_type: String,
     pub semantic: Option<DatasetColumnSemantic>,
     pub nullable: bool,
-}
-
-#[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DatasetSchemaInspection {
-    pub database_id: String,
-    pub runtime_revision: u64,
-    pub schema_revision: u64,
-    pub columns: Vec<DatasetColumnSchema>,
-}
-
-#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DatasetProfileInspection {
-    pub database_id: String,
-    pub runtime_revision: u64,
-    pub schema_revision: u64,
-    pub row_count: usize,
-    pub column_count: usize,
-    pub estimated_memory_bytes: Option<usize>,
-    pub duplicated_rows: Option<usize>,
-    pub numeric_columns: usize,
-    pub categorical_columns: usize,
-    pub string_columns: usize,
-    pub temporal_columns: usize,
-    pub boolean_columns: usize,
-    pub total_nulls: usize,
-    pub null_ratio: f64,
-    pub columns_with_nulls: usize,
-    pub rows_with_nulls: usize,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]

@@ -77,11 +77,9 @@ async fn cancelled_reference_lookup_cannot_start_a_model_or_block_the_next_turn(
             sessions: store.clone(),
             events: store.clone(),
             event_sink: store.clone(),
-            workflows: store.clone(),
             tool_ledger: store.clone(),
             knowledge: store.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
-            approvals: store,
             clock: Arc::new(FixedClock::new(1000)),
             ids: Arc::new(SequentialIds::default()),
         })

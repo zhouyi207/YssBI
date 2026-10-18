@@ -219,10 +219,9 @@ pub(crate) fn description(capability_id: CapabilityId) -> &'static str {
         CapabilityId::ReadDatabaseRows => {
             "Read selected columns with stable rowIds and a page continuation. All filters are ANDed. Order uses owner semantics, then stable row order. Use returned rowIds for edits; never use page positions."
         }
-        CapabilityId::InspectDatasetSchema
-        | CapabilityId::InspectDatasetProfile
-        | CapabilityId::ApplyGraphEdit
-        | CapabilityId::SaveGraph => "Internal owner operation; unavailable as a model tool.",
+        CapabilityId::ApplyGraphEdit | CapabilityId::SaveGraph => {
+            "Internal owner operation; unavailable as a model tool."
+        }
         CapabilityId::InspectResult => {
             "Inspect a complete resultRef copied from a receipt. Returns scalar values or a structural overview with complete tableRef values; never reads a table's rows. Tabular schema is paged with schemaOffset/schemaLimit. Validity distinguishes current values, stale pins and retained historical results. Queries never recompute."
         }
@@ -430,8 +429,6 @@ pub(crate) fn decode_input(
         // Knowledge belongs to the Harness; internal owner operations are not model tools.
         CapabilityId::SearchKnowledge
         | CapabilityId::ReadKnowledge
-        | CapabilityId::InspectDatasetSchema
-        | CapabilityId::InspectDatasetProfile
         | CapabilityId::ApplyGraphEdit
         | CapabilityId::SaveGraph => Err(CapabilityFailure::new(
             CapabilityFailureCode::INVALID_REQUEST,

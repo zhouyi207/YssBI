@@ -79,7 +79,6 @@ pub fn invoke_graph_capability(
     let open_request = crate::graph::open::OpenGraphRequest::new(
         captured.project_instance_id().clone(),
         path.clone(),
-        0,
         locale.clone(),
     );
     let opened = if editing.is_some() {

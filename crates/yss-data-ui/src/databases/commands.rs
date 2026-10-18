@@ -161,14 +161,18 @@ impl DatabaseEditor {
         !self.busy() && self.ready
     }
 
-    /// `format` is the file extension: `csv` or `parquet`.
-    pub fn export(&mut self, format: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn export(
+        &mut self,
+        format: yss_database_contract::DatabaseExportFormat,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.can_export() {
             return;
         }
         let revision = self.revision;
         let generation = self.generation;
-        let name = format!("{}.{}", self.name, format);
+        let name = format!("{}.{}", self.name, format.extension());
         let directory = std::env::current_dir().unwrap_or_default();
         self.busy = true;
         self.changed(cx);
@@ -197,7 +201,7 @@ impl DatabaseEditor {
     fn export_to(
         &mut self,
         path: std::path::PathBuf,
-        format: &'static str,
+        format: yss_database_contract::DatabaseExportFormat,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -210,7 +214,7 @@ impl DatabaseEditor {
                 project,
                 id,
                 path.to_string_lossy().into_owned(),
-                format.into(),
+                format,
                 Some(revision),
             )?;
             Ok(())

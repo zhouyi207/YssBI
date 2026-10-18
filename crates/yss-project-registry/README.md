@@ -29,7 +29,7 @@ its identity with the persisted record.
 
 Records and the storage port belong to
 [Registry Contract](../yss-project-registry-contract/README.md). Application owns project
-activation and deletion; Filesystem owns directory identity and generic file access.
+activation; Filesystem owns directory identity and generic file access.
 
 ```sh
 cargo test -p yss-project-registry --lib

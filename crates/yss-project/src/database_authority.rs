@@ -32,18 +32,6 @@ impl ProjectDatabaseError {
         Self::Operation(error.to_string())
     }
 
-    pub const fn command_code(&self) -> Option<&'static str> {
-        match self {
-            Self::Project(error) => Some(error.code()),
-            Self::StaleDatabaseRevision => Some("stale_database_revision"),
-            Self::DatabaseAlreadyExists => Some("database_already_exists"),
-            Self::DatabaseNotFound => Some("database_not_found"),
-            Self::InvalidName => Some("invalid_database_name"),
-            Self::NameConflict => Some("database_name_conflict"),
-            Self::Operation(_) => None,
-        }
-    }
-
     pub const fn recovery_required(&self) -> bool {
         match self {
             Self::Project(error) => error.recovery_required(),

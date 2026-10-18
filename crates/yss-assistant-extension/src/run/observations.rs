@@ -209,18 +209,6 @@ impl ResourceObservations {
                 self.resources
                     .insert(value.database.resource(), observed(&value.version));
             }
-            AutomationCapabilityResult::DatasetSchemaInspection(value) => self.database(
-                &value.database_id,
-                value.runtime_revision,
-                value.schema_revision,
-                current,
-            ),
-            AutomationCapabilityResult::DatasetProfileInspection(value) => self.database(
-                &value.database_id,
-                value.runtime_revision,
-                value.schema_revision,
-                current,
-            ),
             AutomationCapabilityResult::GraphEditReceipt(value) if current => self.advance_graph(
                 &value.graph_path,
                 value.from_revision,
@@ -339,22 +327,6 @@ impl ResourceObservations {
             {
                 *observed = observation.clone();
             }
-        }
-    }
-
-    fn database(&mut self, id: &str, runtime: u64, schema: u64, current: bool) {
-        let resource = ProjectResourceRef {
-            kind: ProjectResourceKind::Database,
-            id: id.into(),
-        };
-        if current {
-            self.datasets.insert(id.into(), (runtime, schema));
-            // Runtime/schema counters belong to Database, not Project resource history.
-            self.resources.remove(&resource);
-        } else {
-            self.datasets.remove(id);
-            self.resources
-                .insert(resource, Observation::PreviousSession);
         }
     }
 

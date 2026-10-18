@@ -65,10 +65,6 @@ pub enum CapabilityInput {
 
     InspectNodes(InspectNodesRequest),
     FindConnections(FindConnectionsRequest),
-    #[serde(skip_deserializing)]
-    InspectDatasetSchema(InspectDatasetSchemaRequest),
-    #[serde(skip_deserializing)]
-    InspectDatasetProfile(InspectDatasetProfileRequest),
     InspectResult(InspectResultRequest),
     ReadResultTable(ReadResultTableRequest),
     ListResources(ListResourcesRequest),
@@ -147,8 +143,6 @@ impl CapabilityInput {
 
             Self::InspectNodes(_) => CapabilityId::InspectNodes,
             Self::FindConnections(_) => CapabilityId::FindConnections,
-            Self::InspectDatasetSchema(_) => CapabilityId::InspectDatasetSchema,
-            Self::InspectDatasetProfile(_) => CapabilityId::InspectDatasetProfile,
             Self::InspectResult(_) => CapabilityId::InspectResult,
             Self::ReadResultTable(_) => CapabilityId::ReadResultTable,
             Self::ListResources(_) => CapabilityId::ListResources,
@@ -273,12 +267,6 @@ impl From<&AutomationCapabilityRequest> for CapabilityInput {
             AutomationCapabilityRequest::InspectNodes(value) => Self::InspectNodes(value.clone()),
             AutomationCapabilityRequest::FindConnections(value) => {
                 Self::FindConnections(value.clone())
-            }
-            AutomationCapabilityRequest::InspectDatasetSchema(value) => {
-                Self::InspectDatasetSchema(value.clone())
-            }
-            AutomationCapabilityRequest::InspectDatasetProfile(value) => {
-                Self::InspectDatasetProfile(value.clone())
             }
             AutomationCapabilityRequest::InspectResult(value) => Self::InspectResult(value.clone()),
             AutomationCapabilityRequest::ReadResultTable(value) => {

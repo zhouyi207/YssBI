@@ -115,7 +115,7 @@ impl ProjectState {
             return PreparedProjectActivation::from_data(None, ProjectData::new(), None, false);
         };
         let root = NormalizedRoot::from_path(crate::project_root_from_path(path))?;
-        let lease = self.filesystem().acquire(root.clone())?;
+        let lease = self.filesystem().acquire(root.clone());
         let authority_before = self.capture_prepared_authority_basis(&root)?;
         let data = self.read_activation_data(&root)?;
         let authority_after = self.capture_prepared_authority_basis(&root)?;
@@ -144,7 +144,7 @@ impl ProjectState {
                 })?;
         let _activation = self.project_activation.acquire();
         self.run_project_activation_test_hook();
-        let lease = self.filesystem().acquire(root.clone())?;
+        let lease = self.filesystem().acquire(root.clone());
         if prepared.requires_final_rebuild {
             let authority_basis = prepared.authority_basis.take();
             let data = self.read_activation_data(&root)?;
@@ -171,6 +171,7 @@ impl ProjectState {
         Ok(ProjectSession { instance_id, root })
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn activate_project_from_path(
         &self,
         path: &Path,

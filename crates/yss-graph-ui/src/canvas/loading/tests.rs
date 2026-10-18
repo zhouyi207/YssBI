@@ -93,7 +93,7 @@ impl Fixture {
             .unwrap()
             .project_instance_id()
             .clone();
-        let request = OpenGraphRequest::new(project, path, 0, yss_ui::text::locale());
+        let request = OpenGraphRequest::new(project, path, yss_ui::text::locale());
         Self {
             directory,
             application,

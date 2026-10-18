@@ -296,7 +296,13 @@ fn rename_updates_unloaded_callers_and_duplicate_preserves_text_and_port_identit
     let fixture = crate::fixtures::TempProject::activate("rename-unloaded-reference", data);
     let state = fixture.state();
     let session = state.capture_project_session().unwrap();
-    state.unload_graph_resource(&path).unwrap();
+    state
+        .unload_graph_resource(
+            &state.capture_project_session().unwrap().instance_id,
+            &path,
+            None,
+        )
+        .unwrap();
     state
         .rename_graph_resource(
             &registry,
@@ -305,7 +311,6 @@ fn rename_updates_unloaded_callers_and_duplicate_preserves_text_and_port_identit
                 graph_path: &source,
                 expected_revision: ResourceRevision::INITIAL,
                 new_name: "G",
-                lifecycle_token: 100,
                 operation_id: OperationId::new(),
             },
         )
@@ -439,7 +444,6 @@ fn rename_remaps_saved_only_references_and_reversible_history() {
                 graph_path: &source,
                 expected_revision: ResourceRevision::INITIAL,
                 new_name: "G",
-                lifecycle_token: 100,
                 operation_id: OperationId::new(),
             },
         )
@@ -483,7 +487,6 @@ fn rename_remaps_saved_only_references_and_reversible_history() {
                 graph_path: &target,
                 expected_revision: ResourceRevision::INITIAL.checked_next().unwrap(),
                 new_name: "H",
-                lifecycle_token: 200,
                 operation_id: OperationId::new(),
             },
         )

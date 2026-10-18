@@ -94,7 +94,6 @@ impl Fixture {
                     .open_graph(OpenGraphRequest::new(
                         project.clone(),
                         GraphResourcePath::new(path).unwrap(),
-                        0,
                         language,
                     ))
                     .unwrap(),

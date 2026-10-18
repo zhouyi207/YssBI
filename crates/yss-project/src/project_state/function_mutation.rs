@@ -80,10 +80,7 @@ impl ProjectState {
         let reservation = self
             .reserve_resource_operation(expected_project_instance_id, request.operation_id)
             .map_err(function_mutation_error)?;
-        let lease = self
-            .filesystem()
-            .acquire(snapshot.session.root.clone())
-            .map_err(function_mutation_error)?;
+        let lease = self.filesystem().acquire(snapshot.session.root.clone());
         let function = validate_signature_request(&snapshot.graphs, graph_path, &request)?;
         let revision = function
             .revision
@@ -301,14 +298,18 @@ mod tests {
                 .publication_revision,
             before_rescan
         );
-        state.unload_graph_resource(&path).unwrap();
+        state
+            .unload_graph_resource(
+                &state.capture_project_session().unwrap().instance_id,
+                &path,
+                None,
+            )
+            .unwrap();
         assert_eq!(
             state.read_project_index(&project).unwrap().function_graphs[0].revision,
             next_revision
         );
-        state
-            .load_graph_document(&project, &path, u64::MAX - 1)
-            .unwrap();
+        state.load_graph_document(&project, &path).unwrap();
         assert_eq!(state.revision_state_for_test()[&path], next_revision);
         assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
 

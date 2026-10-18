@@ -23,10 +23,6 @@ pub struct ProjectLifecycleApplicationEvent {
 pub enum ProjectLifecycleKind {
     SaveAs,
     Create,
-    Delete,
-    RegistryCleanup,
-    Load,
-    Clear,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,7 +37,6 @@ pub enum ProjectLifecycleOutcome {
     Committed,
     RegistryFailed,
     ActivationFailed,
-    RegistryPending,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,8 +50,6 @@ pub struct LifecycleRecovery {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LifecycleRecoveryAction {
     RegisterDestination,
-    RemoveRegistryRecord,
-    CleanupRegistry,
     ActivateDestination,
 }
 

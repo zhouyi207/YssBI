@@ -34,9 +34,6 @@ impl ProjectFeedback {
                 ProjectLifecycleOutcome::ActivationFailed => {
                     Some("native.workbench.projectCopyOpenFailed")
                 }
-                ProjectLifecycleOutcome::RegistryPending => {
-                    Some("native.workbench.projectTrashPartial")
-                }
             };
             if let Some(key) = key {
                 return Self::message(key);
@@ -69,12 +66,6 @@ impl ProjectFeedback {
                 ProjectLifecycleError::InvalidPath => {
                     Self::message("projectPicker.issues.errors.invalidPath")
                 }
-                ProjectLifecycleError::ProjectNotFound => {
-                    Self::message("projectPicker.issues.errors.projectNotFound")
-                }
-                ProjectLifecycleError::RegistryLookupFailed(_) => {
-                    Self::message("native.projects.loadFailed")
-                }
                 ProjectLifecycleError::LoadFailed(error)
                 | ProjectLifecycleError::AuthorityFailed(error) => {
                     let key = if error.recovery_required() {
@@ -85,10 +76,7 @@ impl ProjectFeedback {
                             "invalid_graph_document" => {
                                 "projectPicker.issues.errors.invalidProject"
                             }
-                            "filesystem_transaction_busy"
-                            | "project_lifecycle_admission_closed" => {
-                                "projectPicker.issues.errors.busy"
-                            }
+                            "filesystem_transaction_busy" => "projectPicker.issues.errors.busy",
                             "transaction_prepare_failed"
                             | "transaction_commit_failed"
                             | "transaction_rollback_failed" => {

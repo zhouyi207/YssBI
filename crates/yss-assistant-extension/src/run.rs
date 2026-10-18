@@ -497,8 +497,6 @@ fn request_resource_id(request: &AutomationCapabilityRequest) -> Option<&str> {
         ReadMind(value) => &value.input.mind().id,
         ReadDocument(value) => &value.input.document().id,
         ExportDatabase(value) => &value.resource.id,
-        InspectDatasetSchema(value) => &value.database_id,
-        InspectDatasetProfile(value) => &value.database_id,
         InspectGraph(value) => &value.graph.id,
         FindNodes(value) => &value.graph.id,
         FindConstants(value) => &value.graph.id,

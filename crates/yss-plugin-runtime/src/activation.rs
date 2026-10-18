@@ -82,9 +82,6 @@ impl PluginManager {
             state
                 .contexts
                 .retain(|context, _| !removed.contains(context));
-            state
-                .exports
-                .retain(|_, (context, _)| !removed.contains(context));
             removed
         } else {
             BTreeSet::new()

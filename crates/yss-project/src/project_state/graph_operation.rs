@@ -147,6 +147,7 @@ impl From<yss_filesystem::FilesystemError> for ProjectGraphSaveError {
 impl ProjectState {
     /// Capture the current graph without accepting a caller-authored revision.
     /// The revision remains an internal token for the atomic overwrite commit.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn capture_graph_overwrite_operation(
         &self,
         project_instance_id: &ProjectInstanceId,
@@ -253,8 +254,7 @@ impl ProjectState {
                     ProjectGraphOperationError::RecoveryRequired
                 }
                 ProjectOperationError::StaleProjectLifecycle { .. }
-                | ProjectOperationError::StaleResourceLifecycle { .. }
-                | ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
+                | ProjectOperationError::StaleResourceLifecycle { .. } => {
                     ProjectGraphOperationError::ResourceLifecycleChanged {
                         graph: graph_path.clone(),
                     }
@@ -280,6 +280,7 @@ impl ProjectState {
         })
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn commit_graph_candidate(
         &self,
         authority: GraphOperationAuthority,
@@ -549,7 +550,7 @@ impl ProjectState {
                     message: error.to_string(),
                 }
             })?;
-        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
+        let filesystem_lease = self.filesystem().acquire(session.root.clone());
         self.validate_project_session(&session)?;
         let prepared = FilesystemTransaction::prepare_with_validator(
             TransactionContext {
@@ -588,8 +589,7 @@ fn capture_lifecycle_error(error: ProjectOperationError) -> ProjectGraphOperatio
         ProjectOperationError::ProjectRecoveryRequired { .. } => {
             ProjectGraphOperationError::RecoveryRequired
         }
-        ProjectOperationError::StaleProjectLifecycle { .. }
-        | ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
+        ProjectOperationError::StaleProjectLifecycle { .. } => {
             ProjectGraphOperationError::AdmissionClosed
         }
         source => ProjectGraphOperationError::Internal(ProjectGraphOperationSource::new(source)),

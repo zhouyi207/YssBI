@@ -68,10 +68,6 @@ pub enum ActivityItem {
         creation: NodeCreation,
         search_text: Box<str>,
     },
-    Command {
-        id: &'static str,
-        label: ActivityText,
-    },
     Plugin {
         id: String,
         name: String,
@@ -431,25 +427,6 @@ fn node_key(creation: &NodeCreation) -> String {
             ..
         } => format!("resourceBound:{node_type_id}:{}", resource_path.as_str()),
     }
-}
-
-pub fn commands_activity_panel() -> ActivityPanelDocument {
-    let mut document = ActivityPanelDocument::new("commands", "activityBar.commands");
-    document.empty_state = Some((
-        ActivityText::Key("sidebar.noActiveGraph"),
-        ActivityText::Key("sidebar.noActiveGraphDescription"),
-    ));
-    for (id, label) in [("undo", "common.undo"), ("redo", "common.redo")] {
-        document.rows.push(ActivityRow {
-            id: id.into(),
-            depth: 0,
-            content: ActivityRowContent::Item(ActivityItem::Command {
-                id,
-                label: ActivityText::Key(label),
-            }),
-        });
-    }
-    document
 }
 
 pub fn plugins_activity_panel(plugins: &[InstalledPlugin]) -> ActivityPanelDocument {

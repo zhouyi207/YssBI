@@ -12,7 +12,7 @@ Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime�
 ```mermaid
 flowchart TD
     UI["GPUI 宿主"] --> APP["ApplicationServices / typed Harness calls"]
-    APP --> CORE["Harness Core：会话、运行、委派、工作流、账本、审批与有序事件"]
+    APP --> CORE["Harness Core：会话、运行、委派、账本与有序事件"]
     CORE --> EXT["HarnessExtension：AssistantExtension"]
     EXT --> GATEWAY["CapabilityGatewayPort"]
     GATEWAY --> OWNERS["Application / Project / Graph / Database owners"]
@@ -70,7 +70,7 @@ Review 不能写入。新资源仅从真实回执取得 ID，并继承明确声�
 内部图/资源读取回执保留完整版本；模型只看到业务事实。`inspect_resource` 返回身份、名称和 dirty 状态；
 函数资源另保留既有签名投影，不返回节点或连线正文。
 
-图变更在模型与内部入口共用角色能力检查；内部授权读取原请求的能力身份与图引用，不复制节点、参数或常量值。普通、Workflow 和审批执行器由同一个基础构造函数初始化共同服务与默认状态，再设置各自的专属身份。
+图变更在模型与内部入口共用角色能力检查；内部授权读取原请求的能力身份与图引用，不复制节点、参数或常量值。执行器由同一个基础构造函数初始化共同服务与默认状态，再设置 Agent 运行身份。
 
 Worker 使用角色规范、单个任务、必要约束和指定依赖的结构化交付，不复制整个用户会话。
 报告 Skill 只加载到 Manager/Report，统计计划工具只提供给 Stats。Worker 以最后一条文本或
@@ -124,7 +124,7 @@ Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各
 
 | 范围          | 源码入口与职责                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core Host     | [host/mod.rs](src/host/mod.rs) 构造共享状态；[session](src/host/session.rs)、[turn](src/host/turn.rs)、[workflow](src/host/workflow.rs)、[approval](src/host/approval.rs) 分别实现对应入口                                                                                                                                                                                                                                                                  |
+| Core Host     | [host/mod.rs](src/host/mod.rs) 构造共享状态；[session](src/host/session.rs)、[turn](src/host/turn.rs) 分别实现对应入口                                                                                                                                                                                                                                                                  |
 | Core 公共依赖 | [ports.rs](src/ports.rs) 拥有注入端口集合，[error.rs](src/error.rs) 拥有 Core 错误；编排器不依赖 Host 内部实现                                                                                                                                                                                                                                                                                                                                              |
 | 上下文与事件  | [conversation.rs](src/conversation.rs) 统一历史重建和消息组装；[events.rs](src/events.rs) 统一持久事件写入、交付及 Agent 输出适配                                                                                                                                                                                                                                                                                                                           |
 | 角色与权限    | [Assistant agents](../yss-assistant-extension/src/agents.rs) 定义六角色与工具，Assistant extension 执行角色和任务授权；Core 执行工具注册与模式准入 |
@@ -132,7 +132,7 @@ Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各
 | Rig           | [driver.rs](../yss-harness-rig/src/driver.rs) 执行模型循环，[provider/client.rs](../yss-harness-rig/src/provider/client.rs) 建立原生协议客户端，[stream.rs](../yss-harness-rig/src/stream.rs) 管理流与取消，[messages.rs](../yss-harness-rig/src/messages.rs) 映射消息，[tools](../yss-harness-rig/src/tools/mod.rs) 映射模型工具，[error.rs](../yss-harness-rig/src/error.rs) 分类失败                                                                     |
 | Knowledge     | [knowledge.rs](src/knowledge.rs) 处理查询与引用；[knowledge/tools.rs](src/knowledge/tools.rs) 映射公开工具结果与内部引用事件；[knowledge/index.rs](src/knowledge/index.rs) 管理来源快照与索引发布；[knowledge/retrieval.rs](src/knowledge/retrieval.rs) 拥有 Unicode 分段与引用身份 |
 | Tantivy       | [lib.rs](../yss-harness-tantivy/src/lib.rs) 实现中立索引构建端口；[index.rs](../yss-harness-tantivy/src/index.rs) 拥有字段、查询和摘要；[tokenizer.rs](../yss-harness-tantivy/src/tokenizer.rs) 拥有中英文分词；[collector.rs](../yss-harness-tantivy/src/collector.rs) 在结果限制前按文档去重                                                                                                                                                              |
-| SQLite        | [lib.rs](../yss-harness-sqlite/src/lib.rs) 构造唯一 Store/连接池；各持久化 port 分别实现于 session、events、workflow、ledger、approval 和 knowledge 模块；[schema.rs](../yss-harness-sqlite/src/schema.rs) 拥有唯一 schema，[codec.rs](../yss-harness-sqlite/src/codec.rs) 共享编码与错误映射                                                                                                                                                               |
+| SQLite        | [lib.rs](../yss-harness-sqlite/src/lib.rs) 构造唯一 Store/连接池；各持久化 port 分别实现于 session、events、ledger 和 knowledge 模块；[schema.rs](../yss-harness-sqlite/src/schema.rs) 拥有唯一 schema，[codec.rs](../yss-harness-sqlite/src/codec.rs) 共享编码与错误映射                                                                                                                                                               |
 | Contract      | [契约说明](../yss-harness-contract/README.md) 维护共享值边界；[lib.rs](../yss-harness-contract/src/lib.rs) 只组织模块和导出；[context.rs](../yss-harness-contract/src/context.rs) 拥有调用身份与绑定 |
 
 提示词不承担后端授权，编写约束见 [crates 规则](../.rules)。
@@ -145,24 +145,23 @@ Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各
 | Project、Graph、Database、Execution、Result 和 SCI   | 原有业务 owners，不转移给 Harness                   |
 | Harness session 和 turn                              | `yss-harness-core` + session persistence port       |
 | conversation transcript / final turn state           | persisted turn/event records                        |
-| Statistical Plan 和 Workflow run/step                | Harness workflow runtime + workflow store           |
+| Statistical Plan                                     | Assistant planner 工具与 turn 事件                  |
 | Tool invocation state、idempotency 和 result receipt | Harness tool ledger                                 |
-| approval grant lifecycle                             | Harness approval service/store                      |
 | Skill identity/version/source                        | Harness skill registry                              |
 | Knowledge source/citation                            | knowledge source store；Tantivy index 是 projection |
 | ordered Assistant stream                             | persisted Harness events + Rust sequence            |
-| rendered conversation/workflow cards                 | GPUI projection，可从持久事件 replay 重建            |
+| rendered conversation cards                          | GPUI projection，可从持久事件 replay 重建            |
 
 Harness 只保存业务资源的 opaque references、project/session binding、captured revisions、完整结果 JSON、分页数据及其他有界 capability results 和 receipts。Result payload 仍由 Execution `ResultStore` 拥有；Harness 不能复制完整 DataFrame 或成为 Project history。
 
 会话删除经 Application 捕获当前项目范围，由 `HarnessSessionAccess::delete_conversation` 校验 principal 与项目归属。
-删除复用会话访问锁和 Turn 准入，拒绝运行中的 Turn 及尚未结束的 Workflow；Workflow 创建也经过同一个会话访问锁，避免删除检查后新增任务。
-存储端口原子删除该会话及其 Turn、事件、工具调用、Workflow Run 和审批记录；共享 Workflow 定义、知识来源及项目资源保留。
+删除复用会话访问锁和 Turn 准入，拒绝运行中的 Turn。
+存储端口原子删除该会话及其 Turn、事件和工具调用；知识来源及项目资源保留。
 删除后原 session ID 不再可打开或提交新 Turn，不通过新建会话来恢复已删除记录。
 
 ## 3. Stable contracts and ports
 
-`yss-harness-contract` 是 Pure Leaf，拥有 Harness、Application Gateway、Rig 和 MCP adapter 共享的 stable typed contracts：identities、project binding、capability request/result、tool descriptor、workflow records、approval、knowledge citation、event、cancellation/deadline 和 structured failure。
+`yss-harness-contract` 是 Pure Leaf，拥有 Harness、Application Gateway、Rig 和 MCP adapter 共享的 stable typed contracts：identities、project binding、capability request/result、tool descriptor、knowledge citation、event、cancellation/deadline 和 structured failure。
 
 Contract 的不透明字符串身份共用 `context.rs` 的内部构造与反序列化规则：去除空白后不能为空，UTF-8 编码不超过 128 字节；保留原始字符串，不在读取时归一化。各身份仍为独立类型。
 
@@ -170,11 +169,11 @@ Harness 只通过 constructor-injected ports 使用外部能力：
 
 - `AgentDriverPort`：provider-neutral model turn；
 - `CapabilityGatewayPort`：项目资源和业务操作的唯一 capability seam；Core 自有的知识查询通过知识 store/index ports 执行；
-- session/event/workflow/tool-ledger/approval/knowledge stores；
+- session/event/tool-ledger/knowledge stores；
 - `KnowledgeIndexPort` / `KnowledgeIndexReaderPort`：构造不可变检索投影并查询，不授予来源读取权限；
 - clock 和 ID generator。
 
-adapter 不得把 framework type 带入 Core，也不得拥有 policy。Application Gateway 每次调用根据 principal、Harness session、Project instance/session、resource currentness、approval、deadline、cancellation 和 invocation identity 验证请求。模型请求只携带角色、并发度、输出模式、用户执行选项、上下文和工具签名；授权身份由 Core executor 与事件输出持有，不重复塞入 Rig 不使用的请求字段。
+adapter 不得把 framework type 带入 Core，也不得拥有 policy。Application Gateway 每次调用根据 principal、Harness session、Project instance/session、resource currentness、deadline、cancellation 和 invocation identity 验证请求。模型请求只携带角色、并发度、输出模式、用户执行选项、上下文和工具签名；授权身份由 Core executor 与事件输出持有，不重复塞入 Rig 不使用的请求字段。
 
 ## 4. Registered capabilities
 
@@ -183,7 +182,7 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 不透明标识。数据库声明中的 DatabaseId 与 publication key 不可互换。图内部编辑与运行继续
 共用节点图协议，传入对应的 `resource.id` 作为 `graphPath`。
 
-桌面按 `ToolRegistry::for_agent(role).with_mode(mode)` 选择工具；Workflow step 和批准执行只注册本次所需的单个能力。Registry 保存允许的能力集合，同一 run 的模型工具和执行器复用该集合，仅为模型请求生成一次输入 schema。下表是共享业务能力全集，每个角色只获得其中的子集：
+桌面按 `ToolRegistry::for_agent(role).with_mode(mode)` 选择工具。Registry 保存允许的能力集合，同一 run 的模型工具和执行器复用该集合，仅为模型请求生成一次输入 schema。下表是共享业务能力全集，每个角色只获得其中的子集：
 
 | Capability                                                         | 作用                                                                           |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
@@ -255,8 +254,7 @@ Worker 已有基线不会因读取自动变成新版本。实时结果和历史�
 schema 默认 50 列、最大 100 列；行页默认 20 行、最大 1000 行，显式选择至多 100 列。
 过滤条件全部为 AND，比较使用 Data Contract 精确字面量；空值判断不带比较值。排序复用原列语义，
 并列值按显示顺序及 rowId 定位。过滤后的总数未知时为 null，分页仍返回实际 `hasMore` 与 `nextOffset`。
-画像只运行明确选择的指标组；省略的指标组不会计算。旧 `inspect_dataset_schema` / `inspect_dataset_profile`
-不再注册给模型，其内部请求仍服务 Workflow 与既存历史。
+画像只运行明确选择的指标组；省略的指标组不会计算。
 
 `inspect_result` 与界面复用 Application 的有界 `query_result_projection` 和共享 `result_encoding` 映射，返回 `ResultValueInspection::Json`。内联结果受投影展开预算及 64 KiB 编码上限约束，超限明确拒绝，不静默裁剪。原生报告使用概览、参数目录与表引用，统计数据按表引用继续读取。普通结果字段、嵌套对象与文本没有 AI 专用白名单或截断规则。
 
@@ -266,12 +264,12 @@ schema 默认 50 列、最大 100 列；行页默认 20 行、最大 1000 行，
 
 Contract 中的结果引用通过 `hex` 编解码会话和表选择的 UTF-8 字节，保留现有小写编码、
 长度限制和完整引用格式校验；非法 UTF-8 或非规范引用继续拒绝。
-Core 的审批、工具幂等、任务、技能和知识摘要也由 `hex` 编码；领域分隔及摘要输入仍归各自 owner。
+Core 的工具幂等、任务、技能和知识摘要也由 `hex` 编码；领域分隔及摘要输入仍归各自 owner。
 
 `list_graph_results` 只列出当前有效输出，可按节点、输出 Pin、运行筛选并分页；指定运行也不返回仅由报告租约持有的旧结果。读取回执区分 `currentValid` 与显式租约持有的 `retained`，后者不进入结果目录。重跑准入或输入失效移除相关旧输出，失败、取消与撤销均不恢复。运行状态、过期会话、已回收结果和不存在的表分别反馈；读取永不触发重算。Worker 授权、委派和历史回放使用同一完整业务引用。
 
 Model-facing schema 来自 `model::CapabilityInput` 所用业务参数类型。
-模型不填写 revision/sessionId、图 hash、条件查询 token 或幂等 key。内部 Workflow/审批直接使用原有内部契约。
+模型不填写 revision/sessionId、图 hash、条件查询 token 或幂等 key。
 Rig 实时返回与历史回放共用 `model::capability_result`，工具历史参数共用 `CapabilityInput` 投影；
 错误投影保留输入 schema 声明的业务字段、参数范围和下一步指引；不透传内部字段名。
 内部 `RevisionConflict` / `GraphDraftChanged` 在实时工具、历史回放与 Worker 预检反馈中通过同一公开错误投影转换。
@@ -462,7 +460,7 @@ SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护�
 
 每次提交携带 `HarnessTurnOptions`：`mode` 为 Ask 或 Write，`reasoningEffort` 为默认（null）、Low、Medium 或 High。Core 在 `TurnStarted` 后持久化 `TurnConfigured`，Manager 和该轮所有 Worker 共享不可变选项。Ask 的 Registry 与 executor 只允许效果为 Inspect 的能力，禁止图计算、资源写入、导出和 UI 意图；委派及恢复旧任务也必须满足只读 scope，不能通过 Worker 绕过。Write 沿用既有角色、任务范围和 Gateway 授权，并不扩大权限。
 
-一个 Harness session 绑定明确 principal 和当前 Project instance/session。用于 Assistant 对话的 session 还保存 `HarnessConversationMetadata`：项目根目录的稳定文件系统身份、首条消息生成的标题和最近打开时间；底层 workflow/session 调用可不带对话元数据。每个 session 同时只准入一个 active turn；submit、cancel 和 project/session currentness 由 Rust 控制。Session 状态为 `Active` 或 `Stale`：项目绑定失效时标记 `Stale` 并取消正在运行的 turn；重新打开对话时验证归属并恢复为 `Active`。Session store 的 `load_active_sessions` 只返回当前有效的绑定。
+一个 Harness session 绑定明确 principal 和当前 Project instance/session。用于 Assistant 对话的 session 还保存 `HarnessConversationMetadata`：项目根目录的稳定文件系统身份、首条消息生成的标题和最近打开时间；不经由对话创建的 session 可不带对话元数据。每个 session 同时只准入一个 active turn；submit、cancel 和 project/session currentness 由 Rust 控制。Session 状态为 `Active` 或 `Stale`：项目绑定失效时标记 `Stale` 并取消正在运行的 turn；重新打开对话时验证归属并恢复为 `Active`。Session store 的 `load_active_sessions` 只返回当前有效的绑定。
 
 Host 的 `HarnessSessionAccess` 串行化绑定协调、对话选择和 session 写入；Application 持门重验其捕获的项目，门本身不保存当前绑定。普通 session 创建和首次消息的标题写回也使用同一门；submit 在门内读取 session 并核对调用方捕获的项目绑定，失效则返回既有 `SessionNotActive`。会话读取、turn 准入和标题写入后释放门，再创建 turn 和执行模型，因此项目切换仍可取消正在执行的 turn。
 
@@ -487,7 +485,7 @@ validate and persist user turn
   → persist terminal turn state
 ```
 
-每个 Harness event 包含 stream/session/sequence 和相关 turn/workflow identity。事件先进入 durable store，再交付 live channel。Frontend 订阅从 last seen sequence replay；出现 gap、断线或交付竞态时重新订阅并 replay，不把本地数组当作 durable transcript。
+每个 Harness event 包含 stream/session/sequence 和相关 turn identity。事件先进入 durable store，再交付 live channel。Frontend 订阅从 last seen sequence replay；出现 gap、断线或交付竞态时重新订阅并 replay，不把本地数组当作 durable transcript。
 
 `HarnessEventStorePort::append_event` 在一次持久化操作中分配会话内的连续序号并写入事件，返回已提交的 envelope。
 SQLite 在 `BEGIN IMMEDIATE` 事务内读取当前最大序号并 INSERT；失败回滚不消耗序号，独立连接使用同一分配规则。
@@ -500,24 +498,13 @@ Host 在 active-turn 锁内捕获当前 turn 的 cancellation token，释放锁�
 
 模型取消或超时后，Rig 停止模型请求并等待已准入工具完成 ledger/终态事件收尾，然后 Harness 结束 turn。共享 cancellation token 支持多个等待者；future 注册前后检查取消原因，waker 的克隆、释放与唤醒均在 waiters 锁外进行。启动恢复结束遗留 running invocation/turn；中断的 mutation 使用 `outcome_unknown`，不推断已经回滚。已持久化的真实 receipt 保留；内存编辑回执随 Project 编辑会话释放，进程崩溃后不能从当前图内容猜测旧工具是否提交。完整跨进程 commit reconciliation 仍属于 roadmap。
 
-## 6. Workflow and statistical plan
+## 6. Statistical plan
 
 Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事实。计划区分 research question、analysis mode、study design、estimands、variable roles、candidate methods、selected workflow、diagnostics、robustness 和 reporting needs。
 
-当前 Assistant 的数据质量检查通过 DataAgent 的 `inspect_database_schema` 和 `profile_database` 能力执行。通用 Workflow runtime 接收调用方构造的 versioned definition；每个 `WorkflowStep` 直接包含 typed capability `request` 和依赖列表，compiler 校验 step identity、dependency existence、self-dependency、cycle 和 capability request。Runtime 持久化 run/step state，并提供 plan、advance、pause、resume 和 cancel 操作；桌面没有手动工作流控制入口。
-
-Compiler 使用临时 `petgraph::graphmap::DiGraphMap` 和迭代式 `toposort` 检测依赖环，
-包含无依赖的独立步骤并合并重复依赖边。该图只用于校验，步骤定义及执行顺序仍由 Workflow 拥有。
-
-每个 run 的 advance 持有唯一执行租约；并发 advance 返回 `ConcurrentWorkflow`，状态转换使用短时异步互斥，能力调用期间不持有该转换锁。
-运行记录携带 revision；`save_run` 的创建仅允许不存在的记录，更新必须匹配预期 revision，成功返回递增版本，冲突不覆盖当前记录。
-取消先持久化 `Cancelled`，再取消正在执行的能力所共享的 token；迟到结果不能更新终态或发布步骤完成事件。
-暂停阻止新步骤派发，必须显式 resume。已准入步骤可以在重读当前版本并核对执行尝试后收尾，但保持 `Paused` 或恢复后的 `Ready`；再次 advance 才继续派发或确认完成。
-恢复跳过仍有执行所有者的 run。中断的 Inspect 步骤可重新调度，并保留已持久化的暂停状态；其他中断步骤标为 `TerminalFailure`，run 标为 `Failed`，避免重复执行可能已提交的操作，实际提交结果以工具账本和业务回执为准。
+当前 Assistant 的数据质量检查通过 DataAgent 的 `inspect_database_schema` 和 `profile_database` 能力执行。
 
 统计计划未通过校验时，工具反馈具体失败原因与 MethodRegistry 的当前方法卡（方法 ID、研究设计、变量角色和诊断要求），供模型修正后重新提交；schema 解码失败返回字段、枚举、数值/长度范围及对应字段说明，不回显原始参数。`selectedWorkflow` 是不超过 128 UTF-8 字节的短工作流标识，不接收大段分析描述。工具、并发度和输出模式统一由 Core 的角色配置传入 Rig。
-
-Workflow run 绑定 exact definition ID/version 和 Project session。恢复或继续前必须重验 binding/currentness；step output 仍是 typed capability result，不允许 model 自行制造 estimate、p-value、standard error 或 confidence interval。
 
 ## 7. Skills and knowledge
 
@@ -527,7 +514,7 @@ Workflow run 绑定 exact definition ID/version 和 Project session。恢复或�
 - builtin statistical knowledge 安装；
 - Tantivy BM25 检索、中英文分词、命中片段摘要和可核验 source citation；
 - 六个角色共用按需 `search_knowledge` / `read_knowledge` 工具；
-- SQLite persistence ports for sessions/events/workflows/ledger/approval/knowledge。
+- SQLite persistence ports for sessions/events/ledger/knowledge。
 
 Skill 是包含指令正文的版本化方法包，manifest 记录 ID、版本和来源哈希。`SkillRegistry` 是当前内置方法包的来源，SQLite 不存储 Skill 安装包。当前内置 Skill 用于上下文预加载；执行权限由实际角色/任务范围和 Gateway 校验。内置 Knowledge source 是 authority；项目来源的正文 authority 仍为 Project，SQLite 只保存显式来源选择和检索快照。搜索索引可以重建。
 
@@ -561,8 +548,8 @@ Hybrid/vector retrieval 和 remote Skill trust 尚未成为 current production c
 
 `yss-harness-rig` 实现 `AgentDriverPort`，负责 provider/model configuration、Rig message mapping、streaming、tool schema/call mapping 和 provider failure 分类。它不拥有：
 
-- Harness session、workflow 或 event sequence；
-- Tool Registry 或 approval；
+- Harness session 或 event sequence；
+- Tool Registry；
 - Project/Graph/Database authority；
 - capability authorization/currentness。
 
@@ -592,7 +579,7 @@ Rig adapter 使用 `rig-core`、`rig-agent` 和 `rig-reqwest` 0.43.0，最低 Ru
 设置页支持重复添加供应商、修改端点；从服务获取模型成功后，将全部返回模型直接加入当前草稿，按模型 ID 跳过已有项并保留已有参数，无需再次选择或确认添加。模型也可以逐个手工添加，支持部署 ID。模型型号由服务发现或用户配置，不维护易过期的固定型号清单。所选模型必须支持工具调用；未实现模型列表的服务仍可手工配置。Base URL 填 API 根路径，例如 OpenAI 的 `https://api.openai.com/v1`、Anthropic 的 `https://api.anthropic.com`、Azure 的资源地址加 `/openai/v1`；不得包含凭据、query 或具体接口路径。
 模型工具参数均为对象；`yss-harness-contract::capability_input_schema` 在生成 `ToolDescriptor.input_schema` 时统一声明根级 `type: object`，同时保留 typed schema 的 `oneOf`、`$defs` 等约束。Rig adapter 将 descriptor 中的完整 schema 序列化为 function parameters。内部参数解码契约不变。
 
-模型工具签名仅包含 capability identity 与输入 schema。共享 `CapabilityDescriptor` 只保存能力身份、效果和条目上限，并按效果提供调用时限；Core 与图编辑提交前的结果检查共用 `MAX_CAPABILITY_RESULT_BYTES`。实际幂等由工具账本和提交回执实现，权限由角色/任务范围及 Gateway 检查实现；显式批准执行由 `ApprovalService` 校验并消费精确绑定请求的 grant，不使用声明式审批元数据。
+模型工具签名仅包含 capability identity 与输入 schema。共享 `CapabilityDescriptor` 只保存能力身份、效果和条目上限，并按效果提供调用时限；Core 与图编辑提交前的结果检查共用 `MAX_CAPABILITY_RESULT_BYTES`。实际幂等由工具账本和提交回执实现，权限由角色/任务范围及 Gateway 检查实现。
 Contract 的同一能力元数据声明生成公开描述符列表及按身份匹配的入口，不手写列表索引。
 内部 Owner 操作保留自身的描述符，但不加入公开模型能力列表；角色与执行模式继续由 Core 筛选。
 Rig streams the first text promptly and coalesces subsequent deltas at 40 ms or 4 KiB. Core owns identified tool lifecycle events. Worker summaries use the final accepted model response as plain text; Manager finalText retains the public transcript. The Host has no 1 MiB final-response admission limit. Cancellation preserves committed receipts and waits for admitted tools to settle.

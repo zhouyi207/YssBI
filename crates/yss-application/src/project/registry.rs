@@ -42,10 +42,6 @@ impl ProjectManagement {
         self.registry.toggle_favorite(id).await
     }
 
-    pub fn cancel_picker_task(&self) {
-        self.tasks.cancel_active();
-    }
-
     pub async fn scan_directory(
         &self,
         directory: &str,
@@ -153,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn picker_cancellation_targets_current_task_after_an_old_future_is_dropped() {
+    fn a_new_picker_task_cancels_the_previous_one() {
         let store = Arc::new(PausedStore::default());
         let projects = ProjectManagement::new(store.clone());
         let mut context = Context::from_waker(Waker::noop());
@@ -161,17 +157,15 @@ mod tests {
         assert!(old.as_mut().poll(&mut context).is_pending());
         let mut current = Box::pin(projects.cleanup_invalid_projects(&Progress));
         assert!(current.as_mut().poll(&mut context).is_pending());
-        drop(old);
-        projects.cancel_picker_task();
         store.0.store(true, Ordering::Release);
         assert!(matches!(
-            current.as_mut().poll(&mut context),
+            old.as_mut().poll(&mut context),
             Poll::Ready(Err(ProjectRegistryError::Cancelled))
         ));
-        drop(current);
-        let mut next = Box::pin(projects.cleanup_invalid_projects(&Progress));
+        // Ending the superseded task must not end the current one.
+        drop(old);
         assert!(matches!(
-            next.as_mut().poll(&mut context),
+            current.as_mut().poll(&mut context),
             Poll::Ready(Ok(CleanupInvalidProjectsResult { removed: 0 }))
         ));
     }

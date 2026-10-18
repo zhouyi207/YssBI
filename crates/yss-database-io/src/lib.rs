@@ -13,7 +13,6 @@ use arrow::datatypes::{DataType, Schema, SchemaRef};
 use arrow::error::ArrowError;
 use arrow::ipc::{
     MetadataVersion,
-    reader::FileReader,
     writer::{FileWriter, IpcWriteOptions},
 };
 use arrow::record_batch::{
@@ -94,12 +93,13 @@ fn failure(
     }
 }
 
+#[cfg(test)]
 pub fn read_ipc_batches(
     path: &Path,
     projection: Option<Vec<usize>>,
-) -> Result<FileReader<File>, TabularIoError> {
+) -> Result<arrow::ipc::reader::FileReader<File>, TabularIoError> {
     let file = open(path, TabularIoFormat::ArrowIpc)?;
-    FileReader::try_new(file, projection).map_err(|error| {
+    arrow::ipc::reader::FileReader::try_new(file, projection).map_err(|error| {
         failure(
             TabularIoOperation::Read,
             TabularIoFormat::ArrowIpc,
@@ -264,6 +264,7 @@ pub fn write_ipc_batches(
     sync(&file, format)
 }
 
+#[cfg(any(test, feature = "test-support"))]
 pub fn write_parquet_batches(
     path: &Path,
     schema: SchemaRef,

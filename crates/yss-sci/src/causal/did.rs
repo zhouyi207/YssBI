@@ -201,6 +201,7 @@ fn run_placebo_fake_treatment_ri(
     })
 }
 
+#[cfg(test)]
 pub fn compute_fake_group_ri(
     payload: &DidFakeGroupEnginePayload,
     n_perm: usize,

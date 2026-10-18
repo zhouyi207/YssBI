@@ -1,6 +1,6 @@
 //! Automation identities, project bindings and the generic invocation identity.
 
-use crate::{AgentRunId, ApprovalGrantId};
+use crate::AgentRunId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
@@ -104,7 +104,6 @@ pub struct ToolInvocationContext {
     pub harness_session_id: HarnessSessionId,
     pub invocation_id: CapabilityInvocationId,
     pub project: ProjectSessionBinding,
-    pub approval_grant_id: Option<ApprovalGrantId>,
     pub agent_run_id: Option<AgentRunId>,
 }
 
@@ -120,7 +119,6 @@ impl ToolInvocationContext {
             harness_session_id,
             invocation_id,
             project,
-            approval_grant_id: None,
             agent_run_id: None,
         }
     }

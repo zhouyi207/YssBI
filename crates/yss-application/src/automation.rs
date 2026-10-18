@@ -3,18 +3,14 @@
 use std::sync::Arc;
 
 use yss_assistant_contract::{
-    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityId,
-    CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection,
-    DatasetSchemaInspection, GraphPortInspection, InspectDatasetProfileRequest,
-    InspectDatasetSchemaRequest, ResultCategoryInspection,
+    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityInvocationContext,
+    GraphPortInspection, ResultCategoryInspection,
 };
 #[cfg(test)]
 use yss_assistant_contract::{
     InspectResultRequest, ReadResultTableRequest, ResultInspection, ResultRef, ResultValidity,
     ResultValueInspection, TableRef,
 };
-use yss_database_contract::DatabaseId;
-use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_snapshot};
 use yss_graph_document::{PortAddress, PortRef};
 use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
 use yss_harness_contract::{CapabilityControl, CapabilityFailure, CapabilityFailureCode};
@@ -128,14 +124,6 @@ fn invoke_capability(
             catalog::inspect_node_type(application, &captured, request)
                 .map(AutomationCapabilityResult::NodeTypeInspection)
         }
-        AutomationCapabilityRequest::InspectDatasetSchema(request) => {
-            inspect_dataset_schema(&captured, request)
-                .map(AutomationCapabilityResult::DatasetSchemaInspection)
-        }
-        AutomationCapabilityRequest::InspectDatasetProfile(request) => {
-            inspect_dataset_profile(&captured, request, control)
-                .map(AutomationCapabilityResult::DatasetProfileInspection)
-        }
         AutomationCapabilityRequest::InspectResult(request) => {
             results::inspect_result(application, &captured, request)
                 .map(AutomationCapabilityResult::ResultInspection)
@@ -210,128 +198,6 @@ fn inspect_port(address: &PortAddress) -> GraphPortInspection {
 
 mod catalog;
 
-fn inspect_dataset_schema(
-    captured: &ApplicationSession,
-    request: InspectDatasetSchemaRequest,
-) -> Result<DatasetSchemaInspection, CapabilityFailure> {
-    captured
-        .project()
-        .read_database_declaration(captured.project_instance_id(), &request.database_id)
-        .map_err(|_| {
-            CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
-                .with_detail("databaseId", &request.database_id)
-        })?;
-
-    let catalog = catalog_snapshot(captured.database()).map_err(|_| {
-        CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
-            .with_detail("databaseId", &request.database_id)
-    })?;
-    let schema = catalog
-        .schemas()
-        .iter()
-        .find(|schema| schema.database().as_str() == request.database_id)
-        .ok_or_else(|| {
-            CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
-                .with_detail("databaseId", &request.database_id)
-        })?;
-    enforce_result_bound(CapabilityId::InspectDatasetSchema, schema.columns().len())?;
-    let inspection = DatasetSchemaInspection {
-        database_id: schema.database().as_str().to_owned(),
-        runtime_revision: schema.runtime_revision().get(),
-        schema_revision: schema.schema_revision().get(),
-        columns: schema
-            .columns()
-            .iter()
-            .map(|column| DatasetColumnSchema {
-                name: column.name().as_str().to_owned(),
-                data_type: column.data_type().to_string(),
-                physical_type: column.physical_type().to_owned(),
-                semantic: column.semantic().map(resources::semantic_to_contract),
-                nullable: column.nullable(),
-            })
-            .collect(),
-    };
-    revalidate_catalog_snapshot(captured.database(), &catalog).map_err(|_| {
-        CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
-            .with_detail("databaseId", &request.database_id)
-    })?;
-    Ok(inspection)
-}
-
-fn inspect_dataset_profile(
-    captured: &ApplicationSession,
-    request: InspectDatasetProfileRequest,
-    control: &CapabilityControl,
-) -> Result<DatasetProfileInspection, CapabilityFailure> {
-    captured
-        .project()
-        .read_database_declaration(captured.project_instance_id(), &request.database_id)
-        .map_err(|_| {
-            CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
-                .with_detail("databaseId", &request.database_id)
-        })?;
-    let catalog = catalog_snapshot(captured.database()).map_err(|_| {
-        CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
-            .with_detail("databaseId", &request.database_id)
-    })?;
-    let schema = catalog
-        .schemas()
-        .iter()
-        .find(|schema| schema.database().as_str() == request.database_id)
-        .ok_or_else(|| {
-            CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
-                .with_detail("databaseId", &request.database_id)
-        })?;
-    let overview = yss_database_runtime::session_api::dataset_overview_with_control(
-        captured.database(),
-        DatabaseId::from_existing(request.database_id.clone().into_boxed_str()),
-        &yss_relational_contract::RelationControl {
-            cancellation: control.cancellation_flag(),
-            deadline: control.deadline(),
-            max_input_bytes: 16 * 1024 * 1024,
-        },
-    )
-    .map_err(|error| map_dataset_profile_error(&error, &request.database_id))?;
-    control.check()?;
-    let inspection = DatasetProfileInspection {
-        database_id: request.database_id.clone(),
-        runtime_revision: schema.runtime_revision().get(),
-        schema_revision: schema.schema_revision().get(),
-        row_count: overview.size_shape.n_rows,
-        column_count: overview.size_shape.n_columns,
-        estimated_memory_bytes: overview.size_shape.estimated_dataframe_memory_bytes,
-        duplicated_rows: overview.size_shape.duplicated_rows,
-        numeric_columns: overview.schema_overview.numeric_cols,
-        categorical_columns: overview.schema_overview.categorical_cols,
-        string_columns: overview.schema_overview.string_cols,
-        temporal_columns: overview.schema_overview.datetime_cols,
-        boolean_columns: overview.schema_overview.bool_cols,
-        total_nulls: overview.data_completeness.total_nulls,
-        null_ratio: overview.data_completeness.null_ratio,
-        columns_with_nulls: overview.data_completeness.cols_with_nulls,
-        rows_with_nulls: overview.data_completeness.rows_with_nulls,
-    };
-    revalidate_catalog_snapshot(captured.database(), &catalog).map_err(|_| {
-        CapabilityFailure::new(yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE)
-            .with_detail("databaseId", &request.database_id)
-    })?;
-    Ok(inspection)
-}
-
-fn map_dataset_profile_error(
-    error: &yss_database_runtime::error::DatabaseError,
-    database_id: &str,
-) -> CapabilityFailure {
-    use yss_database_runtime::error::DatabaseErrorCode;
-
-    let code = match error.code() {
-        DatabaseErrorCode::Cancelled => CapabilityFailureCode::CANCELLED,
-        DatabaseErrorCode::Deadline => CapabilityFailureCode::DEADLINE_ELAPSED,
-        _ => yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE,
-    };
-    CapabilityFailure::new(code).with_detail("databaseId", database_id)
-}
-
 fn inspect_result_category(category: ResultCategory) -> ResultCategoryInspection {
     match category {
         ResultCategory::Value => ResultCategoryInspection::Value,
@@ -376,21 +242,6 @@ fn report_kind(kind: StatisticalReportKind) -> &'static str {
     }
 }
 
-fn enforce_result_bound(
-    capability_id: CapabilityId,
-    result_count: usize,
-) -> Result<(), CapabilityFailure> {
-    let maximum = usize::from(capability_id.descriptor().maximum_results);
-    if result_count > maximum {
-        return Err(
-            CapabilityFailure::new(CapabilityFailureCode::RESULT_TOO_LARGE)
-                .with_detail("capabilityId", capability_id.as_str())
-                .with_detail("maximumResults", maximum.to_string()),
-        );
-    }
-    Ok(())
-}
-
 fn map_session_capture_error(_: SessionCaptureError) -> CapabilityFailure {
     CapabilityFailure::new(CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE)
 }
@@ -404,8 +255,7 @@ fn map_project_inspection_error(error: yss_project::ProjectOperationError) -> Ca
         ProjectOperationError::CatalogResourceStale { .. } => {
             CapabilityFailureCode::REVISION_CONFLICT
         }
-        ProjectOperationError::ProjectLifecycleAdmissionClosed { .. }
-        | ProjectOperationError::ProjectRecoveryRequired { .. } => {
+        ProjectOperationError::ProjectRecoveryRequired { .. } => {
             CapabilityFailureCode::PROJECT_SESSION_UNAVAILABLE
         }
         _ => yss_assistant_contract::failure_code::CATALOG_UNAVAILABLE,
@@ -443,6 +293,20 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
     }
 }
 
+fn map_dataset_profile_error(
+    error: &yss_database_runtime::error::DatabaseError,
+    database_id: &str,
+) -> CapabilityFailure {
+    use yss_database_runtime::error::DatabaseErrorCode;
+
+    let code = match error.code() {
+        DatabaseErrorCode::Cancelled => CapabilityFailureCode::CANCELLED,
+        DatabaseErrorCode::Deadline => CapabilityFailureCode::DEADLINE_ELAPSED,
+        _ => yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE,
+    };
+    CapabilityFailure::new(code).with_detail("databaseId", database_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::graph::editor_mutation;
@@ -471,57 +335,6 @@ mod tests {
         ] {
             let wire = serde_json::to_value(kind).unwrap();
             assert_eq!(Some(plot_kind(kind)), wire.as_str());
-        }
-    }
-
-    #[test]
-    fn result_bounds_fail_closed_at_the_contract_descriptor_limit() {
-        let maximum = usize::from(
-            CapabilityId::InspectDatasetSchema
-                .descriptor()
-                .maximum_results,
-        );
-
-        assert!(enforce_result_bound(CapabilityId::InspectDatasetSchema, maximum).is_ok());
-        assert_eq!(
-            enforce_result_bound(CapabilityId::InspectDatasetSchema, maximum + 1)
-                .unwrap_err()
-                .code,
-            CapabilityFailureCode::RESULT_TOO_LARGE
-        );
-    }
-
-    #[test]
-    fn dataset_profile_preserves_typed_query_interruptions() {
-        use yss_database_runtime::error::{DatabaseError, DatabaseOperation};
-        use yss_database_store::DatasetStoreError;
-        use yss_relational_contract::RelationError;
-
-        for (source, expected) in [
-            (RelationError::Cancelled, CapabilityFailureCode::CANCELLED),
-            (
-                RelationError::DeadlineExceeded,
-                CapabilityFailureCode::DEADLINE_ELAPSED,
-            ),
-            (
-                RelationError::QueryFailed,
-                yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE,
-            ),
-        ] {
-            let error = DatabaseError::dataset(
-                DatabaseOperation::Query,
-                Some(DatabaseId::from_existing("database-1".into())),
-                DatasetStoreError::Query(source),
-            );
-            let failure = map_dataset_profile_error(&error, "database-1");
-            assert_eq!(failure.code, expected);
-            assert_eq!(failure.details["databaseId"], "database-1");
-            let wire = serde_json::to_value(&failure).unwrap();
-            assert_eq!(wire["code"], serde_json::to_value(expected).unwrap());
-            assert_eq!(
-                wire["details"],
-                serde_json::json!({"databaseId": "database-1"})
-            );
         }
     }
 
@@ -763,5 +576,40 @@ mod tests {
             .code,
             CapabilityFailureCode::INVALID_REQUEST
         );
+    }
+
+    #[test]
+    fn dataset_profile_preserves_typed_query_interruptions() {
+        use yss_database_contract::DatabaseId;
+        use yss_database_runtime::error::{DatabaseError, DatabaseOperation};
+        use yss_database_store::DatasetStoreError;
+        use yss_relational_contract::RelationError;
+
+        for (source, expected) in [
+            (RelationError::Cancelled, CapabilityFailureCode::CANCELLED),
+            (
+                RelationError::DeadlineExceeded,
+                CapabilityFailureCode::DEADLINE_ELAPSED,
+            ),
+            (
+                RelationError::QueryFailed,
+                yss_assistant_contract::failure_code::DATABASE_UNAVAILABLE,
+            ),
+        ] {
+            let error = DatabaseError::dataset(
+                DatabaseOperation::Query,
+                Some(DatabaseId::from_existing("database-1".into())),
+                DatasetStoreError::Query(source),
+            );
+            let failure = map_dataset_profile_error(&error, "database-1");
+            assert_eq!(failure.code, expected);
+            assert_eq!(failure.details["databaseId"], "database-1");
+            let wire = serde_json::to_value(&failure).unwrap();
+            assert_eq!(wire["code"], serde_json::to_value(expected).unwrap());
+            assert_eq!(
+                wire["details"],
+                serde_json::json!({"databaseId": "database-1"})
+            );
+        }
     }
 }

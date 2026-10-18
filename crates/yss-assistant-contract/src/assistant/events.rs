@@ -172,37 +172,6 @@ pub enum AssistantEventKind {
     KnowledgeCited {
         citation: KnowledgeCitation,
     },
-    WorkflowPlanned {
-        run_id: String,
-    },
-    WorkflowStarted {
-        run_id: String,
-    },
-    WorkflowStepStarted {
-        run_id: String,
-        step_id: String,
-    },
-    WorkflowStepCompleted {
-        run_id: String,
-        step_id: String,
-    },
-    WorkflowStepFailed {
-        run_id: String,
-        step_id: String,
-        retriable: bool,
-    },
-    WorkflowCompleted {
-        run_id: String,
-    },
-    WorkflowPaused {
-        run_id: String,
-    },
-    WorkflowResumed {
-        run_id: String,
-    },
-    WorkflowCancelled {
-        run_id: String,
-    },
 }
 
 impl TryFrom<&HarnessEventEnvelope> for AssistantEvent {
@@ -301,43 +270,6 @@ impl TryFrom<&HarnessEvent> for AssistantEventKind {
             HarnessEvent::TurnCancelled => Self::TurnCancelled,
             HarnessEvent::KnowledgeCited { citation } => Self::KnowledgeCited {
                 citation: citation.clone(),
-            },
-            HarnessEvent::WorkflowPlanned { run_id } => Self::WorkflowPlanned {
-                run_id: run_id.to_string(),
-            },
-            HarnessEvent::WorkflowStarted { run_id } => Self::WorkflowStarted {
-                run_id: run_id.to_string(),
-            },
-            HarnessEvent::WorkflowStepStarted { run_id, step_id } => Self::WorkflowStepStarted {
-                run_id: run_id.to_string(),
-                step_id: step_id.to_string(),
-            },
-            HarnessEvent::WorkflowStepCompleted { run_id, step_id } => {
-                Self::WorkflowStepCompleted {
-                    run_id: run_id.to_string(),
-                    step_id: step_id.to_string(),
-                }
-            }
-            HarnessEvent::WorkflowStepFailed {
-                run_id,
-                step_id,
-                retriable,
-            } => Self::WorkflowStepFailed {
-                run_id: run_id.to_string(),
-                step_id: step_id.to_string(),
-                retriable: *retriable,
-            },
-            HarnessEvent::WorkflowCompleted { run_id } => Self::WorkflowCompleted {
-                run_id: run_id.to_string(),
-            },
-            HarnessEvent::WorkflowPaused { run_id } => Self::WorkflowPaused {
-                run_id: run_id.to_string(),
-            },
-            HarnessEvent::WorkflowResumed { run_id } => Self::WorkflowResumed {
-                run_id: run_id.to_string(),
-            },
-            HarnessEvent::WorkflowCancelled { run_id } => Self::WorkflowCancelled {
-                run_id: run_id.to_string(),
             },
         })
     }
@@ -703,19 +635,14 @@ mod tests {
             },
             AssistantEventKind::ToolInvocationStarted {
                 invocation_id: "tool-1".into(),
-                capability_id: CapabilityId::InspectDatasetSchema.into(),
+                capability_id: CapabilityId::InspectDatabaseSchema.into(),
             },
             AssistantEventKind::TurnCompleted {
                 final_text: "Schema inspected.".into(),
             },
-            AssistantEventKind::WorkflowStepFailed {
-                run_id: "workflow-1".into(),
-                step_id: "schema".into(),
-                retriable: true,
-            },
             AssistantEventKind::ToolInvocationFailed {
                 invocation_id: "tool-2".into(),
-                capability_id: CapabilityId::InspectDatasetProfile.into(),
+                capability_id: CapabilityId::ProfileDatabase.into(),
                 failure_code: crate::CapabilityFailureCode::DEADLINE_ELAPSED.to_string(),
             },
             AssistantEventKind::AgentRunResumed {
@@ -777,7 +704,7 @@ mod tests {
         .map(|(index, event)| AssistantEvent {
             sequence: index as u64 + 1,
             session_id: "session-1".into(),
-            turn_id: ((1..=3).contains(&index) || index >= 5).then(|| "turn-1".into()),
+            turn_id: (index != 0).then(|| "turn-1".into()),
             occurred_at: 1000,
             event,
         })

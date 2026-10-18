@@ -79,6 +79,12 @@ pub(in crate::workbench) fn full_height_conversation(dock: &DockArea, group: Nod
     false
 }
 
+/// Whether a side dock is on screen. A zoomed conversation column keeps the left sidebar.
+pub(in crate::workbench) fn dock_shown(dock: &DockArea, placement: DockPlacement) -> bool {
+    dock.is_dock_open(placement)
+        && (!dock.is_zoomed() || placement == DockPlacement::Left && conversation_zoomed(dock))
+}
+
 pub(in crate::workbench) fn conversation_zoomed(dock: &DockArea) -> bool {
     dock.zoomed_group()
         .and_then(|node| dock.layout(DockPlacement::Center)?.find_node(node))

@@ -357,6 +357,9 @@ impl Workbench {
                     CanvasEvent::OpenGraph(path) => {
                         view.open_dropped_graph(canvas, path, window, cx)
                     }
+                    CanvasEvent::Removed { project, path } => {
+                        view.unload_graph(project.clone(), path.clone(), cx)
+                    }
                 }
             },
         ));

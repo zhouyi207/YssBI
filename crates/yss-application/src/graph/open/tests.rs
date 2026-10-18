@@ -152,7 +152,6 @@ fn open_request(session: &StagedSession, path: &GraphResourcePath) -> OpenGraphR
     OpenGraphRequest::new(
         session.session.project_instance_id().clone(),
         path.clone(),
-        1,
         "en-US",
     )
 }
@@ -167,7 +166,7 @@ fn refresh_graph_follows_retained_session_across_moves_and_path_reuse() {
     let project = session.session.project_instance_id();
     let authority = session.session.project();
     let request =
-        |path: &GraphResourcePath| OpenGraphRequest::new(project.clone(), path.clone(), 0, "en-US");
+        |path: &GraphResourcePath| OpenGraphRequest::new(project.clone(), path.clone(), "en-US");
     assert_eq!(
         authority
             .graph_editing_path(project, uuid::Uuid::new_v4())
@@ -186,7 +185,6 @@ fn refresh_graph_follows_retained_session_across_moves_and_path_reuse() {
                 current.graph_path().clone(),
                 current.editing().version.revision,
                 name.into(),
-                0,
                 yss_project_identity::OperationId::new(),
             )
             .unwrap();
@@ -227,7 +225,7 @@ fn refresh_graph_follows_retained_session_across_moves_and_path_reuse() {
     let foreign_project = ProjectInstanceId::from_existing(uuid::Uuid::new_v4().to_string());
     assert!(matches!(
         session.application.refresh_graph(
-            OpenGraphRequest::new(foreign_project, original, 1, "en-US"),
+            OpenGraphRequest::new(foreign_project, original, "en-US"),
             identity
         ),
         Err(OpenGraphApplicationError::Project(
@@ -644,7 +642,7 @@ fn open_graph_rejects_a_replaced_captured_session_before_project_load() {
         .slot
         .publish_for_test(Arc::clone(&replacement.session));
 
-    let request = OpenGraphRequest::new(captured.project_instance_id().clone(), path, 1, "en-US");
+    let request = OpenGraphRequest::new(captured.project_instance_id().clone(), path, "en-US");
     let error = open_graph_in_session(&session.application, &captured, request).unwrap_err();
 
     assert!(matches!(error, OpenGraphApplicationError::SessionChanged));

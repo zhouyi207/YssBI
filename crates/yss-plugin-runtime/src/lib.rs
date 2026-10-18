@@ -60,7 +60,6 @@ struct RuntimeState {
     starting: BTreeMap<String, Arc<ProcessStart>>,
     mutating: BTreeSet<String>,
     contexts: BTreeMap<String, ContextBinding>,
-    exports: BTreeMap<String, (String, PathBuf)>,
     diagnostics: std::collections::VecDeque<Arc<diagnostics::DiagnosticBuffer>>,
 }
 

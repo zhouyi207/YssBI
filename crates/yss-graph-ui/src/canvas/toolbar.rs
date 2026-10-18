@@ -30,16 +30,13 @@ struct Display {
     path: GraphResourcePath,
     edit_session: uuid::Uuid,
     execution_session: ExecutionSessionId,
+    commands: super::GraphCommandState,
     save: bool,
     undo: bool,
     redo: bool,
-    editable: bool,
-    run_node: bool,
-    running: bool,
     run_unavailable: Option<&'static str>,
     sync_status: Option<&'static str>,
     clear_run: Option<RunIdentity>,
-    inspect: bool,
     results: Rc<[ResultEntry]>,
     locale: &'static str,
 }
@@ -51,16 +48,13 @@ impl Display {
             path: canvas.graph.projection.graph_path.clone(),
             edit_session: canvas.graph.editing.version.session_id,
             execution_session: canvas.graph.results.execution_session_id,
+            commands: canvas.command_state(cx),
             save: canvas.can_edit() && canvas.dirty(cx),
             undo: canvas.is_edit_command_enabled(GraphEditCommand::Undo),
             redo: canvas.is_edit_command_enabled(GraphEditCommand::Redo),
-            editable: canvas.can_edit(),
-            run_node: canvas.can_run() && canvas.selected.len() == 1,
-            running: canvas.is_running(),
             run_unavailable: canvas.graph_run_unavailable_reason(cx),
             sync_status: canvas.execution_sync_status(),
             clear_run: canvas.clearable_run().cloned(),
-            inspect: !canvas.graph.results.outputs.is_empty(),
             results: canvas.result_entries().clone(),
             locale: yss_ui::text::locale(),
         }
@@ -75,16 +69,13 @@ impl Display {
 
     fn matches(&self, canvas: &GraphCanvas, cx: &App) -> bool {
         self.same_context(canvas)
+            && self.commands == canvas.command_state(cx)
             && self.save == (canvas.can_edit() && canvas.dirty(cx))
             && self.undo == canvas.is_edit_command_enabled(GraphEditCommand::Undo)
             && self.redo == canvas.is_edit_command_enabled(GraphEditCommand::Redo)
-            && self.editable == canvas.can_edit()
-            && self.run_node == (canvas.can_run() && canvas.selected.len() == 1)
-            && self.running == canvas.is_running()
             && self.run_unavailable == canvas.graph_run_unavailable_reason(cx)
             && self.sync_status == canvas.execution_sync_status()
             && self.clear_run.as_ref() == canvas.clearable_run()
-            && self.inspect == !canvas.graph.results.outputs.is_empty()
             && Rc::ptr_eq(&self.results, canvas.result_entries())
             && self.locale == yss_ui::text::locale()
     }
@@ -156,15 +147,15 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
-        let run_node = self.can_run() && self.selected.len() == 1;
-        let running = self.is_running();
+        let commands = self.command_state(cx);
+        let run_node = commands.run_node;
+        let running = commands.running;
         let run_unavailable = self.graph_run_unavailable_reason(cx);
         let clear_run = self.clearable_run().cloned();
-        let event_graph = self.graph.projection.graph_path.kind()
-            == yss_graph_document::GraphResourceKind::EventGraph;
+        let event_graph = commands.event_graph;
         let focus = self.focus.clone();
         let owner = cx.weak_entity();
-        let inspect = !self.graph.results.outputs.is_empty();
+        let inspect = commands.inspect;
         div()
             .w_full()
             .h(yss_ui::appearance::HEADER_HEIGHT)
@@ -364,7 +355,7 @@ mod tests {
         let locale = yss_ui::text::locale();
         let graph = crate::OpenedGraph::from_open(
             application
-                .open_graph(OpenGraphRequest::new(project.clone(), path, 0, locale))
+                .open_graph(OpenGraphRequest::new(project.clone(), path, locale))
                 .unwrap(),
             locale,
         );

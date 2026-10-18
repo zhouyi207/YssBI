@@ -56,7 +56,7 @@ fn transactions_accept_arbitrary_bytes_and_only_apply_explicit_content_validatio
     let binary = vec![0, 255, 128, 17];
     let prepared = FilesystemTransaction::prepare(
         transaction_context(root.clone()),
-        directory.coordinator().acquire(root.clone()).unwrap(),
+        directory.coordinator().acquire(root.clone()),
         vec![
             StagedFilesystemMutation::Write {
                 relative_path: "text.txt".into(),
@@ -81,7 +81,7 @@ fn transactions_accept_arbitrary_bytes_and_only_apply_explicit_content_validatio
 
     let rejected = FilesystemTransaction::prepare_with_validator(
         transaction_context(root.clone()),
-        directory.coordinator().acquire(root).unwrap(),
+        directory.coordinator().acquire(root),
         vec![StagedFilesystemMutation::Write {
             relative_path: "rejected.bin".into(),
             contents: vec![1],
@@ -98,7 +98,7 @@ fn prepare_json_transaction_with_coordinator(
     mutations: Vec<StagedFilesystemMutation>,
 ) -> Result<super::PreparedFilesystemTransaction, super::FilesystemError> {
     let root = normalized(temporary.path());
-    let lease = coordinator.acquire(root.clone()).unwrap();
+    let lease = coordinator.acquire(root.clone());
     FilesystemTransaction::prepare_with_validator(
         transaction_context(root),
         lease,
@@ -124,7 +124,7 @@ fn prepare_json_transaction_with_recovery_marker(
     marker: RecoveryMarker,
 ) -> Result<super::PreparedFilesystemTransaction, super::FilesystemError> {
     let root = normalized(temporary.path());
-    let lease = temporary.coordinator().acquire(root.clone()).unwrap();
+    let lease = temporary.coordinator().acquire(root.clone());
     let mut context = transaction_context(root);
     context.recovery_marker = Some(marker);
     FilesystemTransaction::prepare_with_validator(context, lease, mutations, |_, contents| {
@@ -249,7 +249,7 @@ fn transaction_targets_cannot_address_the_reserved_staging_tree() {
     ] {
         let result = FilesystemTransaction::prepare(
             transaction_context(root.clone()),
-            temporary.coordinator().acquire(root.clone()).unwrap(),
+            temporary.coordinator().acquire(root.clone()),
             vec![StagedFilesystemMutation::Write {
                 relative_path,
                 contents: vec![0, 255],
@@ -331,28 +331,6 @@ fn destination_binding_rejects_replaced_roots_and_admits_new_directories() {
     let bound = missing.bind_existing().unwrap();
     assert!(bound.identity().is_some());
     bound.revalidate().unwrap();
-}
-
-#[test]
-fn lifecycle_close_rejects_new_operations_and_reopens_only_after_final_lease() {
-    let temporary = TestDirectory::new("filesystem-lifecycle-close");
-    let root = normalized(temporary.path().join("project"));
-    let coordinator = FilesystemCoordinator::default();
-
-    let mut lifecycle = coordinator.begin_root_lifecycle(root.clone()).unwrap();
-    let error = coordinator.acquire(root.clone()).err().unwrap();
-    assert_eq!(error.code(), "filesystem_root_admission_closed");
-
-    lifecycle.release_initial_and_drain();
-    lifecycle.acquire_final();
-    assert!(lifecycle.holds_lease());
-    assert_eq!(
-        coordinator.acquire(root.clone()).err().unwrap().code(),
-        "filesystem_root_admission_closed"
-    );
-
-    drop(lifecycle);
-    drop(coordinator.acquire(root).unwrap());
 }
 
 #[test]
@@ -1464,8 +1442,7 @@ fn abandoned_preparation_releases_staged_files_without_changing_live_content() {
     assert_eq!(std::fs::read(document).unwrap(), br#"{"live":1}"#);
     let _lease = temporary
         .coordinator()
-        .acquire(normalized(temporary.path()))
-        .unwrap();
+        .acquire(normalized(temporary.path()));
 }
 
 #[test]

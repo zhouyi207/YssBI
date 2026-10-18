@@ -1,14 +1,12 @@
 use crate::ProjectOperationError;
-use crate::filesystem::validate_deletion_root;
 use crate::{PreparedProjectActivation, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use yss_filesystem::{
-    FilesystemTransaction, NormalizedRoot, RootBinding, RootLifecycleGuard,
-    StagedFilesystemMutation, ensure_directory, read_file_inventory, remove_directory_if_created,
-    validate_destination_policy,
+    FilesystemTransaction, NormalizedRoot, RootBinding, StagedFilesystemMutation, ensure_directory,
+    read_file_inventory, remove_directory_if_created, validate_destination_policy,
 };
-use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
+use yss_project_identity::{OperationId, ProjectInstanceId};
 use yss_project_layout::{CHART_EXTENSION, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE};
 use yss_project_model::file::{FileContent, FilePath, FileState};
 use yss_project_model::{ProjectData, normalize_project_name};
@@ -31,33 +29,6 @@ impl std::fmt::Debug for PreparedProjectCopy {
 pub struct CreatedProject {
     pub metadata_path: PathBuf,
     pub project_name: String,
-}
-
-#[derive(Debug)]
-pub struct ProjectDeletionResult {
-    pub deleted_root: NormalizedRoot,
-    pub cleared_project_instance_id: Option<ProjectInstanceId>,
-}
-
-pub struct PreparedProjectDeletion {
-    deleted_root: NormalizedRoot,
-    post_activation_failed: bool,
-    active_project_instance_id: Option<ProjectInstanceId>,
-    activation: Option<crate::ProjectActivationToken>,
-    lifecycle: Option<RootLifecycleGuard>,
-}
-
-impl PreparedProjectDeletion {
-    pub fn post_activation_failed(&self) -> bool {
-        self.post_activation_failed
-    }
-}
-
-impl Drop for PreparedProjectDeletion {
-    fn drop(&mut self) {
-        self.lifecycle.take();
-        self.activation.take();
-    }
 }
 
 struct DestinationRootGuard {
@@ -117,7 +88,7 @@ impl ProjectState {
 
         let lease = self
             .filesystem()
-            .acquire_many([session.root.clone(), destination_root.clone()])?;
+            .acquire_many([session.root.clone(), destination_root.clone()]);
         self.validate_project_session(&session)?;
         if self.capture_prepared_authority_basis(&session.root)? != Some(authority_basis.clone()) {
             return Err(stale(
@@ -177,7 +148,7 @@ impl ProjectState {
             RootBinding::for_destination(crate::project_root_from_path(destination))?;
         let destination_root = destination_binding.normalized().clone();
         validate_destination_policy(destination_root.as_path())?;
-        let lease = self.filesystem().acquire(destination_root.clone())?;
+        let lease = self.filesystem().acquire(destination_root.clone());
         validate_destination_policy(destination_root.as_path())?;
         let mut root_guard = DestinationRootGuard::ensure(&destination_binding)?;
         let mut data = ProjectData::new();
@@ -209,65 +180,6 @@ impl ProjectState {
             project_name,
         })
     }
-
-    pub fn prepare_project_deletion(
-        &self,
-        root: &Path,
-        expected_root_identity: Option<&ProjectRootIdentity>,
-        expected_active_instance_id: Option<&ProjectInstanceId>,
-    ) -> Result<PreparedProjectDeletion, ProjectOperationError> {
-        let root_binding = RootBinding::for_existing(crate::project_root_from_path(root))?;
-        if expected_root_identity.is_some_and(|expected| {
-            root_binding.identity().map(|identity| identity.as_str()) != Some(expected.as_str())
-        }) {
-            return Err(stale("registered project root identity changed"));
-        }
-        let normalized = root_binding.normalized().clone();
-        let activation = self.project_activation.acquire();
-        let mut lifecycle = self.filesystem().begin_root_lifecycle(normalized.clone())?;
-        root_binding.revalidate()?;
-        validate_deletion_root(&normalized)?;
-        let _active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
-        lifecycle.release_initial_and_drain();
-        lifecycle.acquire_final();
-        root_binding.revalidate()?;
-        validate_deletion_root(&normalized)?;
-        let active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
-        let cleared_project_instance_id =
-            active.as_ref().map(|session| session.instance_id.clone());
-        let cleared_activation = cleared_project_instance_id
-            .as_ref()
-            .map(|_| PreparedProjectActivation::from_data(None, ProjectData::new(), None, false))
-            .transpose()?;
-        root_binding.revalidate()?;
-        move_project_to_recycle_bin(normalized.as_path())?;
-        let post_activation_failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            if let Some(cleared) = cleared_activation {
-                let published = self.publish_project_activation(cleared).map_err(|_| ())?;
-                published.dispose();
-            }
-            Ok::<(), ()>(())
-        }))
-        .map_or(true, |result| result.is_err());
-        Ok(PreparedProjectDeletion {
-            deleted_root: normalized,
-            post_activation_failed,
-            active_project_instance_id: cleared_project_instance_id,
-            activation: Some(activation),
-            lifecycle: Some(lifecycle),
-        })
-    }
-
-    pub fn commit_project_deletion(
-        &self,
-        prepared: PreparedProjectDeletion,
-    ) -> ProjectDeletionResult {
-        let cleared_project_instance_id = prepared.active_project_instance_id.clone();
-        ProjectDeletionResult {
-            deleted_root: prepared.deleted_root.clone(),
-            cleared_project_instance_id,
-        }
-    }
 }
 
 fn current_export_time() -> String {
@@ -275,45 +187,6 @@ fn current_export_time() -> String {
         .naive_local()
         .format("%Y-%m-%dT%H:%M:%S%.3f")
         .to_string()
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub type RecycleBinTestHook = std::sync::Arc<dyn Fn(&Path) -> Result<(), String> + Send + Sync>;
-
-#[cfg(any(test, feature = "test-support"))]
-static RECYCLE_BIN_TEST_HOOK: std::sync::Mutex<Option<RecycleBinTestHook>> =
-    std::sync::Mutex::new(None);
-
-#[cfg(any(test, feature = "test-support"))]
-pub fn set_recycle_bin_test_hook(hook: Option<RecycleBinTestHook>) {
-    *RECYCLE_BIN_TEST_HOOK.lock().unwrap() = hook;
-}
-
-fn move_project_to_recycle_bin(root: &Path) -> Result<(), ProjectOperationError> {
-    #[cfg(any(test, feature = "test-support"))]
-    if let Some(hook) = RECYCLE_BIN_TEST_HOOK.lock().unwrap().clone() {
-        return hook(root).map_err(|error| recycle_bin_error(root, error));
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    {
-        std::fs::remove_dir_all(root).map_err(|error| recycle_bin_error(root, error))
-    }
-
-    #[cfg(not(any(test, feature = "test-support")))]
-    {
-        trash::delete(root).map_err(|error| recycle_bin_error(root, error))
-    }
-}
-
-fn recycle_bin_error(root: &Path, error: impl ToString) -> ProjectOperationError {
-    ProjectOperationError::TransactionCommitFailed {
-        message: format!(
-            "failed to move project root '{}' to the system recycle bin: {}",
-            root.display(),
-            error.to_string()
-        ),
-    }
 }
 
 fn lifecycle_context(
@@ -328,23 +201,6 @@ fn lifecycle_context(
         expected_revisions: BTreeMap::new(),
         expected_absent_resources: BTreeSet::new(),
         recovery_marker: Some(state.project_recovery_marker()),
-    }
-}
-
-fn active_session_for_deletion(
-    state: &ProjectState,
-    root: &NormalizedRoot,
-    expected: Option<&ProjectInstanceId>,
-) -> Result<Option<ProjectSession>, ProjectOperationError> {
-    let current = state.capture_project_session().ok();
-    let active = current.filter(|session| &session.root == root);
-    match (active, expected) {
-        (Some(session), Some(expected)) if &session.instance_id == expected => Ok(Some(session)),
-        (Some(_), _) => Err(stale("active project identity does not authorize deletion")),
-        (None, Some(_)) => Err(stale(
-            "expected active project is no longer active at this root",
-        )),
-        (None, None) => Ok(None),
     }
 }
 

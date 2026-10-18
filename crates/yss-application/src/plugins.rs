@@ -97,7 +97,7 @@ impl HostServices for PluginHostServices {
             "data.list" => {
                 let data = self
                     .application
-                    .query_project_databases_in_session(&captured, None)
+                    .query_project_databases_in_session(&captured)
                     .map_err(|_| fail("plugin_dataset_unavailable"))?;
                 Ok(
                     json!({"datasets":data.databases().iter().map(|dataset|json!({"id":dataset.declaration.id.as_str(),"name":dataset.declaration.name,"columns":dataset.schema.columns().iter().map(|column|json!({"name":column.name().as_str(),"type":column.display_type(),"nullable":column.nullable()})).collect::<Vec<_>>()})).collect::<Vec<_>>()}),

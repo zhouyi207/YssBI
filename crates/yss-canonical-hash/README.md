@@ -21,7 +21,7 @@
 `CanonicalEncodingError` 保留 Serde JSON 的错误来源，调用方映射为自己的失败契约。
 
 对象指纹直接使用当前规范键顺序，不保留依赖构建特性或字段顺序的旧编码路径。
-项目保存身份、Graph 语义/依赖和执行缓存、Kernel/Registry 定义及 Harness 幂等/审批
+项目保存身份、Graph 语义/依赖和执行缓存、Kernel/Registry 定义及 Harness 幂等
 均应通过这一入口生成各自身份；原始文件内容身份仍使用字节散列入口。
 
 Focused validation:

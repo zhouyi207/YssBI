@@ -4,15 +4,14 @@ use crate::graph::{validate_graph_hash, validate_graph_request};
 
 use crate::{
     ApplyGraphEditRequest, BrowseNodesRequest, CapabilityContractError, CapabilityFailure,
-    CapabilityFailureCode, DatabaseExported, DatasetProfileInspection, DatasetSchemaInspection,
-    EditResourceRequest, ExecuteGraphRequest, ExportDatabaseRequest, GraphEditReceipt,
-    GraphExecution, GraphInspection, GraphInspectionPage, GraphResults, GraphSaved,
-    GraphValidation, InspectDatasetProfileRequest, InspectDatasetSchemaRequest,
-    InspectGraphRequest, InspectResourceRequest, InspectResultRequest, ListGraphResultsRequest,
-    ListResourcesRequest, MAX_CATALOG_QUERY_BYTES, MAX_CATALOG_RESULTS, MAX_LOCALE_BYTES,
-    ManageResourceRequest, NodeCatalogPage, ProjectInspection, ResourceInspection,
-    ResourceMutationReceipt, ResultInspection, ResultValueInspection, SaveGraphRequest, ToolEffect,
-    ValidateGraphRequest, validate_graph_edit_operation, validate_resource_id,
+    CapabilityFailureCode, DatabaseExported, EditResourceRequest, ExecuteGraphRequest,
+    ExportDatabaseRequest, GraphEditReceipt, GraphExecution, GraphInspection, GraphInspectionPage,
+    GraphResults, GraphSaved, GraphValidation, InspectGraphRequest, InspectResourceRequest,
+    InspectResultRequest, ListGraphResultsRequest, ListResourcesRequest, MAX_CATALOG_QUERY_BYTES,
+    MAX_CATALOG_RESULTS, MAX_LOCALE_BYTES, ManageResourceRequest, NodeCatalogPage,
+    ProjectInspection, ResourceInspection, ResourceMutationReceipt, ResultInspection,
+    ResultValueInspection, SaveGraphRequest, ToolEffect, ValidateGraphRequest,
+    validate_graph_edit_operation, validate_resource_id,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -87,8 +86,6 @@ pub enum CapabilityId {
     DeleteConnections,
     SearchKnowledge,
     ReadKnowledge,
-    InspectDatasetSchema,
-    InspectDatasetProfile,
     InspectResult,
     ReadResultTable,
     ListResources,
@@ -167,8 +164,6 @@ impl CapabilityId {
             Self::DeleteConnections => "delete_connections",
             Self::SearchKnowledge => "search_knowledge",
             Self::ReadKnowledge => "read_knowledge",
-            Self::InspectDatasetSchema => "inspect_dataset_schema",
-            Self::InspectDatasetProfile => "inspect_dataset_profile",
             Self::InspectResult => "inspect_result",
             Self::ReadResultTable => "read_result_table",
             Self::ListResources => "list_resources",
@@ -293,12 +288,10 @@ capability_descriptors! {
         InspectChart => Inspect, 1;
         UpdateChart => Mutate, 1;
     }
-    // Internal owner operations and stored history have metadata but are not model tools.
+    // Internal owner operations have metadata but are not model tools.
     internal {
         ApplyGraphEdit => Mutate, 200;
         SaveGraph => Mutate, 1;
-        InspectDatasetSchema => Inspect, 4096;
-        InspectDatasetProfile => Inspect, 1;
     }
 }
 
@@ -324,8 +317,6 @@ pub enum AutomationCapabilityRequest {
 
     InspectNodes(crate::InspectNodesRequest),
     FindConnections(crate::FindConnectionsRequest),
-    InspectDatasetSchema(InspectDatasetSchemaRequest),
-    InspectDatasetProfile(InspectDatasetProfileRequest),
     InspectResult(InspectResultRequest),
     ReadResultTable(crate::ReadResultTableRequest),
     ListResources(ListResourcesRequest),
@@ -368,8 +359,6 @@ impl AutomationCapabilityRequest {
 
             Self::InspectNodes(_) => CapabilityId::InspectNodes,
             Self::FindConnections(_) => CapabilityId::FindConnections,
-            Self::InspectDatasetSchema(_) => CapabilityId::InspectDatasetSchema,
-            Self::InspectDatasetProfile(_) => CapabilityId::InspectDatasetProfile,
             Self::InspectResult(_) => CapabilityId::InspectResult,
             Self::ReadResultTable(_) => CapabilityId::ReadResultTable,
             Self::ListResources(_) => CapabilityId::ListResources,
@@ -411,12 +400,6 @@ impl AutomationCapabilityRequest {
 
             Self::InspectNodes(request) => request.validate(),
             Self::FindConnections(request) => request.validate(),
-            Self::InspectDatasetSchema(request) => {
-                validate_resource_id("databaseId", &request.database_id)
-            }
-            Self::InspectDatasetProfile(request) => {
-                validate_resource_id("databaseId", &request.database_id)
-            }
             Self::InspectResult(request) => request.validate(),
             Self::ReadResultTable(request) => request.validate(),
             Self::ListResources(value) => {
@@ -544,8 +527,6 @@ pub enum AutomationCapabilityResult {
     GraphInspectionPage(GraphInspectionPage),
     NodeCatalogPage(NodeCatalogPage),
     NodeTypeInspection(crate::NodeTypeInspection),
-    DatasetSchemaInspection(DatasetSchemaInspection),
-    DatasetProfileInspection(DatasetProfileInspection),
     ResultInspection(ResultInspection),
     ResultTablePage(crate::ResultTablePage),
     ProjectInspection(ProjectInspection),
@@ -635,8 +616,6 @@ impl AutomationCapabilityResult {
             }
             Self::NodeCatalogPage(_) => CapabilityId::BrowseNodes,
             Self::NodeTypeInspection(_) => CapabilityId::InspectNodeType,
-            Self::DatasetSchemaInspection(_) => CapabilityId::InspectDatasetSchema,
-            Self::DatasetProfileInspection(_) => CapabilityId::InspectDatasetProfile,
             Self::ResultInspection(_) => CapabilityId::InspectResult,
             Self::ResultTablePage(_) => CapabilityId::ReadResultTable,
             Self::ProjectInspection(_) => CapabilityId::ListResources,
@@ -746,8 +725,6 @@ pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema 
         CapabilityId::FindConnections => schemars::schema_for!(crate::FindConnectionsRequest),
         CapabilityId::SearchKnowledge => schemars::schema_for!(crate::SearchKnowledgeRequest),
         CapabilityId::ReadKnowledge => schemars::schema_for!(crate::ReadKnowledgeRequest),
-        CapabilityId::InspectDatasetSchema => return false.into(),
-        CapabilityId::InspectDatasetProfile => return false.into(),
         CapabilityId::InspectResult => schemars::schema_for!(InspectResultRequest),
         CapabilityId::ReadResultTable => schemars::schema_for!(crate::ReadResultTableRequest),
         CapabilityId::ListResources => schemars::schema_for!(ListResourcesRequest),

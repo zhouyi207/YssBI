@@ -5,8 +5,6 @@ use thiserror::Error;
 pub enum FilesystemError {
     #[error("invalid filesystem root '{}': {message}", path.display())]
     InvalidRoot { path: PathBuf, message: String },
-    #[error("filesystem root admission is closed: {message}")]
-    RootAdmissionClosed { message: String },
     #[error("filesystem recovery is required: {message}")]
     RecoveryRequired { message: String },
     #[error("failed to prepare filesystem transaction: {message}")]
@@ -24,7 +22,6 @@ impl FilesystemError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidRoot { .. } => "invalid_filesystem_root",
-            Self::RootAdmissionClosed { .. } => "filesystem_root_admission_closed",
             Self::RecoveryRequired { .. } => "filesystem_recovery_required",
             Self::TransactionPrepareFailed { .. } => "transaction_prepare_failed",
             Self::TransactionCommitFailed { .. } => "transaction_commit_failed",

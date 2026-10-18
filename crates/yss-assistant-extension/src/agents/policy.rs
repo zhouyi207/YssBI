@@ -206,22 +206,6 @@ pub(crate) fn authorize_model_capability(
         Request::SetColumnSemantics(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::InspectDatasetSchema(request) => authorize_agent_resource(
-            scope,
-            &ProjectResourceRef {
-                kind: Kind::Database,
-                id: request.database_id.clone(),
-            },
-            Op::Inspect,
-        ),
-        Request::InspectDatasetProfile(request) => authorize_agent_resource(
-            scope,
-            &ProjectResourceRef {
-                kind: Kind::Database,
-                id: request.database_id.clone(),
-            },
-            Op::Inspect,
-        ),
         Request::InspectGraph(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }

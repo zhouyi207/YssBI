@@ -117,11 +117,8 @@ impl HarnessSessionStorePort for SqliteHarnessStore {
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
         Box::pin(async move {
             let mut transaction = self.pool.begin().await.map_err(|_| unavailable())?;
-            // All records owned by the session leave together, including records
-            // whose session identity is stored only in their JSON payload.
+            // All records owned by the session leave together.
             for query in [
-                "DELETE FROM approval_grant WHERE json_extract(payload_json, '$.sessionId') = ?",
-                "DELETE FROM workflow_run WHERE json_extract(payload_json, '$.sessionId') = ?",
                 "DELETE FROM tool_invocation WHERE session_id = ?",
                 "DELETE FROM assistant_event WHERE session_id = ?",
                 "DELETE FROM assistant_turn WHERE session_id = ?",

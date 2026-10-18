@@ -658,21 +658,12 @@ mod tests {
         let file = session.root.as_path().join(path.as_str());
         let saved = std::fs::read(&file).unwrap();
         let first = move_node(state, project, &path, node);
-        assert!(
-            !state
-                .unload_graph_resource_for_lifecycle(project, &path, 100, None)
-                .unwrap()
-        );
+        assert!(!state.unload_graph_resource(project, &path, None).unwrap());
         let retained = state.read_graph_editing(project, &path).unwrap();
         assert!(retained.state.dirty && retained.state.can_undo);
         let latest = move_node(state, project, &path, node);
         assert!(matches!(
-            state.unload_graph_resource_for_lifecycle(
-                project,
-                &path,
-                101,
-                Some(first.editing.version)
-            ),
+            state.unload_graph_resource(project, &path, Some(first.editing.version)),
             Err(ProjectOperationError::ResourceRevisionConflict { .. })
         ));
         assert_eq!(
@@ -685,12 +676,7 @@ mod tests {
         );
         assert!(
             state
-                .unload_graph_resource_for_lifecycle(
-                    project,
-                    &path,
-                    102,
-                    Some(latest.editing.version)
-                )
+                .unload_graph_resource(project, &path, Some(latest.editing.version))
                 .unwrap()
         );
         assert!(state.read_resident_graph(&path).unwrap().is_none());
@@ -930,22 +916,21 @@ mod tests {
         assert_eq!(preserved.state, edited.editing);
         assert_eq!(preserved.document.nodes[&node].position.x, 42.0);
 
-        state.unload_graph_resource(&path).unwrap();
+        state
+            .unload_graph_resource(
+                &state.capture_project_session().unwrap().instance_id,
+                &path,
+                None,
+            )
+            .unwrap();
         assert_eq!(
             state.read_graph_editing(&project, &path).unwrap().state,
             preserved.state
         );
         state
-            .unload_graph_resource_for_lifecycle(
-                &project,
-                &path,
-                u64::MAX - 2,
-                Some(preserved.state.version),
-            )
+            .unload_graph_resource(&project, &path, Some(preserved.state.version))
             .unwrap();
-        state
-            .load_graph_document(&project, &path, u64::MAX - 1)
-            .unwrap();
+        state.load_graph_document(&project, &path).unwrap();
         let reopened = state.read_graph_editing(&project, &path).unwrap();
         assert_ne!(
             reopened.state.version.session_id,
@@ -1119,7 +1104,6 @@ mod tests {
                     graph_path: &path,
                     expected_revision: edited.to_revision,
                     new_name: "Renamed",
-                    lifecycle_token: 1000,
                     operation_id: OperationId::new(),
                 },
             )
