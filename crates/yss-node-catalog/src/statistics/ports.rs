@@ -35,7 +35,7 @@ pub(super) fn fixed_table<'a>(
 
 pub(super) fn numeric_or_binary_series() -> Result<TypeExpr, BuiltinAssemblyError> {
     normalize_type_expr(TypeExpr::Union(vec![
-        series_type()?,
+        numeric_data_series_type(),
         data_series_type(concrete("core.binary")?),
     ]))
     .map_err(

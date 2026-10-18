@@ -1,6 +1,10 @@
 use std::time::{Duration, Instant};
 use yss_sci::power::compute;
-use yss_sci_contract::{execution::*, power::*};
+use yss_sci_contract::{
+    execution::*,
+    hypothesis::{Alternative, MeanDesign},
+    power::*,
+};
 fn control() -> ScientificExecutionControl {
     ScientificExecutionControl {
         cancellation: Default::default(),
@@ -34,7 +38,7 @@ fn normal_power_preserves_reference_tail_precision() {
         },
         PowerOptions {
             alpha: 0.8,
-            alternative: PowerAlternative::TwoSided,
+            alternative: Alternative::TwoSided,
             request: PowerRequest::Power { sample_size: 4 },
         },
         &control(),
@@ -58,7 +62,7 @@ fn normal_power_retains_subnormal_significance() {
             },
             PowerOptions {
                 alpha: f64::from_bits(1),
-                alternative: PowerAlternative::TwoSided,
+                alternative: Alternative::TwoSided,
                 request: PowerRequest::Power { sample_size: 4 },
             },
             &control(),
@@ -78,7 +82,7 @@ fn noncentral_f_power_finishes_for_large_denominator_degrees() {
         },
         PowerOptions {
             alpha: 0.05,
-            alternative: PowerAlternative::Greater,
+            alternative: Alternative::Greater,
             request: PowerRequest::Power { sample_size },
         },
     );
@@ -96,7 +100,7 @@ fn noncentral_f_power_retains_shift_with_large_balanced_degrees() {
         },
         PowerOptions {
             alpha: 0.05,
-            alternative: PowerAlternative::Greater,
+            alternative: Alternative::Greater,
             request: PowerRequest::Power { sample_size },
         },
     );
@@ -119,7 +123,7 @@ fn noncentral_t_power_retains_large_degrees() {
         },
         PowerOptions {
             alpha: 0.05,
-            alternative: PowerAlternative::TwoSided,
+            alternative: Alternative::TwoSided,
             request: PowerRequest::Power { sample_size },
         },
         &control(),
@@ -140,7 +144,7 @@ fn noncentral_t_power_retains_small_central_thresholds() {
         },
         PowerOptions {
             alpha: 0.8,
-            alternative: PowerAlternative::TwoSided,
+            alternative: Alternative::TwoSided,
             request: PowerRequest::Power { sample_size },
         },
         &control(),
@@ -160,10 +164,10 @@ fn noncentral_t_power_retains_small_central_thresholds() {
 fn null_t_power_retains_alpha_without_allocating_large_sample_data() {
     // Tail, zero, central and reflected-central thresholds exercise distinct branches.
     for (design, alternative, alpha) in [
-        (MeanDesign::OneSample, PowerAlternative::TwoSided, 0.05),
-        (MeanDesign::Independent, PowerAlternative::Greater, 0.5),
-        (MeanDesign::OneSample, PowerAlternative::TwoSided, 0.8),
-        (MeanDesign::Independent, PowerAlternative::Less, 0.8),
+        (MeanDesign::OneSample, Alternative::TwoSided, 0.05),
+        (MeanDesign::Independent, Alternative::Greater, 0.5),
+        (MeanDesign::OneSample, Alternative::TwoSided, 0.8),
+        (MeanDesign::Independent, Alternative::Less, 0.8),
     ] {
         let result = compute(
             PowerModel::TMean {
@@ -189,8 +193,8 @@ fn null_t_power_retains_alpha_without_allocating_large_sample_data() {
     }
 }
 
-fn models() -> Vec<(&'static str, PowerModel, PowerAlternative)> {
-    use PowerAlternative::*;
+fn models() -> Vec<(&'static str, PowerModel, Alternative)> {
+    use Alternative::*;
     use PowerModel::*;
     vec![
         (
@@ -373,7 +377,7 @@ fn power_directions_null_effects_invalid_targets_and_control_are_explicit() {
     let c = control();
     let options = PowerOptions {
         alpha: 0.05,
-        alternative: PowerAlternative::Greater,
+        alternative: Alternative::Greater,
         request: PowerRequest::Power { sample_size: 640 },
     };
     let null = compute(
@@ -392,7 +396,7 @@ fn power_directions_null_effects_invalid_targets_and_control_are_explicit() {
             design: MeanDesign::Independent,
         },
         PowerOptions {
-            alternative: PowerAlternative::Less,
+            alternative: Alternative::Less,
             ..options
         },
         &c,
@@ -429,7 +433,7 @@ fn power_directions_null_effects_invalid_targets_and_control_are_explicit() {
                 margin: 0.3
             },
             PowerOptions {
-                alternative: PowerAlternative::TwoSided,
+                alternative: Alternative::TwoSided,
                 request: PowerRequest::SampleSize { target_power: 0.8 },
                 ..options
             },

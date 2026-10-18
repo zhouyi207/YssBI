@@ -37,13 +37,13 @@ pub(super) fn ports(method: &str) -> Result<Vec<PortSpec>, BuiltinAssemblyError>
     };
     let mut ports = keys
         .iter()
-        .map(|&(key, label)| data_input(key, label, series_type()?))
+        .map(|&(key, label)| data_input(key, label, numeric_data_series_type()))
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
     if method == "regression" {
         ports.push(bounded_user_data_input(
             "moderators",
             "Moderator",
-            series_type()?,
+            numeric_data_series_type(),
             1,
             None,
         )?);
@@ -52,7 +52,7 @@ pub(super) fn ports(method: &str) -> Result<Vec<PortSpec>, BuiltinAssemblyError>
         ports.push(bounded_user_data_input(
             "weights",
             "Stouffer weights",
-            series_type()?,
+            numeric_data_series_type(),
             0,
             Some(1),
         )?);

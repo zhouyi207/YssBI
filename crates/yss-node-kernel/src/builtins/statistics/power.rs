@@ -1,7 +1,11 @@
 //! Scalar planning adapters; no observation rows or fitted-sample state enter these nodes.
 use super::{common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
-use yss_sci_contract::{execution::ScientificExecutionControl as Control, power::*};
+use yss_sci_contract::{
+    execution::ScientificExecutionControl as Control,
+    hypothesis::{Alternative, MeanDesign},
+    power::*,
+};
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     for (method, parameters, fixed_alternative) in [
         ("principles", &["effect_size"][..], None),
@@ -22,12 +26,12 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         (
             "anova",
             &["groups", "effect_f"][..],
-            Some(PowerAlternative::Greater),
+            Some(Alternative::Greater),
         ),
         (
             "linear_regression",
             &["predictors", "effect_f_squared"][..],
-            Some(PowerAlternative::Greater),
+            Some(Alternative::Greater),
         ),
         (
             "generalized_model",
@@ -57,12 +61,12 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         (
             "noninferiority",
             &["difference", "margin", "higher_is_better"][..],
-            Some(PowerAlternative::Greater),
+            Some(Alternative::Greater),
         ),
         (
             "equivalence",
             &["difference", "margin"][..],
-            Some(PowerAlternative::TwoSided),
+            Some(Alternative::TwoSided),
         ),
     ] {
         let mut params = vec!["solve_for", "sample_size", "target_power", "alpha"];
@@ -83,18 +87,13 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
 fn compute(
     inv: &KernelInvocation<'_>,
     method: &str,
-    fixed_alternative: Option<PowerAlternative>,
+    fixed_alternative: Option<Alternative>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     inv.control.check_bytes(Some(65536))?;
     let alternative = if let Some(a) = fixed_alternative {
         a
     } else {
-        match text(inv, "alternative")? {
-            "two_sided" => PowerAlternative::TwoSided,
-            "greater" => PowerAlternative::Greater,
-            "less" => PowerAlternative::Less,
-            _ => return Err(KernelError::InvalidParameter),
-        }
+        alternative(inv)?
     };
     let request = match text(inv, "solve_for")? {
         "power" => PowerRequest::Power {
@@ -130,10 +129,9 @@ fn model(inv: &KernelInvocation<'_>, method: &str) -> Result<PowerModel, KernelE
             design: if method == "paired" {
                 MeanDesign::Paired
             } else {
-                match text(inv, "design")? {
-                    "one_sample" => MeanDesign::OneSample,
-                    "independent" => MeanDesign::Independent,
-                    _ => return Err(KernelError::InvalidParameter),
+                match MeanDesign::from_name(text(inv, "design")?) {
+                    Some(MeanDesign::Paired) | None => return Err(KernelError::InvalidParameter),
+                    Some(design) => design,
                 }
             },
         },

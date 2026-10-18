@@ -1,5 +1,6 @@
 //! Executable multivariate analyses and parameter-derived coordinate tables.
 use super::*;
+use crate::builtin::add_node_messages;
 
 const RESOLVER: &str = "yssbi.statistics.multivariate.schema.coordinates";
 const SPECS: &[(&str, &str, &str)] = &[
@@ -44,7 +45,7 @@ fn numeric_group(
     label: &'static str,
     min: u16,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    bounded_user_data_input(key, label, series_type()?, min, None)
+    bounded_user_data_input(key, label, numeric_data_series_type(), min, None)
 }
 fn coordinate_output(
     key: &'static str,
@@ -186,7 +187,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id, NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(id, "title")?,
-                    documentation_key: Some(node_key(id, "documentation")?),
                     aliases_key: Some(node_key(id, "aliases")?),
                     category_id: sid("statistics.multivariate", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -212,28 +212,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        for (locale, title, help) in [
-            (
-                "en-US",
-                en,
-                "Analyze aligned numerical variables; inspect the summary and connect the numerical output. See node help for model assumptions.",
-            ),
-            (
-                "zh-CN",
-                zh,
-                "分析对齐的数值变量，查看摘要并连接计算输出；方法假设见节点帮助。",
-            ),
-        ] {
-            fragment.messages.extend([
-                (locale, node_key_text(id, "title"), Text(title)),
-                (locale, node_key_text(id, "documentation"), Text(help)),
-                (
-                    locale,
-                    node_key_text(id, "aliases"),
-                    Aliases(aliases(method)),
-                ),
-            ]);
-        }
+        let aliases = aliases(method);
+        add_node_messages(
+            &mut fragment.messages,
+            id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     Ok(())
 }

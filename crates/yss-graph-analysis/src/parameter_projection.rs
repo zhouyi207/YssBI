@@ -24,9 +24,7 @@ pub(crate) fn effective_conversion_target(
         yss_node_protocol::ConversionTarget::Fixed(target) => Some(*target),
         yss_node_protocol::ConversionTarget::Parameter(parameter) => {
             let value = effective_text_parameter(node, parameter, registry)?;
-            yss_node_protocol::SemanticType::ALL
-                .into_iter()
-                .find(|target| target.type_id() == value)
+            yss_node_protocol::SemanticType::from_type_id(value)
         }
     }
 }

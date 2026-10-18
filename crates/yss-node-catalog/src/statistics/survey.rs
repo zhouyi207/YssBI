@@ -1,5 +1,6 @@
 //! Survey interfaces; sampling weights are distinct from precision and treatment weights.
 use super::*;
+use crate::builtin::add_node_messages;
 mod parameters;
 const METHODS: &[(&str, &str, &str, bool)] = &[
     ("weights", "Sampling weights", "抽样权重", false),
@@ -48,10 +49,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 data_input(
                     "values",
                     "Weights or inclusion probabilities",
-                    series_type()?,
+                    numeric_data_series_type(),
                 )?,
                 data_output("result", "Weight summary", report_type()?)?,
-                data_output("weights", "Validated sampling weights", series_type()?)?,
+                data_output(
+                    "weights",
+                    "Validated sampling weights",
+                    numeric_data_series_type(),
+                )?,
             ]
         } else {
             estimate_ports(method, regression)?
@@ -62,7 +67,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: None,
                     category_id: sid("statistics.survey", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -79,12 +83,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-            ]);
-        }
+        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }
@@ -95,7 +94,7 @@ fn estimate_ports(method: &str, regression: bool) -> Result<Vec<PortSpec>, Built
     ]));
     let mut ports = vec![
         data_input("y", "Y", response)?,
-        data_input("weights", "Sampling weights", series_type()?)?,
+        data_input("weights", "Sampling weights", numeric_data_series_type())?,
     ];
     for (key, title, required) in [
         ("strata", "Stratum", method == "stratified"),
@@ -112,7 +111,13 @@ fn estimate_ports(method: &str, regression: bool) -> Result<Vec<PortSpec>, Built
         });
     }
     if regression {
-        ports.push(bounded_user_data_input("x", "X", series_type()?, 0, None)?);
+        ports.push(bounded_user_data_input(
+            "x",
+            "X",
+            numeric_data_series_type(),
+            0,
+            None,
+        )?);
     }
     ports.push(data_output(
         "result",

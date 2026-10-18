@@ -325,10 +325,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                     "breslow" => CoxTies::Breslow,
                     _ => return Err(KernelError::InvalidParameter),
                 },
-                iteration: yss_sci_contract::regression::models::IterationOptions {
-                    max_iterations: integer(inv, "max_iterations")?,
-                    tolerance: number(inv, "tolerance")?,
-                },
+                iteration: iteration(inv)?,
             };
             let transform = match text(inv, "time_transform")? {
                 "rank" => PhTimeTransform::Rank,

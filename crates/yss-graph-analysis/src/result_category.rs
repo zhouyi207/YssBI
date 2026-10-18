@@ -1,13 +1,11 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GraphResultCategory {
     Value,
     PlotData(GraphPlotDataKind),
     StatisticalReport(GraphStatisticalReportKind),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GraphPlotDataKind {
     Scatter,
     Line,
@@ -31,7 +29,7 @@ pub enum GraphPlotDataKind {
     Nomogram,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GraphStatisticalReportKind {
     Structured,
     LinearRegressionSummary,

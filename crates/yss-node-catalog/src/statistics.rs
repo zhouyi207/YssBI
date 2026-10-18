@@ -3,6 +3,7 @@
 //! This module owns graph-independent interfaces and localization. Node Kernel
 //! owns executable adapters; Graph Analysis owns connected types and schemas.
 
+use crate::builtin::add_node_messages;
 use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 mod analyses;
@@ -59,7 +60,12 @@ fn defined_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError>
     let nodes = NODES
         .iter()
         .map(|spec| {
-            add_node_messages(&mut messages, spec);
+            add_node_messages(
+                &mut messages,
+                spec.id,
+                [spec.title, spec.zh_title],
+                Some([spec.aliases, spec.zh_aliases]),
+            );
             Ok(leaf(protocol(spec)?, spec.id))
         })
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
@@ -100,7 +106,6 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         type_id: sid(spec.id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
-            documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
             category_id: sid(category(spec), NodeCategoryId::new)?,
             icon_id: sid("builtin.statistics", IconId::new)?,
@@ -167,7 +172,7 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         ports.push(user_data_input(
             "variables",
             "Variables",
-            series_type()?,
+            numeric_data_series_type(),
             2,
         )?);
     } else {
@@ -177,7 +182,7 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         ports.push(user_data_input(
             "exogenous",
             "Exogenous",
-            series_type()?,
+            numeric_data_series_type(),
             0,
         )?);
     }
@@ -185,33 +190,37 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         ports.push(bounded_user_data_input(
             "endogenous",
             "Endogenous",
-            series_type()?,
+            numeric_data_series_type(),
             1,
             None,
         )?);
         ports.push(bounded_user_data_input(
             "instruments",
             "Instruments",
-            series_type()?,
+            numeric_data_series_type(),
             1,
             None,
         )?);
     }
     if spec.family == Family::PanelDid {
-        ports.push(data_input("treatment", "Treatment", series_type()?)?);
+        ports.push(data_input(
+            "treatment",
+            "Treatment",
+            numeric_data_series_type(),
+        )?);
     }
     if spec.family == Family::Linear {
         ports.push(bounded_user_data_input(
             "weights",
             "Weights (WLS)",
-            series_type()?,
+            numeric_data_series_type(),
             0,
             Some(1),
         )?);
         ports.push(user_data_input(
             "sigma",
             "Covariance column (GLS)",
-            series_type()?,
+            numeric_data_series_type(),
             0,
         )?);
     }
@@ -246,7 +255,7 @@ fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError>
 fn prediction_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
         data_input("model", "Model", prediction_model_type(family)?)?,
-        user_data_input("x", "X", series_type()?, 1)?,
+        user_data_input("x", "X", numeric_data_series_type(), 1)?,
         data_output("prediction", "Prediction", float_series_type()?)?,
     ])
 }
@@ -256,17 +265,34 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     match family {
         Family::PanelDid => {
             ports.extend(regression_inputs(family)?);
-            ports.push(data_input("treat", "Treated group (0/1)", series_type()?)?);
-            ports.push(data_input("post", "Post period (0/1)", series_type()?)?);
+            ports.push(data_input(
+                "treat",
+                "Treated group (0/1)",
+                numeric_data_series_type(),
+            )?);
+            ports.push(data_input(
+                "post",
+                "Post period (0/1)",
+                numeric_data_series_type(),
+            )?);
         }
-        Family::Adf => ports.push(user_data_input("series", "DataSeries", series_type()?, 1)?),
+        Family::Adf => ports.push(user_data_input(
+            "series",
+            "DataSeries",
+            numeric_data_series_type(),
+            1,
+        )?),
         Family::Var | Family::VecRank => ports.push(user_data_input(
             "variables",
             "Variables",
-            series_type()?,
+            numeric_data_series_type(),
             2,
         )?),
-        _ => ports.push(data_input("series", "DataSeries", series_type()?)?),
+        _ => ports.push(data_input(
+            "series",
+            "DataSeries",
+            numeric_data_series_type(),
+        )?),
     }
     ports.push(data_output("result", "Result", result_type(family)?)?);
     Ok(ports)
@@ -274,11 +300,11 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
 
 fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     let mut ports = vec![
-        data_input("y", "Y", series_type()?)?,
+        data_input("y", "Y", numeric_data_series_type())?,
         user_data_input(
             "x",
             "X",
-            series_type()?,
+            numeric_data_series_type(),
             if matches!(family, Family::Iv2sls | Family::IvLiml | Family::PanelDid) {
                 0
             } else {
@@ -287,8 +313,8 @@ fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyErr
         )?,
     ];
     if matches!(family, Family::Panel | Family::PanelDid) {
-        ports.push(data_input("entity", "Entity", series_type()?)?);
-        ports.push(data_input("time", "Time", series_type()?)?);
+        ports.push(data_input("entity", "Entity", numeric_data_series_type())?);
+        ports.push(data_input("time", "Time", numeric_data_series_type())?);
     }
     Ok(ports)
 }
@@ -756,6 +782,13 @@ fn choice_parameter(
     ));
     Ok(parameter)
 }
+fn alternative_parameter() -> Result<Parameter, BuiltinAssemblyError> {
+    choice_parameter(
+        "alternative",
+        yss_sci_contract::hypothesis::Alternative::TwoSided.name(),
+        &yss_sci_contract::hypothesis::Alternative::NAMES,
+    )
+}
 fn nonnegative_integer_parameter(
     key: &'static str,
     default: i64,
@@ -1052,9 +1085,6 @@ fn category(spec: &NodeSpec) -> &'static str {
 fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
 }
-fn series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(numeric_data_series_type())
-}
 fn model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
     let id = match family {
         Family::Linear => "statistics.model.linear",
@@ -1111,28 +1141,6 @@ fn report_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 fn port_key(key: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
     sid(key, PortKey::new)
-}
-
-fn add_node_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &NodeSpec) {
-    let title = node_key_text(spec.id, "title");
-    let documentation = node_key_text(spec.id, "documentation");
-    let aliases = node_key_text(spec.id, "aliases");
-    out.extend([
-        ("en-US", title.to_owned(), Text(spec.title)),
-        ("zh-CN", title.to_owned(), Text(spec.zh_title)),
-        (
-            "en-US",
-            documentation.to_owned(),
-            Text("Lowered through the scientific runtime API and node-system contracts."),
-        ),
-        (
-            "zh-CN",
-            documentation.to_owned(),
-            Text("通过科学计算运行时 API 和节点系统契约执行。"),
-        ),
-        ("en-US", aliases.to_owned(), Aliases(spec.aliases)),
-        ("zh-CN", aliases.to_owned(), Aliases(spec.zh_aliases)),
-    ]);
 }
 
 fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {

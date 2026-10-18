@@ -10,11 +10,9 @@ pub(super) fn aligned(columns: &[&[f64]], control: &Control) -> Result<usize> {
         return Err(parameter());
     }
     if columns.iter().any(|c| c.len() != n) {
-        return Err(
-            yss_sci_contract::execution::ScientificComputationError::InvalidInput {
-                violation: yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
-            },
-        );
+        return Err(crate::error::invalid(
+            yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
+        ));
     }
     for col in columns {
         for (i, v) in col.iter().enumerate() {

@@ -14,8 +14,9 @@ pub use basis::{
 };
 pub use identity::{
     InvalidPlanIdentity, PlanGraphId, PlanId, PlanInputGroupId, PlanNodeId, PlanNodeTypeId,
-    PlanOutputRef, PlanPortAddress, PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint,
-    PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
+    PlanOutputRef, PlanParameterHandle, PlanParameterSchemaId, PlanPortAddress,
+    PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
+    PlanResourceVersion, PlanSourceIdentity,
 };
 pub use model::{
     ExecutionPlan, NodeExecutionMode, PlanExecutionDemand, PlanFieldLineage, PlanInputBinding,
@@ -26,9 +27,8 @@ pub use model::{
 pub use observation::{PlanObservationIntent, ValueRef};
 pub use package::ExecutionPlanPackage;
 pub use parameter::{
-    InvalidPlanParameterId, PlanParameterBundle, PlanParameterBundleBuilder,
-    PlanParameterBundleError, PlanParameterHandle, PlanParameterPayload, PlanParameterSchemaId,
-    PlanParameterValue,
+    PlanParameterBundle, PlanParameterBundleBuilder, PlanParameterBundleError,
+    PlanParameterPayload, PlanParameterValue,
 };
 pub use result_category::{PlotDataKind, ResultCategory, StatisticalReportKind};
 pub use validation::PlanValidationError;
@@ -60,7 +60,7 @@ mod tests {
         );
         assert_eq!(
             PlanParameterSchemaId::new(" ".into()),
-            Err(InvalidPlanParameterId::SurroundingWhitespace)
+            Err(InvalidPlanIdentity::SurroundingWhitespace)
         );
     }
 

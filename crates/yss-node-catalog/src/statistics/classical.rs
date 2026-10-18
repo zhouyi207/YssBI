@@ -1,7 +1,7 @@
 //! Executable independent-sample hypothesis tests.
 use super::*;
+use crate::builtin::add_node_messages;
 use crate::builtin::assembled_decimal;
-use crate::builtin::node_key_text;
 use yss_data_contract::DataValue;
 
 const SPECS: &[(&str, &str, &str, &[&str], &str)] = &[
@@ -286,28 +286,36 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             }
         };
         let mut ports = match mode {
-            "one" => vec![data_input("series", "Observations", series_type()?)?],
+            "one" => vec![data_input(
+                "series",
+                "Observations",
+                numeric_data_series_type(),
+            )?],
             "independent" | "mann_whitney" => vec![
-                data_input("group1", "Group 1", series_type()?)?,
-                data_input("group2", "Group 2", series_type()?)?,
+                data_input("group1", "Group 1", numeric_data_series_type())?,
+                data_input("group2", "Group 2", numeric_data_series_type())?,
             ],
             "paired" => vec![
-                data_input("before", "Before", series_type()?)?,
-                data_input("after", "After", series_type()?)?,
+                data_input("before", "Before", numeric_data_series_type())?,
+                data_input("after", "After", numeric_data_series_type())?,
             ],
             "summary" => {
                 vec![data_input(
                     "series",
                     "Summary values by design",
-                    series_type()?,
+                    numeric_data_series_type(),
                 )?]
             }
             "zmean" | "oneprop" | "binomial" => {
-                vec![data_input("series", "Observations", series_type()?)?]
+                vec![data_input(
+                    "series",
+                    "Observations",
+                    numeric_data_series_type(),
+                )?]
             }
             "twoprop" => vec![
-                data_input("group1", "Group 1", series_type()?)?,
-                data_input("group2", "Group 2", series_type()?)?,
+                data_input("group1", "Group 1", numeric_data_series_type())?,
+                data_input("group2", "Group 2", numeric_data_series_type())?,
             ],
             "crosstab" | "fisher" => vec![
                 data_input("row", "Row classification", category_series_type()?)?,
@@ -316,11 +324,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "pearson_table" => vec![data_input(
                 "counts",
                 "Observed cell counts",
-                series_type()?,
+                numeric_data_series_type(),
             )?],
             "gof" => vec![
-                data_input("observed", "Observed counts", series_type()?)?,
-                data_input("expected", "Expected counts", series_type()?)?,
+                data_input("observed", "Observed counts", numeric_data_series_type())?,
+                data_input("expected", "Expected counts", numeric_data_series_type())?,
             ],
             "mcnemar" => vec![
                 data_input("before", "Before (0/1)", category_series_type()?)?,
@@ -334,32 +342,36 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "mult_prop" => vec![data_input(
                 "successes_and_trials",
                 "Successes and trial counts",
-                series_type()?,
+                numeric_data_series_type(),
             )?],
             "poisson" | "equivalence" => vec![data_input(
                 "series",
                 "Counts or measurements",
-                series_type()?,
+                numeric_data_series_type(),
             )?],
             "nonparam_family" | "mood_median" | "kruskal" | "levene" | "brown_forsythe"
             | "bartlett" => vec![bounded_user_data_input(
                 "groups",
                 "Independent samples",
-                series_type()?,
+                numeric_data_series_type(),
                 2,
                 None,
             )?],
             "wilcoxon_one" | "runs" | "mann_kendall" => {
-                vec![data_input("series", "Observations", series_type()?)?]
+                vec![data_input(
+                    "series",
+                    "Observations",
+                    numeric_data_series_type(),
+                )?]
             }
             "wilcoxon_paired" => vec![
-                data_input("before", "Before", series_type()?)?,
-                data_input("after", "After", series_type()?)?,
+                data_input("before", "Before", numeric_data_series_type())?,
+                data_input("after", "After", numeric_data_series_type())?,
             ],
             "friedman" | "cochran_q" => vec![bounded_user_data_input(
                 "conditions",
                 "Repeated conditions",
-                series_type()?,
+                numeric_data_series_type(),
                 3,
                 None,
             )?],
@@ -371,7 +383,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id, NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(id, "title")?,
-                    documentation_key: Some(node_key(id, "documentation")?),
                     aliases_key: Some(node_key(id, "aliases")?),
                     category_id: sid("statistics.tests", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -388,30 +399,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        for (locale, title, description) in [
-            (
-                "en-US",
-                en,
-                "Test a statistical hypothesis using observations or summary data. Outputs a structured result; see the help for required inputs and assumptions.",
-            ),
-            (
-                "zh-CN",
-                zh,
-                "使用观测值或概要数据进行假设检验，输出检验结果和报告；具体输入要求与适用假设见帮助文档。",
-            ),
-        ] {
-            fragment
-                .messages
-                .push((locale, node_key_text(id, "title"), Text(title)));
-            fragment.messages.push((
-                locale,
-                node_key_text(id, "documentation"),
-                Text(description),
-            ));
-            fragment
-                .messages
-                .push((locale, node_key_text(id, "aliases"), Aliases(aliases)));
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     Ok(())
 }
@@ -534,14 +527,6 @@ fn add_parameter_messages(out: &mut Vec<(&'static str, String, Message)>) {
             ]);
         }
     }
-}
-
-fn alternative_parameter() -> Result<Parameter, BuiltinAssemblyError> {
-    choice_parameter(
-        "alternative",
-        "two_sided",
-        &["two_sided", "greater", "less"],
-    )
 }
 
 fn decimal_parameter(

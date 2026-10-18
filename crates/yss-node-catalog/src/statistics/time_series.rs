@@ -1,5 +1,6 @@
 //! Executable entries for the remaining time-series inventory.
 use super::*;
+use crate::builtin::add_node_messages;
 
 const METHODS: &[(&str, &str, &str, &[&str])] = &[
     (
@@ -216,17 +217,23 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         let input = if method == "timeseries.markov_prediction" {
             label_series()?
         } else {
-            series_type()?
+            numeric_data_series_type()
         };
         let mut ports = vec![data_input("series", "Series", input)?];
         if method == "timeseries.ecm" {
-            ports.push(bounded_user_data_input("x", "X", series_type()?, 1, None)?);
+            ports.push(bounded_user_data_input(
+                "x",
+                "X",
+                numeric_data_series_type(),
+                1,
+                None,
+            )?);
         }
         if method == "plot.time_series" {
             ports.push(bounded_user_data_input(
                 "time",
                 "Time (optional)",
-                series_type()?,
+                numeric_data_series_type(),
                 0,
                 Some(1),
             )?);
@@ -245,7 +252,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: Some(node_key(&id, "aliases")?),
                     category_id: sid("statistics.timeseries", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -262,24 +268,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title, help) in [
-            (
-                "en-US",
-                en,
-                "Analyze an ordered time series. See help for assumptions, estimation and forecast indexing.",
-            ),
-            (
-                "zh-CN",
-                zh,
-                "分析按时间排序的序列；模型假设、估计方法及预测索引见节点帮助。",
-            ),
-        ] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(help)),
-                (locale, node_key_text(&id, "aliases"), Aliases(aliases)),
-            ]);
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            &id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     for (key, en, zh) in [
         ("ts_p", "AR / ARCH order", "AR / ARCH 阶数"),

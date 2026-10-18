@@ -1,3 +1,5 @@
+use super::*;
+
 // ============== Time Random Effects (group by time_id) ==============
 
 /// Panel RE FGLS (Time): same as entity RE but group by time period
@@ -9,7 +11,7 @@ pub fn fit_panel_re_fgls_time(
     constant: bool,
     cov_type: &str,
     cov_params: Option<yss_sci_contract::regression::CovParams>,
-) -> Result<super::PanelFit, String> {
+) -> Result<super::super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (FGLS Time): lengths must match".to_string());
@@ -291,18 +293,18 @@ pub fn fit_panel_re_fgls_time(
     let sigma_e = sigma2_e.sqrt();
     let rho = sigma2_u / (sigma2_u + sigma2_e);
 
-    let fe_stats = Some(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats {
+    let fe_stats = Some(super::super::PanelFEStats {
+        r2: Some(super::super::PanelR2Stats {
             r2_within,
             r2_between,
             r2_overall,
         }),
-        obs_per_group: super::ObsPerGroupStats {
+        obs_per_group: super::super::ObsPerGroupStats {
             min: obs_min,
             avg: obs_avg,
             max: obs_max,
         },
-        sigma: super::SigmaStats {
+        sigma: super::super::SigmaStats {
             sigma_u,
             sigma_e,
             rho,
@@ -341,13 +343,13 @@ pub fn fit_panel_re_fgls_time(
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("{}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        crate::distribution::normal_two_sided_p(result.tvalues[i])
+        crate::distribution::normal::two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
-    Ok(super::PanelFit {
+    Ok(super::super::PanelFit {
         parameter_names: vec![],
         parameter_categories: vec![],
         response_name: "response".into(),
@@ -366,20 +368,20 @@ pub fn fit_panel_re_fgls_time(
         },
         family: "panel_re_fgls_time".into(),
         coefficients: (result.betas).iter().copied().collect(),
-        inference: super::RegressionCoefficientStatistics {
-            covariance: super::covariance_rows(&(result.cov_beta)),
+        inference: super::super::RegressionCoefficientStatistics {
+            covariance: super::super::covariance_rows(&(result.cov_beta)),
             standard_errors: (result.stds).iter().copied().collect(),
             statistic_values: (result.tvalues).iter().copied().collect(),
             p_values: (pvalues_z).iter().copied().collect(),
             confidence_interval_lower: (conf_int_left_z).iter().copied().collect(),
             confidence_interval_upper: (conf_int_right_z).iter().copied().collect(),
         },
-        statistics: super::PanelModelStatistics {
+        statistics: super::super::PanelModelStatistics {
             observations: result.num_observation,
             entities: n_times,
             time_periods: n_times,
             within_r2: None,
-            linear: super::LinearRegressionStatistics {
+            linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,
                 adjusted_r2: result.r2_adjusted,
                 f_statistic: result.fvalue,
@@ -401,11 +403,11 @@ pub fn fit_panel_re_fgls_time(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::RandomEffects {
+        estimator_statistics: super::super::PanelEstimatorStatistics::RandomEffects {
             wald_chi2,
             wald_p_value: prob_wald_chi2,
         },
-        covariance_nonrobust: Some(super::covariance_rows(&(result.cov_beta_nonrobust))),
+        covariance_nonrobust: Some(super::super::covariance_rows(&(result.cov_beta_nonrobust))),
     })
 }
 
@@ -416,7 +418,7 @@ pub fn fit_panel_re_be_time(
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
-) -> Result<super::PanelFit, String> {
+) -> Result<super::super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (BE Time): lengths must match".to_string());
@@ -554,18 +556,18 @@ pub fn fit_panel_re_be_time(
 
     // sd(λ_t + avg(e_.t)) — time-level composite error (like entity BE: sd(u_i + avg(e_i.)))
     let sd_lambda_plus_avg_e = (result.ms_residual).sqrt();
-    let fe_stats = Some(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats {
+    let fe_stats = Some(super::super::PanelFEStats {
+        r2: Some(super::super::PanelR2Stats {
             r2_within,
             r2_between,
             r2_overall,
         }),
-        obs_per_group: super::ObsPerGroupStats {
+        obs_per_group: super::super::ObsPerGroupStats {
             min: obs_min,
             avg: obs_avg,
             max: obs_max,
         },
-        sigma: super::SigmaStats {
+        sigma: super::super::SigmaStats {
             sigma_u: sd_lambda_plus_avg_e,
             sigma_e: 0.0,
             rho: 0.0,
@@ -576,13 +578,13 @@ pub fn fit_panel_re_be_time(
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("{}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        crate::distribution::normal_two_sided_p(result.tvalues[i])
+        crate::distribution::normal::two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
-    Ok(super::PanelFit {
+    Ok(super::super::PanelFit {
         parameter_names: vec![],
         parameter_categories: vec![],
         response_name: "response".into(),
@@ -601,20 +603,20 @@ pub fn fit_panel_re_be_time(
         },
         family: "panel_re_be_time".into(),
         coefficients: (result.betas).iter().copied().collect(),
-        inference: super::RegressionCoefficientStatistics {
-            covariance: super::covariance_rows(&(result.cov_beta)),
+        inference: super::super::RegressionCoefficientStatistics {
+            covariance: super::super::covariance_rows(&(result.cov_beta)),
             standard_errors: (result.stds).iter().copied().collect(),
             statistic_values: (result.tvalues).iter().copied().collect(),
             p_values: (pvalues_z).iter().copied().collect(),
             confidence_interval_lower: (conf_int_left_z).iter().copied().collect(),
             confidence_interval_upper: (conf_int_right_z).iter().copied().collect(),
         },
-        statistics: super::PanelModelStatistics {
+        statistics: super::super::PanelModelStatistics {
             observations: n,
             entities: n_times,
             time_periods: n_times,
             within_r2: None,
-            linear: super::LinearRegressionStatistics {
+            linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,
                 adjusted_r2: result.r2_adjusted,
                 f_statistic: result.fvalue,
@@ -636,7 +638,7 @@ pub fn fit_panel_re_be_time(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::LeastSquares,
+        estimator_statistics: super::super::PanelEstimatorStatistics::LeastSquares,
         covariance_nonrobust: None,
     })
 }
@@ -648,7 +650,7 @@ pub fn fit_panel_re_mle_time(
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
-) -> Result<super::PanelFit, String> {
+) -> Result<super::super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (MLE Time): lengths must match".to_string());
@@ -1095,14 +1097,14 @@ pub fn fit_panel_re_mle_time(
     let chi2_1 = ChiSquared::new(1.0).map_err(|e| format!("Panel RE MLE Time chibar2: {}", e))?;
     let prob_chibar2 = 0.5 * (chi2_1.sf(chibar2));
 
-    let fe_stats = Some(super::PanelFEStats {
+    let fe_stats = Some(super::super::PanelFEStats {
         r2: None,
-        obs_per_group: super::ObsPerGroupStats {
+        obs_per_group: super::super::ObsPerGroupStats {
             min: obs_min,
             avg: obs_avg,
             max: obs_max,
         },
-        sigma: super::SigmaStats {
+        sigma: super::super::SigmaStats {
             sigma_u,
             sigma_e,
             rho,
@@ -1113,13 +1115,13 @@ pub fn fit_panel_re_mle_time(
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE MLE Time: {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        crate::distribution::normal_two_sided_p(result.tvalues[i])
+        crate::distribution::normal::two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
-    Ok(super::PanelFit {
+    Ok(super::super::PanelFit {
         parameter_names: vec![],
         parameter_categories: vec![],
         response_name: "response".into(),
@@ -1138,20 +1140,20 @@ pub fn fit_panel_re_mle_time(
         },
         family: "panel_re_mle_time".into(),
         coefficients: (result.betas).iter().copied().collect(),
-        inference: super::RegressionCoefficientStatistics {
-            covariance: super::covariance_rows(&(result.cov_beta)),
+        inference: super::super::RegressionCoefficientStatistics {
+            covariance: super::super::covariance_rows(&(result.cov_beta)),
             standard_errors: (result.stds).iter().copied().collect(),
             statistic_values: (result.tvalues).iter().copied().collect(),
             p_values: (pvalues_z).iter().copied().collect(),
             confidence_interval_lower: (conf_int_left_z).iter().copied().collect(),
             confidence_interval_upper: (conf_int_right_z).iter().copied().collect(),
         },
-        statistics: super::PanelModelStatistics {
+        statistics: super::super::PanelModelStatistics {
             observations: result.num_observation,
             entities: n_times,
             time_periods: n_times,
             within_r2: None,
-            linear: super::LinearRegressionStatistics {
+            linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,
                 adjusted_r2: result.r2_adjusted,
                 f_statistic: result.fvalue,
@@ -1173,7 +1175,7 @@ pub fn fit_panel_re_mle_time(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::MaximumLikelihood {
+        estimator_statistics: super::super::PanelEstimatorStatistics::MaximumLikelihood {
             log_likelihood,
             lr_chi2,
             lr_p_value: prob_lr_chi2,

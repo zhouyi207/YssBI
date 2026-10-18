@@ -13,7 +13,6 @@ use yss_sci_contract::hypothesis::Alternative;
 
 pub(crate) mod normal;
 pub(crate) mod student_t;
-pub(crate) use normal::two_sided_p as normal_two_sided_p;
 
 /// The 16-point Gauss-Legendre rule shared by bounded reference-density integrals.
 pub(crate) fn integrate_gauss(left: f64, right: f64, f: impl Fn(f64) -> f64) -> f64 {

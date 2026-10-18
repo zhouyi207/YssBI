@@ -124,7 +124,6 @@ pub(crate) fn resolve(
         ) {
             // A resolver failure inside a callee remains an internal failure at the root.
             resolution.internal_failure = Some(GraphResolutionOutcome::InternalFailure {
-                stage: crate::GraphResolutionStage::Analysis,
                 code: "graph.function.resolution_failed".into(),
                 node_id: None,
             });

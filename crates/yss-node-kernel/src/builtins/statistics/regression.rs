@@ -250,10 +250,7 @@ fn predict(
         RuntimeValue::Scalar(TabularScalar::Bool(v)) => *v,
         _ => return Err(KernelError::InvalidNumericInput),
     };
-    let expected = match link {
-        BinaryRegressionLink::Logit => "logit",
-        BinaryRegressionLink::Probit => "probit",
-    };
+    let expected = link.family();
     if !matches!(field(model, "family")?, RuntimeValue::Scalar(TabularScalar::String(v)) if v.as_ref() == expected)
     {
         return Err(KernelError::InvalidNumericInput);

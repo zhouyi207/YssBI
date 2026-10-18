@@ -151,9 +151,6 @@ impl<'a, T> MatRef<'a, T> {
     pub fn subcols(self, start: usize, cols: usize) -> Self {
         Self(self.0.subcols(start, cols))
     }
-    pub fn reverse_rows_and_cols(self) -> Self {
-        Self(self.0.reverse_rows_and_cols())
-    }
     pub fn to_owned(self) -> Mat<T>
     where
         T: Clone,
@@ -209,9 +206,6 @@ impl<T> Col<T> {
     pub fn subrows(&self, start: usize, rows: usize) -> ColRef<'_, T> {
         self.as_ref().subrows(start, rows)
     }
-    pub fn reverse_rows(&self) -> ColRef<'_, T> {
-        self.as_ref().reverse_rows()
-    }
 }
 impl Col<f64> {
     pub fn zeros(rows: usize) -> Self {
@@ -244,9 +238,6 @@ impl<'a, T> ColRef<'a, T> {
     }
     pub fn subrows(self, start: usize, rows: usize) -> Self {
         Self(self.0.subrows(start, rows))
-    }
-    pub fn reverse_rows(self) -> Self {
-        Self(self.0.reverse_rows())
     }
     pub fn to_owned(self) -> Col<T>
     where

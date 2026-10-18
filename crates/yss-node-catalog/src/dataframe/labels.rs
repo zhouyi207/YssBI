@@ -1,5 +1,6 @@
 //! Value-label authoring over the existing semantic-domain conversion contract.
 use super::*;
+use crate::builtin::add_node_messages;
 use yss_data_contract::SemanticType;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     const ID: &str = "yssbi.dataframe.labels";
@@ -79,7 +80,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             type_id: sid(ID, NodeTypeId::new)?,
             catalog: NodeCatalogProtocol {
                 title_key: node_key(ID, "title")?,
-                documentation_key: Some(node_key(ID, "documentation")?),
                 aliases_key: Some(node_key(ID, "aliases")?),
                 category_id: sid("dataframe.series", NodeCategoryId::new)?,
                 icon_id: sid("builtin.dataframe", IconId::new)?,
@@ -110,19 +110,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         },
         ID,
     ));
-    for (locale, title) in [
-        ("en-US", "Data labels (value meanings)"),
-        ("zh-CN", "数据标签（取值含义）"),
-    ] {
-        fragment.messages.extend([
-            (locale, node_key_text(ID, "title"), Text(title)),
-            (locale, node_key_text(ID, "documentation"), Text(title)),
-            (
-                locale,
-                node_key_text(ID, "aliases"),
-                Aliases(&["数据标签", "取值标签", "value labels", "data.labels"]),
-            ),
-        ]);
-    }
+    let aliases: &'static [&'static str] = &["数据标签", "取值标签", "value labels", "data.labels"];
+    add_node_messages(
+        &mut fragment.messages,
+        ID,
+        ["Data labels (value meanings)", "数据标签（取值含义）"],
+        Some([aliases, aliases]),
+    );
     Ok(())
 }

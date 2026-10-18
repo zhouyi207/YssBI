@@ -1,3 +1,5 @@
+use super::*;
+
 /// Stata `varsoc varlist, maxlag(P)`：Lag 行 **0…P**（0 = 仅截距的 VAR(0)）；各阶共用 `T−P` 个观测。
 /// `LR(j)=2(LL(j)−LL(j−1))`（`j≥1`），`df=K²`；Lag 0 无 LR（与 Stata 表一致）。
 pub fn var_varsoc(

@@ -175,7 +175,6 @@ mod tests {
             type_id: "test.numeric.node".parse().unwrap(),
             catalog: NodeCatalogProtocol {
                 title_key: "test.title".parse().unwrap(),
-                documentation_key: None,
                 aliases_key: None,
                 category_id: "test".parse().unwrap(),
                 icon_id: "test".parse().unwrap(),

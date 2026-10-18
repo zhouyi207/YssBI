@@ -299,9 +299,8 @@ before the final product, preserving subnormal probabilities. Log-CDF uses
 `log1p` on the positive side; the negative density ratio stays logarithmic after
 probability underflow. Truncated-normal, lognormal AFT, Heckman and Frontier reuse
 this owner; Heckman does not subtract quadratic log-density terms to obtain Mills.
-`normal_two_sided_p` re-exports the same calculation for existing inference callers.
 Binary, IV, random/dynamic panel, model coefficient, asymptotic constraint,
-correlation/rank and VAR/VEC inference reuse it. Probit links, MacKinnon calibration,
+correlation/rank and VAR/VEC inference call `normal::two_sided_p` directly. Probit links, MacKinnon calibration,
 Power, process capability and probability plots use the same directed probabilities.
 The time-series boundary retains its existing rejection of nonfinite statistics.
 The [Mills continued fraction](https://dlmf.nist.gov/7.9) bounds the tail calculation.

@@ -46,7 +46,7 @@ impl ApplicationServices {
     ) -> Result<Self, ApplicationStartupError> {
         let watcher = WatcherState::new(Arc::new(
             yss_filesystem::watcher::notify::NotifyFileWatcher::with_filter(
-                yss_project::is_project_index_watch_path,
+                yss_project_layout::is_project_index_input_path,
             ),
         ));
         let application = ApplicationState::initialize()?;

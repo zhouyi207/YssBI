@@ -69,27 +69,33 @@ fn summary(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
     let report = value(report, inv)?;
     Ok(vec![report])
 }
+fn estimator(name: &str) -> Result<Estimator, KernelError> {
+    Ok(match name {
+        "fixed_effects" => Estimator::FixedEffects,
+        "lsdv" => Estimator::Lsdv,
+        "first_difference" => Estimator::FirstDifference,
+        "random_effects" => Estimator::RandomEffects,
+        "maximum_likelihood" => Estimator::MaximumLikelihood,
+        "between" => Estimator::Between,
+        _ => return Err(KernelError::InvalidParameter),
+    })
+}
+fn effects(inv: &KernelInvocation<'_>) -> Result<Effects, KernelError> {
+    Ok(match text(inv, "effects")? {
+        "entity" => Effects::Entity,
+        "time" => Effects::Time,
+        "two_way" => Effects::TwoWay,
+        _ => return Err(KernelError::InvalidParameter),
+    })
+}
 fn fit(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
     let mut data = columns(&inv.inputs.iter().collect::<Vec<_>>(), inv, 0)?;
     let time = data.pop().ok_or(KernelError::ShapeMismatch)?;
     let entity = data.pop().ok_or(KernelError::ShapeMismatch)?;
     let response = data.remove(0);
     let options = PanelOptions {
-        estimator: match text(inv, "estimator")? {
-            "fixed_effects" => Estimator::FixedEffects,
-            "lsdv" => Estimator::Lsdv,
-            "first_difference" => Estimator::FirstDifference,
-            "random_effects" => Estimator::RandomEffects,
-            "maximum_likelihood" => Estimator::MaximumLikelihood,
-            "between" => Estimator::Between,
-            _ => return Err(KernelError::InvalidParameter),
-        },
-        effects: match text(inv, "effects")? {
-            "entity" => Effects::Entity,
-            "time" => Effects::Time,
-            "two_way" => Effects::TwoWay,
-            _ => return Err(KernelError::InvalidParameter),
-        },
+        estimator: estimator(text(inv, "estimator")?)?,
+        effects: effects(inv)?,
         constant: boolean(inv, "constant")?,
         covariance: text(inv, "covariance")?.into(),
     };
@@ -169,26 +175,13 @@ fn compare(inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
             .and_then(|v| v.checked_mul(requested.len()))
             .and_then(|v| v.checked_mul(STRUCTURED_VALUE_BYTES * STRUCTURED_VALUE_COPIES)),
     )?;
-    let effects = match text(inv, "effects")? {
-        "entity" => Effects::Entity,
-        "time" => Effects::Time,
-        "two_way" => Effects::TwoWay,
-        _ => return Err(KernelError::InvalidParameter),
-    };
+    let effects = effects(inv)?;
     let mut models = Vec::new();
     let mut coefficient_rows = Vec::new();
     let mut statuses = Vec::new();
     for name in requested {
         inv.check_control()?;
-        let estimator = match name {
-            "fixed_effects" => Estimator::FixedEffects,
-            "lsdv" => Estimator::Lsdv,
-            "first_difference" => Estimator::FirstDifference,
-            "random_effects" => Estimator::RandomEffects,
-            "maximum_likelihood" => Estimator::MaximumLikelihood,
-            "between" => Estimator::Between,
-            _ => return Err(KernelError::InvalidParameter),
-        };
+        let estimator = estimator(name)?;
         let result = yss_sci_runtime::panel::fit_model(
             response.clone(),
             data.clone(),

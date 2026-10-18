@@ -1,3 +1,5 @@
+use super::*;
+
 /// 对 y (T×K) 做一阶差分，首行 NaN
 fn diff_y(y: &Mat<f64>) -> Mat<f64> {
     let (n, k) = (y.nrows(), y.ncols());
@@ -12,7 +14,7 @@ fn diff_y(y: &Mat<f64>) -> Mat<f64> {
 }
 
 /// Johansen MLE 第一阶段：Z、S 矩阵与降序特征值（与 Stata [TS] vec / vecrank 公式一致）
-pub(crate) struct JohansenStage1 {
+pub(super) struct JohansenStage1 {
     pub n: usize,
     pub m1: usize,
     pub m2: usize,
@@ -31,10 +33,10 @@ pub(crate) struct JohansenStage1 {
     pub u_eigen_real: Mat<f64>,
 }
 
-pub(crate) fn johansen_stage1(
+pub(super) fn johansen_stage1(
     y: &Mat<f64>,
     p: usize,
-    trend_spec: VecTrendSpec,
+    trend_spec: Deterministic,
     sindicators: Option<&Mat<f64>>,
 ) -> Result<JohansenStage1, String> {
     let (n_full, k) = (y.nrows(), y.ncols());
@@ -52,9 +54,9 @@ pub(crate) fn johansen_stage1(
     }
 
     let (m1, has_const, has_trend): (usize, bool, bool) = match trend_spec {
-        VecTrendSpec::None => (k, false, false),
-        VecTrendSpec::Constant => (k, true, false),
-        VecTrendSpec::Trend => (k, true, true),
+        Deterministic::None => (k, false, false),
+        Deterministic::Constant => (k, true, false),
+        Deterministic::Trend => (k, true, true),
     };
 
     let n_lag_dy = k * (p - 1);

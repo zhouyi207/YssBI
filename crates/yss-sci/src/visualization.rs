@@ -9,16 +9,13 @@ pub use distribution::{box_violin, ecdf, histogram, kde};
 pub use matrix::{correlation, correlogram, heatmap};
 pub use points::{bubble, coefficients, error_bars, probability, quadrant, roc, xy};
 
+use crate::error::{finite, invalid};
 use yss_sci_contract::execution::{
     ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
 };
 use yss_sci_contract::visualization::{MAX_PLOT_POINTS, PlotMetadata};
 
 type Result<T> = std::result::Result<T, ScientificComputationError>;
-
-fn invalid(violation: ScientificInputViolation) -> ScientificComputationError {
-    ScientificComputationError::InvalidInput { violation }
-}
 
 fn validate(values: &[f64], control: &ScientificExecutionControl) -> Result<()> {
     control.check()?;
@@ -68,14 +65,6 @@ fn metadata(length: usize, displayed: usize) -> PlotMetadata {
 
 fn sample_metadata(length: usize) -> PlotMetadata {
     metadata(length, length.min(MAX_PLOT_POINTS))
-}
-
-fn finite(value: f64) -> Result<f64> {
-    if value.is_finite() {
-        Ok(value)
-    } else {
-        Err(ScientificComputationError::ComputationFailed)
-    }
 }
 
 #[cfg(test)]

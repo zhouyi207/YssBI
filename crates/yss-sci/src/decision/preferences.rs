@@ -35,11 +35,9 @@ pub fn kano(functional: &[f64], dysfunctional: &[f64], control: &Control) -> Res
     validate(functional, &[], control)?;
     validate(dysfunctional, &[], control)?;
     if functional.len() != dysfunctional.len() {
-        return Err(
-            yss_sci_contract::execution::ScientificComputationError::InvalidInput {
-                violation: yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
-            },
-        );
+        return Err(crate::error::invalid(
+            yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
+        ));
     }
     // Classic Berger et al. (1993), figure 4: codes are like/expect/neutral/tolerate/dislike.
     const TABLE: [[usize; 5]; 5] = [

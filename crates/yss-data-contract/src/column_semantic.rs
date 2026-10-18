@@ -58,6 +58,12 @@ impl SemanticType {
             Self::Identifier => "core.identifier",
         }
     }
+
+    pub fn from_type_id(id: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|semantic| semantic.type_id() == id)
+    }
 }
 
 impl std::fmt::Display for SemanticType {

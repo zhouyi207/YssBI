@@ -1,19 +1,6 @@
 //! Prospective scalar power designs; sample size is expressed in each design's own unit.
+use crate::hypothesis::{Alternative, MeanDesign};
 use serde::Serialize;
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PowerAlternative {
-    TwoSided,
-    Greater,
-    Less,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MeanDesign {
-    OneSample,
-    Independent,
-    Paired,
-}
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(tag = "model", rename_all = "snake_case")]
 pub enum PowerModel {
@@ -84,7 +71,7 @@ pub enum PowerRequest {
 #[derive(Debug, Clone, Copy)]
 pub struct PowerOptions {
     pub alpha: f64,
-    pub alternative: PowerAlternative,
+    pub alternative: Alternative,
     pub request: PowerRequest,
 }
 #[derive(Debug, Clone, Serialize)]
@@ -92,7 +79,7 @@ pub struct PowerResult {
     pub model: PowerModel,
     pub method: String,
     pub alpha: f64,
-    pub alternative: PowerAlternative,
+    pub alternative: Alternative,
     pub sample_size: usize,
     pub sample_unit: String,
     pub total_observations: usize,

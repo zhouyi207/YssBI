@@ -12,12 +12,8 @@ use yss_node_protocol::{
 
 fn declared_semantic(value: &TypeExpr) -> Option<SemanticType> {
     match value {
-        TypeExpr::Concrete(id) => SemanticType::ALL
-            .into_iter()
-            .find(|kind| kind.type_id() == id.as_str()),
-        TypeExpr::Class(id) => SemanticType::ALL
-            .into_iter()
-            .find(|kind| kind.type_id() == id.as_str()),
+        TypeExpr::Concrete(id) => SemanticType::from_type_id(id.as_str()),
+        TypeExpr::Class(id) => SemanticType::from_type_id(id.as_str()),
         TypeExpr::Applied {
             constructor,
             arguments,

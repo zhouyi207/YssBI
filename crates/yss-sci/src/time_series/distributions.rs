@@ -13,5 +13,5 @@ pub(crate) fn normal_two_sided_p(z_value: f64) -> f64 {
     if !z_value.is_finite() {
         return f64::NAN;
     }
-    crate::distribution::normal_two_sided_p(z_value)
+    crate::distribution::normal::two_sided_p(z_value)
 }

@@ -12,6 +12,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
+yss-database-contract = { path = "../yss-database-contract" }
 yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-node-catalog = { path = "../yss-node-catalog" }

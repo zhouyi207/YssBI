@@ -1,5 +1,5 @@
 //! Shared k-class fit facts for 2SLS and LIML.
-use crate::distribution::{fisher_snedecor_sf, normal_two_sided_p, student_t_probability};
+use crate::distribution::{fisher_snedecor_sf, normal, student_t_probability};
 use crate::regression::design::covariance_rows;
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT};
 use statrs::statistics::Statistics;
@@ -96,7 +96,7 @@ pub(super) fn coefficient_inference(
         .iter()
         .map(|&statistic| match &student {
             Some(student) => student_t_probability(student, statistic, Alternative::TwoSided),
-            None => normal_two_sided_p(statistic),
+            None => normal::two_sided_p(statistic),
         })
         .collect();
     let mut confidence_interval_lower = Vec::with_capacity(betas.nrows());

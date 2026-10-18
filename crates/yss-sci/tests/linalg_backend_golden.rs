@@ -1,5 +1,6 @@
 use yss_sci::time_series::var::{VAR, VARConfig};
-use yss_sci::time_series::vec::{VECConfig, VecTrendSpec, vec_estimate};
+use yss_sci::time_series::vec::{VECConfig, vec_estimate};
+use yss_sci_contract::time_series::forecast::Deterministic;
 use yss_sci_linalg::Mat;
 
 fn cointegrated_sample() -> Mat<f64> {
@@ -127,7 +128,7 @@ fn vec_fit_preserves_cointegration_and_short_run_estimates() {
     let result = vec_estimate(
         &cointegrated_sample(),
         &VECConfig {
-            trend_spec: VecTrendSpec::Constant,
+            trend_spec: Deterministic::Constant,
             lags: 2,
             rank: 1,
         },
@@ -177,7 +178,7 @@ fn vec_fit_preserves_cointegration_and_short_run_estimates() {
     let first_order = vec_estimate(
         &cointegrated_sample(),
         &VECConfig {
-            trend_spec: VecTrendSpec::Constant,
+            trend_spec: Deterministic::Constant,
             lags: 1,
             rank: 1,
         },

@@ -173,7 +173,7 @@ impl ConversationPanel {
     }
 }
 
-fn mode_key(mode: HarnessMode) -> &'static str {
+pub(super) fn mode_key(mode: HarnessMode) -> &'static str {
     match mode {
         HarnessMode::Ask => "panel.assistantModes.ask",
         HarnessMode::Write => "panel.assistantModes.write",
@@ -185,7 +185,7 @@ fn mode_hint(mode: HarnessMode) -> &'static str {
         HarnessMode::Write => "panel.assistantModeHint.write",
     }
 }
-fn effort_label(effort: ReasoningEffort) -> std::borrow::Cow<'static, str> {
+pub(super) fn effort_label(effort: ReasoningEffort) -> std::borrow::Cow<'static, str> {
     yss_ui::text::t(match effort {
         ReasoningEffort::Low => "panel.assistantEffort.low",
         ReasoningEffort::Medium => "panel.assistantEffort.medium",

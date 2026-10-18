@@ -1,86 +1,67 @@
 //! Executable correlation and inter-rater agreement nodes.
 use super::*;
+use crate::builtin::add_node_messages;
 
-const SPECS: &[(&str, &str, &str, &str, &str, &str)] = &[
+const SPECS: &[(&str, &str, &str, &str)] = &[
     (
         "yssbi.statistics.association.pearson",
         "Pearson correlation",
         "Pearson 相关",
         "pearson",
-        "Compute paired Pearson correlation, its t test and Fisher confidence interval.",
-        "计算配对数值的 Pearson 相关系数、t 检验和 Fisher 置信区间。",
     ),
     (
         "yssbi.statistics.association.partial",
         "Partial correlation",
         "偏相关",
         "partial",
-        "Compute Pearson correlation after controlling for aligned numerical covariates.",
-        "控制对齐的数值协变量后计算 Pearson 偏相关及其推断。",
     ),
     (
         "yssbi.statistics.association.spearman",
         "Spearman rank correlation",
         "Spearman 秩相关",
         "spearman",
-        "Compute Spearman rho with average ranks for ties and exact-permutation or approximate inference.",
-        "使用并列平均秩计算 Spearman rho，支持精确置换或渐近检验。",
     ),
     (
         "yssbi.statistics.association.kendall",
         "Kendall rank correlation",
         "Kendall 秩相关",
         "kendall",
-        "Compute Kendall tau-b with tie corrections and exact-permutation or approximate inference.",
-        "计算处理并列值的 Kendall tau-b，支持精确置换或渐近检验。",
     ),
     (
         "yssbi.statistics.test.kappa",
         "Kappa agreement",
         "Kappa 一致性",
         "kappa",
-        "Choose Cohen or Fleiss kappa; Cohen supports linear and quadratic weighting for ordered categories.",
-        "选择 Cohen 或 Fleiss Kappa；Cohen 支持有序类别的线性、二次加权。",
     ),
     (
         "yssbi.statistics.association.icc",
         "Intraclass correlation",
         "ICC 组内相关系数",
         "icc",
-        "Choose ICC1/2/3 and single/average measurement definitions with F inference.",
-        "选择 ICC1/2/3 的单次或平均测量定义，输出 F 检验和置信区间。",
     ),
     (
         "yssbi.statistics.association.bland_altman",
         "Bland–Altman agreement",
         "Bland–Altman 一致性",
         "bland_altman",
-        "Compute paired bias, limits of agreement, confidence intervals and bounded observation points.",
-        "计算配对方法的偏倚、一致性界限、置信区间及有界观测点。",
     ),
     (
         "yssbi.statistics.test.kendall_w",
         "Kendall concordance W",
         "Kendall 协调系数 W",
         "kendall_w",
-        "Compute Kendall W across aligned raters, including tie correction and chi-square inference.",
-        "计算对齐评定者的 Kendall W，包含并列修正和卡方近似检验。",
     ),
     (
         "yssbi.statistics.association.ridit",
         "Ridit analysis",
         "Ridit 分析",
         "ridit",
-        "Compare an ordered sample to a reference distribution, with category ridits and rank inference.",
-        "将有序样本与参考分布比较，输出类别 Ridit、平均 Ridit 和秩检验。",
     ),
     (
         "yssbi.statistics.association.rwg",
         "Within-group agreement rwg",
         "组内一致性 rwg",
         "rwg",
-        "Compute single-item and multi-item within-group agreement against a stated null variance.",
-        "按明确的零假设方差计算单条目和多条目组内一致性。",
     ),
 ];
 
@@ -131,18 +112,11 @@ fn tolerance_parameter_for(
     field.constraints.push(ParameterConstraint::Positive);
     Ok(field)
 }
-fn alternative() -> Result<Parameter, BuiltinAssemblyError> {
-    choice_parameter(
-        "alternative",
-        "two_sided",
-        &["two_sided", "greater", "less"],
-    )
-}
 fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     Ok(match method {
-        "pearson" | "partial" => vec![alternative()?, confidence()?],
+        "pearson" | "partial" => vec![alternative_parameter()?, confidence()?],
         "spearman" | "kendall" => vec![
-            alternative()?,
+            alternative_parameter()?,
             choice_parameter(
                 "p_value_method",
                 "auto",
@@ -166,7 +140,7 @@ fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
         "bland_altman" => vec![tolerance_parameter_for("coverage", "0.95")?, confidence()?],
         "kendall_w" => vec![],
         "ridit" => vec![
-            alternative()?,
+            alternative_parameter()?,
             toggle_parameter("continuity_correction", false)?,
         ],
         "rwg" => vec![
@@ -185,11 +159,11 @@ fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
 }
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(id, en, zh, method, en_help, zh_help) in SPECS {
+    for &(id, en, zh, method) in SPECS {
         let mut ports = match method {
             "pearson" | "partial" | "bland_altman" => vec![
-                data_input("x", "X / method A", series_type()?)?,
-                data_input("y", "Y / method B", series_type()?)?,
+                data_input("x", "X / method A", numeric_data_series_type())?,
+                data_input("y", "Y / method B", numeric_data_series_type())?,
             ],
             "spearman" | "kendall" => vec![
                 data_input("x", "X", rank_type()?)?,
@@ -201,7 +175,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 match method {
                     "kappa" => label_series()?,
                     "kendall_w" => rank_type()?,
-                    _ => series_type()?,
+                    _ => numeric_data_series_type(),
                 },
                 2,
                 None,
@@ -213,7 +187,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "rwg" => vec![bounded_user_data_input(
                 "items",
                 "Scale item",
-                series_type()?,
+                numeric_data_series_type(),
                 1,
                 None,
             )?],
@@ -223,7 +197,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(bounded_user_data_input(
                 "controls",
                 "Control variable",
-                series_type()?,
+                numeric_data_series_type(),
                 1,
                 None,
             )?);
@@ -234,7 +208,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id, NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(id, "title")?,
-                    documentation_key: Some(node_key(id, "documentation")?),
                     aliases_key: Some(node_key(id, "aliases")?),
                     category_id: sid("statistics.association", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -251,17 +224,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        for (locale, title, help) in [("en-US", en, en_help), ("zh-CN", zh, zh_help)] {
-            fragment.messages.extend([
-                (locale, node_key_text(id, "title"), Text(title)),
-                (locale, node_key_text(id, "documentation"), Text(help)),
-                (
-                    locale,
-                    node_key_text(id, "aliases"),
-                    Aliases(aliases(method)),
-                ),
-            ]);
-        }
+        let aliases = aliases(method);
+        add_node_messages(
+            &mut fragment.messages,
+            id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     for (key, en, zh, en_help, zh_help) in [
         (

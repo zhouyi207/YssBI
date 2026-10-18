@@ -105,7 +105,9 @@ impl ApplicationState {
                 // control-chart outputs that deliberately retain every observation.
                 let mut budget = MAX_RESULT_PAGE_BYTES;
                 charge_value(snapshot.value().value(), &mut budget, 0)?;
-                read::project(kind, snapshot.value().value()).map(Some)
+                read::project(kind, snapshot.value().value())
+                    .map(Some)
+                    .map_err(Into::into)
             }
             _ => Ok(None),
         };

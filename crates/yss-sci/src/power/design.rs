@@ -56,7 +56,7 @@ pub(super) fn validate(model: PowerModel, options: PowerOptions) -> Result<usize
             (2..=MAX_EXACT_SIZE).contains(&groups)
                 && effect_f.is_finite()
                 && effect_f >= 0.
-                && options.alternative == PowerAlternative::Greater,
+                && options.alternative == Alternative::Greater,
             2,
         ),
         PowerModel::LinearRegression {
@@ -66,7 +66,7 @@ pub(super) fn validate(model: PowerModel, options: PowerOptions) -> Result<usize
             predictors > 0
                 && effect_f_squared.is_finite()
                 && effect_f_squared >= 0.
-                && options.alternative == PowerAlternative::Greater,
+                && options.alternative == Alternative::Greater,
             predictors.checked_add(2).ok_or_else(parameter)?,
         ),
         PowerModel::PoissonRate {
@@ -113,7 +113,7 @@ pub(super) fn validate(model: PowerModel, options: PowerOptions) -> Result<usize
         } => (
             standardized_difference.is_finite()
                 && positive(margin)
-                && options.alternative == PowerAlternative::Greater,
+                && options.alternative == Alternative::Greater,
             1,
         ),
         PowerModel::Equivalence {
@@ -122,7 +122,7 @@ pub(super) fn validate(model: PowerModel, options: PowerOptions) -> Result<usize
         } => (
             standardized_difference.is_finite()
                 && positive(margin)
-                && options.alternative == PowerAlternative::TwoSided,
+                && options.alternative == Alternative::TwoSided,
             1,
         ),
     };
@@ -131,7 +131,7 @@ pub(super) fn validate(model: PowerModel, options: PowerOptions) -> Result<usize
     }
     Ok(minimum)
 }
-pub(super) fn increasing(model: PowerModel, alternative: PowerAlternative) -> bool {
+pub(super) fn increasing(model: PowerModel, alternative: Alternative) -> bool {
     let difference = match model {
         PowerModel::NormalMean {
             standardized_effect,
@@ -181,9 +181,9 @@ pub(super) fn increasing(model: PowerModel, alternative: PowerAlternative) -> bo
         } => return standardized_difference.abs() < margin,
     };
     match alternative {
-        PowerAlternative::TwoSided => difference != 0.,
-        PowerAlternative::Greater => difference > 0.,
-        PowerAlternative::Less => difference < 0.,
+        Alternative::TwoSided => difference != 0.,
+        Alternative::Greater => difference > 0.,
+        Alternative::Less => difference < 0.,
     }
 }
 pub(super) fn layout(model: PowerModel, n: usize) -> Result<(&'static str, usize)> {

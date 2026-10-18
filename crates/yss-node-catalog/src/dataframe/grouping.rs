@@ -1,4 +1,5 @@
 use super::*;
+use crate::builtin::add_node_messages;
 use std::sync::Arc;
 use yss_node_registry::StructuralNodeRole;
 
@@ -100,7 +101,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             type_id: sid(id, NodeTypeId::new)?,
             catalog: NodeCatalogProtocol {
                 title_key: node_key(id, "title")?,
-                documentation_key: Some(node_key(id, "documentation")?),
                 aliases_key: Some(node_key(id, "aliases")?),
                 category_id: sid("dataframe", NodeCategoryId::new)?,
                 icon_id: sid("builtin.dataframe", IconId::new)?,
@@ -125,21 +125,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             Some(role) => RegisteredNode::structural(Arc::new(protocol), role),
             None => leaf(protocol, id),
         });
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment
-                .messages
-                .push((locale, node_key_text(id, "title"), Text(title)));
-            fragment.messages.push((
-                locale,
-                node_key_text(id, "aliases"),
-                Aliases(&["groupby", "apply", "transform", "分组函数"]),
-            ));
-            fragment.messages.push((
-                locale,
-                node_key_text(id, "documentation"),
-                Text(help(id, locale)),
-            ));
-        }
+        let aliases: &'static [&'static str] = &["groupby", "apply", "transform", "分组函数"];
+        add_node_messages(
+            &mut fragment.messages,
+            id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     Ok(())
 }

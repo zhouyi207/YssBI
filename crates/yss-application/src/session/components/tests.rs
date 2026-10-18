@@ -69,7 +69,6 @@ fn definition() -> NodeProtocol {
         type_id: ID.parse().unwrap(),
         catalog: NodeCatalogProtocol {
             title_key: "example.increment.title".parse().unwrap(),
-            documentation_key: None,
             aliases_key: None,
             category_id: "numeric".parse().unwrap(),
             icon_id: "builtin.numeric".parse().unwrap(),

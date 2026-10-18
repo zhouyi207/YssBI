@@ -1,6 +1,6 @@
-# Int Range
+# Integer Range
 
-Builds an **Int64** `DataSeries` from **Start** to **End** (exclusive), advancing by **Step**.
+Builds an **Int64** `DataSeries` from **Start** (inclusive) to **End** (exclusive), advancing by **Step**. Step must be a nonzero integer; negative steps are supported. Output allocation is bounded by the execution budget.
 
 ## Usage
 

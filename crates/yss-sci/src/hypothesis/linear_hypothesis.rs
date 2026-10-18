@@ -1,5 +1,5 @@
 //! Hypothesis testing orchestration: parse → linearize → format → dispatch.
-use yss_sci_contract::hypothesis::Alternative as SciAlternative;
+use yss_sci_contract::hypothesis::Alternative;
 
 use std::collections::HashMap;
 use yss_sci_linalg::{Col, Mat};
@@ -9,12 +9,6 @@ use yss_math_expr::{
     BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, parse_relations,
 };
 use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestInput, HypothesisTestOutput};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Alternative {
-    TwoSided,
-    Greater,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TestMethod {
@@ -133,10 +127,6 @@ pub fn run_hypothesis_test(
         &input.param_names,
         &resolved.constraints,
     );
-    let sci_alt = match resolved.alternative {
-        Alternative::TwoSided => SciAlternative::TwoSided,
-        Alternative::Greater => SciAlternative::Greater,
-    };
     let betas = Col::from_iter(input.betas);
     let covariance_values = input.cov_beta.into_iter().flatten().collect::<Vec<_>>();
     if k.checked_mul(k) != Some(covariance_values.len()) {
@@ -152,7 +142,7 @@ pub fn run_hypothesis_test(
         r: &resolved.r_ols,
         r_vec: &resolved.r_vec,
         df_residual: input.df_residual,
-        alternative: sci_alt,
+        alternative: resolved.alternative,
         constraint_desc: input.hypothesis,
     };
     match resolved.test_method {
@@ -195,8 +185,8 @@ pub fn run_asymptotic_hypothesis_test(
     use statrs::distribution::{ChiSquared, ContinuousCDF};
     let mut result = run_hypothesis_test(input)?;
     if result.test_type == "t" {
-        result.p_value = if result.alternative == "two_sided" {
-            crate::distribution::normal_two_sided_p(result.stat)
+        result.p_value = if result.alternative == Alternative::TwoSided.name() {
+            crate::distribution::normal::two_sided_p(result.stat)
         } else {
             crate::distribution::normal::sf(result.stat)
         };

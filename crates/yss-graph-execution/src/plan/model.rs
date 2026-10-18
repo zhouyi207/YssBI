@@ -1,9 +1,8 @@
 use super::identity::{
-    PlanInputGroupId, PlanNodeId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress,
-    PlanSourceIdentity,
+    PlanInputGroupId, PlanNodeId, PlanNodeTypeId, PlanOutputRef, PlanParameterHandle,
+    PlanPortAddress, PlanSourceIdentity,
 };
 use super::observation::{PlanObservationIntent, ValueRef};
-use super::parameter::PlanParameterHandle;
 use super::result_category::ResultCategory;
 use std::collections::BTreeMap;
 use yss_data_contract::ValueType;

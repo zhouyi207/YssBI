@@ -38,7 +38,7 @@ pub const TRACE_OL_CASE1: [[f64; 3]; 12] = [
     [326.5354, 334.9795, 351.2150],
 ];
 
-/// OL Case 2（截距与趋势在 VAR）— trace；与本项目 `VecTrendSpec::Trend` 下 `z2` 含常数与时间趋势一致
+/// OL Case 2（截距与趋势在 VAR）— trace；与本项目 `Deterministic::Trend` 下 `z2` 含常数与时间趋势一致
 pub const TRACE_OL_CASE2: [[f64; 3]; 12] = [
     [2.57, 3.74, 6.40],
     [16.06, 18.17, 23.46],

@@ -86,12 +86,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-fn iteration(inv: &KernelInvocation<'_>) -> Result<IterationOptions, KernelError> {
-    Ok(IterationOptions {
-        max_iterations: integer(inv, "max_iterations")?,
-        tolerance: number(inv, "tolerance")?,
-    })
-}
 fn bootstrap(inv: &KernelInvocation<'_>) -> Result<BootstrapOptions, KernelError> {
     Ok(BootstrapOptions {
         replications: integer(inv, "bootstrap_replications")?,

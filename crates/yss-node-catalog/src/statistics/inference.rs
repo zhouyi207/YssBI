@@ -1,5 +1,6 @@
 //! Explicit estimand/SE intervals and independent-group post-hoc contrasts.
 use super::*;
+use crate::builtin::add_node_messages;
 use yss_data_contract::SemanticType;
 const NODES: &[(&str, &str, &str)] = &[
     (
@@ -31,9 +32,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         let prediction = suffix == "postestimation.adjusted_predictions";
         let mut ports = if cluster {
             vec![
-                data_input("y", "Y", series_type()?)?,
+                data_input("y", "Y", numeric_data_series_type())?,
                 data_input("clusters", "Clusters", label_series()?)?,
-                bounded_user_data_input("x", "X", series_type()?, 1, None)?,
+                bounded_user_data_input("x", "X", numeric_data_series_type(), 1, None)?,
             ]
         } else if prediction {
             vec![data_input(
@@ -43,12 +44,16 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             )?]
         } else if interval {
             vec![
-                data_input("estimates", "Estimates", series_type()?)?,
-                data_input("standard_errors", "Standard errors", series_type()?)?,
+                data_input("estimates", "Estimates", numeric_data_series_type())?,
+                data_input(
+                    "standard_errors",
+                    "Standard errors",
+                    numeric_data_series_type(),
+                )?,
             ]
         } else {
             vec![
-                data_input("y", "Y", series_type()?)?,
+                data_input("y", "Y", numeric_data_series_type())?,
                 data_input("groups", "Groups", label_series()?)?,
             ]
         };
@@ -181,7 +186,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: None,
                     category_id: sid(
                         if prediction {
@@ -205,12 +209,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-            ]);
-        }
+        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }

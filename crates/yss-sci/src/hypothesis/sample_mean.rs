@@ -3,7 +3,7 @@ use super::{Error, Violation, checkpoint, failed, finite, invalid, parameter};
 use statrs::distribution::{Binomial, Discrete, DiscreteCDF, Poisson, StudentsT};
 use yss_sci_contract::execution::ScientificExecutionControl;
 use yss_sci_contract::hypothesis::{
-    Alternative, ClassicalHypothesisTest, ClassicalTestResult, SummaryTDesign,
+    Alternative, ClassicalHypothesisTest, ClassicalTestResult, MeanDesign,
 };
 
 pub fn run(
@@ -110,7 +110,7 @@ pub fn run(
                 return Err(parameter());
             }
             match (design, second_count, second_mean, second_sd) {
-                (SummaryTDesign::Paired, None, None, None) => {
+                (MeanDesign::Paired, None, None, None) => {
                     let se = first_sd / (first_count as f64).sqrt();
                     finish_t(
                         "t.summary_paired",
@@ -122,7 +122,7 @@ pub fn run(
                         control,
                     )
                 }
-                (SummaryTDesign::OneSample, None, None, None) => {
+                (MeanDesign::OneSample, None, None, None) => {
                     let se = first_sd / (first_count as f64).sqrt();
                     finish_t(
                         "t.summary_one_sample",
@@ -134,7 +134,7 @@ pub fn run(
                         control,
                     )
                 }
-                (SummaryTDesign::Independent, Some(n2), Some(mean2), Some(sd2)) => {
+                (MeanDesign::Independent, Some(n2), Some(mean2), Some(sd2)) => {
                     validate_summary(n2, mean2, sd2)?;
                     let estimate = first_mean - mean2;
                     let (se, df) =
@@ -208,7 +208,7 @@ pub fn run(
             Ok(ClassicalTestResult {
                 method: "test.binomial".into(),
                 null_hypothesis: format!("p = {null_probability}"),
-                alternative: alternative_name(alternative).into(),
+                alternative: alternative.name().into(),
                 statistic_name: "successes".into(),
                 statistic: Some(successes as f64),
                 degrees_of_freedom: vec![],
@@ -280,7 +280,7 @@ pub fn run(
             Ok(ClassicalTestResult {
                 method: "poisson".into(),
                 null_hypothesis: format!("rate = {null_rate_per_observation} per observation"),
-                alternative: alternative_name(alternative).into(),
+                alternative: alternative.name().into(),
                 statistic_name: "count_score".into(),
                 statistic: Some(statistic),
                 degrees_of_freedom: vec![],
@@ -474,15 +474,10 @@ fn finish_t(
     let p_value = crate::distribution::student_t_probability(&distribution, statistic, alternative)
         .clamp(0.0, 1.0);
     control.check()?;
-    let alternative = match alternative {
-        Alternative::TwoSided => "two-sided",
-        Alternative::Greater => "greater",
-        Alternative::Less => "less",
-    };
     Ok(ClassicalTestResult {
         method: method.into(),
         null_hypothesis,
-        alternative: alternative.into(),
+        alternative: alternative.name().into(),
         statistic_name: "t".into(),
         statistic: Some(statistic),
         degrees_of_freedom: vec![df],
@@ -511,7 +506,7 @@ fn finish_normal(
     let statistic = finite(estimate / standard_error)?;
     control.check()?;
     let p_value = match alternative {
-        Alternative::TwoSided => crate::distribution::normal_two_sided_p(statistic),
+        Alternative::TwoSided => crate::distribution::normal::two_sided_p(statistic),
         Alternative::Greater => crate::distribution::normal::sf(statistic),
         Alternative::Less => crate::distribution::normal::cdf(statistic),
     }
@@ -520,7 +515,7 @@ fn finish_normal(
     Ok(ClassicalTestResult {
         method: method.into(),
         null_hypothesis,
-        alternative: alternative_name(alternative).into(),
+        alternative: alternative.name().into(),
         statistic_name: "z".into(),
         statistic: Some(statistic),
         degrees_of_freedom: vec![],
@@ -530,14 +525,6 @@ fn finish_normal(
         sample_sizes,
         details: Default::default(),
     })
-}
-
-fn alternative_name(alternative: Alternative) -> &'static str {
-    match alternative {
-        Alternative::TwoSided => "two-sided",
-        Alternative::Greater => "greater",
-        Alternative::Less => "less",
-    }
 }
 
 fn validate_proportion(successes: usize, trials: usize, p: f64) -> Result<(), Error> {

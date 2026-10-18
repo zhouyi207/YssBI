@@ -1,5 +1,6 @@
 //! Executable survival-analysis inventory entries.
 use super::*;
+use crate::builtin::add_node_messages;
 
 const METHODS: &[(&str, &str, &str)] = &[
     (
@@ -96,7 +97,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         } else {
             let mut ports = vec![];
             if method == "survival.time_dependent_cox" {
-                ports.push(data_input("start", "Interval start", series_type()?)?);
+                ports.push(data_input(
+                    "start",
+                    "Interval start",
+                    numeric_data_series_type(),
+                )?);
             }
             ports.push(data_input(
                 if method == "survival.time_dependent_cox" {
@@ -105,7 +110,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                     "time"
                 },
                 "Observed time",
-                series_type()?,
+                numeric_data_series_type(),
             )?);
             ports.push(data_input(
                 if method == "survival.competing_risks" {
@@ -115,7 +120,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 },
                 "Event status",
                 if method == "survival.competing_risks" {
-                    series_type()?
+                    numeric_data_series_type()
                 } else {
                     numeric_or_binary_series()?
                 },
@@ -152,7 +157,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(bounded_user_data_input(
                 "x",
                 "X",
-                series_type()?,
+                numeric_data_series_type(),
                 if cox && method != "workflow.subgroup" {
                     1
                 } else {
@@ -165,7 +170,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(data_input(
                 "predicted_risk",
                 "Predicted event probability",
-                series_type()?,
+                numeric_data_series_type(),
             )?);
         }
         ports.push(data_output(
@@ -225,7 +230,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: Some(node_key(&id, "aliases")?),
                     category_id: sid("statistics.survival", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -265,13 +269,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "plot.decision_curve" => &["plot.decision_curve", "DCA曲线"],
             _ => unreachable!("survival method table"),
         };
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-                (locale, node_key_text(&id, "aliases"), Aliases(aliases)),
-            ]);
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            &id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     fragment.messages.extend([
         (

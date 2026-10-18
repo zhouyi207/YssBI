@@ -24,7 +24,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "criteria"
             },
             "Matrix column",
-            series_type()?,
+            numeric_data_series_type(),
             1,
             None,
         )?];
@@ -33,14 +33,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 bounded_user_data_input(
                     "criterion_weights",
                     "Criterion weights",
-                    series_type()?,
+                    numeric_data_series_type(),
                     0,
                     Some(1),
                 )?,
                 bounded_user_data_input(
                     "grade_scores",
                     "Grade scores",
-                    series_type()?,
+                    numeric_data_series_type(),
                     0,
                     Some(1),
                 )?,
@@ -54,7 +54,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         ports.push(data_output("result", "Summary", report_type()?)?);
         match method {
             "ahp" | "fahp" => {
-                ports.push(data_output("weights", "Criterion weights", series_type()?)?);
+                ports.push(data_output(
+                    "weights",
+                    "Criterion weights",
+                    numeric_data_series_type(),
+                )?);
                 if method == "ahp" {
                     parameters.push(decimal_parameter("random_index", "0")?);
                 }
@@ -101,7 +105,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             _ => ports.push(data_output(
                 "combined_memberships",
                 "Combined memberships",
-                series_type()?,
+                numeric_data_series_type(),
             )?),
         }
         emit(

@@ -612,9 +612,7 @@ fn require_i18n(manifest: &I18nManifest, key: &I18nKey) -> Result<(), String> {
     }
 }
 fn catalog_i18n(protocol: &NodeProtocol) -> impl Iterator<Item = &I18nKey> {
-    std::iter::once(&protocol.catalog.title_key)
-        .chain(protocol.catalog.documentation_key.iter())
-        .chain(protocol.catalog.aliases_key.iter())
+    std::iter::once(&protocol.catalog.title_key).chain(protocol.catalog.aliases_key.iter())
 }
 
 fn validate_type_expr(

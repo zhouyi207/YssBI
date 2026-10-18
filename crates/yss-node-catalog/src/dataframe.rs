@@ -3,7 +3,8 @@
 //! This module depends exclusively on the node-system IR and keeps graph authoring,
 //! pin reconciliation, and execution concerns behind their current boundaries.
 
-use crate::builtin::{node_key, node_key_text};
+use crate::builtin::add_node_messages;
+use crate::builtin::node_key;
 use yss_data_contract::DataValue;
 mod aggregation;
 mod families;
@@ -37,7 +38,7 @@ use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, iid, leaf,
     sid,
 };
-use crate::{Aliases, Message, Text};
+use crate::{Message, Text};
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
 
@@ -55,7 +56,12 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     let nodes = NODES
         .iter()
         .map(|spec| {
-            add_node_messages(&mut messages, spec);
+            add_node_messages(
+                &mut messages,
+                spec.id,
+                [spec.title, spec.zh_title],
+                Some([spec.aliases, spec.zh_aliases]),
+            );
             registered_node(spec)
         })
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
@@ -99,7 +105,6 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         type_id: sid(spec.id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
-            documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
             category_id: sid(category(spec.interface), NodeCategoryId::new)?,
             icon_id: sid("builtin.dataframe", IconId::new)?,
@@ -388,21 +393,21 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         SeriesSum => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type())?,
+                data_input("series", "DataSeries", numeric_data_series_type())?,
                 data_output("value", "Value", concrete("core.numeric")?, None)?,
             ],
             vec![],
         )),
         SeriesMean => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type())?,
+                data_input("series", "DataSeries", numeric_data_series_type())?,
                 data_output("value", "Value", float_type()?, None)?,
             ],
             vec![],
         )),
         Standardize => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type())?,
+                data_input("series", "DataSeries", numeric_data_series_type())?,
                 data_output("standardized", "Standardized", float_series_type()?, None)?,
                 data_output("mean", "Mean", float_type()?, None)?,
                 data_output(
@@ -464,14 +469,14 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         TimeUnary => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type())?,
+                data_input("series", "DataSeries", numeric_data_series_type())?,
                 data_output("result", "Result", float_series_type()?, None)?,
             ],
             vec![positive_integer_parameter("order", 1)?],
         )),
         TimeWindow => Ok((
             vec![
-                data_input("series", "DataSeries", numeric_series_type())?,
+                data_input("series", "DataSeries", numeric_data_series_type())?,
                 transforms::window_context()?,
                 data_output("result", "Result", float_series_type()?, None)?,
             ],
@@ -513,7 +518,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         PanelDifference => Ok((
             vec![
                 data_input("aligned", "Aligned", dataframe_type()?)?,
-                data_input("series", "DataSeries", numeric_series_type())?,
+                data_input("series", "DataSeries", numeric_data_series_type())?,
                 data_output("result", "Result", float_series_type()?, None)?,
             ],
             vec![
@@ -849,9 +854,6 @@ fn generic_series_type(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyErro
         TypeParameterId::new,
     )?)))
 }
-fn numeric_series_type() -> TypeExpr {
-    numeric_data_series_type()
-}
 fn float_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("core.numeric")
 }
@@ -875,63 +877,6 @@ fn derived_schema(
         resolver: sid(resolver, SchemaResolverId::new)?,
         dependencies,
     })
-}
-
-fn add_node_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &NodeSpec) {
-    let title = node_key_text(spec.id, "title");
-    let documentation = node_key_text(spec.id, "documentation");
-    let aliases = node_key_text(spec.id, "aliases");
-    let (en_documentation, zh_documentation) = match spec.interface {
-        InterfaceKind::Frequency | InterfaceKind::GroupBy => aggregation::help(spec.interface),
-        InterfaceKind::IntRange => (
-            "Generates integers from start (inclusive) to end (exclusive). Step must be a nonzero integer; negative steps are supported. Output allocation is bounded by the execution budget.",
-            "生成从 start（包含）到 end（不包含）的整数序列。step 必须是非零整数，支持负步长；输出分配受执行内存预算限制。",
-        ),
-        InterfaceKind::SeriesCount => (
-            "Counts non-null elements as an integer. Empty/all-null input returns zero; relation inputs are counted in controlled batches.",
-            "统计非 Null 元素个数，输出整数。空序列或全空序列返回零；关系数列按受控批流计数。",
-        ),
-        InterfaceKind::Rename => (
-            "Renames the column identified by 'from' to 'to'.",
-            "将“源列”指定的列重命名为“目标列”。",
-        ),
-        InterfaceKind::Project => (
-            "Keeps the selected source columns in the specified output order.",
-            "保留数据帧中指定的列，并按指定顺序排列输出列。",
-        ),
-        InterfaceKind::FilterRows => (
-            "Filters rows by one source column and a Rust-issued compatible operator.",
-            "按一个源列和 Rust 提供的兼容运算符筛选行。",
-        ),
-        InterfaceKind::DropColumns => (
-            "Removes selected columns, preserving the order of the remaining columns.",
-            "移除指定列，并保留其余列的原始顺序。",
-        ),
-        InterfaceKind::DropNaRows => (
-            "Lazily removes rows with any/all Null values in the subset (empty means all columns). NaN and empty text are retained.",
-            "惰性删除检查列中任一/全部为 Null 的行；检查列为空表示全部列。NaN 和空字符串保留。",
-        ),
-        InterfaceKind::DropNaColumns => (
-            "Lazily removes candidate columns with any/all Null values. Columns are resolved on consumption over the entire input, before paging. Empty input retains columns. Output schema is data-dependent; static column selection/decomposition is unavailable.",
-            "惰性删除候选列中任一/全部为 Null 的列；消费结果时检查完整输入，再分页。空表保留列。输出列由数据决定，不能提前选择或拆分确定的列。",
-        ),
-        InterfaceKind::DropRows => (
-            "Removes rows where the condition is true; false and null results are retained.",
-            "移除条件为真的行；条件为假或空值的行保留。",
-        ),
-        _ => (
-            "Uses stable ports and the tabular runtime API.",
-            "使用稳定端口和表格运行时 API。",
-        ),
-    };
-    out.extend([
-        ("en-US", title.to_owned(), Text(spec.title)),
-        ("zh-CN", title.to_owned(), Text(spec.zh_title)),
-        ("en-US", documentation.to_owned(), Text(en_documentation)),
-        ("zh-CN", documentation.to_owned(), Text(zh_documentation)),
-        ("en-US", aliases.to_owned(), Aliases(spec.aliases)),
-        ("zh-CN", aliases.to_owned(), Aliases(spec.zh_aliases)),
-    ]);
 }
 
 fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {

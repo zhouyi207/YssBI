@@ -8,22 +8,13 @@ mod tests;
 pub use multivariate::manova;
 pub use repeated::repeated_measures;
 
+use crate::error::{finite, invalid};
 use design::{Design, fit, response_matrix, term_indices};
 use statrs::distribution::FisherSnedecor;
 use yss_sci_contract::{anova::*, execution::*};
 
 type Result<T> = std::result::Result<T, ScientificComputationError>;
 
-fn invalid(violation: ScientificInputViolation) -> ScientificComputationError {
-    ScientificComputationError::InvalidInput { violation }
-}
-fn finite(value: f64) -> Result<f64> {
-    if value.is_finite() {
-        Ok(value)
-    } else {
-        Err(ScientificComputationError::ComputationFailed)
-    }
-}
 fn nonnegative(value: f64, scale: f64) -> Result<f64> {
     if value < -1e-10 * scale.abs().max(f64::MIN_POSITIVE) {
         return Err(ScientificComputationError::ComputationFailed);

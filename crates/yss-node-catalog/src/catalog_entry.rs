@@ -1,11 +1,9 @@
 //! Shared assembly for catalog entries awaiting interfaces and execution kernels.
 
-use crate::builtin::node_key_text;
 use crate::builtin::{
-    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, iid, leaf,
-    sid,
+    BuiltinAssemblyError, ProviderFragment, add_node_messages, assembled_interface,
+    assembled_parameters, leaf, node_key, sid,
 };
-use crate::{Aliases, Text};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -31,22 +29,19 @@ pub(crate) fn append(
     style: &'static str,
 ) -> Result<(), BuiltinAssemblyError> {
     for entry in entries {
-        let title = node_key_text(entry.id, "title");
-        let aliases = node_key_text(entry.id, "aliases");
-        fragment.messages.extend([
-            ("en-US", title.to_owned(), Text(entry.en)),
-            ("zh-CN", title.to_owned(), Text(entry.zh)),
-            ("en-US", aliases.to_owned(), Aliases(entry.aliases)),
-            ("zh-CN", aliases.to_owned(), Aliases(entry.aliases)),
-        ]);
+        add_node_messages(
+            &mut fragment.messages,
+            entry.id,
+            [entry.en, entry.zh],
+            Some([entry.aliases, entry.aliases]),
+        );
         // An empty interface is intentional: these entries must stay unavailable
         // until a method-specific contract and its matching kernel are delivered.
         let protocol = NodeProtocol {
             type_id: sid(entry.id, NodeTypeId::new)?,
             catalog: NodeCatalogProtocol {
-                title_key: iid(&title)?,
-                documentation_key: None,
-                aliases_key: Some(iid(&aliases)?),
+                title_key: node_key(entry.id, "title")?,
+                aliases_key: Some(node_key(entry.id, "aliases")?),
                 category_id: sid(entry.category, NodeCategoryId::new)?,
                 icon_id: sid(icon, IconId::new)?,
                 style_id: sid(style, NodeStyleId::new)?,

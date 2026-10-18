@@ -60,6 +60,7 @@ yss-project = { path = "../yss-project" }
 yss-filesystem = { path = "../yss-filesystem" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
+yss-project-layout = { path = "../yss-project-layout" }
 yss-project-model = { path = "../yss-project-model" }
 yss-project-progress = { path = "../yss-project-progress" }
 yss-project-registry = { path = "../yss-project-registry" }
@@ -78,7 +79,6 @@ jsonschema.workspace = true
 tempfile = "3"
 yss-harness-core = { path = "../yss-harness-core", features = ["test-support"] }
 yss-assistant-extension = { path = "../yss-assistant-extension", features = ["test-support"] }
-yss-project-layout = { path = "../yss-project-layout" }
 yss-database-runtime = { path = "../yss-database-runtime", features = ["test-support"] }
 yss-graph-execution = { path = "../yss-graph-execution", features = ["test-support"] }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }

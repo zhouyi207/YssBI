@@ -1,3 +1,5 @@
+use super::*;
+
 /// VEC 估计：Johansen 方法
 pub fn vec_estimate(
     y: &Mat<f64>,
@@ -131,7 +133,7 @@ pub fn vec_estimate(
             .checked_cholesky()
             .map_err(|_| "VEC: alpha'alpha singular".to_string())?
             .solve(&Mat::<f64>::identity(r, r));
-        if has_const && config.trend_spec == VecTrendSpec::Constant {
+        if has_const && config.trend_spec == Deterministic::Constant {
             let alpha_t_v = alpha_mat.transpose() * v_hat.as_ref();
             let v_col = Mat::from_fn(r, 1, |i, _| alpha_t_v[i]);
             let mu_col = alpha_aa_inv.as_ref() * v_col.as_ref();
@@ -344,12 +346,6 @@ pub fn vec_estimate(
         beta_ci_upper.push(vec![None; r]);
     }
 
-    let trend_spec_str = match config.trend_spec {
-        VecTrendSpec::None => "none",
-        VecTrendSpec::Constant => "constant",
-        VecTrendSpec::Trend => "trend",
-    };
-
     let inference = (0..k)
         .map(|eq| RegressionCoefficientStatistics {
             covariance: covariance_rows(&cov_beta[eq]),
@@ -364,7 +360,7 @@ pub fn vec_estimate(
         var_names,
         rank: r,
         lags: p,
-        trend_spec: trend_spec_str.into(),
+        trend_spec: config.trend_spec.name().into(),
         coefficients,
         residuals,
         design: covariance_rows(&x_sr),

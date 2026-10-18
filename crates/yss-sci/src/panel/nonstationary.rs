@@ -2,7 +2,9 @@
 use super::data::{Result, failed, groups, parameter};
 use crate::time_series::unit_root::adf_test;
 use statrs::distribution::{ChiSquared, ContinuousCDF};
-use yss_sci_contract::{execution::ScientificExecutionControl, panel::*};
+use yss_sci_contract::{
+    execution::ScientificExecutionControl, panel::*, time_series::forecast::Deterministic,
+};
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve, matrix_rank};
 
 use crate::time_series::mackinnon;
@@ -12,8 +14,8 @@ fn adf(
     options: PanelTestOptions,
     control: &ScientificExecutionControl,
 ) -> Result<(f64, usize)> {
-    let constant = options.deterministic != PanelDeterministic::None;
-    let trend = options.deterministic == PanelDeterministic::Trend;
+    let constant = options.deterministic != Deterministic::None;
+    let trend = options.deterministic == Deterministic::Trend;
     if options.lags >= values.len() {
         return Err(parameter());
     }
@@ -88,7 +90,7 @@ pub fn fisher_unit_root(
             entity: data.entity[rows[0]],
             observations,
             statistic,
-            p_value: mackinnon::p_value(statistic, tau_deterministic(options.deterministic), 1),
+            p_value: mackinnon::p_value(statistic, options.deterministic, 1),
             cointegrating_coefficients: Vec::new(),
         });
     }
@@ -102,12 +104,12 @@ pub fn fisher_cointegration(
     control: &ScientificExecutionControl,
 ) -> Result<PanelFisherTest> {
     if !(1..=MAX_COINTEGRATION_PREDICTORS).contains(&data.predictors.len())
-        || options.deterministic == PanelDeterministic::None
+        || options.deterministic == Deterministic::None
     {
         return Err(parameter());
     }
     let groups = groups(&data, control)?;
-    let deterministic = if options.deterministic == PanelDeterministic::Trend {
+    let deterministic = if options.deterministic == Deterministic::Trend {
         2
     } else {
         1
@@ -144,7 +146,7 @@ pub fn fisher_cointegration(
             &residual,
             PanelTestOptions {
                 lags: options.lags,
-                deterministic: PanelDeterministic::None,
+                deterministic: Deterministic::None,
             },
             control,
         )?;
@@ -158,7 +160,7 @@ pub fn fisher_cointegration(
             statistic,
             p_value: mackinnon::p_value(
                 statistic,
-                tau_deterministic(options.deterministic),
+                options.deterministic,
                 data.predictors.len() + 1,
             ),
             cointegrating_coefficients: coefficients,
@@ -166,15 +168,4 @@ pub fn fisher_cointegration(
     }
     control.check()?;
     combine("fisher_engle_granger", options, tests)
-}
-
-fn tau_deterministic(
-    value: PanelDeterministic,
-) -> yss_sci_contract::time_series::forecast::Deterministic {
-    use yss_sci_contract::time_series::forecast::Deterministic;
-    match value {
-        PanelDeterministic::None => Deterministic::None,
-        PanelDeterministic::Constant => Deterministic::Constant,
-        PanelDeterministic::Trend => Deterministic::Trend,
-    }
 }

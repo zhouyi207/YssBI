@@ -1,5 +1,6 @@
 //! Executable longitudinal nodes preserve the ten inventory identities.
 use super::*;
+use crate::builtin::add_node_messages;
 
 const METHODS: &[(&str, &str, &str)] = &[
     (
@@ -56,7 +57,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         );
         let mut ports = vec![
             data_input("y", "Y", numeric_or_binary_series()?)?,
-            bounded_user_data_input("x", "X", series_type()?, 0, None)?,
+            bounded_user_data_input("x", "X", numeric_data_series_type(), 0, None)?,
             bounded_user_data_input(
                 "groups",
                 "Grouping factor",
@@ -77,7 +78,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(bounded_user_data_input(
                 "random_predictors",
                 "Random slope",
-                series_type()?,
+                numeric_data_series_type(),
                 if method == "mixed.random_slope" { 1 } else { 0 },
                 None,
             )?);
@@ -117,7 +118,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: Some(node_key(&id, "aliases")?),
                     category_id: sid("statistics.longitudinal", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -146,24 +146,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "mixed.poisson" => &["mixed.poisson", "Poisson混合模型"],
             _ => &["mixed.negative_binomial", "负二项混合模型", "NB2"],
         };
-        for (locale, title, help) in [
-            (
-                "en-US",
-                en,
-                "Estimate aligned grouped observations. See help for response families, random-effect design and inference.",
-            ),
-            (
-                "zh-CN",
-                zh,
-                "拟合对齐的分组观测；响应分布、随机效应设计与推断口径见节点帮助。",
-            ),
-        ] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(help)),
-                (locale, node_key_text(&id, "aliases"), Aliases(aliases)),
-            ]);
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            &id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     for (key, en, zh, help_en, help_zh) in [
         (

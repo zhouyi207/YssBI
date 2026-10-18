@@ -105,29 +105,24 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
 }
 
 fn register_constants(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for spec in [
-        NodeTextSpec {
-            id: "yssbi.constant.pi",
-            title: "Pi (π)",
-            zh_title: "π（圆周率）",
-            documentation: "The fixed mathematical constant pi, represented as Float64.",
-            zh_documentation: "输出圆周率 π 的 Float64 近似值，无需输入或配置。",
-            aliases: &["pi", "π", "circle constant"],
-            zh_aliases: &["pi", "π", "圆周率"],
-        },
-        NodeTextSpec {
-            id: "yssbi.constant.e",
-            title: "Euler's Number (e)",
-            zh_title: "e（自然常数）",
-            documentation: "The fixed base of the natural logarithm, represented as Float64.",
-            zh_documentation: "输出自然常数 e 的 Float64 近似值，可用作幂和对数的底数。",
-            aliases: &["e", "Euler's number", "natural logarithm base"],
-            zh_aliases: &["e", "自然常数", "自然对数底数"],
-        },
+    for (id, titles, aliases) in [
+        (
+            "yssbi.constant.pi",
+            ["Pi (π)", "π（圆周率）"],
+            [&["pi", "π", "circle constant"][..], &["pi", "π", "圆周率"]],
+        ),
+        (
+            "yssbi.constant.e",
+            ["Euler's Number (e)", "e（自然常数）"],
+            [
+                &["e", "Euler's number", "natural logarithm base"][..],
+                &["e", "自然常数", "自然对数底数"],
+            ],
+        ),
     ] {
-        fragment.add_node_messages(&spec)?;
+        crate::builtin::add_node_messages(&mut fragment.messages, id, titles, Some(aliases));
         let protocol = protocol(
-            spec.id,
+            id,
             "constants",
             vec![data_port(
                 "value",
@@ -139,7 +134,7 @@ fn register_constants(fragment: &mut ProviderFragment) -> Result<(), BuiltinAsse
             vec![],
             pure(),
         )?;
-        fragment.nodes.push(leaf(protocol, spec.id));
+        fragment.nodes.push(leaf(protocol, id));
     }
     Ok(())
 }
@@ -149,15 +144,12 @@ fn register_arithmetic_operator(
     spec: MathSpec,
 ) -> Result<(), BuiltinAssemblyError> {
     let id = format!("yssbi.numeric.{}", spec.operation);
-    fragment.add_node_messages(&NodeTextSpec {
-        id: &id,
-        title: spec.title,
-        zh_title: spec.zh_title,
-        documentation: "Scalar-only inputs produce a scalar. If any input is a DataSeries, scalar inputs are broadcast and the result is a DataSeries. Int64 widens to Float64 when required.",
-        zh_documentation: "输入全为标量时输出标量；任一输入为 DataSeries 时，标量会广播且结果为 DataSeries。需要时 Int64 会提升为 Float64。",
-        aliases: spec.aliases,
-        zh_aliases: spec.zh_aliases,
-    })?;
+    crate::builtin::add_node_messages(
+        &mut fragment.messages,
+        &id,
+        [spec.title, spec.zh_title],
+        Some([spec.aliases, spec.zh_aliases]),
+    );
     let numeric = numeric_value_type()?;
     let (left_title, right_title) = match spec.operation {
         "power" => ("Base", "Exponent"),
@@ -220,15 +212,12 @@ fn register_unary(
     spec: MathSpec,
 ) -> Result<(), BuiltinAssemblyError> {
     let id = format!("yssbi.numeric.{}", spec.operation);
-    fragment.add_node_messages(&NodeTextSpec {
-        id: &id,
-        title: spec.title,
-        zh_title: spec.zh_title,
-        documentation: "The output shape matches the input shape. Non-finite results are rejected by the runtime kernel.",
-        zh_documentation: "输出形状与输入一致；运行时 kernel 会拒绝非有限结果。",
-        aliases: spec.aliases,
-        zh_aliases: spec.zh_aliases,
-    })?;
+    crate::builtin::add_node_messages(
+        &mut fragment.messages,
+        &id,
+        [spec.title, spec.zh_title],
+        Some([spec.aliases, spec.zh_aliases]),
+    );
     let numeric = numeric_value_type()?;
     let output = TypeExpr::Union(vec![
         concrete("core.numeric")?,

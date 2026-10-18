@@ -42,7 +42,6 @@ pub enum ResourceDisplayKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeCatalogProtocol {
     pub title_key: I18nKey,
-    pub documentation_key: Option<I18nKey>,
     pub aliases_key: Option<I18nKey>,
     pub category_id: NodeCategoryId,
     pub icon_id: IconId,

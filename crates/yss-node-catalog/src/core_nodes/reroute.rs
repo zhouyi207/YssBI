@@ -1,5 +1,5 @@
 use super::support::{
-    BuiltinAssemblyError, NodeTextSpec, ProviderFragment, protocol, pure, semantic, transparent,
+    BuiltinAssemblyError, ProviderFragment, protocol, pure, semantic, transparent,
 };
 use crate::{REROUTE_INPUT_PORT, REROUTE_NODE_TYPE, REROUTE_OUTPUT_PORT};
 use yss_node_protocol::{
@@ -9,15 +9,12 @@ use yss_node_protocol::{
 use yss_node_registry::{RegisteredNode, TransparentNodeRole};
 
 pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    fragment.add_node_messages(&NodeTextSpec {
-        id: REROUTE_NODE_TYPE,
-        title: "Reroute",
-        zh_title: "重路由",
-        documentation: "Persistent data routing point that forwards its input without a computation kernel.",
-        zh_documentation: "持久化的数据路由点，直接转交输入值，无需计算内核。",
-        aliases: &[],
-        zh_aliases: &[],
-    })?;
+    crate::builtin::add_node_messages(
+        &mut fragment.messages,
+        REROUTE_NODE_TYPE,
+        ["Reroute", "重路由"],
+        Some([&[], &[]]),
+    );
     fragment.nodes.push(build_protocol()?);
     Ok(())
 }

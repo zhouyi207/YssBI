@@ -46,7 +46,7 @@ let reconstructed = &a * &x;
 - RHS dimensions are programmer preconditions; nonsquare matrices and numerical
   decomposition failures use `LinalgError`. Callers must distinguish a failed
   decomposition from a successfully computed zero rank.
-- Borrowed wrappers preserve logical indices and may be strided or reversed.
+- Borrowed wrappers preserve logical indices and may be strided (submatrices and transposes).
   Owned matrices are column major and may have padding. Serialized row order must
   be assembled explicitly; native storage must not be treated as a flat row-major
   array. There is no second array representation or raw-pointer conversion layer.

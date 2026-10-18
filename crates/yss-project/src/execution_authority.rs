@@ -47,7 +47,7 @@ impl ProjectResourceId {
     }
 
     pub fn database(id: impl AsRef<str>) -> Result<Self, ProjectResourceIdError> {
-        Self::new(format!("databases/{}", id.as_ref()).into_boxed_str())
+        Self::new(yss_database_contract::database_resource_path(id.as_ref()).into_boxed_str())
     }
 
     pub fn graph(path: &GraphResourcePath) -> Self {
@@ -456,11 +456,8 @@ fn identify_resource(
     resource: &ProjectResourceId,
 ) -> Result<ResourceIdentity, ResourceResolutionFailure> {
     let raw = resource.as_str();
-    if let Some(value) = raw.strip_prefix("databases/") {
-        if value.is_empty() {
-            return Err(ResourceResolutionFailure::InvalidIdentity);
-        }
-        return Ok(ResourceIdentity::Database(value.into()));
+    if let Some(id) = yss_database_contract::database_id_in_resource_path(raw) {
+        return Ok(ResourceIdentity::Database(id.into()));
     }
     if raw.starts_with("events/") || raw.starts_with("functions/") {
         let path =

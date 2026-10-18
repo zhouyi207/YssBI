@@ -76,7 +76,7 @@ fn execute(method: Method, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValu
     let c = Control::from_shared(inv.control.cancellation.clone(), inv.control.deadline);
     match method {
         Method::Validity => Ok(vec![named(
-            sci::validity(&columns, &c).map_err(computation_error)?,
+            sci::sampling_adequacy(&columns, &c).map_err(computation_error)?,
             inv,
         )?]),
         Method::Reliability => {

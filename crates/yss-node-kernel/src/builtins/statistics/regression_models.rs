@@ -1,6 +1,8 @@
 use super::{
     Input,
-    common::{boolean, categories, computation_error, integer, number, numeric, text, value},
+    common::{
+        boolean, categories, computation_error, integer, iteration, number, numeric, text, value,
+    },
 };
 use crate::{
     KernelContract, KernelError, KernelId, KernelInvocation, KernelParameterKey,
@@ -204,12 +206,6 @@ fn list(inv: &KernelInvocation<'_>, key: &str) -> Result<Vec<f64>, KernelError> 
     v.iter()
         .map(|v| super::super::numeric_input(Some(v)).map_err(|_| KernelError::InvalidParameter))
         .collect()
-}
-fn iteration(inv: &KernelInvocation<'_>) -> Result<IterationOptions, KernelError> {
-    Ok(IterationOptions {
-        max_iterations: integer(inv, "max_iterations")?,
-        tolerance: number(inv, "tolerance")?,
-    })
 }
 fn response_link(inv: &KernelInvocation<'_>, key: &str) -> Result<GlmLink, KernelError> {
     match text(inv, key)? {

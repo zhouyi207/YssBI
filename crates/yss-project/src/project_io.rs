@@ -120,14 +120,6 @@ pub(crate) fn snapshot_graph_document(
     Ok(graph_document_from_resource(graph))
 }
 
-#[cfg(any(test, feature = "test-support"))]
-pub(crate) fn initialize_project_directory(
-    project_data: &ProjectData,
-    root: &Path,
-) -> Result<(), ProjectError> {
-    save_project_to_directory(project_data, root)
-}
-
 pub(crate) fn serialize_graph_resource_document(
     graph: &GraphResourceDocument,
 ) -> Result<Vec<u8>, ProjectError> {
@@ -159,7 +151,10 @@ fn write_loaded_graph_document(
 }
 
 #[cfg(any(test, feature = "test-support"))]
-fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<(), ProjectError> {
+pub(crate) fn save_project_to_directory(
+    project_data: &ProjectData,
+    root: &Path,
+) -> Result<(), ProjectError> {
     std::fs::create_dir_all(root)?;
     for directory in PROJECT_CONTENT_DIRECTORIES {
         std::fs::create_dir_all(root.join(directory))?;

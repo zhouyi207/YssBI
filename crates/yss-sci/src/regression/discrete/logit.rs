@@ -20,12 +20,12 @@ fn sigmoid(z: f64) -> f64 {
     }
 }
 
-pub use yss_sci_contract::regression::discrete::BinaryOptions as LogitConfig;
+use yss_sci_contract::regression::discrete::BinaryOptions;
 
 pub struct Logit {
     pub endog: Col<f64>,
     pub exog: Mat<f64>,
-    pub config: LogitConfig,
+    pub config: BinaryOptions,
 }
 
 #[derive(Debug)]
@@ -162,7 +162,7 @@ impl Logit {
                     .collect();
                 let p_values: Vec<f64> = z_values
                     .iter()
-                    .map(|&z| crate::distribution::normal_two_sided_p(z))
+                    .map(|&z| crate::distribution::normal::two_sided_p(z))
                     .collect();
                 let z_crit = normal.inverse_cdf(0.975);
                 let ci_lower = &beta - yss_sci_linalg::Scale(z_crit) * &std_err;
@@ -256,7 +256,7 @@ mod tests {
         let logit = Logit {
             endog,
             exog,
-            config: LogitConfig::default(),
+            config: BinaryOptions::default(),
         };
         let result = logit.fit().unwrap();
 
@@ -291,7 +291,7 @@ mod tests {
         let logit = Logit {
             endog,
             exog,
-            config: LogitConfig::default(),
+            config: BinaryOptions::default(),
         };
         let result = logit.fit().unwrap();
 

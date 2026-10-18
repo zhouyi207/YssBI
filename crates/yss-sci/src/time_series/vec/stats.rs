@@ -1,3 +1,5 @@
+use super::*;
+
 type BetaCoefficientStatistics = (
     Vec<Vec<Option<f64>>>,
     Vec<Vec<Option<f64>>>,
@@ -7,7 +9,7 @@ type BetaCoefficientStatistics = (
 );
 
 /// 协整方程 chi2 (Stata Cointegrating equations 表): Wald 检验自由参数
-fn compute_cointegrating_equations_chi2(
+pub(super) fn compute_cointegrating_equations_chi2(
     beta: &Mat<f64>,
     alpha: &Mat<f64>,
     omega: &Mat<f64>,
@@ -84,7 +86,7 @@ fn compute_cointegrating_equations_chi2(
 /// beta 表 Stata 风格：Std. err., z, P>|z|, [95% conf. interval]
 /// Stata 公式 (15): VCE = (1/(T-d)) (I⊗H_J) {(α'Ω⁻¹α)⊗(H_J'S11 H_J)}⁻¹ (I⊗H_J)'
 /// 对 CE j 的自由参数：V = (1/(n-d)) * a_inv_jj * B⁻¹，B = S11[r..k, r..k]
-fn compute_beta_ce_stats(
+pub(super) fn compute_beta_ce_stats(
     beta: &Mat<f64>,
     alpha: &Mat<f64>,
     omega: &Mat<f64>,

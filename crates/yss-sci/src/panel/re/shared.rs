@@ -1,20 +1,12 @@
+use super::*;
+
 // Panel Random Effects (GLS with variance components)
 //
 // Quasi-demeaning: y*_it = y_it - θ_i·ȳ_i, where θ_i = 1 - sqrt(σ²_e/(T_i·σ²_u + σ²_e)).
 // Stata xtreg, re default: consistent variance components (harmonic mean T̄ for σ²_u).
 
-use super::data::within_transform_by_group as within_transform;
-use crate::regression::collinearity::drop_collinear_columns;
-use crate::regression::linear::OLS;
-
-use yss_sci_linalg::{MatrixExt, Solve};
-
-use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
-use std::collections::HashMap;
-use yss_sci_linalg::{Col, Mat};
-
 /// Between transformation: replace each obs with entity mean (for quasi-demeaning)
-fn between_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {
+pub(super) fn between_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {
     let n = v.len();
     let mut sums: HashMap<usize, (f64, usize)> = HashMap::new();
     for (i, &eid) in entity_id.iter().enumerate() {
@@ -35,13 +27,8 @@ fn between_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {
     (out).into_iter().collect::<Col<f64>>()
 }
 
-/// Obs per entity T_i and harmonic mean T̄ = n / Σ(1/T_i) (Stata xtreg, re)
-fn obs_per_entity_and_harmonic_mean(entity_id: &[usize]) -> (HashMap<usize, usize>, f64) {
-    obs_per_group_and_harmonic_mean(entity_id)
-}
-
 /// Obs per group T_i and harmonic mean T̄ = n / Σ(1/T_i). Generic over group_id.
-fn obs_per_group_and_harmonic_mean(group_id: &[usize]) -> (HashMap<usize, usize>, f64) {
+pub(super) fn obs_per_group_and_harmonic_mean(group_id: &[usize]) -> (HashMap<usize, usize>, f64) {
     let mut cnt: HashMap<usize, usize> = HashMap::new();
     for &gid in group_id {
         *cnt.entry(gid).or_insert(0) += 1;
@@ -56,17 +43,8 @@ fn obs_per_group_and_harmonic_mean(group_id: &[usize]) -> (HashMap<usize, usize>
     (cnt, t_bar_harmonic)
 }
 
-/// Compute entity-level means. Returns (entity_ids, y_means, x_means) for between regression.
-fn entity_means(
-    endog: &[f64],
-    exog: &Mat<f64>,
-    entity_id: &[usize],
-) -> (Vec<usize>, Vec<f64>, Vec<Vec<f64>>) {
-    group_means(endog, exog, entity_id)
-}
-
 /// Compute group-level means (generic for entity or time). Returns (group_ids, y_means, x_means).
-fn group_means(
+pub(super) fn group_means(
     endog: &[f64],
     exog: &Mat<f64>,
     group_id: &[usize],

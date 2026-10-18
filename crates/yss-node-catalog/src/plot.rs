@@ -3,7 +3,8 @@ use super::builtin::{
     assembled_parameters, leaf, sid,
 };
 use crate::Message;
-use crate::builtin::{node_key, node_key_text};
+use crate::builtin::add_node_messages;
+use crate::builtin::node_key;
 use yss_data_contract::DataValue;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, TypeRegistration};
@@ -275,7 +276,12 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         order: 70,
     }];
     for spec in SPECS {
-        add_messages(&mut messages, spec);
+        add_node_messages(
+            &mut messages,
+            spec.id,
+            [spec.en, spec.zh],
+            Some([spec.aliases, spec.zh_aliases]),
+        );
         nodes.push(leaf(protocol(spec)?, spec.id));
     }
     let fragment = ProviderFragment {
@@ -438,7 +444,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         type_id: node_id(spec.id)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
-            documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
             category_id: category_id(CATEGORY)?,
             icon_id: icon_id("builtin.plot")?,
@@ -580,20 +585,6 @@ fn data_port(
         editor: PortEditorSpec::Default,
         schema: None,
     })
-}
-
-fn add_messages(out: &mut Vec<(&'static str, String, Message)>, spec: &PlotSpec) {
-    let title = node_key_text(spec.id, "title");
-    let documentation = node_key_text(spec.id, "documentation");
-    let aliases = node_key_text(spec.id, "aliases");
-    out.extend([
-        ("en-US", title.to_owned(), Message::Text(spec.en)),
-        ("zh-CN", title.to_owned(), Message::Text(spec.zh)),
-        ("en-US", documentation.to_owned(), Message::Text("This dataflow view node returns a presentation result that can be opened from the graph output.")),
-        ("zh-CN", documentation.to_owned(), Message::Text("此数据流视图节点返回可从图结果中打开的展示结果。")),
-        ("en-US", aliases.to_owned(), Message::Aliases(spec.aliases)),
-        ("zh-CN", aliases.to_owned(), Message::Aliases(spec.zh_aliases)),
-    ]);
 }
 
 fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {

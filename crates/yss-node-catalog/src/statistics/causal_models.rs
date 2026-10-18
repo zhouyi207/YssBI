@@ -1,5 +1,6 @@
 //! Executable definitions for the existing econometric/causal inventory entries.
 use super::*;
+use crate::builtin::add_node_messages;
 
 const METHODS: &[(&str, &str, &str, &[&str])] = &[
     (
@@ -90,8 +91,9 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "causal.psm" | "causal.ipw" | "causal.regression_adjustment" | "causal.aipw"
         );
         let projection = matches!(method, "causal.ate" | "causal.att");
-        let repeated =
-            |key, label, min| bounded_user_data_input(key, label, series_type()?, min, None);
+        let repeated = |key, label, min| {
+            bounded_user_data_input(key, label, numeric_data_series_type(), min, None)
+        };
         let mut ports = if projection {
             vec![data_input(
                 "effects",
@@ -101,7 +103,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         } else if method == "econometrics.sur" {
             vec![repeated("y", "Y", 2)?, repeated("x", "X", 0)?]
         } else {
-            vec![data_input("y", "Y", series_type()?)?]
+            vec![data_input("y", "Y", numeric_data_series_type())?]
         };
         if effect || method == "test.heterogeneity" {
             ports.push(data_input(
@@ -114,7 +116,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(data_input("groups", "Group", label_series()?)?);
         }
         if method == "causal.rdd" {
-            ports.push(data_input("running", "Running variable", series_type()?)?);
+            ports.push(data_input(
+                "running",
+                "Running variable",
+                numeric_data_series_type(),
+            )?);
         }
         if method == "econometrics.heckman_two_step" {
             ports.push(data_input(
@@ -232,7 +238,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: Some(node_key(&id, "aliases")?),
                     category_id: sid("statistics.causal", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -249,13 +254,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-                (locale, node_key_text(&id, "aliases"), Aliases(aliases)),
-            ]);
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            &id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     fragment.messages.extend([
         (

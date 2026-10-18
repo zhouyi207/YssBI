@@ -19,7 +19,7 @@ pub(super) fn word_cloud(raw: &Record) -> Result<ResultPlotProjection, Invalid> 
     let unique_words = positive_count(field(raw, "uniqueWords")?)?;
     let words = rows(raw, "words", 1)?
         .iter()
-        .map(|value| word(object(value)?))
+        .map(|value| word(record(value)?))
         .collect::<Result<Vec<_>, _>>()?;
     let displayed_observations = words
         .iter()
@@ -40,7 +40,7 @@ pub(super) fn pareto(raw: &Record) -> Result<ResultPlotProjection, Invalid> {
     let data = rows(raw, "data", 1)?
         .iter()
         .map(|value| {
-            let raw = object(value)?;
+            let raw = record(value)?;
             let word = word(raw)?;
             let cumulative = positive(field(raw, "cumulative")?)?;
             if cumulative > 1. {

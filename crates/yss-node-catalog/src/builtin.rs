@@ -1,5 +1,5 @@
 use super::{core_nodes, dataframe, distribution, plot, project, statistics};
-use crate::{Aliases, BuiltinCatalog, Message, Text, data_connections};
+use crate::{BuiltinCatalog, Message, Text, data_connections};
 use yss_data_contract::DataValue;
 use yss_data_contract::{DecimalLiteral, InvalidDecimal};
 use yss_node_protocol::*;
@@ -422,10 +422,8 @@ fn assemble_builtin_parts()
         add_node_messages(
             messages,
             &id,
-            spec.title,
-            spec.zh_title,
-            spec.aliases,
-            spec.zh_aliases,
+            [spec.title, spec.zh_title],
+            Some([spec.aliases, spec.zh_aliases]),
         );
         let mut protocol = comparison_protocol(&id, matches!(spec.id, "equal" | "not_equal"))?;
         protocol.parameters = comparison_parameters(&id)?;
@@ -436,20 +434,16 @@ fn assemble_builtin_parts()
         add_node_messages(
             messages,
             &id,
-            spec.title,
-            spec.zh_title,
-            spec.aliases,
-            spec.zh_aliases,
+            [spec.title, spec.zh_title],
+            Some([spec.aliases, spec.zh_aliases]),
         );
         nodes.push(leaf(boolean_protocol(&id, false)?, spec.kernel));
     }
     add_node_messages(
         messages,
         "yssbi.logic.not",
-        "Not",
-        "非",
-        &["invert", "!"],
-        &["取反", "!"],
+        ["Not", "非"],
+        Some([&["invert", "!"], &["取反", "!"]]),
     );
     nodes.push(leaf(
         boolean_protocol("yssbi.logic.not", true)?,
@@ -675,7 +669,6 @@ fn protocol(
         type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: iid(node_key_text(id, "title"))?,
-            documentation_key: Some(iid(node_key_text(id, "documentation"))?),
             aliases_key: Some(iid(node_key_text(id, "aliases"))?),
             category_id: sid(category, NodeCategoryId::new)?,
             icon_id: sid(format!("builtin.{category}"), IconId::new)?,
@@ -748,7 +741,6 @@ fn i18n_requirements(
     for node in nodes {
         let protocol = node.protocol();
         keys.insert(protocol.catalog.title_key.clone());
-        keys.extend(protocol.catalog.documentation_key.iter().cloned());
         if let Some(key) = &protocol.catalog.aliases_key {
             keys.insert(key.clone());
             alias_keys.insert(key.clone());
@@ -806,33 +798,26 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         out.push(("zh-CN", key.to_owned(), Text(zh)));
     }
 }
-fn add_node_messages(
+/// Title and alias messages of one node in every shipped locale (English, then Chinese).
+/// `aliases` is `None` exactly when the node's catalog protocol declares no alias key.
+pub(crate) fn add_node_messages(
     out: &mut Vec<(&'static str, String, Message)>,
     id: &str,
-    en: &'static str,
-    zh: &'static str,
-    en_aliases: &'static [&'static str],
-    zh_aliases: &'static [&'static str],
+    [en, zh]: [&'static str; 2],
+    aliases: Option<[&'static [&'static str]; 2]>,
 ) {
     let title = node_key_text(id, "title");
-    let docs = node_key_text(id, "documentation");
-    let aliases = node_key_text(id, "aliases");
     out.extend([
-        ("en-US", title.to_owned(), Text(en)),
-        ("zh-CN", title.to_owned(), Text(zh)),
-        (
-            "en-US",
-            docs.to_owned(),
-            Text("This node is part of the trusted built-in provider."),
-        ),
-        (
-            "zh-CN",
-            docs.to_owned(),
-            Text("此节点属于可信内建 provider。"),
-        ),
-        ("en-US", aliases.to_owned(), Aliases(en_aliases)),
-        ("zh-CN", aliases.to_owned(), Aliases(zh_aliases)),
+        ("en-US", title.clone(), Message::Text(en)),
+        ("zh-CN", title, Message::Text(zh)),
     ]);
+    if let Some([en_aliases, zh_aliases]) = aliases {
+        let key = node_key_text(id, "aliases");
+        out.extend([
+            ("en-US", key.clone(), Message::Aliases(en_aliases)),
+            ("zh-CN", key, Message::Aliases(zh_aliases)),
+        ]);
+    }
 }
 
 pub(super) fn node_key_text(id: &str, suffix: &str) -> String {

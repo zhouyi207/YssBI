@@ -2,12 +2,31 @@
 use crate::{SciError, execution::ScientificComputationError};
 use serde::Serialize;
 use std::collections::BTreeMap;
-/// 备择假设类型（t 检验、Wald 检验共用）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The parameter choice spelling is also the reported result spelling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Alternative {
     TwoSided,
     Greater,
     Less,
+}
+
+impl Alternative {
+    pub const NAMES: [&'static str; 3] = ["two_sided", "greater", "less"];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::TwoSided => "two_sided",
+            Self::Greater => "greater",
+            Self::Less => "less",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        [Self::TwoSided, Self::Greater, Self::Less]
+            .into_iter()
+            .find(|alternative| alternative.name() == name)
+    }
 }
 
 /// Inputs shared by the independent sample mean tests.
@@ -29,7 +48,7 @@ pub enum ClassicalHypothesisTest {
         alternative: Alternative,
     },
     Summary {
-        design: SummaryTDesign,
+        design: MeanDesign,
         first_count: usize,
         first_mean: f64,
         first_sd: f64,
@@ -78,11 +97,23 @@ pub enum ClassicalHypothesisTest {
     },
 }
 
-#[derive(Clone, Copy)]
-pub enum SummaryTDesign {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MeanDesign {
     OneSample,
     Independent,
     Paired,
+}
+
+impl MeanDesign {
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "one_sample" => Some(Self::OneSample),
+            "independent" => Some(Self::Independent),
+            "paired" => Some(Self::Paired),
+            _ => None,
+        }
+    }
 }
 
 /// Common result fields for catalogued hypothesis tests.

@@ -1,12 +1,12 @@
+use super::*;
+
 // VAR (Vector Autoregression) 模型与 IRF (Impulse Response Function)
 //
 // 实现与 Stata varbasic 一致：VAR(p) 估计（每方程 OLS）、正交化 IRF、FEVD。
 // 参考 Lutkepohl (2005) New Introduction to Multiple Time Series Analysis.
 
-use super::distributions::{chi_squared_sf, normal_two_sided_p};
-
 /// Cholesky 分解 L 使得 A = L L'，L 为下三角，原地覆盖 A 的下三角部分
-pub(super) fn cholesky_lower_in_place(a: &mut Mat<f64>) -> Result<(), ()> {
+pub(in crate::time_series) fn cholesky_lower_in_place(a: &mut Mat<f64>) -> Result<(), ()> {
     let n = a.nrows();
     if a.ncols() != n {
         return Err(());
@@ -35,17 +35,6 @@ pub(super) fn cholesky_lower_in_place(a: &mut Mat<f64>) -> Result<(), ()> {
     }
     Ok(())
 }
-
-use serde::{Deserialize, Serialize};
-use yss_sci_linalg::{Col, Mat};
-use yss_sci_linalg::{MatrixExt, Solve};
-
-use crate::regression::design::covariance_rows;
-use yss_sci_contract::regression::fit::RegressionCoefficientStatistics;
-use yss_sci_contract::time_series::fit::{
-    EquationStatistics, MultivariateStatistics, SerialCorrelationTest, StabilityRoot,
-};
-pub use yss_sci_contract::time_series::var::VarFit;
 
 /// VAR 配置
 #[derive(Debug, Clone)]

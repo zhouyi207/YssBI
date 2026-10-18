@@ -2,6 +2,7 @@
 //!
 //! 参考 Stata ac / pac 命令：样本自相关与偏自相关，用于残差诊断。
 
+use crate::error::finite;
 use yss_sci_contract::execution::{
     ScientificComputationError, ScientificExecutionControl, ScientificInputViolation,
 };
@@ -42,14 +43,6 @@ pub fn compute_acf_pacf(
 /// 公式: ρ̂(k) = Σ(y_t - ȳ)(y_{t-k} - ȳ) / Σ(y_t - ȳ)²
 pub fn acf(x: &[f64], max_lag: usize) -> Result<Vec<f64>, ScientificComputationError> {
     acf_values(x, max_lag, None)
-}
-
-fn finite(value: f64) -> Result<f64, ScientificComputationError> {
-    if value.is_finite() {
-        Ok(value)
-    } else {
-        Err(ScientificComputationError::ComputationFailed)
-    }
 }
 
 fn correlation(value: f64) -> Result<f64, ScientificComputationError> {

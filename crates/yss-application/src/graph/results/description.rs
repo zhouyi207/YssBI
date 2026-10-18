@@ -1,10 +1,9 @@
 //! Typed presentation of the existing bounded description-result projection.
-use std::collections::BTreeMap;
-
 use yss_data_contract::TabularScalar;
 use yss_node_kernel::RuntimeValue;
 
 use super::ResultQueryApplicationError;
+use super::read::{Record as Fields, Unrepresentable, count, field, record, text};
 
 pub const NUMERIC_FIELDS: [&str; 7] = ["mean", "std", "min", "q25", "median", "q75", "max"];
 
@@ -37,12 +36,17 @@ pub struct DescriptionCategory {
     pub proportion: f64,
 }
 
-type Fields = BTreeMap<Box<str>, RuntimeValue>;
-type Invalid = ResultQueryApplicationError;
+type Invalid = Unrepresentable;
 
 /// Validate the complete value returned by `query_result_projection`, without JSON conversion.
 /// Field positions preserve source order independently of record-key ordering.
-pub fn columns(value: &RuntimeValue) -> Result<Vec<DescriptionColumn>, Invalid> {
+pub fn columns(
+    value: &RuntimeValue,
+) -> Result<Vec<DescriptionColumn>, ResultQueryApplicationError> {
+    Ok(read_columns(value)?)
+}
+
+fn read_columns(value: &RuntimeValue) -> Result<Vec<DescriptionColumn>, Invalid> {
     let root = record(value)?;
     if root.len() != 1 {
         return invalid();
@@ -52,7 +56,7 @@ pub fn columns(value: &RuntimeValue) -> Result<Vec<DescriptionColumn>, Invalid> 
         .iter()
         .map(|(name, value)| {
             let fields = record(value)?;
-            let position = count(field(fields, "position")?)?;
+            let position: u64 = count(field(fields, "position")?)?;
             let observed = count(field(fields, "count")?)?;
             let missing = count(field(fields, "missing")?)?;
             let statistics = match text(field(fields, "semantic")?)? {
@@ -146,28 +150,6 @@ fn categories(value: &RuntimeValue) -> Result<Vec<DescriptionCategory>, Invalid>
         .collect()
 }
 
-fn record(value: &RuntimeValue) -> Result<&Fields, Invalid> {
-    match value.unannotated() {
-        RuntimeValue::Record(fields) => Ok(fields),
-        _ => invalid(),
-    }
-}
-fn field<'a>(fields: &'a Fields, key: &str) -> Result<&'a RuntimeValue, Invalid> {
-    fields.get(key).ok_or(Invalid::UnrepresentableValue)
-}
-fn text(value: &RuntimeValue) -> Result<&str, Invalid> {
-    match value.unannotated() {
-        RuntimeValue::Scalar(TabularScalar::String(text)) => Ok(text),
-        _ => invalid(),
-    }
-}
-fn count(value: &RuntimeValue) -> Result<u64, Invalid> {
-    match value.unannotated() {
-        RuntimeValue::Scalar(TabularScalar::Unsigned(value)) => Ok(*value),
-        RuntimeValue::Scalar(TabularScalar::Integer(value)) if *value >= 0 => Ok(*value as u64),
-        _ => invalid(),
-    }
-}
 fn metric(value: &RuntimeValue) -> Result<TabularScalar, Invalid> {
     match value.unannotated() {
         RuntimeValue::Scalar(
@@ -178,7 +160,7 @@ fn metric(value: &RuntimeValue) -> Result<TabularScalar, Invalid> {
     }
 }
 fn invalid<T>() -> Result<T, Invalid> {
-    Err(Invalid::UnrepresentableValue)
+    Err(Unrepresentable)
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 //! Native-plan data transformations and their authoring contracts.
 use super::*;
+use crate::builtin::add_node_messages;
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -337,27 +338,17 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 ));
             }
         }
-        for (locale, title) in [("en-US", entry.en), ("zh-CN", entry.zh)] {
-            fragment
-                .messages
-                .push((locale, node_key_text(entry.id, "title"), Text(title)));
-            fragment.messages.push((
-                locale,
-                node_key_text(entry.id, "aliases"),
-                Aliases(entry.aliases),
-            ));
-            fragment.messages.push((
-                locale,
-                node_key_text(entry.id, "documentation"),
-                Text(title),
-            ));
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            entry.id,
+            [entry.en, entry.zh],
+            Some([entry.aliases, entry.aliases]),
+        );
         let frame = entry.kind.is_frame();
         let protocol = NodeProtocol {
             type_id: sid(entry.id, NodeTypeId::new)?,
             catalog: NodeCatalogProtocol {
                 title_key: node_key(entry.id, "title")?,
-                documentation_key: Some(node_key(entry.id, "documentation")?),
                 aliases_key: Some(node_key(entry.id, "aliases")?),
                 category_id: sid(
                     if matches!(entry.kind, Kind::Impute) {
@@ -537,14 +528,14 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
             ),
             DatePart | DateDifference => (
                 data_series_type(concrete("core.datetime")?),
-                numeric_series_type(),
+                numeric_data_series_type(),
             ),
             DateTruncate | DateAdd => (
                 data_series_type(concrete("core.datetime")?),
                 data_series_type(concrete("core.datetime")?),
             ),
             Bin => (
-                numeric_series_type(),
+                numeric_data_series_type(),
                 data_series_type(concrete("core.ordinal")?),
             ),
             Rank => (
@@ -554,7 +545,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
                         .map(|id| concrete(id).map(data_series_type))
                         .collect::<Result<_, _>>()?,
                 ),
-                numeric_series_type(),
+                numeric_data_series_type(),
             ),
             Encode => (
                 TypeExpr::Union(
@@ -565,7 +556,7 @@ fn interface(kind: Kind) -> Result<(Vec<PortSpec>, Vec<Parameter>, bool), Builti
                 ),
                 dataframe_type()?,
             ),
-            _ => (numeric_series_type(), numeric_series_type()),
+            _ => (numeric_data_series_type(), numeric_data_series_type()),
         };
         vec![
             data_input(

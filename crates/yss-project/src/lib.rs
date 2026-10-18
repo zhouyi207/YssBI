@@ -9,9 +9,7 @@ mod filesystem;
 mod operation_error;
 pub(crate) mod project_change_reconciliation;
 pub mod project_error;
-pub use file_changes::{
-    ProjectIndexInvalidation, filesystem_change_affects_project_index, is_project_index_watch_path,
-};
+pub use file_changes::{ProjectIndexInvalidation, filesystem_change_affects_project_index};
 pub use filesystem::project_root_from_path;
 pub use operation_error::ProjectOperationError;
 mod resource_lifecycle_operation;
@@ -92,7 +90,7 @@ pub mod fixtures {
     }
 
     pub fn write_project(project_data: &ProjectData, path: &str) -> Result<(), ProjectError> {
-        super::project_io::initialize_project_directory(
+        super::project_io::save_project_to_directory(
             project_data,
             crate::project_root_from_path(path).as_path(),
         )

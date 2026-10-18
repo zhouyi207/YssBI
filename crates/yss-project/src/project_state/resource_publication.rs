@@ -59,10 +59,10 @@ pub(crate) fn validate_context_revisions(
                 .ok()
                 .and_then(|path| data.graphs.get(&path))
                 .is_some_and(|resource| resource.function.is_some()),
-            ResourceKey::Database(path) => path
-                .0
-                .strip_prefix("databases/")
-                .is_some_and(|id| data.databases.contains_key(id)),
+            ResourceKey::Database(path) => {
+                yss_database_contract::database_id_in_resource_path(&path.0)
+                    .is_some_and(|id| data.databases.contains_key(id))
+            }
             ResourceKey::Mind(path) => yss_project_model::mind::MindPath::parse(&path.0)
                 .ok()
                 .is_some_and(|path| data.minds.contains_key(&path)),

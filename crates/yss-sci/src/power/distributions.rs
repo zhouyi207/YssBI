@@ -10,18 +10,18 @@ pub(super) const EPS: f64 = 2e-14;
 pub(super) fn normal_power(
     noncentrality: f64,
     alpha: f64,
-    alternative: PowerAlternative,
+    alternative: Alternative,
 ) -> Result<f64> {
     if noncentrality == 0.0 {
         return Ok(alpha);
     }
     let value = match alternative {
-        PowerAlternative::TwoSided => {
+        Alternative::TwoSided => {
             let z = normal::two_sided_critical(alpha);
             normal::sum_sf(z - noncentrality, z + noncentrality)
         }
-        PowerAlternative::Greater => normal::sf(normal::upper_quantile(alpha) - noncentrality),
-        PowerAlternative::Less => normal::sf(normal::upper_quantile(alpha) + noncentrality),
+        Alternative::Greater => normal::sf(normal::upper_quantile(alpha) - noncentrality),
+        Alternative::Less => normal::sf(normal::upper_quantile(alpha) + noncentrality),
     };
     probability(value)
 }
@@ -29,14 +29,14 @@ pub(super) fn t_power(
     df: f64,
     noncentrality: f64,
     alpha: f64,
-    alternative: PowerAlternative,
+    alternative: Alternative,
     control: &Control,
 ) -> Result<f64> {
     if !df.is_finite() || df <= 0. {
         return Err(parameter());
     }
     let critical = crate::distribution::student_t::upper_quantile(
-        if alternative == PowerAlternative::TwoSided {
+        if alternative == Alternative::TwoSided {
             alpha / 2.
         } else {
             alpha
@@ -45,12 +45,12 @@ pub(super) fn t_power(
     )
     .ok_or_else(failed)?;
     let power = match alternative {
-        PowerAlternative::TwoSided => {
+        Alternative::TwoSided => {
             t_tail(critical, df, noncentrality, control)?
                 + t_tail(critical, df, -noncentrality, control)?
         }
-        PowerAlternative::Greater => t_tail(critical, df, noncentrality, control)?,
-        PowerAlternative::Less => t_tail(critical, df, -noncentrality, control)?,
+        Alternative::Greater => t_tail(critical, df, noncentrality, control)?,
+        Alternative::Less => t_tail(critical, df, -noncentrality, control)?,
     };
     probability(power)
 }

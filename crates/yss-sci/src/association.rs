@@ -6,6 +6,7 @@ pub use agreement::{bland_altman, icc, kappa, kendall_w, rwg};
 pub use correlation::{kendall, partial, pearson, spearman};
 pub use ridit::ridit;
 
+use crate::error::{finite, invalid};
 use crate::inference::intervals::{critical, validate_confidence as level};
 use statrs::distribution::{ContinuousCDF, StudentsT};
 use yss_sci_contract::association::{ConfidenceInterval, TestInference};
@@ -15,16 +16,6 @@ use yss_sci_contract::execution::{
 };
 use yss_sci_contract::hypothesis::Alternative;
 
-fn invalid(violation: Violation) -> Error {
-    Error::InvalidInput { violation }
-}
-fn finite(value: f64) -> Result<f64, Error> {
-    if value.is_finite() {
-        Ok(value)
-    } else {
-        Err(Error::ComputationFailed)
-    }
-}
 fn bounded(value: f64, low: f64, high: f64) -> Result<f64, Error> {
     let value = finite(value)?;
     if value < low - 1e-12 || value > high + 1e-12 {
@@ -130,17 +121,10 @@ fn coefficient(x: &[f64], y: &[f64], control: &Control) -> Result<f64, Error> {
     let y = unit_vector(y, control)?;
     bounded(sum(x.iter().zip(&y).map(|(x, y)| x * y)), -1.0, 1.0)
 }
-fn alternative(value: Alternative) -> &'static str {
-    match value {
-        Alternative::TwoSided => "two_sided",
-        Alternative::Greater => "greater",
-        Alternative::Less => "less",
-    }
-}
 fn normal_tail(z: f64, alternative: Alternative) -> Result<f64, Error> {
     bounded(
         match alternative {
-            Alternative::TwoSided => crate::distribution::normal_two_sided_p(z),
+            Alternative::TwoSided => crate::distribution::normal::two_sided_p(z),
             Alternative::Greater => crate::distribution::normal::sf(z),
             Alternative::Less => crate::distribution::normal::cdf(z),
         },

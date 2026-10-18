@@ -1,31 +1,14 @@
+use super::*;
+
 // VEC (Vector Error-Correction) 协整模型
 //
 // 按 Stata vec 命令的 Johansen (1995) 方法实现。
 // 支持 trend(none), trend(constant), trend(trend)。
 
-use super::distributions::{chi_squared_sf, normal_two_sided_p};
-use super::vec_vecrank_cv::{max_eigen_critical_row, trace_critical_row};
-
-use yss_sci_linalg::{MatrixExt, Solve};
-
-use serde::{Deserialize, Serialize};
-use yss_sci_linalg::{Col, Mat};
-
-/// 趋势设定：与 Stata trend() 对应
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VecTrendSpec {
-    /// trend(none): 无常数无趋势
-    None,
-    /// trend(constant): 无约束常数（默认）
-    Constant,
-    /// trend(trend): 协整方程含线性趋势，水平数据含二次趋势
-    Trend,
-}
-
 /// VEC 配置
 #[derive(Debug, Clone)]
 pub struct VECConfig {
-    pub trend_spec: VecTrendSpec,
+    pub trend_spec: Deterministic,
     pub lags: usize,
     pub rank: usize,
 }
@@ -63,13 +46,3 @@ pub struct VecRankResult {
     pub rows: Vec<VecRankRow>,
     pub note: String,
 }
-
-use crate::regression::design::covariance_rows;
-use yss_sci_contract::regression::fit::RegressionCoefficientStatistics;
-use yss_sci_contract::time_series::fit::{
-    EquationStatistics, MultivariateStatistics, SerialCorrelationTest, StabilityRoot,
-};
-pub use yss_sci_contract::time_series::vec::VecFit;
-use yss_sci_contract::time_series::vec::{
-    CointegratingEquationStatistics, CointegrationStatistics,
-};

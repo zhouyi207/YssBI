@@ -58,6 +58,8 @@ plan_id!(PlanNodeId);
 plan_id!(PlanNodeTypeId);
 plan_id!(PlanPortAddress);
 plan_id!(PlanInputGroupId);
+plan_id!(PlanParameterSchemaId);
+plan_id!(PlanParameterHandle);
 plan_id!(PlanResourceId);
 plan_id!(PlanResourceVersion);
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

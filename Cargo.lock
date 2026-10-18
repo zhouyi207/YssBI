@@ -13128,6 +13128,7 @@ dependencies = [
  "thiserror 2.0.20",
  "uuid",
  "yss-data-contract",
+ "yss-database-contract",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
  "yss-graph-document",

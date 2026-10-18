@@ -1,8 +1,9 @@
 use super::builtin::{
     BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, leaf, sid,
 };
-use crate::builtin::{node_key, node_key_text};
-use crate::{Aliases, Message, Text};
+use crate::builtin::add_node_messages;
+use crate::builtin::node_key;
+use crate::{Message, Text};
 use std::sync::Arc;
 use yss_node_protocol::*;
 use yss_node_registry::{
@@ -56,7 +57,7 @@ pub(super) fn register(
             &["读取", "获取", "常量"][..],
         ),
     ] {
-        add_node_messages(messages, id, en, zh, aliases, zh_aliases);
+        add_node_messages(messages, id, [en, zh], Some([aliases, zh_aliases]));
     }
 
     nodes.extend([
@@ -187,7 +188,6 @@ fn protocol(
         type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(id, "title")?,
-            documentation_key: Some(node_key(id, "documentation")?),
             aliases_key: Some(node_key(id, "aliases")?),
             category_id: sid("project", NodeCategoryId::new)?,
             icon_id: sid("builtin.project", IconId::new)?,
@@ -303,25 +303,4 @@ fn add_messages(out: &mut Vec<(&'static str, String, Message)>) {
         out.push(("en-US", key.to_owned(), Text(en)));
         out.push(("zh-CN", key.to_owned(), Text(zh)));
     }
-}
-
-fn add_node_messages(
-    out: &mut Vec<(&'static str, String, Message)>,
-    id: &'static str,
-    en: &'static str,
-    zh: &'static str,
-    en_aliases: &'static [&'static str],
-    zh_aliases: &'static [&'static str],
-) {
-    let title = node_key_text(id, "title");
-    let documentation = node_key_text(id, "documentation");
-    let aliases = node_key_text(id, "aliases");
-    out.extend([
-        ("en-US", title.to_owned(), Text(en)),
-        ("zh-CN", title.to_owned(), Text(zh)),
-        ("en-US", documentation.to_owned(), Text("Resource identity is stored as a stable node parameter and resolved from the semantic snapshot.")),
-        ("zh-CN", documentation.to_owned(), Text("资源身份作为稳定节点参数保存，并从编译快照解析。")),
-        ("en-US", aliases.to_owned(), Aliases(en_aliases)),
-        ("zh-CN", aliases.to_owned(), Aliases(zh_aliases)),
-    ]);
 }

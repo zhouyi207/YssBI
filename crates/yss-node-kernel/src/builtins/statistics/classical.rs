@@ -80,15 +80,11 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
         1,
         |inv| {
             let values: Vec<f64> = columns(&group(inv, "series"), inv, 0)?.remove(0);
-            let design = match text(inv, "design")? {
-                "one_sample" => yss_sci_contract::hypothesis::SummaryTDesign::OneSample,
-                "paired" => yss_sci_contract::hypothesis::SummaryTDesign::Paired,
-                "independent" => yss_sci_contract::hypothesis::SummaryTDesign::Independent,
-                _ => return Err(KernelError::InvalidParameter),
-            };
+            let design = yss_sci_contract::hypothesis::MeanDesign::from_name(text(inv, "design")?)
+                .ok_or(KernelError::InvalidParameter)?;
             let needed = if matches!(
                 design,
-                yss_sci_contract::hypothesis::SummaryTDesign::Independent
+                yss_sci_contract::hypothesis::MeanDesign::Independent
             ) {
                 6
             } else {
@@ -578,15 +574,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
             )
         },
     );
-}
-
-fn alternative(inv: &KernelInvocation<'_>) -> Result<Alternative, KernelError> {
-    match text(inv, "alternative")? {
-        "two_sided" => Ok(Alternative::TwoSided),
-        "greater" => Ok(Alternative::Greater),
-        "less" => Ok(Alternative::Less),
-        _ => Err(KernelError::InvalidParameter),
-    }
 }
 
 fn execute(

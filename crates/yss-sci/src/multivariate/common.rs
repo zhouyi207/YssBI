@@ -1,20 +1,8 @@
+pub(super) use crate::error::{failed, finite, invalid};
 use yss_sci_contract::execution::*;
 use yss_sci_linalg::{Mat, SymmetricEigen, matrix_rank};
 
 pub(super) type Result<T> = std::result::Result<T, ScientificComputationError>;
-pub(super) fn invalid(violation: ScientificInputViolation) -> ScientificComputationError {
-    ScientificComputationError::InvalidInput { violation }
-}
-pub(super) fn failed() -> ScientificComputationError {
-    ScientificComputationError::ComputationFailed
-}
-pub(super) fn finite(value: f64) -> Result<f64> {
-    if value.is_finite() {
-        Ok(value)
-    } else {
-        Err(failed())
-    }
-}
 pub(super) fn check_components(k: usize, bound: usize) -> Result<()> {
     if k == 0 || k > bound {
         Err(invalid(ScientificInputViolation::ParameterOutOfRange))

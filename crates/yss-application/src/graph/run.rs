@@ -312,14 +312,6 @@ impl From<GraphInputError> for ExecutionApplicationError {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CancelRunOutcome {
-    NotFound,
-    AlreadyCancelled,
-    AlreadyTerminal,
-    Requested,
-}
-
 /// Execute one graph through the session-bound Application/Graph/Execution
 /// owners. The no-sink overload is kept for non-transport callers; commands
 /// use `run_graph_with_sink` to attach the ordered run channel.
@@ -512,7 +504,7 @@ pub fn cancel_run(
     state: &ApplicationState,
     execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
     run_id: RunId,
-) -> Result<CancelRunOutcome, ExecutionApplicationError> {
+) -> Result<ExecutionCancelOutcome, ExecutionApplicationError> {
     let captured = state
         .capture_session()
         .map_err(ExecutionApplicationError::SessionCapture)?;
@@ -521,12 +513,7 @@ pub fn cancel_run(
             SessionRevalidationError::Changed,
         ));
     }
-    Ok(match captured.execution().cancel_run(run_id) {
-        ExecutionCancelOutcome::NotFound => CancelRunOutcome::NotFound,
-        ExecutionCancelOutcome::AlreadyCancelled => CancelRunOutcome::AlreadyCancelled,
-        ExecutionCancelOutcome::AlreadyTerminal => CancelRunOutcome::AlreadyTerminal,
-        ExecutionCancelOutcome::Requested => CancelRunOutcome::Requested,
-    })
+    Ok(captured.execution().cancel_run(run_id))
 }
 
 fn check_control(request: &RunGraphRequest) -> Result<(), ExecutionApplicationError> {
@@ -595,7 +582,7 @@ fn graph_resource_requirements(
         .resources_for_nodes(scope.nodes())
         .into_iter()
         .map(|identity| {
-            let kind = if identity.starts_with("databases/") {
+            let kind = if yss_database_contract::database_id_in_resource_path(identity).is_some() {
                 ProjectResourceKind::DataFrame
             } else {
                 ProjectResourceKind::File
@@ -689,10 +676,7 @@ fn map_project_resource_facts(
                 resource: grant.resource().clone(),
             })?;
         let value = if grant.kind() == ProjectResourceKind::DataFrame {
-            let id = resource
-                .as_str()
-                .strip_prefix("databases/")
-                .filter(|id| !id.is_empty())
+            let id = yss_database_contract::database_id_in_resource_path(resource.as_str())
                 .ok_or(ResourceBindingError::Identity(InvalidPlanIdentity::Empty))?;
             let relation = captured
                 .database()
@@ -840,7 +824,7 @@ mod tests {
         );
         assert!(matches!(
             cancel_run(&state, successor.execution_session_id(), run_id),
-            Ok(CancelRunOutcome::Requested)
+            Ok(ExecutionCancelOutcome::Requested)
         ));
     }
 

@@ -86,9 +86,9 @@ pub(crate) fn resource_path_is_valid(
                 canonical.as_str() == path && canonical.kind() == GraphResourceKind::FunctionGraph
             })
         }
-        ResourceBoundCreateArgs::Database => path
-            .strip_prefix("databases/")
-            .is_some_and(|id| !id.is_empty()),
+        ResourceBoundCreateArgs::Database => {
+            yss_database_contract::database_id_in_resource_path(path).is_some()
+        }
     }
 }
 

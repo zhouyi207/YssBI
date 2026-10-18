@@ -4,7 +4,9 @@ use statrs::distribution::{Binomial, ChiSquared, ContinuousCDF, DiscreteCDF};
 use statrs::function::gamma::ln_gamma;
 use std::collections::BTreeMap;
 use yss_sci_contract::execution::ScientificExecutionControl;
-use yss_sci_contract::hypothesis::{CategoricalHypothesisTest as Input, ClassicalTestResult};
+use yss_sci_contract::hypothesis::{
+    Alternative, CategoricalHypothesisTest as Input, ClassicalTestResult,
+};
 
 pub fn run(
     input: Input,
@@ -215,7 +217,7 @@ fn fisher(
     Ok(ClassicalTestResult {
         method: "fisher_exact".into(),
         null_hypothesis: "row and column classifications are independent".into(),
-        alternative: "two-sided".into(),
+        alternative: Alternative::TwoSided.name().into(),
         statistic_name: "odds_ratio".into(),
         statistic,
         degrees_of_freedom: vec![],

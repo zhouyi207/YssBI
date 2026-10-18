@@ -218,10 +218,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     let iteration = if matches!(method, "ols" | "slx") {
         IterationOptions::default()
     } else {
-        IterationOptions {
-            max_iterations: integer(inv, "max_iterations")?,
-            tolerance: number(inv, "tolerance")?,
-        }
+        iteration(inv)?
     };
     let mut model = if method == "panel" {
         regression::panel(kind, &y, &x, &w.matrix, iteration, &control)

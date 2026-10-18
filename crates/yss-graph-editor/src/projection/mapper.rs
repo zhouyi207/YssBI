@@ -499,19 +499,12 @@ fn project_outcome(value: &GraphResolutionOutcome) -> EditorResolutionOutcome {
     match value {
         GraphResolutionOutcome::Complete => EditorResolutionOutcome::Complete,
         GraphResolutionOutcome::Incomplete => EditorResolutionOutcome::Incomplete,
-        GraphResolutionOutcome::InternalFailure {
-            stage,
-            code,
-            node_id,
-        } => EditorResolutionOutcome::InternalFailure {
-            stage: match stage {
-                yss_graph_analysis::GraphResolutionStage::Analysis => {
-                    EditorResolutionStage::Analysis
-                }
-            },
-            code: code.clone(),
-            node_id: *node_id,
-        },
+        GraphResolutionOutcome::InternalFailure { code, node_id } => {
+            EditorResolutionOutcome::InternalFailure {
+                code: code.clone(),
+                node_id: *node_id,
+            }
+        }
     }
 }
 

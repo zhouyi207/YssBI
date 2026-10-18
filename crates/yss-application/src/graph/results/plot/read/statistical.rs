@@ -63,7 +63,7 @@ pub(super) fn correlogram(raw: &Record) -> Result<ResultPlotProjection, Invalid>
         rows(raw, key, 1)?
             .iter()
             .map(|value| {
-                let row = object(value)?;
+                let row = record(value)?;
                 let q_stat = nullable_number(field(row, "qStat")?)?;
                 let p_value = nullable_number(field(row, "pValue")?)?;
                 if (inference && (q_stat.is_none() || p_value.is_none()))
@@ -92,7 +92,7 @@ pub(super) fn distribution(raw: &Record, violin: bool) -> Result<ResultPlotProje
     let groups = rows(raw, "groups", 1)?
         .iter()
         .map(|value| {
-            let row = object(value)?;
+            let row = record(value)?;
             let group = DistributionGroup {
                 label: text(field(row, "label")?)?.into(),
                 observations: positive_count(field(row, "observations")?)?,
@@ -143,7 +143,7 @@ pub(super) fn interval(raw: &Record) -> Result<ResultPlotProjection, Invalid> {
     let data = rows(raw, "data", 1)?
         .iter()
         .map(|value| {
-            let row = object(value)?;
+            let row = record(value)?;
             let p = IntervalPoint {
                 x: number(field(row, "x")?)?,
                 y: number(field(row, "y")?)?,
@@ -169,7 +169,7 @@ pub(super) fn coefficient(raw: &Record) -> Result<ResultPlotProjection, Invalid>
     let data = rows(raw, "data", 1)?
         .iter()
         .map(|value| {
-            let row = object(value)?;
+            let row = record(value)?;
             let p = CoefficientPoint {
                 label: text(field(row, "label")?)?.into(),
                 value: number(field(row, "value")?)?,

@@ -1,6 +1,6 @@
 //! Neutral inputs and reports for univariate forecasting and stationarity.
 use crate::regression::models::{IterationOptions, RegressionModelResult};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ArimaOptions {
@@ -104,12 +104,29 @@ pub struct VolatilityResult {
     pub seed: Option<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// Deterministic terms shared by unit-root, cointegration and VEC specifications.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Deterministic {
     None,
     Constant,
     Trend,
+}
+
+impl Deterministic {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Constant => "constant",
+            Self::Trend => "trend",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        [Self::None, Self::Constant, Self::Trend]
+            .into_iter()
+            .find(|deterministic| deterministic.name() == name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

@@ -1,10 +1,12 @@
-struct RandomEffectVariances {
-    sigma2_u: f64,
-    sigma2_e: f64,
+use super::*;
+
+pub(super) struct RandomEffectVariances {
+    pub(super) sigma2_u: f64,
+    pub(super) sigma2_e: f64,
 }
 
 /// RE MLE log likelihood (Stata xtreg, mle formula). Generic over group_id (entity or time).
-fn re_mle_log_lik(
+pub(super) fn re_mle_log_lik(
     endog: &[f64],
     exog: &Mat<f64>,
     group_id: &[usize],
@@ -53,7 +55,7 @@ fn re_mle_log_lik(
 }
 
 /// Negative log likelihood for Newton-Raphson. params = [betas..., ln(σ²_u), ln(σ²_e)].
-fn re_mle_neg_ll_from_params(
+pub(super) fn re_mle_neg_ll_from_params(
     params: &[f64],
     endog: &[f64],
     exog: &Mat<f64>,
@@ -142,7 +144,7 @@ fn re_mle_numerical_hessian(
 
 /// Newton-Raphson step for maximization: θ_new = θ_old - H^{-1} * g (minimize neg_ll).
 /// Returns (new_params, new_neg_ll, converged).
-fn re_mle_newton_step(
+pub(super) fn re_mle_newton_step(
     params: &[f64],
     endog: &[f64],
     exog: &Mat<f64>,
@@ -192,7 +194,7 @@ pub fn fit_panel_re_mle(
     exog: &Mat<f64>,
     entity_id: &[usize],
     constant: bool,
-) -> Result<super::PanelFit, String> {
+) -> Result<super::super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n {
         return Err("Panel RE (MLE): lengths must match".to_string());
@@ -206,7 +208,7 @@ pub fn fit_panel_re_mle(
         return Err("Panel RE (MLE): need at least 2 entities".to_string());
     }
 
-    let (obs_per_entity, t_bar_harmonic) = obs_per_entity_and_harmonic_mean(entity_id);
+    let (obs_per_entity, t_bar_harmonic) = obs_per_group_and_harmonic_mean(entity_id);
     let k = exog.ncols();
     let endog_vec: Vec<f64> = endog.iter().cloned().collect();
     let t_bar = if t_bar_harmonic > 1e-300 {
@@ -222,7 +224,7 @@ pub fn fit_panel_re_mle(
     let mut ll_null = 0.0;
     let mut mle_iter_log_lik_const: Vec<f64> = Vec::new();
     {
-        let (_, y_b_vec, _) = entity_means(&endog_vec, exog, entity_id);
+        let (_, y_b_vec, _) = group_means(&endog_vec, exog, entity_id);
         let n_b = y_b_vec.len();
         let mut ss_b = 0.0;
         for &y in &y_b_vec {
@@ -666,21 +668,21 @@ pub fn fit_panel_re_mle(
         let mn = thetas.iter().cloned().fold(f64::INFINITY, f64::min);
         let mx = thetas.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let avg = thetas.iter().sum::<f64>() / thetas.len().max(1) as f64;
-        super::ThetaStats {
+        super::super::ThetaStats {
             min: mn,
             avg,
             max: mx,
         }
     };
 
-    let fe_stats = Some(super::PanelFEStats {
+    let fe_stats = Some(super::super::PanelFEStats {
         r2: None,
-        obs_per_group: super::ObsPerGroupStats {
+        obs_per_group: super::super::ObsPerGroupStats {
             min: obs_min,
             avg: obs_avg,
             max: obs_max,
         },
-        sigma: super::SigmaStats {
+        sigma: super::super::SigmaStats {
             sigma_u,
             sigma_e,
             rho,
@@ -692,13 +694,13 @@ pub fn fit_panel_re_mle(
     // Stata xtreg, re uses z (asymptotic normal), not t
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE MLE: {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        crate::distribution::normal_two_sided_p(result.tvalues[i])
+        crate::distribution::normal::two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
-    Ok(super::PanelFit {
+    Ok(super::super::PanelFit {
         parameter_names: vec![],
         parameter_categories: vec![],
         response_name: "response".into(),
@@ -717,20 +719,20 @@ pub fn fit_panel_re_mle(
         },
         family: "panel_re_mle".into(),
         coefficients: (result.betas).iter().copied().collect(),
-        inference: super::RegressionCoefficientStatistics {
-            covariance: super::covariance_rows(&(result.cov_beta)),
+        inference: super::super::RegressionCoefficientStatistics {
+            covariance: super::super::covariance_rows(&(result.cov_beta)),
             standard_errors: (result.stds).iter().copied().collect(),
             statistic_values: (result.tvalues).iter().copied().collect(),
             p_values: (pvalues_z).iter().copied().collect(),
             confidence_interval_lower: (conf_int_left_z).iter().copied().collect(),
             confidence_interval_upper: (conf_int_right_z).iter().copied().collect(),
         },
-        statistics: super::PanelModelStatistics {
+        statistics: super::super::PanelModelStatistics {
             observations: result.num_observation,
             entities: n_entities,
             time_periods: 0,
             within_r2: None,
-            linear: super::LinearRegressionStatistics {
+            linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,
                 adjusted_r2: result.r2_adjusted,
                 f_statistic: result.fvalue,
@@ -752,7 +754,7 @@ pub fn fit_panel_re_mle(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::MaximumLikelihood {
+        estimator_statistics: super::super::PanelEstimatorStatistics::MaximumLikelihood {
             log_likelihood,
             lr_chi2,
             lr_p_value: prob_lr_chi2,

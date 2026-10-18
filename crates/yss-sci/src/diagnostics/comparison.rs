@@ -95,10 +95,7 @@ fn view<'a>(model: FittedRegression<'a>, control: &Control) -> Result<View<'a>> 
                 return Err(parameter());
             }
             Ok(View {
-                family: match link {
-                    BinaryRegressionLink::Logit => "logit",
-                    BinaryRegressionLink::Probit => "probit",
-                },
+                family: link.family(),
                 design: &m.design,
                 fitted: &m.fitted,
                 residuals: &m.residuals,
@@ -248,7 +245,7 @@ pub fn compare_models(
                 return Err(parameter());
             }
             let variance = p * (1.0 - p);
-            let derivative = if r.family == "logit" {
+            let derivative = if r.family == BinaryRegressionLink::Logit.family() {
                 variance
             } else {
                 normal.pdf(normal.inverse_cdf(p))

@@ -1,5 +1,5 @@
 use super::*;
-use yss_sci_contract::{execution::*, panel::*};
+use yss_sci_contract::{execution::*, panel::*, time_series::forecast::Deterministic};
 
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     for method in [
@@ -96,11 +96,12 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         "unit_root" | "cointegration" => {
             let options = PanelTestOptions {
                 lags: integer(inv, "lags")?,
-                deterministic: match text(inv, "regression")? {
-                    "none" if method == "unit_root" => PanelDeterministic::None,
-                    "constant" => PanelDeterministic::Constant,
-                    "trend" => PanelDeterministic::Trend,
-                    _ => return Err(KernelError::InvalidParameter),
+                deterministic: match Deterministic::from_name(text(inv, "regression")?) {
+                    Some(Deterministic::None) if method != "unit_root" => {
+                        return Err(KernelError::InvalidParameter);
+                    }
+                    Some(deterministic) => deterministic,
+                    None => return Err(KernelError::InvalidParameter),
                 },
             };
             let result = if method == "unit_root" {
@@ -140,11 +141,11 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
                 effects: if method == "fd" {
                     Effects::Entity
                 } else {
-                    match text(inv, "effects")? {
-                        "entity" => Effects::Entity,
-                        "time" => Effects::Time,
-                        "two_way" if method != "between" => Effects::TwoWay,
-                        _ => return Err(KernelError::InvalidParameter),
+                    match super::effects(inv)? {
+                        Effects::TwoWay if method == "between" => {
+                            return Err(KernelError::InvalidParameter);
+                        }
+                        effects => effects,
                     }
                 },
                 constant: method == "fd" || boolean(inv, "constant")?,

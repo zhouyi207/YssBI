@@ -12,73 +12,59 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
             .flatten()
             .collect(),
     );
-    for (id, target, title, zh_title, documentation, zh_documentation) in [
+    for (id, target, title, zh_title) in [
         (
             "yssbi.value.to_numeric",
             SemanticType::Numeric,
             "To Numeric",
             "转数值",
-            "Convert a scalar or series to Numeric with exact integer/real conversion and null preservation.",
-            "将标量或数列转换为数值，支持精确的整数和实数转换并保留空值。",
         ),
         (
             "yssbi.value.to_text",
             SemanticType::Text,
             "To Text",
             "转文本",
-            "Convert a scalar or series to Text using stored values, preserving nulls.",
-            "将标量或数列的原始值转换为文本并保留空值。",
         ),
         (
             "yssbi.value.to_categorical",
             SemanticType::Categorical,
             "To Categorical",
             "转分类",
-            "Automatically map observed values to categories, or declare or inherit labels, preserving original codes and shape.",
-            "按实际取值自动生成分类映射，也可配置或继承标签，保留原始编码及标量或数列结构。",
         ),
         (
             "yssbi.value.to_ordinal",
             SemanticType::Ordinal,
             "To Ordinal",
             "转顺序",
-            "Declare or inherit ordered levels while preserving original codes and shape.",
-            "声明或继承由低到高的等级顺序，保留原始编码及标量或数列结构。",
         ),
         (
             "yssbi.value.to_binary",
             SemanticType::Binary,
             "To Binary",
             "转二元",
-            "Convert a scalar or series to Binary with an optional two-value mapping and positive value.",
-            "将标量或数列转换为二元值，可配置两值映射与正值。",
         ),
         (
             "yssbi.value.to_datetime",
             SemanticType::Datetime,
             "To Datetime",
             "转日期时间",
-            "Parse or convert calendar values with explicit kind, precision and format while retaining wall time.",
-            "按日期时间形式、精度和格式解析或转换日历值，保留原钟面时间。",
         ),
         (
             "yssbi.value.to_identifier",
             SemanticType::Identifier,
             "To Identifier",
             "转标识",
-            "Mark a scalar or series as Identifier, preserving original representation without requiring uniqueness.",
-            "将标量或数列转换为标识，保留原始表示，不附加唯一性要求。",
         ),
     ] {
-        fragment.add_node_messages(&NodeTextSpec {
+        crate::builtin::add_node_messages(
+            &mut fragment.messages,
             id,
-            title,
-            zh_title,
-            documentation,
-            zh_documentation,
-            aliases: &["convert", "cast", "semantic conversion"],
-            zh_aliases: &["转换", "类型转换", "语义转换"],
-        })?;
+            [title, zh_title],
+            Some([
+                &["convert", "cast", "semantic conversion"],
+                &["转换", "类型转换", "语义转换"],
+            ]),
+        );
         let parameters = conversion_parameters(fragment, id, target)?;
         let input = data_port("input", "Input", PortDirection::Input, input_types.clone())?;
         let output = data_port(

@@ -39,7 +39,7 @@ fn mood_median_preserves_group_margins_and_ignores_pooled_median_ties() {
         assert!((report.p_value - p).abs() < 1e-12);
         assert_eq!(report.method, "mood_median");
         assert_eq!(report.null_hypothesis, "group medians are equal");
-        assert_eq!(report.alternative, "two-sided");
+        assert_eq!(report.alternative, "two_sided");
         assert_eq!(report.statistic_name, "chi_squared");
         assert_eq!(report.degrees_of_freedom, [degrees]);
         assert_eq!(report.sample_sizes, sizes);

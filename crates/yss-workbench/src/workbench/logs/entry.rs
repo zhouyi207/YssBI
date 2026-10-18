@@ -45,11 +45,7 @@ impl LogEntry {
                         record.message.to_lowercase(),
                         record.source.as_deref().unwrap_or_default().to_lowercase(),
                         domain_name(record.domain).into(),
-                        match record.origin {
-                            LogOrigin::Rust => "rust",
-                            LogOrigin::Frontend => "frontend",
-                        }
-                        .into(),
+                        origin_name(record.origin).into(),
                         record.target.to_lowercase(),
                         record.event.as_deref().unwrap_or_default().to_lowercase(),
                         serde_json::to_string(&record.fields)
@@ -69,6 +65,13 @@ pub(super) fn level_label(level: LogLevel) -> &'static str {
         LogLevel::Info => "INFO",
         LogLevel::Debug => "DEBUG",
         LogLevel::Trace => "TRACE",
+    }
+}
+
+pub(super) fn origin_name(origin: LogOrigin) -> &'static str {
+    match origin {
+        LogOrigin::Rust => "rust",
+        LogOrigin::Frontend => "frontend",
     }
 }
 

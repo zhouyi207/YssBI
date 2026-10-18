@@ -6,7 +6,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         "Delphi round summary",
         "德尔菲法（单轮汇总）",
         vec![
-            bounded_user_data_input("criteria", "Rated item", series_type()?, 1, None)?,
+            bounded_user_data_input(
+                "criteria",
+                "Rated item",
+                numeric_data_series_type(),
+                1,
+                None,
+            )?,
             data_output("result", "Concordance", report_type()?)?,
             fixed_numeric_table(
                 "items",

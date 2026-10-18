@@ -1,7 +1,8 @@
 //! Numerical time-series model regressions.
 use yss_sci::time_series::unit_root::{AdfRegression, adf_test};
 use yss_sci::time_series::var::var_varsoc;
-use yss_sci::time_series::vec::{VECConfig, VecTrendSpec, vec_estimate, vec_vecrank_stats};
+use yss_sci::time_series::vec::{VECConfig, vec_estimate, vec_vecrank_stats};
+use yss_sci_contract::time_series::forecast::Deterministic;
 use yss_sci_linalg::Mat;
 
 #[test]
@@ -174,7 +175,7 @@ fn test_vec_estimate_rejects_invalid_config() {
         }
     });
     let config = VECConfig {
-        trend_spec: VecTrendSpec::Constant,
+        trend_spec: Deterministic::Constant,
         lags: 0,
         rank: 1,
     };
@@ -185,13 +186,13 @@ fn test_vec_estimate_rejects_invalid_config() {
     for (observations, lags) in [(2, 3), (0, 1)] {
         let sample = Mat::zeros(observations, 2);
         let config = VECConfig {
-            trend_spec: VecTrendSpec::Constant,
+            trend_spec: Deterministic::Constant,
             lags,
             rank: 1,
         };
         assert!(vec_estimate(&sample, &config, None, None).is_err());
         assert!(
-            vec_vecrank_stats(&sample, lags, VecTrendSpec::Constant, None, true, None).is_err()
+            vec_vecrank_stats(&sample, lags, Deterministic::Constant, None, true, None).is_err()
         );
     }
 }

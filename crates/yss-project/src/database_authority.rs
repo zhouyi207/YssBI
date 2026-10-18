@@ -162,7 +162,7 @@ impl ProjectState {
     ) -> Result<yss_project_identity::ResourceRevision, ProjectDatabaseError> {
         retained.checked_next().map_err(|error| {
             ProjectOperationError::ResourceRevisionOverflow {
-                resource: format!("databases/{id}"),
+                resource: yss_database_contract::database_resource_path(id),
                 retained: error.retained,
             }
             .into()
@@ -198,7 +198,7 @@ impl ProjectState {
             Vec::new(),
             vec![ResourceDeltaEvent {
                 resource: ResourceKey::Database(DatabaseResourceKey(
-                    format!("databases/{id}").into(),
+                    yss_database_contract::database_resource_path(id).into(),
                 )),
                 from_revision,
                 to_revision,

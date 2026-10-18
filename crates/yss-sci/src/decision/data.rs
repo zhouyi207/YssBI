@@ -16,11 +16,9 @@ pub(super) fn dimensions(
 pub(super) fn square(columns: &[Vec<f64>], control: &Control) -> Result<usize> {
     let (n, p) = dimensions(columns, &vec![false; columns.len()], control)?;
     if n != p {
-        return Err(
-            yss_sci_contract::execution::ScientificComputationError::InvalidInput {
-                violation: yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
-            },
-        );
+        return Err(crate::error::invalid(
+            yss_sci_contract::execution::ScientificInputViolation::ShapeMismatch,
+        ));
     }
     Ok(n)
 }

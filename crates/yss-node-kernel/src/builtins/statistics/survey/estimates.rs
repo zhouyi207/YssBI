@@ -1,5 +1,5 @@
 use super::*;
-use yss_sci_contract::regression::models::{GlmFamily, IterationOptions};
+use yss_sci_contract::regression::models::GlmFamily;
 const METHODS: &[(&str, Option<GlmFamily>)] = &[
     ("mean_proportion", None),
     ("stratified", None),
@@ -92,10 +92,7 @@ fn estimate(
             SurveyRegressionOptions {
                 family,
                 constant: boolean(inv, "constant")?,
-                iteration: IterationOptions {
-                    max_iterations: integer(inv, "max_iterations")?,
-                    tolerance: number(inv, "tolerance")?,
-                },
+                iteration: iteration(inv)?,
             },
             &control,
         )

@@ -48,13 +48,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         let mut ports = vec![bounded_user_data_input(
             "criteria",
             "Criterion",
-            series_type()?,
+            numeric_data_series_type(),
             1,
             None,
         )?];
         let mut parameters = vec![parameter(
             "cost_criteria",
-            series_type()?,
+            numeric_data_series_type(),
             ParameterEditorSpec::Auto,
             DataValue::List(vec![]),
             vec![],
@@ -63,7 +63,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(bounded_user_data_input(
                 "criterion_weights",
                 "Criterion weights",
-                series_type()?,
+                numeric_data_series_type(),
                 0,
                 Some(1),
             )?);
@@ -117,7 +117,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                     &["observation", "score", "rank"]
                 },
             )?,
-            data_output("weights", "Criterion weights", series_type()?)?,
+            data_output("weights", "Criterion weights", numeric_data_series_type())?,
         ]);
         emit(fragment, suffix, en, zh, ports, parameters)?;
     }

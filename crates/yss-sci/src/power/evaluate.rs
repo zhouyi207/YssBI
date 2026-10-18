@@ -7,7 +7,7 @@ pub(super) fn power(
     model: PowerModel,
     n: usize,
     alpha: f64,
-    alternative: PowerAlternative,
+    alternative: Alternative,
     control: &Control,
 ) -> Result<f64> {
     control.check()?;
@@ -150,7 +150,7 @@ pub(super) fn power(
             normal_power(
                 finite((delta + margin) * (n / 2.).sqrt())?,
                 alpha,
-                PowerAlternative::Greater,
+                Alternative::Greater,
             )?
         }
         PowerModel::Equivalence {
@@ -178,9 +178,9 @@ fn proportion(
     variance: f64,
     n: f64,
     alpha: f64,
-    alternative: PowerAlternative,
+    alternative: Alternative,
 ) -> Result<f64> {
-    let z = if alternative == PowerAlternative::TwoSided {
+    let z = if alternative == Alternative::TwoSided {
         normal::two_sided_critical(alpha)
     } else {
         normal::upper_quantile(alpha)
@@ -199,20 +199,20 @@ fn proportion(
         }
     };
     finite(match alternative {
-        PowerAlternative::TwoSided => normal::sum_sf(statistic(true), statistic(false)),
-        PowerAlternative::Greater => normal::sf(statistic(true)),
-        PowerAlternative::Less => normal::sf(statistic(false)),
+        Alternative::TwoSided => normal::sum_sf(statistic(true), statistic(false)),
+        Alternative::Greater => normal::sf(statistic(true)),
+        Alternative::Less => normal::sf(statistic(false)),
     })
 }
 fn variance(
     n: f64,
     ratio: f64,
     alpha: f64,
-    alternative: PowerAlternative,
+    alternative: Alternative,
     control: &Control,
 ) -> Result<f64> {
     let chi = ChiSquared::new(n - 1.).map_err(|_| parameter())?;
-    let tail = if alternative == PowerAlternative::TwoSided {
+    let tail = if alternative == Alternative::TwoSided {
         alpha / 2.
     } else {
         alpha
@@ -242,9 +242,9 @@ fn variance(
         }
     };
     finite(match alternative {
-        PowerAlternative::TwoSided => chi.cdf(lo / ratio) + chi.sf(hi / ratio),
-        PowerAlternative::Greater => chi.sf(hi / ratio),
-        PowerAlternative::Less => chi.cdf(lo / ratio),
+        Alternative::TwoSided => chi.cdf(lo / ratio) + chi.sf(hi / ratio),
+        Alternative::Greater => chi.sf(hi / ratio),
+        Alternative::Less => chi.cdf(lo / ratio),
     })
 }
 pub(super) fn method(model: PowerModel) -> &'static str {

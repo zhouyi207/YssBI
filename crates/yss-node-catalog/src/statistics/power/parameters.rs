@@ -15,11 +15,7 @@ pub(super) fn build(
         method,
         "anova" | "linear_regression" | "noninferiority" | "equivalence"
     ) {
-        params.push(choice_parameter(
-            "alternative",
-            "two_sided",
-            &["two_sided", "greater", "less"],
-        )?);
+        params.push(alternative_parameter()?);
     }
     let decimals: &[(&str, &str)] = match method {
         "principles" | "mean_difference" | "paired" | "cluster_randomized" => {

@@ -223,7 +223,7 @@ pub fn marginal_effects(
             estimate: values[j],
             standard_error: se,
             z_value: z,
-            p_value: z.map(crate::distribution::normal_two_sided_p),
+            p_value: z.map(crate::distribution::normal::two_sided_p),
             ci_lower: values[j] - critical * se,
             ci_upper: values[j] + critical * se,
         });

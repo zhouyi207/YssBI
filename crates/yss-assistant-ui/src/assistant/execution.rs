@@ -7,7 +7,6 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Sizable, tooltip::Tooltip};
 use gpui_kit::{AnyElement, App, Context, SharedString, Window, div, prelude::*, rems};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use yss_harness_contract::{HarnessMode, ReasoningEffort};
 
 impl ConversationPanel {
     pub(super) fn timing_connected(&self) -> bool {
@@ -70,16 +69,9 @@ impl ConversationPanel {
                         .items_center()
                         .flex_shrink_0()
                         .gap_1()
-                        .child(yss_ui::text::t(match options.mode {
-                            HarnessMode::Ask => "panel.assistantModes.ask",
-                            HarnessMode::Write => "panel.assistantModes.write",
-                        }))
+                        .child(yss_ui::text::t(super::options::mode_key(options.mode)))
                         .when_some(options.reasoning_effort, |group, effort| {
-                            group.child(yss_ui::text::t(match effort {
-                                ReasoningEffort::Low => "panel.assistantEffort.low",
-                                ReasoningEffort::Medium => "panel.assistantEffort.medium",
-                                ReasoningEffort::High => "panel.assistantEffort.high",
-                            }))
+                            group.child(super::options::effort_label(effort))
                         }),
                 )
             })

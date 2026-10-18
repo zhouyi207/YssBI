@@ -141,9 +141,7 @@ impl SemanticConversion {
     }
 
     pub fn from_parameters(target: &str, numeric: &str) -> Option<Self> {
-        let target = SemanticType::ALL
-            .into_iter()
-            .find(|kind| kind.type_id() == target)?;
+        let target = SemanticType::from_type_id(target)?;
         Some(Self::new(
             target,
             NumericRepresentation::from_parameter(numeric)?,

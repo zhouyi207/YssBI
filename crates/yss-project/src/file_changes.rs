@@ -10,8 +10,6 @@ pub fn filesystem_change_affects_project_index(change: &FilesystemChange) -> boo
     }
 }
 
-pub use yss_project_layout::is_project_index_input_path as is_project_index_watch_path;
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectIndexInvalidation {
     project_instance_id: ProjectInstanceId,

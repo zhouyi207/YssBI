@@ -1,5 +1,6 @@
 //! Process-control and balanced crossed measurement-study declarations.
 use super::*;
+use crate::builtin::add_node_messages;
 const ENTRIES: [(&str, &str, &str); 3] = [
     (
         "plot.control_chart",
@@ -21,7 +22,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     for (suffix, en, zh) in ENTRIES {
         let id = format!("yssbi.statistics.{suffix}");
         let chart = suffix == "plot.control_chart";
-        let mut ports = vec![data_input("measurements", "Measurement", series_type()?)?];
+        let mut ports = vec![data_input(
+            "measurements",
+            "Measurement",
+            numeric_data_series_type(),
+        )?];
         let mut parameters = if chart {
             vec![choice_parameter(
                 "chart_kind",
@@ -80,7 +85,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: None,
                     category_id: sid("statistics.design_quality", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -97,12 +101,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-            ]);
-        }
+        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }

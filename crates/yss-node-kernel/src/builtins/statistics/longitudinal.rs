@@ -1,10 +1,10 @@
 use super::{
     Input,
-    common::{boolean, computation_error, integer, number, text, value},
+    common::{boolean, computation_error, iteration, text, value},
 };
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
 use yss_data_contract::TabularScalar;
-use yss_sci_contract::{execution::*, longitudinal::*, regression::models::IterationOptions};
+use yss_sci_contract::{execution::*, longitudinal::*};
 use yss_sci_runtime::longitudinal as sci;
 
 const METHODS: &[&str] = &[
@@ -163,10 +163,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
         inv.control.cancellation.clone(),
         inv.control.deadline,
     );
-    let iteration = IterationOptions {
-        max_iterations: integer(inv, "max_iterations")?,
-        tolerance: number(inv, "tolerance")?,
-    };
+    let iteration = iteration(inv)?;
     let family = match method {
         "mixed.logistic" => ResponseFamily::Binomial,
         "mixed.poisson" => ResponseFamily::Poisson,

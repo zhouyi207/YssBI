@@ -14,7 +14,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         if method != "coupling_coordination" {
             parameters.push(parameter(
                 "cost_criteria",
-                series_type()?,
+                numeric_data_series_type(),
                 ParameterEditorSpec::Auto,
                 DataValue::List(vec![]),
                 vec![],
@@ -52,7 +52,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             bounded_user_data_input(
                 "criteria",
                 "Criterion",
-                series_type()?,
+                numeric_data_series_type(),
                 if method == "coupling_coordination" {
                     2
                 } else {
@@ -63,13 +63,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             bounded_user_data_input(
                 "criterion_weights",
                 "Criterion weights",
-                series_type()?,
+                numeric_data_series_type(),
                 0,
                 Some(1),
             )?,
             data_output("result", "Summary", report_type()?)?,
             fixed_numeric_table("scores", "Observations", fields)?,
-            data_output("weights", "Criterion weights", series_type()?)?,
+            data_output("weights", "Criterion weights", numeric_data_series_type())?,
         ];
         emit(
             fragment,

@@ -1,7 +1,7 @@
 use super::{
     Input,
     common::{
-        Category, boolean, category_code, columns, computation_error, integer, number,
+        Category, alternative, boolean, category_code, columns, computation_error, integer, number,
         ordinal_domain, ordinal_index, text, value,
     },
 };
@@ -13,7 +13,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::TabularScalar;
 use yss_sci_contract::association::*;
 use yss_sci_contract::execution::ScientificExecutionControl;
-use yss_sci_contract::hypothesis::Alternative;
 use yss_sci_runtime::association as sci;
 
 #[derive(Clone, Copy)]
@@ -140,14 +139,6 @@ pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     }
 }
 
-fn alternative(inv: &KernelInvocation<'_>) -> Result<Alternative, KernelError> {
-    match text(inv, "alternative")? {
-        "two_sided" => Ok(Alternative::TwoSided),
-        "greater" => Ok(Alternative::Greater),
-        "less" => Ok(Alternative::Less),
-        _ => Err(KernelError::InvalidParameter),
-    }
-}
 fn rank_method(inv: &KernelInvocation<'_>) -> Result<RankInference, KernelError> {
     match text(inv, "p_value_method")? {
         "auto" => Ok(RankInference::Auto),

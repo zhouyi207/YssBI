@@ -1,3 +1,5 @@
+use super::*;
+
 fn checked_fit(fit: &VarFit) -> Result<(), String> {
     let k = fit.var_names.len();
     let n = fit.statistics.observations;

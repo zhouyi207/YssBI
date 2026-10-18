@@ -5,11 +5,11 @@ pub(super) fn project(raw: &Record) -> Result<ResultPlotProjection, Invalid> {
     let axes = rows(raw, "axes", 4)?
         .iter()
         .map(|axis| {
-            let axis = object(axis)?;
+            let axis = record(axis)?;
             let ticks = rows(axis, "ticks", 1)?
                 .iter()
                 .map(|tick| {
-                    let tick = object(tick)?;
+                    let tick = record(tick)?;
                     let position = number(field(tick, "position")?)?;
                     if !(0.0..=1.0).contains(&position) {
                         return Err(invalid());

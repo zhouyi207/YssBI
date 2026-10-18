@@ -6,9 +6,9 @@ use crate::port_projection::include_referenced_orphan_ports;
 use crate::schema_resolution::resolve_graph_schemas;
 use crate::{
     GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeSemanticFact, GraphResolutionOutcome,
-    GraphResolutionStage, GraphResolvedInputBinding, GraphResolvedInputSource, GraphSchemaIssue,
-    GraphSchemaState, GraphSemanticCache, GraphSemanticSnapshot, function_validation,
-    graph_problem, semantic_validation, type_resolution,
+    GraphResolvedInputBinding, GraphResolvedInputSource, GraphSchemaIssue, GraphSchemaState,
+    GraphSemanticCache, GraphSemanticSnapshot, function_validation, graph_problem,
+    semantic_validation, type_resolution,
 };
 use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{GraphDocument, PortRef};
@@ -157,13 +157,11 @@ pub(crate) fn resolve_graph_semantics_inner(
         diagnostics,
         if let Some(node_id) = internal_interface_node {
             GraphResolutionOutcome::InternalFailure {
-                stage: GraphResolutionStage::Analysis,
                 code: "graph.interface.unsupported_resolver".into(),
                 node_id: Some(node_id),
             }
         } else if resolved_schemas.internal_failure().is_some() {
             GraphResolutionOutcome::InternalFailure {
-                stage: GraphResolutionStage::Analysis,
                 code: "graph.schema.unsupported_resolver".into(),
                 node_id: resolved_schemas
                     .internal_failure()

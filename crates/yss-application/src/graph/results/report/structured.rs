@@ -1,10 +1,10 @@
 //! Validated presentation of the bounded structured-result projection.
-use std::collections::BTreeMap;
 
 use yss_data_contract::TabularScalar;
 use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::RelationColumn;
 
+use super::super::read::{field, number, record, text};
 use super::{ReportQueryError, ResultPageProjection, ResultTablePart};
 
 pub struct ReportSection {
@@ -189,38 +189,6 @@ impl ReportTable {
                 .collect();
         }
         Ok(ReportTablePage { table: page, roots })
-    }
-}
-
-fn record(value: &RuntimeValue) -> Result<&BTreeMap<Box<str>, RuntimeValue>, ReportQueryError> {
-    match value.unannotated() {
-        RuntimeValue::Record(fields) => Ok(fields),
-        _ => Err(ReportQueryError::UnrepresentableValue),
-    }
-}
-
-fn field<'a>(
-    fields: &'a BTreeMap<Box<str>, RuntimeValue>,
-    key: &str,
-) -> Result<&'a RuntimeValue, ReportQueryError> {
-    fields
-        .get(key)
-        .ok_or(ReportQueryError::UnrepresentableValue)
-}
-
-fn text(value: &RuntimeValue) -> Result<&str, ReportQueryError> {
-    match value.unannotated() {
-        RuntimeValue::Scalar(TabularScalar::String(value)) => Ok(value),
-        _ => Err(ReportQueryError::UnrepresentableValue),
-    }
-}
-
-fn number(value: &RuntimeValue) -> Result<f64, ReportQueryError> {
-    match value.unannotated() {
-        RuntimeValue::Scalar(TabularScalar::Float64(value)) => Ok(value.as_f64()),
-        RuntimeValue::Scalar(TabularScalar::Integer(value)) => Ok(*value as f64),
-        RuntimeValue::Scalar(TabularScalar::Unsigned(value)) => Ok(*value as f64),
-        _ => Err(ReportQueryError::UnrepresentableValue),
     }
 }
 

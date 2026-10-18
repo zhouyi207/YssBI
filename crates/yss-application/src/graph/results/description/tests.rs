@@ -83,7 +83,7 @@ fn description_projection_rejects_incomplete_or_mixed_column_contracts() {
     for value in invalid {
         assert!(matches!(
             columns(&RuntimeValue::try_from(value).unwrap()),
-            Err(Invalid::UnrepresentableValue)
+            Err(ResultQueryApplicationError::UnrepresentableValue)
         ));
     }
 }

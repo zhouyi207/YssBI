@@ -117,9 +117,9 @@ fn overlay_authoritative_project_index(
         .iter()
         .map(|(id, declaration)| crate::ProjectDatabaseIndexEntry {
             id: id.clone(),
-            resource_path: yss_project_identity::ProjectResourcePath::new(format!(
-                "databases/{id}"
-            )),
+            resource_path: yss_project_identity::ProjectResourcePath::new(
+                yss_database_contract::database_resource_path(id.as_str()),
+            ),
             revision: yss_project_identity::ResourceRevision::new(database_revisions[id]),
             engine: declaration.engine.clone(),
             schema_version: declaration.schema_version,

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+pub(super) use crate::error::{failed, invalid, parameter};
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl as Control,
     ScientificInputViolation as Violation,
@@ -8,15 +9,6 @@ use yss_sci_contract::panel::PanelData;
 use yss_sci_linalg::Col;
 
 pub(super) type Result<T> = std::result::Result<T, Error>;
-pub(super) fn invalid(violation: Violation) -> Error {
-    Error::InvalidInput { violation }
-}
-pub(super) fn parameter() -> Error {
-    invalid(Violation::ParameterOutOfRange)
-}
-pub(super) fn failed() -> Error {
-    Error::ComputationFailed
-}
 
 /// Subtract group means after the estimator has validated matching lengths.
 pub(super) fn within_transform_by_group(v: &[f64], group_id: &[usize]) -> Col<f64> {

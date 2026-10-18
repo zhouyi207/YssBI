@@ -33,8 +33,6 @@ pub enum GraphPlanError {
     InvalidLiteral,
     #[error("graph plan identity is invalid")]
     Identity(#[from] InvalidPlanIdentity),
-    #[error("graph parameter identity is invalid")]
-    ParameterIdentity(#[from] InvalidPlanParameterId),
     #[error("kernel identity is invalid")]
     KernelIdentity(#[from] yss_node_kernel::InvalidKernelIdentity),
     #[error("graph parameter handle is duplicated")]

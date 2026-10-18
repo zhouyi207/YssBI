@@ -1,5 +1,6 @@
 //! Additional model diagnostics with explicit fitted-model or aligned-series inputs.
 use super::super::*;
+use crate::builtin::add_node_messages;
 
 const METHODS: &[(&str, &str, &str)] = &[
     ("collinearity", "Collinearity diagnostics", "共线性分析"),
@@ -41,19 +42,23 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "collinearity" | "harman" => vec![bounded_user_data_input(
                 "variables",
                 "Variable",
-                series_type()?,
+                numeric_data_series_type(),
                 if method == "harman" { 2 } else { 1 },
                 None,
             )?],
             "nri_idi" => vec![
                 data_input("outcome", "Binary outcome", numeric_or_binary_series()?)?,
-                data_input("reference", "Reference probability", series_type()?)?,
-                data_input("new", "New probability", series_type()?)?,
+                data_input(
+                    "reference",
+                    "Reference probability",
+                    numeric_data_series_type(),
+                )?,
+                data_input("new", "New probability", numeric_data_series_type())?,
             ],
             "ph" => vec![
-                data_input("time", "Time", series_type()?)?,
+                data_input("time", "Time", numeric_data_series_type())?,
                 data_input("event", "Event", numeric_or_binary_series()?)?,
-                bounded_user_data_input("x", "X", series_type()?, 1, None)?,
+                bounded_user_data_input("x", "X", numeric_data_series_type(), 1, None)?,
             ],
             "lr" | "score_lm" | "nested_comparison" => vec![
                 data_input("restricted", "Restricted model", fitted_regression_type()?)?,
@@ -89,7 +94,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 choice_parameter("nri_mode", "continuous", &["continuous", "categorical"])?,
                 parameter(
                     "risk_thresholds",
-                    series_type()?,
+                    numeric_data_series_type(),
                     ParameterEditorSpec::Auto,
                     DataValue::List(vec![]),
                     vec![],
@@ -130,7 +135,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: None,
                     category_id: sid("statistics.diagnostics", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -147,12 +151,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-            ]);
-        }
+        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }

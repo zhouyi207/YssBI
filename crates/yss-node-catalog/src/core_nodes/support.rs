@@ -1,63 +1,21 @@
+use crate::Text;
 use crate::builtin::node_key_text;
 pub(crate) use crate::builtin::{BuiltinAssemblyError, ProviderFragment, leaf};
 use crate::builtin::{assembled_interface, assembled_parameters};
-use crate::{Aliases, Text};
 use std::sync::Arc;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, RegisteredNode, TransparentNodeRole};
 
 impl ProviderFragment {
-    pub(crate) fn add_node_messages(
-        &mut self,
-        spec: &NodeTextSpec<'_>,
-    ) -> Result<(), BuiltinAssemblyError> {
-        let keys = NodeKeys::new(spec.id)?;
-        for (locale, title, documentation, aliases) in [
-            ("en-US", spec.title, spec.documentation, spec.aliases),
-            (
-                "zh-CN",
-                spec.zh_title,
-                spec.zh_documentation,
-                spec.zh_aliases,
-            ),
-        ] {
-            self.text(locale, keys.title.clone(), title);
-            self.text(locale, keys.documentation.clone(), documentation);
-            self.aliases(locale, keys.aliases.clone(), aliases);
-        }
-        Ok(())
-    }
-
     pub(crate) fn text(&mut self, locale: &'static str, key: I18nKey, value: &'static str) {
         self.messages
             .push((locale, key.as_str().to_owned(), Text(value)));
     }
-
-    pub(crate) fn aliases(
-        &mut self,
-        locale: &'static str,
-        key: I18nKey,
-        values: &'static [&'static str],
-    ) {
-        self.messages
-            .push((locale, key.as_str().to_owned(), Aliases(values)));
-    }
-}
-
-pub(crate) struct NodeTextSpec<'a> {
-    pub id: &'a str,
-    pub title: &'static str,
-    pub zh_title: &'static str,
-    pub documentation: &'static str,
-    pub zh_documentation: &'static str,
-    pub aliases: &'static [&'static str],
-    pub zh_aliases: &'static [&'static str],
 }
 
 #[derive(Clone)]
 struct NodeKeys {
     title: I18nKey,
-    documentation: I18nKey,
     aliases: I18nKey,
 }
 
@@ -65,7 +23,6 @@ impl NodeKeys {
     fn new(id: &str) -> Result<Self, BuiltinAssemblyError> {
         Ok(Self {
             title: i18n(node_key_text(id, "title"))?,
-            documentation: i18n(node_key_text(id, "documentation"))?,
             aliases: i18n(node_key_text(id, "aliases"))?,
         })
     }
@@ -91,7 +48,6 @@ pub(crate) fn protocol(
         type_id: semantic(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: keys.title,
-            documentation_key: Some(keys.documentation),
             aliases_key: Some(keys.aliases),
             category_id: semantic(category, NodeCategoryId::new)?,
             icon_id: semantic(format!("builtin.{category}"), IconId::new)?,

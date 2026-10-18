@@ -5,7 +5,6 @@ use gpui_kit::component::{
     input::{Input, Textarea, TextareaState},
 };
 use gpui_kit::{ClipboardItem, Render, SharedString, relative};
-use yss_logging::LogOrigin;
 use yss_ui::inspector::{self, InspectorHeader, InspectorSection};
 
 struct LogSection {
@@ -37,11 +36,7 @@ impl LogDetails {
             ),
             (
                 "detail.fields.origin",
-                match record.origin {
-                    LogOrigin::Rust => "rust",
-                    LogOrigin::Frontend => "frontend",
-                }
-                .into(),
+                entry::origin_name(record.origin).into(),
             ),
             ("detail.fields.target", record.target.clone()),
         ];

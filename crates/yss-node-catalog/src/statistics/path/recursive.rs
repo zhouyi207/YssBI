@@ -7,7 +7,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         "Path analysis (observed recursive linear models)",
         "路径分析（观测变量递归线性模型）",
         vec![
-            bounded_user_data_input("variables", "Variable (x1, x2, …)", series_type()?, 2, None)?,
+            bounded_user_data_input(
+                "variables",
+                "Variable (x1, x2, …)",
+                numeric_data_series_type(),
+                2,
+                None,
+            )?,
             data_output("result", "Path equations", report_type()?)?,
             fixed_numeric_table(
                 "effects",

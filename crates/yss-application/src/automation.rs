@@ -12,7 +12,7 @@ use yss_assistant_contract::{
     ResultValueInspection, TableRef,
 };
 use yss_graph_document::{PortAddress, PortRef};
-use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
+use yss_graph_execution::plan::ResultCategory;
 use yss_harness_contract::{CapabilityControl, CapabilityFailure, CapabilityFailureCode};
 #[cfg(test)]
 use yss_node_kernel::RuntimeValue;
@@ -202,43 +202,11 @@ fn inspect_result_category(category: ResultCategory) -> ResultCategoryInspection
     match category {
         ResultCategory::Value => ResultCategoryInspection::Value,
         ResultCategory::PlotData(kind) => ResultCategoryInspection::PlotData {
-            plot_kind: plot_kind(kind).to_owned(),
+            plot_kind: kind.name().to_owned(),
         },
         ResultCategory::StatisticalReport(kind) => ResultCategoryInspection::StatisticalReport {
-            report_kind: report_kind(kind).to_owned(),
+            report_kind: kind.name().to_owned(),
         },
-    }
-}
-
-fn plot_kind(kind: PlotDataKind) -> &'static str {
-    match kind {
-        PlotDataKind::Scatter => "scatter",
-        PlotDataKind::Line => "line",
-        PlotDataKind::Ecdf => "ecdf",
-        PlotDataKind::Kde => "kde",
-        PlotDataKind::Histogram => "histogram",
-        PlotDataKind::Correlation => "correlation",
-        PlotDataKind::Correlogram => "correlogram",
-        PlotDataKind::Boxplot => "boxplot",
-        PlotDataKind::Wordcloud => "wordcloud",
-        PlotDataKind::Errorbar => "errorbar",
-        PlotDataKind::PpQq => "ppQq",
-        PlotDataKind::Roc => "roc",
-        PlotDataKind::Quadrant => "quadrant",
-        PlotDataKind::Pareto => "pareto",
-        PlotDataKind::Combination => "combination",
-        PlotDataKind::Bubble => "bubble",
-        PlotDataKind::Violin => "violin",
-        PlotDataKind::Heatmap => "heatmap",
-        PlotDataKind::Coefficient => "coefficient",
-        PlotDataKind::Nomogram => "nomogram",
-    }
-}
-
-fn report_kind(kind: StatisticalReportKind) -> &'static str {
-    match kind {
-        StatisticalReportKind::Structured => "structured",
-        StatisticalReportKind::LinearRegressionSummary => "linear_regression_summary",
     }
 }
 
@@ -315,28 +283,6 @@ mod tests {
     use yss_data_contract::TabularScalar;
     use yss_graph_document::{NodeId, NodePosition};
     use yss_graph_editor::EditorGraphMutation;
-
-    #[test]
-    fn new_plot_kind_labels_follow_the_execution_enum_wire() {
-        for kind in [
-            PlotDataKind::Boxplot,
-            PlotDataKind::Wordcloud,
-            PlotDataKind::Errorbar,
-            PlotDataKind::PpQq,
-            PlotDataKind::Roc,
-            PlotDataKind::Quadrant,
-            PlotDataKind::Pareto,
-            PlotDataKind::Combination,
-            PlotDataKind::Bubble,
-            PlotDataKind::Violin,
-            PlotDataKind::Heatmap,
-            PlotDataKind::Coefficient,
-            PlotDataKind::Nomogram,
-        ] {
-            let wire = serde_json::to_value(kind).unwrap();
-            assert_eq!(Some(plot_kind(kind)), wire.as_str());
-        }
-    }
 
     #[test]
     fn result_json_preserves_long_text_deep_objects_and_complete_arrays() {

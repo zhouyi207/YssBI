@@ -1,4 +1,5 @@
 use super::*;
+use crate::builtin::add_node_messages;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for (id, en, zh, surface) in [
         (
@@ -14,11 +15,17 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             false,
         ),
     ] {
-        let mut ports = vec![data_input("y", "Y", series_type()?)?];
+        let mut ports = vec![data_input("y", "Y", numeric_data_series_type())?];
         ports.push(if surface {
-            bounded_user_data_input("factors", "Continuous factor", series_type()?, 1, None)?
+            bounded_user_data_input(
+                "factors",
+                "Continuous factor",
+                numeric_data_series_type(),
+                1,
+                None,
+            )?
         } else {
-            data_input("dose", "Nonnegative dose", series_type()?)?
+            data_input("dose", "Nonnegative dose", numeric_data_series_type())?
         });
         ports.extend([
             data_output("result", "Fit and interpretation", report_type()?)?,
@@ -86,7 +93,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id, NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(id, "title")?,
-                    documentation_key: Some(node_key(id, "documentation")?),
                     aliases_key: None,
                     category_id: sid("statistics.design_quality", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -103,12 +109,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(id, "title"), Text(title)),
-                (locale, node_key_text(id, "documentation"), Text(title)),
-            ]);
-        }
+        add_node_messages(&mut fragment.messages, id, [en, zh], None);
     }
     Ok(())
 }

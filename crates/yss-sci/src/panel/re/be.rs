@@ -1,10 +1,12 @@
+use super::*;
+
 /// Panel Between estimator: regress ȳ_i on x̄_i (entity means)
 pub fn fit_panel_re_be(
     endog: &Col<f64>,
     exog: &Mat<f64>,
     entity_id: &[usize],
     constant: bool,
-) -> Result<super::PanelFit, String> {
+) -> Result<super::super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n {
         return Err("Panel RE (BE): lengths must match".to_string());
@@ -19,7 +21,7 @@ pub fn fit_panel_re_be(
     }
 
     let (eids, y_b_vec, x_b_vec) =
-        entity_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
+        group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
     let k = exog.ncols();
     let n_b = y_b_vec.len();
     let mut x_b_data = Vec::with_capacity(n_b * k);
@@ -145,18 +147,18 @@ pub fn fit_panel_re_be(
     };
 
     let sd_u_plus_avg_e = (result.ms_residual).sqrt();
-    let fe_stats = Some(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats {
+    let fe_stats = Some(super::super::PanelFEStats {
+        r2: Some(super::super::PanelR2Stats {
             r2_within,
             r2_between,
             r2_overall,
         }),
-        obs_per_group: super::ObsPerGroupStats {
+        obs_per_group: super::super::ObsPerGroupStats {
             min: obs_min,
             avg: obs_avg,
             max: obs_max,
         },
-        sigma: super::SigmaStats {
+        sigma: super::super::SigmaStats {
             sigma_u: sd_u_plus_avg_e,
             sigma_e: 0.0,
             rho: 0.0,
@@ -165,15 +167,18 @@ pub fn fit_panel_re_be(
         theta: None,
     });
 
-    Ok(super::PanelFit {
+    Ok(super::super::PanelFit {
         parameter_names: vec![],
         parameter_categories: vec![],
         response_name: "response".into(),
         omitted_terms: vec![],
         estimation: yss_sci_contract::panel::PanelEstimationSample {
-            space: "between".into(), constant: final_ols.config.constant,
+            space: "between".into(),
+            constant: final_ols.config.constant,
             response: final_ols.endog.iter().copied().collect(),
-            design: (0..final_ols.exog.ncols()).map(|j|final_ols.exog.col(j).iter().copied().collect()).collect(),
+            design: (0..final_ols.exog.ncols())
+                .map(|j| final_ols.exog.col(j).iter().copied().collect())
+                .collect(),
             coefficients: result.betas.iter().copied().collect(),
             fitted: result.fitted.iter().copied().collect(),
             residuals: result.residuals.iter().copied().collect(),
@@ -181,20 +186,20 @@ pub fn fit_panel_re_be(
         },
         family: "panel_re_be".into(),
         coefficients: (result.betas).iter().copied().collect(),
-        inference: super::RegressionCoefficientStatistics {
-            covariance: super::covariance_rows(&(result.cov_beta)),
+        inference: super::super::RegressionCoefficientStatistics {
+            covariance: super::super::covariance_rows(&(result.cov_beta)),
             standard_errors: (result.stds).iter().copied().collect(),
             statistic_values: (result.tvalues).iter().copied().collect(),
             p_values: (result.pvalues).iter().copied().collect(),
             confidence_interval_lower: (result.conf_int_left).iter().copied().collect(),
             confidence_interval_upper: (result.conf_int_right).iter().copied().collect(),
         },
-        statistics: super::PanelModelStatistics {
+        statistics: super::super::PanelModelStatistics {
             observations: n,
             entities: n_entities,
             time_periods: 0,
             within_r2: None,
-            linear: super::LinearRegressionStatistics {
+            linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,
                 adjusted_r2: result.r2_adjusted,
                 f_statistic: result.fvalue,
@@ -216,7 +221,7 @@ pub fn fit_panel_re_be(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::LeastSquares,
+        estimator_statistics: super::super::PanelEstimatorStatistics::LeastSquares,
         covariance_nonrobust: None,
     })
 }

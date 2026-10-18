@@ -1,8 +1,10 @@
+use super::*;
+
 /// Johansen 协整秩检验（LR_trace、LR_max、LL(r) 与 Stata [TS] vecrank 公式一致；临界值为 Osterwald–Lenum，与 Stata 打印一致）
 pub fn vec_vecrank_stats(
     y: &Mat<f64>,
     lags: usize,
-    trend_spec: VecTrendSpec,
+    trend_spec: Deterministic,
     sindicators: Option<&Mat<f64>>,
     show_max_eigen: bool,
     var_names: Option<Vec<String>>,
@@ -27,9 +29,9 @@ pub fn vec_vecrank_stats(
     }
 
     let det_order = match trend_spec {
-        VecTrendSpec::None => -1,
-        VecTrendSpec::Constant => 0,
-        VecTrendSpec::Trend => 1,
+        Deterministic::None => -1,
+        Deterministic::Constant => 0,
+        Deterministic::Trend => 1,
     };
 
     let mut s00_chol = s1.s00;
@@ -96,13 +98,6 @@ pub fn vec_vecrank_stats(
         }
     }
 
-    let trend_str = match trend_spec {
-        VecTrendSpec::None => "none",
-        VecTrendSpec::Constant => "constant",
-        VecTrendSpec::Trend => "trend",
-    }
-    .to_string();
-
     let names = var_names.unwrap_or_else(|| (0..k).map(|i| format!("y{}", i)).collect());
 
     let mut rows = Vec::with_capacity(k + 1);
@@ -159,7 +154,7 @@ pub fn vec_vecrank_stats(
         var_names: names,
         num_observation: n,
         n_lags: lags,
-        trend_spec: trend_str,
+        trend_spec: trend_spec.name().into(),
         show_max_eigen,
         selected_rank_trace_95: sel_tr_95,
         selected_rank_trace_99: sel_tr_99,

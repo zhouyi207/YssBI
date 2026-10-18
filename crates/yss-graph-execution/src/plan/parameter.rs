@@ -1,55 +1,7 @@
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-use super::identity::PlanResourceId;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
-pub enum InvalidPlanParameterId {
-    #[error("parameter identity is empty")]
-    Empty,
-    #[error("parameter identity has surrounding whitespace")]
-    SurroundingWhitespace,
-    #[error("parameter identity contains a NUL")]
-    Nul,
-}
-
-fn validate(value: Box<str>) -> Result<Box<str>, InvalidPlanParameterId> {
-    if value.is_empty() {
-        return Err(InvalidPlanParameterId::Empty);
-    }
-    if value.trim() != value.as_ref() {
-        return Err(InvalidPlanParameterId::SurroundingWhitespace);
-    }
-    if value.contains('\0') {
-        return Err(InvalidPlanParameterId::Nul);
-    }
-    Ok(value)
-}
-
-macro_rules! parameter_id {
-    ($name:ident) => {
-        #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        pub struct $name(Box<str>);
-
-        impl $name {
-            pub fn new(value: Box<str>) -> Result<Self, InvalidPlanParameterId> {
-                Ok(Self(validate(value)?))
-            }
-
-            pub fn from_existing(value: Box<str>) -> Self {
-                debug_assert!(validate(value.clone()).is_ok());
-                Self(value)
-            }
-
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-        }
-    };
-}
-
-parameter_id!(PlanParameterSchemaId);
-parameter_id!(PlanParameterHandle);
+use super::identity::{PlanParameterHandle, PlanParameterSchemaId, PlanResourceId};
 
 /// Immutable literal trees are prepared once; resources are authorized separately per run.
 #[derive(Clone, Debug, PartialEq)]

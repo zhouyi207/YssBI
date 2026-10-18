@@ -79,7 +79,7 @@ pub fn analyze(
         (
             v,
             z,
-            z.map(|z| crate::distribution::normal_two_sided_p(z).clamp(0.0, 1.0)),
+            z.map(|z| crate::distribution::normal::two_sided_p(z).clamp(0.0, 1.0)),
         )
     };
     let (normal_variance, normal_z, normal_p_value) = infer(Some(variance));

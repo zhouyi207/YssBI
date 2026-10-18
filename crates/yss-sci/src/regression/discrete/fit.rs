@@ -96,7 +96,7 @@ pub(crate) fn fit_logit_design(
             .map(|j| x.col(j).iter().copied().collect())
             .collect(),
         constant,
-        family: "logit".into(),
+        family: BinaryRegressionLink::Logit.family().into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
         fitted,
         coefficients,
@@ -170,7 +170,7 @@ pub(crate) fn fit_probit_design(
             .map(|j| x.col(j).iter().copied().collect())
             .collect(),
         constant,
-        family: "probit".into(),
+        family: BinaryRegressionLink::Probit.family().into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
         fitted,
         coefficients,

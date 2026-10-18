@@ -88,15 +88,9 @@ pub(super) fn wald_test(
 
     let r_beta_minus_r = if q == 1 { contrast[0] } else { 0.0 };
 
-    let alt_str = match alternative {
-        Alternative::TwoSided => "two_sided",
-        Alternative::Greater => "greater",
-        Alternative::Less => "less",
-    };
-
     Ok(WaldTestResult {
         constraint_desc: constraint_desc.into(),
-        alternative: alt_str.to_string(),
+        alternative: alternative.name().into(),
         r_beta_minus_r,
         stat: f_stat,
         df1: q,

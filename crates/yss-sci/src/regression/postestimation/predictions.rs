@@ -97,11 +97,7 @@ pub fn adjusted_predictions(
     let standard_error = delta_standard_error(&gradient, covariance)?;
     Ok(AdjustedPrediction {
         observations: design[0].len(),
-        family: match link {
-            None => "linear",
-            Some(yss_sci_contract::regression::fit::BinaryRegressionLink::Logit) => "logit",
-            Some(yss_sci_contract::regression::fit::BinaryRegressionLink::Probit) => "probit",
-        },
+        family: link.map_or("linear", |link| link.family()),
         evaluation: options.evaluation,
         at: options.at,
         confidence_level: options.confidence_level,

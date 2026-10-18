@@ -89,9 +89,7 @@ pub fn data_type_from_type_expr(value: &TypeExpr) -> Option<ValueType> {
 }
 
 fn data_type_from_nominal(id: &str) -> ValueType {
-    yss_data_contract::SemanticType::ALL
-        .into_iter()
-        .find(|semantic| semantic.type_id() == id)
+    yss_data_contract::SemanticType::from_type_id(id)
         .map(ValueType::Scalar)
         .unwrap_or_else(|| match id {
             "core.object" => ValueType::Object,

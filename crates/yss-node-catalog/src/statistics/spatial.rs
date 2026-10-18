@@ -1,5 +1,6 @@
 //! Executable spatial-analysis protocols and weight design objects.
 use super::*;
+use crate::builtin::add_node_messages;
 
 const METHODS: &[(&str, &str, &str, &[&str])] = &[
     (
@@ -78,16 +79,22 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         ports.push(data_input("units", "Unit identifier", label_series()?)?);
         if weights {
             ports.extend([
-                data_input("x", "X coordinate", series_type()?)?,
-                data_input("y", "Y coordinate", series_type()?)?,
+                data_input("x", "X coordinate", numeric_data_series_type())?,
+                data_input("y", "Y coordinate", numeric_data_series_type())?,
             ]);
         } else {
             if method == "panel" {
                 ports.push(data_input("periods", "Period identifier", label_series()?)?);
             }
-            ports.push(data_input("y", "Y", series_type()?)?);
+            ports.push(data_input("y", "Y", numeric_data_series_type())?);
             if method != "moran" {
-                ports.push(bounded_user_data_input("x", "X", series_type()?, 1, None)?);
+                ports.push(bounded_user_data_input(
+                    "x",
+                    "X",
+                    numeric_data_series_type(),
+                    1,
+                    None,
+                )?);
             }
         }
         ports.push(data_output(
@@ -140,7 +147,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: Some(node_key(&id, "aliases")?),
                     category_id: sid("statistics.spatial", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -157,13 +163,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-                (locale, node_key_text(&id, "aliases"), Aliases(aliases)),
-            ]);
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            &id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     fragment.messages.extend([
         (

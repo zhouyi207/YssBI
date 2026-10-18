@@ -1,3 +1,5 @@
+use super::*;
+
 impl VAR {
     pub fn fit(&self) -> Result<VarFit, String> {
         let y = &self.y;

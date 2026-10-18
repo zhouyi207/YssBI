@@ -1,5 +1,6 @@
 //! Numerical panel-model fits.
 use crate::regression::fit::{LinearRegressionStatistics, RegressionCoefficientStatistics};
+use crate::time_series::forecast::Deterministic;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,18 +179,10 @@ pub struct PanelData<'a> {
     pub time: &'a [f64],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PanelDeterministic {
-    None,
-    Constant,
-    Trend,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct PanelTestOptions {
     pub lags: usize,
-    pub deterministic: PanelDeterministic,
+    pub deterministic: Deterministic,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,7 +199,7 @@ pub struct PanelEntityTest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PanelFisherTest {
     pub method: String,
-    pub deterministic: PanelDeterministic,
+    pub deterministic: Deterministic,
     pub lags: usize,
     pub observations: usize,
     /// None denotes an infinite Fisher statistic when an individual p-value underflows to zero.

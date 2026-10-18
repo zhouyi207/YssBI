@@ -110,7 +110,9 @@ pub fn build_resource_catalog(
         }
         schemas.insert(database.clone());
         database_catalog.insert(
-            GraphResourceId::new(format!("databases/{}", database.as_str())),
+            GraphResourceId::new(yss_database_contract::database_resource_path(
+                database.as_str(),
+            )),
             DataSchema {
                 columns: schema
                     .columns()
@@ -286,7 +288,10 @@ fn database_result_version(
     let revision = databases
         .schemas()
         .iter()
-        .find(|schema| identity.strip_prefix("databases/") == Some(schema.database().as_str()))?
+        .find(|schema| {
+            yss_database_contract::database_id_in_resource_path(identity)
+                == Some(schema.database().as_str())
+        })?
         .runtime_revision()
         .get();
     Some(

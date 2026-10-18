@@ -1,3 +1,5 @@
+use super::*;
+
 /// Two-way within: z̃_it = z_it - z̄_i - z̄_t + z̄
 fn within_transform_twoway(v: &[f64], entity_id: &[usize], time_id: &[usize]) -> Col<f64> {
     let n = v.len();
@@ -16,7 +18,7 @@ pub fn fit_panel_re_fgls_twoway(
     constant: bool,
     cov_type: &str,
     cov_params: Option<yss_sci_contract::regression::CovParams>,
-) -> Result<super::PanelFit, String> {
+) -> Result<super::super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (Two-Way FGLS): lengths must match".to_string());
@@ -353,18 +355,18 @@ pub fn fit_panel_re_fgls_twoway(
     let sigma_e = sigma2_e.sqrt();
     let rho = (sigma2_alpha + sigma2_lambda) / (sigma2_alpha + sigma2_lambda + sigma2_e);
 
-    let fe_stats = Some(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats {
+    let fe_stats = Some(super::super::PanelFEStats {
+        r2: Some(super::super::PanelR2Stats {
             r2_within,
             r2_between,
             r2_overall,
         }),
-        obs_per_group: super::ObsPerGroupStats {
+        obs_per_group: super::super::ObsPerGroupStats {
             min: obs_min,
             avg: obs_avg,
             max: obs_max,
         },
-        sigma: super::SigmaStats {
+        sigma: super::super::SigmaStats {
             sigma_u,
             sigma_e,
             rho,
@@ -404,13 +406,13 @@ pub fn fit_panel_re_fgls_twoway(
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE (Two-Way): {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        crate::distribution::normal_two_sided_p(result.tvalues[i])
+        crate::distribution::normal::two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
-    Ok(super::PanelFit {
+    Ok(super::super::PanelFit {
         parameter_names: vec![],
         parameter_categories: vec![],
         response_name: "response".into(),
@@ -429,20 +431,20 @@ pub fn fit_panel_re_fgls_twoway(
         },
         family: "panel_re_fgls_twoway".into(),
         coefficients: (result.betas).iter().copied().collect(),
-        inference: super::RegressionCoefficientStatistics {
-            covariance: super::covariance_rows(&(result.cov_beta)),
+        inference: super::super::RegressionCoefficientStatistics {
+            covariance: super::super::covariance_rows(&(result.cov_beta)),
             standard_errors: (result.stds).iter().copied().collect(),
             statistic_values: (result.tvalues).iter().copied().collect(),
             p_values: (pvalues_z).iter().copied().collect(),
             confidence_interval_lower: (conf_int_left_z).iter().copied().collect(),
             confidence_interval_upper: (conf_int_right_z).iter().copied().collect(),
         },
-        statistics: super::PanelModelStatistics {
+        statistics: super::super::PanelModelStatistics {
             observations: n,
             entities: n_entities,
             time_periods: n_times,
             within_r2: None,
-            linear: super::LinearRegressionStatistics {
+            linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,
                 adjusted_r2: result.r2_adjusted,
                 f_statistic: result.fvalue,
@@ -464,11 +466,11 @@ pub fn fit_panel_re_fgls_twoway(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::RandomEffects {
+        estimator_statistics: super::super::PanelEstimatorStatistics::RandomEffects {
             wald_chi2,
             wald_p_value: prob_wald_chi2,
         },
-        covariance_nonrobust: Some(super::covariance_rows(&(result.cov_beta_nonrobust))),
+        covariance_nonrobust: Some(super::super::covariance_rows(&(result.cov_beta_nonrobust))),
     })
 }
 
@@ -559,7 +561,7 @@ pub fn fit_panel_re_mle_twoway(
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
-) -> Result<super::PanelFit, String> {
+) -> Result<super::super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (Two-Way MLE): lengths must match".to_string());
@@ -1106,14 +1108,14 @@ pub fn fit_panel_re_mle_twoway(
         ChiSquared::new(0.5).map_err(|e| format!("Panel RE (Two-Way) chibar2: {}", e))?;
     let prob_chibar2 = chibar2_dist.sf(chibar2);
 
-    let fe_stats = Some(super::PanelFEStats {
+    let fe_stats = Some(super::super::PanelFEStats {
         r2: None,
-        obs_per_group: super::ObsPerGroupStats {
+        obs_per_group: super::super::ObsPerGroupStats {
             min: obs_min,
             avg: obs_avg,
             max: obs_max,
         },
-        sigma: super::SigmaStats {
+        sigma: super::super::SigmaStats {
             sigma_u,
             sigma_e,
             rho,
@@ -1124,13 +1126,13 @@ pub fn fit_panel_re_mle_twoway(
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE (Two-Way) MLE: {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        crate::distribution::normal_two_sided_p(result.tvalues[i])
+        crate::distribution::normal::two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
-    Ok(super::PanelFit {
+    Ok(super::super::PanelFit {
         parameter_names: vec![],
         parameter_categories: vec![],
         response_name: "response".into(),
@@ -1149,20 +1151,20 @@ pub fn fit_panel_re_mle_twoway(
         },
         family: "panel_re_mle_twoway".into(),
         coefficients: (result.betas).iter().copied().collect(),
-        inference: super::RegressionCoefficientStatistics {
-            covariance: super::covariance_rows(&(result.cov_beta)),
+        inference: super::super::RegressionCoefficientStatistics {
+            covariance: super::super::covariance_rows(&(result.cov_beta)),
             standard_errors: (result.stds).iter().copied().collect(),
             statistic_values: (result.tvalues).iter().copied().collect(),
             p_values: (pvalues_z).iter().copied().collect(),
             confidence_interval_lower: (conf_int_left_z).iter().copied().collect(),
             confidence_interval_upper: (conf_int_right_z).iter().copied().collect(),
         },
-        statistics: super::PanelModelStatistics {
+        statistics: super::super::PanelModelStatistics {
             observations: result.num_observation,
             entities: n_entities,
             time_periods: n_times,
             within_r2: None,
-            linear: super::LinearRegressionStatistics {
+            linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,
                 adjusted_r2: result.r2_adjusted,
                 f_statistic: result.fvalue,
@@ -1184,7 +1186,7 @@ pub fn fit_panel_re_mle_twoway(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::MaximumLikelihood {
+        estimator_statistics: super::super::PanelEstimatorStatistics::MaximumLikelihood {
             log_likelihood,
             lr_chi2,
             lr_p_value: prob_lr_chi2,

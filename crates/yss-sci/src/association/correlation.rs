@@ -19,7 +19,7 @@ fn result(
         coefficient: r,
         observations: n,
         control_variables: controls,
-        alternative: alternative(alternative_kind),
+        alternative: alternative_kind.name(),
         inference,
         confidence_interval,
         concordant_pairs: None,

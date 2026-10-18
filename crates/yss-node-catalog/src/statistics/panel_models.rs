@@ -1,5 +1,6 @@
 //! Complete the existing panel-category entries without duplicating their identities.
 use super::*;
+use crate::builtin::add_node_messages;
 use yss_sci_contract::panel::MAX_COINTEGRATION_PREDICTORS;
 
 const SPECS: &[(&str, &str, &str, &str, &[&str])] = &[
@@ -111,13 +112,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         let mut ports = vec![data_input(
             if method == "unit_root" { "series" } else { "y" },
             if method == "unit_root" { "Series" } else { "Y" },
-            series_type()?,
+            numeric_data_series_type(),
         )?];
         if method != "unit_root" {
             ports.push(bounded_user_data_input(
                 "x",
                 "X",
-                series_type()?,
+                numeric_data_series_type(),
                 if method == "dynamic" { 0 } else { 1 },
                 if method == "cointegration" {
                     Some(MAX_COINTEGRATION_PREDICTORS as u16)
@@ -127,8 +128,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             )?);
         }
         ports.extend([
-            data_input("entity", "Entity", series_type()?)?,
-            data_input("time", "Time", series_type()?)?,
+            data_input("entity", "Entity", numeric_data_series_type())?,
+            data_input("time", "Time", numeric_data_series_type())?,
             data_output(
                 if model { "model" } else { "result" },
                 if model { "Model" } else { "Result" },
@@ -144,7 +145,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id, NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(id, "title")?,
-                    documentation_key: Some(node_key(id, "documentation")?),
                     aliases_key: Some(node_key(id, "aliases")?),
                     category_id: sid("statistics.panel", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -161,13 +161,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(id, "title"), Text(title)),
-                (locale, node_key_text(id, "documentation"), Text(title)),
-                (locale, node_key_text(id, "aliases"), Aliases(aliases)),
-            ]);
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     fragment.messages.extend([
         ("en-US", "parameters.statistics.max_instrument_lag.title".into(), Text("Maximum instrument lag")),

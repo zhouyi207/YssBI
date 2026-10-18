@@ -1,5 +1,4 @@
 use super::*;
-use yss_sci_contract::regression::models::IterationOptions;
 use yss_sci_runtime::doe as sci;
 pub(super) fn register(builder: &mut KernelRegistryBuilder) {
     install(
@@ -60,16 +59,8 @@ fn execute(inv: &KernelInvocation<'_>, surface: bool) -> Result<Vec<RuntimeValue
             &result.geometry,
         )
     } else {
-        let result = sci::dose_response(
-            &response,
-            &predictors[0],
-            IterationOptions {
-                max_iterations: integer(inv, "max_iterations")?,
-                tolerance: number(inv, "tolerance")?,
-            },
-            &c,
-        )
-        .map_err(computation_error)?;
+        let result = sci::dose_response(&response, &predictors[0], iteration(inv)?, &c)
+            .map_err(computation_error)?;
         regression_outputs(
             inv,
             &response,

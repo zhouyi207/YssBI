@@ -1,5 +1,6 @@
 //! Executable variance-analysis nodes retain their inventory identities.
 use super::*;
+use crate::builtin::add_node_messages;
 
 const METHODS: &[(&str, &str, &str)] = &[
     ("one_way", "One-way ANOVA", "单因素方差分析"),
@@ -27,9 +28,15 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     for &(method, en, zh) in METHODS {
         let id = format!("yssbi.statistics.anova.{method}");
         let mut ports = if method == "manova" {
-            vec![bounded_user_data_input("y", "Y", series_type()?, 2, None)?]
+            vec![bounded_user_data_input(
+                "y",
+                "Y",
+                numeric_data_series_type(),
+                2,
+                None,
+            )?]
         } else {
-            vec![data_input("y", "Y", series_type()?)?]
+            vec![data_input("y", "Y", numeric_data_series_type())?]
         };
         if method == "repeated_measures" {
             ports.push(data_input("subjects", "Subject", label_series()?)?);
@@ -51,7 +58,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ports.push(bounded_user_data_input(
                 "covariates",
                 "Covariate",
-                series_type()?,
+                numeric_data_series_type(),
                 1,
                 None,
             )?);
@@ -82,7 +89,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: Some(node_key(&id, "aliases")?),
                     category_id: sid("statistics.anova", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -119,24 +125,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ],
             _ => unreachable!(),
         };
-        for (locale, title, help) in [
-            (
-                "en-US",
-                en,
-                "Analyze aligned responses and categorical factors. See node help for the design and inference assumptions.",
-            ),
-            (
-                "zh-CN",
-                zh,
-                "分析对齐的响应变量与分类因素；设计要求与推断假设见节点帮助。",
-            ),
-        ] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(help)),
-                (locale, node_key_text(&id, "aliases"), Aliases(aliases)),
-            ]);
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            &id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     for (key, en, zh, en_help, zh_help) in [
         (

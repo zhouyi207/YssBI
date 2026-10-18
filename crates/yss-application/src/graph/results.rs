@@ -18,6 +18,7 @@ pub mod plot;
 pub mod report;
 mod retention;
 pub use retention::ResultLease;
+mod read;
 mod structure;
 pub(crate) mod structured;
 pub(crate) use structure::ResultStructure;

@@ -295,7 +295,9 @@ impl ProjectCatalogResources {
             entries.push(CatalogResourceEntry {
                 name: declaration.name.clone(),
                 node_type_id: node_type("yssbi.dataframe.source.get")?,
-                resource_path: CatalogResourcePath::new(format!("databases/{}", database.id)),
+                resource_path: CatalogResourcePath::new(
+                    yss_database_contract::database_resource_path(&database.id),
+                ),
                 resource_revision: database.revision.get(),
                 create_args: ResourceBoundCreateArgs::Database,
                 technical_terms: vec!["dataframe".into(), "database".into()],

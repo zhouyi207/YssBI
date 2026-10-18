@@ -1,3 +1,5 @@
+use super::*;
+
 /// Panel Random Effects FGLS (Swamy-Arora variance components)
 pub fn fit_panel_re_fgls(
     endog: &Col<f64>,
@@ -6,7 +8,7 @@ pub fn fit_panel_re_fgls(
     constant: bool,
     cov_type: &str,
     cov_params: Option<yss_sci_contract::regression::CovParams>,
-) -> Result<super::PanelFit, String> {
+) -> Result<super::super::PanelFit, String> {
     let n = endog.nrows();
     if exog.nrows() != n {
         return Err(format!(
@@ -32,7 +34,7 @@ pub fn fit_panel_re_fgls(
         return Err("Panel RE (FGLS): need at least 2 entities".to_string());
     }
 
-    let (obs_per_entity, t_bar_harmonic) = obs_per_entity_and_harmonic_mean(entity_id);
+    let (obs_per_entity, t_bar_harmonic) = obs_per_group_and_harmonic_mean(entity_id);
 
     // Step 1: Within regression to get sigma_e^2 (variance of idiosyncratic error)
     let y_w = within_transform(&endog.iter().cloned().collect::<Vec<_>>(), entity_id);
@@ -89,7 +91,7 @@ pub fn fit_panel_re_fgls(
 
     // Step 2: Between regression (entity means) to get sigma_u^2
     let (_, y_b_vec, x_b_vec) =
-        entity_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
+        group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
     let n_b = y_b_vec.len();
     let mut x_b_data = Vec::with_capacity(n_b * k);
     for row in x_b_vec.iter().take(n_b) {
@@ -254,7 +256,7 @@ pub fn fit_panel_re_fgls(
     // R² Between: regress ȳ on x̄ with FGLS betas
     let r2_between = {
         let (_, y_b_vec, x_b_vec) =
-            entity_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
+            group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
         let n_b = y_b_vec.len();
         let y_mean = y_b_vec.iter().sum::<f64>() / n_b as f64;
         let xb_b: Vec<f64> = (0..n_b)
@@ -331,25 +333,25 @@ pub fn fit_panel_re_fgls(
         let mn = thetas.iter().cloned().fold(f64::INFINITY, f64::min);
         let mx = thetas.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let avg = thetas.iter().sum::<f64>() / thetas.len().max(1) as f64;
-        super::ThetaStats {
+        super::super::ThetaStats {
             min: mn,
             avg,
             max: mx,
         }
     };
 
-    let fe_stats = Some(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats {
+    let fe_stats = Some(super::super::PanelFEStats {
+        r2: Some(super::super::PanelR2Stats {
             r2_within,
             r2_between,
             r2_overall,
         }),
-        obs_per_group: super::ObsPerGroupStats {
+        obs_per_group: super::super::ObsPerGroupStats {
             min: obs_min,
             avg: obs_avg,
             max: obs_max,
         },
-        sigma: super::SigmaStats {
+        sigma: super::super::SigmaStats {
             sigma_u,
             sigma_e,
             rho,
@@ -390,13 +392,13 @@ pub fn fit_panel_re_fgls(
     // Stata xtreg, re uses z (asymptotic normal), not t
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE FGLS: {}", e))?;
     let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
-        crate::distribution::normal_two_sided_p(result.tvalues[i])
+        crate::distribution::normal::two_sided_p(result.tvalues[i])
     });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
     let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
-    Ok(super::PanelFit {
+    Ok(super::super::PanelFit {
         parameter_names: vec![],
         parameter_categories: vec![],
         response_name: "response".into(),
@@ -415,20 +417,20 @@ pub fn fit_panel_re_fgls(
         },
         family: "panel_re_fgls".into(),
         coefficients: (result.betas).iter().copied().collect(),
-        inference: super::RegressionCoefficientStatistics {
-            covariance: super::covariance_rows(&(result.cov_beta)),
+        inference: super::super::RegressionCoefficientStatistics {
+            covariance: super::super::covariance_rows(&(result.cov_beta)),
             standard_errors: (result.stds).iter().copied().collect(),
             statistic_values: (result.tvalues).iter().copied().collect(),
             p_values: (pvalues_z).iter().copied().collect(),
             confidence_interval_lower: (conf_int_left_z).iter().copied().collect(),
             confidence_interval_upper: (conf_int_right_z).iter().copied().collect(),
         },
-        statistics: super::PanelModelStatistics {
+        statistics: super::super::PanelModelStatistics {
             observations: result.num_observation,
             entities: n_entities,
             time_periods: 0,
             within_r2: None,
-            linear: super::LinearRegressionStatistics {
+            linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,
                 adjusted_r2: result.r2_adjusted,
                 f_statistic: result.fvalue,
@@ -450,10 +452,10 @@ pub fn fit_panel_re_fgls(
         recovered_constant_standard_error: None,
         effects_statistics: fe_stats,
         omitted_indices,
-        estimator_statistics: super::PanelEstimatorStatistics::RandomEffects {
+        estimator_statistics: super::super::PanelEstimatorStatistics::RandomEffects {
             wald_chi2,
             wald_p_value: prob_wald_chi2,
         },
-        covariance_nonrobust: Some(super::covariance_rows(&(result.cov_beta_nonrobust))),
+        covariance_nonrobust: Some(super::super::covariance_rows(&(result.cov_beta_nonrobust))),
     })
 }

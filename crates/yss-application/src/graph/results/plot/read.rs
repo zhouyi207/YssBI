@@ -1,12 +1,9 @@
+use super::super::read::{Record, Unrepresentable, count, field, list, number, record, text};
 use super::{
     CartesianResultPlot, HistogramResultBin, HistogramResultPlot, PlotAnnotation,
     ResultPlotProjection,
 };
-use crate::{
-    chart::{ChartPlotResult, PlotAxisFormat, PlotPoint},
-    graph::results::ResultQueryApplicationError,
-};
-use std::collections::BTreeMap;
+use crate::chart::{ChartPlotResult, PlotAxisFormat, PlotPoint};
 use yss_data_contract::TabularScalar;
 use yss_graph_execution::plan::PlotDataKind;
 use yss_node_kernel::RuntimeValue;
@@ -15,30 +12,29 @@ mod categorical;
 mod nomogram;
 mod statistical;
 
-type Record = BTreeMap<Box<str>, RuntimeValue>;
-type Invalid = ResultQueryApplicationError;
+type Invalid = Unrepresentable;
 fn invalid() -> Invalid {
-    Invalid::UnrepresentableValue
+    Unrepresentable
 }
 
 pub(super) fn project(
     kind: PlotDataKind,
     value: &RuntimeValue,
 ) -> Result<ResultPlotProjection, Invalid> {
-    let record = object(value)?;
+    let raw = record(value)?;
     match kind {
-        PlotDataKind::Correlation => return statistical::correlation(record),
-        PlotDataKind::Correlogram => return statistical::correlogram(record),
-        PlotDataKind::Heatmap => return statistical::heatmap(record),
+        PlotDataKind::Correlation => return statistical::correlation(raw),
+        PlotDataKind::Correlogram => return statistical::correlogram(raw),
+        PlotDataKind::Heatmap => return statistical::heatmap(raw),
         PlotDataKind::Boxplot | PlotDataKind::Violin => {
-            return statistical::distribution(record, kind == PlotDataKind::Violin);
+            return statistical::distribution(raw, kind == PlotDataKind::Violin);
         }
-        PlotDataKind::Errorbar => return statistical::interval(record),
-        PlotDataKind::Coefficient => return statistical::coefficient(record),
-        PlotDataKind::Nomogram => return nomogram::project(record),
-        PlotDataKind::Pareto => return categorical::pareto(record),
-        PlotDataKind::Combination => return categorical::combination(record),
-        PlotDataKind::Wordcloud => return categorical::word_cloud(record),
+        PlotDataKind::Errorbar => return statistical::interval(raw),
+        PlotDataKind::Coefficient => return statistical::coefficient(raw),
+        PlotDataKind::Nomogram => return nomogram::project(raw),
+        PlotDataKind::Pareto => return categorical::pareto(raw),
+        PlotDataKind::Combination => return categorical::combination(raw),
+        PlotDataKind::Wordcloud => return categorical::word_cloud(raw),
         PlotDataKind::Scatter
         | PlotDataKind::Line
         | PlotDataKind::Ecdf
@@ -49,7 +45,7 @@ pub(super) fn project(
         | PlotDataKind::Roc
         | PlotDataKind::Quadrant => {}
     }
-    let rows = list(field(record, "data")?)?;
+    let rows = list(field(raw, "data")?)?;
     if rows.is_empty() {
         return Err(invalid());
     }
@@ -58,26 +54,26 @@ pub(super) fn project(
             bins: rows
                 .iter()
                 .map(|row| {
-                    let row = object(row)?;
+                    let row = record(row)?;
                     Ok(HistogramResultBin {
                         label: text(field(row, "label")?)?.into(),
                         count: count(field(row, "count")?)?,
                     })
                 })
                 .collect::<Result<_, Invalid>>()?,
-            x_label: optional_text(record, "xLabel")?,
-            y_label: optional_text(record, "yLabel")?,
-            observations: record.get("observations").map(count).transpose()?,
+            x_label: optional_text(raw, "xLabel")?,
+            y_label: optional_text(raw, "yLabel")?,
+            observations: raw.get("observations").map(count).transpose()?,
         }));
     }
     let data = rows.iter().map(point).collect::<Result<Vec<_>, _>>()?;
-    let reference_lines = record
+    let reference_lines = raw
         .get("referenceLines")
         .map(|value| {
             list(value)?
                 .iter()
                 .map(|line| {
-                    let line = object(line)?;
+                    let line = record(line)?;
                     Ok([point(field(line, "start")?)?, point(field(line, "end")?)?])
                 })
                 .collect::<Result<Vec<_>, Invalid>>()
@@ -88,7 +84,7 @@ pub(super) fn project(
         Some(
             rows.iter()
                 .map(|row| {
-                    let size = number(field(object(row)?, "size")?)?;
+                    let size = number(field(record(row)?, "size")?)?;
                     if size < 0. {
                         return Err(invalid());
                     }
@@ -99,7 +95,7 @@ pub(super) fn project(
     } else {
         None
     };
-    let y_domain = record
+    let y_domain = raw
         .get("yDomain")
         .map(|value| {
             let domain = list(value)?;
@@ -113,20 +109,20 @@ pub(super) fn project(
             Ok(result)
         })
         .transpose()?;
-    let annotation = annotation(kind, record, &data)?;
+    let annotation = annotation(kind, raw, &data)?;
     Ok(ResultPlotProjection::Cartesian(CartesianResultPlot {
         kind,
         series: ChartPlotResult {
             data,
-            x_label: optional_text(record, "xLabel")?,
-            y_label: optional_text(record, "yLabel")?,
-            x_format: axis_format(record.get("xFormat"))?,
-            y_format: axis_format(record.get("yFormat"))?,
+            x_label: optional_text(raw, "xLabel")?,
+            y_label: optional_text(raw, "yLabel")?,
+            x_format: axis_format(raw.get("xFormat"))?,
+            y_format: axis_format(raw.get("yFormat"))?,
         },
         reference_lines,
         point_sizes,
         y_domain,
-        metadata: record.get("metadata").map(metadata).transpose()?,
+        metadata: raw.get("metadata").map(metadata).transpose()?,
         annotation,
     }))
 }
@@ -193,7 +189,7 @@ fn annotation(
 }
 
 fn metadata(value: &RuntimeValue) -> Result<PlotMetadata, Invalid> {
-    let raw = object(value)?;
+    let raw = record(value)?;
     let observations = count(field(raw, "observations")?)?;
     let displayed = count(field(raw, "displayed")?)?;
     let RuntimeValue::Scalar(TabularScalar::Bool(sampled)) = field(raw, "sampled")?.unannotated()
@@ -210,57 +206,11 @@ fn metadata(value: &RuntimeValue) -> Result<PlotMetadata, Invalid> {
     })
 }
 fn point(value: &RuntimeValue) -> Result<PlotPoint, Invalid> {
-    let raw = object(value)?;
+    let raw = record(value)?;
     Ok(PlotPoint {
         x: number(field(raw, "x")?)?,
         y: number(field(raw, "y")?)?,
     })
-}
-fn object(value: &RuntimeValue) -> Result<&Record, Invalid> {
-    match value.unannotated() {
-        RuntimeValue::Record(value) => Ok(value),
-        _ => Err(invalid()),
-    }
-}
-fn list(value: &RuntimeValue) -> Result<&[RuntimeValue], Invalid> {
-    match value.unannotated() {
-        RuntimeValue::List(value) => Ok(value),
-        _ => Err(invalid()),
-    }
-}
-fn field<'a>(record: &'a Record, key: &str) -> Result<&'a RuntimeValue, Invalid> {
-    record.get(key).ok_or_else(invalid)
-}
-fn number(value: &RuntimeValue) -> Result<f64, Invalid> {
-    match value.unannotated() {
-        RuntimeValue::Scalar(TabularScalar::Float64(value)) => Ok(value.as_f64()),
-        RuntimeValue::Scalar(TabularScalar::Integer(value))
-            if value.unsigned_abs() <= (1_u64 << 53) =>
-        {
-            Ok(*value as f64)
-        }
-        RuntimeValue::Scalar(TabularScalar::Unsigned(value)) if *value <= (1_u64 << 53) => {
-            Ok(*value as f64)
-        }
-        _ => Err(invalid()),
-    }
-}
-fn count(value: &RuntimeValue) -> Result<usize, Invalid> {
-    match value.unannotated() {
-        RuntimeValue::Scalar(TabularScalar::Integer(value)) => {
-            usize::try_from(*value).map_err(|_| invalid())
-        }
-        RuntimeValue::Scalar(TabularScalar::Unsigned(value)) => {
-            usize::try_from(*value).map_err(|_| invalid())
-        }
-        _ => Err(invalid()),
-    }
-}
-fn text(value: &RuntimeValue) -> Result<&str, Invalid> {
-    match value.unannotated() {
-        RuntimeValue::Scalar(TabularScalar::String(value)) => Ok(value),
-        _ => Err(invalid()),
-    }
 }
 fn optional_text(raw: &Record, key: &str) -> Result<Option<Box<str>>, Invalid> {
     raw.get(key)

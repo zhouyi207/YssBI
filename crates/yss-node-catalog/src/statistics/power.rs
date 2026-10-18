@@ -1,5 +1,6 @@
 //! Prospective scalar power interfaces with model-specific units and assumptions.
 use super::*;
+use crate::builtin::add_node_messages;
 mod parameters;
 const METHODS: &[(&str, &str, &str)] = &[
     (
@@ -88,7 +89,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: None,
                     category_id: sid("statistics.power", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -114,12 +114,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-            ]);
-        }
+        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }

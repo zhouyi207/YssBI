@@ -14,8 +14,8 @@ pub use model::{
     EditorParameterModel, EditorPortConnectionCapabilities, EditorPortDisplay,
     EditorPortInstanceAdditionModel, EditorPortModel, EditorPortStatus, EditorPortTypeState,
     EditorProjectionBasis, EditorProjectionError, EditorProjectionInput, EditorProjectionModel,
-    EditorResolutionOutcome, EditorResolutionStage, EditorSchemaField, EditorSchemaSummary,
-    EditorSchemaSummaryKind, ParameterEditorKind,
+    EditorResolutionOutcome, EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind,
+    ParameterEditorKind,
 };
 
 #[cfg(test)]

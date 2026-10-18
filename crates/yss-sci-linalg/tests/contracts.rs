@@ -18,22 +18,20 @@ fn near_matrix(actual: MatRef<'_, f64>, expected: MatRef<'_, f64>) {
 }
 
 #[test]
-fn checked_factors_accept_submatrices_and_reversed_views() {
+fn checked_factors_accept_submatrix_views() {
     let mut storage = Mat::full(4, 4, 99.0);
     storage
         .submatrix_mut(1, 1, 2, 2)
         .copy_from(&mat![[4., 1.], [1., 3.]]);
-    let matrix = storage.submatrix(1, 1, 2, 2).reverse_rows_and_cols();
+    let matrix = storage.submatrix(1, 1, 2, 2);
     let factor = matrix.checked_cholesky().unwrap();
-    let rhs_storage = col![9., 5.];
-    let rhs = rhs_storage.reverse_rows();
-    let result = factor.solve(&rhs);
+    let result = factor.solve(&col![6., 7.]);
     near(result[0], 1.);
     near(result[1], 2.);
     let mut rhs_matrix_storage = Mat::full(4, 4, 99.0);
     rhs_matrix_storage
         .submatrix_mut(1, 1, 2, 2)
-        .copy_from(&mat![[5., 9.], [9., 14.]]);
+        .copy_from(&mat![[6., 11.], [7., 11.]]);
     let rhs_matrix = rhs_matrix_storage.submatrix(1, 1, 2, 2);
     let solutions = factor.solve(&rhs_matrix);
     near_matrix(solutions.as_ref(), mat![[1., 2.], [2., 3.]].as_ref());

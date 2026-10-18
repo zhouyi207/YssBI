@@ -508,15 +508,9 @@ pub enum GraphResolutionOutcome {
     Complete,
     Incomplete,
     InternalFailure {
-        stage: GraphResolutionStage,
         code: Box<str>,
         node_id: Option<NodeId>,
     },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GraphResolutionStage {
-    Analysis,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

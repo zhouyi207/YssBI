@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::time::{Duration, Instant};
 use yss_sci::panel::{difference_gmm, fisher_cointegration, fisher_unit_root};
-use yss_sci_contract::{execution::*, panel::*};
+use yss_sci_contract::{execution::*, panel::*, time_series::forecast::Deterministic};
 
 #[derive(Clone, Deserialize)]
 struct Data {
@@ -98,7 +98,7 @@ fn panel_fisher_tests_match_statsmodels_reference_distributions() {
         },
         PanelTestOptions {
             lags: 0,
-            deterministic: PanelDeterministic::Constant,
+            deterministic: Deterministic::Constant,
         },
         &control(),
     )
@@ -196,7 +196,7 @@ fn panel_lagged_analyses_reject_invalid_samples_and_honor_execution_control() {
     );
     let test_options = PanelTestOptions {
         lags: 1,
-        deterministic: PanelDeterministic::Constant,
+        deterministic: Deterministic::Constant,
     };
     let cancelled = control();
     cancelled.cancellation.cancel();
@@ -264,7 +264,7 @@ fn scale_limits_panel_uses_sample_dependent_lags_and_dynamic_width() {
         data.input(),
         PanelTestOptions {
             lags: 21,
-            deterministic: PanelDeterministic::Constant,
+            deterministic: Deterministic::Constant,
         },
         &control(),
     )
@@ -276,7 +276,7 @@ fn scale_limits_panel_uses_sample_dependent_lags_and_dynamic_width() {
             data.input(),
             PanelTestOptions {
                 lags: usize::MAX,
-                deterministic: PanelDeterministic::Constant,
+                deterministic: Deterministic::Constant,
             },
             &control()
         )

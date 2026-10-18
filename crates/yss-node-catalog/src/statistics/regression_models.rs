@@ -1,5 +1,6 @@
 //! Executable estimators and model-building analyses in the regression category.
 use super::*;
+use crate::builtin::add_node_messages;
 const SPECS: &[[&str; 3]] = &[
     ["regression.robust", "Regression Robust", "Robust回归"],
     [
@@ -130,7 +131,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
                 catalog: NodeCatalogProtocol {
                     title_key: node_key(&id, "title")?,
-                    documentation_key: Some(node_key(&id, "documentation")?),
                     aliases_key: Some(node_key(&id, "aliases")?),
                     category_id: sid("statistics.regression", NodeCategoryId::new)?,
                     icon_id: sid("builtin.statistics", IconId::new)?,
@@ -147,13 +147,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        for (locale, title) in [("en-US", en), ("zh-CN", zh)] {
-            fragment.messages.extend([
-                (locale, node_key_text(&id, "title"), Text(title)),
-                (locale, node_key_text(&id, "documentation"), Text(title)),
-                (locale, node_key_text(&id, "aliases"), Aliases(aliases)),
-            ]);
-        }
+        add_node_messages(
+            &mut fragment.messages,
+            &id,
+            [en, zh],
+            Some([aliases, aliases]),
+        );
     }
     Ok(())
 }
@@ -166,7 +165,7 @@ fn when(key: &str, value: &str) -> Result<ParameterCondition, BuiltinAssemblyErr
 fn list(key: &'static str, default: &[i64]) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
-        series_type()?,
+        numeric_data_series_type(),
         ParameterEditorSpec::Auto,
         DataValue::List(default.iter().copied().map(DataValue::Integer).collect()),
         vec![],
@@ -206,16 +205,22 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
         | "regression.logit.conditional"
         | "regression.cloglog"
         | "regression.glm" => numeric_or_binary_series()?,
-        _ => series_type()?,
+        _ => numeric_data_series_type(),
     };
     let mut ports = vec![data_input("y", "Y", response)?];
     if matches!(
         method,
         "regression.curve" | "regression.nonlinear" | "regression.deming" | "transform.rcs"
     ) {
-        ports.push(data_input("x", "X", series_type()?)?);
+        ports.push(data_input("x", "X", numeric_data_series_type())?);
     } else {
-        ports.push(bounded_user_data_input("x", "X", series_type()?, 1, None)?);
+        ports.push(bounded_user_data_input(
+            "x",
+            "X",
+            numeric_data_series_type(),
+            1,
+            None,
+        )?);
     }
     if matches!(
         method,
@@ -227,7 +232,7 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
         ports.push(data_input(
             "threshold_variable",
             "Threshold variable",
-            series_type()?,
+            numeric_data_series_type(),
         )?);
     }
     if matches!(
@@ -237,7 +242,7 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
         ports.push(bounded_user_data_input(
             "inflation_predictors",
             "Inflation predictor",
-            series_type()?,
+            numeric_data_series_type(),
             0,
             None,
         )?);

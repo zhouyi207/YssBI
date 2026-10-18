@@ -71,7 +71,7 @@ pub fn ridit(
         reference_observations: reference.len(),
         sample_observations: sample.len(),
         mean_ridit: mean,
-        alternative: alternative(alternative_kind),
+        alternative: alternative_kind.name(),
         continuity_correction: continuity,
         inference: TestInference {
             statistic_name: "z",

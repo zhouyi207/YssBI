@@ -46,7 +46,7 @@ pub use semantic_snapshot::{
     GraphNodeSemanticFact, GraphNodeSpecialization, GraphParameterConfigurationFact,
     GraphParameterFact, GraphParameterGroupFact, GraphPortBacking, GraphPortConnectionFacts,
     GraphPortEditorFact, GraphPortInstanceAdditionFact, GraphPortSemanticFact,
-    GraphPortTypeBinding, GraphResolutionOutcome, GraphResolutionStage, GraphResolvedInputBinding,
+    GraphPortTypeBinding, GraphResolutionOutcome, GraphResolvedInputBinding,
     GraphResolvedInputSource, GraphResolvedParameterValue, GraphSemanticSnapshot,
     ReadyGraphSemanticSnapshot,
 };

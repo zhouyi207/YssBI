@@ -39,6 +39,12 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
     Some(match node_type_id {
         "yssbi.statistics.describe" => markdown!("describe"),
         "yssbi.dataframe.labels" => markdown!("data_labels"),
+        "yssbi.core.reroute" => markdown!("reroute"),
+        "yssbi.dataframe.dropna.columns" => markdown!("dropna_columns"),
+        "yssbi.dataframe.dropna.rows" => markdown!("dropna_rows"),
+        "yssbi.dataframe.rename" => markdown!("rename_dataframe"),
+        "yssbi.dataframe.series.count" => markdown!("series_count"),
+        "yssbi.dataframe.series.int_range" => markdown!("int_range"),
         "yssbi.statistics.workflow.mediation" => markdown!("path_mediation"),
         "yssbi.statistics.workflow.moderated_mediation" => markdown!("path_moderated_mediation"),
         "yssbi.statistics.sem.path" => markdown!("path_recursive"),

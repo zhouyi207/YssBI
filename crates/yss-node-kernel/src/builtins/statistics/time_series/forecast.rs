@@ -201,10 +201,7 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
     }
     let y = numeric(first, false, inv)?;
     let iteration = if inv.parameter("max_iterations").is_some() {
-        IterationOptions {
-            max_iterations: integer(inv, "max_iterations")?,
-            tolerance: number(inv, "tolerance")?,
-        }
+        iteration(inv)?
     } else {
         IterationOptions::default()
     };
@@ -252,12 +249,8 @@ fn execute(method: &str, inv: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>
             value(result, inv)?
         }
         "phillips_perron" | "kpss" => {
-            let deterministic = match text(inv, "ts_deterministic")? {
-                "none" => Deterministic::None,
-                "constant" => Deterministic::Constant,
-                "trend" => Deterministic::Trend,
-                _ => return Err(KernelError::InvalidParameter),
-            };
+            let deterministic = Deterministic::from_name(text(inv, "ts_deterministic")?)
+                .ok_or(KernelError::InvalidParameter)?;
             let bandwidth = integer(inv, "ts_bandwidth")?;
             value(
                 if method == "kpss" {

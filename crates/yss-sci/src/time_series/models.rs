@@ -1,10 +1,11 @@
 use crate::error::{computation_failed, invalid_input};
 use crate::time_series::unit_root::{AdfResult, adf_test};
 use crate::time_series::var::{VAR, VARConfig, VARSocResult, VarFit, var_varsoc};
-use crate::time_series::vec::{
-    VECConfig, VecFit, VecRankResult, VecTrendSpec, vec_estimate, vec_vecrank_stats,
+use crate::time_series::vec::{VECConfig, VecFit, VecRankResult, vec_estimate, vec_vecrank_stats};
+use yss_sci_contract::{
+    SciError, SciOperationCode, execution::ScientificInputViolation,
+    time_series::forecast::Deterministic,
 };
-use yss_sci_contract::{SciError, SciOperationCode, execution::ScientificInputViolation};
 use yss_sci_linalg::Mat;
 pub fn augmented_dickey_fuller(
     series: &[f64],
@@ -12,7 +13,7 @@ pub fn augmented_dickey_fuller(
     regression: &str,
 ) -> Result<AdfResult, SciError> {
     let (constant, trend) = match regression {
-        "none" | "no_constant" => (false, false),
+        "none" => (false, false),
         "constant" => (true, false),
         "trend" => (true, true),
         _ => {
@@ -155,14 +156,7 @@ pub fn vec_rank_test(
     Ok(result)
 }
 
-fn vec_trend(trend: &str, operation: SciOperationCode) -> Result<VecTrendSpec, SciError> {
-    match trend {
-        "none" | "no_constant" => Ok(VecTrendSpec::None),
-        "constant" => Ok(VecTrendSpec::Constant),
-        "trend" => Ok(VecTrendSpec::Trend),
-        _ => Err(invalid_input(
-            operation,
-            ScientificInputViolation::ParameterOutOfRange,
-        )),
-    }
+fn vec_trend(trend: &str, operation: SciOperationCode) -> Result<Deterministic, SciError> {
+    Deterministic::from_name(trend)
+        .ok_or_else(|| invalid_input(operation, ScientificInputViolation::ParameterOutOfRange))
 }

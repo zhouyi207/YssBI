@@ -49,15 +49,9 @@ pub(super) fn t_test(
 
     let p_value = crate::distribution::student_t_probability(&dist, t_stat, alternative);
 
-    let alt_str = match alternative {
-        Alternative::TwoSided => "two_sided",
-        Alternative::Greater => "greater",
-        Alternative::Less => "less",
-    };
-
     Ok(TTestResult {
         constraint_desc: constraint_desc.into(),
-        alternative: alt_str.to_string(),
+        alternative: alternative.name().into(),
         r_beta_minus_r: c,
         stat: t_stat,
         df: df_residual,

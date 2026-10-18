@@ -131,7 +131,7 @@ fn wilcoxon(
         p,
         vec![n],
     );
-    result.alternative = alternative_name(alternative).into();
+    result.alternative = alternative.name().into();
     result.details.insert("positive_rank_sum".into(), observed);
     result.details.insert(
         "exact_p_value_used".into(),
@@ -232,7 +232,7 @@ fn mann_whitney(
         normal_p(z, alternative, control)?,
         vec![n1, n2],
     );
-    result.alternative = alternative_name(alternative).into();
+    result.alternative = alternative.name().into();
     result
         .details
         .insert("u_complement".into(), pair_count - u1);
@@ -671,7 +671,7 @@ fn mann_kendall(
         p,
         vec![n],
     );
-    result.alternative = alternative_name(alternative).into();
+    result.alternative = alternative.name().into();
     result.details.insert("s_statistic".into(), s as f64);
     result.details.insert(
         "kendall_tau".into(),
@@ -752,20 +752,13 @@ fn normal_p(z: f64, a: Alternative, control: &ScientificExecutionControl) -> Res
     finite(z)?;
     control.check()?;
     let p = match a {
-        Alternative::TwoSided => crate::distribution::normal_two_sided_p(z),
+        Alternative::TwoSided => crate::distribution::normal::two_sided_p(z),
         Alternative::Greater => crate::distribution::normal::sf(z),
         Alternative::Less => crate::distribution::normal::cdf(z),
     }
     .clamp(0.0, 1.0);
     control.check()?;
     Ok(p)
-}
-fn alternative_name(a: Alternative) -> &'static str {
-    match a {
-        Alternative::TwoSided => "two-sided",
-        Alternative::Greater => "greater",
-        Alternative::Less => "less",
-    }
 }
 fn base(
     method: &str,
@@ -779,7 +772,7 @@ fn base(
     ClassicalTestResult {
         method: method.into(),
         null_hypothesis: null.into(),
-        alternative: "two-sided".into(),
+        alternative: Alternative::TwoSided.name().into(),
         statistic_name: name.into(),
         statistic: Some(stat),
         degrees_of_freedom: df,

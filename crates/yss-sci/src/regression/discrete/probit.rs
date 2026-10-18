@@ -9,12 +9,12 @@ use yss_sci_linalg::{MatrixExt, Solve};
 
 const EPS: f64 = 1e-7;
 
-pub use yss_sci_contract::regression::discrete::BinaryOptions as ProbitConfig;
+use yss_sci_contract::regression::discrete::BinaryOptions;
 
 pub struct Probit {
     pub endog: Col<f64>,
     pub exog: Mat<f64>,
-    pub config: ProbitConfig,
+    pub config: BinaryOptions,
 }
 
 #[derive(Debug)]
@@ -158,7 +158,7 @@ impl Probit {
                     .collect();
                 let p_values: Vec<f64> = z_values
                     .iter()
-                    .map(|&z| crate::distribution::normal_two_sided_p(z))
+                    .map(|&z| crate::distribution::normal::two_sided_p(z))
                     .collect();
                 let z_crit = normal.inverse_cdf(0.975);
                 let ci_lower = &beta - yss_sci_linalg::Scale(z_crit) * &std_err;

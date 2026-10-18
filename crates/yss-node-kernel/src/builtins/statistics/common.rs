@@ -30,6 +30,20 @@ pub(in crate::builtins) fn number(
 ) -> Result<f64, KernelError> {
     super::super::numeric_input(inv.parameter(key)).map_err(|_| KernelError::InvalidParameter)
 }
+pub(super) fn alternative(
+    inv: &KernelInvocation<'_>,
+) -> Result<yss_sci_contract::hypothesis::Alternative, KernelError> {
+    yss_sci_contract::hypothesis::Alternative::from_name(text(inv, "alternative")?)
+        .ok_or(KernelError::InvalidParameter)
+}
+pub(super) fn iteration(
+    inv: &KernelInvocation<'_>,
+) -> Result<yss_sci_contract::regression::models::IterationOptions, KernelError> {
+    Ok(yss_sci_contract::regression::models::IterationOptions {
+        max_iterations: integer(inv, "max_iterations")?,
+        tolerance: number(inv, "tolerance")?,
+    })
+}
 pub(super) fn sci(error: yss_sci_contract::SciError) -> KernelError {
     use yss_sci_contract::{SciError, execution::ScientificInputViolation};
     match error {

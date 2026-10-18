@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 use yss_sci::hypothesis::sample_mean;
 use yss_sci_contract::{
     execution::{ScientificCancellationToken, ScientificExecutionControl},
-    hypothesis::{Alternative, ClassicalHypothesisTest, SummaryTDesign},
+    hypothesis::{Alternative, ClassicalHypothesisTest, MeanDesign},
 };
 
 #[test]
@@ -22,7 +22,7 @@ fn summary_student_probabilities_retain_large_degrees_and_direction() {
         ] {
             let result = sample_mean::run(
                 ClassicalHypothesisTest::Summary {
-                    design: SummaryTDesign::OneSample,
+                    design: MeanDesign::OneSample,
                     first_count: count,
                     first_mean: statistic / (count as f64).sqrt(),
                     first_sd: 1.0,
@@ -94,7 +94,7 @@ fn sample_mean_preserves_small_and_extreme_student_tails() {
     }
     let welch = sample_mean::run(
         ClassicalHypothesisTest::Summary {
-            design: SummaryTDesign::Independent,
+            design: MeanDesign::Independent,
             first_count: 2,
             first_mean: 1e155,
             first_sd: (2.0 + 3.0_f64.sqrt()).sqrt(),

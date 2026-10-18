@@ -63,6 +63,16 @@ pub enum BinaryRegressionLink {
     Probit,
 }
 
+impl BinaryRegressionLink {
+    /// The `family` recorded on fitted models; model-consuming nodes compare against it.
+    pub const fn family(self) -> &'static str {
+        match self {
+            Self::Logit => "logit",
+            Self::Probit => "probit",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BinaryRegressionStatistics {

@@ -1,6 +1,6 @@
 use super::{Input, common::*, install};
 use crate::{KernelError, KernelInvocation, KernelRegistryBuilder, RuntimeValue};
-use yss_sci_contract::{execution::*, regression::models::IterationOptions, survival::*};
+use yss_sci_contract::{execution::*, survival::*};
 use yss_sci_runtime::survival::{cox, evaluation, nonparametric, parametric};
 
 mod input;
@@ -114,12 +114,6 @@ fn is_parametric(method: &str) -> bool {
             | "survival.loglogistic"
             | "survival.aft"
     )
-}
-fn iteration(inv: &KernelInvocation<'_>) -> Result<IterationOptions, KernelError> {
-    Ok(IterationOptions {
-        max_iterations: integer(inv, "max_iterations")?,
-        tolerance: number(inv, "tolerance")?,
-    })
 }
 fn cox_options(inv: &KernelInvocation<'_>) -> Result<CoxOptions, KernelError> {
     Ok(CoxOptions {

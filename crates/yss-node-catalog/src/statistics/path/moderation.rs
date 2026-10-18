@@ -16,19 +16,25 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         ),
     ] {
         let mut ports = vec![
-            data_input("y", "Y", series_type()?)?,
-            data_input("x", "X", series_type()?)?,
-            data_input("moderator", "Moderator W", series_type()?)?,
+            data_input("y", "Y", numeric_data_series_type())?,
+            data_input("x", "X", numeric_data_series_type())?,
+            data_input("moderator", "Moderator W", numeric_data_series_type())?,
         ];
         if advanced {
             ports.push(data_input(
                 "second_moderator",
                 "Second moderator Z",
-                series_type()?,
+                numeric_data_series_type(),
             )?);
         }
         ports.extend([
-            bounded_user_data_input("covariates", "Additive covariate", series_type()?, 0, None)?,
+            bounded_user_data_input(
+                "covariates",
+                "Additive covariate",
+                numeric_data_series_type(),
+                0,
+                None,
+            )?,
             data_output(
                 "result",
                 "Interaction and conditional effects",

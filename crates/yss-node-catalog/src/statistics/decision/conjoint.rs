@@ -6,7 +6,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         "Ratings-based conjoint",
         "联合分析（评分型）",
         vec![
-            data_input("ratings", "Profile ratings", series_type()?)?,
+            data_input("ratings", "Profile ratings", numeric_data_series_type())?,
             bounded_user_data_input("factors", "Categorical attribute", label_series()?, 1, None)?,
             data_output("result", "Part-worth utilities", report_type()?)?,
             fixed_numeric_table(

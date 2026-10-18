@@ -1,3 +1,4 @@
+pub(crate) use crate::error::{failed, finite, invalid, parameter};
 use statrs::distribution::StudentsT;
 use yss_sci_contract::execution::{
     ScientificComputationError as Error, ScientificExecutionControl as Control,
@@ -7,22 +8,6 @@ use yss_sci_contract::regression::models::*;
 use yss_sci_linalg::{Col, Mat, MatrixExt, Solve, matrix_rank};
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
-pub(crate) fn invalid(violation: Violation) -> Error {
-    Error::InvalidInput { violation }
-}
-pub(crate) fn parameter() -> Error {
-    invalid(Violation::ParameterOutOfRange)
-}
-pub(crate) fn failed() -> Error {
-    Error::ComputationFailed
-}
-pub(crate) fn finite(value: f64) -> Result<f64> {
-    if value.is_finite() {
-        Ok(value)
-    } else {
-        Err(failed())
-    }
-}
 pub(crate) fn check_iteration(options: IterationOptions) -> Result<()> {
     if options.max_iterations == 0
         || !options.tolerance.is_finite()
@@ -324,7 +309,7 @@ pub(crate) fn coefficient_table(
                     .as_ref()
                     .and_then(|(t, _)| t.as_ref())
                     .map_or_else(
-                        || crate::distribution::normal_two_sided_p(v),
+                        || crate::distribution::normal::two_sided_p(v),
                         |d| {
                             crate::distribution::student_t_probability(
                                 d,

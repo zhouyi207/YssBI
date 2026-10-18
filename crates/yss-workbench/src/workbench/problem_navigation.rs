@@ -49,7 +49,7 @@ impl Workbench {
                     .find(|entry| {
                         entry.resource().id == identity.as_ref()
                             || (entry.resource().kind == ProjectResourceKind::Database
-                                && identity.strip_prefix("databases/")
+                                && yss_database_contract::database_id_in_resource_path(identity)
                                     == Some(entry.resource().id.as_str()))
                     })
                     .map(|entry| entry.resource().clone())

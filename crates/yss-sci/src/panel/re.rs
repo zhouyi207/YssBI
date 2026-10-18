@@ -1,11 +1,22 @@
-﻿//! Panel Random Effects estimators split by workflow.
-//!
-//! The included files share one module scope to preserve private helper access
-//! while keeping the public `fit_panel_re_*` API unchanged.
+//! Panel Random Effects estimators split by workflow.
 
-include!("re/shared.rs");
-include!("re/be.rs");
-include!("re/fgls.rs");
-include!("re/mle.rs");
-include!("re/twoway.rs");
-include!("re/time.rs");
+use super::data::within_transform_by_group as within_transform;
+use crate::regression::collinearity::drop_collinear_columns;
+use crate::regression::linear::OLS;
+use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
+use std::collections::HashMap;
+use yss_sci_linalg::{Col, Mat};
+use yss_sci_linalg::{MatrixExt, Solve};
+
+mod shared;
+use shared::*;
+mod be;
+pub use be::*;
+mod fgls;
+pub use fgls::*;
+mod mle;
+pub use mle::*;
+mod twoway;
+pub use twoway::*;
+mod time;
+pub use time::*;

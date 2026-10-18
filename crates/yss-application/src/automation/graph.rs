@@ -313,7 +313,7 @@ pub fn invoke_graph_capability(
                     })
                     .map(|entry| {
                         let resource = if entry.resource.kind == ProjectResourceKind::Database {
-                            format!("databases/{}", entry.resource.id)
+                            yss_database_contract::database_resource_path(&entry.resource.id)
                         } else {
                             entry.resource.id.clone()
                         };

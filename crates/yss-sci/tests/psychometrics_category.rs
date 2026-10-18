@@ -1,4 +1,5 @@
 use std::time::{Duration, Instant};
+use yss_sci::multivariate::sampling_adequacy;
 use yss_sci::psychometrics::*;
 use yss_sci_contract::execution::*;
 fn control() -> ScientificExecutionControl {
@@ -48,7 +49,7 @@ fn scale_statistics_and_tail_tests_match_numpy_scipy() {
         );
         close(row.alpha_if_deleted.unwrap(), cell("alpha_deleted", j));
     }
-    let v = validity(&x, &c).unwrap();
+    let v = sampling_adequacy(&x, &c).unwrap();
     close(v.kmo.unwrap(), number("kmo"));
     close(v.bartlett_chi_square, number("bartlett"));
     assert_eq!(v.bartlett_df, 6);
@@ -111,8 +112,8 @@ fn constant_and_tied_items_keep_undefined_results_and_disjoint_groups() {
     assert!(r.rows[0].t_statistic.is_none());
     let r = reliability(&[vec![1., 2., 4., 6.], vec![6., 4., 2., 1.]], &c).unwrap();
     assert!(r.summary.raw_alpha.unwrap() < 0.);
-    assert!(validity(&x, &c).is_err());
-    assert!(validity(&[vec![1., 2., 3., 4.], vec![2., 4., 6., 8.]], &c).is_err());
+    assert!(sampling_adequacy(&x, &c).is_err());
+    assert!(sampling_adequacy(&[vec![1., 2., 3., 4.], vec![2., 4., 6., 8.]], &c).is_err());
     assert!(item_analysis(&data(), 0.5, &c).is_err());
     c.cancellation.cancel();
     assert!(matches!(
