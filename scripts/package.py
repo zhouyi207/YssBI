@@ -73,21 +73,43 @@ def sha256(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def verify_samples(directory):
+def sample_catalog(directory):
     catalog = json.loads((directory / "catalog.json").read_text(encoding="utf-8"))
     if catalog.get("formatVersion") != 1 or not catalog.get("datasets"):
         raise ValueError("Missing or unsupported sample catalog")
-    for dataset in catalog["datasets"]:
-        identifier = dataset["id"]
-        revision = dataset["version"]
-        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", identifier) or type(revision) is not int or revision < 1:
-            raise ValueError("Invalid sample identity")
-        payload = directory / identifier / f"v{revision}" / "data.parquet"
+    return catalog
+
+
+def sample_payload(dataset):
+    identifier = dataset["id"]
+    revision = dataset["version"]
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", identifier) or type(revision) is not int or revision < 1:
+        raise ValueError("Invalid sample identity")
+    return Path(identifier) / f"v{revision}" / "data.parquet"
+
+
+def verify_samples(directory):
+    for dataset in sample_catalog(directory)["datasets"]:
+        payload = directory / sample_payload(dataset)
         if payload.stat().st_size != dataset["byteSize"] or sha256(payload) != dataset["sha256"]:
-            raise ValueError(f"Sample payload does not match catalog: {identifier}")
+            raise ValueError(f"Sample payload does not match catalog: {dataset['id']}")
     for name in ("README.md", "sources.json"):
         if not (directory / name).is_file():
             raise ValueError(f"Missing sample provenance: {name}")
+
+
+def stage_samples(destination):
+    # The catalog's content check (`build_samples --check`) runs once in CI; building that
+    # example here would recompile the release tree with its dev-dependency features.
+    source = ROOT / "resources/samples"
+    for dataset in sample_catalog(source)["datasets"]:
+        relative = sample_payload(dataset)
+        (destination / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source / relative, destination / relative)
+    shutil.copyfile(source / "README.md", destination / "README.md")
+    shutil.copyfile(ROOT / "scripts/samples/sources.json", destination / "sources.json")
+    shutil.copyfile(source / "catalog.json", destination / "catalog.json")
+    verify_samples(destination)
 
 
 def verify_elf(binary, architecture):
@@ -244,8 +266,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="yssbi-package-") as temporary:
         staging = Path(temporary)
         samples = staging / "samples"
-        run(["cargo", "run", "--locked", "--release", "--target", arguments.target, "-p", "yss-application", "--example", "build_samples", "--", "--check", "--stage", samples])
-        verify_samples(samples)
+        stage_samples(samples)
         notices = staging / "THIRD_PARTY_NOTICES.txt"
         dependency_notices(arguments.target, notices)
         if system == "linux":

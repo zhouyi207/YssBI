@@ -109,6 +109,14 @@ class PackagingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not match"):
                 packaging.verify_samples(samples)
 
+    def test_staged_samples_match_repository_catalog(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            staged = Path(temporary)
+            packaging.stage_samples(staged)
+            source = packaging.ROOT / "resources/samples"
+            self.assertEqual((staged / "catalog.json").read_bytes(), (source / "catalog.json").read_bytes())
+            self.assertFalse(any(staged.rglob("*.csv")))
+
     def test_sample_identity_cannot_escape_resource_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             samples = Path(temporary)

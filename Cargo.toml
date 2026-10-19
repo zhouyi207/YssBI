@@ -80,6 +80,11 @@ windows-sys = { version = "0.61.2", features = [
   "Win32_Storage_FileSystem",
 ] }
 
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
 # Keep interactive rendering usable in `cargo run` without optimizing business crates.
 [profile.dev.package.yss-desktop-gpui]
 opt-level = 1

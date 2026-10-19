@@ -42,5 +42,8 @@ jobs:
         run: cargo test --locked -p yss-resource-naming -p yss-project-layout -p yss-canonical-hash --lib
       - name: Test installed resource discovery
         run: cargo test --locked -p yss-installation-paths --lib
+      - name: Check bundled sample catalog
+        if: runner.os == 'Linux'
+        run: cargo run --locked -p yss-application --example build_samples -- --check
       - name: Test packaging scripts
         run: python -m unittest discover -s scripts/tests -p 'test_*.py'
