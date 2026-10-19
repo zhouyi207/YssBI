@@ -9,7 +9,6 @@ use crate::filesystem::project_root_from_path;
 use crate::manifest::{CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
 use yss_database_store::DatasetStore;
-use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument as NodeGraphDocument, GraphResourceKind};
 use yss_project_identity::ProjectResourcePath;
 #[cfg(any(test, feature = "test-support"))]
@@ -26,26 +25,19 @@ pub struct GraphResourceFile {
     pub function: Option<yss_project_history::FunctionDocument>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct ProjectEventGraphIndexEntry {
     pub path: String,
     pub name: String,
-    #[serde(rename = "type")]
-    file_kind: GraphResourceKind,
     pub revision: yss_project_identity::ResourceRevision,
 }
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct ProjectFunctionGraphIndexEntry {
     pub path: String,
     pub name: String,
-    #[serde(rename = "type")]
-    file_kind: GraphResourceKind,
     pub revision: yss_project_identity::ResourceRevision,
     pub function_revision: yss_project_identity::ResourceRevision,
     pub function_signature: yss_project_history::FunctionSignature,
-    pub function_editor_projection: FunctionEditorProjection,
 }
 
 struct ScannedNodeFileHeader {
@@ -54,8 +46,7 @@ struct ScannedNodeFileHeader {
     function: Option<yss_project_history::FunctionDocument>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct ProjectDatabaseIndexEntry {
     pub id: String,
     pub resource_path: ProjectResourcePath,
@@ -66,14 +57,12 @@ pub struct ProjectDatabaseIndexEntry {
     pub name: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct ProjectIndex {
     pub minds: Vec<crate::minds::MindIndexEntry>,
     pub docs: Vec<crate::docs::DocIndexEntry>,
     pub project_instance_id: String,
     pub publication_revision: u64,
-    #[serde(skip)]
     pub(crate) authority_generation: u64,
     pub project_name: String,
     pub export_time: String,
@@ -212,11 +201,6 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     Ok(project_data)
 }
 
-pub fn read_project_index(path: &str) -> Result<ProjectIndex, ProjectError> {
-    let root = project_root_from_path(path);
-    read_project_index_from_root(root.as_path())
-}
-
 pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, ProjectError> {
     let manifest = read_project_manifest_from_root(root)?;
     let graph_resources = load_graph_resource_index(root)?;
@@ -226,7 +210,6 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
             .map(|file| ProjectEventGraphIndexEntry {
                 path: file.path,
                 name: file.name,
-                file_kind: GraphResourceKind::EventGraph,
                 revision: yss_project_identity::ResourceRevision::INITIAL,
             })
             .collect();
@@ -237,16 +220,12 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
                 let function = file.function.ok_or_else(|| {
                     ProjectError::InvalidProjectFormat("function file has no signature".into())
                 })?;
-                let projection = FunctionEditorProjection::try_from(&function)
-                    .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
                 Ok(ProjectFunctionGraphIndexEntry {
                     path: file.path,
                     name: file.name,
-                    file_kind: GraphResourceKind::FunctionGraph,
                     revision: yss_project_identity::ResourceRevision::INITIAL,
                     function_revision: function.revision,
                     function_signature: function.signature,
-                    function_editor_projection: projection,
                 })
             })
             .collect::<Result<Vec<_>, ProjectError>>()?;

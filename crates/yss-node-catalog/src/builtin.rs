@@ -583,10 +583,7 @@ fn comparison_parameters(id: &str) -> Result<Parameters, BuiltinAssemblyError> {
                 presentation: ParameterPresentation::DetailPanel,
                 visible_when: None,
             }
-            .when(ParameterCondition {
-                key: sid("mode", ParameterKey::new)?,
-                values: vec![DataValue::String("tolerance".into())].into_boxed_slice(),
-            }),
+            .when(choice_condition("mode", "tolerance")?),
         );
     }
     assembled_parameters(id, fields)
@@ -619,9 +616,30 @@ fn binary_predicate_protocol(
         id,
         "logic",
         vec![
-            data_port_expr("left", "Left", PortDirection::Input, input.clone())?,
-            data_port_expr("right", "Right", PortDirection::Input, input)?,
-            data_port_expr("result", "Result", PortDirection::Output, output)?,
+            data_port(
+                "left",
+                "Left",
+                PortDirection::Input,
+                input.clone(),
+                PortCardinality::Declared,
+                LiteralPolicy::Allowed,
+            )?,
+            data_port(
+                "right",
+                "Right",
+                PortDirection::Input,
+                input,
+                PortCardinality::Declared,
+                LiteralPolicy::Allowed,
+            )?,
+            data_port(
+                "result",
+                "Result",
+                PortDirection::Output,
+                output,
+                PortCardinality::Declared,
+                LiteralPolicy::Allowed,
+            )?,
         ],
         vec![],
         pure(),
@@ -644,8 +662,22 @@ fn boolean_protocol(id: &str, unary: bool) -> Result<NodeProtocol, BuiltinAssemb
         id,
         "logic",
         vec![
-            data_port_expr("input", "Input", PortDirection::Input, binary.clone())?,
-            data_port_expr("result", "Result", PortDirection::Output, binary)?,
+            data_port(
+                "input",
+                "Input",
+                PortDirection::Input,
+                binary.clone(),
+                PortCardinality::Declared,
+                LiteralPolicy::Allowed,
+            )?,
+            data_port(
+                "result",
+                "Result",
+                PortDirection::Output,
+                binary,
+                PortCardinality::Declared,
+                LiteralPolicy::Allowed,
+            )?,
         ],
         vec![],
         pure(),
@@ -685,31 +717,6 @@ fn protocol(
     })
 }
 
-fn data_port_expr(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    value_type: TypeExpr,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: sid(key, PortKey::new)?,
-        title: title.into(),
-        direction,
-        value_type,
-        cardinality: PortCardinality::Declared,
-        connections: data_connections(direction),
-        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
-            literal_policy: LiteralPolicy::Allowed,
-            default_value: None,
-        }),
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
-}
-
-fn concrete(id: &str) -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
-}
 fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
@@ -726,6 +733,69 @@ pub(super) fn sid<T, S: AsRef<str> + Clone>(
     make(value.clone()).map_err(|source| BuiltinAssemblyError::InvalidSemanticId {
         value: value.as_ref().into(),
         source,
+    })
+}
+
+pub(crate) fn concrete(id: &str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Concrete(type_id(id)?))
+}
+
+pub(crate) fn data_series(element: &str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(data_series_type(concrete(element)?))
+}
+
+pub(crate) fn type_id(id: &str) -> Result<TypeId, BuiltinAssemblyError> {
+    sid(id, TypeId::new)
+}
+
+pub(crate) fn node_type_id(id: &str) -> Result<NodeTypeId, BuiltinAssemblyError> {
+    sid(id, NodeTypeId::new)
+}
+
+pub(crate) fn category_id(id: &str) -> Result<NodeCategoryId, BuiltinAssemblyError> {
+    sid(id, NodeCategoryId::new)
+}
+
+pub(crate) fn icon_id(id: &str) -> Result<IconId, BuiltinAssemblyError> {
+    sid(id, IconId::new)
+}
+
+pub(crate) fn choice_condition(
+    key: &str,
+    value: &str,
+) -> Result<ParameterCondition, BuiltinAssemblyError> {
+    Ok(ParameterCondition {
+        key: sid(key, ParameterKey::new)?,
+        values: vec![DataValue::String(value.into())].into_boxed_slice(),
+    })
+}
+
+pub(crate) fn port_key(key: &str) -> Result<PortKey, BuiltinAssemblyError> {
+    sid(key, PortKey::new)
+}
+
+/// Inputs accept an inline literal only when `literals` allows it.
+pub(crate) fn data_port(
+    key: &str,
+    title: &'static str,
+    direction: PortDirection,
+    value_type: TypeExpr,
+    cardinality: PortCardinality,
+    literals: LiteralPolicy,
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: port_key(key)?,
+        title: title.into(),
+        direction,
+        value_type,
+        cardinality,
+        connections: data_connections(direction),
+        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
+            literal_policy: literals,
+            default_value: None,
+        }),
+        editor: PortEditorSpec::Default,
+        schema: None,
     })
 }
 

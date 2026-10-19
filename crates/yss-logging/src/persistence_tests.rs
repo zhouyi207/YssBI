@@ -4,7 +4,7 @@ use crate::collector::LogLayer;
 use sqlx::{ConnectOptions, Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 use tracing_subscriber::prelude::*;
 
-use crate::{LogDomain, LogLevel, LogOrigin, LogQuery, LogRecordDto, LogRuntime};
+use crate::{LogDomain, LogLevel, LogRecordDto, LogRuntime};
 
 #[test]
 fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() {
@@ -18,9 +18,8 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
             sequence: 1,
             timestamp: "2026-10-10T12:00:00.000".into(),
             level: LogLevel::Info,
-            origin: LogOrigin::Frontend,
             domain: LogDomain::Ui,
-            target: "frontend.test".into(),
+            target: "workbench.test".into(),
             event: Some("dropRejected".into()),
             message: "Drop was rejected".into(),
             source: None,
@@ -34,7 +33,7 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
         .subscribe_batches(move |batch| sender.send(batch).is_ok())
         .unwrap();
     assert_eq!(snapshot.entries.len(), 1);
-    assert_eq!(snapshot.entries[0].origin, LogOrigin::Frontend);
+    assert_eq!(snapshot.entries[0].domain, LogDomain::Ui);
     let subscriber = tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(None)));
     let dispatch = tracing::Dispatch::new(subscriber);
     tracing::dispatcher::with_default(&dispatch, || {
@@ -64,7 +63,7 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
             .disable_statement_logging();
         let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
         let rows = sqlx::query(
-            "SELECT sequence, origin, domain, event, message, fields FROM logs ORDER BY sequence",
+            "SELECT sequence, domain, event, message, fields FROM logs ORDER BY sequence",
         )
         .fetch_all(&mut connection)
         .await
@@ -74,8 +73,6 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
             snapshot.entries.len() + delivered.len(),
             "snapshot and channel only announce committed rows"
         );
-        assert_eq!(rows[0].get::<String, _>("origin"), "frontend");
-        assert_eq!(rows[1].get::<String, _>("origin"), "rust");
         assert_eq!(rows[1].get::<String, _>("domain"), "data");
         assert_eq!(rows[1].get::<String, _>("event"), "missingValues");
         assert_eq!(rows[0].get::<String, _>("domain"), "ui");
@@ -106,37 +103,7 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
     assert_eq!(restored.entries[1].fields["missing_count"], 3);
     assert_eq!(restored.entries[0].event.as_deref(), Some("dropRejected"));
     assert_eq!(restored.entries[2].message, "Last before exit");
-    let page = reopened
-        .query(LogQuery {
-            limit: 2,
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(
-        page.entries
-            .iter()
-            .map(|record| record.sequence)
-            .collect::<Vec<_>>(),
-        vec![2, 3]
-    );
-    let previous = reopened
-        .query(LogQuery {
-            before_sequence: page.next_before_sequence,
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(previous.entries[0].sequence, 1);
-    assert!(previous.next_before_sequence.is_none());
-    let rust_only = reopened
-        .query(LogQuery {
-            origin: Some(LogOrigin::Rust),
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(rust_only.entries.len(), 2);
-    let statistics = reopened.statistics().unwrap();
-    assert_eq!(statistics.total, 3);
-    assert_eq!(statistics.by_origin["frontend"], 1);
+    assert_eq!(restored.entries.len(), 3);
     reopened.shutdown();
 
     let mut storage = crate::store::LogStore::open(path).unwrap();
@@ -178,15 +145,14 @@ fn failed_sqlite_write_sends_a_terminal_failure_without_publishing_uncommitted_l
     });
     let failure = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
     assert_eq!(
-        serde_json::to_value(failure.failure).unwrap(),
-        "storage_unavailable"
+        failure.failure,
+        Some(crate::LogStreamFailure::StorageUnavailable)
     );
     assert!(failure.entries.is_empty());
     assert!(matches!(
         receiver.recv_timeout(Duration::from_secs(1)),
         Err(mpsc::RecvTimeoutError::Disconnected)
     ));
-    assert!(logs.query(LogQuery::default()).is_err());
     assert!(logs.subscribe_batches(|_| true).is_err());
     let (console_sender, console_receiver) = mpsc::channel();
     let (console, _console_guard) = crate::collector::spawn_output(
@@ -206,5 +172,5 @@ fn failed_sqlite_write_sends_a_terminal_failure_without_publishing_uncommitted_l
     assert!(!record.message.contains("secret"));
     assert_eq!(record.fields["password"], "[REDACTED]");
     let mut storage = crate::store::LogStore::open(path).unwrap();
-    assert_eq!(storage.statistics().unwrap().total, 0);
+    assert!(storage.snapshot(1).unwrap().entries.is_empty());
 }

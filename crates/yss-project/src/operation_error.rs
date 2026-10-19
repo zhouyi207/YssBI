@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use thiserror::Error;
-use yss_graph_document::GraphResourcePath;
 use yss_resource_naming::ResourceNameValidationError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -9,20 +8,12 @@ pub enum ProjectOperationError {
     InvalidResourceName(#[from] ResourceNameValidationError),
     #[error("invalid project root '{}': {message}", path.display())]
     InvalidRoot { path: PathBuf, message: String },
-    #[error("graph resource '{path}' is structurally invalid")]
-    InvalidGraphDocument {
-        path: GraphResourcePath,
-        message: String,
-    },
     #[error("stale project lifecycle: {message}")]
     StaleProjectLifecycle { message: String },
     #[error("stale resource lifecycle: {message}")]
     StaleResourceLifecycle { message: String },
     #[error("catalog resource stale: {message}")]
     CatalogResourceStale { message: String },
-
-    #[error("result source read failed: {message}")]
-    ResultSourceReadFailed { message: String },
     #[error("resource revision overflow for '{resource}' at {retained}")]
     ResourceRevisionOverflow { resource: String, retained: u64 },
     #[error("resource name conflict: {message}")]
@@ -65,11 +56,9 @@ impl ProjectOperationError {
         match self {
             Self::InvalidResourceName(source) => resource_name_error_code(source),
             Self::InvalidRoot { .. } => "invalid_project_root",
-            Self::InvalidGraphDocument { .. } => "invalid_graph_document",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
             Self::StaleResourceLifecycle { .. } => "stale_resource_lifecycle",
             Self::CatalogResourceStale { .. } => "catalog_resource_stale",
-            Self::ResultSourceReadFailed { .. } => "result_source_read_failed",
             Self::ResourceRevisionOverflow { .. } => "resource_revision_overflow",
             Self::ResourceNameConflict { .. } => "resource_name_conflict",
             Self::ResourceNotFound { .. } => "resource_not_found",

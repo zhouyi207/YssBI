@@ -82,7 +82,7 @@ pub fn specialize_function(
     {
         result.value_type = actual.clone();
     }
-    let state = if semantics.ready().is_some() {
+    let state = if semantics.is_ready() {
         GraphFunctionState::Ready
     } else if permits_unbound_schema(&semantics) {
         GraphFunctionState::AwaitingSchema

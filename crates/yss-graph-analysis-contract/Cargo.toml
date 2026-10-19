@@ -5,6 +5,5 @@ edition = "2024"
 publish = false
 
 [dependencies]
-serde.workspace = true
 yss-node-protocol = { path = "../yss-node-protocol" }
 yss-node-registry = { path = "../yss-node-registry" }

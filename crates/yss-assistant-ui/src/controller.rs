@@ -91,10 +91,6 @@ impl AssistantController {
             last_closed: None,
         }
     }
-
-    pub fn project(&self) -> Option<&ProjectInstanceId> {
-        self.project.as_ref()
-    }
     pub fn is_busy(&self) -> bool {
         self.busy
     }
@@ -109,9 +105,6 @@ impl AssistantController {
     }
     pub fn conversation(&self, id: &str) -> Option<&Entity<ConversationPanel>> {
         self.conversations.get(id)
-    }
-    pub fn conversations(&self) -> &BTreeMap<String, Entity<ConversationPanel>> {
-        &self.conversations
     }
     pub fn has_pending_submission(&self, cx: &App) -> bool {
         self.conversations

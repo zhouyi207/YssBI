@@ -136,21 +136,9 @@ impl InlineMessage {
         Self::new(Severity::Warning, text)
     }
 
-    /// A stable identity lets assistive technology announce errors as alerts.
-    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
-        self.id = Some(id.into());
-        self
-    }
-
     /// The object the message is about, such as a parameter or a port.
     pub fn subject(mut self, subject: impl Into<SharedString>) -> Self {
         self.subject = Some(subject.into());
-        self
-    }
-
-    /// The recovery for the reported condition, such as Retry, at the trailing edge.
-    pub fn action(mut self, action: impl IntoElement) -> Self {
-        self.action = Some(action.into_any_element());
         self
     }
 }

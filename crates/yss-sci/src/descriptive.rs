@@ -41,7 +41,7 @@ pub fn dagum_gini(
         samples.entry(group).or_default().push(value);
     }
     let n = values.len() as f64;
-    let mut within = Sum::default();
+    let mut within = CompensatedSum::default();
     let mut group_rows = Vec::with_capacity(samples.len());
     let mut means = Vec::with_capacity(samples.len());
     let mut scales = Vec::with_capacity(samples.len());
@@ -77,8 +77,8 @@ pub fn dagum_gini(
     }
     let samples = samples.into_values().collect::<Vec<_>>();
     let mut pairs = Vec::with_capacity(samples.len() * (samples.len() - 1) / 2);
-    let mut between = Sum::default();
-    let mut transvariation = Sum::default();
+    let mut between = CompensatedSum::default();
+    let mut transvariation = CompensatedSum::default();
     for a in 0..samples.len() {
         for b in 0..a {
             let pair_scale = scales[a].max(scales[b]);
@@ -196,8 +196,8 @@ fn sorted_statistics(
     control: &ScientificExecutionControl,
 ) -> Result<(f64, Option<f64>), Error> {
     let n = sorted.len() as f64;
-    let mut total = Sum::default();
-    let mut differences = Sum::default();
+    let mut total = CompensatedSum::default();
+    let mut differences = CompensatedSum::default();
     for (i, &value) in sorted.iter().enumerate() {
         if i % 1024 == 0 {
             control.check()?;
@@ -235,8 +235,8 @@ fn cross_distances(
 ) -> Result<(f64, f64), Error> {
     let (mut i, mut j, mut previous) = (0usize, 0usize, 0.0);
     let mut next_check = 0;
-    let mut forward = Sum::default();
-    let mut reverse = Sum::default();
+    let mut forward = CompensatedSum::default();
+    let mut reverse = CompensatedSum::default();
     while i < a.len() || j < b.len() {
         if i + j >= next_check {
             control.check()?;
@@ -309,8 +309,8 @@ pub fn theil_t(
 
     // Normalize population and income separately in log space: both w*x and
     // their sums can overflow even though the dimensionless index is finite.
-    let mut population = Sum::default();
-    let mut income = Sum::default();
+    let mut population = CompensatedSum::default();
+    let mut income = CompensatedSum::default();
     for (i, &value) in values.iter().enumerate() {
         if i % 1024 == 0 {
             control.check()?;
@@ -326,7 +326,7 @@ pub fn theil_t(
     }
     let log_population = population.total.ln();
     let log_income = income.total.ln();
-    let mut index = Sum::default();
+    let mut index = CompensatedSum::default();
     for (i, &value) in values.iter().enumerate() {
         if i % 1024 == 0 {
             control.check()?;
@@ -347,14 +347,15 @@ pub fn theil_t(
     Ok(index.total.max(0.0))
 }
 
+/// Kahan compensated summation shared by the descriptive and association estimators.
 #[derive(Default)]
-struct Sum {
-    total: f64,
+pub(crate) struct CompensatedSum {
+    pub(crate) total: f64,
     correction: f64,
 }
 
-impl Sum {
-    fn add(&mut self, value: f64) {
+impl CompensatedSum {
+    pub(crate) fn add(&mut self, value: f64) {
         let adjusted = value - self.correction;
         let next = self.total + adjusted;
         self.correction = (next - self.total) - adjusted;

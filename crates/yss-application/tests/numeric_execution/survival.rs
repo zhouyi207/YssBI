@@ -1,33 +1,8 @@
+use super::fixture::{connect_port, field, node};
 use super::*;
 use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
 
-fn node(document: &mut GraphDocument, kind: &str, parameters: serde_json::Value) -> NodeId {
-    let id = NodeId::new();
-    document.nodes.insert(
-        id,
-        DocumentNode {
-            id,
-            node_type: kind.parse().unwrap(),
-            position: NodePosition { x: 0.0, y: 0.0 },
-            parameters: serde_json::from_value(parameters).unwrap(),
-            user_label: None,
-        },
-    );
-    id
-}
-fn connect(document: &mut GraphDocument, from: NodeId, key: &str, to: PortAddress) {
-    let id = ConnectionId::new();
-    document.connections.insert(
-        id,
-        DocumentConnection {
-            id,
-            output: PortAddress::declared(from, key.parse().unwrap()),
-            input: to,
-            order: None,
-        },
-    );
-}
 fn port(
     document: &mut GraphDocument,
     node: NodeId,
@@ -47,12 +22,6 @@ fn port(
     } else {
         PortAddress::declared(node, key.parse().unwrap())
     }
-}
-fn field<'a>(value: &'a RuntimeValue, key: &str) -> &'a RuntimeValue {
-    let RuntimeValue::Record(fields) = value else {
-        panic!("record")
-    };
-    fields.get(key).unwrap_or_else(|| panic!("missing {key}"))
 }
 
 #[test]
@@ -195,19 +164,19 @@ fn survival_category_all_fifteen_nodes_execute_and_models_feed_evaluation_and_no
                 "yssbi.dataframe.series.select",
                 serde_json::json!({"column":format!("column{i}")}),
             );
-            connect(
+            connect_port(
                 &mut document,
                 source,
                 "value",
                 PortAddress::declared(select, "dataframe".parse().unwrap()),
             );
             let address = port(&mut document, model, key, *repeat, i);
-            connect(&mut document, select, "series", address);
+            connect_port(&mut document, select, "series", address);
         }
         if plot {
             let target = node(&mut document, &id, serde_json::json!({}));
             if method == "plot.nomogram" {
-                connect(
+                connect_port(
                     &mut document,
                     model,
                     "result",
@@ -224,13 +193,13 @@ fn survival_category_all_fifteen_nodes_execute_and_models_feed_evaluation_and_no
                         "yssbi.dataframe.series.select",
                         serde_json::json!({"column":column}),
                     );
-                    connect(
+                    connect_port(
                         &mut document,
                         model,
                         "predictions",
                         PortAddress::declared(select, "dataframe".parse().unwrap()),
                     );
-                    connect(
+                    connect_port(
                         &mut document,
                         select,
                         "series",

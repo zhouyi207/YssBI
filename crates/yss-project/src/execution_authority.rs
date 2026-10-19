@@ -46,21 +46,8 @@ impl ProjectResourceId {
         Ok(Self(value))
     }
 
-    pub fn database(id: impl AsRef<str>) -> Result<Self, ProjectResourceIdError> {
-        Self::new(yss_database_contract::database_resource_path(id.as_ref()).into_boxed_str())
-    }
-
-    pub fn graph(path: &GraphResourcePath) -> Self {
-        Self::from_existing(path.as_str().into())
-    }
-
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-
-    fn from_existing(value: Box<str>) -> Self {
-        debug_assert!(Self::new(value.clone()).is_ok());
-        Self(value)
     }
 }
 
@@ -92,8 +79,6 @@ pub enum ProjectResourcePresence {
 pub struct ProjectResourceVersion(u64);
 
 impl ProjectResourceVersion {
-    pub const INITIAL: Self = Self(0);
-
     pub const fn from_existing(value: u64) -> Self {
         Self(value)
     }
@@ -134,16 +119,8 @@ impl ProjectResourceRequirement {
         &self.resource
     }
 
-    pub const fn kind(&self) -> ProjectResourceKind {
-        self.kind
-    }
-
     pub const fn access(&self) -> ProjectResourceAccess {
         self.access
-    }
-
-    pub const fn optional(&self) -> bool {
-        self.optional
     }
 }
 
@@ -231,10 +208,6 @@ impl ProjectExecutionRequest {
             .into_boxed_slice();
         self
     }
-
-    pub fn required_resources(&self) -> &[ProjectResourceRequirement] {
-        &self.required_resources
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -253,31 +226,11 @@ pub struct ProjectExecutionAuthority {
     session: ProjectSession,
     graph_path: GraphResourcePath,
     document: Arc<GraphDocument>,
-    authority_generation: u64,
     resource_grants: Arc<[ProjectResourceGrant]>,
-}
-
-impl ProjectExecutionAuthority {
-    pub fn project_instance_id(&self) -> &ProjectInstanceId {
-        &self.session.instance_id
-    }
-
-    pub fn graph_path(&self) -> &GraphResourcePath {
-        &self.graph_path
-    }
-
-    pub fn document(&self) -> &GraphDocument {
-        &self.document
-    }
-
-    pub const fn authority_generation(&self) -> u64 {
-        self.authority_generation
-    }
 }
 
 pub struct PreparedProjectExecution {
     authority: ProjectExecutionAuthority,
-    graph: Arc<GraphDocument>,
     resources: ProjectExecutionResourceSnapshot,
 }
 
@@ -286,75 +239,18 @@ impl PreparedProjectExecution {
         &self.authority
     }
 
-    pub fn graph(&self) -> &GraphDocument {
-        &self.graph
-    }
-
     pub fn resources(&self) -> &ProjectExecutionResourceSnapshot {
         &self.resources
     }
 }
 
-#[derive(Debug)]
-pub struct CandidateProjectEffects {
-    grants: Box<[ProjectResourceGrant]>,
-}
-
-impl CandidateProjectEffects {
-    pub fn new(grants: impl IntoIterator<Item = ProjectResourceGrant>) -> Self {
-        Self {
-            grants: grants.into_iter().collect::<Vec<_>>().into_boxed_slice(),
-        }
-    }
-
-    pub fn empty() -> Self {
-        Self::new([])
-    }
-}
-
-pub struct PreparedEffectCommit {
-    authority: ProjectExecutionAuthority,
-    effects: CandidateProjectEffects,
-}
-
-impl PreparedEffectCommit {
-    pub fn authority(&self) -> &ProjectExecutionAuthority {
-        &self.authority
-    }
-}
-
-pub struct CommittedProjectEffects {
-    project_instance_id: ProjectInstanceId,
-    authority_generation: u64,
-    publication_revision: u64,
-    resource_grants: Box<[ProjectResourceGrant]>,
-}
-
-impl CommittedProjectEffects {
-    pub fn project_instance_id(&self) -> &ProjectInstanceId {
-        &self.project_instance_id
-    }
-
-    pub const fn authority_generation(&self) -> u64 {
-        self.authority_generation
-    }
-
-    pub const fn publication_revision(&self) -> u64 {
-        self.publication_revision
-    }
-
-    pub fn resource_grants(&self) -> &[ProjectResourceGrant] {
-        &self.resource_grants
-    }
-}
-
 #[derive(Clone)]
-pub struct ProjectEffectCommitControl {
+pub struct ProjectExecutionConfirmationControl {
     cancellation: Arc<AtomicBool>,
     deadline: Instant,
 }
 
-impl ProjectEffectCommitControl {
+impl ProjectExecutionConfirmationControl {
     pub fn new(cancellation: Arc<AtomicBool>, deadline: Instant) -> Self {
         Self {
             cancellation,
@@ -374,8 +270,6 @@ pub enum ProjectExecutionPreparationError {
     },
     #[error("requested graph is unavailable: {graph}")]
     GraphUnavailable { graph: GraphResourcePath },
-    #[error("requested graph is invalid: {graph}")]
-    InvalidGraph { graph: GraphResourcePath },
     #[error("resource requirement is duplicated: {resource}")]
     DuplicateResourceRequirement { resource: ProjectResourceId },
     #[error("resource identity cannot be resolved: {resource}")]
@@ -393,42 +287,26 @@ pub enum ProjectExecutionPreparationError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
-pub enum ProjectEffectCommitError {
-    #[error("project effect commit authority is unavailable")]
+pub enum ProjectExecutionConfirmationError {
+    #[error("project execution authority is unavailable")]
     ProjectUnavailable,
-    #[error("project effect commit authority is stale")]
+    #[error("project execution authority is stale")]
     StaleProjectSession,
-    #[error("project graph document changed before effect commit")]
+    #[error("project graph document changed during execution")]
     GraphChanged,
-    #[error("project effect dependency is unavailable")]
+    #[error("project execution dependency is unavailable")]
     ResourceUnavailable { resource: ProjectResourceId },
-    #[error("project effect dependency has no revision authority")]
+    #[error("project execution dependency has no revision authority")]
     ResourceRevisionUnavailable { resource: ProjectResourceId },
-    #[error("project effect dependency kind changed")]
+    #[error("project execution dependency kind changed")]
     ResourceKindChanged { resource: ProjectResourceId },
-    #[error("project effect dependency presence changed")]
+    #[error("project execution dependency presence changed")]
     ResourcePresenceChanged { resource: ProjectResourceId },
-    #[error("project effect dependency version changed")]
+    #[error("project execution dependency version changed")]
     ResourceVersionChanged { resource: ProjectResourceId },
-    #[error("candidate grant is duplicated")]
-    DuplicateCandidateGrant { resource: ProjectResourceId },
-    #[error("candidate grant is missing")]
-    MissingCandidateGrant { resource: ProjectResourceId },
-    #[error("candidate grant is unexpected")]
-    UnexpectedCandidateGrant { resource: ProjectResourceId },
-    #[error("candidate grant kind does not match")]
-    CandidateKindMismatch { resource: ProjectResourceId },
-    #[error("candidate grant access does not match")]
-    CandidateAccessMismatch { resource: ProjectResourceId },
-    #[error("candidate grant optionality does not match")]
-    CandidateOptionalityMismatch { resource: ProjectResourceId },
-    #[error("candidate grant presence does not match")]
-    CandidatePresenceMismatch { resource: ProjectResourceId },
-    #[error("candidate grant version does not match")]
-    CandidateVersionMismatch { resource: ProjectResourceId },
-    #[error("project effect commit was cancelled")]
+    #[error("project execution confirmation was cancelled")]
     Cancelled,
-    #[error("project effect commit deadline was exceeded")]
+    #[error("project execution confirmation deadline was exceeded")]
     DeadlineExceeded,
 }
 
@@ -576,22 +454,22 @@ fn preparation_resolution_error(
 fn current_resolution_error(
     resource: &ProjectResourceId,
     failure: ResourceResolutionFailure,
-) -> ProjectEffectCommitError {
+) -> ProjectExecutionConfirmationError {
     match failure {
         ResourceResolutionFailure::RevisionUnavailable => {
-            ProjectEffectCommitError::ResourceRevisionUnavailable {
+            ProjectExecutionConfirmationError::ResourceRevisionUnavailable {
                 resource: resource.clone(),
             }
         }
         ResourceResolutionFailure::Unavailable
         | ResourceResolutionFailure::InvalidIdentity
         | ResourceResolutionFailure::UnknownResource => {
-            ProjectEffectCommitError::ResourceUnavailable {
+            ProjectExecutionConfirmationError::ResourceUnavailable {
                 resource: resource.clone(),
             }
         }
         ResourceResolutionFailure::KindMismatch { .. } => {
-            ProjectEffectCommitError::ResourceKindChanged {
+            ProjectExecutionConfirmationError::ResourceKindChanged {
                 resource: resource.clone(),
             }
         }
@@ -610,87 +488,25 @@ fn current_project_session(
     })
 }
 
-fn compare_candidate_grant(
-    expected: &ProjectResourceGrant,
-    actual: &ProjectResourceGrant,
-) -> Result<(), ProjectEffectCommitError> {
-    if expected.kind != actual.kind {
-        return Err(ProjectEffectCommitError::CandidateKindMismatch {
-            resource: actual.resource.clone(),
-        });
-    }
-    if expected.access != actual.access {
-        return Err(ProjectEffectCommitError::CandidateAccessMismatch {
-            resource: actual.resource.clone(),
-        });
-    }
-    if expected.optional != actual.optional {
-        return Err(ProjectEffectCommitError::CandidateOptionalityMismatch {
-            resource: actual.resource.clone(),
-        });
-    }
-    if expected.presence != actual.presence {
-        return Err(ProjectEffectCommitError::CandidatePresenceMismatch {
-            resource: actual.resource.clone(),
-        });
-    }
-    if expected.version != actual.version {
-        return Err(ProjectEffectCommitError::CandidateVersionMismatch {
-            resource: actual.resource.clone(),
-        });
-    }
-    Ok(())
-}
-
 fn compare_current_grant(
     expected: &ProjectResourceGrant,
     current: &ProjectResourceGrant,
-) -> Result<(), ProjectEffectCommitError> {
+) -> Result<(), ProjectExecutionConfirmationError> {
     if expected.kind != current.kind {
-        return Err(ProjectEffectCommitError::ResourceKindChanged {
+        return Err(ProjectExecutionConfirmationError::ResourceKindChanged {
             resource: expected.resource.clone(),
         });
     }
     if expected.presence != current.presence {
-        return Err(ProjectEffectCommitError::ResourcePresenceChanged {
+        return Err(ProjectExecutionConfirmationError::ResourcePresenceChanged {
             resource: expected.resource.clone(),
         });
     }
     if expected.version != current.version {
-        return Err(ProjectEffectCommitError::ResourceVersionChanged {
+        return Err(ProjectExecutionConfirmationError::ResourceVersionChanged {
             resource: expected.resource.clone(),
         });
     }
-    Ok(())
-}
-
-fn validate_candidate_effects(
-    authority: &ProjectExecutionAuthority,
-    effects: &CandidateProjectEffects,
-) -> Result<(), ProjectEffectCommitError> {
-    let mut seen = BTreeSet::new();
-    for candidate in &effects.grants {
-        let resource = candidate.resource.clone();
-        if !seen.insert(resource.clone()) {
-            return Err(ProjectEffectCommitError::DuplicateCandidateGrant { resource });
-        }
-        let Some(expected) = authority
-            .resource_grants
-            .iter()
-            .find(|grant| grant.resource == candidate.resource)
-        else {
-            return Err(ProjectEffectCommitError::UnexpectedCandidateGrant { resource });
-        };
-        compare_candidate_grant(expected, candidate)?;
-    }
-    for expected in authority.resource_grants.iter() {
-        if !seen.contains(&expected.resource) {
-            return Err(ProjectEffectCommitError::MissingCandidateGrant {
-                resource: expected.resource.clone(),
-            });
-        }
-    }
-
     Ok(())
 }
 
@@ -706,7 +522,7 @@ struct CurrentAuthorityContents<'a> {
 fn validate_current_authority_contents(
     authority: &ProjectExecutionAuthority,
     current: CurrentAuthorityContents<'_>,
-) -> Result<(), ProjectEffectCommitError> {
+) -> Result<(), ProjectExecutionConfirmationError> {
     let CurrentAuthorityContents {
         publication,
         project_path,
@@ -717,22 +533,22 @@ fn validate_current_authority_contents(
         database_revisions,
     } = current;
     let session = current_project_session(publication, project_path)
-        .map_err(|_| ProjectEffectCommitError::StaleProjectSession)?;
+        .map_err(|_| ProjectExecutionConfirmationError::StaleProjectSession)?;
     if session != authority.session
         || identity.project_instance_id != authority.session.instance_id
         || identity.project_root.as_ref() != Some(&authority.session.root)
     {
-        return Err(ProjectEffectCommitError::StaleProjectSession);
+        return Err(ProjectExecutionConfirmationError::StaleProjectSession);
     }
     if publication.project_instance_id != authority.session.instance_id.as_str() {
-        return Err(ProjectEffectCommitError::StaleProjectSession);
+        return Err(ProjectExecutionConfirmationError::StaleProjectSession);
     }
     let graph = data
         .graphs
         .get(&authority.graph_path)
-        .ok_or(ProjectEffectCommitError::StaleProjectSession)?;
+        .ok_or(ProjectExecutionConfirmationError::StaleProjectSession)?;
     if graph.document != authority.document {
-        return Err(ProjectEffectCommitError::GraphChanged);
+        return Err(ProjectExecutionConfirmationError::GraphChanged);
     }
     for expected in authority.resource_grants.iter() {
         let requirement = ProjectResourceRequirement::new(
@@ -832,12 +648,10 @@ impl ProjectState {
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice();
         let resource_grants: Arc<[ProjectResourceGrant]> = Arc::from(grants);
-        let document = Arc::clone(&graph.document);
         let authority = ProjectExecutionAuthority {
             session,
             graph_path: request.graph_path,
-            document: Arc::clone(&document),
-            authority_generation: publication.authority_generation(),
+            document: Arc::clone(&graph.document),
             resource_grants: Arc::clone(&resource_grants),
         };
         let lifecycle_after = self.activation_generation.load(Ordering::Acquire);
@@ -846,23 +660,25 @@ impl ProjectState {
         }
         Ok(PreparedProjectExecution {
             authority,
-            graph: document,
             resources: ProjectExecutionResourceSnapshot {
                 grants: resource_grants,
             },
         })
     }
 
-    pub fn prepare_execution_effects(
+    /// Rejects result publication when the Project facts captured by `prepare_execution`
+    /// changed while the run was executing.
+    pub fn confirm_execution_authority(
         &self,
         authority: &ProjectExecutionAuthority,
-        effects: CandidateProjectEffects,
-    ) -> Result<PreparedEffectCommit, ProjectEffectCommitError> {
+        control: &ProjectExecutionConfirmationControl,
+    ) -> Result<(), ProjectExecutionConfirmationError> {
+        check_confirmation_control(control)?;
         self.ensure_project_operational()
-            .map_err(|_| ProjectEffectCommitError::ProjectUnavailable)?;
+            .map_err(|_| ProjectExecutionConfirmationError::ProjectUnavailable)?;
         let lifecycle_before = self.activation_generation.load(Ordering::Acquire);
         if !lifecycle_before.is_multiple_of(2) {
-            return Err(ProjectEffectCommitError::StaleProjectSession);
+            return Err(ProjectExecutionConfirmationError::StaleProjectSession);
         }
         let publication = self
             .mutation_publication
@@ -888,6 +704,9 @@ impl ProjectState {
             .database_authority_revisions
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        // Waiting for the locks may cross the deadline or a cancellation request.
+        check_confirmation_control(control)?;
         validate_current_authority_contents(
             authority,
             CurrentAuthorityContents {
@@ -899,91 +718,22 @@ impl ProjectState {
                 database_revisions: &database_revisions,
             },
         )?;
-        validate_candidate_effects(authority, &effects)?;
         let lifecycle_after = self.activation_generation.load(Ordering::Acquire);
         if lifecycle_before != lifecycle_after || !lifecycle_after.is_multiple_of(2) {
-            return Err(ProjectEffectCommitError::StaleProjectSession);
+            return Err(ProjectExecutionConfirmationError::StaleProjectSession);
         }
-        Ok(PreparedEffectCommit {
-            authority: authority.clone(),
-            effects,
-        })
-    }
-
-    pub fn finalize_execution_effects(
-        &self,
-        prepared: PreparedEffectCommit,
-        control: &ProjectEffectCommitControl,
-    ) -> Result<CommittedProjectEffects, ProjectEffectCommitError> {
-        check_commit_control(control)?;
-        self.ensure_project_operational()
-            .map_err(|_| ProjectEffectCommitError::ProjectUnavailable)?;
-        let lifecycle_before = self.activation_generation.load(Ordering::Acquire);
-        if !lifecycle_before.is_multiple_of(2) {
-            return Err(ProjectEffectCommitError::StaleProjectSession);
-        }
-
-        let PreparedEffectCommit { authority, effects } = prepared;
-        let publication = self
-            .mutation_publication
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let project_path = self
-            .project_path
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let identity = self
-            .activation_identity
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let data = self
-            .project_data
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let graph_resource_revisions = self
-            .graph_resource_revisions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let database_revisions = self
-            .database_authority_revisions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-        check_commit_control(control)?;
-        validate_current_authority_contents(
-            &authority,
-            CurrentAuthorityContents {
-                publication: &publication,
-                project_path: &project_path,
-                identity: &identity,
-                data: &data,
-                graph_resource_revisions: &graph_resource_revisions,
-                database_revisions: &database_revisions,
-            },
-        )?;
-        validate_candidate_effects(&authority, &effects)?;
-
-        let lifecycle_at_gate = self.activation_generation.load(Ordering::Acquire);
-        if lifecycle_before != lifecycle_at_gate || !lifecycle_at_gate.is_multiple_of(2) {
-            return Err(ProjectEffectCommitError::StaleProjectSession);
-        }
-        Ok(CommittedProjectEffects {
-            project_instance_id: authority.session.instance_id,
-            authority_generation: publication.authority_generation(),
-            publication_revision: publication.resource_revision,
-            resource_grants: effects.grants,
-        })
+        Ok(())
     }
 }
 
-fn check_commit_control(
-    control: &ProjectEffectCommitControl,
-) -> Result<(), ProjectEffectCommitError> {
+fn check_confirmation_control(
+    control: &ProjectExecutionConfirmationControl,
+) -> Result<(), ProjectExecutionConfirmationError> {
     if control.cancellation.load(Ordering::Acquire) {
-        return Err(ProjectEffectCommitError::Cancelled);
+        return Err(ProjectExecutionConfirmationError::Cancelled);
     }
     if Instant::now() >= control.deadline {
-        return Err(ProjectEffectCommitError::DeadlineExceeded);
+        return Err(ProjectExecutionConfirmationError::DeadlineExceeded);
     }
     Ok(())
 }

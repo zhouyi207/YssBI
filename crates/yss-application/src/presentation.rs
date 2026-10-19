@@ -28,19 +28,6 @@ pub enum UiError {
     Workbench,
 }
 
-impl UiError {
-    pub const fn code(&self) -> &'static str {
-        match self {
-            Self::Invalid => "ui_intent_invalid",
-            Self::Conflict => "ui_intent_conflict",
-            Self::Unavailable => "ui_target_unavailable",
-            Self::Session => "ui_session_changed",
-            Self::Capacity => "ui_capacity_exceeded",
-            Self::Workbench => "ui_workbench_unavailable",
-        }
-    }
-}
-
 struct IntentEntry {
     key: String,
     receipt: UiIntentReceipt,
@@ -532,19 +519,14 @@ mod tests {
             )
         };
         let original = open().unwrap();
-        let [first, second] = [uuid::Uuid::new_v4(), uuid::Uuid::new_v4()];
-        application
-            .retain_result(reference, first, "first", None)
-            .unwrap();
-        application
-            .retain_result(reference, second, "second", None)
-            .unwrap();
+        let (first, _) = application.retain_owned_result(reference).unwrap();
+        let (second, _) = application.retain_owned_result(reference).unwrap();
         session
             .execution()
             .invalidate_graph_results("events/report.yssbi-event");
-        application.release_result_lease(first, "first").unwrap();
+        drop(first);
         assert_eq!(open().unwrap(), original);
-        application.release_result_lease(second, "second").unwrap();
+        drop(second);
         assert!(matches!(open(), Err(UiError::Unavailable)));
     }
 

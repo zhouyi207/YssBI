@@ -37,14 +37,13 @@ fn record(id: &str, path: &str) -> ProjectRecord {
         path: path.into(),
         created_at: "17".into(),
         last_opened_at: Some("19".into()),
-        is_favorite: false,
         root_identity: ProjectRootIdentity::from_canonical(format!("root-{id}")),
         root_identity_state: ProjectRootIdentityState::Valid,
     }
 }
 
 #[tokio::test]
-async fn sqlite_store_round_trips_updates_and_removes_canonical_records() {
+async fn sqlite_store_round_trips_and_updates_canonical_records() {
     let directory = TestDirectory::new("round-trip-%23");
     let store = SqliteProjectRegistryStore::connect(directory.path().to_path_buf())
         .await
@@ -64,54 +63,29 @@ async fn sqlite_store_round_trips_updates_and_removes_canonical_records() {
         &[expected.clone()]
     );
     assert_eq!(
-        store.get_by_id(&expected.id).await.unwrap(),
-        Some(expected.clone())
-    );
-    assert_eq!(
         store.get_by_path(&expected.path).await.unwrap(),
         Some(expected.clone())
-    );
-    assert_eq!(
-        store
-            .get_by_id(&ProjectRegistrationId::from_existing("missing".into()))
-            .await
-            .unwrap(),
-        None
     );
     assert_eq!(store.get_by_path("' OR 1 = 1 --").await.unwrap(), None);
 
     let old_path = expected.path.clone();
     expected.name = "Renamed".into();
     expected.path = "C:/projects/renamed/metadata.yssbi".into();
-    expected.is_favorite = true;
     store.upsert(&expected).await.expect("update record");
     assert_eq!(
         store.load().await.expect("load update").as_ref(),
         &[expected.clone()]
     );
     assert_eq!(
-        store.get_by_id(&expected.id).await.unwrap(),
-        Some(expected.clone())
-    );
-    assert_eq!(
         store.get_by_path(&expected.path).await.unwrap(),
         Some(expected.clone())
     );
     assert_eq!(store.get_by_path(&old_path).await.unwrap(), None);
-
-    store.remove(&expected.id).await.expect("remove record");
-    assert!(store.load().await.expect("load empty").is_empty());
-    assert_eq!(store.get_by_id(&expected.id).await.unwrap(), None);
-    assert_eq!(store.get_by_path(&expected.path).await.unwrap(), None);
-    assert_eq!(
-        store.remove(&expected.id).await,
-        Err(ProjectRegistryStoreError::Unavailable)
-    );
     store.pool.close().await;
 }
 
 #[tokio::test]
-async fn corrupt_persisted_discriminants_fail_closed() {
+async fn corrupt_persisted_identity_state_fails_closed() {
     let directory = TestDirectory::new("invalid-discriminants");
     let store = SqliteProjectRegistryStore::connect(directory.path().to_path_buf())
         .await
@@ -123,19 +97,6 @@ async fn corrupt_persisted_discriminants_fail_closed() {
         .execute(&store.pool)
         .await
         .expect("corrupt identity state");
-    assert_eq!(
-        store.load().await,
-        Err(ProjectRegistryStoreError::StorageFailed)
-    );
-    assert_eq!(
-        store.get_by_id(&expected.id).await,
-        Err(ProjectRegistryStoreError::StorageFailed)
-    );
-
-    sqlx::query("UPDATE projects SET root_identity_state = 'valid', is_favorite = 2")
-        .execute(&store.pool)
-        .await
-        .expect("corrupt favorite state");
     assert_eq!(
         store.load().await,
         Err(ProjectRegistryStoreError::StorageFailed)

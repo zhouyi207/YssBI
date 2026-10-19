@@ -18,8 +18,7 @@ pub enum WorkingCorrelation {
     Exchangeable,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MixedEstimation {
     Ml,
     Reml,

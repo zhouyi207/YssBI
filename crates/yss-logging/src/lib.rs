@@ -14,8 +14,8 @@ mod retention_tests;
 pub use collection::{LogCollection, LogCollectionInitializationError};
 pub use collector::{LogFields, LogLevel, LogRecord};
 pub use retention::LogRetentionPolicy;
-pub use store::{LOG_DATABASE_NAME, LogPage, LogQuery, LogStatistics, LogStoreError};
+pub use store::{LOG_DATABASE_NAME, LogStoreError};
 pub use stream::{
-    LogBatchDto, LogDomain, LogInitializationError, LogOrigin, LogRecordDto, LogRuntime,
-    LogStreamFailure, LogSubscriptionDto, LogsUnavailable,
+    LogBatchDto, LogDomain, LogInitializationError, LogRecordDto, LogRuntime, LogStreamFailure,
+    LogSubscriptionDto, LogsUnavailable,
 };

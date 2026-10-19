@@ -32,8 +32,7 @@ impl ToolEffect {
 }
 
 /// A model-callable tool. The Harness treats its arguments, requests and results as opaque JSON.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToolSpec {
     pub name: String,
     pub description: String,
@@ -60,8 +59,7 @@ impl ToolSpec {
 }
 
 /// A provider tool call. The executor owns validation, durable identity and the model projection.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: Value,
@@ -77,8 +75,7 @@ pub struct ToolCallOutcome {
 }
 
 /// One durable execution reported by the executor to its caller.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToolInvocationOutcome {
     pub invocation_id: ToolInvocationId,
     pub result: Value,

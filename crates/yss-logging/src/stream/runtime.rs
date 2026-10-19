@@ -1,6 +1,6 @@
 use crate::LogRetentionPolicy;
 use crate::collector::{CapturedLogSink, OutputHandle};
-use crate::store::{LogPage, LogQuery, LogStatistics, LogStoreError};
+use crate::store::LogStoreError;
 use std::{path::PathBuf, sync::Arc};
 
 use super::dispatcher::{LogDispatcherGuard, LogDispatcherStartError, LogHub, LogsUnavailable};
@@ -15,7 +15,8 @@ pub struct LogRuntime {
 }
 
 impl LogRuntime {
-    pub fn open(path: PathBuf) -> Result<Self, LogInitializationError> {
+    #[cfg(test)]
+    pub(crate) fn open(path: PathBuf) -> Result<Self, LogInitializationError> {
         Self::open_with_retention(path, LogRetentionPolicy::default())
     }
 
@@ -38,13 +39,6 @@ impl LogRuntime {
             hub,
             _dispatcher_guard: Arc::new(guard),
         })
-    }
-
-    pub fn query(&self, query: LogQuery) -> Result<LogPage, LogStoreError> {
-        self.hub.query(query)
-    }
-    pub fn statistics(&self) -> Result<LogStatistics, LogStoreError> {
-        self.hub.statistics()
     }
 
     /// Changes logging-owned retention without changing collection or display

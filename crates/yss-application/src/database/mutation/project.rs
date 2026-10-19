@@ -109,7 +109,6 @@ pub(in crate::database) fn check_database_revision(
                 captured.project_instance_id(),
                 Some(id),
                 Some(revision),
-                None,
             ))
         })
 }

@@ -1,7 +1,6 @@
 use crate::ProjectOperationError;
 use crate::file_resources::{FileIndexEntry, ResourceFile};
 use crate::{ProjectIndex, ProjectSession, ProjectState};
-use yss_function_editor_projection::FunctionEditorProjection;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;
@@ -155,8 +154,6 @@ fn overlay_authoritative_project_index(
                 .ok_or_else(|| stale_catalog("function file has no signature"))?;
             entry.function_revision = function.revision;
             entry.function_signature = function.signature.clone();
-            entry.function_editor_projection = FunctionEditorProjection::try_from(function)
-                .map_err(ProjectOperationError::prepare_failed)?;
         }
     }
     Ok(())

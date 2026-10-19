@@ -26,9 +26,6 @@ impl OpenedGraph {
     pub fn editing(&self) -> &GraphEditingState {
         &self.editing
     }
-    pub fn results(&self) -> &GraphResultState {
-        &self.results
-    }
     pub fn language(&self) -> &str {
         &self.language
     }

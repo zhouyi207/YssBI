@@ -1,7 +1,7 @@
 //! Immutable display and lazy search text for one already-sanitized log record.
 use gpui_kit::SharedString;
 use std::cell::OnceCell;
-use yss_logging::{LogDomain, LogLevel, LogOrigin, LogRecordDto};
+use yss_logging::{LogDomain, LogLevel, LogRecordDto};
 
 pub(super) struct LogEntry {
     pub record: LogRecordDto,
@@ -45,7 +45,6 @@ impl LogEntry {
                         record.message.to_lowercase(),
                         record.source.as_deref().unwrap_or_default().to_lowercase(),
                         domain_name(record.domain).into(),
-                        origin_name(record.origin).into(),
                         record.target.to_lowercase(),
                         record.event.as_deref().unwrap_or_default().to_lowercase(),
                         serde_json::to_string(&record.fields)
@@ -65,13 +64,6 @@ pub(super) fn level_label(level: LogLevel) -> &'static str {
         LogLevel::Info => "INFO",
         LogLevel::Debug => "DEBUG",
         LogLevel::Trace => "TRACE",
-    }
-}
-
-pub(super) fn origin_name(origin: LogOrigin) -> &'static str {
-    match origin {
-        LogOrigin::Rust => "rust",
-        LogOrigin::Frontend => "frontend",
     }
 }
 

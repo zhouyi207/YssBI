@@ -356,7 +356,7 @@ fn open_graph_preserves_referenced_declared_orphans_for_repair() {
     assert!(receipt.projection().diagnostics.iter().any(|diagnostic| {
         diagnostic.code.as_ref() == "graph.port.unknown" && diagnostic.blocking
     }));
-    assert!(receipt.analysis().semantic_snapshot().ready().is_none());
+    assert!(!receipt.analysis().semantic_snapshot().is_ready());
     assert_eq!(receipt.document().connections[&connection].input, missing);
     assert_eq!(
         receipt.document().input_states[&missing_literal]

@@ -182,7 +182,7 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 不透明标识。数据库声明中的 DatabaseId 与 publication key 不可互换。图内部编辑与运行继续
 共用节点图协议，传入对应的 `resource.id` 作为 `graphPath`。
 
-桌面按 `ToolRegistry::for_agent(role).with_mode(mode)` 选择工具。Registry 保存允许的能力集合，同一 run 的模型工具和执行器复用该集合，仅为模型请求生成一次输入 schema。下表是共享业务能力全集，每个角色只获得其中的子集：
+桌面按 `ToolRegistry::new(profile.tools).with_mode(mode)` 选择工具，角色 profile 由 extension 提供。Registry 保存允许的能力集合，同一 run 的模型工具和执行器复用该集合，仅为模型请求生成一次输入 schema。下表是共享业务能力全集，每个角色只获得其中的子集：
 
 | Capability                                                         | 作用                                                                           |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
@@ -272,7 +272,7 @@ Model-facing schema 来自 `model::CapabilityInput` 所用业务参数类型。
 模型不填写 revision/sessionId、图 hash、条件查询 token 或幂等 key。
 Rig 实时返回与历史回放共用 `model::capability_result`，工具历史参数共用 `CapabilityInput` 投影；
 错误投影保留输入 schema 声明的业务字段、参数范围和下一步指引；不透传内部字段名。
-内部 `RevisionConflict` / `GraphDraftChanged` 在实时工具、历史回放与 Worker 预检反馈中通过同一公开错误投影转换。
+`REVISION_CONFLICT` 与 `GRAPH_DRAFT_CHANGED` 失败码在实时工具、历史回放与 Worker 预检反馈中通过同一公开错误投影转换。
 已确认变化返回 `resource_changed`；历史读取尚未在当前项目中核验，或普通工具缺少必要的读取依据，
 统一返回 `resource_read_required`，不能据此断言内容发生变化，也不将其误报为参数格式错误。
 两者保留具体 `resourceId`，文档章节错误指引重新读取大纲，模型不协商内部版本。
@@ -344,7 +344,7 @@ Mind 的公开 DTO 归 Contract 的 `model/mind`，领域回执归 `mind.rs`；A
 删除包括全部后代且不能删除资源根；复制子树分配全新 ID，外部引用原样保留，失效外部目标不等同于坏树。
 `mindEdit` 回执提供实际创建映射、影响主题、删除主题及 dirty；回执体积在提交前核对，非法批次不发布。
 Report 可写 Mind，其他角色仍受原只读边界约束。主题工具沿真实读写回执绑定版本，显式 `save_resource`
-完成持久化。原 `edit_resource` 的 Mind 参数、`MindOperation` 和通用资源回执的 `createdNodes` 已移除。
+完成持久化。
 `inspect_resource` 的模型参数由 `model::InspectResourceInput` 定义；正文分页由各领域工具声明单位、范围及继续位置。
 Markdown 的范围按 Unicode 字符计数；局部编辑使用 `replace_document_text` 的 replacements 列表，
 在同一个捕获正文中按顺序匹配唯一原文。空原文、零匹配或多处匹配拒绝整个批次，返回字段与修正指引，
@@ -365,8 +365,7 @@ Markdown 的范围按 Unicode 字符计数；局部编辑使用 `replace_documen
 `write_document` 表达明确的整篇初始化/替换；`append_document` 原样追加，包括调用者提供的换行。
 读页大小和原 Graph 的 JSON 输入预算不限制完整文档写入，实际大小仍由 Doc owner 的 `MAX_FILE_BYTES`
 约束。`documentEdit` 回执返回每步实际 Unicode 变更范围、最终字符数和 dirty，成功后继续通过
-`save_resource` 保存。旧模型 Markdown 操作枚举及 `edit_resource` 的 Doc 分支已移除，Report
-不再注册通用内容编辑工具；报告提示和内置写作 Skill 使用这些明确工具。
+`save_resource` 保存。Report 角色没有通用内容编辑工具；报告提示和内置写作 Skill 使用这些明确工具。
 数据读取按行分页并返回稳定 row IDs、物理类型、列语义及历史状态；复制通过既有导出/导入 owner
 保留数据和 Schema，产生新的数据库身份。导出在替换目标前重验版本，发布结果不确定时不自动重试。
 
@@ -374,7 +373,7 @@ Doc/Mind 修改保留现有 Edit/Save 生命周期；`undo_resource` / `redo_res
 
 数据库行修改使用三个明确工具，`database` 引用在 schema 中只允许 Database。Data 角色还须持有该资源的 Edit 授权，Core 在既有资源 envelope 中补齐此前观察版本；成功回执继续推进同一观察状态。`insert_rows` 按可选 `beforeRowId` 或追加位置初始化行，省略列为 null；`update_cells` 拒绝重复 rowId/column，null 显式清空；`delete_rows` 只接收稳定行 ID。每批最多 200 个请求项，Store 在原准备/提交路径验证整个批次，形成一个 Runtime 历史单位；这不是计算行数限制。公开回执的 `databaseEdit` 返回实际插入 ID、提交项数、dirty 和历史可用状态，不返回行值或内部版本。通用 `edit_resource` 不再提供单行插入、单元格修改或按页位置删除分支。
 
-五个列工具使用同一 Database 授权与回执路径，每批最多 200 个列目标。新增列初值为空，重命名支持最终名称交换且保留身份；删除必须保留至少一列。物理类型名称由原 Arrow owner 解析，每列转换要求显式 `force`：允许无法表示的值转为空，但不能绕过语义约束。语义修改只更新元数据并验证全部当前值。批次失败不提交，成功只产生一个撤销单位；`databaseEdit.columnNames` 返回本次提交的目标名称（重命名后的名称或已删除名称）。原模型 `DatasetOperation` 与 `edit_resource` 的 Database 分支已移除，Data 角色不再注册通用内容编辑工具。
+五个列工具使用同一 Database 授权与回执路径，每批最多 200 个列目标。新增列初值为空，重命名支持最终名称交换且保留身份；删除必须保留至少一列。物理类型名称由原 Arrow owner 解析，每列转换要求显式 `force`：允许无法表示的值转为空，但不能绕过语义约束。语义修改只更新元数据并验证全部当前值。批次失败不提交，成功只产生一个撤销单位；`databaseEdit.columnNames` 返回本次提交的目标名称（重命名后的名称或已删除名称）。Data 角色没有通用内容编辑工具。
 图表设置修改立即持久化。Chart 没有 Rust 未保存缓冲区，`save_resource` 的 Chart 保存
 确认已持久化版本，不读取或保存独立的前端配置草稿；后续发布继续保留前端未提交的修改。
 资源回执返回实际变化、删除标识、移动和创建的节点 ID，不猜测新名称对应的路径。
@@ -472,7 +471,7 @@ Host 的 `HarnessSessionAccess` 串行化绑定协调、对话选择和 session 
 提示只包含资源标识和读取要求，不包含内部版本、会话绑定或 hash。重新读取后该要求消失；忽略提示的委派仍被拒绝，
 不能把历史依据直接替换为最新版本以放行操作。
 
-`list_graph_results` / `execute_graph` 的每个结果交付完整 `resultRef`，模型原样传回即可。内部解析仍校验原执行会话与结果 ID；项目重启后的历史编号不能读取到新结果，过期引用返回 `ResultUnavailable` 和 `reference_expired`。
+`list_graph_results` / `execute_graph` 的每个结果交付完整 `resultRef`，模型原样传回即可。内部解析仍校验原执行会话与结果 ID；项目重启后的历史编号不能读取到新结果，过期引用返回 `RESULT_UNAVAILABLE` 失败码及 `reason: reference_expired`。
 
 Turn 流程是：
 
@@ -532,7 +531,7 @@ SQLite 通过 `replace_source` 在一个事务内替换来源及完整文档集�
 
 设置中的“知识库”通过 [Application knowledge](../yss-application/src/harness/knowledge.rs) 管理明确选定的项目 Markdown 文档。来源身份绑定已有项目根身份与资源路径，项目重开恢复选择；另存为或切换到其他根不会隐式复制来源选择。添加/重建捕获当前 Rust Doc 正文，以内容摘要绑定检索快照；用户修改正文后来源显示需要重建，空文档和不可用文档各自显示状态。重命名后原路径不可用，用户可将新路径重新加入。源文档没有被知识库复制成另一份可编辑正文。
 
-该 Application 服务实现现有 KnowledgeSourceStorePort，在索引载入时筛选当前项目，并把持久来源映射到当前项目会话；每次命中/片段读取通过 Project 的 `read_doc_source` 再核验当前正文、原始资源路径、磁盘保存指纹和读取期间的编辑版本，随后重验 SQLite 来源没有被删除或替换。未保存正文可以显式加入；外部删除或未处理的外部修改使旧来源不可引用，Project 的脏正文恢复能力保留。文件读取与正文摘要在 blocking pool，Project 与 SQLite 的状态锁不跨这些操作持有。管理请求绑定桌面捕获的项目身份，迟到回复不会更新后继项目；内部项目 key、会话、摘要不进入模型协议。
+该 Application 服务实现现有 KnowledgeSourceStorePort，在索引载入时筛选当前项目，并把持久来源映射到当前项目会话；每次命中/片段读取通过 Project 的 `read_file_source` 再核验当前正文、原始资源路径、磁盘保存指纹和读取期间的编辑版本，随后重验 SQLite 来源没有被删除或替换。未保存正文可以显式加入；外部删除或未处理的外部修改使旧来源不可引用，Project 的脏正文恢复能力保留。文件读取与正文摘要在 blocking pool，Project 与 SQLite 的状态锁不跨这些操作持有。管理请求绑定桌面捕获的项目身份，迟到回复不会更新后继项目；内部项目 key、会话、摘要不进入模型协议。
 
 Assistant 展开引用返回片段正文与可选原始资源定位，打开原文前再次校验来源，随后复用已有文档编辑器入口。内置方法没有原始项目文档按钮。折叠后再次展开重新读取，切换会话/项目丢弃未完成的详情请求。桌面人工验收仍见 roadmap。
 
@@ -577,14 +576,14 @@ Rig adapter 使用 `rig-core`、`rig-agent` 和 `rig-reqwest` 0.43.0，最低 Ru
 “自定义名称”在创建和编辑时均可填写，通过独立的 `customName` 字段保存；默认留空，清空后保存为 null。供应商列表标题、配置页面包屑、默认模型与对话模型选择器的前缀统一由 `providerDisplayName` 读取自定义名称，去除首尾空白后为空时使用供应商名称；模型选项显示为“配置显示名称 · 模型名称”。列表次行依次显示实际供应商名称、模型数量与密钥状态；供应商选择字段继续显示实际供应商名称。选择预设时更新供应商名称，保留自定义名称。预设选择使用独立的表单 ID。配置与凭据按稳定 ID 区分，支持同一供应商使用不同 API Key 的多份配置，不以任一名称作为唯一键。切换供应商会清空原临时密钥与模型，并丢弃旧发现请求的迟到结果；重选当前供应商不重置连接草稿。已有密钥的配置改用其他供应商名称或 adapter 后，API Key 认证需要输入新密钥，发现和保存操作不能隐式沿用原供应商的密钥。
 
 设置页支持重复添加供应商、修改端点；从服务获取模型成功后，将全部返回模型直接加入当前草稿，按模型 ID 跳过已有项并保留已有参数，无需再次选择或确认添加。模型也可以逐个手工添加，支持部署 ID。模型型号由服务发现或用户配置，不维护易过期的固定型号清单。所选模型必须支持工具调用；未实现模型列表的服务仍可手工配置。Base URL 填 API 根路径，例如 OpenAI 的 `https://api.openai.com/v1`、Anthropic 的 `https://api.anthropic.com`、Azure 的资源地址加 `/openai/v1`；不得包含凭据、query 或具体接口路径。
-模型工具参数均为对象；`yss-harness-contract::capability_input_schema` 在生成 `ToolDescriptor.input_schema` 时统一声明根级 `type: object`，同时保留 typed schema 的 `oneOf`、`$defs` 等约束。Rig adapter 将 descriptor 中的完整 schema 序列化为 function parameters。内部参数解码契约不变。
+模型工具参数均为对象；`yss-assistant-contract::capability_input_schema` 在生成 `ToolSpec.input_schema` 时统一声明根级 `type: object`，同时保留 typed schema 的 `oneOf`、`$defs` 等约束。Rig adapter 将 descriptor 中的完整 schema 序列化为 function parameters。内部参数解码契约不变。
 
 模型工具签名仅包含 capability identity 与输入 schema。共享 `CapabilityDescriptor` 只保存能力身份、效果和条目上限，并按效果提供调用时限；Core 与图编辑提交前的结果检查共用 `MAX_CAPABILITY_RESULT_BYTES`。实际幂等由工具账本和提交回执实现，权限由角色/任务范围及 Gateway 检查实现。
 Contract 的同一能力元数据声明生成公开描述符列表及按身份匹配的入口，不手写列表索引。
 内部 Owner 操作保留自身的描述符，但不加入公开模型能力列表；角色与执行模式继续由 Core 筛选。
 Rig streams the first text promptly and coalesces subsequent deltas at 40 ms or 4 KiB. Core owns identified tool lifecycle events. Worker summaries use the final accepted model response as plain text; Manager finalText retains the public transcript. The Host has no 1 MiB final-response admission limit. Cancellation preserves committed receipts and waits for admitted tools to settle.
 
-工具账本的 `ToolInvocationRequest` 区分已绑定的内部执行请求与执行前被拒绝的模型意图。参数解码失败、授权拒绝和基线绑定失败同样记录调用身份、公开能力名称、失败终态及开始/结束时间；绑定时间计入工具总耗时。成功解码的业务输入保留用于重放，畸形原始参数不落账本，重放该调用使用空参数和原结构化错误。被拒绝的调用不产生业务回执、不推进观察基线，启动恢复也不会把它误判为可能已提交的写入。
+工具账本的 `ToolInvocationRecord` 区分已绑定的内部执行请求与执行前被拒绝的模型意图。参数解码失败、授权拒绝和基线绑定失败同样记录调用身份、公开能力名称、失败终态及开始/结束时间；绑定时间计入工具总耗时。成功解码的业务输入保留用于重放，畸形原始参数不落账本，重放该调用使用空参数和原结构化错误。被拒绝的调用不产生业务回执、不推进观察基线，启动恢复也不会把它误判为可能已提交的写入。
 
 委派、续接与统计计划的每次模型调用另由 Core 分配调用 ID，通过同一持久事件流记录 `ControlToolStarted` / `ControlToolFinished`，不新增账本或持久化表。Rig 的 [control.rs](../yss-harness-rig/src/tools/control.rs) 在参数解码前开始记录，成功、参数错误、准入失败、计划策略拒绝、取消及 panic 都经过同一终态路径；计划策略与委派业务仍由原 owner 执行。已准入控制任务加入原清理队列，取消等待其收尾。启动恢复将缺少终态的调用标记为 `outcome_unknown`，不重复执行已发生的委派或计划提交。
 
@@ -616,7 +615,7 @@ Transport recovery retries only the latest sampling boundary, at most five conse
 具体实现见 [原生事件交付](../yss-assistant-ui/src/assistant/stream.rs)，
 呈现、输入、工具卡片和人工验收归 [GPUI host](../yss-desktop-gpui/README.md)。
 
-`submit_harness_turn.resources` 只接收 `{kind,id}`。Core 先登记轮次准入和取消令牌，再通过 `HarnessResourceResolverPort` 调用 Application；后者在 blocking pool 复用资源工具的 Project index，检查项目绑定、真实成员和重复项，并补充权威显示名。资源与模型解析不持有会话选择锁；完成后 Core 重新读取和验证会话。解析期间取消立即结束等待，迟到的只读结果不能启动模型或发布 `TurnStarted`。Core 将 `{resource,name}` 随 `TurnStarted` 持久化，当前请求和历史回放使用同一个 user-input 投影。模型得到资源定位信息，按任务需要调用资源工具读取正文或结果；引用不携带 revision/hash/同步状态，也不提前展开完整图或数据行。没有隐式的 active graph 参数。资源在之后被修改或删除时，读取工具仍检查当前事实；历史引用不会跟随编辑器焦点改变。
+`HarnessHost::submit_turn` 的 `resources` 只接收 `{kind,id}`。Core 先登记轮次准入和取消令牌，再通过 `HarnessResourceResolverPort` 调用 Application；后者在 blocking pool 复用资源工具的 Project index，检查项目绑定、真实成员和重复项，并补充权威显示名。资源与模型解析不持有会话选择锁；完成后 Core 重新读取和验证会话。解析期间取消立即结束等待，迟到的只读结果不能启动模型或发布 `TurnStarted`。Core 将 `{resource,name}` 随 `TurnStarted` 持久化，当前请求和历史回放使用同一个 user-input 投影。模型得到资源定位信息，按任务需要调用资源工具读取正文或结果；引用不携带 revision/hash/同步状态，也不提前展开完整图或数据行。没有隐式的 active graph 参数。资源在之后被修改或删除时，读取工具仍检查当前事实；历史引用不会跟随编辑器焦点改变。
 
 未提交正文、显式资源引用、下一轮模型与执行选项属于宿主输入暂态；提交后的用户输入、执行选项与资源引用由持久事件记录。排队与草稿恢复不能改写正在运行的轮次或已接纳消息，具体原生输入行为及待验收范围见 GPUI README。
 

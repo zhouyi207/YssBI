@@ -1,31 +1,20 @@
 # Project registry workflows
 
 > Status: Current
-> Scope: Project discovery, registration, path admission, listing and cleanup
+> Scope: Project registration, path admission and listing
 > Canonical owners: This crate owns registry workflows; the registry contract owns records and storage ports
-> Update when: Registration, discovery, path checks or cleanup behavior changes
+> Update when: Registration, path checks or listing behavior changes
 
 `register_project` admits an existing metadata file and binds its native directory identity.
 Metadata redirects are rejected through the shared Filesystem predicate. Reopening a registered
-root retains its registration ID, name and favorite state; root replacement is rejected.
-Canonical paths preserve native Windows prefixes needed to reopen long or special paths.
-
-Discovery uses the private `discovery` module and shared cancellation/progress values. It skips
-redirected metadata and directory trees. Cleanup retains a record only when its root identity
-still matches and its metadata entry is a valid existing file. Cleanup removes registration
-records and leaves project files with their lifecycle owner.
-
-Discovery tests use real directory and metadata-file symlinks on Unix. Windows tests
-use junctions for redirected roots/subtrees and a metadata file with a private GUID
-reparse point; neither fixture requires symbolic-link privileges. The file fixture
-removes its reparse tag through the original handle before assertions and cleanup.
+root retains its registration ID and name; root replacement is rejected. Canonical paths
+preserve native Windows prefixes needed to reopen long or special paths. Registration
+revalidates the captured root after the asynchronous lookup before comparing its identity
+with the persisted record.
 
 Path normalization returns `ProjectRegistryError::InvalidPath`; default parent lookup returns
-the standard environment error. Host adapters own localized messages. Listing sorts favorites,
-numeric Unix timestamps and names; individual lookups do not invoke the presentation sort.
-Single-record reads use the store's registration-ID or canonical-path lookup. Registration
-and discovery revalidate the captured root after the asynchronous lookup before comparing
-its identity with the persisted record.
+the standard environment error. Host adapters own localized messages. Listing sorts numeric
+Unix timestamps, then names.
 
 Records and the storage port belong to
 [Registry Contract](../yss-project-registry-contract/README.md). Application owns project

@@ -9,7 +9,7 @@
 
 通用文件能力集中在 [yss-filesystem](../../../yss-filesystem/README.md)，其运行、开发和构建依赖都不包含内部 crate。FS 不解释项目入口、图表/图文档、资源版本或索引失效；Project 解释这些业务规则并映射 ProjectOperationError，Application 组装带项目路径过滤器的监听器。文件事务默认接受任意字节，项目文档校验由 Project 显式提供。
 
-项目发现由 `yss-project-registry` 的私有 `discovery` 模块使用 `walkdir` 遍历候选目录，链接与重解析点判断复用 `yss-filesystem`。注册流程采用发现结果并通过存储端口持久化；直接注册和扫描复用已有记录时，共用项目根身份校验。项目默认名称与规范化规则由 `yss-project-model` 统一拥有。共享进度与任务取消归 `yss-project-progress`；Application 将调用方提供的 `ProjectProgressSink` 传给注册服务，由原生宿主呈现类型化进度。
+项目注册由 `yss-project-registry` 通过存储端口持久化；重新注册已有记录时校验项目根身份，元数据重定向判断复用 `yss-filesystem`。项目默认名称与规范化规则由 `yss-project-model` 统一拥有。
 
 注册存储由 Application runtime 注入 SQLite adapter；adapter 将原生文件路径直接交给 SQLx，不把应用数据目录中的百分号等文件名字符解释为 URL 编码。
 

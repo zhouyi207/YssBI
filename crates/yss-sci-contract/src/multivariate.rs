@@ -1,14 +1,14 @@
 //! Neutral multivariate options, summaries and row-major coordinate outputs.
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct OrdinationOutput<R> {
     pub report: R,
     /// Observations/categories by retained axes, in original row order.
     pub coordinates: Vec<Vec<f64>>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct PcaOptions {
     pub components: usize,
     pub standardize: bool,
@@ -47,7 +47,7 @@ pub enum FactorRotation {
     Varimax,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct FactorOptions {
     pub factors: usize,
     pub rotation: FactorRotation,
@@ -127,7 +127,7 @@ pub struct CanonicalReport {
     pub tests: Vec<CanonicalTest>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CanonicalOutput {
     pub report: CanonicalReport,
     pub x_scores: Vec<Vec<f64>>,
@@ -150,7 +150,7 @@ pub struct CorrespondenceReport {
     pub retained_inertia_proportion: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CorrespondenceOutput {
     pub report: CorrespondenceReport,
     pub row_coordinates: Vec<Vec<f64>>,
@@ -163,13 +163,12 @@ pub enum DiscriminantMethod {
     Linear,
     Quadratic,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClassPriors {
     Empirical,
     Equal,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct DiscriminantOptions {
     pub method: DiscriminantMethod,
     pub priors: ClassPriors,
@@ -217,13 +216,13 @@ impl<L> DiscriminantReport<L> {
         }
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DiscriminantOutput {
     pub report: DiscriminantReport,
     pub predictions: Vec<usize>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct RdaOptions {
     pub components: usize,
     pub standardize: bool,
@@ -272,7 +271,7 @@ pub enum MdsInput {
     Observations,
     DissimilarityMatrix,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct MdsOptions {
     pub components: usize,
     pub input: MdsInput,

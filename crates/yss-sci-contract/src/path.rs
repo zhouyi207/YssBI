@@ -93,7 +93,7 @@ pub struct PathEquationFit {
     pub equation: PathEquation,
     pub model: RegressionModelResult,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct PathDecomposition {
     pub source: usize,
     pub target: usize,

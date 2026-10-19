@@ -28,30 +28,9 @@ pub struct Logit {
     pub config: BinaryOptions,
 }
 
-#[derive(Debug)]
-pub struct LogitResult {
-    pub num_observation: usize,
-    pub betas: Col<f64>,
-    pub stds: Col<f64>,
-    pub zvalues: Col<f64>,
-    pub pvalues: Col<f64>,
-    pub conf_int_left: Col<f64>,
-    pub conf_int_right: Col<f64>,
-    pub cov_beta: Mat<f64>,
-    pub log_likelihood: f64,
-    pub ll_null: f64,
-    pub pseudo_r2: f64,
-    pub lr_chi2: f64,
-    pub lr_p_value: f64,
-    pub aic: f64,
-    pub bic: f64,
-    pub iterations: usize,
-    pub converged: bool,
-}
-
 impl Logit {
     /// Fit the logit model via IRLS.
-    pub fn fit(&self) -> Result<LogitResult, String> {
+    pub fn fit(&self) -> Result<super::BinaryFitResult, String> {
         if self.config.max_iterations == 0
             || !self.config.tolerance.is_finite()
             || self.config.tolerance <= 0.0
@@ -209,7 +188,7 @@ impl Logit {
                 let aic = -2.0 * ll + 2.0 * k as f64;
                 let bic = -2.0 * ll + k as f64 * (n as f64).ln();
 
-                return Ok(LogitResult {
+                return Ok(super::BinaryFitResult {
                     num_observation: n,
                     betas: beta,
                     stds: std_err,

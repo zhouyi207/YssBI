@@ -25,10 +25,6 @@ impl ProjectDatabaseSnapshot {
         &self.identity.project_session_id
     }
 
-    pub fn authority_generation(&self) -> u64 {
-        self.authority_generation
-    }
-
     pub fn root(&self) -> Option<&NormalizedRoot> {
         self.identity.project_root.as_ref()
     }

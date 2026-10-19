@@ -90,8 +90,7 @@ impl UnixMillis {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "role", rename_all = "snake_case", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum AgentMessage {
     CompactionCheckpoint {
         checkpoint: ContextCompactionCheckpoint,
@@ -119,8 +118,7 @@ pub enum AgentMessage {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AgentTurnRequest {
     pub options: crate::HarnessTurnOptions,
     pub role: crate::AgentRoleId,
@@ -130,8 +128,7 @@ pub struct AgentTurnRequest {
     pub tools: Vec<crate::ToolSpec>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentTurnResult {
     pub final_text: String,
 }
@@ -259,12 +256,10 @@ pub enum AgentDriverFailureCode {
     InternalFailure,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("{code}")]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentDriverFailure {
     pub code: AgentDriverFailureCode,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<u64>,
 }
 
@@ -277,11 +272,8 @@ impl AgentDriverFailure {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum AgentOutputFailure {
-    #[error("output_closed")]
-    Closed,
     #[error("output_persistence_failed")]
     PersistenceFailed,
 }
@@ -318,8 +310,7 @@ pub trait AgentDriverPort: Send + Sync {
     ) -> AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>>;
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum CancellationReason {
     User = 1,
@@ -432,14 +423,19 @@ pub enum AutomationIdKind {
     ToolInvocation,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum IdGenerationFailure {
-    #[error("id generation unavailable")]
-    Unavailable,
+impl AutomationIdKind {
+    pub const fn prefix(self) -> &'static str {
+        match self {
+            Self::HarnessSession => "session",
+            Self::HarnessTurn => "turn",
+            Self::AgentRun => "agent",
+            Self::ToolInvocation => "tool",
+        }
+    }
 }
 
 pub trait IdGeneratorPort: Send + Sync {
-    fn next_id(&self, kind: AutomationIdKind) -> Result<String, IdGenerationFailure>;
+    fn next_id(&self, kind: AutomationIdKind) -> String;
 }
 
 pub trait ClockPort: Send + Sync {
@@ -470,8 +466,6 @@ impl std::fmt::Debug for SecretCredential {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum CredentialFailure {
-    #[error("credential is unavailable")]
-    Unavailable,
     #[error("credential is invalid")]
     Invalid,
 }

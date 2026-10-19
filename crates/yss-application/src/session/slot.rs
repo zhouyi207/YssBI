@@ -171,8 +171,6 @@ impl ApplicationSessionSlot {
 
 #[derive(Debug, Error)]
 pub enum ApplicationSessionRefreshError {
-    #[error("application session capture failed")]
-    Capture(SessionCaptureError),
     #[error("application session candidate build failed")]
     Candidate,
     #[error("application session replacement failed")]

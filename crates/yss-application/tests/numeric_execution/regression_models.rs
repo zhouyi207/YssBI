@@ -1,44 +1,15 @@
+use super::fixture::{connect_port, node};
 use super::*;
 use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
 
-pub(super) fn node(
-    document: &mut GraphDocument,
-    kind: &str,
-    parameters: serde_json::Value,
-) -> NodeId {
-    let id = NodeId::new();
-    document.nodes.insert(
-        id,
-        DocumentNode {
-            id,
-            node_type: kind.parse().unwrap(),
-            position: NodePosition { x: 0., y: 0. },
-            parameters: serde_json::from_value(parameters).unwrap(),
-            user_label: None,
-        },
-    );
-    id
-}
-pub(super) fn connect(document: &mut GraphDocument, from: NodeId, output: &str, to: PortAddress) {
-    let id = ConnectionId::new();
-    document.connections.insert(
-        id,
-        DocumentConnection {
-            id,
-            output: PortAddress::declared(from, output.parse().unwrap()),
-            input: to,
-            order: None,
-        },
-    );
-}
 pub(super) fn selector(document: &mut GraphDocument, source: NodeId, column: &str) -> NodeId {
     let id = node(
         document,
         "yssbi.dataframe.series.select",
         serde_json::json!({"column":column}),
     );
-    connect(
+    connect_port(
         document,
         source,
         "value",
@@ -79,7 +50,7 @@ fn run_model(
     }
     let y = selector(&mut document, source, "y");
     let model = node(&mut document, method, parameters);
-    connect(
+    connect_port(
         &mut document,
         y,
         "series",
@@ -106,11 +77,11 @@ fn run_model(
             );
             a
         };
-        connect(&mut document, id, "series", address);
+        connect_port(&mut document, id, "series", address);
     }
     if method.ends_with("logit.conditional") || method.ends_with("workflow.regression.grouped") {
         let g = selector(&mut document, source, "g");
-        connect(
+        connect_port(
             &mut document,
             g,
             "series",
@@ -119,7 +90,7 @@ fn run_model(
     }
     if method.ends_with("regression.threshold") {
         let q = selector(&mut document, source, "x1");
-        connect(
+        connect_port(
             &mut document,
             q,
             "series",

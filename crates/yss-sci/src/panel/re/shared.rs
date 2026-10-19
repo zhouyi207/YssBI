@@ -8,7 +8,7 @@ use super::*;
 /// Between transformation: replace each obs with entity mean (for quasi-demeaning)
 pub(super) fn between_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {
     let n = v.len();
-    let mut sums: HashMap<usize, (f64, usize)> = HashMap::new();
+    let mut sums: BTreeMap<usize, (f64, usize)> = BTreeMap::new();
     for (i, &eid) in entity_id.iter().enumerate() {
         let val = v[i];
         if !val.is_nan() {
@@ -28,8 +28,8 @@ pub(super) fn between_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {
 }
 
 /// Obs per group T_i and harmonic mean T̄ = n / Σ(1/T_i). Generic over group_id.
-pub(super) fn obs_per_group_and_harmonic_mean(group_id: &[usize]) -> (HashMap<usize, usize>, f64) {
-    let mut cnt: HashMap<usize, usize> = HashMap::new();
+pub(super) fn obs_per_group_and_harmonic_mean(group_id: &[usize]) -> (BTreeMap<usize, usize>, f64) {
+    let mut cnt: BTreeMap<usize, usize> = BTreeMap::new();
     for &gid in group_id {
         *cnt.entry(gid).or_insert(0) += 1;
     }
@@ -49,9 +49,9 @@ pub(super) fn group_means(
     exog: &Mat<f64>,
     group_id: &[usize],
 ) -> (Vec<usize>, Vec<f64>, Vec<Vec<f64>>) {
-    let mut sums_y: HashMap<usize, (f64, usize)> = HashMap::new();
+    let mut sums_y: BTreeMap<usize, (f64, usize)> = BTreeMap::new();
     let k = exog.ncols();
-    let mut sums_x: HashMap<usize, (Vec<f64>, usize)> = HashMap::new();
+    let mut sums_x: BTreeMap<usize, (Vec<f64>, usize)> = BTreeMap::new();
 
     for (i, &gid) in group_id.iter().enumerate() {
         let val = endog[i];

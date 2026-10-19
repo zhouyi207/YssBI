@@ -382,7 +382,7 @@ mod tests {
             std::collections::BTreeSet::from([a.as_str(), c.as_str()])
         );
         let function = &resolution.functions[&a];
-        assert!(function.semantics.ready().is_some());
+        assert!(function.semantics.is_ready());
         assert!(function.semantics.functions().is_empty());
         assert_eq!(
             function
@@ -632,7 +632,7 @@ mod tests {
             resolution.diagnostics
         );
         let resolved = &resolution.functions[&function];
-        assert!(resolved.semantics.ready().is_some());
+        assert!(resolved.semantics.is_ready());
         assert_eq!(resolved.abi.parameters[0].entry_output, output);
         assert_eq!(resolved.abi.result.as_ref().unwrap().return_input, input);
         assert_eq!(restored.function_document(&function), Some(&body));
@@ -659,7 +659,7 @@ mod tests {
             ),
         ]);
         let cycle = crate::resolve_graph_semantics(&root, &registry, &resources);
-        assert!(cycle.ready().is_none());
+        assert!(!cycle.is_ready());
         assert!(
             cycle
                 .diagnostics()
@@ -671,7 +671,7 @@ mod tests {
         );
         let resources = resources.with_function_document(&b, body(&a, &[]).into());
         let mismatched = crate::resolve_graph_semantics(&root, &registry, &resources);
-        assert!(mismatched.ready().is_none());
+        assert!(!mismatched.is_ready());
         assert!(
             mismatched
                 .diagnostics()

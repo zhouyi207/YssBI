@@ -1,9 +1,7 @@
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use yss_node_protocol::ParameterKey;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DiagnosticCode(Box<str>);
 
 impl DiagnosticCode {
@@ -18,14 +16,14 @@ impl DiagnosticCode {
 
 pub type DiagnosticArguments = BTreeMap<Box<str>, Box<str>>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticSeverity {
     Error,
     Warning,
     Information,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiagnosticLocation<NodeId, PortAddress, ConnectionId, ResourceIdentity> {
     Graph,
     Node(NodeId),

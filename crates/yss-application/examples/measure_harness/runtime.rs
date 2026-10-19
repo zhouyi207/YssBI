@@ -92,8 +92,8 @@ impl ClockPort for Clock {
 
 struct Ids;
 impl IdGeneratorPort for Ids {
-    fn next_id(&self, _kind: AutomationIdKind) -> Result<String, IdGenerationFailure> {
-        Ok(uuid::Uuid::new_v4().to_string())
+    fn next_id(&self, _kind: AutomationIdKind) -> String {
+        uuid::Uuid::new_v4().to_string()
     }
 }
 

@@ -27,7 +27,7 @@ use yss_graph_execution::state::{
     RunExecutionControl,
 };
 use yss_project::execution_authority::{
-    CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
+    ProjectExecutionConfirmationControl, ProjectExecutionConfirmationError,
     ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
     ProjectResourceGrant, ProjectResourceId, ProjectResourceKind, ProjectResourcePresence,
     ProjectResourceRequirement,
@@ -269,10 +269,8 @@ pub enum ExecutionApplicationError {
     PackagePreparation(#[source] PackagePreparationError),
     #[error("prepared execution failed")]
     PreparedExecution(#[source] ExecutePreparedError),
-    #[error("project effect preparation failed")]
-    ProjectEffectPreparation(#[source] ProjectEffectCommitError),
-    #[error("project effect finalization failed")]
-    ProjectEffectFinalization(#[source] ProjectEffectCommitError),
+    #[error("project execution authority changed before result publication")]
+    ProjectAuthorityChanged(#[source] ProjectExecutionConfirmationError),
     #[error("execution finalization failed")]
     Finalization(#[source] FinalizationError),
     #[error("execution run terminal publication failed")]
@@ -312,9 +310,7 @@ impl From<GraphInputError> for ExecutionApplicationError {
     }
 }
 
-/// Execute one graph through the session-bound Application/Graph/Execution
-/// owners. The no-sink overload is kept for non-transport callers; commands
-/// use `run_graph_with_sink` to attach the ordered run channel.
+#[cfg(test)]
 pub fn run_graph(
     state: &ApplicationState,
     request: RunGraphRequest,
@@ -526,9 +522,11 @@ fn check_control(request: &RunGraphRequest) -> Result<(), ExecutionApplicationEr
     Ok(())
 }
 
-fn terminal_kind_for_effect_error(error: &ProjectEffectCommitError) -> RunApplicationEventKind {
+fn terminal_kind_for_confirmation_error(
+    error: &ProjectExecutionConfirmationError,
+) -> RunApplicationEventKind {
     match error {
-        ProjectEffectCommitError::Cancelled => RunApplicationEventKind::RunCancelled,
+        ProjectExecutionConfirmationError::Cancelled => RunApplicationEventKind::RunCancelled,
         _ => RunApplicationEventKind::RunErrored {
             failure: finalization_failure(),
         },

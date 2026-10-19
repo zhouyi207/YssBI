@@ -1,10 +1,10 @@
 use super::support::{
-    BuiltinAssemblyError, ProviderFragment, protocol, pure, semantic, transparent,
+    BuiltinAssemblyError, ProviderFragment, data_port, protocol, pure, semantic, transparent,
 };
 use crate::{REROUTE_INPUT_PORT, REROUTE_NODE_TYPE, REROUTE_OUTPUT_PORT};
 use yss_node_protocol::{
-    InputBindingSpec, LiteralPolicy, NodeStyleId, NodeTypingSpec, PortCardinality, PortDirection,
-    PortEditorSpec, PortKey, PortSpec, TypeExpr, TypeParameterId,
+    LiteralPolicy, NodeStyleId, NodeTypingSpec, PortCardinality, PortDirection, PortKey, TypeExpr,
+    TypeParameterId,
 };
 use yss_node_registry::{RegisteredNode, TransparentNodeRole};
 
@@ -55,17 +55,21 @@ fn build_protocol() -> Result<yss_node_registry::RegisteredNode, BuiltinAssembly
         node_type,
         "dataflow",
         vec![
-            port(
+            data_port(
                 REROUTE_INPUT_PORT,
                 "Input",
                 PortDirection::Input,
                 value_type.clone(),
+                PortCardinality::Declared,
+                LiteralPolicy::Forbidden,
             )?,
-            port(
+            data_port(
                 REROUTE_OUTPUT_PORT,
                 "Output",
                 PortDirection::Output,
                 value_type,
+                PortCardinality::Declared,
+                LiteralPolicy::Forbidden,
             )?,
         ],
         vec![generic],
@@ -79,28 +83,6 @@ fn build_protocol() -> Result<yss_node_registry::RegisteredNode, BuiltinAssembly
         output: output_key,
     };
     Ok(transparent(reroute, TransparentNodeRole::Reroute))
-}
-
-fn port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    value_type: TypeExpr,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: semantic(key, PortKey::new)?,
-        title: title.into(),
-        direction,
-        value_type,
-        cardinality: PortCardinality::Declared,
-        connections: crate::data_connections(direction),
-        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
-            literal_policy: LiteralPolicy::Forbidden,
-            default_value: None,
-        }),
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
 }
 
 #[cfg(test)]

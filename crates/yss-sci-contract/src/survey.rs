@@ -1,8 +1,7 @@
 //! Single-stage, with-replacement survey designs and Taylor-linearized estimates.
 use crate::regression::models::{GlmFamily, IterationOptions, RegressionModelResult};
 use serde::Serialize;
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LonelyPsu {
     Fail,
     Certainty,

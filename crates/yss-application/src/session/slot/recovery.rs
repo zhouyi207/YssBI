@@ -25,7 +25,6 @@ impl SessionRecoveryId {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SessionRecoveryPhase {
     DrainOldExecution,
-    RetryDatabaseCompensation,
     ResolveOldDatabase,
     DrainOldDatabase,
     ClearOldProject,
@@ -346,8 +345,7 @@ impl ApplicationSessionSlot {
                     .map_err(|_| SessionRecoveryError::ProjectClearFailed)?;
                 guard.finish(None)
             }
-            SessionRecoveryPhase::RetryDatabaseCompensation
-            | SessionRecoveryPhase::ResolveOldDatabase => Err(SessionRecoveryError::WrongPhase),
+            SessionRecoveryPhase::ResolveOldDatabase => Err(SessionRecoveryError::WrongPhase),
         }
     }
 
@@ -357,11 +355,7 @@ impl ApplicationSessionSlot {
     ) -> Result<SessionRecoveryOutcome, SessionRecoveryError> {
         let guard = self.claim_recovery(recovery)?;
         let phase = guard.phase();
-        if !matches!(
-            phase,
-            SessionRecoveryPhase::RetryDatabaseCompensation
-                | SessionRecoveryPhase::ResolveOldDatabase
-        ) {
+        if phase != SessionRecoveryPhase::ResolveOldDatabase {
             return Err(SessionRecoveryError::WrongPhase);
         }
         let deadline = Instant::now() + std::time::Duration::from_secs(30);

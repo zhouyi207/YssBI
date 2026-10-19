@@ -190,7 +190,7 @@ fn connections_consume_the_exact_multi_output_port_value() {
     let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
     let semantics =
         yss_graph_analysis::resolve_graph_semantics(&document, &builtin.registry, &resources);
-    assert!(semantics.ready().is_some(), "{:?}", semantics.diagnostics());
+    assert!(semantics.is_ready(), "{:?}", semantics.diagnostics());
     let package = build_template(&graph_path(), PlanId::from_existing(9), &semantics)
         .expect("the dataflow document is prepared");
     let producer_operation = package
@@ -484,7 +484,7 @@ fn view_requires_an_output_binding_before_plan_preparation() {
     );
     let literal = semantics(&document, &builtin.registry);
     assert!(
-        literal.ready().is_none(),
+        !literal.is_ready(),
         "View cannot inspect an inline literal without an upstream result"
     );
     assert!(literal.diagnostics().iter().any(|diagnostic| {

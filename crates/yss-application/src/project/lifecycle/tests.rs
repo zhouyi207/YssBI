@@ -339,11 +339,11 @@ fn created_project_name_agrees_with_manifest_and_registry() {
             .unwrap();
             assert_eq!(manifest["projectName"], expected);
             assert_eq!(record.name, expected);
+            let registered = registry.list_projects().await.unwrap();
             assert_eq!(
-                registry
-                    .fetch_by_id(record.id.as_str())
-                    .await
-                    .unwrap()
+                registered
+                    .iter()
+                    .find(|registered| registered.id == record.id)
                     .unwrap()
                     .name,
                 expected

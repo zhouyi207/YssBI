@@ -68,10 +68,7 @@ pub struct DatabaseEditor {
 }
 impl DatabaseEditor {
     fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
-        if let Some(error) = &error {
-            self.notifications.error(error.clone(), cx);
-        }
-        self.error = error;
+        self.notifications.replace_error(&mut self.error, error, cx);
     }
 
     pub fn new(
@@ -128,20 +125,11 @@ impl DatabaseEditor {
             notifications: yss_ui::notifications::Notifications::new(window),
         }
     }
-    pub fn project(&self) -> &ProjectInstanceId {
-        &self.project
-    }
     pub fn id(&self) -> &str {
         &self.id
     }
-    pub fn revision(&self) -> ResourceRevision {
-        self.revision
-    }
     pub fn name(&self) -> &str {
         &self.name
-    }
-    pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
     }
     pub fn dirty(&self) -> bool {
         self.edit.as_ref().is_some_and(|edit| edit.is_modified)

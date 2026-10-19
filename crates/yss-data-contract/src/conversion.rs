@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{ColumnSemantic, SemanticType, SemanticValue};
 
 /// A fixed representation policy, resolved from schema rather than sampled rows.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum NumericRepresentation {
     #[default]
     Auto,

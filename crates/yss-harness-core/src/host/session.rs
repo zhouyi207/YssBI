@@ -250,7 +250,7 @@ impl HarnessHost {
         conversation: Option<yss_harness_contract::HarnessConversationMetadata>,
     ) -> Result<HarnessSessionRecord, HarnessError> {
         let id =
-            HarnessSessionId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessSession)?)?;
+            HarnessSessionId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessSession))?;
         let now = self.ports.clock.now();
         let record = HarnessSessionRecord {
             id: id.clone(),

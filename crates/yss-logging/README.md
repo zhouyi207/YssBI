@@ -19,7 +19,7 @@ Drop 随后停止 console 入队并排空队列。console 关闭等待约 250 ms
 会终止输出，持续阻塞的 sink 不会无限阻塞宿主关闭。
 原生 `YSSBI_APP_DATA_DIR` 可隔离验收数据，具体路径由宿主决定。
 
-`LogRuntime` 提供 typed query、statistics、recent snapshot 和 subscribe/unsubscribe。
+`LogRuntime` 提供 recent snapshot 和 subscribe/unsubscribe；持久历史不提供分页查询入口。
 订阅使用中立 sink 回调；关闭释放原 worker。Logs 清空只清视图，不删除持久记录。
 原生日志呈现与操作由 [GPUI host](../yss-desktop-gpui/README.md) 拥有。
 
@@ -41,17 +41,17 @@ SQL、连接字符串、认证/密钥及未经清理的基础设施错误。sani
 ## SQLite 与交付顺序
 
 [store.rs](src/store.rs) 唯一维护 schema：`logs` 包含 sequence、stream_id、timestamp、level、
-origin、domain、target、event、message、source 和 JSON fields；`tracing_meta` 保存流身份、
+domain、target、event、message、source 和 JSON fields；`tracing_meta` 保存流身份、
 独立于剩余行数的 sequence 高水位与历史已清理标记。
 时间戳保留本机钟面且不附带时区。SQLx statement logging 被关闭，避免 INSERT 反馈循环。
 
 同一批记录先提交 SQLite WAL transaction，再更新 recent snapshot 并发送订阅通知。
 重启从同一库恢复 identity、sequence 和 recent snapshot；数据库预计由一个应用进程写入，
-诊断连接可只读查询。清理最后一行也不会重置 sequence、stream_id 或查询游标。
-近期查询多读取一条以判断截断，完整数量由 statistics 查询提供。
+诊断连接可只读查询。清理最后一行也不会重置 sequence 或 stream_id。
+近期快照多读取一条以判断截断。
 
-写入失败通过 `LogBatchDto.failure` 交付 `storage_unavailable`，之后查询和订阅失败，
-未提交记录不成为可见持久历史；console 输出继续。慢订阅队列满时交付 `subscriber_lagged`。
+写入失败通过 `LogBatchDto.failure` 交付 `StorageUnavailable`，之后订阅失败，
+未提交记录不成为可见持久历史；console 输出继续。慢订阅队列满时交付 `SubscriberLagged`。
 终止通知使用普通队列之外的一个保留位置：当前回调返回后丢弃剩余批次，通知一次并释放 sink。
 dispatcher 不等待慢消费者。sink 已关闭、拒收或永久阻塞时不能承诺送达。
 原生宿主从已提交 recent snapshot 恢复；存储不可用时显示错误。
@@ -77,7 +77,7 @@ dispatcher 不等待慢消费者。sink 已关闭、拒收或永久阻塞时不�
 
 提交删除后才发布带排序 `evicted_sequences` 的批次，宿主移除对应显示行；
 活动订阅、stream_id 和 sequence 高水位保持不变，新快照不再包含已删除记录。
-维护失败由同步调用返回，并向活动订阅交付 `retention_failed` 终止通知；
+维护失败由同步调用返回，并向活动订阅交付 `RetentionFailed` 终止通知；
 之后持久查询失败，console 继续输出。异步维护失败同样由 Logs 显示错误。
 
 

@@ -181,7 +181,6 @@ fn delete_database_in_captured_session(
                 &project_instance_id,
                 Some(&id),
                 Some(expected_revision),
-                None,
             ))
         })?;
     let declaration = database_declaration(captured, &id, DatabaseApplicationOperation::Delete)?;
@@ -238,7 +237,6 @@ fn database_declaration(
                 operation,
                 captured.project_instance_id(),
                 Some(id),
-                None,
                 None,
             ))
         })

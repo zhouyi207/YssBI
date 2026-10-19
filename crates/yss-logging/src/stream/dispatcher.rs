@@ -1,5 +1,5 @@
 use crate::LogRetentionPolicy;
-use crate::store::{LogPage, LogQuery, LogStatistics, LogStore, LogStoreError, MAX_SAFE_SEQUENCE};
+use crate::store::{LogStore, LogStoreError, MAX_SAFE_SEQUENCE};
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -13,8 +13,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::dto::{
-    LogBatchDto, LogDomain, LogFields, LogLevel, LogOrigin, LogRecordDto, LogStreamFailure,
-    LogSubscriptionDto,
+    LogBatchDto, LogDomain, LogFields, LogLevel, LogRecordDto, LogStreamFailure, LogSubscriptionDto,
 };
 use super::rust_projection::project_log_record;
 use super::worker::{BoundedWorker, EnqueueResult};
@@ -38,7 +37,6 @@ type BatchSink = Box<dyn Fn(LogBatchDto) -> bool + Send + 'static>;
 pub(crate) struct PendingLog {
     pub timestamp: String,
     pub level: LogLevel,
-    pub origin: LogOrigin,
     pub domain: LogDomain,
     pub target: String,
     pub event: Option<String>,
@@ -52,7 +50,6 @@ impl PendingLog {
         Self {
             timestamp: super::local_timestamp_now(),
             level: LogLevel::Warn,
-            origin: LogOrigin::Rust,
             domain: LogDomain::System,
             target: DROPPED_TARGET.to_owned(),
             event: Some(DROPPED_EVENT.to_owned()),
@@ -90,13 +87,6 @@ pub(crate) struct LogDispatcherGuard {
 }
 
 enum DispatcherCommand {
-    Query {
-        query: LogQuery,
-        response: mpsc::Sender<Result<LogPage, LogStoreError>>,
-    },
-    Statistics {
-        response: mpsc::Sender<Result<LogStatistics, LogStoreError>>,
-    },
     SetRetention {
         policy: LogRetentionPolicy,
         response: mpsc::Sender<Result<(), LogStoreError>>,
@@ -344,26 +334,6 @@ impl LogHub {
             .map_err(|_| LogsUnavailable)
     }
 
-    pub(crate) fn query(&self, query: LogQuery) -> Result<LogPage, LogStoreError> {
-        let (response, result) = mpsc::channel();
-        self.sender
-            .try_send(DispatcherCommand::Query { query, response })
-            .map_err(|_| LogStoreError::Unavailable)?;
-        result
-            .recv_timeout(DISPATCH_RESPONSE_TIMEOUT)
-            .map_err(|_| LogStoreError::Unavailable)?
-    }
-
-    pub(crate) fn statistics(&self) -> Result<LogStatistics, LogStoreError> {
-        let (response, result) = mpsc::channel();
-        self.sender
-            .try_send(DispatcherCommand::Statistics { response })
-            .map_err(|_| LogStoreError::Unavailable)?;
-        result
-            .recv_timeout(DISPATCH_RESPONSE_TIMEOUT)
-            .map_err(|_| LogStoreError::Unavailable)?
-    }
-
     pub(crate) fn set_retention(&self, policy: LogRetentionPolicy) -> Result<(), LogStoreError> {
         if self.shutdown.load(Ordering::Acquire) || self.storage_failed.load(Ordering::Acquire) {
             return Err(LogStoreError::Unavailable);
@@ -474,7 +444,6 @@ impl DispatcherState {
             sequence,
             timestamp: pending.timestamp,
             level: pending.level,
-            origin: pending.origin,
             domain: pending.domain,
             target: pending.target,
             event: pending.event,
@@ -729,30 +698,6 @@ fn process_command(command: DispatcherCommand, state: &mut DispatcherState) -> b
         DispatcherCommand::SetRetention { policy, response } => {
             let _ = response.send(state.set_retention(policy));
         }
-        DispatcherCommand::Query { query, response } => {
-            let result = if state.flush_live() {
-                state
-                    .storage
-                    .as_mut()
-                    .ok_or(LogStoreError::Unavailable)
-                    .and_then(|store| store.query(query))
-            } else {
-                Err(LogStoreError::Unavailable)
-            };
-            let _ = response.send(result);
-        }
-        DispatcherCommand::Statistics { response } => {
-            let result = if state.flush_live() {
-                state
-                    .storage
-                    .as_mut()
-                    .ok_or(LogStoreError::Unavailable)
-                    .and_then(LogStore::statistics)
-            } else {
-                Err(LogStoreError::Unavailable)
-            };
-            let _ = response.send(result);
-        }
         DispatcherCommand::PublishRust { record, console } => state.publish_rust(record, console),
         DispatcherCommand::ReportDropped(dropped_count) => state.publish_dropped(dropped_count),
         DispatcherCommand::Subscribe { sink, response } => {
@@ -782,12 +727,6 @@ fn drain_for_shutdown(
 ) {
     loop {
         match receiver.try_recv() {
-            Ok(DispatcherCommand::Query { response, .. }) => {
-                let _ = response.send(Err(LogStoreError::Unavailable));
-            }
-            Ok(DispatcherCommand::Statistics { response }) => {
-                let _ = response.send(Err(LogStoreError::Unavailable));
-            }
             Ok(DispatcherCommand::SetRetention { response, .. }) => {
                 let _ = response.send(Err(LogStoreError::Unavailable));
             }
@@ -856,9 +795,15 @@ mod retention_tests {
         assert!(state.live_pending.is_empty());
         assert_eq!(state.latest_sequence, 1);
         assert_eq!(state.stream_id, stream);
-        assert_eq!(
-            state.storage.as_mut().unwrap().statistics().unwrap().total,
-            0
+        assert!(
+            state
+                .storage
+                .as_mut()
+                .unwrap()
+                .snapshot(1)
+                .unwrap()
+                .entries
+                .is_empty()
         );
         assert!(!state.storage_failed.load(Ordering::Acquire));
         assert!(state.retention_deadline.is_some());

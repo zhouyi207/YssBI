@@ -112,9 +112,6 @@ impl MindCanvas {
             gesture: None,
         }
     }
-    pub fn snapshot(&self) -> &MindSnapshot {
-        self.file.snapshot()
-    }
     pub fn focus_canvas(&self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
         cx.emit(FileEditorEvent::Activated);

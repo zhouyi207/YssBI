@@ -19,13 +19,13 @@ pub struct ControlChartSummary {
     pub mean_moving_range: f64,
     pub outside_count: usize,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ControlChartRow {
     pub observation: usize,
     pub value: f64,
     pub outside: bool,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ControlChartResult {
     pub summary: ControlChartSummary,
     pub plot: XyPlot,

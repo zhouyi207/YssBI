@@ -332,7 +332,7 @@ mod tests {
             &columns("amount"),
             &mut cache,
         );
-        assert!(initial.ready().is_some(), "{:?}", initial.diagnostics());
+        assert!(initial.is_ready(), "{:?}", initial.diagnostics());
         let changed = columns("replacement");
         let blocked =
             crate::resolve_graph_semantics_with_cache(&document, &registry, &changed, &mut cache);
@@ -348,7 +348,7 @@ mod tests {
             "{:?}",
             blocked.diagnostics()
         );
-        assert!(blocked.ready().is_none());
+        assert!(!blocked.is_ready());
         assert_eq!(
             blocked,
             crate::resolve_graph_semantics(&document, &registry, &changed)
@@ -366,8 +366,7 @@ mod tests {
             );
         assert!(
             crate::resolve_graph_semantics_with_cache(&document, &registry, &changed, &mut cache)
-                .ready()
-                .is_some()
+                .is_ready()
         );
         document
             .nodes
@@ -383,7 +382,7 @@ mod tests {
             .insert("enabled".parse().unwrap(), serde_json::json!(0));
         let hidden =
             crate::resolve_graph_semantics_with_cache(&document, &registry, &changed, &mut cache);
-        assert!(hidden.ready().is_some(), "{:?}", hidden.diagnostics());
+        assert!(hidden.is_ready(), "{:?}", hidden.diagnostics());
         assert!(
             hidden
                 .node(consumer)
@@ -456,12 +455,12 @@ mod tests {
             "{:?}",
             blocked.diagnostics()
         );
-        assert!(blocked.ready().is_none());
+        assert!(!blocked.is_ready());
         let available = resources(vec![]);
         assert!(!available.matches_dependencies(&observed.dependencies()));
         let recovered =
             crate::resolve_graph_semantics_with_cache(&document, &registry, &available, &mut cache);
-        assert!(recovered.ready().is_some(), "{:?}", recovered.diagnostics());
+        assert!(recovered.is_ready(), "{:?}", recovered.diagnostics());
         assert_eq!(
             recovered,
             crate::resolve_graph_semantics(&document, &registry, &available)
@@ -504,7 +503,7 @@ mod tests {
             &hidden_resources,
             &mut cache,
         );
-        assert!(hidden.ready().is_some(), "{:?}", hidden.diagnostics());
+        assert!(hidden.is_ready(), "{:?}", hidden.diagnostics());
         assert!(available.matches_dependencies(&hidden_resources.dependencies()));
         document
             .nodes
@@ -576,7 +575,7 @@ mod tests {
             );
         }
         let snapshot = crate::resolve_graph_semantics(&document, &registry, &resources(vec![]));
-        assert!(snapshot.ready().is_none());
+        assert!(!snapshot.is_ready());
         for kind in [
             GraphDiagnosticKind::ConnectionLimit,
             GraphDiagnosticKind::ConnectionOrderForbidden,
@@ -660,7 +659,7 @@ mod tests {
             let ready = crate::resolve_graph_semantics_with_cache(
                 &document, &registry, &initial, &mut cache,
             );
-            assert!(ready.ready().is_some(), "{:?}", ready.diagnostics());
+            assert!(ready.is_ready(), "{:?}", ready.diagnostics());
             use crate::{GraphFilterLiteralType, GraphParameterConfigurationFact};
             use yss_node_protocol::dataframe::FilterOperator;
             match ready.node(consumer).unwrap().parameters[0]
@@ -709,7 +708,7 @@ mod tests {
             let blocked = crate::resolve_graph_semantics_with_cache(
                 &document, &registry, &changed, &mut cache,
             );
-            assert!(blocked.ready().is_none());
+            assert!(!blocked.is_ready());
             match blocked.node(consumer).unwrap().parameters[0]
                 .configuration
                 .as_ref()
@@ -748,7 +747,7 @@ mod tests {
             let recovered = crate::resolve_graph_semantics_with_cache(
                 &document, &registry, &initial, &mut cache,
             );
-            assert!(recovered.ready().is_some());
+            assert!(recovered.is_ready());
             document.connections.clear();
             let disconnected = crate::resolve_graph_semantics(&document, &registry, &initial);
             match disconnected.node(consumer).unwrap().parameters[0]

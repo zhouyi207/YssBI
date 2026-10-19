@@ -2,6 +2,7 @@ use super::builtin::{BuiltinAssemblyError, ProviderFragment, assembled_interface
 use crate::Message;
 use crate::builtin::add_node_messages;
 use crate::builtin::node_key;
+use crate::builtin::{category_id, concrete, data_port, icon_id, node_type_id};
 use yss_node_protocol::*;
 use yss_node_registry::CategoryRegistration;
 
@@ -486,10 +487,13 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
     let ports = vec![data_port(
         "samples",
         "Samples",
+        PortDirection::Output,
         data_series_type(concrete("core.numeric")?),
+        PortCardinality::Declared,
+        LiteralPolicy::Forbidden,
     )?];
     Ok(NodeProtocol {
-        type_id: node_id(spec.id)?,
+        type_id: node_type_id(spec.id)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
             aliases_key: Some(node_key(spec.id, "aliases")?),
@@ -575,42 +579,6 @@ fn field_key(node: &'static str, field: &'static str) -> Result<I18nKey, Builtin
     i18n_key(format!("nodes.{node}.parameters.{field}.title"))
 }
 
-fn data_port(
-    key: &'static str,
-    title: &'static str,
-    value_type: TypeExpr,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: port_key(key)?,
-        title: title.into(),
-        direction: PortDirection::Output,
-        value_type,
-        cardinality: PortCardinality::Declared,
-        connections: crate::data_connections(PortDirection::Output),
-        input_binding: None,
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
-}
-
-fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Concrete(type_id(value)?))
-}
-fn node_id(value: &'static str) -> Result<NodeTypeId, BuiltinAssemblyError> {
-    sid(value, NodeTypeId::new)
-}
-fn type_id(value: &'static str) -> Result<TypeId, BuiltinAssemblyError> {
-    sid(value, TypeId::new)
-}
-fn port_key(value: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
-    sid(value, PortKey::new)
-}
-fn category_id(value: &'static str) -> Result<NodeCategoryId, BuiltinAssemblyError> {
-    sid(value, NodeCategoryId::new)
-}
-fn icon_id(value: &'static str) -> Result<IconId, BuiltinAssemblyError> {
-    sid(value, IconId::new)
-}
 fn style_id(value: &'static str) -> Result<NodeStyleId, BuiltinAssemblyError> {
     sid(value, NodeStyleId::new)
 }

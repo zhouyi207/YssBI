@@ -3,7 +3,7 @@ use crate::graph::editing::GraphEditRequest;
 use crate::graph::open::OpenGraphRequest;
 use crate::graph::run::{RunDemand, RunGraphRequest, run_graph};
 use yss_data_contract::{DataValue, TabularScalar, ValueType};
-use yss_graph_document::{ConnectionId, DocumentConnection};
+
 use yss_graph_editor::EditorGraphMutation;
 use yss_graph_execution::plan::{NodeExecutionMode, PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_graph_execution::result::ResultCacheState;
@@ -11,19 +11,6 @@ use yss_node_kernel::RuntimeValue;
 
 fn port(node: NodeId, key: &str) -> PortAddress {
     PortAddress::declared(node, key.parse().unwrap())
-}
-
-fn connect(document: &mut GraphDocument, output: PortAddress, input: PortAddress) {
-    let id = ConnectionId::new();
-    document.connections.insert(
-        id,
-        DocumentConnection {
-            id,
-            output,
-            input,
-            order: None,
-        },
-    );
 }
 
 fn node(document: &mut GraphDocument, kind: &str) -> NodeId {

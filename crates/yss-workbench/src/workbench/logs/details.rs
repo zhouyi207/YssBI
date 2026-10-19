@@ -34,10 +34,6 @@ impl LogDetails {
                 "detail.fields.type",
                 crate::text::translate(entry::domain_key(Some(record.domain))),
             ),
-            (
-                "detail.fields.origin",
-                entry::origin_name(record.origin).into(),
-            ),
             ("detail.fields.target", record.target.clone()),
         ];
         if let Some(event) = &record.event {

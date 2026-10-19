@@ -3,13 +3,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum LogOrigin {
-    Rust,
-    Frontend,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum LogDomain {
     Application,
     Execution,
@@ -33,14 +26,14 @@ impl LogDomain {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Serialized only for clipboard export of one record.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogRecordDto {
     pub stream_id: String,
     pub sequence: u64,
     pub timestamp: String,
     pub level: LogLevel,
-    pub origin: LogOrigin,
     pub domain: LogDomain,
     pub target: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -51,29 +44,24 @@ pub struct LogRecordDto {
     pub fields: LogFields,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogStreamFailure {
     StorageUnavailable,
     RetentionFailed,
     SubscriberLagged,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LogBatchDto {
     pub stream_id: String,
     pub entries: Vec<LogRecordDto>,
     /// Committed retention deletions, sorted by sequence. They do not reset the
     /// stream high-water mark or require subscribers to reconnect.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evicted_sequences: Vec<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<LogStreamFailure>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LogSubscriptionDto {
     pub subscription_id: String,
     pub stream_id: String,

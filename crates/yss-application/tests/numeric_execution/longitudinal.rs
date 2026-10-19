@@ -1,4 +1,5 @@
-use super::regression_models::{connect, node, selector};
+use super::fixture::{connect_port, node};
+use super::regression_models::selector;
 use super::*;
 use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
@@ -65,7 +66,7 @@ fn longitudinal_category_executes_all_ten_nodes_with_aligned_relations_and_catal
                 );
                 a
             };
-            connect(&mut document, from, "series", address);
+            connect_port(&mut document, from, "series", address);
         }
         let result = execute(&document, &kind).unwrap_or_else(|e| panic!("{suffix}: {e:?}"));
         let RuntimeValue::Record(report) = result else {

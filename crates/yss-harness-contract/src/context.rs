@@ -97,8 +97,7 @@ impl ProjectSessionBinding {
 }
 
 /// The Harness-owned identity of one tool invocation. Extensions add their own call bindings.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ToolInvocationContext {
     pub principal_id: PrincipalId,
     pub harness_session_id: HarnessSessionId,

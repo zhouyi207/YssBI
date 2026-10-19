@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub(super) use crate::error::{failed, invalid, parameter};
 use yss_sci_contract::execution::{
@@ -12,7 +12,7 @@ pub(super) type Result<T> = std::result::Result<T, Error>;
 
 /// Subtract group means after the estimator has validated matching lengths.
 pub(super) fn within_transform_by_group(v: &[f64], group_id: &[usize]) -> Col<f64> {
-    let mut sums: HashMap<usize, (f64, usize)> = HashMap::new();
+    let mut sums: BTreeMap<usize, (f64, usize)> = BTreeMap::new();
     for (i, &gid) in group_id.iter().enumerate() {
         let val = v[i];
         if !val.is_nan() {
@@ -26,6 +26,46 @@ pub(super) fn within_transform_by_group(v: &[f64], group_id: &[usize]) -> Col<f6
         let mean = if count > 0 { sum / count as f64 } else { 0.0 };
         v[i] - mean
     })
+}
+
+/// Two-way within transformation z̃_it = z_it - z̄_i - z̄_t + z̄ after the estimator has
+/// validated matching lengths.
+pub(super) fn within_transform_twoway(
+    v: &[f64],
+    entity_id: &[usize],
+    time_id: &[usize],
+) -> Col<f64> {
+    let n = v.len();
+    let mut e_sums: BTreeMap<usize, (f64, usize)> = BTreeMap::new();
+    let mut t_sums: BTreeMap<usize, (f64, usize)> = BTreeMap::new();
+    let mut total = 0.0;
+    let mut total_cnt = 0usize;
+    for (i, &val) in v.iter().enumerate() {
+        if !val.is_nan() {
+            let e_entry = e_sums.entry(entity_id[i]).or_insert((0.0, 0));
+            e_entry.0 += val;
+            e_entry.1 += 1;
+            let t_entry = t_sums.entry(time_id[i]).or_insert((0.0, 0));
+            t_entry.0 += val;
+            t_entry.1 += 1;
+            total += val;
+            total_cnt += 1;
+        }
+    }
+    let z_bar = if total_cnt > 0 {
+        total / total_cnt as f64
+    } else {
+        0.0
+    };
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let (es, ec) = e_sums.get(&entity_id[i]).copied().unwrap_or((0.0, 0));
+        let e_bar = if ec > 0 { es / ec as f64 } else { 0.0 };
+        let (ts, tc) = t_sums.get(&time_id[i]).copied().unwrap_or((0.0, 0));
+        let t_bar = if tc > 0 { ts / tc as f64 } else { 0.0 };
+        out.push(v[i] - e_bar - t_bar + z_bar);
+    }
+    out.into_iter().collect::<Col<f64>>()
 }
 
 /// Validate before indexing, then retain the source order mapping through all transforms.

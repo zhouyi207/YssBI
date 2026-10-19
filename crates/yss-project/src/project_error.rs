@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -14,9 +13,6 @@ pub enum ProjectError {
 
     #[error("invalid project format: {0}")]
     InvalidProjectFormat(String),
-
-    #[error("graph file '{}' is structurally invalid", path.display())]
-    InvalidGraphDocument { path: PathBuf, message: String },
 }
 
 impl From<yss_graph_document::GraphResourcePathError> for ProjectError {

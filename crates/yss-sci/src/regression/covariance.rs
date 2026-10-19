@@ -434,7 +434,8 @@ fn clustered_score_meat(
     let k = x.ncols();
     let mut meat = Mat::<f64>::zeros(k, k);
 
-    let mut groups: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();
+    let mut groups: std::collections::BTreeMap<usize, Vec<usize>> =
+        std::collections::BTreeMap::new();
     for (i, &g) in cluster_id.iter().enumerate() {
         groups.entry(g).or_default().push(i);
     }

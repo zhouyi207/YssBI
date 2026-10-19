@@ -134,7 +134,7 @@ fn dataframe_arguments_specialize_independently_and_missing_columns_keep_inner_l
         functions.diagnostics
     );
     assert!(
-        definition.semantics.ready().is_none(),
+        !definition.semantics.is_ready(),
         "a definition has no concrete dataframe argument"
     );
     let value = |name: &str, semantic| {
@@ -169,12 +169,12 @@ fn dataframe_arguments_specialize_independently_and_missing_columns_keep_inner_l
     let numeric = bind(value("sales", SemanticType::Numeric), &mut cache);
     assert_eq!(numeric.state, GraphFunctionState::Ready);
     assert!(
-        numeric.semantics.ready().is_some(),
+        numeric.semantics.is_ready(),
         "{:?}",
         numeric.semantics.diagnostics()
     );
     let text = bind(value("sales", SemanticType::Text), &mut cache);
-    assert!(text.semantics.ready().is_some());
+    assert!(text.semantics.is_ready());
     let result_type = |function: &GraphFunctionSemanticFact| {
         function
             .semantics
@@ -197,7 +197,7 @@ fn dataframe_arguments_specialize_independently_and_missing_columns_keep_inner_l
     );
     let missing = bind(value("income", SemanticType::Numeric), &mut cache);
     assert_eq!(missing.state, GraphFunctionState::Invalid);
-    assert!(missing.semantics.ready().is_none());
+    assert!(!missing.semantics.is_ready());
     assert!(
         missing
             .semantics
@@ -242,7 +242,7 @@ fn dataframe_arguments_specialize_independently_and_missing_columns_keep_inner_l
     ));
     assert_eq!(resources.function_document(&function), Some(&body));
     assert!(
-        definition.semantics.ready().is_none(),
+        !definition.semantics.is_ready(),
         "specialization never overwrites the shared definition"
     );
     let unavailable = crate::resolve_graph_semantics(&root, &registry, &resources)

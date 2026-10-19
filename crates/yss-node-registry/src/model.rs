@@ -1,5 +1,4 @@
 use super::{ProtocolFingerprint, RegistryFingerprint};
-use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
@@ -71,7 +70,7 @@ impl StructuralNodeRole {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TransparentNodeRole {
     Reroute,
 }
@@ -278,12 +277,6 @@ impl NodeRegistry {
     }
     pub fn iter(&self) -> impl ExactSizeIterator<Item = (&NodeTypeId, &Arc<RegisteredNode>)> {
         self.inner.by_id.iter()
-    }
-    pub fn len(&self) -> usize {
-        self.inner.by_id.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.inner.by_id.is_empty()
     }
     pub fn types(&self) -> &TypeRegistry {
         &self.inner.type_index

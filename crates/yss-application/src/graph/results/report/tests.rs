@@ -254,9 +254,7 @@ fn parameter_catalog_is_independent_of_coefficient_pages() {
 #[test]
 fn typed_coefficient_pages_keep_values_bounds_and_lease_identity() {
     let (app, reference, fit) = fixture(30);
-    let lease = uuid::Uuid::new_v4();
-    app.retain_result(reference, lease, "coefficient-report", None)
-        .unwrap();
+    let (lease, _) = app.retain_owned_result(reference).unwrap();
     app.capture_session()
         .unwrap()
         .execution()
@@ -282,8 +280,7 @@ fn typed_coefficient_pages_keep_values_bounds_and_lease_identity() {
         app.query_result_coefficients(foreign, 0, 1),
         Err(ReportQueryError::Stale)
     ));
-    app.release_result_lease(lease, "coefficient-report")
-        .unwrap();
+    drop(lease);
     assert!(matches!(
         app.query_result_coefficients(reference, 0, 1),
         Err(ReportQueryError::Unavailable)
@@ -316,8 +313,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
         panic!()
     };
     let analyses = native.summary.as_ref().unwrap();
-    let lease = uuid::Uuid::new_v4();
-    app.retain_result(reference, lease, "report", None).unwrap();
+    let (lease, _) = app.retain_owned_result(reference).unwrap();
     app.capture_session()
         .unwrap()
         .execution()
@@ -387,7 +383,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     };
     assert!((test.stat - fit.report.coefficients[1].t_value).abs() < 1e-8);
     assert_eq!(test.df2, 53_938);
-    app.release_result_lease(lease, "report").unwrap();
+    drop(lease);
     assert!(matches!(app.query_result_projection(reference), Ok(None)));
 }
 

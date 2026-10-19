@@ -181,18 +181,9 @@ pub struct SequentialIds {
 }
 
 impl IdGeneratorPort for SequentialIds {
-    fn next_id(
-        &self,
-        kind: AutomationIdKind,
-    ) -> Result<String, yss_harness_contract::IdGenerationFailure> {
-        let prefix = match kind {
-            AutomationIdKind::HarnessSession => "session",
-            AutomationIdKind::HarnessTurn => "turn",
-            AutomationIdKind::AgentRun => "agent",
-            AutomationIdKind::ToolInvocation => "tool",
-        };
+    fn next_id(&self, kind: AutomationIdKind) -> String {
         let value = self.next.fetch_add(1, Ordering::AcqRel) + 1;
-        Ok(format!("{prefix}-{value}"))
+        format!("{}-{value}", kind.prefix())
     }
 }
 

@@ -129,6 +129,8 @@ fn register_constants(fragment: &mut ProviderFragment) -> Result<(), BuiltinAsse
                 "Value",
                 PortDirection::Output,
                 concrete("core.numeric")?,
+                PortCardinality::Declared,
+                LiteralPolicy::Allowed,
             )?],
             vec![],
             vec![],
@@ -157,15 +159,23 @@ fn register_arithmetic_operator(
         _ => ("Left", "Right"),
     };
     let operands = if spec.operation == "add" {
-        data_port_with_cardinality(
+        data_port(
             "operands",
             "Operands",
             PortDirection::Input,
             numeric.clone(),
             PortCardinality::UserCreated { min: 2, max: None },
+            LiteralPolicy::Allowed,
         )?
     } else {
-        data_port("left", left_title, PortDirection::Input, numeric.clone())?
+        data_port(
+            "left",
+            left_title,
+            PortDirection::Input,
+            numeric.clone(),
+            PortCardinality::Declared,
+            LiteralPolicy::Allowed,
+        )?
     };
     let mut ports = vec![operands];
     if spec.operation != "add" {
@@ -174,6 +184,8 @@ fn register_arithmetic_operator(
             right_title,
             PortDirection::Input,
             numeric,
+            PortCardinality::Declared,
+            LiteralPolicy::Allowed,
         )?);
     }
     let result_type = if matches!(spec.operation, "divide" | "power" | "log") {
@@ -186,6 +198,8 @@ fn register_arithmetic_operator(
         "Result",
         PortDirection::Output,
         result_type,
+        PortCardinality::Declared,
+        LiteralPolicy::Allowed,
     )?);
     let mut protocol = protocol(&id, "numeric", ports, vec![], vec![], pure())?;
     protocol.typing = NodeTypingSpec::NumericFold {
@@ -219,16 +233,27 @@ fn register_unary(
         Some([spec.aliases, spec.zh_aliases]),
     );
     let numeric = numeric_value_type()?;
-    let output = TypeExpr::Union(vec![
-        concrete("core.numeric")?,
-        data_series("core.numeric")?,
-    ]);
+    let output = TypeExpr::Union(vec![concrete("core.numeric")?, numeric_data_series_type()]);
     let mut protocol = protocol(
         &id,
         "numeric",
         vec![
-            data_port("input", "Input", PortDirection::Input, numeric)?,
-            data_port("result", "Result", PortDirection::Output, output)?,
+            data_port(
+                "input",
+                "Input",
+                PortDirection::Input,
+                numeric,
+                PortCardinality::Declared,
+                LiteralPolicy::Allowed,
+            )?,
+            data_port(
+                "result",
+                "Result",
+                PortDirection::Output,
+                output,
+                PortCardinality::Declared,
+                LiteralPolicy::Allowed,
+            )?,
         ],
         vec![],
         vec![],
@@ -256,6 +281,6 @@ fn numeric_value_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 fn float_value_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Union(vec![
         concrete("core.numeric")?,
-        data_series("core.numeric")?,
+        numeric_data_series_type(),
     ]))
 }

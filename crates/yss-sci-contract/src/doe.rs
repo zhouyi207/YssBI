@@ -77,7 +77,7 @@ pub struct FactorRange {
     pub balanced: bool,
     pub optimal_levels: Vec<usize>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct RangeLevel {
     pub factor: usize,
     pub level: usize,
@@ -93,7 +93,7 @@ pub struct RangeAnalysisSummary {
     pub equal_level_counts: bool,
     pub factors: Vec<FactorRange>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct RangeAnalysisResult {
     pub summary: RangeAnalysisSummary,
     pub rows: Vec<RangeLevel>,

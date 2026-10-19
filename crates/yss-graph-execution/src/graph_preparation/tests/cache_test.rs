@@ -176,7 +176,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         },
     );
     let partial = resolve(&document, &resources, true);
-    assert!(partial.semantic_snapshot().ready().is_none());
+    assert!(!partial.semantic_snapshot().is_ready());
     let target = PlanOutputRef::new(
         PlanGraphId::new(graph.as_str().into()).unwrap(),
         plan_port(&PortAddress::declared(node_id, "value".parse().unwrap())),

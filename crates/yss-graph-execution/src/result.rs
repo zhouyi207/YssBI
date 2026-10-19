@@ -102,12 +102,6 @@ pub struct GraphResultCacheState {
 pub enum ResultRetentionError {
     #[error("result is no longer available")]
     Unavailable,
-    #[error("lease is already bound to another result or owner")]
-    LeaseConflict,
-    #[error("lease belongs to another owner")]
-    WrongOwner,
-    #[error("lease owner has closed")]
-    OwnerClosed,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -197,10 +191,6 @@ impl ResultProvenance {
 
     pub fn run_id(&self) -> RunId {
         self.run_id
-    }
-
-    pub const fn created_at_ms(&self) -> u64 {
-        self.created_at_ms
     }
 }
 

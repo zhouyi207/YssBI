@@ -10,7 +10,7 @@ pub struct ReliabilitySummary {
     pub total_mean: f64,
     pub total_standard_deviation: f64,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ReliabilityItem {
     pub item: usize,
     pub mean: f64,
@@ -18,14 +18,13 @@ pub struct ReliabilityItem {
     pub corrected_item_total_correlation: Option<f64>,
     pub alpha_if_deleted: Option<f64>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ReliabilityResult {
     pub summary: ReliabilitySummary,
     pub rows: Vec<ReliabilityItem>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct DiscriminationItem {
-    #[serde(flatten)]
     pub reliability: ReliabilityItem,
     pub low_mean: Option<f64>,
     pub high_mean: Option<f64>,
@@ -33,7 +32,7 @@ pub struct DiscriminationItem {
     pub degrees_of_freedom: Option<f64>,
     pub p_value: Option<f64>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ItemScore {
     pub observation: usize,
     pub total: f64,
@@ -51,7 +50,7 @@ pub struct DiscriminationSummary {
     pub high_count: usize,
     pub tail_test: &'static str,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct DiscriminationResult {
     pub summary: DiscriminationSummary,
     pub rows: Vec<DiscriminationItem>,
@@ -65,7 +64,7 @@ pub struct ContentValiditySummary {
     pub scale_cvi_average: f64,
     pub scale_cvi_universal_agreement: f64,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ContentValidityItem {
     pub item: usize,
     pub relevant_experts: usize,
@@ -73,7 +72,7 @@ pub struct ContentValidityItem {
     pub chance_agreement: f64,
     pub modified_kappa: f64,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ContentValidityResult {
     pub summary: ContentValiditySummary,
     pub rows: Vec<ContentValidityItem>,

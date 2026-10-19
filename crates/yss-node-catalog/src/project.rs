@@ -2,6 +2,7 @@ use super::builtin::{
     BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, leaf, sid,
 };
 use crate::builtin::add_node_messages;
+use crate::builtin::data_port;
 use crate::builtin::node_key;
 use crate::{Message, Text};
 use std::sync::Arc;
@@ -148,6 +149,7 @@ fn constant_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortDirection::Output,
             TypeExpr::Generic(generic.clone()),
             PortCardinality::Declared,
+            LiteralPolicy::Forbidden,
         )?],
         vec![generic],
         vec![Parameter {
@@ -224,30 +226,8 @@ fn derived_data_port(
         PortCardinality::Derived {
             resolver: sid(resolver, InterfaceResolverId::new)?,
         },
+        LiteralPolicy::Forbidden,
     )
-}
-
-fn data_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    value_type: TypeExpr,
-    cardinality: PortCardinality,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: sid(key, PortKey::new)?,
-        title: title.into(),
-        direction,
-        value_type,
-        cardinality,
-        connections: crate::data_connections(direction),
-        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
-            literal_policy: LiteralPolicy::Forbidden,
-            default_value: None,
-        }),
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
 }
 
 pub(crate) fn resource_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {

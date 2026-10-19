@@ -48,7 +48,6 @@ pub use semantic_snapshot::{
     GraphPortEditorFact, GraphPortInstanceAdditionFact, GraphPortSemanticFact,
     GraphPortTypeBinding, GraphResolutionOutcome, GraphResolvedInputBinding,
     GraphResolvedInputSource, GraphResolvedParameterValue, GraphSemanticSnapshot,
-    ReadyGraphSemanticSnapshot,
 };
 pub use type_resolution::{GraphSemanticCache, type_patterns_can_connect};
 

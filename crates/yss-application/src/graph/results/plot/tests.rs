@@ -78,9 +78,7 @@ fn plot_query_preserves_complete_retained_results_and_session_identity() {
         execution_session_id: captured.execution_session_id(),
         result_id,
     };
-    let lease = uuid::Uuid::new_v4();
-    app.retain_result(reference, lease, "plot-test", None)
-        .unwrap();
+    let (lease, _) = app.retain_owned_result(reference).unwrap();
     captured
         .execution()
         .invalidate_graph_results(graph.as_str());
@@ -111,7 +109,7 @@ fn plot_query_preserves_complete_retained_results_and_session_identity() {
         app.query_result_plot(wrong_session),
         Err(ResultQueryApplicationError::SessionChanged)
     ));
-    app.release_result_lease(lease, "plot-test").unwrap();
+    drop(lease);
     assert!(app.query_result_plot(reference).unwrap().is_none());
 }
 

@@ -17,8 +17,7 @@ string_identity!(AgentRoleId, "agent role id");
 pub const DELEGATE_TASK_TOOL: &str = "delegate_task";
 pub const FOLLOWUP_TASK_TOOL: &str = "followup_task";
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentOutputMode {
     Transcript,
     FinalResponse,

@@ -25,10 +25,9 @@ pub struct GraphSemanticSnapshot {
 }
 
 impl GraphSemanticSnapshot {
-    pub fn ready(&self) -> Option<ReadyGraphSemanticSnapshot<'_>> {
-        (matches!(self.outcome, GraphResolutionOutcome::Complete)
-            && self.nodes_ready(&self.nodes.iter().map(|node| node.node_id).collect()))
-        .then_some(ReadyGraphSemanticSnapshot { snapshot: self })
+    pub fn is_ready(&self) -> bool {
+        matches!(self.outcome, GraphResolutionOutcome::Complete)
+            && self.nodes_ready(&self.nodes.iter().map(|node| node.node_id).collect())
     }
 
     /// Readiness of selected nodes; execution owns selecting the dependency closure.
@@ -253,17 +252,6 @@ impl GraphSemanticSnapshot {
 
     pub fn node(&self, node_id: NodeId) -> Option<&GraphNodeSemanticFact> {
         self.nodes.iter().find(|node| node.node_id == node_id)
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct ReadyGraphSemanticSnapshot<'a> {
-    snapshot: &'a GraphSemanticSnapshot,
-}
-
-impl<'a> ReadyGraphSemanticSnapshot<'a> {
-    pub const fn snapshot(self) -> &'a GraphSemanticSnapshot {
-        self.snapshot
     }
 }
 

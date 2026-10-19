@@ -47,10 +47,6 @@ impl PlanResourceRequirement {
         self.kind
     }
 
-    pub const fn access(&self) -> ResourceAccess {
-        self.access
-    }
-
     pub const fn optional(&self) -> bool {
         self.optional
     }
@@ -89,10 +85,6 @@ impl PlanBasis {
 
     pub fn project_session(&self) -> &PlanProjectSessionId {
         &self.project_session
-    }
-
-    pub const fn registry_fingerprint(&self) -> PlanRegistryFingerprint {
-        self.registry_fingerprint
     }
 
     pub const fn kernel_fingerprint(&self) -> yss_node_kernel::KernelFingerprint {

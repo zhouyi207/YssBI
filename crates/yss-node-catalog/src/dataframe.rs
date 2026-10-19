@@ -5,6 +5,7 @@
 
 use crate::builtin::add_node_messages;
 use crate::builtin::node_key;
+use crate::builtin::{concrete, data_port, port_key};
 use yss_data_contract::DataValue;
 mod aggregation;
 mod families;
@@ -362,7 +363,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
             vec![data_output(
                 "series",
                 "DataSeries",
-                int_series_type()?,
+                numeric_data_series_type(),
                 None,
             )?],
             [("start", 0), ("end", 10), ("step", 1)]
@@ -408,7 +409,12 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         Standardize => Ok((
             vec![
                 data_input("series", "DataSeries", numeric_data_series_type())?,
-                data_output("standardized", "Standardized", float_series_type()?, None)?,
+                data_output(
+                    "standardized",
+                    "Standardized",
+                    numeric_data_series_type(),
+                    None,
+                )?,
                 data_output("mean", "Mean", float_type()?, None)?,
                 data_output(
                     "standard_deviation",
@@ -421,10 +427,10 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         )),
         InverseStandardize => Ok((
             vec![
-                data_input("standardized", "Standardized", float_series_type()?)?,
+                data_input("standardized", "Standardized", numeric_data_series_type())?,
                 scalar_input("mean", "Mean", "core.numeric")?,
                 scalar_input("standard_deviation", "Standard Deviation", "core.numeric")?,
-                data_output("series", "DataSeries", float_series_type()?, None)?,
+                data_output("series", "DataSeries", numeric_data_series_type(), None)?,
             ],
             vec![],
         )),
@@ -470,7 +476,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
         TimeUnary => Ok((
             vec![
                 data_input("series", "DataSeries", numeric_data_series_type())?,
-                data_output("result", "Result", float_series_type()?, None)?,
+                data_output("result", "Result", numeric_data_series_type(), None)?,
             ],
             vec![positive_integer_parameter("order", 1)?],
         )),
@@ -478,7 +484,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
             vec![
                 data_input("series", "DataSeries", numeric_data_series_type())?,
                 transforms::window_context()?,
-                data_output("result", "Result", float_series_type()?, None)?,
+                data_output("result", "Result", numeric_data_series_type(), None)?,
             ],
             std::iter::once(positive_integer_parameter("window", 1)?)
                 .chain([
@@ -519,7 +525,7 @@ fn interface(kind: InterfaceKind) -> Result<(Vec<PortSpec>, Vec<Parameter>), Bui
             vec![
                 data_input("aligned", "Aligned", dataframe_type()?)?,
                 data_input("series", "DataSeries", numeric_data_series_type())?,
-                data_output("result", "Result", float_series_type()?, None)?,
+                data_output("result", "Result", numeric_data_series_type(), None)?,
             ],
             vec![
                 positive_integer_parameter("order", 1)?,
@@ -564,13 +570,13 @@ fn data_input(
     title: &'static str,
     value_type: TypeExpr,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(
+    data_port(
         key,
         title,
         PortDirection::Input,
         value_type,
         PortCardinality::Declared,
-        None,
+        LiteralPolicy::Forbidden,
     )
 }
 
@@ -588,13 +594,13 @@ fn user_input(
     value_type: TypeExpr,
     min: u16,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(
+    data_port(
         key,
         title,
         PortDirection::Input,
         value_type,
         PortCardinality::UserCreated { min, max: None },
-        None,
+        LiteralPolicy::Forbidden,
     )
 }
 
@@ -604,14 +610,17 @@ fn data_output(
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(
-        key,
-        title,
-        PortDirection::Output,
-        value_type,
-        PortCardinality::Declared,
+    Ok(PortSpec {
         schema,
-    )
+        ..data_port(
+            key,
+            title,
+            PortDirection::Output,
+            value_type,
+            PortCardinality::Declared,
+            LiteralPolicy::Forbidden,
+        )?
+    })
 }
 
 fn derived_output(
@@ -620,7 +629,7 @@ fn derived_output(
     value_type: TypeExpr,
     resolver: &'static str,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(
+    data_port(
         key,
         title,
         PortDirection::Output,
@@ -628,32 +637,8 @@ fn derived_output(
         PortCardinality::Derived {
             resolver: sid(resolver, InterfaceResolverId::new)?,
         },
-        None,
+        LiteralPolicy::Forbidden,
     )
-}
-
-fn port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    value_type: TypeExpr,
-    cardinality: PortCardinality,
-    schema: Option<SchemaExpr>,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: port_key(key)?,
-        title: title.into(),
-        direction,
-        value_type,
-        cardinality,
-        connections: crate::data_connections(direction),
-        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
-            literal_policy: LiteralPolicy::Forbidden,
-            default_value: None,
-        }),
-        editor: PortEditorSpec::Default,
-        schema,
-    })
 }
 
 fn resource_parameter(key: &'static str) -> Result<Parameter, BuiltinAssemblyError> {
@@ -856,18 +841,6 @@ fn generic_series_type(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyErro
 }
 fn float_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("core.numeric")
-}
-fn int_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.numeric")?))
-}
-fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.numeric")?))
-}
-fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
-}
-fn port_key(key: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
-    sid(key, PortKey::new)
 }
 fn derived_schema(
     resolver: &'static str,

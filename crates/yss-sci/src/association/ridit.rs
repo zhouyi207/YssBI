@@ -27,8 +27,8 @@ pub fn ridit(
     let n = sample.len() as f64;
     let m = reference.len() as f64;
     let mut previous = 0usize;
-    let mut mean = Sum::default();
-    let mut ties = Sum::default();
+    let mut mean = CompensatedSum::default();
+    let mut ties = CompensatedSum::default();
     let mut output = Vec::with_capacity(categories);
     for category in 0..categories {
         let score = (previous as f64 + 0.5 * b[category] as f64) / m;

@@ -66,13 +66,8 @@ impl TurnOrchestrator {
         access: Arc<RwLock<()>>,
         options: HarnessTurnOptions,
     ) -> Result<Arc<Self>, AgentDriverFailure> {
-        let manager_run_id = AgentRunId::try_new(
-            ports
-                .ids
-                .next_id(AutomationIdKind::AgentRun)
-                .map_err(|_| driver_failure())?,
-        )
-        .map_err(|_| driver_failure())?;
+        let manager_run_id = AgentRunId::try_new(ports.ids.next_id(AutomationIdKind::AgentRun))
+            .map_err(|_| driver_failure())?;
         let root_role = ports.extension.root_role();
         Ok(Arc::new(Self {
             options,
@@ -329,13 +324,8 @@ impl TurnOrchestrator {
                         .ok_or_else(|| rejected("dependency_not_completed"))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let run_id = AgentRunId::try_new(
-                self.ports
-                    .ids
-                    .next_id(AutomationIdKind::AgentRun)
-                    .map_err(|_| persistence_failure())?,
-            )
-            .map_err(|_| persistence_failure())?;
+            let run_id = AgentRunId::try_new(self.ports.ids.next_id(AutomationIdKind::AgentRun))
+                .map_err(|_| persistence_failure())?;
             tasks.insert(
                 task.key.clone(),
                 TaskEntry {

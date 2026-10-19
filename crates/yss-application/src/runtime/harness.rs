@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use yss_assistant_contract::CapabilityGatewayPort;
 use yss_harness_contract::{
-    AutomationIdKind, ClockPort, HarnessEventSinkPort, IdGenerationFailure, IdGeneratorPort,
-    UnixMillis,
+    AutomationIdKind, ClockPort, HarnessEventSinkPort, IdGeneratorPort, UnixMillis,
 };
 use yss_harness_core::{HarnessHost, HarnessPorts};
 
@@ -46,14 +45,8 @@ impl ClockPort for SystemHarnessClock {
 struct HarnessIdGenerator;
 
 impl IdGeneratorPort for HarnessIdGenerator {
-    fn next_id(&self, kind: AutomationIdKind) -> Result<String, IdGenerationFailure> {
-        let prefix = match kind {
-            AutomationIdKind::HarnessSession => "session",
-            AutomationIdKind::HarnessTurn => "turn",
-            AutomationIdKind::AgentRun => "agent",
-            AutomationIdKind::ToolInvocation => "tool",
-        };
-        Ok(format!("{prefix}-{}", uuid::Uuid::new_v4()))
+    fn next_id(&self, kind: AutomationIdKind) -> String {
+        format!("{}-{}", kind.prefix(), uuid::Uuid::new_v4())
     }
 }
 

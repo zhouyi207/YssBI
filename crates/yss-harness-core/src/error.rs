@@ -1,15 +1,13 @@
 use crate::KnowledgeError;
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AutomationIdentityError, CapabilityFailure,
-    IdGenerationFailure, PersistenceFailure,
+    PersistenceFailure,
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum HarnessError {
     #[error("automation identity is invalid")]
     Identity(#[from] AutomationIdentityError),
-    #[error("automation id generation failed")]
-    IdGeneration(#[from] IdGenerationFailure),
     #[error("harness persistence failed: {0}")]
     Persistence(#[from] PersistenceFailure),
     #[error("harness knowledge retrieval failed")]

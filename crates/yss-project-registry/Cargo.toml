@@ -5,19 +5,13 @@ edition = "2024"
 publish = false
 
 [dependencies]
-serde.workspace = true
 thiserror.workspace = true
-walkdir.workspace = true
 dunce.workspace = true
 yss-filesystem = { path = "../yss-filesystem" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-project-model = { path = "../yss-project-model" }
-yss-project-progress = { path = "../yss-project-progress" }
 yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 
 [dev-dependencies]
 tokio.workspace = true
-
-[target.'cfg(windows)'.dev-dependencies]
-windows-sys = { workspace = true, features = ["Win32_System_IO", "Win32_System_Ioctl"] }

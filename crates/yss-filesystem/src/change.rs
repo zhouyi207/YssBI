@@ -83,10 +83,6 @@ impl FileChange {
     pub fn relative_path(&self) -> &RelativePath {
         &self.relative_path
     }
-
-    pub fn kind(&self) -> FileChangeKind {
-        self.kind
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -31,8 +31,7 @@ impl ResourceKey {
 /// Project-owned mutation envelope. Application and Command adapters may
 /// carry this envelope across the session boundary, while Graph only receives
 /// the typed payload it needs for a single graph operation.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MutationRequest<T> {
     pub resource: ResourceKey,
     pub base_revision: ResourceRevision,

@@ -37,6 +37,19 @@ impl Notifications {
         });
     }
 
+    /// Replaces a view's inline error, announcing only a newly reported one.
+    pub fn replace_error<T: 'static>(
+        &self,
+        slot: &mut Option<String>,
+        error: Option<String>,
+        cx: &mut Context<T>,
+    ) {
+        if let Some(error) = &error {
+            self.error(error.clone(), cx);
+        }
+        *slot = error;
+    }
+
     pub fn error<T: 'static>(&self, message: impl Into<SharedString>, cx: &mut Context<T>) {
         self.push(Notification::error(message), cx);
     }

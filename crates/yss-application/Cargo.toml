@@ -44,7 +44,6 @@ yss-database-store = { path = "../yss-database-store" }
 arrow.workspace = true
 yss-database-arrow = { path = "../yss-database-arrow" }
 yss-graph-execution = { path = "../yss-graph-execution" }
-yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-node-catalog = { path = "../yss-node-catalog" }
@@ -62,7 +61,6 @@ yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-project-model = { path = "../yss-project-model" }
-yss-project-progress = { path = "../yss-project-progress" }
 yss-project-registry = { path = "../yss-project-registry" }
 yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 yss-sci-contract = { path = "../yss-sci-contract" }

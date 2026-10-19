@@ -40,10 +40,7 @@ struct PackageInstaller {
 }
 impl PackageInstaller {
     fn set_error(&mut self, error: Option<String>, cx: &mut gpui_kit::Context<Self>) {
-        if let Some(error) = &error {
-            self.notifications.error(error.clone(), cx);
-        }
-        self.error = error;
+        self.notifications.replace_error(&mut self.error, error, cx);
     }
 
     fn new(

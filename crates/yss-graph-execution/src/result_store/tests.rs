@@ -545,11 +545,9 @@ fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() 
         crate::result::ResultValidity::CurrentValid
     );
     let weak = Arc::downgrade(store.get(id).unwrap().value());
-    let a = Uuid::new_v4();
-    let b = Uuid::new_v4();
-    store.retain(id, a, "main", None).unwrap();
-    store.retain(id, a, "main", None).unwrap();
-    store.retain(id, b, "report-window", None).unwrap();
+    let (a, _) = store.retain(id).unwrap();
+    let (b, _) = store.retain(id).unwrap();
+    assert_ne!(a, b);
     assert_eq!(store.registry.read().unwrap().values[&id].leases.len(), 2);
     store.invalidate_graph("events/main.yssbi-event");
     assert!(store.query_pin_result(&output()).is_none());
@@ -585,14 +583,10 @@ fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() 
         store.query_result_with_validity(id).unwrap().validity,
         crate::result::ResultValidity::Retained
     );
-    store.release(a, "main").unwrap();
-    store.release(a, "main").unwrap();
+    store.release(a);
+    store.release(a);
     assert!(store.get(id).is_some());
-    assert!(matches!(
-        store.release(b, "main"),
-        Err(ResultRetentionError::WrongOwner)
-    ));
-    store.release(b, "report-window").unwrap();
+    store.release(b);
     assert!(store.get(id).is_none());
     assert!(
         store
@@ -605,48 +599,13 @@ fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() 
 }
 
 #[test]
-fn window_handoffs_and_owner_reconciliation_do_not_leak_or_drop_claimed_results() {
+fn retaining_an_unavailable_result_issues_no_lease() {
     let store = ResultStore::new();
-    let run = RunId::from_existing(1);
-    store.begin_run(run, &[output()], None, &BTreeMap::new());
-    store.publish(&[result(1, run)], &[]);
-    let id = ResultId::from_existing(1);
-    let lease = Uuid::new_v4();
-    store.retain(id, lease, "main", Some("plot")).unwrap();
-    store.invalidate_graph("events/main.yssbi-event");
-    store.reconcile("main", &BTreeSet::new());
-    assert!(store.get(id).is_some());
     assert!(matches!(
-        store.claim(lease, "other"),
-        Err(ResultRetentionError::WrongOwner)
+        store.retain(ResultId::from_existing(1)),
+        Err(ResultRetentionError::Unavailable)
     ));
-    store.claim(lease, "plot").unwrap();
-    store.claim(lease, "plot").unwrap();
-    store.close_owner("main");
-    assert!(store.get(id).is_some());
-    assert!(matches!(
-        store.retain(id, Uuid::new_v4(), "main", None),
-        Err(ResultRetentionError::OwnerClosed)
-    ));
-    store.reconcile("plot", &BTreeSet::from([lease]));
-    assert!(store.get(id).is_some());
-    store.reconcile("plot", &BTreeSet::new());
-    assert!(store.get(id).is_none());
-    for closed in ["main", "plot"] {
-        let store = ResultStore::new();
-        let run = RunId::from_existing(2);
-        store.begin_run(run, &[output()], None, &BTreeMap::new());
-        store.publish(&[result(2, run)], &[]);
-        let id = ResultId::from_existing(2);
-        store
-            .retain(id, Uuid::new_v4(), "main", Some("plot"))
-            .unwrap();
-        store.invalidate_graph("events/main.yssbi-event");
-        store.close_owner(closed);
-        assert!(store.get(id).is_none());
-        assert!(store.registry.read().unwrap().leases.is_empty());
-        assert!(store.registry.read().unwrap().owner_leases.is_empty());
-    }
+    assert!(store.registry.read().unwrap().leases.is_empty());
 }
 
 #[test]
@@ -852,8 +811,7 @@ fn dependency_edits_and_undo_do_not_rebind_explicitly_leased_results() {
         .provenance()
         .result_id();
     let weak = Arc::downgrade(store.get(id).unwrap().value());
-    let lease = Uuid::new_v4();
-    store.retain(id, lease, "report", None).unwrap();
+    let (lease, _) = store.retain(id).unwrap();
     let edited = cache_inputs(2, &[("a", 1, &[]), ("b", 8, &["a"]), ("c", 3, &["b"])]);
     store.observe_graph_inputs(graph, edited);
     assert_eq!(
@@ -875,7 +833,7 @@ fn dependency_edits_and_undo_do_not_rebind_explicitly_leased_results() {
     }
     assert_eq!(store.schema_candidates(graph).len(), 1);
     let reading = store.query_result_with_validity(id).unwrap();
-    store.release(lease, "report").unwrap();
+    store.release(lease);
     assert!(store.get(id).is_none());
     assert!(
         weak.upgrade().is_some(),
@@ -898,8 +856,7 @@ fn pending_rerun_keeps_only_explicit_leases_outside_all_result_catalogs() {
     assert!(store.publish(&[result(1, first)], &[]));
     let id = ResultId::from_existing(1);
     let weak = Arc::downgrade(store.get(id).unwrap().value());
-    let lease = Uuid::new_v4();
-    store.retain(id, lease, "report", None).unwrap();
+    let (lease, _) = store.retain(id).unwrap();
     assert!(store.begin_run(second, &[output()], None, &BTreeMap::new()));
     let graph = "events/main.yssbi-event";
     for run in [None, Some(first), Some(second)] {
@@ -912,7 +869,7 @@ fn pending_rerun_keeps_only_explicit_leases_outside_all_result_catalogs() {
         store.query_result_with_validity(id).unwrap().validity,
         crate::result::ResultValidity::Retained
     );
-    store.release(lease, "report").unwrap();
+    store.release(lease);
     assert!(store.get(id).is_none());
     assert!(weak.upgrade().is_none());
     assert!(!store.publish(&[result(1, first)], &[]));

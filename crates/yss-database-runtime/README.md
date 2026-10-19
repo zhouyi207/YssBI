@@ -131,8 +131,7 @@ day/microsecond coordinate convention. The plot adapter classifies its selected 
 exact Arrow types and the shared semantic adapter; timestamps and Time32/Time64 values are normalized
 to microseconds before becoming numeric coordinates. Plugin snapshots use exact Arrow IPC batches.
 
-Harness profile inspection calls `session_api::dataset_overview_with_control` with the caller's
-cancellation and query budget. Chart histograms use `session_api::column_distributions` through
+Chart histograms use `session_api::column_distributions` through
 the Application revision-checked read boundary. That read requires an explicit nonempty column
 selection, projects those fields with the existing Engine query before computing distributions,
 and retains its original query budget and operation lease. Duplicate or missing columns are

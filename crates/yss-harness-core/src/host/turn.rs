@@ -111,7 +111,7 @@ impl HarnessHost {
         // Session writes share the selection gate; executing a turn must not hold it.
         drop(access);
         let turn_id =
-            HarnessTurnId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessTurn)?)?;
+            HarnessTurnId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessTurn))?;
         let started_at = self.ports.clock.now();
         let mut turn = HarnessTurnRecord {
             id: turn_id.clone(),

@@ -7,7 +7,7 @@ use chrono::NaiveDateTime;
 use serde_json::json;
 
 use super::dispatcher::{LIVE_BATCH_INTERVAL, LIVE_BATCH_MAX_RECORDS, LogHub, RECENT_LOG_CAPACITY};
-use super::dto::{LogBatchDto, LogDomain, LogLevel, LogOrigin, LogRecordDto, LogSubscriptionDto};
+use super::dto::{LogDomain, LogLevel, LogRecordDto, LogStreamFailure};
 
 fn captured(message: impl Into<String>) -> CapturedLog {
     CapturedLog {
@@ -26,7 +26,6 @@ fn log_record_serializes_strict_camel_case_contract() {
         sequence: 7,
         timestamp: super::local_timestamp_now(),
         level: LogLevel::Warn,
-        origin: LogOrigin::Rust,
         domain: LogDomain::Execution,
         target: "yssbi::runtime".into(),
         event: Some("runFailed".into()),
@@ -39,7 +38,6 @@ fn log_record_serializes_strict_camel_case_contract() {
     assert_eq!(value["streamId"], "stream-1");
     assert_eq!(value["sequence"], 7);
     assert_eq!(value["level"], "warn");
-    assert_eq!(value["origin"], "rust");
     assert_eq!(value["domain"], "execution");
     assert_eq!(value["event"], "runFailed");
     assert_eq!(value["fields"]["runId"], 42);
@@ -47,46 +45,6 @@ fn log_record_serializes_strict_camel_case_contract() {
     assert!(value.get("source").is_none());
     NaiveDateTime::parse_from_str(value["timestamp"].as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%.f")
         .unwrap();
-}
-
-#[test]
-fn batch_and_subscription_serialize_exact_entries_contract() {
-    let record = LogRecordDto {
-        stream_id: "stream-1".into(),
-        sequence: 1,
-        timestamp: super::local_timestamp_now(),
-        level: LogLevel::Info,
-        origin: LogOrigin::Frontend,
-        domain: LogDomain::Ui,
-        target: "editor.canvas".into(),
-        event: None,
-        message: "ready".into(),
-        source: None,
-        fields: BTreeMap::new(),
-    };
-    let batch = serde_json::to_value(LogBatchDto {
-        stream_id: "stream-1".into(),
-        entries: vec![record.clone()],
-        evicted_sequences: Vec::new(),
-        failure: None,
-    })
-    .unwrap();
-    assert_eq!(batch.as_object().unwrap().len(), 2);
-    assert!(batch.get("entries").is_some());
-    assert!(batch.get("records").is_none());
-
-    let subscription = serde_json::to_value(LogSubscriptionDto {
-        subscription_id: "subscription-1".into(),
-        stream_id: "stream-1".into(),
-        entries: vec![record],
-        latest_sequence: 1,
-        truncated: false,
-    })
-    .unwrap();
-    assert_eq!(subscription.as_object().unwrap().len(), 5);
-    assert!(subscription.get("entries").is_some());
-    assert!(subscription.get("snapshot").is_none());
-    assert_eq!(subscription["latestSequence"], 1);
 }
 
 #[test]
@@ -230,10 +188,7 @@ fn overflowing_subscriber_stops_without_delivering_queued_batches() {
     assert_eq!(first.entries[0].message, "in-flight");
     let terminal = slow_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
     assert!(terminal.entries.is_empty());
-    assert_eq!(
-        serde_json::to_value(terminal.failure).unwrap(),
-        "subscriber_lagged"
-    );
+    assert_eq!(terminal.failure, Some(LogStreamFailure::SubscriberLagged));
     assert!(matches!(
         slow_receiver.recv_timeout(Duration::from_secs(1)),
         Err(mpsc::RecvTimeoutError::Disconnected)

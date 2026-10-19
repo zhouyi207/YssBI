@@ -60,25 +60,6 @@ impl OlsCovariance {
             Self::Newey { .. } => "newey",
         }
     }
-
-    pub fn parameters(&self) -> Option<CovParams> {
-        match self {
-            Self::NonRobust | Self::Hc0 | Self::Hc1 | Self::Hc2 | Self::Hc3 => None,
-            Self::FixedScale { scale } => Some(CovParams::FixedScale { scale: *scale }),
-            Self::Cluster {
-                cluster_id,
-                xtreg_fe_style,
-            } => Some(CovParams::Cluster {
-                cluster_id: cluster_id.clone(),
-                xtreg_fe_style: *xtreg_fe_style,
-            }),
-            Self::Hac { kernel, bandwidth } => Some(CovParams::HAC {
-                kernel: kernel.clone(),
-                bandwidth: *bandwidth,
-            }),
-            Self::Newey { lag } => Some(CovParams::Newey { lag: *lag }),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -23,9 +23,15 @@ pub fn fit_binary(
         SciOperationCode::Regression,
     )?;
     let y = Col::from_iter(response);
+    fit_binary_design(link, y, x, metadata, options)
+}
+
+fn inverse_link(link: BinaryRegressionLink, value: f64) -> f64 {
     match link {
-        BinaryRegressionLink::Logit => fit_logit_design(y, x, metadata, options),
-        BinaryRegressionLink::Probit => fit_probit_design(y, x, metadata, options),
+        // Branching keeps exp from overflowing on either tail.
+        BinaryRegressionLink::Logit if value >= 0.0 => 1.0 / (1.0 + (-value).exp()),
+        BinaryRegressionLink::Logit => value.exp() / (1.0 + value.exp()),
+        BinaryRegressionLink::Probit => crate::distribution::normal::cdf(value),
     }
 }
 
@@ -50,34 +56,42 @@ pub fn predict_binary(
     }
     Ok((&x * &Col::from_iter(coefficients.iter().copied()))
         .iter()
-        .map(|&v| match link {
-            BinaryRegressionLink::Logit if v >= 0.0 => 1.0 / (1.0 + (-v).exp()),
-            BinaryRegressionLink::Logit => v.exp() / (1.0 + v.exp()),
-            BinaryRegressionLink::Probit => crate::distribution::normal::cdf(v),
-        })
+        .map(|&v| inverse_link(link, v))
         .collect())
 }
 
-pub(crate) fn fit_logit_design(
+fn fit_binary_design(
+    link: BinaryRegressionLink,
     y: Col<f64>,
     x: Mat<f64>,
     metadata: StatisticalObservationMetadata,
     config: yss_sci_contract::regression::discrete::BinaryOptions,
 ) -> Result<RegressionFit, SciError> {
     let constant = config.constant;
-    let model = Logit {
-        endog: y,
-        exog: x,
-        config,
+    let (result, y, x) = match link {
+        BinaryRegressionLink::Logit => {
+            let model = Logit {
+                endog: y,
+                exog: x,
+                config,
+            };
+            (model.fit(), model.endog, model.exog)
+        }
+        BinaryRegressionLink::Probit => {
+            let model = Probit {
+                endog: y,
+                exog: x,
+                config,
+            };
+            (model.fit(), model.endog, model.exog)
+        }
     };
-    let result = model
-        .fit()
-        .map_err(|_| computation_failed(SciOperationCode::Regression))?;
-    let (y, x) = (&model.endog, &model.exog);
+    let result = result.map_err(|_| computation_failed(SciOperationCode::Regression))?;
+    let (y, x) = (&y, &x);
     let coefficients = result.betas.iter().copied().collect::<Vec<_>>();
     let fitted = (x * &result.betas)
         .iter()
-        .map(|&value| 1.0 / (1.0 + (-value).exp()))
+        .map(|&value| inverse_link(link, value))
         .collect::<Vec<_>>();
     let adjusted_pseudo_r2 =
         1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
@@ -96,86 +110,12 @@ pub(crate) fn fit_logit_design(
             .map(|j| x.col(j).iter().copied().collect())
             .collect(),
         constant,
-        family: BinaryRegressionLink::Logit.family().into(),
+        family: link.family().into(),
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
         fitted,
         coefficients,
         statistics: RegressionStatistics::Binary {
-            link: BinaryRegressionLink::Logit,
-            coefficients: RegressionCoefficientStatistics {
-                covariance: covariance_rows(&result.cov_beta),
-                standard_errors: result.stds.iter().copied().collect::<Vec<_>>(),
-                statistic_values: result.zvalues.iter().copied().collect::<Vec<_>>(),
-                p_values: result.pvalues.iter().copied().collect::<Vec<_>>(),
-                confidence_interval_lower: result.conf_int_left.iter().copied().collect::<Vec<_>>(),
-                confidence_interval_upper: result
-                    .conf_int_right
-                    .iter()
-                    .copied()
-                    .collect::<Vec<_>>(),
-            },
-            model: BinaryRegressionStatistics {
-                log_likelihood: result.log_likelihood,
-                null_log_likelihood: result.ll_null,
-                pseudo_r2: result.pseudo_r2,
-                adjusted_pseudo_r2,
-                lr_chi2: result.lr_chi2,
-                lr_p_value: result.lr_p_value,
-                aic: result.aic,
-                bic: result.bic,
-                iterations: result.iterations,
-                converged: result.converged,
-                condition_number: design_condition_number(x),
-            },
-        },
-        metadata,
-    })
-}
-
-pub(crate) fn fit_probit_design(
-    y: Col<f64>,
-    x: Mat<f64>,
-    metadata: StatisticalObservationMetadata,
-    config: yss_sci_contract::regression::discrete::BinaryOptions,
-) -> Result<RegressionFit, SciError> {
-    let constant = config.constant;
-    let model = Probit {
-        endog: y,
-        exog: x,
-        config,
-    };
-    let result = model
-        .fit()
-        .map_err(|_| computation_failed(SciOperationCode::Regression))?;
-    let (y, x) = (&model.endog, &model.exog);
-    let coefficients = result.betas.iter().copied().collect::<Vec<_>>();
-    let fitted = (x * &result.betas)
-        .iter()
-        .map(|&value| crate::distribution::normal::cdf(value))
-        .collect::<Vec<_>>();
-    let adjusted_pseudo_r2 =
-        1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
-    Ok(RegressionFit {
-        parameter_names: (0..x.ncols())
-            .map(|i| {
-                if i == 0 && constant {
-                    "_cons".into()
-                } else {
-                    format!("x{}", i + usize::from(!constant))
-                }
-            })
-            .collect(),
-        response_name: "response".into(),
-        design: (0..x.ncols())
-            .map(|j| x.col(j).iter().copied().collect())
-            .collect(),
-        constant,
-        family: BinaryRegressionLink::Probit.family().into(),
-        residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
-        fitted,
-        coefficients,
-        statistics: RegressionStatistics::Binary {
-            link: BinaryRegressionLink::Probit,
+            link,
             coefficients: RegressionCoefficientStatistics {
                 covariance: covariance_rows(&result.cov_beta),
                 standard_errors: result.stds.iter().copied().collect::<Vec<_>>(),

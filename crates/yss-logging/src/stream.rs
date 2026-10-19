@@ -5,9 +5,7 @@ mod rust_projection;
 mod worker;
 
 pub use dispatcher::LogsUnavailable;
-pub use dto::{
-    LogBatchDto, LogDomain, LogOrigin, LogRecordDto, LogStreamFailure, LogSubscriptionDto,
-};
+pub use dto::{LogBatchDto, LogDomain, LogRecordDto, LogStreamFailure, LogSubscriptionDto};
 pub use runtime::{LogInitializationError, LogRuntime};
 
 fn local_timestamp_now() -> String {

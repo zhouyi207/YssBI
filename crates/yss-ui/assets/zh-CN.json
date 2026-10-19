@@ -271,7 +271,8 @@
     "delete": "删除",
     "cancel": "取消",
     "confirm": "确定",
-    "listSeparator": "、"
+    "listSeparator": "、",
+    "run": "运行"
   },
   "notifications": {
     "editor": {
@@ -283,12 +284,6 @@
     },
     "externalUrl": {
       "openFailed": "无法打开外部链接。"
-    },
-    "julia": {
-      "runtime": {
-        "title": "Julia 运行时",
-        "description": "Julia 计算环境与工作进程状态"
-      }
     }
   },
   "editor": {
@@ -762,17 +757,10 @@
     }
   },
   "projectPicker": {
-    "title": "项目管理",
-    "description": "从最近项目继续，或新建 / 打开一个 metadata.yssbi 项目。",
-    "deleteProjectConfirm": {
-      "title": "将项目移到回收站？",
-      "description": "「%{name}」的所有文件和文件夹将移到回收站，之后可从回收站恢复。"
-    },
     "issues": {
       "errors": {
         "unknown": "无法完成该操作。",
         "invalidPath": "所选路径不是有效的 YssBI 项目位置。",
-        "invalidProject": "所选项目元数据无效或已损坏。",
         "busy": "另一个项目操作仍在进行，请稍后重试。",
         "recoveryRequired": "该项目需要先完成恢复才能继续操作。",
         "filesystem": "无法安全地更新项目文件。"
@@ -842,85 +830,7 @@
     "keyboardShortcuts": "快捷键…",
     "services": "服务"
   },
-  "bayes": {
-    "title": "贝叶斯参数估计",
-    "tabs": {
-      "model": "模型"
-    },
-    "actions": {
-      "run": "运行"
-    },
-    "errors": {
-      "title": "贝叶斯推断失败"
-    },
-    "validation": {
-      "title": "请检查模型"
-    },
-    "formula": {
-      "title": "1. 模型公式"
-    },
-    "symbols": {
-      "title": "2. 符号配置"
-    },
-    "prior": {
-      "title": "先验分布"
-    },
-    "dataBinding": {
-      "title": "数据绑定"
-    },
-    "sampler": {
-      "title": "3. 采样器"
-    },
-    "results": {
-      "titles": {
-        "summary": "结果摘要"
-      },
-      "empty": {
-        "summary": "运行完成后显示参数摘要。"
-      },
-      "diagnostics": {
-        "assessment": {
-          "good": {
-            "title": "诊断良好",
-            "summary": "当前采样诊断未发现明显问题。"
-          },
-          "warning": {
-            "title": "需要关注",
-            "summary": "部分诊断指标需要进一步检查。"
-          },
-          "bad": {
-            "title": "诊断较差",
-            "summary": "当前结果可能尚未可靠收敛。"
-          },
-          "unknown": {
-            "title": "诊断不完整",
-            "summary": "当前结果缺少部分诊断信息。"
-          }
-        },
-        "warnings": {
-          "rhat_too_high": {
-            "title": "%{parameter} R-hat 偏高"
-          },
-          "ess_too_low": {
-            "title": "%{parameter} 有效样本量不足"
-          },
-          "unknown": {
-            "title": "诊断警告（%{code}）"
-          }
-        }
-      }
-    }
-  },
-  "julia": {
-    "menu": {
-      "title": "Julia 计算引擎"
-    },
-    "install": {
-      "title": "安装 Julia Runtime"
-    }
-  },
   "aboutModal": {
-    "title": "关于 %{appName}",
     "description": "统计计算与可视化工作台"
   },
   "bottomBar": {
@@ -969,7 +879,6 @@
       "providers": "供应商",
       "searchProviders": "搜索供应商…",
       "noMatchingProviders": "未找到匹配的供应商。",
-      "title": "模型与供应商",
       "chooseModel": "选择模型",
       "nextTurn": "切换仅影响之后发送的消息",
       "unavailable": "所选模型不可用",
@@ -990,9 +899,9 @@
       "removeProvider": "删除供应商",
       "authentication": "认证方式",
       "noAuthentication": "无需认证",
-      "endpointHint": "填写服务的 API 根地址，可修改地域或使用自己的网关。Azure 请填写资源地址并以 /openai/v1 结尾。"
+      "endpointHint": "填写服务的 API 根地址，可修改地域或使用自己的网关。Azure 请填写资源地址并以 /openai/v1 结尾。",
+      "model": "模型"
     },
-    "title": "设置",
     "sections": {
       "ai": "AI",
       "appearance": "外观"
@@ -1097,7 +1006,6 @@
     "open": "打开",
     "viewInDatabaseEditor": "在数据库编辑器中查看",
     "projectTree": {
-      "empty": "暂无项目资源",
       "categories": {
         "eventGraphs": "事件图",
         "functionGraphs": "函数图",
@@ -1202,9 +1110,6 @@
       "mariadb": {
         "label": "MariaDB",
         "description": "远程 MariaDB 数据库"
-      },
-      "api": {
-        "description": "从远程接口拉取数据"
       }
     },
     "selectSheet": "选择 Sheet",
@@ -1314,7 +1219,6 @@
       "moveColumnDown": "下移%{column}"
     },
     "fields": {
-      "name": "名称",
       "type": "类型",
       "value": "值",
       "columns": "列",
@@ -1325,7 +1229,6 @@
       "message": "消息",
       "stream": "日志流",
       "sequence": "序列",
-      "origin": "记录来源",
       "target": "目标",
       "event": "事件",
       "fields": "字段",
@@ -1341,17 +1244,12 @@
     "typeLabels": {
       "function_graph": "函数图"
     },
-    "callSites": {
-      "title": "被引用 (%{count})",
-      "empty": "暂无其他图引用此函数"
-    },
     "counts": {
       "rows": "%{count} 行"
     },
     "constants": {
       "title": "常量",
       "add": "添加常量",
-      "empty": "在此添加供当前图使用的常量。",
       "choose": "选择常量"
     },
     "constantValue": {
@@ -1369,9 +1267,6 @@
         "notArray": "请输入 JSON 数组",
         "notObject": "请输入 JSON 对象"
       }
-    },
-    "delete": {
-      "title": "删除%{itemType}"
     },
     "pinEditor": {
       "noInputs": "无输入"

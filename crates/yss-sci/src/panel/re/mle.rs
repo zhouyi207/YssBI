@@ -12,7 +12,7 @@ pub(super) fn re_mle_log_lik(
     group_id: &[usize],
     betas: &[f64],
     kept: &[usize],
-    obs_per_group: &HashMap<usize, usize>,
+    obs_per_group: &BTreeMap<usize, usize>,
     input: RandomEffectVariances,
 ) -> f64 {
     let RandomEffectVariances { sigma2_u, sigma2_e } = input;
@@ -61,7 +61,7 @@ pub(super) fn re_mle_neg_ll_from_params(
     exog: &Mat<f64>,
     group_id: &[usize],
     kept: &[usize],
-    obs_per_group: &HashMap<usize, usize>,
+    obs_per_group: &BTreeMap<usize, usize>,
 ) -> f64 {
     let n_beta = kept.len();
     if params.len() < n_beta + 2 {
@@ -90,7 +90,7 @@ fn re_mle_numerical_gradient(
     exog: &Mat<f64>,
     group_id: &[usize],
     kept: &[usize],
-    obs_per_group: &HashMap<usize, usize>,
+    obs_per_group: &BTreeMap<usize, usize>,
     h: f64,
 ) -> Vec<f64> {
     let d = params.len();
@@ -120,7 +120,7 @@ fn re_mle_numerical_hessian(
     exog: &Mat<f64>,
     group_id: &[usize],
     kept: &[usize],
-    obs_per_group: &HashMap<usize, usize>,
+    obs_per_group: &BTreeMap<usize, usize>,
     h: f64,
 ) -> Vec<Vec<f64>> {
     let d = params.len();
@@ -150,7 +150,7 @@ pub(super) fn re_mle_newton_step(
     exog: &Mat<f64>,
     group_id: &[usize],
     kept: &[usize],
-    obs_per_group: &HashMap<usize, usize>,
+    obs_per_group: &BTreeMap<usize, usize>,
     h: f64,
 ) -> Result<(Vec<f64>, f64, bool), String> {
     let d = params.len();
@@ -195,26 +195,70 @@ pub fn fit_panel_re_mle(
     entity_id: &[usize],
     constant: bool,
 ) -> Result<super::super::PanelFit, String> {
+    fit_panel_re_mle_oneway(
+        endog,
+        exog,
+        entity_id,
+        super::super::OneWayEffect::Entity,
+        constant,
+    )
+}
+
+/// Panel RE MLE (Time): same as entity MLE but group by time period
+pub fn fit_panel_re_mle_time(
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
+    entity_id: &[usize],
+    time_id: &[usize],
+    constant: bool,
+) -> Result<super::super::PanelFit, String> {
+    fit_panel_re_mle_oneway(
+        endog,
+        exog,
+        entity_id,
+        super::super::OneWayEffect::Time(time_id),
+        constant,
+    )
+}
+
+fn fit_panel_re_mle_oneway(
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
+    entity_id: &[usize],
+    effect: super::super::OneWayEffect<'_>,
+    constant: bool,
+) -> Result<super::super::PanelFit, String> {
+    let (group_id, label, groups) = match effect {
+        super::super::OneWayEffect::Entity => (entity_id, "Panel RE (MLE)", "entities"),
+        super::super::OneWayEffect::Time(time_id) => {
+            (time_id, "Panel RE (MLE Time)", "time periods")
+        }
+    };
     let n = endog.nrows();
-    if exog.nrows() != n || entity_id.len() != n {
-        return Err("Panel RE (MLE): lengths must match".to_string());
+    if exog.nrows() != n || entity_id.len() != n || group_id.len() != n {
+        return Err(format!("{label}: lengths must match"));
     }
     let n_entities = entity_id
         .iter()
         .copied()
         .collect::<std::collections::HashSet<_>>()
         .len();
-    if n_entities < 2 {
-        return Err("Panel RE (MLE): need at least 2 entities".to_string());
+    let n_groups = group_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    if n_groups < 2 {
+        return Err(format!("{label}: need at least 2 {groups}"));
     }
 
-    let (obs_per_entity, t_bar_harmonic) = obs_per_group_and_harmonic_mean(entity_id);
+    let (obs_per_entity, t_bar_harmonic) = obs_per_group_and_harmonic_mean(group_id);
     let k = exog.ncols();
     let endog_vec: Vec<f64> = endog.iter().cloned().collect();
     let t_bar = if t_bar_harmonic > 1e-300 {
         t_bar_harmonic
     } else {
-        n as f64 / n_entities as f64
+        n as f64 / n_groups as f64
     };
 
     // 1. Fit constant-only model for ll_null (Stata "Fitting constant-only model")
@@ -224,7 +268,7 @@ pub fn fit_panel_re_mle(
     let mut ll_null = 0.0;
     let mut mle_iter_log_lik_const: Vec<f64> = Vec::new();
     {
-        let (_, y_b_vec, _) = group_means(&endog_vec, exog, entity_id);
+        let (_, y_b_vec, _) = group_means(&endog_vec, exog, group_id);
         let n_b = y_b_vec.len();
         let mut ss_b = 0.0;
         for &y in &y_b_vec {
@@ -232,9 +276,9 @@ pub fn fit_panel_re_mle(
         }
         let df_b = (n_b as i64 - 1).max(1) as usize;
         let var_y_bar = ss_b / df_b as f64;
-        let r_w = within_transform(&endog_vec, entity_id);
+        let r_w = within_transform(&endog_vec, group_id);
         let r_w_ss: f64 = r_w.iter().map(|x| x * x).sum();
-        let df_w = n.saturating_sub(n_entities).max(1);
+        let df_w = n.saturating_sub(n_groups).max(1);
         let sigma2_e_sa = (r_w_ss / df_w as f64).max(1e-12);
         let sigma2_u_sa = (var_y_bar - sigma2_e_sa / t_bar).max(1e-10);
         let ss_pooled: f64 = endog_vec.iter().map(|y| (y - y_global_mean).powi(2)).sum();
@@ -252,21 +296,21 @@ pub fn fit_panel_re_mle(
         fn gls_alpha_and_ll(
             endog_vec: &[f64],
             exog: &Mat<f64>,
-            entity_id: &[usize],
-            obs_per_entity: &HashMap<usize, usize>,
+            group_id: &[usize],
+            obs_per_entity: &BTreeMap<usize, usize>,
             su: f64,
             se: f64,
         ) -> Result<(f64, f64), String> {
             let n = endog_vec.len();
             let theta_arr: Vec<f64> = (0..n)
                 .map(|i| {
-                    let eid = entity_id[i];
+                    let eid = group_id[i];
                     let t_i = *obs_per_entity.get(&eid).unwrap_or(&1) as f64;
                     let denom = t_i * su + se;
                     1.0 - (se / denom.max(1e-300)).sqrt()
                 })
                 .collect();
-            let y_bar = between_transform(endog_vec, entity_id);
+            let y_bar = between_transform(endog_vec, group_id);
             let y_star: Vec<f64> = (0..n)
                 .map(|i| endog_vec[i] - theta_arr[i] * y_bar[i])
                 .collect();
@@ -292,7 +336,7 @@ pub fn fit_panel_re_mle(
             let ll = re_mle_log_lik(
                 endog_vec,
                 exog,
-                entity_id,
+                group_id,
                 &[alpha],
                 &[0],
                 obs_per_entity,
@@ -306,7 +350,7 @@ pub fn fit_panel_re_mle(
         let (_, ll_sa) = gls_alpha_and_ll(
             &endog_vec,
             exog,
-            entity_id,
+            group_id,
             &obs_per_entity,
             sigma2_u_sa,
             sigma2_e_sa,
@@ -315,7 +359,7 @@ pub fn fit_panel_re_mle(
             gls_alpha_and_ll(
                 &endog_vec,
                 exog,
-                entity_id,
+                group_id,
                 &obs_per_entity,
                 sigma2_u_pool,
                 sigma2_e_pool,
@@ -327,7 +371,7 @@ pub fn fit_panel_re_mle(
         let ll_grand = re_mle_log_lik(
             &endog_vec,
             exog,
-            entity_id,
+            group_id,
             &[y_global_mean],
             &[0],
             &obs_per_entity,
@@ -340,7 +384,7 @@ pub fn fit_panel_re_mle(
             let (alpha_sa, _) = gls_alpha_and_ll(
                 &endog_vec,
                 exog,
-                entity_id,
+                group_id,
                 &obs_per_entity,
                 sigma2_u_sa,
                 sigma2_e_sa,
@@ -349,7 +393,7 @@ pub fn fit_panel_re_mle(
                 gls_alpha_and_ll(
                     &endog_vec,
                     exog,
-                    entity_id,
+                    group_id,
                     &obs_per_entity,
                     sigma2_u_pool,
                     sigma2_e_pool,
@@ -378,7 +422,7 @@ pub fn fit_panel_re_mle(
                 &params_const,
                 &endog_vec,
                 exog,
-                entity_id,
+                group_id,
                 &kept_const,
                 &obs_per_entity,
                 h_num,
@@ -388,7 +432,7 @@ pub fn fit_panel_re_mle(
                         &new_params,
                         &endog_vec,
                         exog,
-                        entity_id,
+                        group_id,
                         &kept_const,
                         &obs_per_entity,
                     );
@@ -418,18 +462,18 @@ pub fn fit_panel_re_mle(
     {
         let theta_arr: Vec<f64> = (0..n)
             .map(|i| {
-                let eid = entity_id[i];
+                let eid = group_id[i];
                 let t_i = *obs_per_entity.get(&eid).unwrap_or(&1) as f64;
                 let denom = t_i * sigma2_u + sigma2_e;
                 1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
             })
             .collect();
-        let y_bar = between_transform(&endog_vec, entity_id);
+        let y_bar = between_transform(&endog_vec, group_id);
         let y_star: Col<f64> = Col::from_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
         let mut x_star = Mat::zeros(n, k);
         for c in 0..k {
             let col: Vec<f64> = exog.col(c).iter().cloned().collect();
-            let x_bar = between_transform(&col, entity_id);
+            let x_bar = between_transform(&col, group_id);
             for i in 0..n {
                 x_star[(i, c)] = col[i] - theta_arr[i] * x_bar[i];
             }
@@ -458,7 +502,7 @@ pub fn fit_panel_re_mle(
         let ll0_full = re_mle_log_lik(
             &endog_vec,
             exog,
-            entity_id,
+            group_id,
             &betas,
             &kept,
             &obs_per_entity,
@@ -477,7 +521,7 @@ pub fn fit_panel_re_mle(
             &params,
             &endog_vec,
             exog,
-            entity_id,
+            group_id,
             &kept,
             &obs_per_entity,
             h_num,
@@ -490,7 +534,7 @@ pub fn fit_panel_re_mle(
                     &new_params,
                     &endog_vec,
                     exog,
-                    entity_id,
+                    group_id,
                     &kept,
                     &obs_per_entity,
                 );
@@ -506,20 +550,20 @@ pub fn fit_panel_re_mle(
 
     let theta_arr: Vec<f64> = (0..n)
         .map(|i| {
-            let eid = entity_id[i];
+            let eid = group_id[i];
             let t_i = *obs_per_entity.get(&eid).unwrap_or(&1) as f64;
             let denom = t_i * sigma2_u + sigma2_e;
             1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
         })
         .collect();
 
-    let y_bar = between_transform(&endog_vec, entity_id);
+    let y_bar = between_transform(&endog_vec, group_id);
     let y_star: Col<f64> = Col::from_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
 
     let mut x_star = Mat::zeros(n, k);
     for c in 0..k {
         let col: Vec<f64> = exog.col(c).iter().cloned().collect();
-        let x_bar = between_transform(&col, entity_id);
+        let x_bar = between_transform(&col, group_id);
         for i in 0..n {
             x_star[(i, c)] = col[i] - theta_arr[i] * x_bar[i];
         }
@@ -563,8 +607,8 @@ pub fn fit_panel_re_mle(
     };
 
     // Obs per group
-    let mut obs_per_entity: HashMap<usize, usize> = HashMap::new();
-    for &eid in entity_id {
+    let mut obs_per_entity: BTreeMap<usize, usize> = BTreeMap::new();
+    for &eid in group_id {
         *obs_per_entity.entry(eid).or_insert(0) += 1;
     }
     let eids: Vec<usize> = obs_per_entity.keys().copied().collect();
@@ -574,7 +618,7 @@ pub fn fit_panel_re_mle(
         .collect();
     let obs_min = obs_per_group.iter().copied().min().unwrap_or(0);
     let obs_max = obs_per_group.iter().copied().max().unwrap_or(0);
-    let obs_avg = obs_per_group.iter().sum::<usize>() as f64 / n_entities as f64;
+    let obs_avg = obs_per_group.iter().sum::<usize>() as f64 / n_groups as f64;
 
     // MLE does not report R² Within/Between/Overall (Stata xtreg, mle)
     let sigma_u = sigma2_u.sqrt();
@@ -586,7 +630,7 @@ pub fn fit_panel_re_mle(
     let log_likelihood = re_mle_log_lik(
         &endog_vec,
         exog,
-        entity_id,
+        group_id,
         &betas_vec,
         &kept,
         &obs_per_entity,
@@ -636,7 +680,7 @@ pub fn fit_panel_re_mle(
         re_mle_log_lik(
             &endog_vec,
             exog,
-            entity_id,
+            group_id,
             &ols_betas,
             &ols_kept,
             &obs_per_entity,
@@ -717,7 +761,11 @@ pub fn fit_panel_re_mle(
             residuals: result.residuals.iter().copied().collect(),
             source_rows: vec![],
         },
-        family: "panel_re_mle".into(),
+        family: match effect {
+            super::super::OneWayEffect::Entity => "panel_re_mle",
+            super::super::OneWayEffect::Time(_) => "panel_re_mle_time",
+        }
+        .into(),
         coefficients: (result.betas).iter().copied().collect(),
         inference: super::super::RegressionCoefficientStatistics {
             covariance: super::super::covariance_rows(&(result.cov_beta)),
@@ -730,7 +778,10 @@ pub fn fit_panel_re_mle(
         statistics: super::super::PanelModelStatistics {
             observations: result.num_observation,
             entities: n_entities,
-            time_periods: 0,
+            time_periods: match effect {
+                super::super::OneWayEffect::Entity => 0,
+                super::super::OneWayEffect::Time(_) => n_groups,
+            },
             within_r2: None,
             linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,

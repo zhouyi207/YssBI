@@ -19,12 +19,6 @@ struct ResultEntry {
     observations: BTreeMap<PlanNodeId, OutputResultInputs>,
 }
 
-struct ResultLease {
-    result_id: ResultId,
-    owner: Box<str>,
-    handoff: Option<Box<str>>,
-}
-
 #[derive(Default)]
 struct CachedOutput {
     run: Option<RunId>,
@@ -45,9 +39,7 @@ struct ResultStoreRegistry {
     values: BTreeMap<ResultId, ResultEntry>,
     graph_inputs: BTreeMap<String, ObservedGraphInputs>,
     outputs: BTreeMap<PlanOutputRef, CachedOutput>,
-    leases: BTreeMap<Uuid, ResultLease>,
-    owner_leases: BTreeMap<Box<str>, BTreeSet<Uuid>>,
-    closed_owners: BTreeSet<Box<str>>,
+    leases: BTreeMap<Uuid, ResultId>,
 }
 
 #[derive(Default)]

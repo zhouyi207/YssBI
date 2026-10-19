@@ -1612,22 +1612,23 @@ fn prepare_rejects_symlinked_live_and_staging_ancestors() {
 }
 
 #[cfg(windows)]
+fn junction(link: &Path, target: &Path) {
+    let status = std::process::Command::new("cmd")
+        .args([
+            "/C",
+            "mklink",
+            "/J",
+            link.to_string_lossy().as_ref(),
+            target.to_string_lossy().as_ref(),
+        ])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+#[cfg(windows)]
 #[test]
 fn prepare_rejects_reparse_point_live_and_staging_ancestors() {
-    fn junction(link: &Path, target: &Path) {
-        let status = std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "mklink",
-                "/J",
-                link.to_string_lossy().as_ref(),
-                target.to_string_lossy().as_ref(),
-            ])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
-
     let temporary = TestDirectory::new("transaction-reparse-defense");
     let outside = TestDirectory::new("transaction-reparse-outside");
     junction(&temporary.path().join("linked"), outside.path());
@@ -1658,20 +1659,6 @@ fn prepare_rejects_reparse_point_live_and_staging_ancestors() {
 #[cfg(windows)]
 #[test]
 fn commit_rejects_reparse_point_staging_traversal() {
-    fn junction(link: &Path, target: &Path) {
-        let status = std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "mklink",
-                "/J",
-                link.to_string_lossy().as_ref(),
-                target.to_string_lossy().as_ref(),
-            ])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
-
     let temporary = TestDirectory::new("transaction-staging-reparse-commit");
     let outside = TestDirectory::new("transaction-staging-reparse-outside");
     let prepared = prepare_json_transaction(
@@ -1705,20 +1692,6 @@ fn commit_rejects_reparse_point_staging_traversal() {
 #[cfg(windows)]
 #[test]
 fn rollback_rejects_reparse_point_live_traversal() {
-    fn junction(link: &Path, target: &Path) {
-        let status = std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "mklink",
-                "/J",
-                link.to_string_lossy().as_ref(),
-                target.to_string_lossy().as_ref(),
-            ])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
-
     let temporary = TestDirectory::new("transaction-live-reparse-rollback");
     let outside = TestDirectory::new("transaction-live-reparse-outside");
     let live_parent = temporary.path().join("nested");
@@ -1752,20 +1725,6 @@ fn rollback_rejects_reparse_point_live_traversal() {
 #[cfg(windows)]
 #[test]
 fn remove_file_revalidates_ancestor_before_commit() {
-    fn junction(link: &Path, target: &Path) {
-        let status = std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "mklink",
-                "/J",
-                link.to_string_lossy().as_ref(),
-                target.to_string_lossy().as_ref(),
-            ])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
-
     let temporary = TestDirectory::new("transaction-remove-file-reparse");
     let outside = TestDirectory::new("transaction-remove-file-outside");
     let parent = temporary.path().join("nested");
@@ -1795,20 +1754,6 @@ fn remove_file_revalidates_ancestor_before_commit() {
 #[cfg(windows)]
 #[test]
 fn remove_file_revalidates_immediately_before_mutation() {
-    fn junction(link: &Path, target: &Path) {
-        let status = std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "mklink",
-                "/J",
-                link.to_string_lossy().as_ref(),
-                target.to_string_lossy().as_ref(),
-            ])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
-
     let temporary = TestDirectory::new("transaction-remove-file-last-check");
     let outside = TestDirectory::new("transaction-remove-file-last-check-outside");
     let parent = temporary.path().join("nested");
@@ -1848,20 +1793,6 @@ fn remove_file_revalidates_immediately_before_mutation() {
 #[cfg(windows)]
 #[test]
 fn remove_directory_revalidates_immediately_before_mutation() {
-    fn junction(link: &Path, target: &Path) {
-        let status = std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "mklink",
-                "/J",
-                link.to_string_lossy().as_ref(),
-                target.to_string_lossy().as_ref(),
-            ])
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
-
     let temporary = TestDirectory::new("transaction-remove-directory-reparse");
     let outside = TestDirectory::new("transaction-remove-directory-outside");
     let parent = temporary.path().join("container");

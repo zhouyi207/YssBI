@@ -64,38 +64,6 @@ pub(crate) fn protocol(
     })
 }
 
-pub(crate) fn data_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    value_type: TypeExpr,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    data_port_with_cardinality(key, title, direction, value_type, PortCardinality::Declared)
-}
-
-pub(crate) fn data_port_with_cardinality(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    value_type: TypeExpr,
-    cardinality: PortCardinality,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: semantic(key, PortKey::new)?,
-        title: title.into(),
-        direction,
-        value_type,
-        cardinality,
-        connections: crate::data_connections(direction),
-        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
-            literal_policy: LiteralPolicy::Allowed,
-            default_value: None,
-        }),
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
-}
-
 pub(crate) fn parameter(
     node_id: &str,
     key: &'static str,
@@ -114,17 +82,6 @@ pub(crate) fn parameter(
         editor,
         presentation: ParameterPresentation::DetailPanel,
         visible_when: None,
-    })
-}
-
-pub(crate) fn concrete(id: &str) -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Concrete(semantic(id, TypeId::new)?))
-}
-
-pub(crate) fn data_series(element: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Applied {
-        constructor: semantic("core.data_series", TypeConstructorId::new)?,
-        arguments: vec![concrete(element)?],
     })
 }
 
@@ -177,4 +134,4 @@ pub(crate) fn category(
     })
 }
 
-pub(crate) use crate::builtin::{iid as i18n, sid as semantic};
+pub(crate) use crate::builtin::{concrete, data_port, data_series, iid as i18n, sid as semantic};

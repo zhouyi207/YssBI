@@ -19,25 +19,6 @@ pub enum ProjectDatabaseError {
     DatabaseAlreadyExists,
     #[error("database not found")]
     DatabaseNotFound,
-    #[error("database name is invalid")]
-    InvalidName,
-    #[error("database name already exists")]
-    NameConflict,
-    #[error("database operation failed: {0}")]
-    Operation(String),
-}
-
-impl ProjectDatabaseError {
-    pub fn operation(error: impl std::fmt::Display) -> Self {
-        Self::Operation(error.to_string())
-    }
-
-    pub const fn recovery_required(&self) -> bool {
-        match self {
-            Self::Project(error) => error.recovery_required(),
-            _ => false,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]

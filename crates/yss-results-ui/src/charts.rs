@@ -14,7 +14,7 @@ use yss_application::database::DatabaseMetaResult;
 use yss_chart_document::ChartDocument;
 use yss_desktop_services::ApplicationTasks;
 use yss_project::{ProjectIndex, charts::ChartSnapshot};
-use yss_project_identity::{ProjectInstanceId, ResourceRevision};
+use yss_project_identity::ResourceRevision;
 use yss_resource_ui::file_session::{FileEditor, FileEditorEvent, FileSession};
 
 actions!(native_charts, [SaveChart]);
@@ -58,9 +58,6 @@ impl ChartEditor {
             _preferences_subscription: None,
             preview_loading: false,
         }
-    }
-    pub fn project(&self) -> &ProjectInstanceId {
-        &self.file.snapshot().project_instance_id
     }
     pub fn focus_chart(&self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);

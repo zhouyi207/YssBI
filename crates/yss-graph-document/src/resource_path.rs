@@ -52,10 +52,6 @@ impl GraphResourcePath {
         &self.0
     }
 
-    pub fn into_string(self) -> String {
-        self.0
-    }
-
     pub fn kind(&self) -> GraphResourceKind {
         if self
             .0

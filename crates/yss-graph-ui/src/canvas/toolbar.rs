@@ -290,7 +290,7 @@ impl GraphCanvas {
                     .label(if running {
                         yss_ui::text::t("common.cancel")
                     } else {
-                        yss_ui::text::t("bayes.actions.run")
+                        yss_ui::text::t("common.run")
                     })
                     .tooltip(if running {
                         yss_ui::text::t("native.canvas.cancelShortcut")

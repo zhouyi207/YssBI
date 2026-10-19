@@ -8,7 +8,7 @@ use std::{
     sync::Mutex,
 };
 use yss_database_contract::DatabaseId;
-use yss_database_runtime::session_api::{DatabaseColumnSelection, DatabaseDataSnapshotRequest};
+use yss_database_runtime::session_api::DatabaseDataSnapshotRequest;
 use yss_plugin_protocol::{
     CallContext, HostServices, PluginFailure, ProjectContext, valid_relative_path,
 };
@@ -138,7 +138,7 @@ impl HostServices for PluginHostServices {
                     captured.database(),
                     DatabaseDataSnapshotRequest {
                         database: DatabaseId::from_existing(dataset.into()),
-                        columns: DatabaseColumnSelection::Selected(columns.into_boxed_slice()),
+                        columns: columns.into_boxed_slice(),
                         offset: 0,
                         limit: max_rows + 1,
                     },

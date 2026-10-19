@@ -100,8 +100,8 @@ pub fn kappa(
                 .iter()
                 .map(|&count| count as f64 / n as f64)
                 .collect::<Vec<_>>();
-            let mut observed = Sum::default();
-            let mut expected = Sum::default();
+            let mut observed = CompensatedSum::default();
+            let mut expected = CompensatedSum::default();
             for a in 0..categories {
                 for b in 0..categories {
                     observed.add(weights[a][b] * table[a][b] as f64 / n as f64);
@@ -122,7 +122,7 @@ pub fn kappa(
             let v = (0..categories)
                 .map(|b| sum((0..categories).map(|a| weights[a][b] * row[a])))
                 .collect::<Vec<_>>();
-            let mut average_gradient = Sum::default();
+            let mut average_gradient = CompensatedSum::default();
             for a in 0..categories {
                 for b in 0..categories {
                     let gradient =
@@ -130,8 +130,8 @@ pub fn kappa(
                     average_gradient.add(table[a][b] as f64 / n as f64 * gradient);
                 }
             }
-            let mut variance = Sum::default();
-            let mut null_variance = Sum::default();
+            let mut variance = CompensatedSum::default();
+            let mut null_variance = CompensatedSum::default();
             for a in 0..categories {
                 for b in 0..categories {
                     let gradient =
@@ -166,7 +166,7 @@ pub fn kappa(
             }
             let mut subject_counts = vec![0usize; categories];
             let mut agreements = Vec::with_capacity(n);
-            let mut observed = Sum::default();
+            let mut observed = CompensatedSum::default();
             for i in 0..n {
                 checkpoint(control, i)?;
                 subject_counts.fill(0);
@@ -183,7 +183,7 @@ pub fn kappa(
             }
             let po = bounded(observed.total, 0.0, 1.0)?;
             let coefficient = finite((po - pe) / (1.0 - pe))?;
-            let mut influences = Sum::default();
+            let mut influences = CompensatedSum::default();
             for i in 0..n {
                 checkpoint(control, i)?;
                 subject_counts.fill(0);
@@ -281,8 +281,8 @@ pub fn icc(
     }
     let ss_subjects = k as f64 * sum(row_means.iter().map(|mean| (mean - grand).powi(2)));
     let ss_raters = n as f64 * sum(column_means.iter().map(|mean| (mean - grand).powi(2)));
-    let mut residual = Sum::default();
-    let mut within = Sum::default();
+    let mut residual = CompensatedSum::default();
+    let mut within = CompensatedSum::default();
     for i in 0..n {
         checkpoint(control, i)?;
         for j in 0..k {
@@ -485,7 +485,7 @@ pub fn kendall_w(ratings: &[Vec<f64>], control: &Control) -> Result<ConcordanceR
     let n = matrix(ratings, 2, control)?;
     let m = ratings.len();
     let mut rank_sums = vec![0.0; n];
-    let mut variance = Sum::default();
+    let mut variance = CompensatedSum::default();
     let mean = (n + 1) as f64 / 2.0;
     for column in ratings {
         let ranked = ranks(column, control)?;

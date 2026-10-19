@@ -4,6 +4,19 @@ mod function_calls;
 mod reroute;
 mod schema_feedback;
 
+fn connect(document: &mut GraphDocument, output: PortAddress, input: PortAddress) {
+    let id = yss_graph_document::ConnectionId::new();
+    document.connections.insert(
+        id,
+        yss_graph_document::DocumentConnection {
+            id,
+            output,
+            input,
+            order: None,
+        },
+    );
+}
+
 use crate::session::{ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::num::NonZeroU64;
 use std::path::PathBuf;

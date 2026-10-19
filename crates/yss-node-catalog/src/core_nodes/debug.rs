@@ -28,6 +28,8 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
         "Data",
         PortDirection::Input,
         TypeExpr::Generic(value_type.clone()),
+        PortCardinality::Declared,
+        LiteralPolicy::Allowed,
     )?;
     input.input_binding = Some(InputBindingSpec {
         literal_policy: LiteralPolicy::Forbidden,

@@ -1,34 +1,9 @@
+use super::fixture::{connect_port, node};
 use super::*;
 use yss_data_contract::{DataValue, ValueType};
 use yss_graph_analysis::{GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind};
 use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
 
-fn node(document: &mut GraphDocument, kind: &str, parameters: serde_json::Value) -> NodeId {
-    let id = NodeId::new();
-    document.nodes.insert(
-        id,
-        DocumentNode {
-            id,
-            node_type: kind.parse().unwrap(),
-            position: NodePosition { x: 0., y: 0. },
-            parameters: serde_json::from_value(parameters).unwrap(),
-            user_label: None,
-        },
-    );
-    id
-}
-fn connect(document: &mut GraphDocument, from: NodeId, key: &str, input: PortAddress) {
-    let id = ConnectionId::new();
-    document.connections.insert(
-        id,
-        DocumentConnection {
-            id,
-            output: PortAddress::declared(from, key.parse().unwrap()),
-            input,
-            order: None,
-        },
-    );
-}
 #[test]
 fn time_series_category_defaults_execute_relational_inputs_and_publish_reports_or_plots() {
     yss_application::session::NodeComponents::builtins().unwrap();
@@ -123,7 +98,7 @@ fn time_series_category_defaults_execute_relational_inputs_and_publish_reports_o
                 "yssbi.dataframe.series.select",
                 serde_json::json!({"column":column}),
             );
-            connect(
+            connect_port(
                 &mut document,
                 source,
                 "value",
@@ -142,7 +117,7 @@ fn time_series_category_defaults_execute_relational_inputs_and_publish_reports_o
                 );
                 address
             };
-            connect(&mut document, select, "series", address);
+            connect_port(&mut document, select, "series", address);
         }
         let resources = ResourceCatalogSnapshot::new(BTreeMap::new(), BTreeMap::new());
         let analysis = analyze_document(

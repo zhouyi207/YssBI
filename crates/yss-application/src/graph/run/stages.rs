@@ -161,23 +161,16 @@ where
                     },
                 )
                 .map_err(ExecutionApplicationError::PreparedExecution)?;
-            let effects = captured
+            captured
                 .project()
-                .prepare_execution_effects(
+                .confirm_execution_authority(
                     project.authority(),
-                    CandidateProjectEffects::new(project.resources().grants().iter().cloned()),
-                )
-                .map_err(ExecutionApplicationError::ProjectEffectPreparation)?;
-            let _committed = captured
-                .project()
-                .finalize_execution_effects(
-                    effects,
-                    &ProjectEffectCommitControl::new(
+                    &ProjectExecutionConfirmationControl::new(
                         Arc::clone(&request.cancellation),
                         request.deadline,
                     ),
                 )
-                .map_err(ExecutionApplicationError::ProjectEffectFinalization)?;
+                .map_err(ExecutionApplicationError::ProjectAuthorityChanged)?;
             revalidate_final_session(state, captured)?;
             let outcome = finalize_successful_run(handoff)
                 .map_err(ExecutionApplicationError::Finalization)?;
@@ -266,9 +259,8 @@ fn terminal_kind(error: &ExecutionApplicationError) -> RunApplicationEventKind {
                 failure: error.failure(),
             }
         }
-        ExecutionApplicationError::ProjectEffectPreparation(error)
-        | ExecutionApplicationError::ProjectEffectFinalization(error) => {
-            terminal_kind_for_effect_error(error)
+        ExecutionApplicationError::ProjectAuthorityChanged(error) => {
+            terminal_kind_for_confirmation_error(error)
         }
         ExecutionApplicationError::DeadlineExceeded => RunApplicationEventKind::RunErrored {
             failure: RunFailure {

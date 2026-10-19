@@ -25,13 +25,6 @@ impl RecoveryMarker {
         self.state.clear_poison();
     }
 
-    pub fn clear(&self) {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-    }
-
     pub fn error(&self) -> Option<FilesystemError> {
         self.state
             .lock()

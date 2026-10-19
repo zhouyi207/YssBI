@@ -349,7 +349,7 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
         .parameters
         .insert("scale".parse().unwrap(), "2".into());
     assert!(
-        runtime
+        !runtime
             .resolve_graph_document(
                 &graph,
                 &Arc::new(document.clone()),
@@ -359,8 +359,7 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
                 "en-US"
             )
             .semantic_snapshot()
-            .ready()
-            .is_none()
+            .is_ready()
     );
     document
         .nodes
@@ -466,5 +465,5 @@ fn node_owned_ols_parameters_change_the_prepared_plan_and_results() {
         &[],
         "en-US",
     );
-    assert!(analysis.semantic_snapshot().ready().is_none());
+    assert!(!analysis.semantic_snapshot().is_ready());
 }

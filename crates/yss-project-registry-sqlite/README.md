@@ -11,14 +11,13 @@
 options, preserving percent signs and other filename characters. The pool uses one connection
 with WAL and normal synchronous mode.
 
-The registration ID primary key and metadata path unique index serve individual reads.
-Queries bind values through SQLx; catalog loading and individual reads share one row decoder.
-Unknown root identity states and non-boolean favorite values return `StorageFailed`.
-Upsert conflicts and SQL failures use the same typed failure; removing an absent registration
-returns `Unavailable`. SQL diagnostics go to structured tracing rather than localized UI text.
+The metadata path unique index serves path reads. Queries bind values through SQLx; catalog
+loading and path reads share one row decoder. Unknown root identity states return
+`StorageFailed`, as do upsert conflicts and SQL failures. SQL diagnostics go to structured
+tracing rather than localized UI text.
 
-[Registry workflows](../yss-project-registry/README.md) own path admission, native root checks,
-listing order and cleanup. This adapter persists those records without a second project model.
+[Registry workflows](../yss-project-registry/README.md) own path admission, native root checks
+and listing order. This adapter persists those records without a second project model.
 
 ```sh
 cargo test -p yss-project-registry-sqlite --lib

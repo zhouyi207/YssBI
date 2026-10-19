@@ -6,6 +6,7 @@ pub use agreement::{bland_altman, icc, kappa, kendall_w, rwg};
 pub use correlation::{kendall, partial, pearson, spearman};
 pub use ridit::ridit;
 
+use crate::descriptive::CompensatedSum;
 use crate::error::{finite, invalid};
 use crate::inference::intervals::{critical, validate_confidence as level};
 use statrs::distribution::{ContinuousCDF, StudentsT};
@@ -72,21 +73,8 @@ fn matrix(columns: &[Vec<f64>], minimum_columns: usize, control: &Control) -> Re
     }
     Ok(rows)
 }
-#[derive(Default)]
-struct Sum {
-    total: f64,
-    correction: f64,
-}
-impl Sum {
-    fn add(&mut self, value: f64) {
-        let adjusted = value - self.correction;
-        let next = self.total + adjusted;
-        self.correction = (next - self.total) - adjusted;
-        self.total = next;
-    }
-}
 fn sum(values: impl IntoIterator<Item = f64>) -> f64 {
-    let mut sum = Sum::default();
+    let mut sum = CompensatedSum::default();
     for value in values {
         sum.add(value);
     }
@@ -212,8 +200,8 @@ pub(crate) fn ranks(values: &[f64], control: &Control) -> Result<Ranks, Error> {
     control.check()?;
     let mut output = vec![0.0; values.len()];
     let mut pairs = 0u64;
-    let mut cubic = Sum::default();
-    let mut variance = Sum::default();
+    let mut cubic = CompensatedSum::default();
+    let mut variance = CompensatedSum::default();
     let mut first = 0;
     while first < order.len() {
         checkpoint(control, first)?;

@@ -1,4 +1,3 @@
-use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_editor::projection::EditorProjectionModel;
 use yss_project_history::{ResourceDeltaEvent, ResourceDocumentPatch, ResourceLifecycleKind};
@@ -159,7 +158,6 @@ impl ResourceProjectionStatus {
 pub struct GraphProjectionReplacement {
     pub graph_path: Box<str>,
     pub projection: EditorProjectionModel,
-    pub function_editor_projection: Option<FunctionEditorProjection>,
 }
 
 pub(crate) fn committed_resource_mutation_from_project(

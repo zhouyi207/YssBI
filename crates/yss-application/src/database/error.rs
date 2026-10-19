@@ -164,7 +164,6 @@ impl DatabaseOperationError {
             project_instance_id,
             database_id,
             None,
-            None,
         )
     }
 
@@ -188,7 +187,6 @@ impl DatabaseOperationError {
         project_instance_id: &ProjectInstanceId,
         database_id: Option<&str>,
         expected_revision: Option<ResourceRevision>,
-        requested_name: Option<&str>,
     ) -> Self {
         match error {
             ProjectDatabaseError::Project(ProjectOperationError::StaleProjectLifecycle {
@@ -219,21 +217,6 @@ impl DatabaseOperationError {
                     Self::internal_message(operation, "database-not-found error lacked identity")
                 }
             },
-            ProjectDatabaseError::InvalidName => match (database_id, requested_name) {
-                (Some(database_id), Some(requested_name)) => Self::InvalidName {
-                    database_id: database_id.to_owned(),
-                    requested_name: requested_name.to_owned(),
-                },
-                _ => Self::internal_message(operation, "invalid database name lacked context"),
-            },
-            ProjectDatabaseError::NameConflict => match (database_id, requested_name) {
-                (Some(database_id), Some(requested_name)) => Self::NameConflict {
-                    database_id: database_id.to_owned(),
-                    requested_name: requested_name.to_owned(),
-                },
-                _ => Self::internal_message(operation, "database name conflict lacked context"),
-            },
-            ProjectDatabaseError::Operation(message) => Self::internal_message(operation, message),
         }
     }
 }

@@ -5,6 +5,7 @@ use super::builtin::{
 use crate::Message;
 use crate::builtin::add_node_messages;
 use crate::builtin::node_key;
+use crate::builtin::{category_id, concrete, data_port, icon_id, node_type_id, type_id};
 use yss_data_contract::DataValue;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, TypeRegistration};
@@ -308,6 +309,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortCardinality::Declared,
+                LiteralPolicy::Allowed,
             )?);
             ports.push(data_port(
                 "y",
@@ -315,6 +317,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortCardinality::Declared,
+                LiteralPolicy::Allowed,
             )?);
         }
         PlotInputs::NumericSeries => ports.push(data_port(
@@ -323,6 +326,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortDirection::Input,
             numeric_data_series_type(),
             PortCardinality::Declared,
+            LiteralPolicy::Allowed,
         )?),
         PlotInputs::CorrelationSeries => ports.push(data_port(
             "series",
@@ -333,6 +337,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 min: 2,
                 max: Some(64),
             },
+            LiteralPolicy::Allowed,
         )?),
         PlotInputs::Correlogram => {
             ports.push(data_port(
@@ -341,6 +346,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortCardinality::Declared,
+                LiteralPolicy::Allowed,
             )?);
         }
         PlotInputs::Groups => ports.push(data_port(
@@ -352,6 +358,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 min: 1,
                 max: Some(64),
             },
+            LiteralPolicy::Allowed,
         )?),
         PlotInputs::Words | PlotInputs::Categories => ports.push(data_port(
             if matches!(spec.inputs, PlotInputs::Words) {
@@ -363,6 +370,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortDirection::Input,
             data_series_type(concrete("core.text")?),
             PortCardinality::Declared,
+            LiteralPolicy::Allowed,
         )?),
         PlotInputs::ErrorBars => {
             for (key, title) in [
@@ -377,6 +385,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                     PortDirection::Input,
                     numeric_data_series_type(),
                     PortCardinality::Declared,
+                    LiteralPolicy::Allowed,
                 )?);
             }
         }
@@ -387,6 +396,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 data_series_type(concrete("core.binary")?),
                 PortCardinality::Declared,
+                LiteralPolicy::Allowed,
             )?);
             ports.push(data_port(
                 "scores",
@@ -394,6 +404,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortCardinality::Declared,
+                LiteralPolicy::Allowed,
             )?);
         }
         PlotInputs::Combination => {
@@ -403,6 +414,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortDirection::Input,
                 data_series_type(concrete("core.text")?),
                 PortCardinality::Declared,
+                LiteralPolicy::Allowed,
             )?);
             for (key, title) in [("bars", "Bars"), ("line", "Line")] {
                 ports.push(data_port(
@@ -411,6 +423,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                     PortDirection::Input,
                     numeric_data_series_type(),
                     PortCardinality::Declared,
+                    LiteralPolicy::Allowed,
                 )?);
             }
         }
@@ -422,6 +435,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                     PortDirection::Input,
                     numeric_data_series_type(),
                     PortCardinality::Declared,
+                    LiteralPolicy::Allowed,
                 )?);
             }
         }
@@ -431,6 +445,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortDirection::Input,
             concrete("statistics.model.linear")?,
             PortCardinality::Declared,
+            LiteralPolicy::Allowed,
         )?),
     }
     ports.push(data_port(
@@ -439,9 +454,10 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         PortDirection::Output,
         concrete("plot.data")?,
         PortCardinality::Declared,
+        LiteralPolicy::Allowed,
     )?);
     Ok(NodeProtocol {
-        type_id: node_id(spec.id)?,
+        type_id: node_type_id(spec.id)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
             aliases_key: Some(node_key(spec.id, "aliases")?),
@@ -564,47 +580,6 @@ fn parameters(spec: &PlotSpec) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     })
 }
 
-fn data_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    value_type: TypeExpr,
-    cardinality: PortCardinality,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: port_key(key)?,
-        title: title.into(),
-        direction,
-        value_type,
-        cardinality,
-        connections: crate::data_connections(direction),
-        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
-            literal_policy: LiteralPolicy::Allowed,
-            default_value: None,
-        }),
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
-}
-
-fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Concrete(type_id(value)?))
-}
-fn node_id(value: &'static str) -> Result<NodeTypeId, BuiltinAssemblyError> {
-    sid(value, NodeTypeId::new)
-}
-fn type_id(value: &'static str) -> Result<TypeId, BuiltinAssemblyError> {
-    sid(value, TypeId::new)
-}
-fn port_key(value: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
-    sid(value, PortKey::new)
-}
-fn category_id(value: &'static str) -> Result<NodeCategoryId, BuiltinAssemblyError> {
-    sid(value, NodeCategoryId::new)
-}
-fn icon_id(value: &'static str) -> Result<IconId, BuiltinAssemblyError> {
-    sid(value, IconId::new)
-}
 fn style_id(value: &'static str) -> Result<NodeStyleId, BuiltinAssemblyError> {
     sid(value, NodeStyleId::new)
 }

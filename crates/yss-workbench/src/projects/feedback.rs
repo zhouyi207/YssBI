@@ -73,9 +73,6 @@ impl ProjectFeedback {
                     } else {
                         match error.code() {
                             "invalid_project_root" => "projectPicker.issues.errors.invalidPath",
-                            "invalid_graph_document" => {
-                                "projectPicker.issues.errors.invalidProject"
-                            }
                             "filesystem_transaction_busy" => "projectPicker.issues.errors.busy",
                             "transaction_prepare_failed"
                             | "transaction_commit_failed"

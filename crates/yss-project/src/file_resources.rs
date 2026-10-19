@@ -1,7 +1,7 @@
 //! Shared lifecycle for authored Mind, Markdown and Chart files.
 use crate::project_writers::{ProjectResourceMutationFacts, context};
 use crate::{ProjectError, ProjectOperationError, ProjectState};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation, read_secure_file};
@@ -55,8 +55,7 @@ pub(crate) fn moves<T: ResourceFile>(
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct FileSnapshot<T: FileContent> {
     pub project_instance_id: ProjectInstanceId,
     pub path: FilePath<T>,
@@ -66,8 +65,7 @@ pub struct FileSnapshot<T: FileContent> {
     pub dirty: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct FileIndexEntry<T: FileContent> {
     pub path: FilePath<T>,
     pub kind: &'static str,

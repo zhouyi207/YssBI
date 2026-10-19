@@ -93,7 +93,7 @@ API Key 认证必须显式提供替换密钥；拒绝不会修改配置或凭据
 
 ### 应用会话
 
-`session/` 拥有完整应用会话；内部模块保持私有，通过 `session` 的明确公开项使用。桌面宿主从 crate 根导入 `ApplicationState`，窗口销毁调用现有 `close_result_owner` 释放该窗口的结果租约。
+`session/` 拥有完整应用会话；内部模块保持私有，通过 `session` 的明确公开项使用。桌面宿主从 crate 根导入 `ApplicationState`，窗口持有的 `ResultLease` 被释放时归还结果租约。
 
 | 源码                                                         | 职责                                                           |
 | ------------------------------------------------------------ | -------------------------------------------------------------- |
@@ -110,12 +110,12 @@ API Key 认证必须显式提供替换密钥；拒绝不会修改配置或凭据
 也不自行拼接 revision/fingerprint 或补造缺失版本；数据库列表复用同一 Project 读取边界。
 数据库会话事实按值交给 Runtime 打开入口，由其复用 Contract 完成一次声明与 observation 校验；Application 不提前重复扫描同一请求。
 
-自定义节点通过 `NodeComponents::new(registry, catalog, kernel_builder)` 组装，再交给
+自定义节点通过 `NodeComponents::new(registry, catalog, kernels)` 组装，再交给
 `ApplicationState::initialize_with_nodes`。slot 持有这份冻结配置，项目切换继续使用相同定义和实现，
 不会退回默认 kernel 表。组装检查参数字段、各输入模板的数量范围及输出总数；模板数量统一读取
 Protocol 的 `port_instance_bounds`，包括成员分组的上下限。编辑解析阻断未安装的实现；实现 revision 和
 契约组成能力指纹，计划准备、资源准备和执行入口都核对该指纹。
-`kernel_builder` 来自 `yss-node-kernel`，执行函数接收已解析的中立调用并返回局部输出值；Graph 地址、资源授权和结果定位由 Execution 适配。
+`kernels` 是 `yss-node-kernel` 的 `KernelRegistryBuilder`，执行函数接收已解析的中立调用并返回局部输出值；Graph 地址、资源授权和结果定位由 Execution 适配。
 [普通数值扩展示例](src/session/components/tests.rs)覆盖注册冲突、绑定不匹配、会话替换及旧产物拒绝。
 
 `ApplicationState` 持有 `ApplicationSessionSlot`，用作应用会话入口。一个 `ApplicationSession` 将以下运行时和身份绑定在一起：
@@ -149,7 +149,7 @@ Node Kernel 调用 `yss-sci-runtime`，Application 不直接依赖 SCI runtime�
 
 `project/` 聚合生命周期、查询、文件变更和失败投影；`ProjectManagement` 由 `project` 明确导出，注册服务不随项目会话替换。`database/` 聚合查询、导入导出、示例及私有 `mutation` 协调；准备、提交、补偿和恢复仍在原有协议内完成。
 
-[ProjectManagement](src/project/registry.rs) 持有进程级 `ProjectRegistry` 和项目选择器任务取消注册表，接收注入的 `ProjectRegistryStore`。扫描和清理在应用层登记任务，完成或 future 被丢弃时释放登记；旧任务结束不能清除较新任务的取消入口。注册表规则由 `yss-project-registry` 实现，类型化进度经调用方提供的 `ProjectProgressSink` 交付；原生呈现与后续查询由宿主负责。
+[ProjectManagement](src/project/registry.rs) 持有进程级 `ProjectRegistry`，接收注入的 `ProjectRegistryStore`，只提供最近项目列表和注册；注册表规则由 `yss-project-registry` 实现，原生呈现由宿主负责。
 
 ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。项目切换不重建注册存储和模型 provider；Harness 在启动和创建会话时按当前项目绑定协调旧会话。SQLite、Rig 和文件监听器由 Application runtime 选择，事件由调用方注入的中立 sink 交付。
 

@@ -115,11 +115,7 @@ impl HarnessToolExecutor {
         &self,
         tool: &str,
     ) -> Result<ToolInvocationId, CapabilityFailure> {
-        let id = self
-            .services
-            .ids
-            .next_id(AutomationIdKind::ToolInvocation)
-            .map_err(|_| persistence_unavailable())?;
+        let id = self.services.ids.next_id(AutomationIdKind::ToolInvocation);
         let invocation_id = ToolInvocationId::try_new(id).map_err(|_| persistence_unavailable())?;
         self.emit(AgentEvent::ControlToolStarted {
             invocation_id: invocation_id.clone(),
@@ -151,11 +147,7 @@ impl HarnessToolExecutor {
     }
 
     pub(crate) fn new_call_key(&self) -> Result<String, CapabilityFailure> {
-        let id = self
-            .services
-            .ids
-            .next_id(AutomationIdKind::ToolInvocation)
-            .map_err(|_| persistence_unavailable())?;
+        let id = self.services.ids.next_id(AutomationIdKind::ToolInvocation);
         let digest = yss_canonical_hash::hash_canonical("yssbi.harness.call", &id)
             .map_err(|_| persistence_unavailable())?;
         Ok(hex::encode(digest))
@@ -222,11 +214,7 @@ impl HarnessToolExecutor {
             Ok(_) => Ok(()),
         };
         let run_id = self.run.as_ref().map(|(run_id, _)| run_id.clone());
-        let raw_invocation_id = self
-            .services
-            .ids
-            .next_id(AutomationIdKind::ToolInvocation)
-            .map_err(|_| persistence_unavailable())?;
+        let raw_invocation_id = self.services.ids.next_id(AutomationIdKind::ToolInvocation);
         let invocation_id = ToolInvocationId::try_new(raw_invocation_id.clone())
             .map_err(|_| persistence_unavailable())?;
         let token = call

@@ -16,6 +16,13 @@ pub use re::{
     fit_panel_re_fgls_twoway, fit_panel_re_mle, fit_panel_re_mle_time, fit_panel_re_mle_twoway,
 };
 
+/// The single dimension a one-way entity or time estimator absorbs.
+#[derive(Clone, Copy)]
+enum OneWayEffect<'a> {
+    Entity,
+    Time(&'a [usize]),
+}
+
 use crate::regression::design::covariance_rows;
 pub use yss_sci_contract::panel::{
     ObsPerGroupStats, PanelFEStats, PanelFit, PanelR2Stats, SigmaStats, ThetaStats,

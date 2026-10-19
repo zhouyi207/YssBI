@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::{DataValue, DecimalLiteral};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parameter {
     pub key: ParameterKey,
     pub title_key: I18nKey,
@@ -125,14 +125,14 @@ pub struct ParameterCondition {
     pub values: Box<[DataValue]>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ParameterPresentation {
     #[default]
     DetailPanel,
     InlineAndDetail,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParameterGroup {
     pub key: ParameterGroupKey,
     pub title_key: I18nKey,
@@ -157,7 +157,7 @@ impl ParameterGroup {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Parameters {
     pub groups: Box<[ParameterGroup]>,
 }
@@ -312,7 +312,7 @@ pub enum ParameterConstraint {
     Length { min: Option<u32>, max: Option<u32> },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParameterEditorSpec {
     Auto,
     Hidden,

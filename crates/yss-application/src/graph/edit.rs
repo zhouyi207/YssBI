@@ -3,14 +3,12 @@ use super::resources::ResourceMutationApplicationError;
 use crate::events::GraphProjectionReplacement;
 use crate::session::{ApplicationSession, ApplicationState};
 use std::sync::Arc;
-use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_document_edit::{apply_graph_document_patch, validate_graph_document};
 use yss_graph_editor::projection::{EditorProjectionInput, build_editor_projection};
 use yss_graph_editor::{
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
 };
-use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -72,21 +70,6 @@ fn build_graph_projection_replacement(
         registry_fingerprint: context.registry_fingerprint,
     })
     .map_err(ResourceMutationApplicationError::Projection)?;
-    let function_editor_projection = captured
-        .project()
-        .read_resident_graph(graph_path)
-        .map_err(ResourceMutationApplicationError::Project)?
-        .as_ref()
-        .and_then(|resource| resource.function.as_ref())
-        .map(FunctionEditorProjection::try_from)
-        .transpose()
-        .map_err(|error| {
-            ResourceMutationApplicationError::Project(
-                ProjectOperationError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                },
-            )
-        })?;
     let result_inputs = crate::graph::inputs::graph_result_inputs(
         graph_path,
         &analysis,
@@ -97,7 +80,6 @@ fn build_graph_projection_replacement(
         GraphProjectionReplacement {
             graph_path: graph_path.as_str().into(),
             projection: model,
-            function_editor_projection,
         },
         result_inputs,
         analysis.semantic_snapshot().dependencies().clone(),

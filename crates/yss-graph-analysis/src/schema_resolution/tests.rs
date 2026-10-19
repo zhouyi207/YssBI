@@ -111,7 +111,7 @@ fn protocol_defaults_resolve_resource_projection_and_renames_without_document_va
     let resources = catalog(None);
     let mut cache = GraphSemanticCache::default();
     let first = assert_matches_full(&document, &registry, &resources, &mut cache);
-    assert!(first.ready().is_some(), "{:?}", first.diagnostics());
+    assert!(first.is_ready(), "{:?}", first.diagnostics());
     for (id, name) in [(project, "amount"), (rename, "renamed"), (mapped, "final")] {
         let interface = first.concrete_interface();
         let fields = &interface
@@ -133,7 +133,7 @@ fn protocol_defaults_resolve_resource_projection_and_renames_without_document_va
         serde_json::json!({"renamed":"override"}),
     );
     let explicit = assert_matches_full(&document, &registry, &resources, &mut cache);
-    assert!(explicit.ready().is_some());
+    assert!(explicit.is_ready());
     assert_eq!(
         explicit
             .concrete_interface()
@@ -155,7 +155,7 @@ fn protocol_defaults_resolve_resource_projection_and_renames_without_document_va
         .parameters
         .insert("from".parse().unwrap(), serde_json::Value::Null);
     let invalid = assert_matches_full(&document, &registry, &resources, &mut cache);
-    assert!(invalid.ready().is_none());
+    assert!(!invalid.is_ready());
     assert!(
         invalid
             .concrete_interface()
@@ -220,7 +220,7 @@ fn protocol_defaults_keep_selected_series_type_and_schema_in_agreement() {
     for semantic in [SemanticType::Numeric, SemanticType::Categorical] {
         let resources = catalog(Some(ValueType::Scalar(semantic)));
         let snapshot = assert_matches_full(&document, &registry, &resources, &mut cache);
-        assert!(snapshot.ready().is_some(), "{:?}", snapshot.diagnostics());
+        assert!(snapshot.is_ready(), "{:?}", snapshot.diagnostics());
         let interface = snapshot.concrete_interface();
         assert_eq!(
             interface
@@ -253,7 +253,7 @@ fn protocol_defaults_keep_selected_series_type_and_schema_in_agreement() {
         .parameters
         .insert("column".parse().unwrap(), serde_json::json!(5));
     let invalid = assert_matches_full(&document, &registry, &resources, &mut cache);
-    assert!(invalid.ready().is_none());
+    assert!(!invalid.is_ready());
     assert!(
         invalid
             .concrete_interface()
@@ -276,7 +276,7 @@ fn protocol_defaults_keep_selected_series_type_and_schema_in_agreement() {
         .parameters
         .insert("enabled".parse().unwrap(), serde_json::json!(0));
     let hidden = assert_matches_full(&document, &registry, &resources, &mut cache);
-    assert!(hidden.ready().is_none());
+    assert!(!hidden.is_ready());
     assert!(
         hidden
             .concrete_interface()
@@ -292,11 +292,7 @@ fn protocol_defaults_keep_selected_series_type_and_schema_in_agreement() {
         .unwrap()
         .parameters
         .clear();
-    assert!(
-        assert_matches_full(&document, &registry, &resources, &mut cache)
-            .ready()
-            .is_some()
-    );
+    assert!(assert_matches_full(&document, &registry, &resources, &mut cache).is_ready());
     assert!(document.nodes[&selected].parameters.is_empty());
 }
 
@@ -901,7 +897,7 @@ fn fixed_conversion_targets_reach_schema_consumers_and_survive_downstream_confli
             }
             assert!(document.nodes[&convert].parameters.is_empty());
         }
-        assert!(snapshot.ready().is_some());
+        assert!(snapshot.is_ready());
         assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
     }
     let incompatible = node(&mut document, "yssbi.logic.less", &[]);
@@ -917,7 +913,7 @@ fn fixed_conversion_targets_reach_schema_consumers_and_survive_downstream_confli
         port(incompatible, "left"),
     );
     let conflict = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
-    assert!(conflict.ready().is_none());
+    assert!(!conflict.is_ready());
     assert_eq!(
         conflict
             .concrete_interface()
@@ -937,7 +933,7 @@ fn fixed_conversion_targets_reach_schema_consumers_and_survive_downstream_confli
         .unwrap()
         .output = port(numeric, "value");
     let recovered = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
-    assert!(recovered.ready().is_some());
+    assert!(recovered.is_ready());
 }
 
 #[test]
@@ -1398,13 +1394,13 @@ fn restored_decomposed_columns_refresh_consumers_through_orphan_bindings() {
     connect(&mut document, column.clone(), port(frequency, "series"));
     let mut cache = GraphSemanticCache::default();
     let missing = assert_matches_full(&document, &builtin.registry, &catalog(None), &mut cache);
-    assert!(missing.ready().is_none());
+    assert!(!missing.is_ready());
     assert!(missing.concrete_interface().port(&column).unwrap().orphan);
 
     for semantic in [SemanticType::Numeric, SemanticType::Categorical] {
         let resources = catalog(Some(ValueType::Scalar(semantic)));
         let restored = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
-        assert!(restored.ready().is_some(), "{:?}", restored.diagnostics());
+        assert!(restored.is_ready(), "{:?}", restored.diagnostics());
         let interface = restored.concrete_interface();
         let source = interface.port(&column).unwrap();
         assert!(!source.orphan);
@@ -1958,7 +1954,7 @@ fn missing_target_keeps_existing_schema_and_type_facts() {
         .unwrap();
     assert_eq!(actual.schema_state, expected.schema_state);
     assert_eq!(actual.type_state, expected.type_state);
-    assert!(after.ready().is_none());
+    assert!(!after.is_ready());
     assert!(after.diagnostics().iter().any(|issue| {
         issue.primary == crate::GraphDiagnosticLocation::Connection(invalid)
             && issue.code.as_str() == yss_graph_diagnostics::GraphDiagnosticKind::PortUnknown.code()
@@ -1982,7 +1978,7 @@ fn missing_source_is_a_connection_error_not_a_value_cycle() {
     let mut cache = GraphSemanticCache::default();
 
     let facts = assert_matches_full(&document, &registry, &resources, &mut cache);
-    assert!(facts.ready().is_none());
+    assert!(!facts.is_ready());
     assert!(facts.diagnostics().iter().any(|issue| {
         issue.primary == crate::GraphDiagnosticLocation::Connection(invalid)
             && issue.code.as_str() == yss_graph_diagnostics::GraphDiagnosticKind::PortUnknown.code()
@@ -2054,7 +2050,7 @@ fn schema_cache_preserves_absent_reads_and_recovers_from_missing_resources() {
         &mut cache,
     );
     assert_eq!(cache.schemas.reused_outputs, 0);
-    assert!(recovered.ready().is_some(), "{:?}", recovered.diagnostics());
+    assert!(recovered.is_ready(), "{:?}", recovered.diagnostics());
     assert_matches_full(&document, &registry, &catalog(None), &mut cache);
     assert_eq!(cache.schemas.reused_outputs, 0);
 }

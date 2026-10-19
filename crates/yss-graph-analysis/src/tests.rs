@@ -671,7 +671,7 @@ fn fixed_semantic_conversions_preserve_shape_and_reject_incompatible_consumers()
             output_type(&document),
             TypeState::Exact(resolved_series(target))
         );
-        assert_eq!(facts.ready().is_some(), accepted, "dummy input {target}");
+        assert_eq!(facts.is_ready(), accepted, "dummy input {target}");
         if accepted {
             assert_eq!(
                 facts
@@ -969,7 +969,7 @@ fn editor_projection_reports_a_graph_level_value_cycle() {
         diagnostic.code.as_str() == GraphDiagnosticKind::DependencyValueCycle.code()
             && diagnostic.primary == GraphDiagnosticLocation::Graph
     }));
-    assert!(facts.ready().is_none());
+    assert!(!facts.is_ready());
     assert!(facts.nodes_ready(&std::collections::BTreeSet::from([independent])));
     assert!(!facts.nodes_ready(&std::collections::BTreeSet::from([left])));
     assert_eq!(

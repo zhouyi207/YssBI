@@ -181,7 +181,7 @@ Schema 依赖参数并参与既有缓存失效，维数编辑同步更新下游�
 
 命名常量由 `GraphDocument.constants` 持有，使用稳定 `ConstantId`。Event 和 Function 的 Details 面板编辑名称、类型和值；增删改通过 `SetConstant` 和同一 当前图文档 FIFO、undo/redo、Save 路径处理，没有独立的变量 Store、revision、作用域或项目资源文件。名称在所属图内唯一，重命名不会改变引用身份。
 
-常量、端口和协议默认值共用 `SerializedDataValue` 及严格校验器；宿主编辑字段是临时输入状态，不维护另一份已提交数据。
+常量、端口和协议默认值共用 Data Contract 的 `DataValue` 与 Protocol 的 `validate_typed_value` 严格校验；宿主编辑字段是临时输入状态，不维护另一份已提交数据。
 
 表格常量保存 `tabular` 快照，`dataValue` 为 Null，不再保存由常量 ID 派生的资源句柄。编辑时提交的 JSON 文本由 Graph 原子解析、按外层 `ValueType` 校验；序列不另存元素类型、dummy 或 time-series 状态。
 

@@ -189,39 +189,12 @@ impl ExecutionRuntimeState {
     pub fn retain_result(
         &self,
         result_id: ResultId,
-        lease_id: uuid::Uuid,
-        owner: &str,
-        handoff: Option<&str>,
-    ) -> Result<StoredResultSnapshot, crate::result::ResultRetentionError> {
-        self.results.retain(result_id, lease_id, owner, handoff)
+    ) -> Result<(uuid::Uuid, StoredResultSnapshot), crate::result::ResultRetentionError> {
+        self.results.retain(result_id)
     }
 
-    pub fn claim_result_lease(
-        &self,
-        lease_id: uuid::Uuid,
-        owner: &str,
-    ) -> Result<StoredResultSnapshot, crate::result::ResultRetentionError> {
-        self.results.claim(lease_id, owner)
-    }
-
-    pub fn release_result_lease(
-        &self,
-        lease_id: uuid::Uuid,
-        owner: &str,
-    ) -> Result<(), crate::result::ResultRetentionError> {
-        self.results.release(lease_id, owner)
-    }
-
-    pub fn reconcile_result_leases(
-        &self,
-        owner: &str,
-        active: &std::collections::BTreeSet<uuid::Uuid>,
-    ) {
-        self.results.reconcile(owner, active);
-    }
-
-    pub fn close_result_owner(&self, owner: &str) {
-        self.results.close_owner(owner);
+    pub fn release_result_lease(&self, lease: uuid::Uuid) {
+        self.results.release(lease);
     }
 
     pub fn publish_committed_results(&self, handoff: &ExecutionFinalizationHandoff) -> bool {

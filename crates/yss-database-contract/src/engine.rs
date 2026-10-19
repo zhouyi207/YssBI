@@ -32,8 +32,7 @@ pub enum DatabaseEngine {
 }
 
 /// Connection configuration for an external [`DatabaseImportSource::Sql`] source.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DatabaseEngineSql {
     Sqlite { auto_create: bool },
     Postgres { ssl: bool },

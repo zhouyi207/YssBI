@@ -1,39 +1,7 @@
+use super::fixture::{connect_port, field, node};
 use super::*;
 use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
-
-fn node(document: &mut GraphDocument, kind: &str, parameters: serde_json::Value) -> NodeId {
-    let id = NodeId::new();
-    document.nodes.insert(
-        id,
-        DocumentNode {
-            id,
-            node_type: kind.parse().unwrap(),
-            position: NodePosition { x: 0., y: 0. },
-            parameters: serde_json::from_value(parameters).unwrap(),
-            user_label: None,
-        },
-    );
-    id
-}
-fn connect(document: &mut GraphDocument, from: NodeId, output: &str, to: PortAddress) {
-    let id = ConnectionId::new();
-    document.connections.insert(
-        id,
-        DocumentConnection {
-            id,
-            output: PortAddress::declared(from, output.parse().unwrap()),
-            input: to,
-            order: None,
-        },
-    );
-}
-fn field<'a>(value: &'a RuntimeValue, key: &str) -> &'a RuntimeValue {
-    let RuntimeValue::Record(record) = value else {
-        panic!("expected record")
-    };
-    record.get(key).unwrap_or_else(|| panic!("missing {key}"))
-}
 
 #[test]
 fn panel_category_nodes_execute_defaults_and_connect_to_existing_summary() {
@@ -99,7 +67,7 @@ fn panel_category_nodes_execute_defaults_and_connect_to_existing_summary() {
                 "yssbi.dataframe.series.select",
                 serde_json::json!({"column":column}),
             );
-            connect(
+            connect_port(
                 &mut document,
                 source,
                 "value",
@@ -118,7 +86,7 @@ fn panel_category_nodes_execute_defaults_and_connect_to_existing_summary() {
             } else {
                 PortAddress::declared(model, key.parse().unwrap())
             };
-            connect(&mut document, select, "series", address);
+            connect_port(&mut document, select, "series", address);
         }
         let static_model = matches!(method, "fe" | "re" | "fd" | "between");
         let target = if static_model {
@@ -127,7 +95,7 @@ fn panel_category_nodes_execute_defaults_and_connect_to_existing_summary() {
                 "yssbi.statistics.panel.summary",
                 serde_json::json!({}),
             );
-            connect(
+            connect_port(
                 &mut document,
                 model,
                 "model",

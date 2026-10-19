@@ -43,8 +43,7 @@ pub struct LocalizedCatalog {
     pub items: Vec<LocalizedCatalogItem>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedCategory {
     pub category_id: Box<str>,
     pub parent_category_id: Option<Box<str>>,
@@ -53,8 +52,7 @@ pub struct LocalizedCategory {
     pub search_text: Box<str>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedCatalogItem {
     pub available: bool,
     pub node_type_id: Box<str>,
@@ -69,21 +67,18 @@ pub struct LocalizedCatalogItem {
     pub resource_names: Vec<Box<str>>,
     pub ports: Vec<LocalizedPort>,
     pub parameters: Vec<LocalizedParameter>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_path: Option<CatalogResourcePath>,
     pub creation: NodeCreation,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedPort {
     pub key: Box<str>,
     pub label: Box<str>,
     pub direction: Box<str>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedParameter {
     pub key: Box<str>,
     pub title: Box<str>,

@@ -4,10 +4,8 @@ use crate::{
     AgentInvocationScope, CapabilityInvocationId, HarnessSessionId, PrincipalId,
     ProjectSessionBinding, ToolInvocationContext,
 };
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CapabilityInvocationContext {
     principal_id: PrincipalId,
     harness_session_id: HarnessSessionId,

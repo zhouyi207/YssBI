@@ -60,7 +60,7 @@ impl SettingsPanel {
     fn model_list(&self, cx: &mut Context<Self>) -> SettingGroup {
         let mut group =
             SettingGroup::new()
-                .title(yss_ui::text::t("bayes.tabs.model"))
+                .title(yss_ui::text::t("settings.models.model"))
                 .item(
                     self.model_action_row(
                         |view, cx| {

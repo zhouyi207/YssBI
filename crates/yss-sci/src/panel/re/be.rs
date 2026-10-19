@@ -7,21 +7,65 @@ pub fn fit_panel_re_be(
     entity_id: &[usize],
     constant: bool,
 ) -> Result<super::super::PanelFit, String> {
+    fit_panel_re_be_oneway(
+        endog,
+        exog,
+        entity_id,
+        super::super::OneWayEffect::Entity,
+        constant,
+    )
+}
+
+/// Panel RE Between (Time): regress time-period means ȳ_t on x̄_t
+pub fn fit_panel_re_be_time(
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
+    entity_id: &[usize],
+    time_id: &[usize],
+    constant: bool,
+) -> Result<super::super::PanelFit, String> {
+    fit_panel_re_be_oneway(
+        endog,
+        exog,
+        entity_id,
+        super::super::OneWayEffect::Time(time_id),
+        constant,
+    )
+}
+
+fn fit_panel_re_be_oneway(
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
+    entity_id: &[usize],
+    effect: super::super::OneWayEffect<'_>,
+    constant: bool,
+) -> Result<super::super::PanelFit, String> {
+    let (group_id, label, groups) = match effect {
+        super::super::OneWayEffect::Entity => (entity_id, "Panel RE (BE)", "entities"),
+        super::super::OneWayEffect::Time(time_id) => {
+            (time_id, "Panel RE (BE Time)", "time periods")
+        }
+    };
     let n = endog.nrows();
-    if exog.nrows() != n || entity_id.len() != n {
-        return Err("Panel RE (BE): lengths must match".to_string());
+    if exog.nrows() != n || entity_id.len() != n || group_id.len() != n {
+        return Err(format!("{label}: lengths must match"));
     }
     let n_entities = entity_id
         .iter()
         .copied()
         .collect::<std::collections::HashSet<_>>()
         .len();
-    if n_entities < 2 {
-        return Err("Panel RE (BE): need at least 2 entities".to_string());
+    let n_groups = group_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    if n_groups < 2 {
+        return Err(format!("{label}: need at least 2 {groups}"));
     }
 
     let (eids, y_b_vec, x_b_vec) =
-        group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
+        group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, group_id);
     let k = exog.ncols();
     let n_b = y_b_vec.len();
     let mut x_b_data = Vec::with_capacity(n_b * k);
@@ -63,8 +107,8 @@ pub fn fit_panel_re_be(
     let kept: Vec<usize> = (0..k).filter(|j| !omitted_be.contains(j)).collect();
     let betas = &result.betas;
 
-    let mut obs_per_entity: HashMap<usize, usize> = HashMap::new();
-    for &eid in entity_id {
+    let mut obs_per_entity: BTreeMap<usize, usize> = BTreeMap::new();
+    for &eid in group_id {
         *obs_per_entity.entry(eid).or_insert(0) += 1;
     }
     let obs_per_group: Vec<usize> = eids
@@ -79,7 +123,7 @@ pub fn fit_panel_re_be(
 
     // Stata: Within R² = corr²((y - ȳ), (X - X̄)·β̂)
     let r2_within = {
-        let y_w: Vec<f64> = within_transform(&endog.iter().cloned().collect::<Vec<_>>(), entity_id)
+        let y_w: Vec<f64> = within_transform(&endog.iter().cloned().collect::<Vec<_>>(), group_id)
             .iter()
             .cloned()
             .collect();
@@ -92,7 +136,7 @@ pub fn fit_panel_re_be(
                 s
             })
             .collect();
-        let xb_bar = between_transform(&xb, entity_id);
+        let xb_bar = between_transform(&xb, group_id);
         let xb_w: Vec<f64> = (0..n).map(|i| xb[i] - xb_bar[i]).collect();
         let (y_mean, xb_mean) = (
             y_w.iter().sum::<f64>() / n as f64,
@@ -184,7 +228,11 @@ pub fn fit_panel_re_be(
             residuals: result.residuals.iter().copied().collect(),
             source_rows: vec![],
         },
-        family: "panel_re_be".into(),
+        family: match effect {
+            super::super::OneWayEffect::Entity => "panel_re_be",
+            super::super::OneWayEffect::Time(_) => "panel_re_be_time",
+        }
+        .into(),
         coefficients: (result.betas).iter().copied().collect(),
         inference: super::super::RegressionCoefficientStatistics {
             covariance: super::super::covariance_rows(&(result.cov_beta)),
@@ -197,7 +245,10 @@ pub fn fit_panel_re_be(
         statistics: super::super::PanelModelStatistics {
             observations: n,
             entities: n_entities,
-            time_periods: 0,
+            time_periods: match effect {
+                super::super::OneWayEffect::Entity => 0,
+                super::super::OneWayEffect::Time(_) => n_groups,
+            },
             within_r2: None,
             linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,

@@ -34,7 +34,7 @@ pub(super) use connection::{
     validate_subgraph_connection, validate_subgraph_port,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorMutationErrorCode {
     GraphPortNotFound,
     GraphNodeNotFound,

@@ -513,7 +513,7 @@ fn gini_nodes_execute_with_aligned_group_labels_and_structured_results() {
             "{conversion}: {:?}",
             group_port.type_state
         );
-        assert!(snapshot.ready().is_none(), "{conversion}");
+        assert!(!snapshot.is_ready(), "{conversion}");
     }
 
     let number = |value: &RuntimeValue| match value {
@@ -989,7 +989,7 @@ fn probability_distribution_catalog_executes_all_defaults_and_rejects_invalid_or
         &GraphResourcePath::new("events/invalid.yssbi-event").unwrap(),
         &resources,
     );
-    assert!(analysis.semantic_snapshot().ready().is_none());
+    assert!(!analysis.semantic_snapshot().is_ready());
     assert!(analysis.semantic_snapshot().diagnostics().iter().any(|diagnostic| {
         matches!(&diagnostic.primary, yss_graph_analysis::GraphDiagnosticLocation::Parameter { key, .. } if key.as_str() == "standard_deviation")
     }));

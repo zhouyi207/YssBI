@@ -8,22 +8,20 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub type InitialPortCounts = BTreeMap<PortKey, u16>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeProtocol {
     pub type_id: NodeTypeId,
     pub catalog: NodeCatalogProtocol,
     pub interface: NodeInterfaceProtocol,
     pub parameters: Parameters,
-    #[serde(default)]
     pub instance_display: NodeInstanceDisplaySpec,
     pub execution: ExecutionSemantics,
-    #[serde(default)]
     pub typing: NodeTypingSpec,
     pub scope: NodeScope,
     pub managed_role: Option<ManagedNodeRole>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum NodeInstanceDisplaySpec {
     #[default]
     Static,
@@ -39,7 +37,7 @@ pub enum ResourceDisplayKind {
     Database,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeCatalogProtocol {
     pub title_key: I18nKey,
     pub aliases_key: Option<I18nKey>,
@@ -49,11 +47,10 @@ pub struct NodeCatalogProtocol {
     pub hidden: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeInterfaceProtocol {
     pub ports: Box<[PortSpec]>,
     pub type_parameters: Box<[TypeParameterId]>,
-    #[serde(default)]
     pub member_groups: Box<[PortMemberGroupSpec]>,
 }
 
@@ -184,7 +181,7 @@ impl std::fmt::Display for InitialPortCountError {
 
 impl std::error::Error for InitialPortCountError {}
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortSpec {
     pub key: PortKey,
     /// Stable, non-localized display title supplied by the node definition.
@@ -231,7 +228,7 @@ pub enum LiteralPolicy {
     Allowed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortEditorSpec {
     Default,
     Hidden,

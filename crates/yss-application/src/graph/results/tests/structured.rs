@@ -247,8 +247,7 @@ fn poisson_report_reads_bounded_json_and_complete_array_pages_with_a_lease() {
         assert_eq!(value[key]["kind"], "tableRef");
         assert_eq!(value[key]["rowCount"], 53_940);
     }
-    let lease = uuid::Uuid::new_v4();
-    app.retain_result(reference, lease, "report", None).unwrap();
+    let (lease, _) = app.retain_owned_result(reference).unwrap();
     app.capture_session()
         .unwrap()
         .execution()
@@ -290,7 +289,7 @@ fn poisson_report_reads_bounded_json_and_complete_array_pages_with_a_lease() {
         app.query_result_table(foreign, part.parse().unwrap(), 0, 1),
         Err(ReportQueryError::Stale)
     ));
-    app.release_result_lease(lease, "report").unwrap();
+    drop(lease);
     assert!(matches!(
         app.query_result_table(reference, part.parse().unwrap(), 0, 1),
         Err(ReportQueryError::Unavailable)

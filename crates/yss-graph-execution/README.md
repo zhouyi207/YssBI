@@ -122,7 +122,7 @@ ResultStore 在准入时校验复用结果的 ID 与当前缓存一致，并记�
 
 `ResultStore` 是 session-scoped result authority，分别维护当前 output address 索引和不可变结果记录。
 `result_store.rs` 拥有唯一的 registry 与锁；内部 `cache` 管理输入依据及依赖有效性，
-`publication` 管理运行准入和结果批次发布，`retention` 管理租约、窗口交接与回收，
+`publication` 管理运行准入和结果批次发布，`retention` 签发与释放租约并回收无持有者的结果，
 `projection` 只读取当前结果及有效性摘要。这些模块共用同一状态，不建立独立缓存或同步流程。
 发布先校验完整批次，再在同一写锁内安装结果和实际消费记录。
 
@@ -148,7 +148,7 @@ Schema 反馈只读取同一 ResultStore 的当前有效已求值结果，没有
 写入事务在锁内收集已移除的结果，释放 registry 锁后再释放这些值及其关系句柄；unwind 也遵守该释放顺序。
 计算中的查询通过临时 `Arc` 保证内存安全，最后一个共享引用释放后回收实际数据；不依赖周期性 GC 或前端计数。
 会话不提供重置整个 ResultStore 的入口；图失效、租约释放和会话结束负责各自的清理，
-同一会话内的摘要 revision 与已关闭 owner 记录不会被清空重置。
+同一会话内的摘要 revision 不会被清空重置。租约 ID 由 ResultStore 签发，持有者只凭该 ID 释放。
 
 每个现存输出最多持有一份当前有效缓存；输入或依赖失效时解除绑定并回收无租约结果，不保留自动回退值。
 Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；Application 映射资源版本，Execution 记录实际消费的上游结果身份。

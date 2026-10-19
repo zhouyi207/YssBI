@@ -150,7 +150,6 @@ impl Workbench {
                 yss_ui_contract::UiEvent::Intent { receipt } => {
                     self.enqueue_intent(receipt, window, cx)
                 }
-                yss_ui_contract::UiEvent::Resync => self.resync_intents(window, cx),
                 yss_ui_contract::UiEvent::SessionChanged => {
                     self.rebind_session(window, cx);
                 }

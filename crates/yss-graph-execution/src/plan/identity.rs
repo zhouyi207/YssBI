@@ -69,10 +69,6 @@ impl PlanId {
     pub const fn from_existing(value: u64) -> Self {
         Self(value)
     }
-
-    pub const fn get(self) -> u64 {
-        self.0
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -81,10 +77,6 @@ pub struct PlanRegistryFingerprint([u8; 32]);
 impl PlanRegistryFingerprint {
     pub const fn from_bytes(value: [u8; 32]) -> Self {
         Self(value)
-    }
-
-    pub const fn as_bytes(self) -> [u8; 32] {
-        self.0
     }
 }
 

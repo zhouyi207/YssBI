@@ -5,8 +5,8 @@ use sqlx::{ConnectOptions, Connection, SqliteConnection, sqlite::SqliteConnectOp
 use tracing_subscriber::prelude::*;
 
 use crate::{
-    LogDomain, LogLevel, LogOrigin, LogQuery, LogRecordDto, LogRetentionPolicy, LogRuntime,
-    LogStoreError, LogStreamFailure, collector::LogLayer, store::LogStore,
+    LogDomain, LogLevel, LogRecordDto, LogRetentionPolicy, LogRuntime, LogStoreError,
+    LogStreamFailure, collector::LogLayer, store::LogStore,
 };
 
 fn now() -> NaiveDateTime {
@@ -19,7 +19,6 @@ fn record(stream: &str, sequence: u64, timestamp: &str) -> LogRecordDto {
         sequence,
         timestamp: timestamp.into(),
         level: LogLevel::Info,
-        origin: LogOrigin::Rust,
         domain: LogDomain::System,
         target: "retention.test".into(),
         event: None,
@@ -27,6 +26,16 @@ fn record(stream: &str, sequence: u64, timestamp: &str) -> LogRecordDto {
         source: None,
         fields: BTreeMap::new(),
     }
+}
+
+fn stored_sequences(store: &mut LogStore) -> Vec<u64> {
+    store
+        .snapshot(usize::MAX - 1)
+        .unwrap()
+        .entries
+        .iter()
+        .map(|entry| entry.sequence)
+        .collect()
 }
 
 fn execute(path: &Path, sql: &'static str) {
@@ -110,18 +119,10 @@ fn age_cutoff_is_strict_and_handles_non_monotonic_timestamps_and_cursors() {
         .unwrap();
     assert!(store.maintain(now()).unwrap().evicted.is_empty());
     assert_eq!(
-        store.statistics().unwrap().total,
-        4,
+        stored_sequences(&mut store),
+        vec![1, 2, 3, 4],
         "disabled means full history"
     );
-    let cursor = store
-        .query(LogQuery {
-            limit: 2,
-            ..Default::default()
-        })
-        .unwrap()
-        .next_before_sequence;
-    assert_eq!(cursor, Some(3));
     store
         .set_retention(LogRetentionPolicy::new(Some(1), None).unwrap())
         .unwrap();
@@ -137,21 +138,6 @@ fn age_cutoff_is_strict_and_handles_non_monotonic_timestamps_and_cursors() {
     );
     assert_eq!(snapshot.latest_sequence, 4);
     assert!(snapshot.truncated);
-    let previous = store
-        .query(LogQuery {
-            before_sequence: cursor,
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(
-        previous
-            .entries
-            .iter()
-            .map(|entry| entry.sequence)
-            .collect::<Vec<_>>(),
-        vec![2]
-    );
-    assert!(previous.next_before_sequence.is_none());
     store.set_retention(LogRetentionPolicy::default()).unwrap();
     assert!(
         store
@@ -175,8 +161,9 @@ fn emptying_history_preserves_sequence_and_stream_after_restart() {
         .set_retention(LogRetentionPolicy::new(Some(1), None).unwrap())
         .unwrap();
     assert_eq!(store.maintain(now()).unwrap().evicted, vec![1]);
-    assert_eq!(store.statistics().unwrap().total, 0);
-    assert_eq!(store.statistics().unwrap().latest_sequence, 1);
+    let emptied = store.snapshot(10).unwrap();
+    assert!(emptied.entries.is_empty());
+    assert_eq!(emptied.latest_sequence, 1);
     drop(store);
     let mut reopened = LogStore::open(&path).unwrap();
     let snapshot = reopened.snapshot(10).unwrap();
@@ -209,9 +196,9 @@ fn age_maintenance_has_a_bounded_deletion_budget_and_converges() {
     let first = store.maintain(now()).unwrap();
     assert_eq!(first.evicted.len(), 512);
     assert!(first.pending);
-    assert_eq!(store.statistics().unwrap().total, 1);
+    assert_eq!(stored_sequences(&mut store), vec![513]);
     assert_eq!(store.maintain(now()).unwrap().evicted, vec![513]);
-    assert_eq!(store.statistics().unwrap().latest_sequence, 513);
+    assert_eq!(store.snapshot(1).unwrap().latest_sequence, 513);
 }
 
 #[test]
@@ -291,8 +278,6 @@ fn runtime_policy_changes_keep_live_subscribers_and_high_water_after_eviction() 
     assert!(eviction.entries.is_empty());
     assert!(eviction.failure.is_none());
     assert_eq!(eviction.stream_id, stream);
-    assert_eq!(logs.statistics().unwrap().latest_sequence, 1);
-    assert!(logs.query(LogQuery::default()).unwrap().entries.is_empty());
     let snapshot = logs.subscribe_batches(|_| true).unwrap();
     assert!(snapshot.entries.is_empty());
     assert_eq!(snapshot.latest_sequence, 1);
@@ -309,7 +294,13 @@ fn runtime_policy_changes_keep_live_subscribers_and_high_water_after_eviction() 
     let reopened =
         LogRuntime::open_with_retention(path, LogRetentionPolicy::new(Some(1), None).unwrap())
             .unwrap();
-    assert_eq!(reopened.statistics().unwrap().latest_sequence, 2);
+    assert_eq!(
+        reopened
+            .subscribe_batches(|_| true)
+            .unwrap()
+            .latest_sequence,
+        2
+    );
     reopened.shutdown();
 }
 
@@ -339,7 +330,7 @@ fn maintenance_failure_is_returned_and_delivered_without_false_eviction() {
     assert_eq!(failure.failure, Some(LogStreamFailure::RetentionFailed));
     assert!(failure.entries.is_empty());
     assert!(failure.evicted_sequences.is_empty());
-    assert!(logs.query(LogQuery::default()).is_err());
+    assert!(logs.subscribe_batches(|_| true).is_err());
     logs.shutdown();
     assert!(
         LogRuntime::open_with_retention(
@@ -350,8 +341,8 @@ fn maintenance_failure_is_returned_and_delivered_without_false_eviction() {
     );
     let mut store = LogStore::open(path).unwrap();
     assert_eq!(
-        store.statistics().unwrap().total,
-        1,
+        stored_sequences(&mut store),
+        vec![1],
         "failed deletion rolls back"
     );
 }
@@ -377,7 +368,7 @@ fn startup_retention_runs_before_snapshot_and_resumes_after_empty_history() {
     tracing::subscriber::with_default(subscriber, || {
         tracing::info!(target: "retention.test", log_domain = "ui", "after startup");
     });
-    assert_eq!(logs.statistics().unwrap().latest_sequence, 2);
+    assert_eq!(logs.subscribe_batches(|_| true).unwrap().latest_sequence, 2);
     logs.shutdown();
 }
 
@@ -420,7 +411,7 @@ fn pinned_reader_defers_reclamation_without_losing_its_snapshot_or_failing_write
         outcome.pending,
         "WAL reclamation waits for the reader, not the dispatcher"
     );
-    assert_eq!(store.statistics().unwrap().total, 0);
+    assert!(stored_sequences(&mut store).is_empty());
     store
         .append(&[record(&stream, 2, "2026-10-10T12:00:00.000")])
         .unwrap();
@@ -440,5 +431,5 @@ fn pinned_reader_defers_reclamation_without_losing_its_snapshot_or_failing_write
         connection.close().await.unwrap();
     });
     assert!(!store.maintain(now()).unwrap().pending);
-    assert_eq!(store.statistics().unwrap().latest_sequence, 2);
+    assert_eq!(store.snapshot(1).unwrap().latest_sequence, 2);
 }

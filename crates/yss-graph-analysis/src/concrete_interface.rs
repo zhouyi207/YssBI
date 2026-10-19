@@ -19,10 +19,6 @@ impl<'a> ConcreteGraphInterface<'a> {
             .iter()
             .find(|port| &port.address == address)
     }
-
-    pub fn nodes(&self) -> &'a [GraphNodeSemanticFact] {
-        self.nodes
-    }
 }
 
 pub(crate) fn sort_concrete_ports(

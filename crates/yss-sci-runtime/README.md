@@ -119,8 +119,7 @@ Entry points and method-specific report records live in their owning domains.
 | `descriptive`                                                  | Gini, Dagum decomposition and Theil T entry points                                                            |
 | `distribution`                                                 | Probability distribution sampling entry point                                                                 |
 
-There is no empty `SciContext` or parallel `api/backends/rust` route. Capability
-entry points call the corresponding SCI owner; report encoding stays here.
+Capability entry points call the corresponding SCI owner; report encoding stays here.
 
 `regression::models` exposes SCI's neutral functions directly. It adds no estimator,
 options mirror or report model; node adapters supply aligned columns, budgets,

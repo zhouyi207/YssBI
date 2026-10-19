@@ -95,12 +95,6 @@ fn union_series(semantics: &[&'static str]) -> Result<TypeExpr, BuiltinAssemblyE
 fn rank_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     union_series(&["core.numeric", "core.ordinal"])
 }
-fn condition(key: &str, value: &str) -> Result<ParameterCondition, BuiltinAssemblyError> {
-    Ok(ParameterCondition {
-        key: sid(key, ParameterKey::new)?,
-        values: vec![DataValue::String(value.into())].into_boxed_slice(),
-    })
-}
 fn confidence() -> Result<Parameter, BuiltinAssemblyError> {
     tolerance_parameter_for("confidence_level", "0.95")
 }
@@ -126,7 +120,7 @@ fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
         "kappa" => vec![
             choice_parameter("kappa_method", "cohen", &["cohen", "fleiss"])?,
             choice_parameter("kappa_weighting", "none", &["none", "linear", "quadratic"])?
-                .when(condition("kappa_method", "cohen")?),
+                .when(choice_condition("kappa_method", "cohen")?),
             confidence()?,
         ],
         "icc" => vec![
@@ -150,9 +144,9 @@ fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
                 &["uniform", "specified_variance"],
             )?,
             bounded_integer_parameter("scale_points", 5, 2, 10000)?
-                .when(condition("null_distribution", "uniform")?),
+                .when(choice_condition("null_distribution", "uniform")?),
             tolerance_parameter_for("expected_variance", "2")?
-                .when(condition("null_distribution", "specified_variance")?),
+                .when(choice_condition("null_distribution", "specified_variance")?),
         ],
         _ => unreachable!(),
     })

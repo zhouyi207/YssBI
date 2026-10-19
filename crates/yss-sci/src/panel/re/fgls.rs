@@ -9,40 +9,80 @@ pub fn fit_panel_re_fgls(
     cov_type: &str,
     cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::super::PanelFit, String> {
-    let n = endog.nrows();
-    if exog.nrows() != n {
-        return Err(format!(
-            "Panel RE (FGLS): exog rows {} != endog len {}",
-            exog.nrows(),
-            n
-        ));
-    }
-    if entity_id.len() != n {
-        return Err(format!(
-            "Panel RE (FGLS): entity_id len {} != n {}",
-            entity_id.len(),
-            n
-        ));
-    }
+    fit_panel_re_fgls_oneway(
+        endog,
+        exog,
+        entity_id,
+        super::super::OneWayEffect::Entity,
+        constant,
+        cov_type,
+        cov_params,
+    )
+}
 
+/// Panel Random Effects FGLS over time periods (time-specific variance components)
+pub fn fit_panel_re_fgls_time(
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
+    entity_id: &[usize],
+    time_id: &[usize],
+    constant: bool,
+    cov_type: &str,
+    cov_params: Option<yss_sci_contract::regression::CovParams>,
+) -> Result<super::super::PanelFit, String> {
+    fit_panel_re_fgls_oneway(
+        endog,
+        exog,
+        entity_id,
+        super::super::OneWayEffect::Time(time_id),
+        constant,
+        cov_type,
+        cov_params,
+    )
+}
+
+fn fit_panel_re_fgls_oneway(
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
+    entity_id: &[usize],
+    effect: super::super::OneWayEffect<'_>,
+    constant: bool,
+    cov_type: &str,
+    cov_params: Option<yss_sci_contract::regression::CovParams>,
+) -> Result<super::super::PanelFit, String> {
+    let (group_id, label, groups) = match effect {
+        super::super::OneWayEffect::Entity => (entity_id, "Panel RE (FGLS)", "entities"),
+        super::super::OneWayEffect::Time(time_id) => {
+            (time_id, "Panel RE (FGLS Time)", "time periods")
+        }
+    };
+    let n = endog.nrows();
+    if exog.nrows() != n || entity_id.len() != n || group_id.len() != n {
+        return Err(format!("{label}: lengths must match"));
+    }
     let n_entities = entity_id
         .iter()
         .copied()
         .collect::<std::collections::HashSet<_>>()
         .len();
-    if n_entities < 2 {
-        return Err("Panel RE (FGLS): need at least 2 entities".to_string());
+    let n_groups = group_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    if n_groups < 2 {
+        return Err(format!("{label}: need at least 2 {groups}"));
     }
 
-    let (obs_per_entity, t_bar_harmonic) = obs_per_group_and_harmonic_mean(entity_id);
+    let (obs_per_entity, t_bar_harmonic) = obs_per_group_and_harmonic_mean(group_id);
 
     // Step 1: Within regression to get sigma_e^2 (variance of idiosyncratic error)
-    let y_w = within_transform(&endog.iter().cloned().collect::<Vec<_>>(), entity_id);
+    let y_w = within_transform(&endog.iter().cloned().collect::<Vec<_>>(), group_id);
     let k = exog.ncols();
     let mut x_w = Mat::zeros(n, k);
     for c in 0..k {
         let col: Vec<f64> = exog.col(c).iter().cloned().collect();
-        let tc = within_transform(&col, entity_id);
+        let tc = within_transform(&col, group_id);
         for i in 0..n {
             x_w[(i, c)] = tc[i];
         }
@@ -86,12 +126,12 @@ pub fn fit_panel_re_fgls(
         .map_err(|e| format!("Panel RE within step: {}", e))?;
     // Stata: σ²_e = Σe²_it / (N - n - K + 1), K = 1 + k_slopes (within has constant)
     // Our within has k_w slopes (no const), so df = N - n - k_w
-    let df_e = (n as i64 - n_entities as i64 - k_w as i64).max(1) as usize;
+    let df_e = (n as i64 - n_groups as i64 - k_w as i64).max(1) as usize;
     let sigma2_e = res_w.ss_residual / df_e as f64;
 
     // Step 2: Between regression (entity means) to get sigma_u^2
     let (_, y_b_vec, x_b_vec) =
-        group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
+        group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, group_id);
     let n_b = y_b_vec.len();
     let mut x_b_data = Vec::with_capacity(n_b * k);
     for row in x_b_vec.iter().take(n_b) {
@@ -125,7 +165,7 @@ pub fn fit_panel_re_fgls(
     let t_bar = if t_bar_harmonic > 1e-300 {
         t_bar_harmonic
     } else {
-        n as f64 / n_entities as f64
+        n as f64 / n_groups as f64
     };
     let sigma2_u = if df_b > 0 {
         (res_b.ss_residual / df_b as f64 - sigma2_e / t_bar).max(0.0)
@@ -139,10 +179,10 @@ pub fn fit_panel_re_fgls(
 
     // Theta per entity: θ_i = 1 - sqrt(σ²_e / (T_i·σ²_u + σ²_e)) (Stata xtreg, re)
     let y_vec: Vec<f64> = endog.iter().cloned().collect();
-    let y_bar = between_transform(&y_vec, entity_id);
+    let y_bar = between_transform(&y_vec, group_id);
     let theta_arr: Vec<f64> = (0..n)
         .map(|i| {
-            let eid = entity_id[i];
+            let eid = group_id[i];
             let t_i = *obs_per_entity.get(&eid).unwrap_or(&1) as f64;
             let denom = t_i * sigma2_u + sigma2_e;
             1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
@@ -155,7 +195,7 @@ pub fn fit_panel_re_fgls(
     let mut x_star = Mat::zeros(n, k);
     for c in 0..k {
         let col: Vec<f64> = exog.col(c).iter().cloned().collect();
-        let x_bar = between_transform(&col, entity_id);
+        let x_bar = between_transform(&col, group_id);
         for i in 0..n {
             x_star[(i, c)] = col[i] - theta_arr[i] * x_bar[i];
         }
@@ -171,7 +211,7 @@ pub fn fit_panel_re_fgls(
     let cov_params = cov_params.or_else(|| {
         if cov_type == "cluster" {
             Some(yss_sci_contract::regression::CovParams::Cluster {
-                cluster_id: entity_id.to_vec(),
+                cluster_id: group_id.to_vec(),
                 xtreg_fe_style: false,
             })
         } else {
@@ -202,8 +242,8 @@ pub fn fit_panel_re_fgls(
     let betas = &result.betas;
 
     // Obs per group
-    let mut obs_per_entity: HashMap<usize, usize> = HashMap::new();
-    for &eid in entity_id {
+    let mut obs_per_entity: BTreeMap<usize, usize> = BTreeMap::new();
+    for &eid in group_id {
         *obs_per_entity.entry(eid).or_insert(0) += 1;
     }
     let eids: Vec<usize> = obs_per_entity.keys().copied().collect();
@@ -213,11 +253,11 @@ pub fn fit_panel_re_fgls(
         .collect();
     let obs_min = obs_per_group.iter().copied().min().unwrap_or(0);
     let obs_max = obs_per_group.iter().copied().max().unwrap_or(0);
-    let obs_avg = obs_per_group.iter().sum::<usize>() as f64 / n_entities as f64;
+    let obs_avg = obs_per_group.iter().sum::<usize>() as f64 / n_groups as f64;
 
     // R² Within = corr²((y - ȳ), (X - X̄)·β̂)
     let r2_within = {
-        let y_w: Vec<f64> = within_transform(&endog.iter().cloned().collect::<Vec<_>>(), entity_id)
+        let y_w: Vec<f64> = within_transform(&endog.iter().cloned().collect::<Vec<_>>(), group_id)
             .iter()
             .cloned()
             .collect();
@@ -230,7 +270,7 @@ pub fn fit_panel_re_fgls(
                 s
             })
             .collect();
-        let xb_bar = between_transform(&xb, entity_id);
+        let xb_bar = between_transform(&xb, group_id);
         let xb_w: Vec<f64> = (0..n).map(|i| xb[i] - xb_bar[i]).collect();
         let (y_mean, xb_mean) = (
             y_w.iter().sum::<f64>() / n as f64,
@@ -256,7 +296,7 @@ pub fn fit_panel_re_fgls(
     // R² Between: regress ȳ on x̄ with FGLS betas
     let r2_between = {
         let (_, y_b_vec, x_b_vec) =
-            group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
+            group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, group_id);
         let n_b = y_b_vec.len();
         let y_mean = y_b_vec.iter().sum::<f64>() / n_b as f64;
         let xb_b: Vec<f64> = (0..n_b)
@@ -415,7 +455,11 @@ pub fn fit_panel_re_fgls(
             residuals: result.residuals.iter().copied().collect(),
             source_rows: vec![],
         },
-        family: "panel_re_fgls".into(),
+        family: match effect {
+            super::super::OneWayEffect::Entity => "panel_re_fgls",
+            super::super::OneWayEffect::Time(_) => "panel_re_fgls_time",
+        }
+        .into(),
         coefficients: (result.betas).iter().copied().collect(),
         inference: super::super::RegressionCoefficientStatistics {
             covariance: super::super::covariance_rows(&(result.cov_beta)),
@@ -428,7 +472,10 @@ pub fn fit_panel_re_fgls(
         statistics: super::super::PanelModelStatistics {
             observations: result.num_observation,
             entities: n_entities,
-            time_periods: 0,
+            time_periods: match effect {
+                super::super::OneWayEffect::Entity => 0,
+                super::super::OneWayEffect::Time(_) => n_groups,
+            },
             within_r2: None,
             linear: super::super::LinearRegressionStatistics {
                 r2: result.r2,

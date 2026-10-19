@@ -149,8 +149,7 @@ impl AgentTaskScope {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AgentInvocationScope {
     pub run_id: AgentRunId,
     pub role: AgentRole,

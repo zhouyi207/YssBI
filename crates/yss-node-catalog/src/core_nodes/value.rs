@@ -66,7 +66,14 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
             ]),
         );
         let parameters = conversion_parameters(fragment, id, target)?;
-        let input = data_port("input", "Input", PortDirection::Input, input_types.clone())?;
+        let input = data_port(
+            "input",
+            "Input",
+            PortDirection::Input,
+            input_types.clone(),
+            PortCardinality::Declared,
+            LiteralPolicy::Allowed,
+        )?;
         let output = data_port(
             "output",
             "Output",
@@ -75,6 +82,8 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
                 concrete(target.type_id())?,
                 data_series(target.type_id())?,
             ]),
+            PortCardinality::Declared,
+            LiteralPolicy::Allowed,
         )?;
         let mut protocol = protocol(
             id,

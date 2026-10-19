@@ -18,7 +18,6 @@ uuid.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-store = { path = "../yss-database-store" }
-yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-document-edit = { path = "../yss-graph-document-edit" }
 yss-node-protocol = { path = "../yss-node-protocol" }

@@ -156,12 +156,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     }
     Ok(())
 }
-fn when(key: &str, value: &str) -> Result<ParameterCondition, BuiltinAssemblyError> {
-    Ok(ParameterCondition {
-        key: sid(key, ParameterKey::new)?,
-        values: vec![DataValue::String(value.into())].into_boxed_slice(),
-    })
-}
 fn list(key: &'static str, default: &[i64]) -> Result<Parameter, BuiltinAssemblyError> {
     parameter(
         key,
@@ -295,7 +289,8 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
                     "power",
                 ],
             )?,
-            bounded_integer_parameter("degree", 2, 1, 8)?.when(when("curve_family", "polynomial")?),
+            bounded_integer_parameter("degree", 2, 1, 8)?
+                .when(choice_condition("curve_family", "polynomial")?),
         ]),
         "regression.nonlinear" => {
             params.extend([
@@ -343,9 +338,9 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
                     ],
                 )?,
                 choice_parameter("gaussian_link", "identity", &["identity", "log"])?
-                    .when(when("glm_family", "gaussian")?),
+                    .when(choice_condition("glm_family", "gaussian")?),
                 choice_parameter("binomial_link", "logit", &["logit", "probit", "cloglog"])?
-                    .when(when("glm_family", "binomial")?),
+                    .when(choice_condition("glm_family", "binomial")?),
             ]);
             params.extend(iteration(500)?);
         }
@@ -361,7 +356,7 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
             params.extend([
                 choice_parameter("censoring", "left", &["left", "both"])?,
                 decimal_parameter("lower", "0")?,
-                decimal_parameter("upper", "1")?.when(when("censoring", "both")?),
+                decimal_parameter("upper", "1")?.when(choice_condition("censoring", "both")?),
             ]);
             params.extend(iteration(500)?);
         }
@@ -381,8 +376,9 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
         ]),
         "transform.rcs" => params.extend([
             choice_parameter("knot_mode", "auto", &["auto", "manual"])?,
-            bounded_integer_parameter("knot_count", 4, 3, 8)?.when(when("knot_mode", "auto")?),
-            list("knots", &[])?.when(when("knot_mode", "manual")?),
+            bounded_integer_parameter("knot_count", 4, 3, 8)?
+                .when(choice_condition("knot_mode", "auto")?),
+            list("knots", &[])?.when(choice_condition("knot_mode", "manual")?),
         ]),
         "workflow.regression.univariate_multivariable"
         | "workflow.regression.grouped"

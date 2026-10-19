@@ -11,7 +11,7 @@ use yss_project_registry_contract::{
     ProjectRootIdentityState,
 };
 
-const SELECT_RECORD: &str = "SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity, root_identity_state FROM projects";
+const SELECT_RECORD: &str = "SELECT id, name, path, created_at, last_opened_at, root_identity, root_identity_state FROM projects";
 
 /// The only concrete SQLx/SQLite implementation of the Project registry port.
 pub struct SqliteProjectRegistryStore {
@@ -25,7 +25,6 @@ struct ProjectRegistryRow {
     path: String,
     created_at: String,
     last_opened_at: Option<String>,
-    is_favorite: i64,
     root_identity: String,
     root_identity_state: String,
 }
@@ -79,9 +78,8 @@ impl SqliteProjectRegistryStore {
                 path TEXT NOT NULL UNIQUE,
                 created_at TEXT NOT NULL,
                 last_opened_at TEXT,
-                is_favorite INTEGER NOT NULL DEFAULT 0,
-                root_identity TEXT NOT NULL DEFAULT '',
-                root_identity_state TEXT NOT NULL DEFAULT 'invalid'
+                root_identity TEXT NOT NULL,
+                root_identity_state TEXT NOT NULL
             )
             "#,
         )
@@ -92,14 +90,6 @@ impl SqliteProjectRegistryStore {
 }
 
 impl ProjectRegistryStore for SqliteProjectRegistryStore {
-    fn get_by_id(
-        &self,
-        registration: &ProjectRegistrationId,
-    ) -> ProjectRegistryStoreFuture<'_, Result<Option<ProjectRecord>, ProjectRegistryStoreError>>
-    {
-        Box::pin(self.find_record(" WHERE id = ", registration.as_str().to_owned()))
-    }
-
     fn get_by_path(
         &self,
         path: &str,
@@ -142,19 +132,17 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
         let path = record.path.clone();
         let created_at = record.created_at.clone();
         let last_opened_at = record.last_opened_at.clone();
-        let favorite = record.is_favorite;
         let root_identity = record.root_identity.as_str().to_owned();
         let root_identity_state = record.root_identity_state;
         Box::pin(async move {
             sqlx::query(
-                "INSERT INTO projects (id, name, path, created_at, last_opened_at, is_favorite, root_identity, root_identity_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, path=excluded.path, created_at=excluded.created_at, last_opened_at=excluded.last_opened_at, is_favorite=excluded.is_favorite, root_identity=excluded.root_identity, root_identity_state=excluded.root_identity_state",
+                "INSERT INTO projects (id, name, path, created_at, last_opened_at, root_identity, root_identity_state) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, path=excluded.path, created_at=excluded.created_at, last_opened_at=excluded.last_opened_at, root_identity=excluded.root_identity, root_identity_state=excluded.root_identity_state",
             )
             .bind(id)
             .bind(name)
             .bind(path)
             .bind(created_at)
             .bind(last_opened_at)
-            .bind(i64::from(favorite))
             .bind(root_identity)
             .bind(match root_identity_state {
                 ProjectRootIdentityState::Valid => "valid",
@@ -175,33 +163,6 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
             })
         })
     }
-
-    fn remove(
-        &self,
-        registration: &ProjectRegistrationId,
-    ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
-        let registration_id = registration.as_str().to_owned();
-        Box::pin(async move {
-            let result = sqlx::query("DELETE FROM projects WHERE id = ?")
-                .bind(registration_id)
-                .execute(&self.pool)
-                .await
-                .map_err(|error| {
-                    tracing::warn!(
-                        target: "yss_project_registry_sqlite",
-                        log_domain = "system",
-                        log_event = "projectRegistryRemoveFailed",
-                        error = %error,
-                        "Project registry remove failed"
-                    );
-                    ProjectRegistryStoreError::StorageFailed
-                })?;
-            if result.rows_affected() == 0 {
-                return Err(ProjectRegistryStoreError::Unavailable);
-            }
-            Ok(())
-        })
-    }
 }
 
 fn row_to_record(row: ProjectRegistryRow) -> Result<ProjectRecord, ProjectRegistryStoreError> {
@@ -210,18 +171,12 @@ fn row_to_record(row: ProjectRegistryRow) -> Result<ProjectRecord, ProjectRegist
         "invalid" => ProjectRootIdentityState::Invalid,
         _ => return Err(ProjectRegistryStoreError::StorageFailed),
     };
-    let favorite = match row.is_favorite {
-        0 => false,
-        1 => true,
-        _ => return Err(ProjectRegistryStoreError::StorageFailed),
-    };
     Ok(ProjectRecord {
         id: ProjectRegistrationId::from_existing(row.id),
         name: row.name,
         path: row.path,
         created_at: row.created_at,
         last_opened_at: row.last_opened_at,
-        is_favorite: favorite,
         root_identity: ProjectRootIdentity::from_canonical(row.root_identity),
         root_identity_state: state,
     })

@@ -1,33 +1,8 @@
+use super::fixture::{connect_port, field, node};
 use super::*;
 use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
 
-fn node(document: &mut GraphDocument, kind: &str, parameters: serde_json::Value) -> NodeId {
-    let id = NodeId::new();
-    document.nodes.insert(
-        id,
-        DocumentNode {
-            id,
-            node_type: kind.parse().unwrap(),
-            position: NodePosition { x: 0., y: 0. },
-            parameters: serde_json::from_value(parameters).unwrap(),
-            user_label: None,
-        },
-    );
-    id
-}
-fn connect(document: &mut GraphDocument, from: NodeId, output: &str, to: PortAddress) {
-    let id = ConnectionId::new();
-    document.connections.insert(
-        id,
-        DocumentConnection {
-            id,
-            output: PortAddress::declared(from, output.parse().unwrap()),
-            input: to,
-            order: None,
-        },
-    );
-}
 fn repeated(
     inputs: &mut Vec<(&'static str, serde_json::Value, bool)>,
     key: &'static str,
@@ -36,12 +11,6 @@ fn repeated(
     for column in columns.as_array().unwrap() {
         inputs.push((key, column.clone(), true));
     }
-}
-fn field<'a>(value: &'a RuntimeValue, key: &str) -> &'a RuntimeValue {
-    let RuntimeValue::Record(record) = value else {
-        panic!("record")
-    };
-    record.get(key).unwrap_or_else(|| panic!("missing {key}"))
 }
 
 #[test]
@@ -227,7 +196,7 @@ fn causal_category_nodes_execute_catalog_defaults_and_typed_effect_connections()
                 "yssbi.dataframe.series.select",
                 serde_json::json!({"column":format!("column{i}")}),
             );
-            connect(
+            connect_port(
                 &mut document,
                 source,
                 "value",
@@ -246,11 +215,11 @@ fn causal_category_nodes_execute_catalog_defaults_and_typed_effect_connections()
             } else {
                 PortAddress::declared(model, (*key).parse().unwrap())
             };
-            connect(&mut document, select, "series", address);
+            connect_port(&mut document, select, "series", address);
         }
         if projection {
             let target = node(&mut document, &id, serde_json::json!({}));
-            connect(
+            connect_port(
                 &mut document,
                 model,
                 "result",
@@ -264,7 +233,7 @@ fn causal_category_nodes_execute_catalog_defaults_and_typed_effect_connections()
                 &summary_id,
                 serde_json::json!({"first_stage":true}),
             );
-            connect(
+            connect_port(
                 &mut document,
                 model,
                 "model",

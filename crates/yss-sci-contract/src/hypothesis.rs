@@ -209,7 +209,7 @@ pub enum VarianceHomogeneityTest {
     Bartlett { groups: Vec<Vec<f64>> },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct TTestResult {
     pub constraint_desc: String,
     pub alternative: String,
@@ -219,7 +219,7 @@ pub struct TTestResult {
     pub p_value: f64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct WaldTestResult {
     pub constraint_desc: String,
     pub alternative: String,

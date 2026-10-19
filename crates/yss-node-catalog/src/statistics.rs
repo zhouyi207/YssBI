@@ -4,6 +4,7 @@
 //! owns executable adapters; Graph Analysis owns connected types and schemas.
 
 use crate::builtin::add_node_messages;
+use crate::builtin::{choice_condition, concrete, data_port};
 use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 mod analyses;
@@ -239,8 +240,12 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         ports.push(data_output("model", "Model", model_type(spec.family)?)?);
     }
     if !matches!(spec.family, Family::PanelDid | Family::Var | Family::Vec) {
-        ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
-        ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
+        ports.push(data_output("fitted", "Fitted", numeric_data_series_type())?);
+        ports.push(data_output(
+            "residuals",
+            "Residuals",
+            numeric_data_series_type(),
+        )?);
     }
     Ok(ports)
 }
@@ -256,7 +261,7 @@ fn prediction_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyErro
     Ok(vec![
         data_input("model", "Model", prediction_model_type(family)?)?,
         user_data_input("x", "X", numeric_data_series_type(), 1)?,
-        data_output("prediction", "Prediction", float_series_type()?)?,
+        data_output("prediction", "Prediction", numeric_data_series_type())?,
     ])
 }
 
@@ -651,10 +656,7 @@ fn linear_parameters() -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     };
     let conditional =
         |parameter: Parameter, covariance: &'static str| -> Result<_, BuiltinAssemblyError> {
-            Ok(parameter.when(ParameterCondition {
-                key: sid("covariance", ParameterKey::new)?,
-                values: vec![DataValue::String(covariance.into())].into_boxed_slice(),
-            }))
+            Ok(parameter.when(choice_condition("covariance", covariance)?))
         };
     let mut scale = decimal_parameter("scale", "1")?;
     scale.constraints.push(ParameterConstraint::Positive);
@@ -706,6 +708,7 @@ fn data_input(
         PortDirection::Input,
         value_type,
         PortCardinality::Declared,
+        LiteralPolicy::Forbidden,
     )
 }
 fn user_data_input(
@@ -729,6 +732,7 @@ fn bounded_user_data_input(
         PortDirection::Input,
         value_type,
         PortCardinality::UserCreated { min, max },
+        LiteralPolicy::Forbidden,
     )
 }
 fn data_output(
@@ -742,30 +746,8 @@ fn data_output(
         PortDirection::Output,
         value_type,
         PortCardinality::Declared,
+        LiteralPolicy::Forbidden,
     )
-}
-
-fn data_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    value_type: TypeExpr,
-    cardinality: PortCardinality,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    Ok(PortSpec {
-        key: port_key(key)?,
-        title: title.into(),
-        direction,
-        value_type,
-        cardinality,
-        connections: crate::data_connections(direction),
-        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
-            literal_policy: LiteralPolicy::Forbidden,
-            default_value: None,
-        }),
-        editor: PortEditorSpec::Default,
-        schema: None,
-    })
 }
 
 fn choice_parameter(
@@ -1082,9 +1064,6 @@ fn category(spec: &NodeSpec) -> &'static str {
         Family::Linear | Family::Logit | Family::Probit | Family::Prais => "statistics.regression",
     }
 }
-fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
-}
 fn model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
     let id = match family {
         Family::Linear => "statistics.model.linear",
@@ -1119,9 +1098,6 @@ fn prediction_model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyErro
     }
     model_type(family)
 }
-fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.numeric")?))
-}
 fn result_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete(match family {
         Family::Adf => "statistics.result.adf",
@@ -1138,9 +1114,6 @@ fn result_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 fn report_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("statistics.report")
-}
-fn port_key(key: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
-    sid(key, PortKey::new)
 }
 
 fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {

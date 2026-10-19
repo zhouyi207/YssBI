@@ -61,12 +61,6 @@ fn coordinate_output(
     });
     Ok(output)
 }
-fn condition(key: &str, value: &str) -> Result<ParameterCondition, BuiltinAssemblyError> {
-    Ok(ParameterCondition {
-        key: sid(key, ParameterKey::new)?,
-        values: vec![DataValue::String(value.into())].into_boxed_slice(),
-    })
-}
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     fragment
@@ -154,7 +148,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 )?);
                 parameters.push(
                     toggle_parameter("standardize", false)?
-                        .when(condition("input_kind", "observations")?),
+                        .when(choice_condition("input_kind", "observations")?),
                 );
             }
             _ => {}

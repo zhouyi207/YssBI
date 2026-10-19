@@ -5,9 +5,5 @@ edition = "2024"
 publish = false
 
 [dependencies]
-serde.workspace = true
 thiserror.workspace = true
 yss-project-identity = { path = "../yss-project-identity" }
-
-[dev-dependencies]
-serde_json.workspace = true

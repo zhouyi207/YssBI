@@ -20,15 +20,9 @@ use yss_database_contract::{
 use yss_database_schema::{DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum DatabaseColumnSelection {
-    All,
-    Selected(Box<[TabularColumnName]>),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DatabaseDataSnapshotRequest {
     pub database: DatabaseId,
-    pub columns: DatabaseColumnSelection,
+    pub columns: Box<[TabularColumnName]>,
     pub offset: usize,
     pub limit: usize,
 }
@@ -432,18 +426,11 @@ pub fn arrow_snapshot(
                 error,
             )
         })?;
-    let selected = match request.columns {
-        DatabaseColumnSelection::All => relation
-            .schema()
-            .fields()
-            .iter()
-            .map(|field| field.name().as_str().into())
-            .collect::<Vec<Box<str>>>(),
-        DatabaseColumnSelection::Selected(columns) => columns
-            .iter()
-            .map(|column| column.as_str().into())
-            .collect(),
-    };
+    let selected = request
+        .columns
+        .iter()
+        .map(|column| column.as_str().into())
+        .collect::<Vec<Box<str>>>();
     if selected.is_empty() || selected.iter().collect::<BTreeSet<_>>().len() != selected.len() {
         return Err(DatabaseError::invalid_request(
             DatabaseOperation::DataSnapshot,
@@ -1100,7 +1087,7 @@ mod tests {
                 &session,
                 DatabaseDataSnapshotRequest {
                     database: DatabaseId::from_existing(SALES_ID.into()),
-                    columns: DatabaseColumnSelection::Selected(columns.into_boxed_slice()),
+                    columns: columns.into_boxed_slice(),
                     offset: 0,
                     limit: 1,
                 },

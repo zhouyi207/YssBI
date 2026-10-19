@@ -43,14 +43,13 @@ pub enum DidFakeGroupUnavailableCode {
     InsufficientValidPermutations,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ExogLabelEntry {
     pub variable: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DidFakeGroupEnginePayload {
     pub endog: Vec<f64>,
     pub exog_row_major: Vec<f64>,

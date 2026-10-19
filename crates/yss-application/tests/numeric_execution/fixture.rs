@@ -18,6 +18,23 @@ pub(super) fn node(document: &mut GraphDocument, kind: &str, parameters: Value) 
     );
     id
 }
+pub(super) fn connect_port(
+    document: &mut GraphDocument,
+    from: NodeId,
+    output: &str,
+    input: PortAddress,
+) {
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(from, output.parse().unwrap()),
+            input,
+            order: None,
+        },
+    );
+}
 pub(super) fn connect(
     document: &mut GraphDocument,
     from: NodeId,

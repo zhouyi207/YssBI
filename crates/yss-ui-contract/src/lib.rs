@@ -147,11 +147,9 @@ pub struct InspectUiIntentRequest {
     pub id: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub enum UiEvent {
     Intent { receipt: UiIntentReceipt },
-    Resync,
     SessionChanged,
 }
 

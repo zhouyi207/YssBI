@@ -27,7 +27,7 @@ pub(super) fn inspect(
     }
     let (ready, scope_node_count, diagnostics) = if request.node_ids.is_empty() {
         (
-            semantics.ready().is_some(),
+            semantics.is_ready(),
             semantics.nodes().len(),
             semantics.diagnostics().iter().collect::<Vec<_>>(),
         )

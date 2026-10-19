@@ -6,7 +6,7 @@ use crate::collector::{
 use serde_json::Value;
 
 use super::dispatcher::{LogHub, PendingLog};
-use super::dto::{LogDomain, LogOrigin};
+use super::dto::LogDomain;
 
 const DOMAIN_FIELD: &str = "log_domain";
 const EVENT_FIELD: &str = "log_event";
@@ -34,7 +34,6 @@ pub(super) fn project_log_record(record: LogRecord) -> PendingLog {
     PendingLog {
         timestamp: record.timestamp,
         level: record.level,
-        origin: LogOrigin::Rust,
         domain,
         target,
         event,
@@ -52,21 +51,18 @@ fn take_string(fields: &mut crate::LogFields, name: &str) -> Option<String> {
 }
 
 fn infer_domain(target: &str) -> LogDomain {
-    if target.contains("runtime")
-        || target.contains("execution")
-        || target.contains("julia")
-        || target.contains("bayes")
-    {
-        LogDomain::Execution
-    } else if target.contains("database")
+    // Data crates are matched before "runtime" so `yss_database_runtime` stays a data target.
+    if target.contains("database")
         || target.contains("dataframe")
         || target.contains("tabular")
         || target.contains("variable")
     {
         LogDomain::Data
-    } else if target.contains("graph") || target.contains("node_system") {
+    } else if target.contains("runtime") || target.contains("execution") {
+        LogDomain::Execution
+    } else if target.contains("graph") {
         LogDomain::Graph
-    } else if target.contains("window") || target.contains("frontend") || target.contains("::ui") {
+    } else if target.contains("window") || target.contains("::ui") {
         LogDomain::Ui
     } else if target.contains("system") || target.contains("logging") {
         LogDomain::System

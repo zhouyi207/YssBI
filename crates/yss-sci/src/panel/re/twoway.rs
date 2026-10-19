@@ -1,14 +1,5 @@
 use super::*;
 
-/// Two-way within: z̃_it = z_it - z̄_i - z̄_t + z̄
-fn within_transform_twoway(v: &[f64], entity_id: &[usize], time_id: &[usize]) -> Col<f64> {
-    let n = v.len();
-    let z_bar_i = between_transform(v, entity_id);
-    let z_bar_t = between_transform(v, time_id);
-    let z_bar: f64 = v.iter().sum::<f64>() / n as f64;
-    Col::from_fn(n, |i| v[i] - z_bar_i[i] - z_bar_t[i] + z_bar)
-}
-
 /// Panel RE FGLS (Two-Way): entity + time random effects (Fuller-Battese / plm-style)
 pub fn fit_panel_re_fgls_twoway(
     endog: &Col<f64>,

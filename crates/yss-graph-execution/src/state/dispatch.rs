@@ -84,21 +84,7 @@ impl ExecutionRuntimeState {
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
     ) -> Result<SuccessfulExecutionCandidate, ExecutePreparedError> {
-        let executed = self.execute_prepared_inner(
-            plan,
-            bindings,
-            resources,
-            control,
-            PreparedExecutionDispatch {
-                demand: &crate::plan::PlanExecutionDemand::Default,
-                result_basis: None,
-                executor: &self.executor,
-                on_event: None,
-            },
-        )?;
-        self.finalize_run_success(executed.run_id)
-            .map_err(ExecutePreparedError::RunRegistry)?;
-        Ok(executed.candidate())
+        self.execute_prepared_with_executor(plan, bindings, resources, control, &self.executor)
     }
 
     #[cfg(any(test, feature = "test-support"))]

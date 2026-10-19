@@ -4,8 +4,8 @@ use crate::graph::editing::GraphEditRequest;
 use crate::graph::run::{RunApplicationEventKind, RunGraphRequest, run_graph_with_sink};
 use yss_data_contract::{DataValue, TabularScalar, ValueType};
 use yss_graph_document::{
-    ConnectionId, DocumentConnection, DynamicMemberLocator, DynamicPortBinding,
-    FunctionParameterId, LastKnownPortMetadata, OrderKey, PortInstanceId,
+    DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, LastKnownPortMetadata, OrderKey,
+    PortInstanceId,
 };
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 
@@ -48,19 +48,6 @@ fn member(
         },
     );
     address
-}
-
-fn connect(document: &mut GraphDocument, output: PortAddress, input: PortAddress) {
-    let id = ConnectionId::new();
-    document.connections.insert(
-        id,
-        DocumentConnection {
-            id,
-            output,
-            input,
-            order: None,
-        },
-    );
 }
 
 fn reference(key: &str, path: &GraphResourcePath) -> ParameterValues {

@@ -271,7 +271,8 @@
     "delete": "Delete",
     "cancel": "Cancel",
     "confirm": "OK",
-    "listSeparator": ", "
+    "listSeparator": ", ",
+    "run": "Run"
   },
   "notifications": {
     "editor": {
@@ -283,12 +284,6 @@
     },
     "externalUrl": {
       "openFailed": "Could not open external link."
-    },
-    "julia": {
-      "runtime": {
-        "title": "Julia runtime",
-        "description": "Julia runtime and worker status"
-      }
     }
   },
   "editor": {
@@ -762,17 +757,10 @@
     }
   },
   "projectPicker": {
-    "title": "Project Management",
-    "description": "Continue from recent projects, or create / open a metadata.yssbi project.",
-    "deleteProjectConfirm": {
-      "title": "Move project to Recycle Bin?",
-      "description": "All files and folders for \"%{name}\" will be moved to the Recycle Bin. You can restore them from there later."
-    },
     "issues": {
       "errors": {
         "unknown": "The operation could not be completed.",
         "invalidPath": "The selected path is not a valid YssBI project location.",
-        "invalidProject": "The selected project metadata is invalid or damaged.",
         "busy": "Another project operation is still in progress. Try again shortly.",
         "recoveryRequired": "The project requires recovery before this operation can continue.",
         "filesystem": "The project files could not be updated safely."
@@ -842,85 +830,7 @@
     "keyboardShortcuts": "Keyboard Shortcuts…",
     "services": "Services"
   },
-  "bayes": {
-    "title": "Bayesian Parameter Estimation",
-    "tabs": {
-      "model": "Model"
-    },
-    "actions": {
-      "run": "Run"
-    },
-    "errors": {
-      "title": "Bayesian inference failed"
-    },
-    "validation": {
-      "title": "Review the model"
-    },
-    "formula": {
-      "title": "1. Model formula"
-    },
-    "symbols": {
-      "title": "2. Symbol configuration"
-    },
-    "prior": {
-      "title": "Prior"
-    },
-    "dataBinding": {
-      "title": "Data binding"
-    },
-    "sampler": {
-      "title": "3. Sampler"
-    },
-    "results": {
-      "titles": {
-        "summary": "Result Summary"
-      },
-      "empty": {
-        "summary": "Parameter summaries appear after the run completes."
-      },
-      "diagnostics": {
-        "assessment": {
-          "good": {
-            "title": "Diagnostics look good",
-            "summary": "No obvious sampling issues were detected."
-          },
-          "warning": {
-            "title": "Needs attention",
-            "summary": "Some diagnostic metrics require further review."
-          },
-          "bad": {
-            "title": "Poor diagnostics",
-            "summary": "The current result may not have converged reliably."
-          },
-          "unknown": {
-            "title": "Incomplete diagnostics",
-            "summary": "Some diagnostic information is unavailable."
-          }
-        },
-        "warnings": {
-          "rhat_too_high": {
-            "title": "High R-hat for %{parameter}"
-          },
-          "ess_too_low": {
-            "title": "Low effective sample size for %{parameter}"
-          },
-          "unknown": {
-            "title": "Diagnostic warning (%{code})"
-          }
-        }
-      }
-    }
-  },
-  "julia": {
-    "menu": {
-      "title": "Julia compute engine"
-    },
-    "install": {
-      "title": "Install Julia Runtime"
-    }
-  },
   "aboutModal": {
-    "title": "About %{appName}",
     "description": "Statistical computing and visualization workbench"
   },
   "bottomBar": {
@@ -969,7 +879,6 @@
       "providers": "Providers",
       "searchProviders": "Search providers…",
       "noMatchingProviders": "No matching providers found.",
-      "title": "Models and providers",
       "chooseModel": "Choose a model",
       "nextTurn": "Changes apply to messages sent afterwards",
       "unavailable": "Selected model unavailable",
@@ -990,9 +899,9 @@
       "removeProvider": "Delete provider",
       "authentication": "Authentication",
       "noAuthentication": "No authentication",
-      "endpointHint": "Use the service API root. You can change its region or use your own gateway. Azure resource endpoints must end with /openai/v1."
+      "endpointHint": "Use the service API root. You can change its region or use your own gateway. Azure resource endpoints must end with /openai/v1.",
+      "model": "Model"
     },
-    "title": "Settings",
     "sections": {
       "ai": "AI",
       "appearance": "Appearance"
@@ -1097,7 +1006,6 @@
     "open": "Open",
     "viewInDatabaseEditor": "View in Database Editor",
     "projectTree": {
-      "empty": "No project resources",
       "categories": {
         "eventGraphs": "Event Graphs",
         "functionGraphs": "Function Graphs",
@@ -1202,9 +1110,6 @@
       "mariadb": {
         "label": "MariaDB",
         "description": "Remote MariaDB database"
-      },
-      "api": {
-        "description": "Fetch data from a remote API"
       }
     },
     "selectSheet": "Select Sheet",
@@ -1314,7 +1219,6 @@
       "moveColumnDown": "Move %{column} down"
     },
     "fields": {
-      "name": "Name",
       "type": "Type",
       "value": "Value",
       "columns": "Columns",
@@ -1325,7 +1229,6 @@
       "message": "Message",
       "stream": "Stream",
       "sequence": "Sequence",
-      "origin": "Origin",
       "target": "Target",
       "event": "Event",
       "fields": "Fields",
@@ -1341,17 +1244,12 @@
     "typeLabels": {
       "function_graph": "Function Graph"
     },
-    "callSites": {
-      "title": "Referenced by (%{count})",
-      "empty": "Not referenced by any other graphs"
-    },
     "counts": {
       "rows": "%{count} rows"
     },
     "constants": {
       "title": "Constants",
       "add": "Add constant",
-      "empty": "Add a value to reuse in this graph.",
       "choose": "Choose a constant"
     },
     "constantValue": {
@@ -1369,9 +1267,6 @@
         "notArray": "Expected a JSON array",
         "notObject": "Expected a JSON object"
       }
-    },
-    "delete": {
-      "title": "Delete %{itemType}"
     },
     "pinEditor": {
       "noInputs": "No inputs"

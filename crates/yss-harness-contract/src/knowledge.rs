@@ -5,16 +5,14 @@ use crate::{
     PersistenceFuture, ProjectSessionBinding, SkillId, SkillVersion, SourceHash, UnixMillis,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SkillManifest {
     pub id: SkillId,
     pub version: SkillVersion,
     pub source_hash: SourceHash,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SkillPackage {
     pub manifest: SkillManifest,
     pub instructions: String,
@@ -59,8 +57,7 @@ pub struct ProjectKnowledgeOrigin {
     pub path: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProjectKnowledgeStatus {
     Ready,
     Changed,
@@ -68,8 +65,7 @@ pub enum ProjectKnowledgeStatus {
     Empty,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct ProjectKnowledgeSourceSummary {
     pub source_id: KnowledgeSourceId,
     pub title: String,
@@ -103,8 +99,7 @@ pub struct KnowledgeCitation {
     pub source_hash: SourceHash,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct KnowledgeSearchHit {
     pub citation: KnowledgeCitation,
     pub excerpt: String,

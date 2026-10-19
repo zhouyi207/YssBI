@@ -217,7 +217,6 @@ pub(super) fn import_in_captured_session(
                 &project_instance_id,
                 None,
                 None,
-                None,
             ))
         })?;
     let session = captured
@@ -298,7 +297,6 @@ pub(super) fn import_in_captured_session(
                 error,
                 DatabaseApplicationOperation::Load,
                 &project_instance_id,
-                None,
                 None,
                 None,
             ))

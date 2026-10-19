@@ -12751,7 +12751,6 @@ dependencies = [
  "yss-database-store",
  "yss-dataset-profile",
  "yss-filesystem",
- "yss-function-editor-projection",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
  "yss-graph-document",
@@ -12776,7 +12775,6 @@ dependencies = [
  "yss-project-identity",
  "yss-project-layout",
  "yss-project-model",
- "yss-project-progress",
  "yss-project-registry",
  "yss-project-registry-contract",
  "yss-project-registry-sqlite",
@@ -13049,18 +13047,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-function-editor-projection"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "yss-data-contract",
- "yss-graph-document",
- "yss-project-history",
- "yss-project-identity",
-]
-
-[[package]]
 name = "yss-graph-analysis"
 version = "0.1.0"
 dependencies = [
@@ -13083,7 +13069,6 @@ dependencies = [
 name = "yss-graph-analysis-contract"
 version = "0.1.0"
 dependencies = [
- "serde",
  "yss-node-protocol",
  "yss-node-registry",
 ]
@@ -13473,7 +13458,6 @@ dependencies = [
  "yss-database-contract",
  "yss-database-store",
  "yss-filesystem",
- "yss-function-editor-projection",
  "yss-graph-document",
  "yss-graph-document-edit",
  "yss-node-catalog",
@@ -13532,24 +13516,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-project-progress"
-version = "0.1.0"
-
-[[package]]
 name = "yss-project-registry"
 version = "0.1.0"
 dependencies = [
  "dunce",
- "serde",
  "thiserror 2.0.20",
  "tokio",
- "walkdir",
- "windows-sys 0.61.2",
  "yss-filesystem",
  "yss-project-identity",
  "yss-project-layout",
  "yss-project-model",
- "yss-project-progress",
  "yss-project-registry-contract",
 ]
 
@@ -13557,8 +13533,6 @@ dependencies = [
 name = "yss-project-registry-contract"
 version = "0.1.0"
 dependencies = [
- "serde",
- "serde_json",
  "thiserror 2.0.20",
  "yss-project-identity",
 ]
