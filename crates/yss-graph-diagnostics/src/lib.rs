@@ -10,6 +10,9 @@ use std::sync::LazyLock;
 use yss_graph_analysis_contract::{DiagnosticArguments, DiagnosticSeverity};
 use yss_i18n::SimpleBackend;
 
+/// Diagnostics follow the desktop's default language when a locale has no template.
+const FALLBACK_LOCALE: &str = yss_i18n::CHINESE;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DiagnosticTemplate {
     pub locale: &'static str,
@@ -67,8 +70,8 @@ macro_rules! define_graph_diagnostics {
                     blocking: $blocking,
                     argument_names: &[$(stringify!($argument)),*],
                     templates: &[
-                        DiagnosticTemplate { locale: "en-US", text: $en },
-                        DiagnosticTemplate { locale: "zh-CN", text: $zh },
+                        DiagnosticTemplate { locale: yss_i18n::ENGLISH, text: $en },
+                        DiagnosticTemplate { locale: yss_i18n::CHINESE, text: $zh },
                     ],
                 },
             )*
@@ -377,7 +380,7 @@ pub fn render_diagnostic(
             })
         })
         .collect::<Option<Vec<_>>>()?;
-    let template = yss_i18n::translate(&*TRANSLATIONS, locale, message_key, "zh-CN");
+    let template = yss_i18n::translate(&*TRANSLATIONS, locale, message_key, FALLBACK_LOCALE);
     Some(yss_i18n::format_values(
         &template,
         definition.argument_names,
@@ -425,7 +428,7 @@ impl fmt::Display for GraphDiagnosticDefinitionError {
             }
             Self::MissingDefaultTemplate { code, message_key } => write!(
                 formatter,
-                "diagnostic {code} ({message_key}) has no en-US template"
+                "diagnostic {code} ({message_key}) has no {FALLBACK_LOCALE} template"
             ),
             Self::ArgumentTemplateMismatch {
                 code,
@@ -475,7 +478,7 @@ pub fn validate_graph_diagnostic_definitions(
         if !definition
             .templates
             .iter()
-            .any(|template| template.locale == "en-US")
+            .any(|template| template.locale == FALLBACK_LOCALE)
         {
             return Err(GraphDiagnosticDefinitionError::MissingDefaultTemplate {
                 code: definition.code.into(),
@@ -660,15 +663,15 @@ mod tests {
     #[test]
     fn malformed_template_placeholders_are_typed_definition_errors() {
         const UNMATCHED_OPEN: &[DiagnosticTemplate] = &[DiagnosticTemplate {
-            locale: "en-US",
+            locale: FALLBACK_LOCALE,
             text: "Broken %{value",
         }];
         const UNMATCHED_CLOSE: &[DiagnosticTemplate] = &[DiagnosticTemplate {
-            locale: "en-US",
+            locale: FALLBACK_LOCALE,
             text: "Broken value}",
         }];
         const INVALID_NAME: &[DiagnosticTemplate] = &[DiagnosticTemplate {
-            locale: "en-US",
+            locale: FALLBACK_LOCALE,
             text: "Broken %{Value}",
         }];
 

@@ -3,9 +3,9 @@
 //! This module owns graph-independent interfaces and localization. Node Kernel
 //! owns executable adapters; Graph Analysis owns connected types and schemas.
 
-use crate::builtin::add_node_messages;
+use crate::builtin::node_key;
+use crate::builtin::{add_described, add_node_messages, add_text, describe_parameter};
 use crate::builtin::{choice_condition, concrete, data_port};
-use crate::builtin::{node_key, node_key_text};
 use yss_data_contract::DataValue;
 mod analyses;
 mod anova;
@@ -37,9 +37,9 @@ pub(crate) use inventory::documentation as inventory_documentation;
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_decimal, assembled_interface,
-    assembled_parameters, iid, leaf, sid,
+    assembled_parameters, iid, leaf, pure, sid,
 };
-use crate::{Aliases, Message, Text};
+use crate::Message;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, TypeRegistration};
 
@@ -142,7 +142,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             }
         },
         instance_display: NodeInstanceDisplaySpec::Static,
-        execution: execution(),
+        execution: pure(),
         typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,
@@ -692,11 +692,6 @@ fn linear_parameters() -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     ])
 }
 
-fn execution() -> ExecutionSemantics {
-    ExecutionSemantics {
-        determinism: Determinism::Deterministic,
-    }
-}
 fn data_input(
     key: &'static str,
     title: &'static str,
@@ -1117,18 +1112,11 @@ fn report_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 
 fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
-    out.extend([
-        (
-            "en-US",
-            "parameter_groups.configure.title".to_owned(),
-            Text("Configure"),
-        ),
-        (
-            "zh-CN",
-            "parameter_groups.configure.title".to_owned(),
-            Text("配置"),
-        ),
-    ]);
+    add_text(
+        out,
+        "parameter_groups.configure.title",
+        ["Configure", "配置"],
+    );
     for (key, en, zh) in [
         ("model_summary", "Model summary", "模型概览"),
         ("coefficient_table", "Coefficient table", "系数表"),
@@ -1175,8 +1163,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "检验假设（例如 x1 = 0）",
         ),
     ] {
-        let title = format!("parameters.statistics.{key}.title");
-        let description = format!("parameters.statistics.{key}.description");
         let (en_description, zh_description) = match key {
             "steps" => (
                 "VAR impulse-response or forecast-error variance-decomposition horizons, from 1 to 1000; default 8. Results include period zero.",
@@ -1199,12 +1185,12 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
                 "仅计算选中的汇总内容及其必要依赖。",
             ),
         };
-        out.extend([
-            ("en-US", title.to_owned(), Text(en)),
-            ("zh-CN", title.to_owned(), Text(zh)),
-            ("en-US", description.to_owned(), Text(en_description)),
-            ("zh-CN", description.to_owned(), Text(zh_description)),
-        ]);
+        add_described(
+            out,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [en_description, zh_description],
+        );
     }
     for (key, en, zh) in [
         (
@@ -1271,13 +1257,10 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         ),
         ("categories.statistics.title", "Statistics", "统计"),
     ] {
-        out.push(("en-US", key.to_owned(), Text(en)));
-        out.push(("zh-CN", key.to_owned(), Text(zh)));
+        add_text(out, key, [en, zh]);
     }
     for &(id, en, zh) in CATEGORIES {
-        let key = format!("categories.{id}.title");
-        out.push(("en-US", key.to_owned(), Text(en)));
-        out.push(("zh-CN", key.to_owned(), Text(zh)));
+        add_text(out, format!("categories.{id}.title"), [en, zh]);
     }
     for key in [
         "method",
@@ -1315,8 +1298,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         "use_observed_coefficient",
         "observed_coefficient",
     ] {
-        let title = format!("parameters.statistics.{key}.title");
-        let description = format!("parameters.statistics.{key}.description");
         let (en, zh) = match key {
             "odds_ratios" => ("Odds ratios", "胜算比"),
             "marginal_effects" => ("Marginal effects", "边际效应"),
@@ -1359,13 +1340,11 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "rank" => ("Cointegration rank", "协整秩"),
             _ => (key, key),
         };
-        out.push(("en-US", title.to_owned(), Text(en)));
-        out.push(("zh-CN", title.to_owned(), Text(zh)));
-        out.push((
-            "en-US",
-            description.to_owned(),
-            Text("Typed statistical parameter."),
-        ));
-        out.push(("zh-CN", description.to_owned(), Text("类型化统计参数。")));
+        add_described(
+            out,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            ["Typed statistical parameter.", "类型化统计参数。"],
+        );
     }
 }

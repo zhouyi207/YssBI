@@ -37,21 +37,7 @@ pub(super) fn localize(
                 "按输入顺序用 x1、x2……引用变量，分号或换行分隔方程，例如 x2 ~ x1; x3 ~ x1 + x2。",
             ),
         };
-        p.title_key = node_key(id, &format!("parameters.{}.title", p.key.as_str()))?;
-        p.description_key = Some(node_key(
-            id,
-            &format!("parameters.{}.description", p.key.as_str()),
-        )?);
-        for (locale, title, help) in [("en-US", en, eh), ("zh-CN", zh, zhh)] {
-            fragment.messages.extend([
-                (locale, p.title_key.as_str().to_string(), Text(title)),
-                (
-                    locale,
-                    p.description_key.as_ref().unwrap().as_str().to_string(),
-                    Text(help),
-                ),
-            ]);
-        }
+        describe_parameter(&mut fragment.messages, id, p, [en, zh], [eh, zhh])?;
     }
     Ok(())
 }

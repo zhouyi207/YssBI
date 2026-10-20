@@ -1,17 +1,9 @@
-use crate::Text;
-use crate::builtin::node_key_text;
-pub(crate) use crate::builtin::{BuiltinAssemblyError, ProviderFragment, leaf};
+pub(crate) use crate::builtin::{BuiltinAssemblyError, ProviderFragment, leaf, pure};
+use crate::builtin::{add_described, node_key_text};
 use crate::builtin::{assembled_interface, assembled_parameters};
 use std::sync::Arc;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, RegisteredNode, TransparentNodeRole};
-
-impl ProviderFragment {
-    pub(crate) fn text(&mut self, locale: &'static str, key: I18nKey, value: &'static str) {
-        self.messages
-            .push((locale, key.as_str().to_owned(), Text(value)));
-    }
-}
 
 #[derive(Clone)]
 struct NodeKeys {
@@ -85,12 +77,6 @@ pub(crate) fn parameter(
     })
 }
 
-pub(crate) fn pure() -> ExecutionSemantics {
-    ExecutionSemantics {
-        determinism: Determinism::Deterministic,
-    }
-}
-
 pub(crate) fn parameter_key(
     node_id: &str,
     key: &'static str,
@@ -102,23 +88,16 @@ pub(crate) fn parameter_key(
 pub(crate) fn add_parameter_messages(
     fragment: &mut ProviderFragment,
     node_id: &str,
-    entries: &[(
-        &'static str,
-        &'static str,
-        &'static str,
-        &'static str,
-        &'static str,
-    )],
-) -> Result<(), BuiltinAssemblyError> {
-    for (key, en, zh, description, zh_description) in entries {
-        let title_key = parameter_key(node_id, key, "title")?;
-        let description_key = parameter_key(node_id, key, "description")?;
-        fragment.text("en-US", title_key.clone(), en);
-        fragment.text("zh-CN", title_key, zh);
-        fragment.text("en-US", description_key.clone(), description);
-        fragment.text("zh-CN", description_key, zh_description);
-    }
-    Ok(())
+    key: &str,
+    title: [&'static str; 2],
+    description: [&'static str; 2],
+) {
+    add_described(
+        &mut fragment.messages,
+        &node_key_text(node_id, &format!("parameters.{key}")),
+        title,
+        description,
+    );
 }
 
 pub(crate) fn category(

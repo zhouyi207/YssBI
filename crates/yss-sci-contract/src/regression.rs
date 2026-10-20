@@ -108,9 +108,7 @@ impl OlsOptions {
                 bandwidth: *bandwidth,
             },
             ("newey", Some(CovParams::Newey { lag })) => OlsCovariance::Newey { lag: *lag },
-            ("hac-panel", _) => return Err(InvalidOlsOptions::NotImplemented("hac-panel")),
-            ("hac-groupsum", _) => return Err(InvalidOlsOptions::NotImplemented("hac-groupsum")),
-            _ => return Err(InvalidOlsOptions::InvalidCovariance),
+            _ => return Err(InvalidOlsOptions),
         };
         Ok(Self {
             constant,
@@ -120,12 +118,8 @@ impl OlsOptions {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum InvalidOlsOptions {
-    #[error("OLS covariance selection or parameters are invalid")]
-    InvalidCovariance,
-    #[error("cov_type '{0}' not yet implemented")]
-    NotImplemented(&'static str),
-}
+#[error("OLS covariance selection or parameters are invalid")]
+pub struct InvalidOlsOptions;
 
 /// 协方差计算所需的额外参数（cluster、HAC、fixed scale 等）
 #[derive(Debug, Clone, PartialEq)]

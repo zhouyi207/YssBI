@@ -1,7 +1,7 @@
 //! Desktop localization uses the component library's process locale as its single runtime owner.
 use std::{borrow::Cow, sync::LazyLock};
 
-pub const DEFAULT_LANGUAGE: &str = "zh-CN";
+pub const DEFAULT_LANGUAGE: &str = yss_i18n::CHINESE;
 
 pub fn locale() -> &'static str {
     yss_i18n::resolve_locale(&gpui_kit::component::locale(), DEFAULT_LANGUAGE)
@@ -9,7 +9,7 @@ pub fn locale() -> &'static str {
 
 pub fn set_locale(language: &str) {
     gpui_kit::component::set_locale(
-        if yss_i18n::resolve_locale(language, DEFAULT_LANGUAGE) == "en-US" {
+        if yss_i18n::resolve_locale(language, DEFAULT_LANGUAGE) == yss_i18n::ENGLISH {
             "en"
         } else {
             DEFAULT_LANGUAGE

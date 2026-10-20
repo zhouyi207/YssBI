@@ -3,8 +3,7 @@ use super::*;
 #[test]
 fn node_documentation_matches_localized_catalog_without_requiring_execution() {
     let staged = staged_session(
-        ProjectData::new(),
-        "node-documentation",
+        TestProject::active("node-documentation", ProjectData::new()),
         GraphRuntimeTestControl::default(),
     );
     let project = staged.session.project_instance_id();
@@ -65,8 +64,7 @@ fn node_documentation_matches_localized_catalog_without_requiring_execution() {
 #[test]
 fn node_documentation_rejects_foreign_projects_and_inactive_sessions() {
     let staged = staged_session(
-        ProjectData::new(),
-        "node-documentation-stale",
+        TestProject::active("node-documentation-stale", ProjectData::new()),
         GraphRuntimeTestControl::default(),
     );
     let node_type = NodeTypeId::new("yssbi.statistics.describe").unwrap();

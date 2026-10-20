@@ -7,8 +7,7 @@
 
 The host owns installation, grants, process supervision, task admission and result handoff. It
 does not link Julia/Bayes implementations. The shared `yss-plugin-protocol` and `yss-plugin-sdk` crates live in the root workspace.
-External plugin implementations are installed separately; this repository no longer registers
-a test target from a deleted Julia plugin directory.
+External plugin implementations are installed separately.
 
 ## Module responsibilities
 

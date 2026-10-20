@@ -107,7 +107,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 )?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,

@@ -30,32 +30,20 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         title_key: iid("types.grouped_dataframe.title")?,
         classes: Default::default(),
     });
-    for (locale, title, prefix, help) in [
-        (
-            "en-US",
-            "Grouped DataFrame",
-            "Group Key Prefix",
+    add_text(
+        &mut fragment.messages,
+        "types.grouped_dataframe.title",
+        ["Grouped DataFrame", "已分组数据帧"],
+    );
+    add_described(
+        &mut fragment.messages,
+        "parameters.key_prefix",
+        ["Group Key Prefix", "分组键前缀"],
+        [
             "Prefix for the group key columns prepended to Apply results. Collisions are rejected.",
-        ),
-        (
-            "zh-CN",
-            "已分组数据帧",
-            "分组键前缀",
             "Apply 在结果前追加分组键列，使用此前缀；名称冲突时明确报错。",
-        ),
-    ] {
-        fragment
-            .messages
-            .push((locale, "types.grouped_dataframe.title".into(), Text(title)));
-        fragment
-            .messages
-            .push((locale, "parameters.key_prefix.title".into(), Text(prefix)));
-        fragment.messages.push((
-            locale,
-            "parameters.key_prefix.description".into(),
-            Text(help),
-        ));
-    }
+        ],
+    );
     for &(id, en, zh, role) in NODES {
         let group_type = concrete(yss_data_contract::GROUPED_DATAFRAME_TYPE_ID)?;
         let (ports, parameters) = if let Some(role) = role {

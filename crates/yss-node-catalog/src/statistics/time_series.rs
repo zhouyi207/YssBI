@@ -261,7 +261,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters(method)?)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -313,27 +313,15 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         ),
         ("ts_seed", "Forecast random seed", "预测随机种子"),
     ] {
-        for (locale, title, help) in [
-            (
-                "en-US",
-                en,
+        add_described(
+            &mut fragment.messages,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [
                 "See node help for this parameter's default, valid range and estimation meaning.",
-            ),
-            ("zh-CN", zh, "默认值、有效范围及统计含义见节点帮助。"),
-        ] {
-            fragment.messages.extend([
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.title"),
-                    Text(title),
-                ),
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.description"),
-                    Text(help),
-                ),
-            ]);
-        }
+                "默认值、有效范围及统计含义见节点帮助。",
+            ],
+        );
     }
     Ok(())
 }

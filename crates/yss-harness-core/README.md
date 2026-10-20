@@ -32,7 +32,7 @@ Core 负责通用生命周期、持久序列与重放，通过 extension hooks �
 
 桌面使用扁平的六角色编排。角色定义和工具集合由
 [Assistant agents](../yss-assistant-extension/src/agents.rs) 拥有，角色、任务授权和读取基线归
-`yss-assistant-extension`；[Core orchestration](src/orchestration/mod.rs) 拥有通用运行和委派。
+`yss-assistant-extension`；[Core orchestration](src/orchestration.rs) 拥有通用运行和委派。
 Rig 根据 provider-neutral 请求构建模型与工具循环，不另设角色注册表或持久状态。
 
 | 角色         | 职责与写入边界                                                       |
@@ -124,12 +124,12 @@ Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各
 
 | 范围          | 源码入口与职责                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core Host     | [host/mod.rs](src/host/mod.rs) 构造共享状态；[session](src/host/session.rs)、[turn](src/host/turn.rs) 分别实现对应入口                                                                                                                                                                                                                                                                  |
+| Core Host     | [host.rs](src/host.rs) 构造共享状态；[session](src/host/session.rs)、[turn](src/host/turn.rs) 分别实现对应入口                                                                                                                                                                                                                                                                  |
 | Core 公共依赖 | [ports.rs](src/ports.rs) 拥有注入端口集合，[error.rs](src/error.rs) 拥有 Core 错误；编排器不依赖 Host 内部实现                                                                                                                                                                                                                                                                                                                                              |
 | 上下文与事件  | [conversation.rs](src/conversation.rs) 统一历史重建和消息组装；[events.rs](src/events.rs) 统一持久事件写入、交付及 Agent 输出适配                                                                                                                                                                                                                                                                                                                           |
 | 角色与权限    | [Assistant agents](../yss-assistant-extension/src/agents.rs) 定义六角色与工具，Assistant extension 执行角色和任务授权；Core 执行工具注册与模式准入 |
-| 编排与交付    | [Core orchestration](src/orchestration/mod.rs) 调度通用运行；[Assistant run](../yss-assistant-extension/src/run.rs) 绑定任务、归集业务回执并恢复读取基线；其回归测试位于 [run/tests.rs](../yss-assistant-extension/src/run/tests.rs) |
-| Rig           | [driver.rs](../yss-harness-rig/src/driver.rs) 执行模型循环，[provider/client.rs](../yss-harness-rig/src/provider/client.rs) 建立原生协议客户端，[stream.rs](../yss-harness-rig/src/stream.rs) 管理流与取消，[messages.rs](../yss-harness-rig/src/messages.rs) 映射消息，[tools](../yss-harness-rig/src/tools/mod.rs) 映射模型工具，[error.rs](../yss-harness-rig/src/error.rs) 分类失败                                                                     |
+| 编排与交付    | [Core orchestration](src/orchestration.rs) 调度通用运行；[Assistant run](../yss-assistant-extension/src/run.rs) 绑定任务、归集业务回执并恢复读取基线；其回归测试位于 [run/tests.rs](../yss-assistant-extension/src/run/tests.rs) |
+| Rig           | [driver.rs](../yss-harness-rig/src/driver.rs) 执行模型循环，[provider/client.rs](../yss-harness-rig/src/provider/client.rs) 建立原生协议客户端，[stream.rs](../yss-harness-rig/src/stream.rs) 管理流与取消，[messages.rs](../yss-harness-rig/src/messages.rs) 映射消息，[tools](../yss-harness-rig/src/tools.rs) 映射模型工具，[error.rs](../yss-harness-rig/src/error.rs) 分类失败                                                                     |
 | Knowledge     | [knowledge.rs](src/knowledge.rs) 处理查询与引用；[knowledge/tools.rs](src/knowledge/tools.rs) 映射公开工具结果与内部引用事件；[knowledge/index.rs](src/knowledge/index.rs) 管理来源快照与索引发布；[knowledge/retrieval.rs](src/knowledge/retrieval.rs) 拥有 Unicode 分段与引用身份 |
 | Tantivy       | [lib.rs](../yss-harness-tantivy/src/lib.rs) 实现中立索引构建端口；[index.rs](../yss-harness-tantivy/src/index.rs) 拥有字段、查询和摘要；[tokenizer.rs](../yss-harness-tantivy/src/tokenizer.rs) 拥有中英文分词；[collector.rs](../yss-harness-tantivy/src/collector.rs) 在结果限制前按文档去重                                                                                                                                                              |
 | SQLite        | [lib.rs](../yss-harness-sqlite/src/lib.rs) 构造唯一 Store/连接池；各持久化 port 分别实现于 session、events、ledger 和 knowledge 模块；[schema.rs](../yss-harness-sqlite/src/schema.rs) 拥有唯一 schema，[codec.rs](../yss-harness-sqlite/src/codec.rs) 共享编码与错误映射                                                                                                                                                               |
@@ -537,7 +537,7 @@ Assistant 展开引用返回片段正文与可选原始资源定位，打开原�
 
 会话上下文由对话事件、工具账本和上下文压缩检查点重建，用户消息不另存为独立记忆。当前契约没有会话记忆类型、事件、数据库表、读写接口或前端投影；SQLite 和事件解析只接受当前契约，不保留旧记忆数据的兼容分支。
 
-当前注册并加载的 Skill 是 [statistical-report-writing](skills/statistical-report-writing/SKILL.md)，拥有统计证据、数学源码、表格竖线、显著性标记、金额转义及交付检查规则。Markdown 预览与布局由 [GPUI host](../yss-desktop-gpui/README.md) 拥有；当前提供 GFM 预览，数学预览仍待迁移，保存回执证明的是源码内容。
+当前注册并加载的 Skill 是 [statistical-report-writing](../yss-assistant-extension/skills/statistical-report-writing/SKILL.md)，拥有统计证据、数学源码、表格竖线、显著性标记、金额转义及交付检查规则。Markdown 预览与布局由 [GPUI host](../yss-desktop-gpui/README.md) 拥有；当前提供 GFM 预览，数学预览仍待迁移，保存回执证明的是源码内容。
 
 Host 初始化时通过内置 `SkillRegistry` 精确解析 `yssbi.statistics.statistical-report-writing@1.0.0`，将 ID、版本和原始规范作为独立 System 消息预加载到每次 ManagerAgent 和 ReportAgent 请求，位于基础工具策略之后、对话历史之前；source hash 仅用于内部校验，不发送给模型。Skill 的适用条件限定为生成、修改或续写统计报告，涵盖 Assistant 正文和 Doc 内容；无需按当前消息关键词猜测，也不会因后续修改省略“报告”一词而丢失规范。ReportAgent 复用同一写作 Skill，Manager 直接撰写统计正文时同样适用。当前没有模型侧 `load_skill` 工具；内置方法包由 Core 加载。新增 Skill 文件必须同时注册并接入上下文，单独添加文件不会生效。
 
@@ -585,9 +585,9 @@ Rig streams the first text promptly and coalesces subsequent deltas at 40 ms or 
 
 工具账本的 `ToolInvocationRecord` 区分已绑定的内部执行请求与执行前被拒绝的模型意图。参数解码失败、授权拒绝和基线绑定失败同样记录调用身份、公开能力名称、失败终态及开始/结束时间；绑定时间计入工具总耗时。成功解码的业务输入保留用于重放，畸形原始参数不落账本，重放该调用使用空参数和原结构化错误。被拒绝的调用不产生业务回执、不推进观察基线，启动恢复也不会把它误判为可能已提交的写入。
 
-委派、续接与统计计划的每次模型调用另由 Core 分配调用 ID，通过同一持久事件流记录 `ControlToolStarted` / `ControlToolFinished`，不新增账本或持久化表。Rig 的 [control.rs](../yss-harness-rig/src/tools/control.rs) 在参数解码前开始记录，成功、参数错误、准入失败、计划策略拒绝、取消及 panic 都经过同一终态路径；计划策略与委派业务仍由原 owner 执行。已准入控制任务加入原清理队列，取消等待其收尾。启动恢复将缺少终态的调用标记为 `outcome_unknown`，不重复执行已发生的委派或计划提交。
+委派、续接与统计计划的每次模型调用另由 Core 分配调用 ID，通过同一持久事件流记录 `ControlToolStarted` / `ControlToolFinished`，不新增账本或持久化表。Core [orchestration](src/orchestration.rs) 在参数解码前开始记录，成功、参数错误、准入失败、计划策略拒绝、取消及 panic 都经过同一终态路径；计划策略与委派业务仍由原 owner 执行。已准入控制任务加入原清理队列，取消等待其收尾。启动恢复将缺少终态的调用标记为 `outcome_unknown`，不重复执行已发生的委派或计划提交。
 
-`ControlToolFinished` 保存失败码与可选的诊断 details。参数错误保留 category、path 和 expected，策略拒绝保留 reason；Rig 将同一失败交给 Core 记录后再返回模型。缺少诊断的事件不推断或补造原因。
+`ControlToolFinished` 保存失败码与可选的诊断 details。参数错误保留 category、path 和 expected，策略拒绝保留 reason；Core 记录同一失败后再返回模型。缺少诊断的事件不推断或补造原因。
 
 控制调用耗时包含绑定、Worker 排队与执行以及结果交付，不能解释为纯模型或节点计算时间；Worker 本身继续由原 AgentRun 事件记录准入、运行和结算。Assistant 契约将控制调用投影成普通工具生命周期，详情从原事件重建开始/结束时间；任务正文、授权、结果与统计计划沿用各自投影，不复制到工具参数摘要中。真实图运行的 admission/running/finalization 时间仍由 Execution owner 提供。
 

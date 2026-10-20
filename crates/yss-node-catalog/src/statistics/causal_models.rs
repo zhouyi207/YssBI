@@ -247,7 +247,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -261,18 +261,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             Some([aliases, aliases]),
         );
     }
-    fragment.messages.extend([
-        (
-            "en-US",
-            "types.statistics_result_treatment_effect.title".into(),
-            Text("Treatment-effect estimates"),
-        ),
-        (
-            "zh-CN",
-            "types.statistics_result_treatment_effect.title".into(),
-            Text("处理效应估计结果"),
-        ),
-    ]);
+    add_text(
+        &mut fragment.messages,
+        "types.statistics_result_treatment_effect.title",
+        ["Treatment-effect estimates", "处理效应估计结果"],
+    );
     for (key, en, zh, en_description, zh_description) in [
         (
             "gmm_steps",
@@ -345,28 +338,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "默认 0（仅点估计），启用时至少 2 次。按独立观测整行有放回抽样并重新拟合全部阶段；抽样拟合失败时终止。",
         ),
     ] {
-        fragment.messages.extend([
-            (
-                "en-US",
-                format!("parameters.statistics.{key}.title"),
-                Text(en),
-            ),
-            (
-                "zh-CN",
-                format!("parameters.statistics.{key}.title"),
-                Text(zh),
-            ),
-            (
-                "en-US",
-                format!("parameters.statistics.{key}.description"),
-                Text(en_description),
-            ),
-            (
-                "zh-CN",
-                format!("parameters.statistics.{key}.description"),
-                Text(zh_description),
-            ),
-        ]);
+        add_described(
+            &mut fragment.messages,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [en_description, zh_description],
+        );
     }
     Ok(())
 }

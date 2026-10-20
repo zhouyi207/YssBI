@@ -222,7 +222,7 @@ impl ChartEditor {
                     )
                 }
             })
-            .unwrap_or_else(|| translate("panel.assistantToolFacts.columns"));
+            .unwrap_or_else(|| translate("native.charts.selectedColumns"));
         PropertyField::new(translate(if histogram {
             "native.charts.distributionColumn"
         } else if x_axis {

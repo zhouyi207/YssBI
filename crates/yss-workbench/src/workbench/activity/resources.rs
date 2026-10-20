@@ -100,10 +100,14 @@ impl ActivityPanel {
                     return None;
                 };
                 match (node_type_id.as_str(), create_args) {
-                    ("yssbi.project.function.call", ResourceBoundCreateArgs::FunctionGraph)
-                    | ("yssbi.dataframe.source.get", ResourceBoundCreateArgs::Database) => {
-                        Some((resource_path.as_str().to_owned(), index))
-                    }
+                    (
+                        yss_node_catalog::FUNCTION_CALL_NODE_TYPE,
+                        ResourceBoundCreateArgs::FunctionGraph,
+                    )
+                    | (
+                        yss_node_catalog::DATAFRAME_SOURCE_NODE_TYPE,
+                        ResourceBoundCreateArgs::Database,
+                    ) => Some((resource_path.as_str().to_owned(), index)),
                     _ => None,
                 }
             })

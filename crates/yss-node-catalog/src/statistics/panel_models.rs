@@ -154,7 +154,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(id, parameters(method)?)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -168,11 +168,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             Some([aliases, aliases]),
         );
     }
-    fragment.messages.extend([
-        ("en-US", "parameters.statistics.max_instrument_lag.title".into(), Text("Maximum instrument lag")),
-        ("zh-CN", "parameters.statistics.max_instrument_lag.title".into(), Text("工具变量最大滞后阶")),
-        ("en-US", "parameters.statistics.max_instrument_lag.description".into(), Text("Collapsed response-level instruments from lag 2 to this lag; default 3, at least 2 and below the period count.")),
-        ("zh-CN", "parameters.statistics.max_instrument_lag.description".into(), Text("使用因变量从第 2 阶到指定阶的折叠水平工具变量；默认 3，至少 2 且小于实际期数。")),
-    ]);
+    add_described(
+        &mut fragment.messages,
+        "parameters.statistics.max_instrument_lag",
+        ["Maximum instrument lag", "工具变量最大滞后阶"],
+        [
+            "Collapsed response-level instruments from lag 2 to this lag; default 3, at least 2 and below the period count.",
+            "使用因变量从第 2 阶到指定阶的折叠水平工具变量；默认 3，至少 2 且小于实际期数。",
+        ],
+    );
     Ok(())
 }

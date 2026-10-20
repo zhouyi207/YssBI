@@ -9,25 +9,6 @@ use yss_graph_execution::plan::{NodeExecutionMode, PlanGraphId, PlanOutputRef, P
 use yss_graph_execution::result::ResultCacheState;
 use yss_node_kernel::RuntimeValue;
 
-fn port(node: NodeId, key: &str) -> PortAddress {
-    PortAddress::declared(node, key.parse().unwrap())
-}
-
-fn node(document: &mut GraphDocument, kind: &str) -> NodeId {
-    let id = NodeId::new();
-    document.nodes.insert(
-        id,
-        DocumentNode {
-            id,
-            node_type: kind.parse().unwrap(),
-            position: NodePosition { x: 0., y: 0. },
-            parameters: ParameterValues::new(),
-            user_label: None,
-        },
-    );
-    id
-}
-
 fn install(session: &StagedSession, graph: &GraphResourcePath, document: GraphDocument) {
     let overwrite = session
         .session
@@ -106,8 +87,7 @@ fn output(graph: &GraphResourcePath, node: NodeId, key: &str) -> PlanOutputRef {
 fn inserted_reroutes_run_with_cached_inputs_and_follow_edits_and_undo() {
     let graph = GraphResourcePath::new("events/New Event.yssbi-event").unwrap();
     let session = staged_session(
-        compatible_project(&graph),
-        "reroute-scalar",
+        TestProject::active("reroute-scalar", compatible_project(&graph)),
         GraphRuntimeTestControl::default(),
     );
     let source = NodeId::new();
@@ -251,8 +231,7 @@ fn inserted_reroutes_run_with_cached_inputs_and_follow_edits_and_undo() {
 fn reroutes_forward_deferred_schema_and_share_one_materialized_relation() {
     let graph = GraphResourcePath::new("events/New Event.yssbi-event").unwrap();
     let session = staged_session(
-        compatible_project(&graph),
-        "reroute-schema",
+        TestProject::active("reroute-schema", compatible_project(&graph)),
         GraphRuntimeTestControl::default(),
     );
     let source = NodeId::new();

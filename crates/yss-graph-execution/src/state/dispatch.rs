@@ -52,6 +52,7 @@ impl ExecutedPreparedCandidate {
     }
 }
 
+#[cfg(any(test, feature = "test-support"))]
 pub struct ExecutedPreparedRun {
     run_id: crate::run_registry::RunId,
     handoff: ExecutionFinalizationHandoff,
@@ -65,6 +66,7 @@ pub enum PreparedExecutionEvent {
     },
 }
 
+#[cfg(any(test, feature = "test-support"))]
 impl ExecutedPreparedRun {
     pub const fn run_id(&self) -> crate::run_registry::RunId {
         self.run_id

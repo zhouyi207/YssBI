@@ -224,18 +224,14 @@ impl GraphCanvas {
                     .dropdown_menu(move |menu, _, _| {
                         menu.action_context(focus.clone())
                             .item(
-                                PopupMenuItem::new(yss_ui::text::t(
-                                    "panel.assistantToolNames.inspect_result",
-                                ))
-                                .disabled(!inspect)
-                                .on_click(
-                                    yss_ui::inspector::owner_command(
+                                PopupMenuItem::new(yss_ui::text::t("native.canvas.viewResult"))
+                                    .disabled(!inspect)
+                                    .on_click(yss_ui::inspector::owner_command(
                                         owner.clone(),
                                         |view, _, cx| {
                                             view.inspect_results(cx);
                                         },
-                                    ),
-                                ),
+                                    )),
                             )
                             .item(
                                 PopupMenuItem::new(yss_ui::text::t(

@@ -199,21 +199,7 @@ pub(super) fn localize(
                 "默认 true；false 反转非劣效检验方向。",
             ),
         };
-        p.title_key = node_key(id, &format!("parameters.{}.title", p.key.as_str()))?;
-        p.description_key = Some(node_key(
-            id,
-            &format!("parameters.{}.description", p.key.as_str()),
-        )?);
-        for (locale, title, help) in [("en-US", en, eh), ("zh-CN", zh, zhh)] {
-            fragment.messages.extend([
-                (locale, p.title_key.as_str().to_string(), Text(title)),
-                (
-                    locale,
-                    p.description_key.as_ref().unwrap().as_str().to_string(),
-                    Text(help),
-                ),
-            ]);
-        }
+        describe_parameter(&mut fragment.messages, id, p, [en, zh], [eh, zhh])?;
     }
     Ok(())
 }

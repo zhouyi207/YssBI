@@ -87,7 +87,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::Join,
     ),
     spec(
-        "yssbi.dataframe.source.get",
+        crate::DATAFRAME_SOURCE_NODE_TYPE,
         "Get DataFrame",
         "获取数据帧",
         &["data frame", "table", "source"],

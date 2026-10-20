@@ -7,7 +7,7 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
 }
 
 fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    const ID: &str = "yssbi.debug.view";
+    const ID: &str = crate::DEBUG_VIEW_NODE_TYPE;
     crate::builtin::add_node_messages(
         &mut fragment.messages,
         ID,

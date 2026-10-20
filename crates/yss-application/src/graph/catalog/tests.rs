@@ -1,154 +1,23 @@
 use super::*;
+use crate::graph::test_support::{StagedSession, TestProject, connect, node, port, staged_session};
 mod documentation;
 mod function_calls;
 mod reroute;
 mod schema_feedback;
 
-fn connect(document: &mut GraphDocument, output: PortAddress, input: PortAddress) {
-    let id = yss_graph_document::ConnectionId::new();
-    document.connections.insert(
-        id,
-        yss_graph_document::DocumentConnection {
-            id,
-            output,
-            input,
-            order: None,
-        },
-    );
-}
-
-use crate::session::{ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot};
-use std::num::NonZeroU64;
-use std::path::PathBuf;
+use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::sync::{Arc, Barrier};
 use std::thread;
-use yss_database_contract::{
-    DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
-    DatabaseSessionIdentity, DatabaseSessionOpenRequest,
-};
-use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
+use yss_database_contract::{DatabaseDecl, DatabaseId};
 use yss_graph_document::GraphResourceKind;
 use yss_graph_document::{
     DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition, ParameterValues,
     PortAddress,
 };
-use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use yss_graph_execution::resource_preparation::ResourceProviderFactory;
-use yss_graph_execution::state::ExecutionRuntimeState;
-use yss_graph_runtime::{
-    GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
-    GraphRuntimeTestEvent,
-};
+use yss_graph_runtime::{GraphRuntimeTestControl, GraphRuntimeTestEvent};
 use yss_node_catalog::build_builtin_node_system;
 use yss_node_protocol::{NodeTypeId, PortKey};
-use yss_project::ProjectState;
-use yss_project_identity::ProjectSessionId;
 use yss_project_model::{GraphResourceDocument, ProjectData};
-
-struct TestProject {
-    root: PathBuf,
-    state: Arc<ProjectState>,
-}
-
-impl TestProject {
-    fn active(label: &str, data: ProjectData) -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-catalog-query-{label}-{}",
-            uuid::Uuid::new_v4()
-        ));
-        yss_project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
-        Self {
-            root,
-            state: Arc::new(state),
-        }
-    }
-}
-
-impl Drop for TestProject {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.root);
-    }
-}
-
-struct StagedSession {
-    _project: TestProject,
-    session: Arc<ApplicationSession>,
-    application: ApplicationState,
-    slot: Arc<ApplicationSessionSlot>,
-    control: GraphRuntimeTestControl,
-}
-
-fn staged_session(
-    data: ProjectData,
-    label: &str,
-    control: GraphRuntimeTestControl,
-) -> StagedSession {
-    let project = TestProject::active(label, data);
-    let project_state = Arc::clone(&project.state);
-    let project_instance_id = project_state.capture_project_session().unwrap().instance_id;
-    let project_session_id =
-        ProjectSessionId::new(format!("catalog-query-project-{}", uuid::Uuid::new_v4()));
-    let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
-    let builtin = build_builtin_node_system().unwrap();
-    let graph = Arc::new(GraphRuntimeState::new_for_test(
-        GraphRuntimeEpoch::from_existing(1),
-        GraphRuntimeComponents {
-            registry: builtin.registry,
-            catalog: builtin.catalog,
-        },
-        control.clone(),
-    ));
-    let declarations: Arc<[DatabaseDecl]> = Vec::new().into();
-    let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(
-        DatabaseId,
-        DatabaseDeclarationObservation,
-    )>())
-    .unwrap();
-    let database = Arc::new(
-        DatabaseRuntimeRegistry::new()
-            .open_session(DatabaseSessionOpenRequest::new(
-                DatabaseSessionIdentity::from_existing(project_session_id.as_str().into()),
-                NonZeroU64::new(1).unwrap(),
-                declarations,
-                observations,
-            ))
-            .unwrap(),
-    );
-    let execution = Arc::new(ExecutionRuntimeState::new(
-        execution_session_id,
-        RuntimeGeneration::from_existing(1),
-        yss_node_kernel::KernelRegistry::default().into(),
-        yss_database_runtime::dataset_query_engine().unwrap(),
-    ));
-    let session = Arc::new(ApplicationSession::new_for_test(
-        ApplicationSessionEpoch::from_existing(1),
-        project_instance_id,
-        project_session_id.clone(),
-        execution_session_id,
-        RuntimeGeneration::from_existing(1),
-        project_state,
-        graph,
-        execution,
-        database,
-        Arc::new(ResourceProviderFactory::new(
-            project_session_id.as_str().into(),
-        )),
-    ));
-    let slot = Arc::new(ApplicationSessionSlot::new(
-        crate::session::NodeComponents::builtins().unwrap(),
-    ));
-    slot.publish_for_test(Arc::clone(&session));
-    let application = ApplicationState::new(Arc::clone(&slot));
-    StagedSession {
-        _project: project,
-        session,
-        application,
-        slot,
-        control,
-    }
-}
 
 fn compatible_project(path: &GraphResourcePath) -> ProjectData {
     let mut project = ProjectData::new();
@@ -495,8 +364,7 @@ fn connection_candidates_are_read_only_and_reject_an_obsolete_graph_version() {
     );
     project.graphs.get_mut(&graph).unwrap().document = Arc::new(document);
     let staged = staged_session(
-        project,
-        "connection-candidates",
+        TestProject::active("connection-candidates", project),
         GraphRuntimeTestControl::default(),
     );
     let app = &staged.application;
@@ -660,8 +528,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
     project.graphs.insert(function.clone(), definition);
     project.graphs.insert(caller.clone(), resource);
     let session = staged_session(
-        project,
-        "rename-bound-ports",
+        TestProject::active("rename-bound-ports", project),
         GraphRuntimeTestControl::default(),
     );
     let instance = session.session.project_instance_id().clone();
@@ -721,8 +588,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
 #[test]
 fn localized_catalog_rejects_stale_project_identity() {
     let session = staged_session(
-        ProjectData::new(),
-        "localized-stale-project",
+        TestProject::active("localized-stale-project", ProjectData::new()),
         GraphRuntimeTestControl::default(),
     );
     let stale = ProjectInstanceId::from_existing("stale-project-instance".into());
@@ -747,7 +613,10 @@ fn node_creation_form_is_read_only_and_preserves_protocol_defaults_and_condition
         path.clone(),
         GraphResourceDocument::new("Draft", GraphResourceKind::EventGraph),
     );
-    let session = staged_session(project, "creation-form", GraphRuntimeTestControl::default());
+    let session = staged_session(
+        TestProject::active("creation-form", project),
+        GraphRuntimeTestControl::default(),
+    );
     let instance = session.session.project_instance_id();
     session
         .application
@@ -759,7 +628,7 @@ fn node_creation_form_is_read_only_and_preserves_protocol_defaults_and_condition
         .project()
         .read_project_index(instance)
         .unwrap();
-    let file = session._project.root.join(path.as_str());
+    let file = session.project.root.join(path.as_str());
     let saved = std::fs::read(&file).unwrap();
     let curve = "yssbi.statistics.regression.curve".parse().unwrap();
     let initial = session
@@ -871,8 +740,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         GraphResourceDocument::new("Sales Report", GraphResourceKind::FunctionGraph),
     );
     let session = staged_session(
-        project,
-        "localized-coherent-resource",
+        TestProject::active("localized-coherent-resource", project),
         GraphRuntimeTestControl::default(),
     );
     let project_instance_id = session.session.project_instance_id().clone();
@@ -982,8 +850,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
 #[test]
 fn all_non_deferred_builtin_nodes_are_available_in_catalog_and_sidebar() {
     let session = staged_session(
-        ProjectData::new(),
-        "all-builtin-nodes-availability",
+        TestProject::active("all-builtin-nodes-availability", ProjectData::new()),
         GraphRuntimeTestControl::default(),
     );
     let project_instance_id = session.session.project_instance_id().clone();
@@ -1085,8 +952,7 @@ fn compatible_catalog_reads_unsaved_resident_changes_and_rejects_old_versions() 
     let mut project = compatible_project(&graph_path);
     project.graphs.get_mut(&graph_path).unwrap().document = Arc::new(document);
     let session = staged_session(
-        project,
-        "compatible-resident-source",
+        TestProject::active("compatible-resident-source", project),
         GraphRuntimeTestControl::default(),
     );
     let instance = session.session.project_instance_id().clone();
@@ -1184,8 +1050,7 @@ fn compatible_catalog_excludes_disjoint_numeric_and_model_result_types_in_both_d
     let mut project = compatible_project(&graph);
     project.graphs.get_mut(&graph).unwrap().document = Arc::new(document);
     let session = staged_session(
-        project,
-        "compatible-model-result",
+        TestProject::active("compatible-model-result", project),
         GraphRuntimeTestControl::default(),
     );
     let version = session
@@ -1243,8 +1108,7 @@ fn connection_mutations_reject_model_results_even_through_resolved_generic_outpu
 
     let graph = GraphResourcePath::new("events/Types.yssbi-event").unwrap();
     let session = staged_session(
-        compatible_project(&graph),
-        "connect-model-result",
+        TestProject::active("connect-model-result", compatible_project(&graph)),
         GraphRuntimeTestControl::default(),
     );
     let builtin = build_builtin_node_system().unwrap();
@@ -1405,8 +1269,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
     let mut project = compatible_project(&graph);
     project.graphs.get_mut(&graph).unwrap().document = Arc::new(document.clone());
     let session = staged_session(
-        project,
-        "decompose-view-results",
+        TestProject::active("decompose-view-results", project),
         GraphRuntimeTestControl::default(),
     );
     let app = &session.application;
@@ -1662,8 +1525,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     let mut project = compatible_project(&graph);
     project.graphs.get_mut(&graph).unwrap().document = Arc::new(document.clone());
     let session = staged_session(
-        project,
-        "compatible-derived",
+        TestProject::active("compatible-derived", project),
         GraphRuntimeTestControl::default(),
     );
     let instance = session.session.project_instance_id().clone();
@@ -1851,13 +1713,11 @@ fn replacement_after_catalog_compute_returns_stale_and_publishes_nothing() {
     let release = Arc::new(Barrier::new(2));
     control.pause_after_catalog_compute(Arc::clone(&entered), Arc::clone(&release));
     let session = staged_session(
-        ProjectData::new(),
-        "catalog-replacement-after-compute",
+        TestProject::active("catalog-replacement-after-compute", ProjectData::new()),
         control.clone(),
     );
     let replacement = staged_session(
-        ProjectData::new(),
-        "catalog-replacement-target",
+        TestProject::active("catalog-replacement-target", ProjectData::new()),
         GraphRuntimeTestControl::default(),
     );
     let worker_application = session.application.clone();
@@ -1917,8 +1777,7 @@ fn clipboard_export_uses_project_declarations_without_database_schema_capture() 
     let node_ids = document.nodes.keys().copied().collect();
     project.graphs.get_mut(&graph).unwrap().document = Arc::new(document);
     let staged = staged_session(
-        project,
-        "clipboard-declarations",
+        TestProject::active("clipboard-declarations", project),
         GraphRuntimeTestControl::default(),
     );
     let instance = staged.session.project_instance_id().clone();
@@ -1968,8 +1827,7 @@ fn clipboard_export_rejects_a_snapshot_from_before_a_committed_edit() {
     let mut project = compatible_project(&graph);
     project.graphs.get_mut(&graph).unwrap().document = Arc::new(document);
     let staged = staged_session(
-        project,
-        "clipboard-current-document",
+        TestProject::active("clipboard-current-document", project),
         GraphRuntimeTestControl::default(),
     );
     let instance = staged.session.project_instance_id().clone();
@@ -2027,8 +1885,7 @@ fn localized_catalog_rejects_a_project_database_schema_mismatch() {
     let mut project = ProjectData::new();
     project.databases.insert("sales".into(), database);
     let session = staged_session(
-        project,
-        "catalog-schema-mismatch",
+        TestProject::active("catalog-schema-mismatch", project),
         GraphRuntimeTestControl::default(),
     );
     let project_instance_id = session.session.project_instance_id().clone();

@@ -211,7 +211,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(id, parameters(method)?)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -298,20 +298,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "与评分同一尺度上的有限正方差。",
         ),
     ] {
-        for (locale, title, help) in [("en-US", en, en_help), ("zh-CN", zh, zh_help)] {
-            fragment.messages.extend([
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.title"),
-                    Text(title),
-                ),
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.description"),
-                    Text(help),
-                ),
-            ]);
-        }
+        add_described(
+            &mut fragment.messages,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [en_help, zh_help],
+        );
     }
     Ok(())
 }

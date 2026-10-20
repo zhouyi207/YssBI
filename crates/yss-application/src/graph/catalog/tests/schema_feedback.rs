@@ -11,8 +11,7 @@ use yss_graph_execution::result::ResultCacheState;
 fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
     let graph = GraphResourcePath::new("events/New Event.yssbi-event").unwrap();
     let session = staged_session(
-        compatible_project(&graph),
-        "schema-feedback",
+        TestProject::active("schema-feedback", compatible_project(&graph)),
         GraphRuntimeTestControl::default(),
     );
     let app = &session.application;
@@ -210,8 +209,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
         RunDemand::Default,
     ] {
         let cold = staged_session(
-            compatible_project(&graph),
-            "schema-cold-replay",
+            TestProject::active("schema-cold-replay", compatible_project(&graph)),
             GraphRuntimeTestControl::default(),
         );
         let cold_instance = cold.session.project_instance_id().clone();
@@ -409,8 +407,7 @@ fn evaluated_schema_updates_decompose_without_invalidating_its_producer() {
     );
     assert_eq!(updated.document().connections.len(), 3);
     let fresh = staged_session(
-        compatible_project(&graph),
-        "schema-fresh-session",
+        TestProject::active("schema-fresh-session", compatible_project(&graph)),
         GraphRuntimeTestControl::default(),
     );
     let instance = fresh.session.project_instance_id().clone();

@@ -260,7 +260,7 @@ impl ProjectCatalogResources {
             }
             entries.push(CatalogResourceEntry {
                 name: function.name.clone().into_boxed_str(),
-                node_type_id: node_type("yssbi.project.function.call")?,
+                node_type_id: node_type(yss_node_catalog::FUNCTION_CALL_NODE_TYPE)?,
                 resource_path: CatalogResourcePath::new(function.path.clone()),
                 resource_revision: function.function_revision.get(),
                 create_args: ResourceBoundCreateArgs::FunctionGraph,
@@ -294,7 +294,7 @@ impl ProjectCatalogResources {
             ));
             entries.push(CatalogResourceEntry {
                 name: declaration.name.clone(),
-                node_type_id: node_type("yssbi.dataframe.source.get")?,
+                node_type_id: node_type(yss_node_catalog::DATAFRAME_SOURCE_NODE_TYPE)?,
                 resource_path: CatalogResourcePath::new(
                     yss_database_contract::database_resource_path(&database.id),
                 ),

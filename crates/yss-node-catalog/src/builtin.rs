@@ -1,5 +1,5 @@
 use super::{core_nodes, dataframe, distribution, plot, project, statistics};
-use crate::{BuiltinCatalog, Message, Text, data_connections};
+use crate::{BuiltinCatalog, Message, data_connections};
 use yss_data_contract::DataValue;
 use yss_data_contract::{DecimalLiteral, InvalidDecimal};
 use yss_node_protocol::*;
@@ -392,16 +392,11 @@ fn assemble_builtin_parts()
     let nodes = &mut fragment.nodes;
     add_shared_messages(messages);
 
-    messages.push((
-        "en-US",
-        "parameters.comparison_mode.title".to_owned(),
-        Text("Comparison Mode"),
-    ));
-    messages.push((
-        "zh-CN",
-        "parameters.comparison_mode.title".to_owned(),
-        Text("比较模式"),
-    ));
+    add_text(
+        messages,
+        "parameters.comparison_mode.title",
+        ["Comparison Mode", "比较模式"],
+    );
     for (key, en, zh) in [
         (
             "parameters.absolute_tolerance.title",
@@ -414,8 +409,7 @@ fn assemble_builtin_parts()
             "相对容差",
         ),
     ] {
-        messages.push(("en-US", key.to_owned(), Text(en)));
-        messages.push(("zh-CN", key.to_owned(), Text(zh)));
+        add_text(messages, key, [en, zh]);
     }
     for spec in COMPARISONS {
         let id = format!("yssbi.logic.{}", spec.id);
@@ -717,7 +711,7 @@ fn protocol(
     })
 }
 
-fn pure() -> ExecutionSemantics {
+pub(crate) fn pure() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
     }
@@ -864,28 +858,62 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "常量的值。",
         ),
     ] {
-        out.push(("en-US", key.to_owned(), Text(en)));
-        out.push(("zh-CN", key.to_owned(), Text(zh)));
+        add_text(out, key, [en, zh]);
     }
 }
+/// One text message in every shipped locale; texts are `[English, Chinese]`.
+pub(crate) fn add_text(
+    out: &mut Vec<(&'static str, String, Message)>,
+    key: impl Into<String>,
+    [en, zh]: [&'static str; 2],
+) {
+    let key = key.into();
+    out.extend([
+        (yss_i18n::ENGLISH, key.clone(), Message::Text(en)),
+        (yss_i18n::CHINESE, key, Message::Text(zh)),
+    ]);
+}
+
+/// The `{prefix}.title` and `{prefix}.description` messages in every shipped locale.
+pub(crate) fn add_described(
+    out: &mut Vec<(&'static str, String, Message)>,
+    prefix: &str,
+    title: [&'static str; 2],
+    description: [&'static str; 2],
+) {
+    add_text(out, format!("{prefix}.title"), title);
+    add_text(out, format!("{prefix}.description"), description);
+}
+
+/// Gives `parameter` node-scoped title and description keys and registers their text.
+pub(crate) fn describe_parameter(
+    out: &mut Vec<(&'static str, String, Message)>,
+    node_id: &str,
+    parameter: &mut Parameter,
+    title: [&'static str; 2],
+    description: [&'static str; 2],
+) -> Result<(), BuiltinAssemblyError> {
+    let prefix = node_key_text(node_id, &format!("parameters.{}", parameter.key.as_str()));
+    parameter.title_key = iid(format!("{prefix}.title"))?;
+    parameter.description_key = Some(iid(format!("{prefix}.description"))?);
+    add_described(out, &prefix, title, description);
+    Ok(())
+}
+
 /// Title and alias messages of one node in every shipped locale (English, then Chinese).
 /// `aliases` is `None` exactly when the node's catalog protocol declares no alias key.
 pub(crate) fn add_node_messages(
     out: &mut Vec<(&'static str, String, Message)>,
     id: &str,
-    [en, zh]: [&'static str; 2],
+    title: [&'static str; 2],
     aliases: Option<[&'static [&'static str]; 2]>,
 ) {
-    let title = node_key_text(id, "title");
-    out.extend([
-        ("en-US", title.clone(), Message::Text(en)),
-        ("zh-CN", title, Message::Text(zh)),
-    ]);
+    add_text(out, node_key_text(id, "title"), title);
     if let Some([en_aliases, zh_aliases]) = aliases {
         let key = node_key_text(id, "aliases");
         out.extend([
-            ("en-US", key.clone(), Message::Aliases(en_aliases)),
-            ("zh-CN", key, Message::Aliases(zh_aliases)),
+            (yss_i18n::ENGLISH, key.clone(), Message::Aliases(en_aliases)),
+            (yss_i18n::CHINESE, key, Message::Aliases(zh_aliases)),
         ]);
     }
 }

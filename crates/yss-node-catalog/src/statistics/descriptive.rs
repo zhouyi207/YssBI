@@ -59,7 +59,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(id, vec![])?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -109,51 +109,34 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 )?],
             )?,
             instance_display: NodeInstanceDisplaySpec::Static,
-            execution: execution(),
+            execution: pure(),
             typing: NodeTypingSpec::Fixed,
             scope: NodeScope::Any,
             managed_role: None,
         },
         THEIL_ID,
     ));
-    for (locale, title, form, form_description) in [
-        (
-            "en-US",
-            "Theil index",
-            "Data form",
+    const THEIL_ALIASES: &[&str] = &["inequality.theil", "Theil T", "泰尔指数"];
+    add_node_messages(
+        &mut fragment.messages,
+        THEIL_ID,
+        ["Theil index", "泰尔指数"],
+        Some([THEIL_ALIASES, THEIL_ALIASES]),
+    );
+    add_described(
+        &mut fragment.messages,
+        "parameters.statistics.theil_form",
+        ["Data form", "数据形式"],
+        [
             "Individual: equal weights. Grouped: supply group means and add one Weights input in Details for group populations or population shares. Group means measure between-group inequality only.",
-        ),
-        (
-            "zh-CN",
-            "泰尔指数",
-            "数据形式",
             "个体形式等权计算；分组形式输入组均值，并在详细面板添加一个 Weights 输入，连接组人数或人口占比。组均值仅反映组间差异。",
-        ),
-    ] {
-        fragment.messages.extend([
-            (locale, node_key_text(THEIL_ID, "title"), Text(title)),
-            (
-                locale,
-                node_key_text(THEIL_ID, "aliases"),
-                Aliases(&["inequality.theil", "Theil T", "泰尔指数"]),
-            ),
-            (
-                locale,
-                "parameters.statistics.theil_form.title".into(),
-                Text(form),
-            ),
-            (
-                locale,
-                "parameters.statistics.theil_form.description".into(),
-                Text(form_description),
-            ),
-        ]);
-    }
+        ],
+    );
     Ok(())
 }
 
 fn append_description(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    const ID: &str = "yssbi.statistics.describe";
+    const ID: &str = crate::DESCRIBE_NODE_TYPE;
     let mut input_types = vec![concrete("tabular.dataframe")?];
     for kind in SemanticType::ALL {
         if yss_data_contract::aggregation::supports_description(kind) {
@@ -176,7 +159,7 @@ fn append_description(fragment: &mut ProviderFragment) -> Result<(), BuiltinAsse
             interface: assembled_interface(ID, vec![source, result], vec![], vec![])?,
             parameters: assembled_parameters(ID, vec![])?,
             instance_display: NodeInstanceDisplaySpec::Static,
-            execution: execution(),
+            execution: pure(),
             typing: NodeTypingSpec::Fixed,
             scope: NodeScope::Any,
             managed_role: None,

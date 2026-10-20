@@ -81,6 +81,7 @@ impl SessionAdmission {
         runs.cancel_all();
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) fn close(&self) {
         let state = &self.state;
         state.lock().unwrap_or_else(PoisonError::into_inner).closed = true;

@@ -23,7 +23,7 @@ pub fn read(
     retain: Option<u64>,
 ) -> anyhow::Result<DatabaseRead> {
     anyhow::ensure!(
-        (1..=10_000).contains(&page_size),
+        yss_settings::TABLE_PAGE_SIZES.contains(&page_size),
         "Invalid database page size"
     );
     let started = Instant::now();

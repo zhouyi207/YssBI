@@ -1,3 +1,4 @@
+use crate::graph::test_support::{connect, node};
 use crate::session::ApplicationState;
 use std::{
     collections::BTreeMap,
@@ -6,8 +7,7 @@ use std::{
 };
 use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicPortBinding, GraphDocument,
-    GraphResourcePath, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress,
+    DynamicPortBinding, GraphDocument, GraphResourcePath, NodeId, OrderKey, PortAddress,
     PortInstanceId,
 };
 use yss_graph_execution::{
@@ -17,32 +17,6 @@ use yss_graph_execution::{
 };
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
-fn node(document: &mut GraphDocument, kind: &str) -> NodeId {
-    let id = NodeId::new();
-    document.nodes.insert(
-        id,
-        DocumentNode {
-            id,
-            node_type: kind.parse().unwrap(),
-            position: NodePosition { x: 0., y: 0. },
-            parameters: ParameterValues::new(),
-            user_label: None,
-        },
-    );
-    id
-}
-fn connect(document: &mut GraphDocument, output: PortAddress, input: PortAddress) {
-    let id = ConnectionId::new();
-    document.connections.insert(
-        id,
-        DocumentConnection {
-            id,
-            output,
-            input,
-            order: None,
-        },
-    );
-}
 fn frame(document: &mut GraphDocument, data: serde_json::Value) -> NodeId {
     let source = node(document, "yssbi.constant.get");
     let id = yss_graph_document::ConstantId::new();

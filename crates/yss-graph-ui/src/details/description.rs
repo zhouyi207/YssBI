@@ -219,7 +219,7 @@ impl super::GraphDetails {
     pub(super) fn refresh_node_description(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let target = self
             .node()
-            .filter(|node| node.node_type.as_str() == "yssbi.statistics.describe")
+            .filter(|node| node.node_type.as_str() == yss_node_catalog::DESCRIBE_NODE_TYPE)
             .map(|node| node.node_id)
             .zip(self.graph());
         self.description.update(cx, |description, cx| match target {

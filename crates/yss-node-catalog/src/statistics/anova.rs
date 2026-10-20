@@ -98,7 +98,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -155,20 +155,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "对每个受试者内效应的自由度应用 Greenhouse-Geisser 校正，或使用未校正推断。默认 Greenhouse-Geisser。",
         ),
     ] {
-        for (locale, title, help) in [("en-US", en, en_help), ("zh-CN", zh, zh_help)] {
-            fragment.messages.extend([
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.title"),
-                    Text(title),
-                ),
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.description"),
-                    Text(help),
-                ),
-            ]);
-        }
+        add_described(
+            &mut fragment.messages,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [en_help, zh_help],
+        );
     }
     Ok(())
 }

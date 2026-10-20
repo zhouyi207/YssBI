@@ -27,9 +27,8 @@ Event/Function 的种类检查位于实际定位入口，直接构造和反序�
 
 Graph 索引头读取复用 `GraphResourceIndex` 已扫描的路径，不再次枚举目录。测试夹具使用正式 Graph 序列化入口，按资源路径写入，不根据显示名称重命名或自动生成避重路径。
 
-项目元数据的 `exportTime` 使用不带时区的本机钟面时间。Manifest 构造与读取时遇到
-旧的带偏移日期时间会保留其原日期、钟面和小数精度并去掉偏移，不换算到另一个时区。
-日历展示不再依赖浏览器的本地时区转换；registry 的 Unix 秒计数保持数值时间点语义。
+项目元数据的 `exportTime` 记录创建项目时不带时区的本机钟面时间，Manifest 读写按原文保存；
+registry 的 Unix 秒计数保持数值时间点语义。
 
 Graph 当前文档位于 ProjectData，撤销/重做与保存指纹由 GraphEditingMetadata 管理。普通编辑只提交内存数据，显式 Save 才写入图正文；前端不持有独立图草稿或历史。数据库编辑历史由 Database runtime 管理。Project 提交发布资源版本和 delta，不维护项目级撤销栈。[Project history contracts](../yss-project-history/README.md) 保留共享的资源身份、变更请求、函数文档、delta 与错误；文件事务回滚与失败恢复继续由 Project 和 filesystem owner 负责。
 

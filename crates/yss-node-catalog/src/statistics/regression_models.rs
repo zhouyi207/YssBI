@@ -101,30 +101,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         let (ports, parameters) = interface(method)?;
         let mut parameters = parameters;
         for parameter in &mut parameters {
-            let key = parameter.key.as_str();
-            let (title_en, title_zh, help_en, help_zh) = parameter_text(key);
-            parameter.title_key = node_key(&id, &format!("parameters.{key}.title"))?;
-            parameter.description_key =
-                Some(node_key(&id, &format!("parameters.{key}.description"))?);
-            for (locale, title, help) in
-                [("en-US", title_en, help_en), ("zh-CN", title_zh, help_zh)]
-            {
-                fragment.messages.push((
-                    locale,
-                    parameter.title_key.as_str().to_owned(),
-                    Text(title),
-                ));
-                fragment.messages.push((
-                    locale,
-                    parameter
-                        .description_key
-                        .as_ref()
-                        .unwrap()
-                        .as_str()
-                        .to_owned(),
-                    Text(help),
-                ));
-            }
+            let (title_en, title_zh, help_en, help_zh) = parameter_text(parameter.key.as_str());
+            describe_parameter(
+                &mut fragment.messages,
+                &id,
+                parameter,
+                [title_en, title_zh],
+                [help_en, help_zh],
+            )?;
         }
         fragment.nodes.push(leaf(
             NodeProtocol {
@@ -140,7 +124,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,

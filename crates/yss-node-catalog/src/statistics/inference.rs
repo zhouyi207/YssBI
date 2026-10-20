@@ -158,28 +158,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 ),
                 _ => unreachable!(),
             };
-            parameter.title_key = node_key(&id, &format!("parameters.{key}.title"))?;
-            parameter.description_key =
-                Some(node_key(&id, &format!("parameters.{key}.description"))?);
-            for (locale, title, help) in [("en-US", en, eh), ("zh-CN", zh, zhh)] {
-                fragment.messages.extend([
-                    (
-                        locale,
-                        parameter.title_key.as_str().to_string(),
-                        Text(title),
-                    ),
-                    (
-                        locale,
-                        parameter
-                            .description_key
-                            .as_ref()
-                            .unwrap()
-                            .as_str()
-                            .to_string(),
-                        Text(help),
-                    ),
-                ]);
-            }
+            describe_parameter(&mut fragment.messages, &id, parameter, [en, zh], [eh, zhh])?;
         }
         fragment.nodes.push(leaf(
             NodeProtocol {
@@ -202,7 +181,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,

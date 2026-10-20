@@ -2,7 +2,7 @@
 
 use crate::builtin::{
     BuiltinAssemblyError, ProviderFragment, add_node_messages, assembled_interface,
-    assembled_parameters, leaf, node_key, sid,
+    assembled_parameters, leaf, node_key, pure, sid,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -50,9 +50,7 @@ pub(crate) fn append(
             interface: assembled_interface(entry.id, vec![], vec![], vec![])?,
             parameters: assembled_parameters(entry.id, vec![])?,
             instance_display: NodeInstanceDisplaySpec::Static,
-            execution: ExecutionSemantics {
-                determinism: Determinism::Deterministic,
-            },
+            execution: pure(),
             typing: NodeTypingSpec::Fixed,
             scope: NodeScope::Any,
             managed_role: None,
@@ -66,11 +64,11 @@ static DOCUMENTATION_MESSAGES: LazyLock<SimpleBackend> = LazyLock::new(|| {
     let mut backend = SimpleBackend::new();
     for (locale, template) in [
         (
-            "en-US",
+            yss_i18n::ENGLISH,
             "# %{title}\n\nCatalog entry only; unavailable for execution. Inputs, outputs, parameters and the execution kernel are not defined yet.\n\nMethod: `%{method}`\n\nCategory: `%{category}`\n\nOriginal product form (source language): %{product_form}\n\nOriginal method IDs: %{ids} (removed from the pending inventory).\n\nScope note (source language): %{scope_note}",
         ),
         (
-            "zh-CN",
+            yss_i18n::CHINESE,
             "# %{title}\n\n目录入口，暂不可执行。输入、输出、参数和执行内核尚未定义。\n\n方法：`%{method}`\n\n分类：`%{category}`\n\n原始用途：%{product_form}\n\n原始方法编号：%{ids}（已从待登记清单移除）。\n\n%{scope_note}",
         ),
     ] {
@@ -102,7 +100,7 @@ pub(crate) fn documentation(entries: &[Entry], id: &str, locale: &str) -> Option
         &*DOCUMENTATION_MESSAGES,
         locale,
         "catalog.inventory.documentation",
-        "en-US",
+        yss_i18n::ENGLISH,
     );
     let description = yss_i18n::format(
         &template,

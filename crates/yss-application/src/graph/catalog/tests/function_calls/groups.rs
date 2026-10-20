@@ -54,7 +54,10 @@ fn group_functions_support_manual_steps_schema_feedback_and_located_failures() {
         port(decompose, "dataframe"),
     );
     let saved_root = root.clone();
-    let session = staged_session(data, "group-functions", GraphRuntimeTestControl::default());
+    let session = staged_session(
+        TestProject::active("group-functions", data),
+        GraphRuntimeTestControl::default(),
+    );
     let app = &session.application;
     let captured = &session.session;
     let instance = captured.project_instance_id().clone();

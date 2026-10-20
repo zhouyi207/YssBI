@@ -35,7 +35,7 @@ const NODES: &[(&str, &str, &str)] = &[
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(suffix, en, zh) in NODES {
-        let method = suffix.split('.').next_back().unwrap();
+        let method = suffix.rsplit_once('.').map_or(suffix, |(_, method)| method);
         let customizable = matches!(
             method,
             "weights"

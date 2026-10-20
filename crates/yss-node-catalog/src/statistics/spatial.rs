@@ -156,7 +156,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -170,18 +170,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             Some([aliases, aliases]),
         );
     }
-    fragment.messages.extend([
-        (
-            "en-US",
-            "types.statistics_spatial_weights.title".into(),
-            Text("Spatial weights design"),
-        ),
-        (
-            "zh-CN",
-            "types.statistics_spatial_weights.title".into(),
-            Text("空间权重设计"),
-        ),
-    ]);
+    add_text(
+        &mut fragment.messages,
+        "types.statistics_spatial_weights.title",
+        ["Spatial weights design", "空间权重设计"],
+    );
     for (key, en, zh, en_description, zh_description) in [
         (
             "spatial_weight_rule",
@@ -240,28 +233,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "默认 SLM，也可选 SEM；平衡面板，通过正交时间对比消去实体固定效应。",
         ),
     ] {
-        fragment.messages.extend([
-            (
-                "en-US",
-                format!("parameters.statistics.{key}.title"),
-                Text(en),
-            ),
-            (
-                "zh-CN",
-                format!("parameters.statistics.{key}.title"),
-                Text(zh),
-            ),
-            (
-                "en-US",
-                format!("parameters.statistics.{key}.description"),
-                Text(en_description),
-            ),
-            (
-                "zh-CN",
-                format!("parameters.statistics.{key}.description"),
-                Text(zh_description),
-            ),
-        ]);
+        add_described(
+            &mut fragment.messages,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [en_description, zh_description],
+        );
     }
     Ok(())
 }

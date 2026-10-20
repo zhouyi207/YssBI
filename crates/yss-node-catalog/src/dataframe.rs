@@ -3,8 +3,8 @@
 //! This module depends exclusively on the node-system IR and keeps graph authoring,
 //! pin reconciliation, and execution concerns behind their current boundaries.
 
-use crate::builtin::add_node_messages;
 use crate::builtin::node_key;
+use crate::builtin::{add_described, add_node_messages, add_text, describe_parameter};
 use crate::builtin::{concrete, data_port, port_key};
 use yss_data_contract::DataValue;
 mod aggregation;
@@ -37,9 +37,9 @@ pub(crate) fn aggregation_documentation(id: &str, locale: &str) -> Option<Box<st
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, iid, leaf,
-    sid,
+    pure, sid,
 };
-use crate::{Message, Text};
+use crate::Message;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
 
@@ -121,9 +121,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             },
             _ => NodeInstanceDisplaySpec::Static,
         },
-        execution: ExecutionSemantics {
-            determinism: Determinism::Deterministic,
-        },
+        execution: pure(),
         typing: if spec.interface == InterfaceKind::SeriesSelect {
             NodeTypingSpec::ColumnOutput {
                 input: sid("dataframe", PortKey::new)?,
@@ -901,8 +899,7 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "输入结构存在问题。参数仍可编辑，请查看图诊断。",
         ),
     ] {
-        out.push(("en-US", key.to_owned(), Text(en)));
-        out.push(("zh-CN", key.to_owned(), Text(zh)));
+        add_text(out, key, [en, zh]);
     }
     for key in [
         "dataframe",
@@ -912,16 +909,12 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
         "window",
         "rows",
     ] {
-        let title = format!("parameters.{key}.title");
-        let description = format!("parameters.{key}.description");
-        out.push(("en-US", title.to_owned(), Text(key)));
-        out.push(("zh-CN", title.to_owned(), Text(key)));
-        out.push((
-            "en-US",
-            description.to_owned(),
-            Text("Typed node parameter."),
-        ));
-        out.push(("zh-CN", description.to_owned(), Text("类型化节点参数。")));
+        add_described(
+            out,
+            &format!("parameters.{key}"),
+            [key, key],
+            ["Typed node parameter.", "类型化节点参数。"],
+        );
     }
     for (key, en_title, zh_title, en_description, zh_description) in [
         (
@@ -1044,11 +1037,11 @@ fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "新的列名。",
         ),
     ] {
-        let title = format!("parameters.{key}.title");
-        let description = format!("parameters.{key}.description");
-        out.push(("en-US", title.to_owned(), Text(en_title)));
-        out.push(("zh-CN", title.to_owned(), Text(zh_title)));
-        out.push(("en-US", description.to_owned(), Text(en_description)));
-        out.push(("zh-CN", description.to_owned(), Text(zh_description)));
+        add_described(
+            out,
+            &format!("parameters.{key}"),
+            [en_title, zh_title],
+            [en_description, zh_description],
+        );
     }
 }

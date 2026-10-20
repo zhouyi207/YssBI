@@ -101,19 +101,10 @@ impl Mat<f64> {
     pub fn identity(rows: usize, cols: usize) -> Self {
         Self(faer::Mat::identity(rows, cols))
     }
-    pub fn singular_values(&self) -> Result<Vec<f64>, crate::LinalgError> {
-        self.as_ref().singular_values()
-    }
 }
 impl<'a, T> MatRef<'a, T> {
-    pub fn shape(self) -> (usize, usize) {
-        (self.nrows(), self.ncols())
-    }
     pub fn from_row_major_slice(values: &'a [T], rows: usize, cols: usize) -> Self {
         Self(faer::MatRef::from_row_major_slice(values, rows, cols))
-    }
-    pub fn from_column_major_slice(values: &'a [T], rows: usize, cols: usize) -> Self {
-        Self(faer::MatRef::from_column_major_slice(values, rows, cols))
     }
     pub fn as_ref(&self) -> Self {
         *self

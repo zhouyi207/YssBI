@@ -27,9 +27,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         ("types.data_series.title", "DataSeries", "数据序列"),
         ("categories.debug.title", "Debug", "调试"),
     ] {
-        let key = i18n(key)?;
-        fragment.text("en-US", key.clone(), en);
-        fragment.text("zh-CN", key, zh);
+        crate::builtin::add_text(&mut fragment.messages, key, [en, zh]);
     }
 
     value::register(&mut fragment)?;

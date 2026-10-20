@@ -122,6 +122,7 @@ impl HarnessHost {
         }
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn create_session(
         &self,
         principal_id: PrincipalId,

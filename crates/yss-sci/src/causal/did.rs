@@ -715,14 +715,14 @@ mod tests {
     #[test]
     fn regression_engine_errors_are_not_reported_as_statistical_unavailability() {
         let mut payload = valid_payload();
-        payload.cov_type = "hac-panel".into();
+        payload.cov_type = "unsupported".into();
 
         let error = compute_fake_group_ri(&payload, 10, 1).unwrap_err();
 
         let DidFakeGroupError::FitFailed { diagnostic } = error else {
             panic!("algorithm failures must remain typed as FitFailed");
         };
-        assert!(diagnostic.contains("cov_type 'hac-panel' not yet implemented"));
+        assert!(diagnostic.contains("OLS covariance selection or parameters are invalid"));
     }
 
     #[test]

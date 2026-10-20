@@ -73,7 +73,7 @@ const NODES: &[(&str, &str, &str)] = &[
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     for &(suffix, en, zh) in NODES {
         let id = format!("yssbi.statistics.{suffix}");
-        let method = suffix.rsplit('.').next().unwrap();
+        let method = suffix.rsplit_once('.').map_or(suffix, |(_, method)| method);
         let parameters = parameters::build(&id, method, fragment)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
@@ -89,7 +89,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, interface::ports(method)?, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,

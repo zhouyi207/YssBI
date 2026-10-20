@@ -9,7 +9,10 @@ fn near(actual: f64, expected: f64) {
 }
 
 fn near_matrix(actual: MatRef<'_, f64>, expected: MatRef<'_, f64>) {
-    assert_eq!(actual.shape(), expected.shape());
+    assert_eq!(
+        (actual.nrows(), actual.ncols()),
+        (expected.nrows(), expected.ncols())
+    );
     for row in 0..actual.nrows() {
         for col in 0..actual.ncols() {
             near(actual[(row, col)], expected[(row, col)]);

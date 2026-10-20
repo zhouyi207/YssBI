@@ -15,7 +15,9 @@ pub use admission::{
     ExecutionDrainControl, ExecutionDrainOutcome, ExecutionOutstandingWork, ExecutionWorkLease,
 };
 pub use control::RunExecutionControl;
-pub use dispatch::{ExecutedPreparedRun, ExecutionResultRequest, PreparedExecutionEvent};
+#[cfg(any(test, feature = "test-support"))]
+pub use dispatch::ExecutedPreparedRun;
+pub use dispatch::{ExecutionResultRequest, PreparedExecutionEvent};
 
 use crate::finalization::ExecutionFinalizationHandoff;
 use crate::identity::{ExecutionSessionId, RuntimeGeneration};
@@ -77,6 +79,7 @@ impl ExecutionRuntimeState {
         self.generation
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn close_admission(&self) {
         self.admission.close();
     }
@@ -85,6 +88,7 @@ impl ExecutionRuntimeState {
         self.results.get(result_id)
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn query_graph_results(&self, graph: &str, limit: usize) -> Vec<StoredResultSnapshot> {
         self.results.query_graph_results(graph, limit)
     }

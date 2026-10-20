@@ -1,10 +1,9 @@
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_decimal, assembled_interface,
-    assembled_parameters, leaf, sid,
+    assembled_parameters, leaf, pure, sid,
 };
-use crate::Message;
-use crate::builtin::add_node_messages;
 use crate::builtin::node_key;
+use crate::builtin::{add_node_messages, add_text};
 use crate::builtin::{category_id, concrete, data_port, icon_id, node_type_id, type_id};
 use yss_data_contract::DataValue;
 use yss_node_protocol::*;
@@ -205,38 +204,18 @@ const SPECS: &[PlotSpec] = &[
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut nodes = Vec::with_capacity(SPECS.len());
-    let mut messages = vec![
+    let mut messages = Vec::new();
+    for (key, en, zh) in [
+        ("categories.plot.title", "Visualization", "可视化"),
         (
-            "en-US",
-            "categories.plot.title".to_owned(),
-            Message::Text("Visualization"),
+            "parameters.plot.maximum_lag.title",
+            "Maximum lag",
+            "最大滞后阶数",
         ),
-        (
-            "zh-CN",
-            "categories.plot.title".to_owned(),
-            Message::Text("可视化"),
-        ),
-        (
-            "en-US",
-            "parameters.plot.maximum_lag.title".to_owned(),
-            Message::Text("Maximum lag"),
-        ),
-        (
-            "zh-CN",
-            "parameters.plot.maximum_lag.title".to_owned(),
-            Message::Text("最大滞后阶数"),
-        ),
-        (
-            "en-US",
-            "types.plot_data.title".to_owned(),
-            Message::Text("Plot data"),
-        ),
-        (
-            "zh-CN",
-            "types.plot_data.title".to_owned(),
-            Message::Text("绘图数据"),
-        ),
-    ];
+        ("types.plot_data.title", "Plot data", "绘图数据"),
+    ] {
+        add_text(&mut messages, key, [en, zh]);
+    }
     for (key, en, zh) in [
         ("bins", "Bins (0 = automatic)", "分箱数（0 为自动）"),
         ("grid_points", "Density grid points", "密度网格点数"),
@@ -259,16 +238,11 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         ("confidence_level", "Confidence level", "置信水平"),
         ("include_intercept", "Include intercept", "显示截距"),
     ] {
-        messages.push((
-            "en-US",
+        add_text(
+            &mut messages,
             format!("parameters.plot.{key}.title"),
-            Message::Text(en),
-        ));
-        messages.push((
-            "zh-CN",
-            format!("parameters.plot.{key}.title"),
-            Message::Text(zh),
-        ));
+            [en, zh],
+        );
     }
     let categories = vec![CategoryRegistration {
         id: category_id(CATEGORY)?,
@@ -469,9 +443,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         interface: assembled_interface(spec.id, ports, vec![], vec![])?,
         parameters: assembled_parameters(spec.id, parameters(spec)?)?,
         instance_display: NodeInstanceDisplaySpec::Static,
-        execution: ExecutionSemantics {
-            determinism: Determinism::Deterministic,
-        },
+        execution: pure(),
         typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,

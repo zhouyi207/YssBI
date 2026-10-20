@@ -3,12 +3,15 @@ use std::borrow::Cow;
 pub use rust_i18n::{Backend, SimpleBackend};
 use smallvec::SmallVec;
 
+pub const ENGLISH: &str = "en-US";
+pub const CHINESE: &str = "zh-CN";
+
 pub fn resolve_locale(locale: &str, fallback: &'static str) -> &'static str {
     let language = locale.trim().split(['-', '_']).next().unwrap_or_default();
     if language.eq_ignore_ascii_case("en") {
-        "en-US"
+        ENGLISH
     } else if language.eq_ignore_ascii_case("zh") {
-        "zh-CN"
+        CHINESE
     } else {
         fallback
     }

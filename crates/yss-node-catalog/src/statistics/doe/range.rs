@@ -3,34 +3,16 @@ use crate::builtin::add_node_messages;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     let id = "yssbi.statistics.doe.range_analysis";
     let mut maximize = toggle_parameter("maximize", true)?;
-    maximize.title_key = node_key(id, "parameters.maximize.title")?;
-    maximize.description_key = Some(node_key(id, "parameters.maximize.description")?);
-    for (locale, title, help) in [
-        (
-            "en-US",
-            "Larger response is preferred",
+    describe_parameter(
+        &mut fragment.messages,
+        id,
+        &mut maximize,
+        ["Larger response is preferred", "响应越大越好"],
+        [
             "Turn off to select the lowest factor-level mean; all tied best levels are retained.",
-        ),
-        (
-            "zh-CN",
-            "响应越大越好",
             "关闭时选择均值最低的因素水平；保留全部并列最优水平。",
-        ),
-    ] {
-        fragment.messages.extend([
-            (locale, maximize.title_key.as_str().to_string(), Text(title)),
-            (
-                locale,
-                maximize
-                    .description_key
-                    .as_ref()
-                    .unwrap()
-                    .as_str()
-                    .to_string(),
-                Text(help),
-            ),
-        ]);
-    }
+        ],
+    )?;
     fragment.nodes.push(leaf(
         NodeProtocol {
             type_id: sid(id, NodeTypeId::new)?,
@@ -65,7 +47,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             )?,
             parameters: assembled_parameters(id, vec![maximize])?,
             instance_display: NodeInstanceDisplaySpec::Static,
-            execution: execution(),
+            execution: pure(),
             typing: NodeTypingSpec::Fixed,
             scope: NodeScope::Any,
             managed_role: None,

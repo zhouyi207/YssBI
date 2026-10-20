@@ -60,8 +60,8 @@ fn build_function_graph(
 ) -> Result<GraphResourceDocument, ResourceMutationApplicationError> {
     let mut resource = GraphResourceDocument::new(name, GraphResourceKind::FunctionGraph);
     for (node_type, x) in [
-        ("yssbi.project.function.entry", 120.0),
-        ("yssbi.project.function.return", 560.0),
+        (yss_node_catalog::FUNCTION_ENTRY_NODE_TYPE, 120.0),
+        (yss_node_catalog::FUNCTION_RETURN_NODE_TYPE, 560.0),
     ] {
         let id = yss_graph_document::NodeId::new();
         let parameter = yss_node_protocol::ParameterKey::new("function").map_err(|error| {

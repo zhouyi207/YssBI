@@ -1,5 +1,14 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
+use std::ops::RangeInclusive;
+
+pub const UI_FONT_SIZES: RangeInclusive<f32> = 8.0..=32.0;
+pub const MONO_FONT_SIZES: RangeInclusive<f32> = 8.0..=48.0;
+pub const AUTOSAVE_DELAYS_MS: RangeInclusive<u64> = 250..=60_000;
+pub const TABLE_PAGE_SIZES: RangeInclusive<usize> = 1..=10_000;
+pub const CHART_PREVIEW_POINTS: RangeInclusive<usize> = 1..=100_000;
+pub const LOG_RETENTION_DAYS: RangeInclusive<u32> = 1..=3650;
+pub const LOG_STORAGE_MIB: RangeInclusive<u32> = 1..=10240;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
@@ -236,12 +245,16 @@ impl KeyBindingOverride {
 impl UserSettings {
     pub fn validate(&self) -> Result<()> {
         ensure!(
-            (8.0..=32.0).contains(&self.appearance.ui_font_size),
-            "UI font size must be between 8 and 32"
+            UI_FONT_SIZES.contains(&self.appearance.ui_font_size),
+            "UI font size must be between {} and {}",
+            UI_FONT_SIZES.start(),
+            UI_FONT_SIZES.end()
         );
         ensure!(
-            (8.0..=48.0).contains(&self.appearance.mono_font_size),
-            "Document font size must be between 8 and 48"
+            MONO_FONT_SIZES.contains(&self.appearance.mono_font_size),
+            "Document font size must be between {} and {}",
+            MONO_FONT_SIZES.start(),
+            MONO_FONT_SIZES.end()
         );
         for family in [
             &self.appearance.ui_font_family,
@@ -258,27 +271,37 @@ impl UserSettings {
             );
         }
         ensure!(
-            (250..=60_000).contains(&self.editor.autosave_delay_ms),
-            "Autosave delay must be between 250 and 60000 milliseconds"
+            AUTOSAVE_DELAYS_MS.contains(&self.editor.autosave_delay_ms),
+            "Autosave delay must be between {} and {} milliseconds",
+            AUTOSAVE_DELAYS_MS.start(),
+            AUTOSAVE_DELAYS_MS.end()
         );
         ensure!(
-            (1..=10_000).contains(&self.tables.page_size),
-            "Page size must be between 1 and 10000"
+            TABLE_PAGE_SIZES.contains(&self.tables.page_size),
+            "Page size must be between {} and {}",
+            TABLE_PAGE_SIZES.start(),
+            TABLE_PAGE_SIZES.end()
         );
         ensure!(
-            (1..=100_000).contains(&self.charts.max_preview_points),
-            "Chart preview limit must be between 1 and 100000"
+            CHART_PREVIEW_POINTS.contains(&self.charts.max_preview_points),
+            "Chart preview limit must be between {} and {}",
+            CHART_PREVIEW_POINTS.start(),
+            CHART_PREVIEW_POINTS.end()
         );
         if let Some(days) = self.logs.retention_days {
             ensure!(
-                (1..=3650).contains(&days),
-                "Log retention must be between 1 and 3650 days"
+                LOG_RETENTION_DAYS.contains(&days),
+                "Log retention must be between {} and {} days",
+                LOG_RETENTION_DAYS.start(),
+                LOG_RETENTION_DAYS.end()
             );
         }
         if let Some(size) = self.logs.max_storage_mib {
             ensure!(
-                (1..=10240).contains(&size),
-                "Log storage target must be between 1 and 10240 MiB"
+                LOG_STORAGE_MIB.contains(&size),
+                "Log storage target must be between {} and {} MiB",
+                LOG_STORAGE_MIB.start(),
+                LOG_STORAGE_MIB.end()
             );
         }
         ensure!(

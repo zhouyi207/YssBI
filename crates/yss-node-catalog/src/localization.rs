@@ -6,7 +6,7 @@ use yss_i18n::{Backend, SimpleBackend, resolve_locale, translate};
 use yss_node_protocol::{I18nKey, NodeTypeId};
 use yss_node_registry::{I18nManifest, NodeRegistry};
 
-const DEFAULT_LOCALE: &str = "en-US";
+const DEFAULT_LOCALE: &str = yss_i18n::ENGLISH;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Message {
@@ -517,10 +517,9 @@ fn search<'a>(parts: impl IntoIterator<Item = &'a str>) -> Box<str> {
     crate::normalize_catalog_search_text(&parts.into_iter().collect::<Vec<_>>().join(" "))
 }
 
-pub(crate) use Message::{Aliases, Text};
-
 #[cfg(test)]
 mod tests {
+    use super::Message::{Aliases, Text};
     use super::*;
 
     #[test]

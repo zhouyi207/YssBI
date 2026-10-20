@@ -372,7 +372,7 @@ impl GraphMutationRequest {
             base_revision: self.base_revision,
             graph_hash: self.graph_hash.clone(),
             client_key: self.client_key.clone(),
-            locale: "en-US".into(),
+            locale: crate::AUTOMATION_LOCALE.into(),
             operations: self.input.operations(),
         }
     }

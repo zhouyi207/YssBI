@@ -77,29 +77,16 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         }
         let parameters = if suffix == "item_analysis" {
             let mut p = decimal_parameter("tail_fraction", "0.27")?;
-            p.title_key = node_key(&id, "parameters.tail_fraction.title")?;
-            p.description_key = Some(node_key(&id, "parameters.tail_fraction.description")?);
-            for (locale, title, help) in [
-                (
-                    "en-US",
-                    "Tail fraction",
+            describe_parameter(
+                &mut fragment.messages,
+                &id,
+                &mut p,
+                ["Tail fraction", "高低分组分位比例"],
+                [
                     "Between 0 and 0.5; default 0.27. Boundary ties stay together; coincident cutoffs remain in the middle.",
-                ),
-                (
-                    "zh-CN",
-                    "高低分组分位比例",
                     "大于 0 且小于 0.5，默认 0.27；并列边界总分保留在同组，两个分界相等时边界留在中间组。",
-                ),
-            ] {
-                fragment.messages.extend([
-                    (locale, p.title_key.as_str().to_string(), Text(title)),
-                    (
-                        locale,
-                        p.description_key.as_ref().unwrap().as_str().to_string(),
-                        Text(help),
-                    ),
-                ]);
-            }
+                ],
+            )?;
             vec![p]
         } else {
             vec![]
@@ -118,7 +105,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,

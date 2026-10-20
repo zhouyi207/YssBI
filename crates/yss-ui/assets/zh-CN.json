@@ -439,8 +439,6 @@
       "delete_columns": "删除列",
       "cast_columns": "转换列类型",
       "set_column_semantics": "设置列语义",
-      "retained": "可读取",
-      "current_valid": "当前有效",
       "overview": "概览",
       "nodes": "节点",
       "ports": "端口",
@@ -524,9 +522,6 @@
       "assistant_operation_conflict": "当前操作与已有操作冲突，请确认操作结果后继续。",
       "assistant_invalid_request": "工具参数不符合要求，请展开查看具体原因。",
       "assistant_resource_unavailable": "引用的资源不可用，请检查资源是否仍属于当前项目。",
-      "assistant_model_settings_unavailable": "无法读取或保存模型配置。",
-      "assistant_credentials_unavailable": "系统凭据库不可用，请解锁或检查系统凭据服务。",
-      "harness_turn_already_running": "此对话仍有任务正在执行，请等待结束或停止后继续。",
       "assistant_report_delivery_incomplete": "报告尚未交付：缺少最后修改后的保存回执。已完成的操作仍然保留，可以继续补齐。",
       "assistant_authentication_failed": "认证失败，请检查 API Key 及模型访问权限。",
       "assistant_rate_limited": "服务已限流或额度不足，请检查额度后稍后重试。",
@@ -535,17 +530,13 @@
       "assistant_provider_connection_failed": "无法连接模型服务，请检查网络、代理和 API 地址后重试。",
       "assistant_provider_unavailable": "模型服务暂时不可用，请稍后重新发送。",
       "assistant_invalid_provider_response": "模型服务返回了无法解析的响应，请检查接口兼容性后重试。",
-      "assistant_provider_configuration_invalid": "模型配置无效，请检查模型名称和 API 地址。",
       "assistant_turn_failed": "本次分析失败，可以重新发送消息。",
       "assistant_provider_output_truncated": "模型服务截断了本次输出。已完成的操作仍然保留，可以继续任务或调整模型服务的输出设置。",
       "assistant_provider_stream_interrupted": "模型响应流在完成前中断。已完成的操作仍然保留，可以发送消息继续。",
       "assistant_provider_content_filtered": "模型服务过滤了本次响应，请调整请求后重试。",
       "assistant_provider_payment_required": "模型服务要求付款（HTTP 402），请检查服务账户的余额或计费状态。",
-      "assistant_turn_timed_out": "本次分析超时，可以重新发送消息。",
-      "assistant_stream_failed": "助手消息同步失败，请重新打开助手面板。",
-      "assistant_session_failed": "无法建立助手会话，请重新打开助手面板。",
-      "project_session_unavailable": "项目尚未就绪，请打开项目后重试。",
-      "harness_session_not_active": "助手会话已失效，请重新打开助手面板。"
+      "assistant_deadline_elapsed": "本次分析超时，可以重新发送消息。",
+      "project_session_unavailable": "项目尚未就绪，请打开项目后重试。"
     },
     "assistantAgentRoles": {
       "manager": "任务协调",
@@ -557,7 +548,6 @@
     },
     "assistantBlockedReasons": {
       "report_resource_not_saved": "报告资源尚未保存",
-      "input_revision_changed": "输入资源版本已变化",
       "input_inspection_failed": "无法读取输入资源",
       "dependency_not_completed": "前置任务尚未完成或已过期"
     },
@@ -632,7 +622,6 @@
       "delete_connections": "删除图连接",
       "search_knowledge": "搜索知识",
       "read_knowledge": "读取知识片段",
-      "inspect_dataset_schema": "检查数据结构",
       "inspect_database": "检查数据库概览",
       "inspect_database_schema": "检查数据库结构",
       "profile_database": "分析数据库质量",
@@ -653,7 +642,6 @@
       "move_topics": "移动主题",
       "delete_topics": "删除主题",
       "duplicate_topics": "复制主题",
-      "inspect_dataset_profile": "检查数据质量",
       "inspect_result": "查看结果",
       "read_result_table": "读取结果表",
       "apply_graph_edit": "编辑图",
@@ -1720,7 +1708,9 @@
       "diagnosticsLocal": "进程诊断仅在本机显示。",
       "copyDiagnostics": "复制诊断",
       "noDiagnostics": "暂无诊断",
-      "diagnosticsHint": "进程启动后会保留有界的标准错误输出"
+      "diagnosticsHint": "进程启动后会保留有界的标准错误输出",
+      "overview": "概览",
+      "diagnostics": "诊断"
     },
     "services": {
       "dataDirectoryUnavailable": "无法确定应用目录",
@@ -1763,7 +1753,8 @@
       "loadingRenamedGraph": "正在读取重命名后的图…",
       "opening": "正在打开图…",
       "openFailed": "无法打开此图。请检查资源后重试。",
-      "operationInProgress": "正在提交图操作，请稍候。"
+      "operationInProgress": "正在提交图操作，请稍候。",
+      "viewResult": "查看结果"
     },
     "settings": {
       "newProvider": "新供应商",
@@ -1896,7 +1887,8 @@
       "distributionColumn": "分布列",
       "yAxis": "Y 轴",
       "clearSelection": "清除选择",
-      "noFinitePoints": "所选列没有可用于绘图的有限数值对。"
+      "noFinitePoints": "所选列没有可用于绘图的有限数值对。",
+      "selectedColumns": "选择列"
     },
     "plots": {
       "bubbleSize": "气泡大小",

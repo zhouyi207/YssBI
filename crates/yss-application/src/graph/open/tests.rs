@@ -1,139 +1,13 @@
 use super::*;
+use crate::graph::test_support::{StagedSession, TestProject, staged_session};
 
-use crate::session::{ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot};
-use std::num::NonZeroU64;
-use std::path::PathBuf;
 use std::sync::{Arc, Barrier};
 use std::thread;
-use yss_database_contract::{
-    DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
-    DatabaseSessionIdentity, DatabaseSessionOpenRequest,
-};
-use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
 use yss_graph_document::GraphResourceKind;
-use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use yss_graph_execution::resource_preparation::ResourceProviderFactory;
-use yss_graph_execution::state::ExecutionRuntimeState;
 use yss_graph_runtime::{
-    GraphMaterializationError, GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState,
-    GraphRuntimeTestControl, GraphRuntimeTestEvent,
+    GraphMaterializationError, GraphRuntimeTestControl, GraphRuntimeTestEvent,
 };
-use yss_node_catalog::build_builtin_node_system;
-use yss_project::ProjectState;
-use yss_project_identity::ProjectSessionId;
 use yss_project_model::{GraphResourceDocument, ProjectData};
-
-struct TestProject {
-    root: PathBuf,
-    state: Arc<ProjectState>,
-}
-
-impl TestProject {
-    fn active(label: &str, data: ProjectData) -> Self {
-        let root = test_root(label);
-        yss_project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
-        Self {
-            root,
-            state: Arc::new(state),
-        }
-    }
-
-    fn unloaded(label: &str, data: ProjectData) -> Self {
-        let root = test_root(label);
-        yss_project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_from_path(&root).unwrap();
-        Self {
-            root,
-            state: Arc::new(state),
-        }
-    }
-}
-
-impl Drop for TestProject {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.root);
-    }
-}
-
-struct StagedSession {
-    _project: TestProject,
-    session: Arc<ApplicationSession>,
-    application: ApplicationState,
-    slot: Arc<ApplicationSessionSlot>,
-    control: GraphRuntimeTestControl,
-}
-
-fn test_root(label: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("yssbi-graph-open-{label}-{}", uuid::Uuid::new_v4()))
-}
-
-fn staged_session(project: TestProject, control: GraphRuntimeTestControl) -> StagedSession {
-    let project_state = Arc::clone(&project.state);
-    let project_instance_id = project_state.capture_project_session().unwrap().instance_id;
-    let project_session_id =
-        ProjectSessionId::new(format!("graph-open-project-{}", uuid::Uuid::new_v4()));
-    let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
-    let builtin = build_builtin_node_system().unwrap();
-    let graph = Arc::new(GraphRuntimeState::new_for_test(
-        GraphRuntimeEpoch::from_existing(1),
-        GraphRuntimeComponents {
-            registry: builtin.registry,
-            catalog: builtin.catalog,
-        },
-        control.clone(),
-    ));
-    let declarations: Arc<[DatabaseDecl]> = Vec::new().into();
-    let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(
-        DatabaseId,
-        DatabaseDeclarationObservation,
-    )>())
-    .unwrap();
-    let database = Arc::new(
-        DatabaseRuntimeRegistry::new()
-            .open_session(DatabaseSessionOpenRequest::new(
-                DatabaseSessionIdentity::from_existing(project_session_id.as_str().into()),
-                NonZeroU64::new(1).unwrap(),
-                declarations,
-                observations,
-            ))
-            .unwrap(),
-    );
-    let execution = Arc::new(ExecutionRuntimeState::new(
-        execution_session_id,
-        RuntimeGeneration::from_existing(1),
-        yss_node_kernel::KernelRegistry::default().into(),
-        yss_database_runtime::dataset_query_engine().unwrap(),
-    ));
-    let session = Arc::new(ApplicationSession::new_for_test(
-        ApplicationSessionEpoch::from_existing(1),
-        project_instance_id,
-        project_session_id.clone(),
-        execution_session_id,
-        RuntimeGeneration::from_existing(1),
-        project_state,
-        graph,
-        execution,
-        database,
-        Arc::new(ResourceProviderFactory::new(
-            project_session_id.as_str().into(),
-        )),
-    ));
-    let slot = Arc::new(ApplicationSessionSlot::new(
-        crate::session::NodeComponents::builtins().unwrap(),
-    ));
-    slot.publish_for_test(Arc::clone(&session));
-    let application = ApplicationState::new(Arc::clone(&slot));
-    StagedSession {
-        _project: project,
-        session,
-        application,
-        slot,
-        control,
-    }
-}
 
 fn graph_project(path: &GraphResourcePath) -> ProjectData {
     let mut data = ProjectData::new();
@@ -260,7 +134,7 @@ fn refresh_graph_reads_same_path_after_clean_external_replacement() {
                 user_label: None,
             },
         );
-    yss_project::fixtures::write_project(&data, session._project.root.to_str().unwrap()).unwrap();
+    yss_project::fixtures::write_project(&data, session.project.root.to_str().unwrap()).unwrap();
     let project = session.session.project_instance_id();
     let authority = session.session.project();
     authority

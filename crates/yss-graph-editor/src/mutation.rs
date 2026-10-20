@@ -309,8 +309,9 @@ impl EditorGraphMutation {
                 if !document.constants.contains_key(&id) {
                     return Err(DocumentError::InvalidConstant(id).into());
                 }
-                let node_type = yss_node_protocol::NodeTypeId::new("yssbi.constant.get")
-                    .expect("constant node type is valid");
+                let node_type =
+                    yss_node_protocol::NodeTypeId::new(yss_node_catalog::CONSTANT_GET_NODE_TYPE)
+                        .expect("constant node type is valid");
                 let protocol = registry.protocol(&node_type).ok_or_else(|| {
                     MutationConflict::RegistryInvariant("constant protocol is missing".into())
                 })?;

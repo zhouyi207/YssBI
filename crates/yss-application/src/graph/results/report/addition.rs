@@ -129,7 +129,7 @@ impl ApplicationState {
             .document()
             .nodes
             .get(&output.node_id)
-            .filter(|node| node.node_type.as_str() == "yssbi.statistics.linear.summary")
+            .filter(|node| node.node_type.as_str() == yss_node_catalog::LINEAR_SUMMARY_NODE_TYPE)
             .ok_or(ReportAdditionError::Unavailable)?;
         self.revalidate_captured_session(&captured)
             .map_err(|_| ReportAdditionError::Changed)?;

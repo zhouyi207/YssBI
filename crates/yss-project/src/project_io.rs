@@ -65,7 +65,6 @@ pub struct ProjectIndex {
     pub publication_revision: u64,
     pub(crate) authority_generation: u64,
     pub project_name: String,
-    pub export_time: String,
     pub event_graphs: Vec<ProjectEventGraphIndexEntry>,
     pub function_graphs: Vec<ProjectFunctionGraphIndexEntry>,
     pub charts: Vec<crate::charts::ChartIndexEntry>,
@@ -230,7 +229,7 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
             })
             .collect::<Result<Vec<_>, ProjectError>>()?;
 
-    let (project_name, export_time) = manifest.into_parts();
+    let (project_name, _) = manifest.into_parts();
     Ok(ProjectIndex {
         minds: crate::file_resources::file_index(root)?,
         docs: crate::file_resources::file_index(root)?,
@@ -239,7 +238,6 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         publication_revision: 0,
         authority_generation: 0,
         project_name,
-        export_time,
         event_graphs,
         function_graphs,
         databases: Vec::new(),

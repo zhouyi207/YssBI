@@ -20,6 +20,7 @@ yss-relational-contract = { path = "../yss-relational-contract" }
 yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
+yss-node-catalog = { path = "../yss-node-catalog" }
 yss-node-protocol = { path = "../yss-node-protocol" }
 yss-node-registry = { path = "../yss-node-registry" }
 yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
@@ -31,5 +32,4 @@ yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 arrow-array.workspace = true
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
-yss-node-catalog = { path = "../yss-node-catalog" }
 yss-graph-runtime = { path = "../yss-graph-runtime" }

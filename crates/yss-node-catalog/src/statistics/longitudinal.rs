@@ -127,7 +127,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -176,20 +176,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "默认 REML，亦可选最大似然 ML；比较不同固定效应设计时使用 ML。",
         ),
     ] {
-        for (locale, title, help) in [("en-US", en, help_en), ("zh-CN", zh, help_zh)] {
-            fragment.messages.extend([
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.title"),
-                    Text(title),
-                ),
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.description"),
-                    Text(help),
-                ),
-            ]);
-        }
+        add_described(
+            &mut fragment.messages,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [help_en, help_zh],
+        );
     }
     Ok(())
 }

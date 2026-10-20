@@ -1,10 +1,10 @@
 use super::builtin::{
     BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, leaf, sid,
 };
-use crate::builtin::add_node_messages;
+use crate::Message;
 use crate::builtin::data_port;
 use crate::builtin::node_key;
-use crate::{Message, Text};
+use crate::builtin::{add_node_messages, add_text};
 use std::sync::Arc;
 use yss_node_protocol::*;
 use yss_node_registry::{
@@ -30,28 +30,28 @@ pub(super) fn register(
 ) -> Result<(), BuiltinAssemblyError> {
     for (id, en, zh, aliases, zh_aliases) in [
         (
-            "yssbi.project.function.entry",
+            crate::FUNCTION_ENTRY_NODE_TYPE,
             "Function Entry",
             "函数入口",
             &["function", "arguments", "parameters"][..],
             &["函数", "入口", "参数"][..],
         ),
         (
-            "yssbi.project.function.return",
+            crate::FUNCTION_RETURN_NODE_TYPE,
             "Function Return",
             "函数返回",
             &["function", "result", "exit"][..],
             &["函数", "返回", "结果"][..],
         ),
         (
-            "yssbi.project.function.call",
+            crate::FUNCTION_CALL_NODE_TYPE,
             "Call Function",
             "调用函数",
             &["call", "invoke", "function"][..],
             &["调用", "执行", "函数"][..],
         ),
         (
-            "yssbi.constant.get",
+            crate::CONSTANT_GET_NODE_TYPE,
             "Get Constant",
             "读取常量",
             &["get", "read", "constant"][..],
@@ -82,7 +82,7 @@ pub(super) fn register(
 
 fn function_entry_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
-        "yssbi.project.function.entry",
+        crate::FUNCTION_ENTRY_NODE_TYPE,
         vec![derived_data_port(
             "parameters",
             "Parameters",
@@ -93,13 +93,13 @@ fn function_entry_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
         vec![resource_parameter("function")?],
         NodeScope::Function,
         Some(ManagedNodeRole::FunctionEntry),
-        pure(),
+        environment_dependent(),
     )
 }
 
 fn function_return_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
-        "yssbi.project.function.return",
+        crate::FUNCTION_RETURN_NODE_TYPE,
         vec![derived_data_port(
             "results",
             "Results",
@@ -110,13 +110,13 @@ fn function_return_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
         vec![resource_parameter("function")?],
         NodeScope::Function,
         Some(ManagedNodeRole::FunctionReturn),
-        pure(),
+        environment_dependent(),
     )
 }
 
 fn function_call_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
-        "yssbi.project.function.call",
+        crate::FUNCTION_CALL_NODE_TYPE,
         vec![
             derived_data_port(
                 "arguments",
@@ -135,14 +135,14 @@ fn function_call_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
         vec![resource_parameter("target")?],
         NodeScope::Any,
         None,
-        pure(),
+        environment_dependent(),
     )
 }
 
 fn constant_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     let generic = sid("value", TypeParameterId::new)?;
     let mut protocol = protocol(
-        "yssbi.constant.get",
+        crate::CONSTANT_GET_NODE_TYPE,
         vec![data_port(
             "value",
             "Value",
@@ -165,7 +165,7 @@ fn constant_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
         }],
         NodeScope::Any,
         None,
-        pure(),
+        environment_dependent(),
     )?;
     protocol.catalog.category_id = sid("constants", NodeCategoryId::new)?;
     protocol.catalog.icon_id = sid("builtin.constants", IconId::new)?;
@@ -199,7 +199,7 @@ fn protocol(
         interface: assembled_interface(id, ports, type_parameters, vec![])?,
         parameters: assembled_parameters(id, parameters)?,
         instance_display: match id {
-            "yssbi.project.function.call" => NodeInstanceDisplaySpec::ResourceParameter {
+            crate::FUNCTION_CALL_NODE_TYPE => NodeInstanceDisplaySpec::ResourceParameter {
                 parameter: sid("target", ParameterKey::new)?,
                 kind: ResourceDisplayKind::Function,
             },
@@ -253,7 +253,7 @@ pub(crate) fn resource_parameter(key: &'static str) -> Result<Parameter, Builtin
     })
 }
 
-fn pure() -> ExecutionSemantics {
+fn environment_dependent() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::EnvironmentDependent,
     }
@@ -280,7 +280,6 @@ fn add_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "在当前图详情面板中定义的常量值。",
         ),
     ] {
-        out.push(("en-US", key.to_owned(), Text(en)));
-        out.push(("zh-CN", key.to_owned(), Text(zh)));
+        add_text(out, key, [en, zh]);
     }
 }

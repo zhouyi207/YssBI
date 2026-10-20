@@ -311,32 +311,14 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     for entry in ENTRIES {
         let (ports, mut parameters, generic) = interface(entry.kind)?;
         for parameter in &mut parameters {
-            let key = parameter.key.as_str();
-            let (en, zh, en_description, zh_description) = parameter_text(key);
-            parameter.title_key = node_key(entry.id, &format!("parameters.{key}.title"))?;
-            parameter.description_key = Some(node_key(
+            let (en, zh, en_description, zh_description) = parameter_text(parameter.key.as_str());
+            describe_parameter(
+                &mut fragment.messages,
                 entry.id,
-                &format!("parameters.{key}.description"),
-            )?);
-            for (locale, title, description) in
-                [("en-US", en, en_description), ("zh-CN", zh, zh_description)]
-            {
-                fragment.messages.push((
-                    locale,
-                    parameter.title_key.as_str().to_owned(),
-                    Text(title),
-                ));
-                fragment.messages.push((
-                    locale,
-                    parameter
-                        .description_key
-                        .as_ref()
-                        .unwrap()
-                        .as_str()
-                        .to_owned(),
-                    Text(description),
-                ));
-            }
+                parameter,
+                [en, zh],
+                [en_description, zh_description],
+            )?;
         }
         add_node_messages(
             &mut fragment.messages,
@@ -376,9 +358,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             )?,
             parameters: assembled_parameters(entry.id, parameters)?,
             instance_display: NodeInstanceDisplaySpec::Static,
-            execution: ExecutionSemantics {
-                determinism: Determinism::Deterministic,
-            },
+            execution: pure(),
             typing: NodeTypingSpec::Fixed,
             scope: NodeScope::Any,
             managed_role: None,
@@ -807,16 +787,12 @@ pub(super) fn shared_window_messages(out: &mut Vec<(&'static str, String, Messag
         "offset",
     ] {
         let (en, zh, en_description, zh_description) = parameter_text(key);
-        for (locale, title, description) in
-            [("en-US", en, en_description), ("zh-CN", zh, zh_description)]
-        {
-            out.push((locale, format!("parameters.{key}.title"), Text(title)));
-            out.push((
-                locale,
-                format!("parameters.{key}.description"),
-                Text(description),
-            ));
-        }
+        add_described(
+            out,
+            &format!("parameters.{key}"),
+            [en, zh],
+            [en_description, zh_description],
+        );
     }
 }
 fn parameter_text(key: &str) -> (&'static str, &'static str, &'static str, &'static str) {

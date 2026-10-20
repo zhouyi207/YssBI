@@ -3,9 +3,18 @@ use gpui_kit::component::setting::SettingGroup;
 use gpui_kit::{Context, SharedString};
 use std::time::Duration;
 use yss_settings::{
-    AssistantMode, Autosave, Density, Language, LogLevel, ReasoningEffort, ThemeMode, UserSettings,
+    AUTOSAVE_DELAYS_MS, AssistantMode, Autosave, CHART_PREVIEW_POINTS, Density, LOG_RETENTION_DAYS,
+    LOG_STORAGE_MIB, Language, LogLevel, MONO_FONT_SIZES, ReasoningEffort, TABLE_PAGE_SIZES,
+    ThemeMode, UI_FONT_SIZES, UserSettings,
 };
 use yss_ui::{preferences, text::t};
+
+/// Number input bounds `(min, max, step)` for a validated preference range.
+macro_rules! bounds {
+    ($range:expr, $step:expr) => {
+        (*$range.start() as f64, *$range.end() as f64, $step)
+    };
+}
 
 fn choices<T: Clone>(entries: &[(T, &'static str)]) -> Vec<(T, SharedString)> {
     entries
@@ -52,7 +61,7 @@ impl SettingsPanel {
                 "preferences.appearance.uiSizeHint",
                 |s| s.appearance.ui_font_size as f64,
                 |s, v| s.appearance.ui_font_size = v as f32,
-                (8., 32., 1.),
+                bounds!(UI_FONT_SIZES, 1.),
                 cx,
             ))
             .item(self.preference_font(
@@ -67,7 +76,7 @@ impl SettingsPanel {
                 "preferences.appearance.monoSizeHint",
                 |s| s.appearance.mono_font_size as f64,
                 |s, v| s.appearance.mono_font_size = v as f32,
-                (8., 48., 1.),
+                bounds!(MONO_FONT_SIZES, 1.),
                 cx,
             ))
     }
@@ -115,7 +124,7 @@ impl SettingsPanel {
                 "preferences.documents.delayHint",
                 |s| s.editor.autosave_delay_ms as f64,
                 |s, v| s.editor.autosave_delay_ms = v.round() as u64,
-                (250., 60_000., 250.),
+                bounds!(AUTOSAVE_DELAYS_MS, 250.),
                 cx,
             ))
     }
@@ -146,7 +155,7 @@ impl SettingsPanel {
                 "preferences.tables.pageSizeHint",
                 |s| s.tables.page_size as f64,
                 |s, v| s.tables.page_size = v.round() as usize,
-                (1., 10_000., 1.),
+                bounds!(TABLE_PAGE_SIZES, 1.),
                 cx,
             ))
             .item(self.preference_number(
@@ -154,7 +163,7 @@ impl SettingsPanel {
                 "preferences.charts.pointsHint",
                 |s| s.charts.max_preview_points as f64,
                 |s, v| s.charts.max_preview_points = v.round() as usize,
-                (1., 100_000., 100.),
+                bounds!(CHART_PREVIEW_POINTS, 100.),
                 cx,
             ))
     }
@@ -271,7 +280,8 @@ impl SettingsPanel {
                 "preferences.logs.daysHint",
                 |s| s.logs.retention_days.unwrap_or(0) as f64,
                 |s, v| s.logs.retention_days = (v >= 1.).then_some(v.round() as u32),
-                (0., 3650., 1.),
+                // Zero clears the limit; any positive value must be in range.
+                (0., *LOG_RETENTION_DAYS.end() as f64, 1.),
                 cx,
             ))
             .item(self.preference_number(
@@ -279,7 +289,7 @@ impl SettingsPanel {
                 "preferences.logs.storageHint",
                 |s| s.logs.max_storage_mib.unwrap_or(0) as f64,
                 |s, v| s.logs.max_storage_mib = (v >= 1.).then_some(v.round() as u32),
-                (0., 10240., 1.),
+                (0., *LOG_STORAGE_MIB.end() as f64, 1.),
                 cx,
             ))
     }

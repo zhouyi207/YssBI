@@ -185,6 +185,7 @@ impl ResultStore {
             .collect()
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn query_graph_results(
         &self,
         graph: &str,

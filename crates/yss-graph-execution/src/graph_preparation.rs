@@ -213,7 +213,7 @@ pub(crate) fn build_template(
         }
         let inputs = input_bindings(node, &outputs, &mut parameters)?;
         let observations: Box<[PlanObservationIntent]> =
-            if node.node_type.as_str() == "yssbi.debug.view" {
+            if node.node_type.as_str() == yss_node_catalog::DEBUG_VIEW_NODE_TYPE {
                 inputs
                     .first()
                     .map(|input| PlanObservationIntent::InspectInput {

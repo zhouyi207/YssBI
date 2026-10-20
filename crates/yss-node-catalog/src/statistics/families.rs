@@ -92,7 +92,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Fit,
     ),
     node(
-        "yssbi.statistics.linear.summary",
+        crate::LINEAR_SUMMARY_NODE_TYPE,
         "Linear Regression Summary",
         "线性回归汇总",
         &[

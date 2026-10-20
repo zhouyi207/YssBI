@@ -34,31 +34,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 "填写精确编码及含义；顺序等级从低到高排列。留空时继承兼容值域；分类没有值域时按实际取值自动生成同名标签。",
             )
         };
-        parameter.title_key =
-            node_key(ID, &format!("parameters.{}.title", parameter.key.as_str()))?;
-        parameter.description_key = Some(node_key(
+        describe_parameter(
+            &mut fragment.messages,
             ID,
-            &format!("parameters.{}.description", parameter.key.as_str()),
-        )?);
-        for (locale, title, help) in [("en-US", en, eh), ("zh-CN", zh, zh_help)] {
-            fragment.messages.extend([
-                (
-                    locale,
-                    parameter.title_key.as_str().to_string(),
-                    Text(title),
-                ),
-                (
-                    locale,
-                    parameter
-                        .description_key
-                        .as_ref()
-                        .unwrap()
-                        .as_str()
-                        .to_string(),
-                    Text(help),
-                ),
-            ]);
-        }
+            parameter,
+            [en, zh],
+            [eh, zh_help],
+        )?;
     }
     let series = |kind: &'static str| -> Result<TypeExpr, BuiltinAssemblyError> {
         Ok(data_series_type(concrete(kind)?))
@@ -97,9 +79,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             )?,
             parameters: assembled_parameters(ID, parameters)?,
             instance_display: NodeInstanceDisplaySpec::Static,
-            execution: ExecutionSemantics {
-                determinism: Determinism::Deterministic,
-            },
+            execution: pure(),
             typing: NodeTypingSpec::ShapePreservingConversion {
                 input: sid("input", PortKey::new)?,
                 target: ConversionTarget::Parameter(sid("target_type", ParameterKey::new)?),

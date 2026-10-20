@@ -132,7 +132,7 @@ impl PluginsPanel {
         for (id, label, tab) in [
             (
                 "plugin-overview",
-                yss_ui::text::t("panel.assistantToolValues.overview"),
+                yss_ui::text::t("native.plugins.overview"),
                 DetailTab::Overview,
             ),
             (
@@ -142,7 +142,7 @@ impl PluginsPanel {
             ),
             (
                 "plugin-diagnostics",
-                yss_ui::text::t("panel.assistantToolValues.diagnostics"),
+                yss_ui::text::t("native.plugins.diagnostics"),
                 DetailTab::Diagnostics,
             ),
         ] {

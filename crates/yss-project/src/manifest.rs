@@ -21,22 +21,7 @@ pub struct ProjectManifest {
     #[serde(deserialize_with = "deserialize_current_project_schema_version")]
     schema_version: u32,
     project_name: String,
-    #[serde(deserialize_with = "deserialize_export_time")]
     export_time: String,
-}
-
-fn normalize_export_time(value: String) -> String {
-    chrono::DateTime::parse_from_rfc3339(&value).map_or(value, |time| {
-        time.naive_local()
-            .format("%Y-%m-%dT%H:%M:%S%.f")
-            .to_string()
-    })
-}
-
-fn deserialize_export_time<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> Result<String, D::Error> {
-    String::deserialize(deserializer).map(normalize_export_time)
 }
 
 impl ProjectManifest {
@@ -44,7 +29,7 @@ impl ProjectManifest {
         Self {
             schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
             project_name: project_name.into(),
-            export_time: normalize_export_time(export_time.into()),
+            export_time: export_time.into(),
         }
     }
 

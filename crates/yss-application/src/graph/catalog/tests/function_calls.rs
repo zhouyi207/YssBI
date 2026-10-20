@@ -24,10 +24,6 @@ fn node(document: &mut GraphDocument, kind: &str, parameters: ParameterValues) -
     id
 }
 
-fn port(node: NodeId, key: &str) -> PortAddress {
-    PortAddress::declared(node, key.parse().unwrap())
-}
-
 fn member(
     document: &mut GraphDocument,
     node: NodeId,
@@ -153,7 +149,10 @@ fn nested_dataframe_calls_bind_private_frames_and_report_inner_schema_failures()
         outputs.push((output, decompose));
     }
     let saved_root = root.clone();
-    let session = staged_session(data, "function-frames", GraphRuntimeTestControl::default());
+    let session = staged_session(
+        TestProject::active("function-frames", data),
+        GraphRuntimeTestControl::default(),
+    );
     let app = &session.application;
     let captured = &session.session;
     let instance = captured.project_instance_id().clone();

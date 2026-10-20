@@ -144,7 +144,7 @@ fn conversion_parameters(
         if kind != target {
             continue;
         }
-        add_parameter_messages(fragment, id, &[(key, title, zh_title, help, zh_help)])?;
+        add_parameter_messages(fragment, id, key, [title, zh_title], [help, zh_help]);
         parameters.push(parameter(
             id,
             key,
@@ -166,14 +166,13 @@ fn conversion_parameters(
         add_parameter_messages(
             fragment,
             id,
-            &[(
-                "datetime_format",
-                "Calendar Format",
-                "时间格式",
+            "datetime_format",
+            ["Calendar Format", "时间格式"],
+            [
                 "Empty uses ISO. Custom formats use strftime, e.g. %d/%m/%Y. Offsets are removed without shifting wall time.",
                 "留空按 ISO 格式解析。自定义格式如 %d/%m/%Y；移除时区时保留原钟面时间。",
-            )],
-        )?;
+            ],
+        );
         parameters.push(parameter(
             id,
             "datetime_format",
@@ -214,8 +213,10 @@ fn conversion_parameters(
         add_parameter_messages(
             fragment,
             id,
-            &[("semantic_domain", title, zh_title, help, zh_help)],
-        )?;
+            "semantic_domain",
+            [title, zh_title],
+            [help, zh_help],
+        );
         parameters.push(parameter(
             id,
             "semantic_domain",

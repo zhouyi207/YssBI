@@ -239,7 +239,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(&id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(&id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -276,18 +276,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             Some([aliases, aliases]),
         );
     }
-    fragment.messages.extend([
-        (
-            "en-US",
-            "types.statistics_model_cox.title".into(),
-            Text("Cox survival model"),
-        ),
-        (
-            "zh-CN",
-            "types.statistics_model_cox.title".into(),
-            Text("Cox 生存模型"),
-        ),
-    ]);
+    add_text(
+        &mut fragment.messages,
+        "types.statistics_model_cox.title",
+        ["Cox survival model", "Cox 生存模型"],
+    );
     for (key, en, zh, en_description, zh_description) in [
         (
             "survival_ties",
@@ -346,28 +339,12 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             "默认 99，至少 2；包含两端点的等距阈值网格。",
         ),
     ] {
-        fragment.messages.extend([
-            (
-                "en-US",
-                format!("parameters.statistics.{key}.title"),
-                Text(en),
-            ),
-            (
-                "zh-CN",
-                format!("parameters.statistics.{key}.title"),
-                Text(zh),
-            ),
-            (
-                "en-US",
-                format!("parameters.statistics.{key}.description"),
-                Text(en_description),
-            ),
-            (
-                "zh-CN",
-                format!("parameters.statistics.{key}.description"),
-                Text(zh_description),
-            ),
-        ]);
+        add_described(
+            &mut fragment.messages,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [en_description, zh_description],
+        );
     }
     Ok(())
 }

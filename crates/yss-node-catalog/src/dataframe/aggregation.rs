@@ -159,13 +159,11 @@ pub(super) fn messages(out: &mut Vec<(&'static str, String, Message)>) {
             "选择需要计算中位数的数值列。",
         ),
     ] {
-        for (locale, title, description) in [("en-US", en, en_help), ("zh-CN", zh, zh_help)] {
-            out.push((locale, format!("parameters.{key}.title"), Text(title)));
-            out.push((
-                locale,
-                format!("parameters.{key}.description"),
-                Text(description),
-            ));
-        }
+        add_described(
+            out,
+            &format!("parameters.{key}"),
+            [en, zh],
+            [en_help, zh_help],
+        );
     }
 }

@@ -439,8 +439,6 @@
       "delete_columns": "Delete columns",
       "cast_columns": "Cast column types",
       "set_column_semantics": "Set column semantics",
-      "retained": "Available",
-      "current_valid": "Current and valid",
       "overview": "Overview",
       "nodes": "Nodes",
       "ports": "Ports",
@@ -524,9 +522,6 @@
       "assistant_operation_conflict": "This operation conflicts with an existing operation. Check its outcome before continuing.",
       "assistant_invalid_request": "Tool arguments do not meet the requirements. Expand for details.",
       "assistant_resource_unavailable": "A referenced resource is unavailable. Check that it still belongs to this project.",
-      "assistant_model_settings_unavailable": "Model settings could not be loaded or saved.",
-      "assistant_credentials_unavailable": "Your system credential store is unavailable. Unlock it or check its service.",
-      "harness_turn_already_running": "This conversation still has a running task. Wait for it to finish or stop it first.",
       "assistant_report_delivery_incomplete": "The report has not been delivered: a save receipt after the final edit is missing. Completed operations are preserved and can be continued.",
       "assistant_authentication_failed": "Authentication failed. Check your API key and model access.",
       "assistant_rate_limited": "The service is rate limited or out of quota. Check your quota and try again later.",
@@ -535,17 +530,13 @@
       "assistant_provider_connection_failed": "Could not connect to the model service. Check your network, proxy, and API URL, then retry.",
       "assistant_provider_unavailable": "The model service is temporarily unavailable. Send your message again later.",
       "assistant_invalid_provider_response": "The model response could not be parsed. Check API compatibility and retry.",
-      "assistant_provider_configuration_invalid": "Invalid model configuration. Check the model name and API URL.",
       "assistant_turn_failed": "This analysis failed. You can send another message.",
       "assistant_provider_output_truncated": "The model service truncated this output. Completed operations are preserved; continue the task or adjust the service's output settings.",
       "assistant_provider_stream_interrupted": "The model response stream ended before completion. Completed operations are preserved; send another message to continue.",
       "assistant_provider_content_filtered": "The model service filtered this response. Adjust the request and retry.",
       "assistant_provider_payment_required": "The model service requires payment (HTTP 402). Check the service account balance or billing status.",
-      "assistant_turn_timed_out": "This analysis timed out. You can send another message.",
-      "assistant_stream_failed": "Assistant message synchronization failed. Reopen the assistant panel.",
-      "assistant_session_failed": "Could not create an assistant session. Reopen the assistant panel.",
-      "project_session_unavailable": "The project is not ready. Open a project and try again.",
-      "harness_session_not_active": "The assistant session has expired. Reopen the assistant panel."
+      "assistant_deadline_elapsed": "This analysis timed out. You can send another message.",
+      "project_session_unavailable": "The project is not ready. Open a project and try again."
     },
     "assistantAgentRoles": {
       "manager": "Coordination",
@@ -557,7 +548,6 @@
     },
     "assistantBlockedReasons": {
       "report_resource_not_saved": "Report resource has not been saved",
-      "input_revision_changed": "Input resource version changed",
       "input_inspection_failed": "Input resource could not be inspected",
       "dependency_not_completed": "A dependency is unfinished or stale"
     },
@@ -632,7 +622,6 @@
       "delete_connections": "Delete graph connections",
       "search_knowledge": "Search knowledge",
       "read_knowledge": "Read knowledge passage",
-      "inspect_dataset_schema": "Inspect data schema",
       "inspect_database": "Inspect database",
       "inspect_database_schema": "Inspect database schema",
       "profile_database": "Profile database",
@@ -653,7 +642,6 @@
       "move_topics": "Move topics",
       "delete_topics": "Delete topics",
       "duplicate_topics": "Duplicate topics",
-      "inspect_dataset_profile": "Inspect data quality",
       "inspect_result": "View result",
       "read_result_table": "Read result table",
       "apply_graph_edit": "Edit graph",
@@ -1720,7 +1708,9 @@
       "diagnosticsLocal": "Process diagnostics are shown only on this device.",
       "copyDiagnostics": "Copy diagnostics",
       "noDiagnostics": "No diagnostics",
-      "diagnosticsHint": "Bounded standard error output is retained after the process starts"
+      "diagnosticsHint": "Bounded standard error output is retained after the process starts",
+      "overview": "Overview",
+      "diagnostics": "Diagnostics"
     },
     "services": {
       "dataDirectoryUnavailable": "Could not determine the application directory",
@@ -1763,7 +1753,8 @@
       "loadingRenamedGraph": "Loading the renamed graph…",
       "opening": "Opening graph…",
       "openFailed": "Could not open this graph. Check the resource and retry.",
-      "operationInProgress": "Applying graph changes. Please wait."
+      "operationInProgress": "Applying graph changes. Please wait.",
+      "viewResult": "View result"
     },
     "settings": {
       "newProvider": "New provider",
@@ -1896,7 +1887,8 @@
       "distributionColumn": "Distribution column",
       "yAxis": "Y axis",
       "clearSelection": "Clear selection",
-      "noFinitePoints": "The selected columns contain no finite value pairs to plot."
+      "noFinitePoints": "The selected columns contain no finite value pairs to plot.",
+      "selectedColumns": "Selected columns"
     },
     "plots": {
       "bubbleSize": "Bubble size",

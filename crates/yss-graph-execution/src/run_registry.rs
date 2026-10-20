@@ -135,6 +135,7 @@ impl RunRegistry {
         Ok(run)
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn admit(&self, run: RunId) -> Result<(), RunRegistryError> {
         self.admit_record(run, None)
     }

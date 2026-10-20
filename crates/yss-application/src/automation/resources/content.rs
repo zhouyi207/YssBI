@@ -300,7 +300,7 @@ fn graph_request(
         .open_graph(crate::graph::open::OpenGraphRequest::new(
             session.project_instance_id().clone(),
             path.clone(),
-            "en-US",
+            yss_assistant_contract::AUTOMATION_LOCALE,
         ))
         .map_err(|_| unavailable())?;
     let current = session
@@ -321,7 +321,7 @@ fn graph_request(
             graph_path: path,
             version: current.state.version,
             operation_id: OperationId::new(),
-            locale: "en-US".into(),
+            locale: yss_assistant_contract::AUTOMATION_LOCALE.into(),
         },
         current.document,
     ))

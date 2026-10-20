@@ -12882,6 +12882,7 @@ dependencies = [
  "yss-database-schema",
  "yss-desktop-services",
  "yss-project-identity",
+ "yss-settings",
  "yss-ui",
 ]
 

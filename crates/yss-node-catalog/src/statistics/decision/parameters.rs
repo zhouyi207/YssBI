@@ -88,27 +88,7 @@ pub(super) fn localize(
             ),
             _ => unreachable!(),
         };
-        parameter.title_key = node_key(id, &format!("parameters.{key}.title"))?;
-        parameter.description_key = Some(node_key(id, &format!("parameters.{key}.description"))?);
-        for (locale, title, help) in [("en-US", en, eh), ("zh-CN", zh, zhh)] {
-            fragment.messages.extend([
-                (
-                    locale,
-                    parameter.title_key.as_str().to_string(),
-                    Text(title),
-                ),
-                (
-                    locale,
-                    parameter
-                        .description_key
-                        .as_ref()
-                        .unwrap()
-                        .as_str()
-                        .to_string(),
-                    Text(help),
-                ),
-            ]);
-        }
+        describe_parameter(&mut fragment.messages, id, parameter, [en, zh], [eh, zhh])?;
     }
     Ok(())
 }

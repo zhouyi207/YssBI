@@ -18,6 +18,7 @@ yss-database-contract = { path = "../yss-database-contract" }
 yss-database-schema = { path = "../yss-database-schema" }
 yss-desktop-services = { path = "../yss-desktop-services" }
 yss-project-identity = { path = "../yss-project-identity" }
+yss-settings = { path = "../yss-settings" }
 yss-ui = { path = "../yss-ui" }
 
 [dev-dependencies]

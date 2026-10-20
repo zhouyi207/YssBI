@@ -1,7 +1,6 @@
 use super::builtin::{BuiltinAssemblyError, ProviderFragment, assembled_interface, leaf, sid};
-use crate::Message;
-use crate::builtin::add_node_messages;
 use crate::builtin::node_key;
+use crate::builtin::{add_node_messages, add_text};
 use crate::builtin::{category_id, concrete, data_port, icon_id, node_type_id};
 use yss_node_protocol::*;
 use yss_node_registry::CategoryRegistration;
@@ -371,38 +370,26 @@ const SPECS: &[DistributionSpec] = &[
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut nodes = Vec::with_capacity(SPECS.len());
-    let mut messages = vec![
+    let mut messages = Vec::new();
+    for (key, en, zh) in [
         (
-            "en-US",
-            "categories.distribution.title".to_owned(),
-            Message::Text("Probability Distributions"),
+            "categories.distribution.title",
+            "Probability Distributions",
+            "概率分布",
         ),
         (
-            "zh-CN",
-            "categories.distribution.title".to_owned(),
-            Message::Text("概率分布"),
+            "categories.distribution.continuous.title",
+            "Continuous Distributions",
+            "连续分布",
         ),
         (
-            "en-US",
-            "categories.distribution.continuous.title".to_owned(),
-            Message::Text("Continuous Distributions"),
+            "categories.distribution.discrete.title",
+            "Discrete Distributions",
+            "离散分布",
         ),
-        (
-            "zh-CN",
-            "categories.distribution.continuous.title".to_owned(),
-            Message::Text("连续分布"),
-        ),
-        (
-            "en-US",
-            "categories.distribution.discrete.title".to_owned(),
-            Message::Text("Discrete Distributions"),
-        ),
-        (
-            "zh-CN",
-            "categories.distribution.discrete.title".to_owned(),
-            Message::Text("离散分布"),
-        ),
-    ];
+    ] {
+        add_text(&mut messages, key, [en, zh]);
+    }
     let types = Vec::new();
     let categories = vec![
         CategoryRegistration {
@@ -432,40 +419,39 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
             Some([spec.aliases, spec.zh_aliases]),
         );
         for field in spec.parameters {
-            let key = field_key(spec.id, field.key)?.to_string();
-            messages.push(("en-US", key.to_owned(), Message::Text(field.title)));
-            messages.push((
-                "zh-CN",
-                key.to_owned(),
-                Message::Text(match field.key {
-                    "mean" => "均值",
-                    "standard_deviation" => "标准差",
-                    "sample_count" => "样本数",
-                    "lower_bound" => "下界",
-                    "upper_bound" => "上界",
-                    "rate" => "率参数",
-                    "shape" => "形状参数",
-                    "scale" => "尺度参数",
-                    "alpha" => "Alpha",
-                    "beta" => "Beta",
-                    "degrees_of_freedom" => "自由度",
-                    "location" => "位置参数",
-                    "mu" => "Mu",
-                    "sigma" => "Sigma",
-                    "minimum" => "最小值",
-                    "maximum" => "最大值",
-                    "mode" => "众数",
-                    "numerator_degrees_of_freedom" => "分子自由度",
-                    "denominator_degrees_of_freedom" => "分母自由度",
-                    "probability" => "成功概率",
-                    "trial_count" => "试验次数",
-                    "success_count" => "成功次数",
-                    "population_size" => "总体大小",
-                    "success_population" => "总体成功数",
-                    "draw_count" => "抽取次数",
-                    _ => field.title,
-                }),
-            ));
+            let zh = match field.key {
+                "mean" => "均值",
+                "standard_deviation" => "标准差",
+                "sample_count" => "样本数",
+                "lower_bound" => "下界",
+                "upper_bound" => "上界",
+                "rate" => "率参数",
+                "shape" => "形状参数",
+                "scale" => "尺度参数",
+                "alpha" => "Alpha",
+                "beta" => "Beta",
+                "degrees_of_freedom" => "自由度",
+                "location" => "位置参数",
+                "mu" => "Mu",
+                "sigma" => "Sigma",
+                "minimum" => "最小值",
+                "maximum" => "最大值",
+                "mode" => "众数",
+                "numerator_degrees_of_freedom" => "分子自由度",
+                "denominator_degrees_of_freedom" => "分母自由度",
+                "probability" => "成功概率",
+                "trial_count" => "试验次数",
+                "success_count" => "成功次数",
+                "population_size" => "总体大小",
+                "success_population" => "总体成功数",
+                "draw_count" => "抽取次数",
+                _ => field.title,
+            };
+            add_text(
+                &mut messages,
+                field_key(spec.id, field.key)?.as_str(),
+                [field.title, zh],
+            );
         }
         nodes.push(leaf(protocol(spec)?, spec.id));
     }

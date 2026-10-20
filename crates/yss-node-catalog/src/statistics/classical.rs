@@ -392,7 +392,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
@@ -510,22 +510,12 @@ fn add_parameter_messages(out: &mut Vec<(&'static str, String, Message)>) {
             "单样本符号秩检验使用的参照位置。",
         ),
     ] {
-        for (locale, title, description) in
-            [("en-US", en, en_description), ("zh-CN", zh, zh_description)]
-        {
-            out.extend([
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.title"),
-                    Text(title),
-                ),
-                (
-                    locale,
-                    format!("parameters.statistics.{key}.description"),
-                    Text(description),
-                ),
-            ]);
-        }
+        add_described(
+            out,
+            &format!("parameters.statistics.{key}"),
+            [en, zh],
+            [en_description, zh_description],
+        );
     }
 }
 

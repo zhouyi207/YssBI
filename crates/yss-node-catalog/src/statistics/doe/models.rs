@@ -60,33 +60,13 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                         "非线性求解相对收敛容差，范围为 1e-12 至 0.01。",
                     )
                 };
-            parameter.title_key =
-                node_key(id, &format!("parameters.{}.title", parameter.key.as_str()))?;
-            parameter.description_key = Some(node_key(
+            describe_parameter(
+                &mut fragment.messages,
                 id,
-                &format!("parameters.{}.description", parameter.key.as_str()),
-            )?);
-            for (locale, title, help) in
-                [("en-US", en_title, en_help), ("zh-CN", zh_title, zh_help)]
-            {
-                fragment.messages.extend([
-                    (
-                        locale,
-                        parameter.title_key.as_str().to_string(),
-                        Text(title),
-                    ),
-                    (
-                        locale,
-                        parameter
-                            .description_key
-                            .as_ref()
-                            .unwrap()
-                            .as_str()
-                            .to_string(),
-                        Text(help),
-                    ),
-                ]);
-            }
+                parameter,
+                [en_title, zh_title],
+                [en_help, zh_help],
+            )?;
         }
         fragment.nodes.push(leaf(
             NodeProtocol {
@@ -102,7 +82,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 interface: assembled_interface(id, ports, vec![], vec![])?,
                 parameters: assembled_parameters(id, parameters)?,
                 instance_display: NodeInstanceDisplaySpec::Static,
-                execution: execution(),
+                execution: pure(),
                 typing: NodeTypingSpec::Fixed,
                 scope: NodeScope::Any,
                 managed_role: None,
