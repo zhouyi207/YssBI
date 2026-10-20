@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.grey_relational -->
 # Grey relational evaluation
 
 Uses oriented criterion-wise best observations as the reference, with min–max scaling. Coefficients are $\xi_{ij}=\rho\Delta_{\max}/(|z_{ij}-z_j^*|+\rho\Delta_{\max})$ and scores are their weighted averages. The global minimum deviation is zero because the ideal comes from observed column optima. Resolution $\rho$ defaults to 0.5 and must be in (0,1]. If all deviations are zero, every coefficient is 1. This is ideal-reference evaluation, not correlation with an arbitrary external series.

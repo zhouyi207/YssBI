@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.association.pearson -->
 # Pearson correlation
 
 Connect aligned Numeric series to **X** and **Y**, with at least three finite paired observations. Missing values are rejected; filter the common sample upstream. Both variables must vary.

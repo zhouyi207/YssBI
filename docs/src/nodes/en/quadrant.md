@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.quadrant.view -->
 # Quadrant Plot
 
 Connect aligned, equally sized Numeric X and Y series. X split and Y split default to 0 and accept finite cut points. Missing and nonfinite observations are rejected.

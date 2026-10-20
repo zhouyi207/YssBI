@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.sem.path -->
 # Path analysis (observed recursive linear models)
 
 Connect at least two continuous variables in port order, referenced as x1, x2, … . `equations` defaults to `x2 ~ x1; x3 ~ x1 + x2`, requiring three inputs for this example. Separate equations with semicolons or newlines. Each response has one equation and predictors are separated by plus signs. Every equation includes an intercept. References are independent of column names.

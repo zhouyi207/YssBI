@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.panel.align -->
 # Panel Alignment
 
 Connect a DataFrame and select entity_column and time_column. Time must be Int64, UInt64 (at most i64::MAX), integral Float64 losslessly representable as Int64, or Date32. Keys cannot be null, and entity-time pairs must be unique.

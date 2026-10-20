@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.composite_index -->
 # Composite index
 
 The score is $S_i=\sum_j w_j z_{ij}$ after the chosen normalization and direction adjustment. Default: equal weights and min–max normalization. This is an additive compensatory index; a high score can offset a low score in another criterion. No uncertainty test is implied.

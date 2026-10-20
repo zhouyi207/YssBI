@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.slx -->
 # Spatially lagged X (SLX)
 
 Adds first-order spatial lags of every predictor to OLS; the intercept is not spatially lagged.

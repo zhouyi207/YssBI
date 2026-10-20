@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.association.spearman -->
 # Spearman rank correlation
 
 Connect aligned Numeric or Ordinal **X** and **Y**, with at least two complete observations. Ordinal columns use their explicitly declared level order; numeric columns use increasing values. Ties receive average ranks. Constant rankings are undefined and fail.

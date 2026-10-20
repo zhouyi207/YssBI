@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.causal.aipw -->
 # Augmented inverse-probability weighting
 
 ## Inputs and identification

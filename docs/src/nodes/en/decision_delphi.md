@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.workflow.delphi -->
 # Delphi round summary
 
 Connect aligned **criteria**, one rated item per column and one expert per row.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.cauchy.sample -->
 # Cauchy
 
 The Cauchy distribution $\mathrm{Cauchy}(\mu, \gamma)$ has heavy tails and no finite mean:

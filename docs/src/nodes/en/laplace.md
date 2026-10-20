@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.laplace.sample -->
 # Laplace
 
 The Laplace (double exponential) distribution $\mathrm{Laplace}(\mu, b)$ has density:

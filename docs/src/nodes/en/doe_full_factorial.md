@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.doe.family -->
 # DOE: full factorial design
 
 No input. **result** contains a compact summary; **design** is the complete coded table with `run` and `factor1`…`factorK`. Run and level codes are one-based.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.normal.sample -->
 # Normal
 
 The normal (Gaussian) distribution $N(\mu, \sigma^2)$ has density:

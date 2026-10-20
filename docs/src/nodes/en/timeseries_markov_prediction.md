@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.markov_prediction -->
 # Markov forecast
 
 Connect an ordered categorical, text, identifier, binary or numeric state `series` with at least two nonmissing observations. Numeric states are discrete labels, with exact integer identities retained. States are indexed from zero in first-appearance order; no fixed row or state-count ceiling is imposed.

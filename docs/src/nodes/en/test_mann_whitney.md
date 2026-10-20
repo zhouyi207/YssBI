@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.mann_whitney -->
 # Mann–Whitney U test
 
 Compares distributions or locations of two independent populations.

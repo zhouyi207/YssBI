@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.pp_qq.view -->
 # P-P / Q-Q Plot
 
 Values takes at least two finite Numeric observations. The reference is normal. Defaults to Q-Q with the sample mean and sample standard deviation estimated from the input. Disable estimation to use Reference mean (default 0) and Reference standard deviation (default 1, positive).

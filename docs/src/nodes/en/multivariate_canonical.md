@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.association.canonical -->
 # Canonical correlation
 
 Provide aligned numeric **X variable** and **Y variable** groups, at least one column each. Inputs must have equal lengths and pair by current position, including mixed database and in-memory inputs. Missing values, constant columns and within-group rank deficiency are rejected. With $p,q$ variables, require $n>p+q$ observations. **Retained dimensions** defaults to 1, with $1\le k\le\min(p,q)$.

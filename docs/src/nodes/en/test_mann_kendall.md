@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.mann_kendall -->
 # Mann–Kendall trend test
 
 Tests for monotonic trend in ordered observations.

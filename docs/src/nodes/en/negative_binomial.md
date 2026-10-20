@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.negative_binomial.sample -->
 # Negative Binomial
 
 The negative binomial distribution $\mathrm{NB}(r,p)$ counts failures before the $r$-th success:

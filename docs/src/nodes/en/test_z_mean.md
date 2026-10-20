@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.z.mean -->
 # One-sample z test for a mean
 
 Tests a population mean when the population standard deviation is known.

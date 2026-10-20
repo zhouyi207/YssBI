@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.map -->
 # Map Values
 
 Enter Source values and Replacement values as exact code text in matching order. Source values must be unique; replacements must fit the source physical type. Keep unmatched values defaults to true; turning it off makes unmatched values Null.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.arima -->
 # ARIMA forecast
 
 Fit a univariate ARIMA model by conditional least squares and forecast on the original observation scale.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.describe -->
 # Data Description
 
 Describe each supported column of a DataFrame or DataSeries and return a structured Result. Expand Result in the node’s Details, then expand a column to view its statistics.

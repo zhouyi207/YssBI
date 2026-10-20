@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.fixed_effect -->
 # Fixed-effect meta-analysis
 
 Connect effects and strictly positive variances from the same study table. This model assumes a common true effect across independent studies. It fixes $\tau^2=0$ and pools $\hat\mu=\sum y_i/v_i\,/\,\sum1/v_i$, with conventional variance $1/\sum1/v_i$.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.pareto.view -->
 # Pareto Chart
 
 Categories takes a Text series, one category occurrence per row. Empty or missing categories are rejected.

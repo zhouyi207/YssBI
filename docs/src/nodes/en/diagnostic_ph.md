@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.ph -->
 # Proportional-hazards score test
 
 Connect aligned **time** (positive follow-up), **event** (1/true for an event, 0/false for right censoring) and one or more numeric **X₁, X₂, …**. Missing rows are rejected. The node fits a static, unstratified Cox model, then tests time interactions using an efficient score.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.vikor -->
 # VIKOR
 
 Connect aligned Numeric **criteria**, one column per criterion and one row per alternative.

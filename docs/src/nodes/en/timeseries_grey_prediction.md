@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.grey_prediction -->
 # Grey prediction GM(1,1)
 
 Connect an ordered, equally spaced numeric `series` containing at least four strictly positive, finite observations. Missing values are rejected. `ts_horizon=10` is a positive integer; no fixed input row ceiling applies.

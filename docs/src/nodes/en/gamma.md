@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.gamma.sample -->
 # Gamma
 
 The gamma distribution $\mathrm{Gamma}(\alpha, \beta)$ in shape–rate form has density:

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.debug.view -->
 # View
 
 Open a data inspector sub-window for the connected value. Supports **DataFrame**, **DataSeries**, and scalar types. Read-only: viewing does not mutate project data.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.pareto.sample -->
 # Pareto
 
 The Pareto distribution $\mathrm{Pareto}(\alpha, x_m)$ models power-law tails for $x \ge x_m$:

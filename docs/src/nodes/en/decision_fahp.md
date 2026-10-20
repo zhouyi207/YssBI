@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.fahp -->
 # Fuzzy AHP weights
 
 Connect a square fuzzy complementary judgment matrix to **criteria**, one

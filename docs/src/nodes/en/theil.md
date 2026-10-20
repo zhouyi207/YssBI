@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.inequality.theil -->
 # Theil index
 
 Computes **Theil T** with natural logarithms. Select **Data form** in Details.

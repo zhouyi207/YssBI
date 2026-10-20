@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.ljung_box -->
 # Ljung–Box portmanteau test
 
 Connect a time-ordered residual or analysis `series` with at least four non-null finite observations. `lags` ranges from 1–40, default 1; the effective order is $h=\min(\mathrm{lags},\lfloor n/2\rfloor-1,40)$.

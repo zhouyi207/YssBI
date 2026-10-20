@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.principles -->
 # Power principles (normal mean planning)
 
 Plans a mean test with known population SD. `effect_size` defaults to 0.5 and is the true minus null mean divided by known population SD, d. sample_size is the number of observations n, at least 1.

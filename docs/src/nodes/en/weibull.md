@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.weibull.sample -->
 # Weibull
 
 The Weibull distribution $\mathrm{Weibull}(k, \lambda)$ is widely used in reliability analysis:

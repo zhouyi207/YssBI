@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.linear_regression -->
 # Overall linear regression power
 
 `predictors` defaults to 3: positive number p of predictors excluding the intercept. `effect_f_squared` defaults to 0.15 and is nonnegative overall `R²/(1−R²)`. sample_size is total observations n, at least p+2.

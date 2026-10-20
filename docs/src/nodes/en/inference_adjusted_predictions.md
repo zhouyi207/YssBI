@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.postestimation.adjusted_predictions -->
 # Adjusted predictions
 
 Computes an adjusted outcome mean from a retained Linear, Logit or Probit fit.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.is_not_null -->
 # Is Present
 
 Input accepts any series semantic. Result is a non-nullable Binary series: false for Null and true otherwise, in the same row domain.

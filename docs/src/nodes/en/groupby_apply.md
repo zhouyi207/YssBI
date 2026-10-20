@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.groupby.apply -->
 # Apply to Groups
 
 Connect a **Grouped DataFrame** and select a graph function with exactly one DataFrame parameter

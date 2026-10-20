@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.numeric.subtract -->
 # Subtract (−)
 
 Element-wise subtraction with scalar broadcast:

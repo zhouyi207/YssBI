@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.hausman -->
 # IV Hausman endogeneity test
 
 Connect an IV 2SLS `model` with `nonrobust` covariance to compare IV and OLS coefficients on the same sample. There are no parameters. This tests IV endogeneity, not panel FE/RE differences.

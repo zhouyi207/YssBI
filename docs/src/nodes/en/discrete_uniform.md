@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.discrete_uniform.sample -->
 # Discrete Uniform
 
 The discrete uniform distribution assigns equal probability to each integer in $[\mathrm{Low}, \mathrm{High}]$:

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.psm -->
 # PSM price sensitivity
 
 Connect aligned price responses: **too_cheap**, **cheap**, **expensive**,

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.datetime.part -->
 # Extract Date Part
 
 Connect a Datetime series and choose Part (year by default). Supported selections include year, quarter, month, week, day, day of year, day of week, hour, minute and second. Select a component available in the physical date/time representation.

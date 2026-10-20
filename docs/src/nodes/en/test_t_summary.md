@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.t.summary_input -->
 # Summary-statistics t test
 
 Runs a t test from sample sizes, means, and sample standard deviations without raw observations.

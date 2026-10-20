@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.wald -->
 # Linear coefficient t / Wald tests
 
 Connect a linear `model` and enter coefficient constraints in `hypothesis`, default `x1 = 0`, up to 4096 characters. Names follow the model report; estimates, covariance and residual degrees of freedom are reused.

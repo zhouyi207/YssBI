@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.logit.fit -->
 # Logit
 
 Binary logistic regression estimated by IRLS. For $y_i \in \{0,1\}$:

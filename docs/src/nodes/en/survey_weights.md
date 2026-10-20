@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.survey.weights -->
 # Sampling weights
 
 Connect numeric values. `input_kind=weights` (default) accepts strictly positive finite sampling weights. `inclusion_probabilities` accepts finite probabilities in (0,1] and computes 1/probability. Missing values, zero weights and nonfinite results fail; no records are dropped.

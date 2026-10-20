@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.timeseries.rolling_mean -->
 # Time-Series Rolling Mean
 
 Window is a positive trailing row count, including the current row. Operation defaults to mean; sum, minimum, maximum and sample standard deviation (ddof = 1) are also available. Min periods defaults to 0, requiring a complete non-null window; otherwise it specifies the minimum non-null count, from 1 to Window. Insufficient observations produce Null; standard deviation needs at least two.

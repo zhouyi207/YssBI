@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.causal.synthetic_control -->
 # Synthetic control
 
 Builds a convex combination of untreated donor outcome series to match one treated unit before intervention.

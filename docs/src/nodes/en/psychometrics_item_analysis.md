@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.psychometrics.item_analysis -->
 # Item analysis (discrimination)
 
 Connect at least two aligned numeric **items**, with respondents on rows.

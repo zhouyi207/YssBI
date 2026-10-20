@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.heckman_two_step -->
 # Heckman two-step selection model
 
 Fits a Probit selection equation followed by an outcome OLS equation augmented with the inverse Mills ratio.

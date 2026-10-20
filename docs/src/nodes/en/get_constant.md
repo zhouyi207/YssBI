@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.constant.get -->
 # Get Constant
 
 Outputs a named constant defined in the current Event or Function. Add and edit constants in the graph's Details panel, then select one in this node's parameters or insert its reference from that panel.

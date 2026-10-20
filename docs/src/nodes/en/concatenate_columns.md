@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.concat.columns -->
 # Concatenate Columns
 
 Combine columns from two or more lazy DataFrames in input-port order. Duplicate names receive suffixes such as `_2` and `_3`.

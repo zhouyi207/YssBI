@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.drop.rows -->
 # Drop Rows
 
 Removes rows matching a condition. For example, `amount < 0` removes records with negative amounts, retaining other records and all columns.

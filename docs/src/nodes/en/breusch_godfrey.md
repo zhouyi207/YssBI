@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.breusch_godfrey -->
 # Breusch–Godfrey serial-correlation test
 
 Connect a linear `model` to test residual serial correlation conditional on the original regressors. Fitted rows should be in time order, with at least four observations.

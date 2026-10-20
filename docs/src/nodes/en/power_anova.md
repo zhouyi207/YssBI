@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.anova -->
 # Balanced one-way ANOVA power
 
 `groups` defaults to 3 and is at least 2. `effect_f` defaults to 0.25: nonnegative Cohen f, the population SD of group means divided by common within-group SD. sample_size is n per group, at least 2; total size is gn.

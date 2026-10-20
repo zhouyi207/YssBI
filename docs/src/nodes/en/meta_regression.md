@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.regression -->
 # Meta-regression
 
 Connect aligned effects, positive variances and one or more numeric moderators. An intercept is always included; the design must have full rank and $k>p$, where $p$ includes the intercept. Coefficients use the original moderator units and input column names.

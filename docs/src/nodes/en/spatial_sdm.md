@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.sdm -->
 # Spatial Durbin model (SDM)
 
 Adds first-order spatial lags of every predictor to the spatial lag model; the intercept is not spatially lagged.

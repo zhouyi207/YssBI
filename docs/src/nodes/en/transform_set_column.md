@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.set_column -->
 # Add or Replace Column
 
 Connect Source and an equally long Series; values are assigned by current row position, including results from independent sources or in-memory calculations. Name defaults to computed. An existing name replaces that column in place; a new name appends it.

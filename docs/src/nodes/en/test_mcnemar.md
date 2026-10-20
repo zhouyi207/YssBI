@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.mcnemar -->
 # McNemar test
 
 Tests whether success probabilities are equal across two measurements on the same subjects.

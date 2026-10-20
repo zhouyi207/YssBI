@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.panel.did.twfe -->
 # Panel DID (TWFE)
 
 Fit the response against optional predictors and a precomputed binary treatment interaction, Treat × Post, absorbing entity and time effects. Connect aligned finite numeric response, predictors, entity, time and treatment columns. Entity-time pairs must be unique.

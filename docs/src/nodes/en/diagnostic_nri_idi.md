@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.nri_idi -->
 # NRI and IDI
 
 Connect aligned **outcome** (event 1/true, nonevent 0/false), **reference** event probabilities and **new** event probabilities. Both outcome groups must occur, probabilities must lie in $[0,1]$, and missing rows are rejected.

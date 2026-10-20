@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.ecm -->
 # Error-correction model (ECM)
 
 Estimate a two-step single-equation ECM for a numeric `series` and one or more aligned `X₁, X₂, …`. Rows must be equally spaced and ordered, with finite values and no missing observations. No fixed row or predictor ceiling is imposed.

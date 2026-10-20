@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.causal.psm -->
 # Propensity-score matching
 
 ## Inputs and identification

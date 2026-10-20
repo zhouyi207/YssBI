@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.numeric.ln -->
 # Ln (Natural Logarithm)
 
 Natural logarithm, element-wise:

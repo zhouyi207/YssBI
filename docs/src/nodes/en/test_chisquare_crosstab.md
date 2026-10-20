@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.chisquare.crosstab -->
 # Chi-square test of independence
 
 Builds a contingency table from paired categorical observations and tests independence.

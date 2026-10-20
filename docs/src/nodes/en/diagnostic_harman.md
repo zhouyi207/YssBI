@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.harman -->
 # Harman single-factor diagnostic
 
 Connect all questionnaire items of interest for the same respondents to **variables**. At least two numeric items and two observations are required. Columns must align and vary; missing or nonfinite values fail.

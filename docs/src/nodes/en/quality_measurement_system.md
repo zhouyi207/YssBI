@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.quality.measurement_system -->
 # Measurement system (crossed Gage R&R)
 
 Connect aligned **measurements**, categorical **parts** and **operators** in

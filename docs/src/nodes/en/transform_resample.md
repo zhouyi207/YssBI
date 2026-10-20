@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.resample -->
 # Resample Time
 
 Select a Datetime Time column, optional grouping Keys and the value Columns. Unit defaults to day; choose year, quarter, month, week, day, hour, minute or second. Aggregation defaults to mean.

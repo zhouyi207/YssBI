@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.panel.cointegration -->
 # Panel cointegration (Fisher–Engle–Granger)
 
 Connect aligned finite numeric **Y**, 1–5 **X₁, X₂, …**, numeric **entity** IDs and integer period indices **time**, without missing values. At least two entities are required. Each entity must have consecutive, unique periods; sample lengths and start/end periods may differ. Input variables should be integrated of order one, I(1); the node does not establish integration order automatically.

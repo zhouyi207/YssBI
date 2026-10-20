@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.runs -->
 # Runs test for randomness
 
 Tests whether the order of a binary sequence is consistent with random arrangement.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.association.kendall -->
 # Kendall rank correlation
 
 Connect aligned Numeric or Ordinal **X** and **Y**. At least two complete observations are needed. Ordinal data uses its declared level order. This node computes tau-b, correcting for ties in both variables:

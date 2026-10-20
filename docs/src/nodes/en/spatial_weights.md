@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.weights -->
 # Spatial weights
 
 Build a reusable weights design from unit identifiers and planar coordinates, then connect it to Moran, spatial regression or spatial panel nodes.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.score_lm -->
 # Score / LM test
 
 Connect **restricted** and **full** fits for the same observations. Both must use the same OLS/WLS, Logit or Probit estimator; GLS is unsupported. There are no parameters or refitting. Row order, reconstructed responses, relative WLS weights and genuine design nesting are checked; $q=k_f-k_r>0$ and $n>k_f$ are required.

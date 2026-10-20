@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.egger -->
 # Egger asymmetry test
 
 Connect effects and positive variances for at least three independent studies with varying SEs. Regress $y_i/s_i=\alpha+\beta(1/s_i)+e_i$, $s_i=\sqrt{v_i}$, by OLS with an intercept. The design must be full rank.

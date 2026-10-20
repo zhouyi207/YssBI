@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.exponential_smoothing -->
 # Simple exponential smoothing
 
 This node is SES / ETS(A,N,N), with no trend or seasonal component.

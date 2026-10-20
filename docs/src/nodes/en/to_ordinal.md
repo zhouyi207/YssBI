@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.value.to_ordinal -->
 # To Ordinal
 
 Convert a scalar or series to Ordinal, preserving original codes and declaring level order. Scalars remain scalar; series retain row order and alignment.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.deduplicate -->
 # Deduplicate Rows
 
 Keys is optional; empty checks all visible columns. Keep defaults to first. Last keeps the last source row for each key; none removes every row belonging to a repeated key. Null keys are grouped together.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.psychometrics.content_validity -->
 # Content validity (expert CVI)
 
 Connect numeric **items**, one column per item and one row per expert. All

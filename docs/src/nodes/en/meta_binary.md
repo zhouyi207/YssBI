@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.binary -->
 # Binary effect sizes
 
 Connect treatment_events, treatment_n, reference_events and reference_n. Counts must be nonnegative integers with events no greater than the corresponding positive total. Let $a,b,c,d$ be treatment events/non-events and reference events/non-events; $n_T=a+b$, $n_C=c+d$.

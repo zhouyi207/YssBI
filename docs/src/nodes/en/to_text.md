@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.value.to_text -->
 # To Text
 
 Convert a scalar or series to Text. Scalars remain scalar; series retain row order and alignment. There are no parameters.

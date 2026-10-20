@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.backward_fill -->
 # Backward Fill
 
 Connect any Series. Optional Context supplies grouping and ordering columns, paired with the series by current row position and equal length. Empty selections use one group and the current row order; equal keys retain source order.

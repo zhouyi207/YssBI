@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.causal.ipw -->
 # Inverse-probability weighting
 
 ## Inputs and identification

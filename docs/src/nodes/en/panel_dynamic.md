@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.panel.dynamic -->
 # Dynamic panel (one-step difference GMM)
 
 Connect aligned numeric **Y**, optional strictly exogenous **X₁, X₂, …**, numeric **entity** IDs and integer period indices **time**. Values must be finite and complete. Rows are sorted by keys. A balanced panel is required: the same start/end periods for every entity, exactly one row per consecutive period, at least 4 periods and 3 entities, and more entities than instruments.

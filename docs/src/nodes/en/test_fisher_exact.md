@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.fisher_exact -->
 # Fisher exact test
 
 Performs a two-sided conditional exact test of independence for two binary classifications.

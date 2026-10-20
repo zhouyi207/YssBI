@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.continuous -->
 # Continuous effect sizes
 
 Connect treatment_mean, treatment_sd, treatment_n and reference_mean, reference_sd, reference_n from the same study table. Each row describes two independent groups; both sample sizes must be integers of at least 2. SDs can be zero individually, but must be nonnegative with positive resulting effect variance.

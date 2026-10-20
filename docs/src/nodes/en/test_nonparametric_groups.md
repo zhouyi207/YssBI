@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.nonparametric.family -->
 # Nonparametric group-test selector
 
 Selects one independent-group nonparametric test through `method`. Each execution runs only that method.

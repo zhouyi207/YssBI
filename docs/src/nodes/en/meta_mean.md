@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.mean -->
 # Mean effect sizes
 
 Connect mean, sd and sample_size for each independent study. The study effect is its mean, $y=\bar x$, with sampling variance $v=s^2/n$. SD must be positive and sample size an integer of at least 2. The output is a one-group mean, rather than a difference between groups. All studies must measure the same quantity in compatible units.

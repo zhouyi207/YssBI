@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.plot.control_chart -->
 # Quality control chart (I / MR)
 
 Connect a numeric **measurements** series in process/time order, with at least

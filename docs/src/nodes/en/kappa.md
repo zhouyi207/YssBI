@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.kappa -->
 # Kappa agreement
 
 Each **Rater** input is an aligned classification column over the same subjects. Add raters in Details. Numeric, categorical, ordinal, binary, text, and identifier codes are supported; missing ratings fail. Codes retain their original values, including wide integer labels.

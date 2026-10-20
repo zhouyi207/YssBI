@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.uniform.sample -->
 # Uniform
 
 The continuous uniform distribution $\mathrm{Uniform}(a,b)$ has constant density on $[a,b)$:

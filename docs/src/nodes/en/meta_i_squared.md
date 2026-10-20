@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.i_squared -->
 # I-squared heterogeneity
 
 Connect effects and positive variances for at least two independent studies. With fixed-weight Cochran $Q$ and $df=k-1$, $I^2=100\max(0,(Q-df)/Q)$ (zero when $Q=0$), and $H^2=\max(1,Q/df)$.

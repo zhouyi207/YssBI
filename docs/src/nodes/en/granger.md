@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.granger -->
 # VAR Granger causality tests
 
 Connect a VAR Fit `model` to test whether other variables' histories add predictive information for an equation. There are no parameters; variables, lags, estimates and covariance come from the model.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.linear.summary -->
 # Linear Regression Summary
 
 Connect **Model** from **Linear Regression** to **Model** here. OLS, WLS, and GLS share this node. Summary has no fit configuration and never re-estimates the model.

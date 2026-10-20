@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.lr -->
 # Likelihood-ratio test
 
 Connect the restricted fit to **restricted** and the larger fit to **full**. OLS/WLS, Logit and Probit are supported, with the same estimator on both sides. No parameters or refitting are used.

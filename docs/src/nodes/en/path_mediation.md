@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.workflow.mediation -->
 # Mediation (one observed mediator)
 
 Connect response Y, predictor X and mediator M, optionally followed by continuous covariates C. Both OLS equations include an intercept:

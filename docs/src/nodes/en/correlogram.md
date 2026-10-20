@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.correlogram.view -->
 # Correlogram (ACF & PACF)
 
 Values requires at least 4 finite, nonconstant Numeric observations and rejects missing values. Maximum lag defaults to 20 and ranges from 1 to 40; the effective maximum is $\min(L,\lfloor n/2\rfloor-1,40)$.

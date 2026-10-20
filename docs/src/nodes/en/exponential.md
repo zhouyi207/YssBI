@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.exponential.sample -->
 # Exponential
 
 The exponential distribution $\mathrm{Exp}(\lambda)$ models memoryless waiting times with rate $\lambda$:

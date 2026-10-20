@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.t.independent -->
 # Independent-samples t test
 
 Compares the means of two independent populations.

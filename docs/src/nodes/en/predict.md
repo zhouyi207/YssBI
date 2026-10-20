@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.linear.predict -->
 # Linear Prediction
 
 Connect **Model** from **Linear Regression**, then connect new **X₁, X₂, …** in training-column order. OLS, WLS, and GLS reuse the fitted coefficients and intercept without fitting again. No training response, weights, or covariance matrix is required.

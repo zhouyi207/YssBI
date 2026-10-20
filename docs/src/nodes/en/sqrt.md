@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.numeric.sqrt -->
 # Sqrt (Square Root)
 
 Square root, element-wise:

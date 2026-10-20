@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.errorbar.view -->
 # Error Bar Plot
 
 Connect aligned, equally sized Numeric series X, Estimate, Lower and Upper. Bounds are interval endpoints and must satisfy $Lower\le Estimate\le Upper$. Missing and nonfinite values are rejected.

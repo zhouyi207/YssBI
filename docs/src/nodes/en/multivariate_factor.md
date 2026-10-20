@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.multivariate.exploratory_factor -->
 # Exploratory factor analysis
 
 Provide at least three aligned numeric **Variable** series paired by current position, including mixed database and in-memory inputs. Missing values and constant columns are rejected. Iterative principal-axis factoring uses a correlation matrix and squared-multiple-correlation initial communalities. PCA extraction and maximum likelihood are not used. The observation count must exceed the variable count $p$, with positive-definite correlation.

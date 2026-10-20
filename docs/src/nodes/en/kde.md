@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.kde.view -->
 # Kernel Density Estimate
 
 Values requires at least two finite Numeric observations and rejects missing values. Uses a Gaussian kernel with Silverman bandwidth $h=1.06\,s\,n^{-1/5}$, where $s$ is sample standard deviation. Zero variance uses unit bandwidth, enlarged by machine precision when the numerical scale cannot resolve a unit.

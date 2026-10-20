@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.numeric.multiply -->
 # Multiply (×)
 
 Element-wise multiplication with scalar broadcast:

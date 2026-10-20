@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.survival.exponential -->
 # Exponential survival regression
 
 Connect aligned `time` and `event` series. Time must be finite and strictly positive, in one consistent unit; `event=1` (or true) means an observed event and `0` (or false) means right censoring. Rows with missing values are rejected, not dropped. Censoring is assumed independent of the event process, conditional on the model/group used. Inputs must have equal lengths and pair by current row position, including mixed database and in-memory series.

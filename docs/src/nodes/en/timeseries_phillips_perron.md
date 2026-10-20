@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.phillips_perron -->
 # Phillips–Perron unit-root test
 
 Connect a finite numeric `series` in equally spaced time order, with at least four observations and no missing values. No fixed row ceiling applies. `ts_deterministic=constant` allows `none`, `constant`, or `trend` (intercept plus linear trend). `ts_bandwidth=4` is the nonnegative Newey–West truncation lag, strictly below the regression observation count $N=n-1$; it is not an ADF augmentation order.

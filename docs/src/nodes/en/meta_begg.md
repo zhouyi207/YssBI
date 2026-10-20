@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.begg -->
 # Begg rank-correlation test
 
 Connect effects and positive variances for at least three independent studies. Let $\hat\mu$ be the fixed-weight pooled effect and $V=1/\sum1/v_i$. The test correlates $z_i=(y_i-\hat\mu)/\sqrt{v_i-V}$ with $v_i$ using Kendall's tau-b.

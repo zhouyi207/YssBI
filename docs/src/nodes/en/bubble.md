@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.bubble.view -->
 # Bubble Chart
 
 Connect aligned, equally sized Numeric X, Y and Size series. Sizes must be nonnegative with at least one positive value. Missing and nonfinite values are rejected.

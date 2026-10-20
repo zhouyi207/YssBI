@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.coefficient.view -->
 # Coefficient Plot
 
 Model accepts the OLS, WLS or GLS model output from Linear Fit without refitting. Confidence level defaults to 0.95 and must be strictly between 0 and 1. Intercepts are hidden by default.

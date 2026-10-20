@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.erlang.sample -->
 # Erlang
 
 The Erlang distribution is a special case of **Gamma** with integer shape **K**: the sum of **K** independent exponential waiting times with rate $\lambda$:

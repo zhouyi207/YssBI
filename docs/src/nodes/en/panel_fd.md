@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.panel.fd -->
 # First differences
 
 Connect aligned numeric response, one or more predictors, entity IDs and integer period indices time. Series must be finite, complete and equal in length, with unique entity-time keys. The node sorts rows and retains only adjacent observations within an entity whose time difference is exactly 1; gaps are not treated as one-period differences.

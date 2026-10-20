@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.white -->
 # White heteroskedasticity test
 
 Connect an OLS or WLS `model` to test variance patterns in predictors, their squares and cross-products. There are no parameters. GLS is unsupported; the original model should include an intercept and at least one predictor.

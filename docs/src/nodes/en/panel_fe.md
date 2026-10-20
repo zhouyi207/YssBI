@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.panel.fe -->
 # Fixed effects (FE)
 
 Connect aligned finite numeric series: **Y**, one or more **X₁, X₂, …**, **entity** IDs and **time**. Missing values are rejected and entity-time pairs must be unique. Rows are sorted by panel keys. Encode textual entity IDs before connecting them.

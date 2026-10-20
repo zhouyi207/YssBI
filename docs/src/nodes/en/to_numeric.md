@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.value.to_numeric -->
 # To Numeric
 
 Convert a scalar or series to Numeric. Scalars remain scalar; series retain row order and alignment.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.coupling_coordination -->
 # Coupling coordination
 
 Connect at least two aligned Numeric **criteria**, each representing a subsystem index

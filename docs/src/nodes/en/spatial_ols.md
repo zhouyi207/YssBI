@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.ols -->
 # Spatial OLS regression
 
 Ordinary least squares for spatial observations; weights only supply a residual diagnostic and do not change OLS estimates or standard errors.

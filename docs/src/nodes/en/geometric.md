@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.geometric.sample -->
 # Geometric
 
 The geometric distribution $\mathrm{Geometric}(p)$ models the number of trials until the first success (including the successful trial):

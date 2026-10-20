@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.workflow.moderation -->
 # Moderation (two-way interaction)
 
 Connect response Y, predictor X and moderator W, with optional covariates.

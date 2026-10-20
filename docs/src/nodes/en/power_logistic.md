@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.logistic -->
 # Logistic power (binary predictor)
 
 Supports Logistic Wald planning with one binary predictor, two independent equal-size groups and no other covariates. `baseline_probability` defaults to 0.2 in (0,1); `odds_ratio` defaults to a positive 1.5. sample_size is n per group, at least 1.

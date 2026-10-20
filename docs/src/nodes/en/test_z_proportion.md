@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.z.proportion -->
 # One-proportion z test
 
 Uses a normal approximation to test the population success probability of a binary event.

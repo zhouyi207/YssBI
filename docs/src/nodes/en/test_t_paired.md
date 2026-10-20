@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.t.paired -->
 # Paired t test
 
 Tests whether the mean difference between two measurements on the same subjects is zero.

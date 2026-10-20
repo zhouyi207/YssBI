@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.inference.confidence_interval -->
 # Confidence intervals
 
 Connect aligned numeric estimates and standard_errors. Values must be finite, SEs nonnegative and the table nonempty. Each row is a supplied estimate with its already calculated SE; this node does not estimate sampling variance from raw observations.

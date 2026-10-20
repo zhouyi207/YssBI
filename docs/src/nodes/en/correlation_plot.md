@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.correlation.view -->
 # Correlation Plot
 
 Add 2–64 aligned, equally sized Numeric series with at least 3 finite observations each. Missing values are rejected. Labels use source column names or series numbers.

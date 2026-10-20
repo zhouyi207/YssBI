@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.multivariate.pca -->
 # Principal component analysis (PCA)
 
 Provide at least two numeric **Variable** series with observations in aligned rows. Series must have equal lengths and pair by current position, including mixed database and in-memory inputs; missing values are rejected. **Retained dimensions** defaults to 2, with $1\le k\le\min(p,n-1)$ for $p$ variables and $n$ observations.

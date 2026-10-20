@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.logic.less yssbi.logic.less_equal yssbi.logic.greater yssbi.logic.greater_equal -->
 # Logical Comparison
 
 Less, Less or Equal, Greater and Greater or Equal accept Numeric or Text inputs with matching meanings. Numeric comparisons retain integer precision. Text uses case-sensitive lexical order without numeric parsing or locale collation.

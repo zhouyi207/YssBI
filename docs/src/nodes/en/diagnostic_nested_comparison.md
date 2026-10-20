@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.nested_comparison -->
 # Nested-model comparison
 
 Connect **restricted** and **full** fits using the same OLS/WLS, Logit or Probit estimator. There are no parameters or refitting. The full model must add coefficients and retain $n>k_f$. Reconstructed responses, relative WLS weights and restricted-design column-space inclusion are checked. Upstream fits must use the same subjects and row order. GLS is unsupported.

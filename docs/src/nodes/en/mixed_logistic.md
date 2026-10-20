@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.logistic -->
 # Logistic mixed model
 
 Connect one grouping column and a 0/1 or Boolean response. Uses Bernoulli logit with a Gaussian random intercept. Coefficients describe conditional log odds within groups.

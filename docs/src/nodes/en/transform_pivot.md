@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.pivot -->
 # Pivot
 
 Choose Keys, Category column and Value column. Enter Category values as exact original-code text and give each a distinct Output name in the same order. Only declared categories become columns; output names cannot collide with keys.

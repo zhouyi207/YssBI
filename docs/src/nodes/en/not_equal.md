@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.logic.not_equal -->
 # Not Equal (!=)
 
 Comparison mode under Parameters in Detail defaults to `exact`. Choose `tolerance` for Numeric inputs to show absolute tolerance (default 1e-12) and relative tolerance (default 1e-9). Both must be finite and nonnegative; lossy Float64 conversions are rejected. This mode returns false when `abs(a-b) <= atol + rtol * max(abs(a), abs(b))`, and true otherwise. Null remains null. Use matching settings with Equal to obtain complementary non-null results. The exact mode behaves as described below.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.nps -->
 # Net promoter score
 
 Connect **ratings**, a numeric column containing integer answers from 0 to 10.

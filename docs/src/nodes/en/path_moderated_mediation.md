@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.workflow.moderated_mediation -->
 # Moderated mediation (one moderated stage)
 
 Connect response Y, predictor X, mediator M and moderator W, with optional continuous covariates. All explanatory columns use observed sample mean centering; `input_centers` follows X, M, W, covariates. Both equations contain an intercept, W main effect and all covariates.

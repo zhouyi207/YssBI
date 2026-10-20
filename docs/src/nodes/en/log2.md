@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.numeric.log2 -->
 # Log2 (Base-2 Logarithm)
 
 Base-2 logarithm, element-wise:

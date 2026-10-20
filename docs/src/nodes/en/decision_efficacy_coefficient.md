@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.efficacy_coefficient -->
 # Efficacy coefficient
 
 Uses the observed best and worst value of each criterion, respecting its direction. Min–max utility $z_{ij}$ yields $d_{ij}=60+40z_{ij}$, then the weighted efficacy score is $\sum_j w_j d_{ij}$. These are data-relative endpoints, not external acceptance thresholds. A constant criterion contributes utility zero.

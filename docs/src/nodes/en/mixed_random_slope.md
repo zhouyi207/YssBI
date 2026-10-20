@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.random_slope -->
 # Random-slope model
 
 Connect one grouping column and one or more numeric random_predictors. The model includes a random intercept plus independent random slopes; normally include slope variables in predictors too. Intercept/slope correlations are fixed to zero. No automatic centering is applied.

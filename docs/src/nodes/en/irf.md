@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.irf -->
 # VAR orthogonalized impulse responses
 
 Connect a VAR Fit `model` to compute each variable's period-by-period response to a one-standard-deviation orthogonal innovation shock. `steps` ranges from 1–1000, default 8, with horizons zero through `steps`.

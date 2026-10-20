@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.sac -->
 # Spatial lag/error model (SAC)
 
 Jointly estimates response feedback and spatial error dependence using the same input weights matrix for both.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.text.concatenate -->
 # Concatenate Text
 
 Add at least two Text inputs in the requested order. Inputs may be scalars or series; at least one must be a series, and all series must have equal lengths and pair by current position. Separator defaults to empty text.

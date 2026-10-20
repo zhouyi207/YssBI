@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.leave_one_out -->
 # Leave-one-study-out analysis
 
 Connect effects and positive variances for at least three independent studies. Each study is omitted once and the pooled model, including τ², is refitted. estimator defaults to paule_mandel; fixed and der_simonian_laird are also available.

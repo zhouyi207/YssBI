@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.boxplot.view -->
 # Box Plot
 
 Add 1–64 Numeric series. Samples are independent and may have different lengths. Empty, missing or nonfinite samples are rejected. Labels use source column names when available and series numbers otherwise.

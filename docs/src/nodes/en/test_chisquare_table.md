@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.chisquare.general -->
 # Pearson chi-square contingency test
 
 Tests independence using an existing contingency table of counts.

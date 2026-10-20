@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.fevd -->
 # VAR forecast-error variance decomposition
 
 Connect a VAR Fit `model` to decompose forecast-error variance into orthogonal innovation shares. `steps` ranges from 1–1000, default 8.

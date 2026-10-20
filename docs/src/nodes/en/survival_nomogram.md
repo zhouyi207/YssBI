@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.plot.nomogram -->
 # Cox nomogram
 
 Connect the typed `result` output of the static Cox node to `model`. Parameters: `survival_horizon=1`, positive and within model follow-up; `nomogram_ticks=5`, an integer at least 2. At least one baseline event at or before the horizon and a nonzero predictor contribution range are required. Time-dependent and subgroup reports are not compatible model inputs.

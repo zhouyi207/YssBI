@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.topsis -->
 # TOPSIS
 
 Default vector normalization divides each column by its Euclidean norm. Multiply by normalized weights, find benefit/cost ideal and anti-ideal values, and compute Euclidean distances $D_i^+$ and $D_i^-$. Closeness is $C_i=D_i^-/(D_i^++D_i^-)$. Weights are applied before distances (hence squared inside squared distances). Coincident ideals with zero total distance are rejected.

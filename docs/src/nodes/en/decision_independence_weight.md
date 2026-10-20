@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.independence_weight -->
 # Independence weights
 
 Regress each criterion on all the others with an intercept. Weights are proportional to $1/R_j$, where $R_j$ is the multiple correlation. Reuses SVD collinearity diagnostics, including rank-deficient predictor spans. Requires at least two nonconstant criteria and nonzero $R_j$; a zero multiple correlation makes the reciprocal undefined and is rejected. Default scores use original values.

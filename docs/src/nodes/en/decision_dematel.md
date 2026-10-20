@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.dematel -->
 # DEMATEL influences
 
 Connect a square direct-influence matrix to **criteria**. A(i,j) means row i

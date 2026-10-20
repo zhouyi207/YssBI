@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.kano -->
 # KANO requirements
 
 Analyze one requirement per node. Connect aligned **functional** answers

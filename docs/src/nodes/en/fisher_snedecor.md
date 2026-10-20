@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.fisher_snedecor.sample -->
 # Fisher–Snedecor F
 
 The F distribution $\mathrm{F}(d_1, d_2)$ is the ratio of two independent chi-squared variables, each divided by its degrees of freedom:

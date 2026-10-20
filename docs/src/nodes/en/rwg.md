@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.association.rwg -->
 # Within-group agreement rwg
 
 Supply one group's aligned Numeric **Scale item** columns. Each row is a respondent and each column one item. At least two respondents are needed. For multiple groups, prepare each group's sample separately.

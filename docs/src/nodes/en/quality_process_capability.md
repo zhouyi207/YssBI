@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.quality.process_capability -->
 # Process capability
 
 Connect numeric **measurements** and set finite **lower_limit**, **upper_limit**

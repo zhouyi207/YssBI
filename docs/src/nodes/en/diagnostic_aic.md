@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.aic -->
 # Akaike information criterion (AIC)
 
 Connect a fitted OLS/WLS, Logit or Probit **model**. There are no parameters or refitting. GLS is unsupported. Gaussian residual sum of squares must be positive and binary fits must have converged.

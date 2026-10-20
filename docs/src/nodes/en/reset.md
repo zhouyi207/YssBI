@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.reset -->
 # Ramsey RESET specification test
 
 Connect an OLS or WLS `model` to test whether nonlinear powers improve its mean equation. Fitted observations and WLS weights are reused; GLS is unsupported.

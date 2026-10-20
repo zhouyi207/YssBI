@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.causal.ate -->
 # ATE
 
 Extracts the average treatment effect from a fitted treatment-effect result.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.cluster_randomized -->
 # Cluster randomized power (continuous outcome)
 
 Two-arm cluster randomized design with continuous normal outcomes and equal cluster sizes. `effect_size` defaults to 0.5: mean difference divided by individual population SD, d. `cluster_size` defaults to 20, positive integer subjects m per cluster; `icc` defaults to 0.05 in [0,1]. sample_size is c clusters per arm, at least 2; total subjects are 2cm.

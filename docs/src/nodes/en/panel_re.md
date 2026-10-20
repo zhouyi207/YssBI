@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.panel.re -->
 # Random effects (RE)
 
 Inputs are aligned finite numeric response, one or more predictors, entity IDs and time. Missing values and duplicate entity-time keys are rejected; rows are sorted. Encode textual IDs first.

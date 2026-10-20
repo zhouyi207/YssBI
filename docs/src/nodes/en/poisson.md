@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.poisson.sample -->
 # Poisson
 
 The Poisson distribution $\mathrm{Poisson}(\lambda)$ models the count of rare events in a fixed interval:

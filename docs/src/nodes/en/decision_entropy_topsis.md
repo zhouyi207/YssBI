@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.workflow.entropy_topsis -->
 # Entropy-weighted TOPSIS
 
 Calculates entropy weights from oriented min–max criteria, then calls the same TOPSIS computation with those weights. Score normalization defaults to vector norms and is independent of entropy preprocessing. No positivity offset or hidden pseudo-observations are added. Entropy requires some nonconstant information; TOPSIS requires distinct weighted ideals.

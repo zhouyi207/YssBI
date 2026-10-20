@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.multivariate.mds -->
 # Multidimensional scaling (MDS)
 
 This node uses classical metric MDS. **MDS input** defaults to `observations`: provide one or more numeric **Variable / distance column** series with observations in rows, using Euclidean distances. **Standardize variables** defaults to disabled and appears only in this mode; enabling it uses sample standard deviations and rejects constant variables.

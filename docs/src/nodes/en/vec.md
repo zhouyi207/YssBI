@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.vec.fit -->
 # VEC Fit
 
 Connect at least two aligned finite I(1) series in time order. Configure cointegration rank, levels lag order lags, and deterministic specification trend (none, constant or trend).

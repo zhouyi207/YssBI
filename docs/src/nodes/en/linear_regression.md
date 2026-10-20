@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.linear.fit -->
 # Linear Regression
 
 Fit **Y** against ordered **X₁, X₂, …**. Choose **OLS** (default), **WLS**, or **GLS** in the **Model** parameter group in Detail, with an optional intercept.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.var.fit -->
 # VAR Fit
 
 Connect at least two aligned finite series in time order. The input order determines equation, shock and response ordering. Parameter lags selects consecutive lags 1 through p; the fitted model includes an intercept.

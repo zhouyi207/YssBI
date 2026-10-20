@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.logic.and -->
 # And (&&)
 
 Logical conjunction on two booleans:

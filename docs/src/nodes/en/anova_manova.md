@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.anova.manova -->
 # Multivariate ANOVA (MANOVA)
 
 Jointly compare factor effects across multiple responses. Provide at least two numeric **Y₁, Y₂, …** series and one or more **Factor** series. Columns must have equal lengths and pair by current position; database and in-memory inputs may be mixed. Missing values are rejected. Each factor needs at least two observed categories. The intercept-inclusive design needs full rank and positive residual degrees of freedom. Residual SSCP must be positive definite; collinear responses cannot be jointly tested.

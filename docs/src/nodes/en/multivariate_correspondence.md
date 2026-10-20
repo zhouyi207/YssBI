@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.multivariate.correspondence -->
 # Correspondence analysis
 
 Provide **Count column** series from a nonnegative two-way frequency/weight table with at least two rows and two aligned columns. Rows and columns denote categories rather than individual observations. Negative/missing entries and zero-mass rows or columns are rejected. **Retained dimensions** defaults to 1 and cannot exceed $\min(r-1,c-1)$.

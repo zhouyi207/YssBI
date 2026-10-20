@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.value.to_categorical -->
 # To Categorical
 
 Convert a scalar or series to Categorical while preserving original codes. Scalars remain scalar; series retain row order and alignment.

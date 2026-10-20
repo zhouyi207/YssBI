@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.kpss -->
 # KPSS stationarity test
 
 Connect a finite numeric `series` in equally spaced time order, with at least three observations and no missing values. `ts_deterministic=constant` tests level stationarity; `trend` tests trend stationarity after removing an intercept and linear trend. `ts_bandwidth=4` is a nonnegative Newey–West truncation lag strictly below the observation count. There is no fixed row-count ceiling.

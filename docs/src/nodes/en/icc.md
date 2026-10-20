@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.association.icc -->
 # Intraclass correlation (ICC)
 
 Each **Rater** input is a Numeric measurement column. Rows identify the same subjects across all columns. At least two subjects and two raters are required. Use complete aligned data.

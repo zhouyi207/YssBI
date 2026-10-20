@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.information_matrix -->
 # Cameron–Trivedi information-matrix decomposition
 
 Connect an OLS or WLS `model` to report heteroskedasticity, skewness, kurtosis and joint tests. There are no parameters. GLS is unsupported; the model should include an intercept and at least one predictor.

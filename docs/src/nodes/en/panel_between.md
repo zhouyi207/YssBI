@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.panel.between -->
 # Between estimator
 
 Connect numeric response, one or more predictors, entity IDs and time. Inputs must be aligned, finite and complete, with unique entity-time keys.

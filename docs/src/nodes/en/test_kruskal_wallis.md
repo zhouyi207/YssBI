@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.kruskal_wallis -->
 # Kruskal–Wallis test
 
 Compares distributions of independent groups using pooled ranks.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.sensitivity -->
 # Meta-analysis sensitivity
 
 Connect effects and positive variances for at least three independent studies. result contains baseline (selected estimator, default paule_mandel) and alternative_models (fixed, DerSimonian–Laird and Paule–Mandel fitted to all studies). Each model uses the selected inference and confidence_level.

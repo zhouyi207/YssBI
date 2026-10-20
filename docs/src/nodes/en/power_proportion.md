@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.proportion -->
 # One-proportion power (normal approximation)
 
 `null_proportion` defaults to 0.5 and must lie in (0,1); `proportion` defaults to 0.6 and lies in [0,1]. sample_size is total observations n, at least 1. H0 is p=p0, with the selected alternative.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.logic.or -->
 # Or (||)
 
 Logical disjunction on two booleans:

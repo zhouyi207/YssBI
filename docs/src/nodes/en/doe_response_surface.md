@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.doe.response_surface -->
 # Response surface (full quadratic)
 
 Connect aligned numeric **Y** and continuous **factors**, one column per factor.

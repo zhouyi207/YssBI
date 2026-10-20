@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.cochran_q -->
 # Cochran Q heterogeneity test
 
 Connect effects and positive variances for at least two independent studies. With $w_i=1/v_i$ and fixed pooled mean $\hat\mu$, $Q=\sum w_i(y_i-\hat\mu)^2$ approximately follows $\chi^2_{k-1}$ under the null of a common true effect. The alternative is between-study heterogeneity; a small P value rejects homogeneity.

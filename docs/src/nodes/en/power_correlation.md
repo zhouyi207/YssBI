@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.correlation -->
 # Correlation power (Fisher z)
 
 `null_correlation` defaults to 0 and `correlation` to 0.3; both lie strictly in (−1,1). sample_size is n paired observations, at least 4, each containing two variables. H0 is ρ=ρ0, with the selected alternative.

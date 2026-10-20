@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.logic.not -->
 # Not (!)
 
 Logical negation:

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.drop.columns -->
 # Drop Columns
 
 Removes selected columns from the input DataFrame while preserving the order, types, and row data of the remaining columns. For input `a, b, c`, dropping `["b"]` produces `a, c`.

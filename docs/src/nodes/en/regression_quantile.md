@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.regression.quantile -->
 # Regression Quantile
 
 Connect aligned finite observations; missing values are rejected. Unless specified below, Y is numeric and inputs `X₁, X₂, …` accept one or more numeric columns in port order, named x1,x2,… . Encode categorical predictors explicitly. Unpenalized models require a full-rank design and positive residual degrees.

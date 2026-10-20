@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.cmh -->
 # Cochran–Mantel–Haenszel test
 
 Tests a common association between binary exposure and outcome while controlling for strata.

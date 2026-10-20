@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.constant.e -->
 # Euler's Number (e)
 
 Requires no inputs or parameters. Produces a Numeric scalar for Euler's number, approximately `2.718281828459045`.

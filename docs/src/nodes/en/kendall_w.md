@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.kendall_w -->
 # Kendall concordance W
 
 Each **Rater** input is an aligned Numeric or Ordinal column, with each row identifying the same subject. At least two subjects and two raters are required. Ordinal columns use their own explicit order; missing ratings fail.

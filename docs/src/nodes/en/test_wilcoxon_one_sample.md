@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.wilcoxon.one_sample -->
 # One-sample Wilcoxon signed-rank test
 
 Tests whether a sample distribution has a specified center of symmetry.

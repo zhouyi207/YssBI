@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.combine_p -->
 # Combine p-values
 
 Connect p*values in $[0,1]$; studies must be independent and test a scientifically compatible null. p_method defaults to fisher. Its statistic $X=-2\sum\log p_i$ has a $\chi^2*{2k}$ distribution under the joint null that all component null hypotheses hold; the alternative is departure in at least one study.

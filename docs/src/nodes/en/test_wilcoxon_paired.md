@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.wilcoxon.paired -->
 # Paired Wilcoxon signed-rank test
 
 Tests whether paired differences are symmetrically distributed around zero.

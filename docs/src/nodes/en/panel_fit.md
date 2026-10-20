@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.panel.fit -->
 # Panel Fit
 
 Connect response, ordered predictors, entity IDs and time values as aligned finite numeric series. Entity-time pairs must be unique; observations are sorted by entity and time for estimation.

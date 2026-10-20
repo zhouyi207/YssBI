@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.beta.sample -->
 # Beta
 
 The beta distribution $\mathrm{Beta}(\alpha, \beta)$ is supported on $(0,1)$ and models proportions and probabilities:

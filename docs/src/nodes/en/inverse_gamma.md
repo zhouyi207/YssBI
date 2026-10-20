@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.inverse_gamma.sample -->
 # Inverse Gamma
 
 The inverse gamma distribution $\mathrm{InvGamma}(\alpha, \beta)$ is the reciprocal of a gamma variable and is common as a variance prior:

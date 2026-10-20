@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.survey.linear_regression -->
 # Survey linear regression
 
 Connect Y and sampling weights, optionally adding one strata column and one clusters (primary sampling unit, PSU) column.

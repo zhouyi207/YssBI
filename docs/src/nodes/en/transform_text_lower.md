@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.text.lower -->
 # Lowercase Text
 
 Connect a Text series. Result converts characters to lowercase using Unicode-aware string operations and propagates Null.

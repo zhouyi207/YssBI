@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.vif -->
 # Variance inflation factors
 
 Connect a linear `model` to diagnose predictor multicollinearity. There are no parameters. OLS, WLS and GLS use the original design without weighting or whitening.

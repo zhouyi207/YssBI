@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.panel -->
 # Spatial panel: entity fixed effects
 
 Remove entity fixed effects using orthonormal time contrasts, then fit a Gaussian spatial lag or spatial error model to a balanced panel. Spatial weights are constant over periods.

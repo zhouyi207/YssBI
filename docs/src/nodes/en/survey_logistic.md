@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.survey.logistic -->
 # Survey logistic regression
 
 Connect Y and sampling weights, optionally adding one strata column and one clusters (primary sampling unit, PSU) column.

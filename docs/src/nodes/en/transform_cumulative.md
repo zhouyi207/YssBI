@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.cumulative -->
 # Cumulative Statistics
 
 Connect a Numeric Series. Operation defaults to sum; mean, min, max and sample standard deviation (ddof=1) are available. Connect an equally long optional Context to choose Partition columns and Order columns; context rows pair with the series by current position. Empty selections use one partition and the current row order; equal keys retain source order.

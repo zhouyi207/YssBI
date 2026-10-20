@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.slm -->
 # Spatial lag model (SLM)
 
 A spatial feedback model for the response, fitted by Gaussian maximum likelihood with an estimated spatial lag coefficient.

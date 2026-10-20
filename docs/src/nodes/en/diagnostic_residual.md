@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.residual -->
 # Residual diagnostics
 
 Connect an OLS or WLS **model**. The fitted sample, design and original precision weights are reused without refitting. There are no parameters. GLS is unsupported; the design must have full column rank and $n>k$, including the intercept in $k$.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.sem -->
 # Spatial error model (SEM)
 
 Gaussian maximum likelihood with spatially correlated disturbances.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.weights -->
 # Decision weights
 
 Select equal, explicit, entropy, CRITIC, coefficient-of-variation (information), or reciprocal-multiple-correlation (independence) weights. The default is entropy. The score is the weighted sum of oriented criterion values. This is a decision weight, not a survey sampling weight.

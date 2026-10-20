@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.gmm -->
 # Linear IV GMM
 
 Fits a linear equation using one-step or two-step generalized method of moments.

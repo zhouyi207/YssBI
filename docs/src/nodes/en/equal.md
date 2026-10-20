@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.logic.equal -->
 # Equal (==)
 
 Tests whether two values are equal:

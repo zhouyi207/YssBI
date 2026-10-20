@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.durbin_watson -->
 # Durbin–Watson residual serial-correlation diagnostic
 
 Connect a time-ordered residual `series` with at least four non-null finite observations. There are no parameters; current row order is used.

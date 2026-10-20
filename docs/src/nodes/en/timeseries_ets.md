@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.ets -->
 # Additive-error ETS
 
 This node offers additive errors, optional additive/damped trend and no or additive seasonality: ETS(A,N,N), ETS(A,A,N), ETS(A,Ad,N) and their additive-seasonal variants. It does not search or compare ETS forms automatically.

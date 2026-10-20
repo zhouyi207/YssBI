@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.mean_difference -->
 # Mean difference power (t test)
 
 `effect_size` defaults to 0.5 and is the signed true mean difference divided by population SD, d. `design=independent` (default) compares two independent normal populations with equal variances and sample sizes. sample_size is n per group, at least 2; total size is 2n. Noncentral t degrees of freedom are 2n−2 and noncentrality is `d√(n/2)`.

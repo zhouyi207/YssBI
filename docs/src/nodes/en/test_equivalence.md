@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.equivalence -->
 # One-sample equivalence test (TOST)
 
 Tests whether a population mean lies inside a prespecified equivalence interval.

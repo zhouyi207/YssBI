@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.numeric.log -->
 # Logarithm
 
 Computes `result = log_base(value)`. The left Value input is the argument and the right Base input is the logarithm base. Both accept numeric literals or connections. Float64 results include `log_2(8) = 3` and `log_10(100) = 2`.

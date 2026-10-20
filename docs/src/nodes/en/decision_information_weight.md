@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.information_weight -->
 # Information weights
 
 Weights are proportional to the coefficient of variation $CV_j=s_j/\bar x_j$ of the original criterion. Requires nonnegative observations and a positive mean for every criterion. Uses sample standard deviations. This method measures dispersion, does not account for correlated criteria, and depends on the measurement origin. Default scores use original values.

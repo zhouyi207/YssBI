@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.datetime.difference -->
 # Date Difference
 
 Connect Series and Other, a Datetime scalar or aligned series. Series inputs must have equal lengths and pair by current position, including mixed database and in-memory inputs. Unit defaults to day; week, hour, minute, second, millisecond, microsecond and nanosecond are available.

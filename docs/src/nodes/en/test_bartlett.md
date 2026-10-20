@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.bartlett -->
 # Bartlett test
 
 Tests equality of variances across independent groups under approximate population normality.

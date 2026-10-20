@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.panel.unit_root -->
 # Panel unit root (Fisher–ADF)
 
 Connect aligned finite numeric **series**, **entity** IDs and integer period indices **time**, without missing values. Rows are sorted by entity/time. Every entity must have unique consecutive periods. Start/end periods and lengths may differ across entities; at least two entities are required.

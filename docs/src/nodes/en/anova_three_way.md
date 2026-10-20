@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.anova.three_way -->
 # Three-way ANOVA
 
 Provide one numeric **Y** and exactly three **Factor** series; numeric factor values are category codes. Columns must have equal lengths and pair by current position, including mixed database and in-memory inputs. Missing values are rejected. Each factor needs at least two observed levels; the design must have full rank, include an intercept, with more observations than columns and positive residual variance.

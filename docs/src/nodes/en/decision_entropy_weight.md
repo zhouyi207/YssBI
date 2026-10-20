@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.entropy_weight -->
 # Entropy weights
 
 First min–max scale each criterion and reverse cost criteria. For proportions $p_{ij}=z_{ij}/\sum_i z_{ij}$, entropy is $e_j=-\sum_i p_{ij}\ln(p_{ij})/\ln(n)$ and weights are proportional to $1-e_j$. Zero-probability terms contribute zero. Constant columns have zero information. All-zero information is rejected.

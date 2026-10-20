@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.single_proportion -->
 # Single-proportion effect sizes
 
 Connect events and sample_size. Both are integer counts, $0\le x\le n$ and $n\ge1$. effect_measure defaults to logit_proportion: $y=\log[p/(1-p)]$, $v=1/x+1/(n-x)$. proportion uses $y=p=x/n$, $v=p(1-p)/n$. arcsine_proportion uses $y=\arcsin\sqrt p$, $v=1/(4n)$.

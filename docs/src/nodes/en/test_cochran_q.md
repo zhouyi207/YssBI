@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.cochran_q -->
 # Cochran Q test
 
 Compares binary success probabilities across three or more conditions measured on the same subjects.

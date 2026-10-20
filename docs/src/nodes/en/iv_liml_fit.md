@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.iv.liml.fit -->
 # IV LIML Fit
 
 Connect one response, optional ordered exogenous predictors, one or more endogenous regressors, and one or more excluded instruments. Every column must contain aligned, finite observations; do not include the intercept yourself.

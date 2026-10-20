@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.violin.view -->
 # Violin Plot
 
 Add 1–64 Numeric series with at least two finite observations per group. Groups may have different lengths. Missing values are rejected.

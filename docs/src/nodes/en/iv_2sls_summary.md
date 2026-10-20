@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.iv.2sls.summary -->
 # IV 2SLS Summary
 
 Connect the fitted `model` from IV 2SLS Fit. Configure selects model overview and coefficient inference by default. Enable `first_stage`, `overidentification` or `endogeneity` for additional analyses, computed only when selected using the same fitted sample and specification.

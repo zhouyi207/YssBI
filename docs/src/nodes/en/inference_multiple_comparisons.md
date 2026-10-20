@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.posthoc.multiple_comparisons -->
 # Post-hoc multiple comparisons
 
 Connect a finite numeric response and aligned nonmissing groups. Group labels may be numeric, categorical, ordinal, binary, text or identifiers. At least two groups are required; rows represent independent observations, not repeated measurements.

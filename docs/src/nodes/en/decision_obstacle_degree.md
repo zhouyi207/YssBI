@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.obstacle_degree -->
 # Obstacle degree
 
 Connect aligned Numeric **criteria** and optionally a separate **criterion_weights** vector.

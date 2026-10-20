@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.decompose -->
 # Decompose DataFrame
 
 Split a **DataFrame** into one **DataSeries** output per column. Output pins are created dynamically from the input table schema when **DataFrame** is connected.

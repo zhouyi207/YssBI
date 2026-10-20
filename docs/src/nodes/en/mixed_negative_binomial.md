@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.negative_binomial -->
 # Negative-binomial mixed model
 
 Connect one grouping column and nonnegative integer counts. Uses NB2 with a log link, Gaussian random intercept and estimated alpha > 0: Var(Y|b)=mu+alpha\*mu². No exposure/offset input is provided.

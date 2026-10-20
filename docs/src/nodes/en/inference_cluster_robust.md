@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.inference.cluster_robust -->
 # Cluster-robust standard errors
 
 Fits ordinary least squares with one-way clustered CR1 sandwich covariance.

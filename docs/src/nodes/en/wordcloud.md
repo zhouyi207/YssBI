@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.wordcloud.view -->
 # Word Cloud
 
 Words takes a tokenized Text series, one complete term per row. Case is preserved and surrounding whitespace is trimmed. Empty terms and missing values are rejected.

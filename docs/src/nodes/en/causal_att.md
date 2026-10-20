@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.causal.att -->
 # ATT / ATET
 
 Extracts the average treatment effect on the treated from a fitted treatment-effect result.

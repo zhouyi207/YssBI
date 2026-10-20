@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.series.select -->
 # Get DataSeries
 
 Extract one column from a **DataFrame** as a **DataSeries**.

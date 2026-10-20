@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.paired -->
 # Paired t-test power
 
 `effect_size` defaults to 0.5: true mean paired difference divided by the population SD of differences, not the SD of individual measurements. sample_size is n complete pairs, at least 2; total_observations counts 2n measurements.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.proportion_difference -->
 # Two-proportion power (normal approximation)
 
 `proportion1` defaults to 0.6 and `proportion2` to 0.4; both lie in [0,1] and cannot both be zero or both one. Groups are independent and equally sized. sample_size is n per group, at least 1; total size is 2n. H0 is p1−p2=0, with the selected alternative.

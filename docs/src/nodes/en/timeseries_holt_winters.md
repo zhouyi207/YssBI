@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.holt_winters -->
 # Holt–Winters forecast
 
 Choose additive or multiplicative seasonality, with an optional additive or damped trend. Multiplicative seasonality requires strictly positive observations and positive evolving seasonal baselines.

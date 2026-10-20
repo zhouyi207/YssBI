@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.inequality.gini -->
 # Gini coefficient
 
 Connect individual observations to **Values**. Observations have equal weight. The empirical Gini uses no small-sample correction:

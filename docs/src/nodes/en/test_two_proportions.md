@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.proportion.two -->
 # Two-proportion z test
 
 Compares success probabilities in two independent populations.

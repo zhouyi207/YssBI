@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.sarima -->
 # SARIMA forecast
 
 Fit a univariate SARIMA model by conditional least squares and forecast on the original observation scale.

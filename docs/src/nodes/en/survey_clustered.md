@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.survey.clustered -->
 # Cluster survey mean/proportion
 
 Connect Y and sampling weights, optionally adding one strata column and one clusters (primary sampling unit, PSU) column. This node requires clusters.

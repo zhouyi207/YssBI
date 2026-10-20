@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.cox -->
 # Cox power (Schoenfeld approximation)
 
 `hazard_ratio` defaults to a positive 0.7; `event_fraction` defaults to 0.5 in (0,1], the expected fraction of enrolled subjects with observed events. `predictor_variance` defaults to 0.25, the tested predictor's positive population variance. sample_size is total enrolled subjects n, at least 1.

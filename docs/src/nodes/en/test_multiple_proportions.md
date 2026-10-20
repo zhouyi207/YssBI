@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.proportion.multiple -->
 # Multiple-proportion homogeneity test
 
 Intended to compare success probabilities across independent groups.

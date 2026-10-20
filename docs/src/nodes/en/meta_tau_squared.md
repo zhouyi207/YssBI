@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.tau_squared -->
 # Between-study variance
 
 Connect effects and positive variances for at least two independent studies. estimator defaults to paule*mandel, solving $Q(\tau^2)=k-1$ with $w_i=1/(v_i+\tau^2)$. der_simonian_laird uses $\hat\tau^2=\max(0,(Q(0)-k+1)/C)$, $C=\sum1/v_i-\sum(1/v_i)^2/\sum1/v_i$. Both truncate to zero when $Q(0)\le k-1$.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.labels -->
 # Data labels (value meanings)
 
 Connect a series to **input**, choose categorical or ordinal meaning, and enter exact codes and their labels.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.hypergeometric.sample -->
 # Hypergeometric
 
 The hypergeometric distribution models the number of successes when drawing $n$ items **without replacement** from a finite population of size **N** containing **K** successes:

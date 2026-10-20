@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.multivariate.rda -->
 # Redundancy analysis (RDA)
 
 Provide one or more numeric **Y₁, Y₂, …** and one or more numeric **Constraint** series in aligned rows, paired by current position, including mixed database and in-memory inputs. Missing data are rejected. With $p$ responses, $r$ constraints and $n$ observations, constraints must be nonconstant and full rank, and $n>r+1$.

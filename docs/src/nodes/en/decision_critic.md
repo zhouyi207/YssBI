@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.critic -->
 # CRITIC weights
 
 Use oriented min–max criteria. Information is $C_j=s_j\sum_k(1-r_{jk})$, combining sample standard deviation and Pearson conflict. Normalize $C_j$ to weights. Constant criteria are excluded from correlations and receive zero weight. No positive information is an error.

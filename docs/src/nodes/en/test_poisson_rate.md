@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.poisson -->
 # Poisson rate test
 
 Tests the mean event rate for observations with equal exposure.

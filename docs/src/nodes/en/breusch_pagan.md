@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.breusch_pagan -->
 # Breusch–Pagan / Koenker heteroskedasticity test
 
 Connect an OLS or WLS `model` to test whether error variance changes with selected variables. The fitted sample is reused; GLS is unsupported.

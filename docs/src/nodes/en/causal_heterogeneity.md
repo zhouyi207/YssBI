@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.heterogeneity -->
 # Treatment-effect heterogeneity
 
 Tests equality of treatment effects across observed groups, with optional additive covariate adjustment.

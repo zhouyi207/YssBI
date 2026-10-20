@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.vec.rank_test -->
 # Johansen Cointegration Rank
 
 Connect at least two aligned finite series in time order. max_lags specifies the levels lag order used for this test, not a search over lag orders; trend selects none, constant or trend.

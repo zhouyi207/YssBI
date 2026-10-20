@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.chisquare.goodness_of_fit -->
 # Chi-square goodness-of-fit test
 
 Compares observed category counts with specified expected counts.

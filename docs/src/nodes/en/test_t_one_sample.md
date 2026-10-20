@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.t.one_sample -->
 # One-sample t test
 
 Tests whether a population mean equals a specified value.

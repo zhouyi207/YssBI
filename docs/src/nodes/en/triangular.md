@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.triangular.sample -->
 # Triangular
 
 The triangular distribution is defined by minimum **A**, maximum **B**, and mode **C** ($A \le C \le B$), with peak density at **C**:

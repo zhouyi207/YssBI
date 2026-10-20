@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.causal.regression_adjustment -->
 # Regression adjustment
 
 ## Inputs and identification

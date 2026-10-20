@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.wrsr -->
 # Weighted rank-sum ratio
 
 Give each benefit criterion ascending average ranks, reverse cost ranks, and calculate $WRSR_i=\sum_j w_j R_{ij}/n$. Ties use their average rank. Output scores are weighted rank-sum ratios and rankings; no arbitrary cutpoints, probit regression or quality grades are fabricated. Normalization is unnecessary.

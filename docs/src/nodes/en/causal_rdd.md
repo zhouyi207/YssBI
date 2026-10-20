@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.causal.rdd -->
 # Sharp regression discontinuity
 
 Estimates the outcome jump at a known treatment cutoff using separate local linear slopes.

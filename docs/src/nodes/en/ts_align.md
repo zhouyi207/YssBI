@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.timeseries.align -->
 # Time-series Alignment
 
 Connect a DataFrame and select time_column. Time must be Int64, UInt64 (at most i64::MAX), integral Float64 losslessly representable as Int64, or Date32, with no null or duplicate keys. Positive interval is measured in the integer time unit, or days for Date32.

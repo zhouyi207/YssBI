@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.survival.competing_risks -->
 # Competing risks: Aalen–Johansen
 
 Connect aligned positive finite `time` and numeric integer `status` series. Status 0 means censoring; each distinct positive integer identifies an event cause. At least one event is required. Codes need not be consecutive and are preserved in ascending order. Missing values and fractional/negative statuses are rejected. No parameters, predictors or grouping are used.

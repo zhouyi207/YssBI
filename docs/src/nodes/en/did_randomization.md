@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.panel.did.randomization -->
 # DID Fake-group Randomization
 
 Connect aligned finite Y, optional X₁, X₂, …, entity, time, treat and post series. Treat/post must be 0 or 1; treat must be constant within each entity, and entity-time pairs must be unique.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.or_hr -->
 # Reported OR / HR effect sizes
 
 Connect ratio, lower and upper for reported ORs or HRs, with $0<L<R<U$. source*confidence_level is the reported interval level (default 0.95; strictly between 0 and 1). The effect is $y=\log R$; the SE is reconstructed as $s=(\log U-\log L)/(2z*{(1+c)/2})$, and $v=s^2$.

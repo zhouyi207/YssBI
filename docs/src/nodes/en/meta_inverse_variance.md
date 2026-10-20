@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.inverse_variance -->
 # Inverse-variance meta-analysis
 
 Connect effects and strictly positive sampling variances from the same study table. The estimator setting defaults to fixed, with der_simonian_laird and paule_mandel available. The pooled effect is $\hat\mu=\sum w_i y_i/\sum w_i$, $w_i=1/(v_i+\tau^2)$; fixed sets $\tau^2=0$.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.conjoint -->
 # Ratings-based conjoint
 
 Connect numeric **ratings** and aligned categorical **factors**. Each row is

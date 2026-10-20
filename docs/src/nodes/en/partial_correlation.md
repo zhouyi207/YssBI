@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.association.partial -->
 # Partial correlation
 
 Connect aligned Numeric **X**, **Y**, and one or more **Control variable** inputs. Add controls in Details. All columns must share the same sample. If there are $q$ controls, require $n>q+2$ observations.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.roc.view -->
 # ROC Curve
 
 Labels is a Binary series and Scores is an aligned Numeric score series. Higher scores indicate the positive class. Both classes must be present; missing and nonfinite inputs are rejected.

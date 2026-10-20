@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.random_effect -->
 # Random-effects meta-analysis
 
 Connect effects and positive variances for independent studies estimating comparable effects. The model adds between-study variance: $w_i=1/(v_i+\tau^2)$ and $\hat\mu=\sum w_i y_i/\sum w_i$.

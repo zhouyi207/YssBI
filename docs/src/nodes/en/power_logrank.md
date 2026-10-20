@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.logrank -->
 # Log-rank power (Schoenfeld approximation)
 
 `hazard_ratio` defaults to a positive 0.7, `event_fraction` to 0.5 in (0,1], and `allocation` to treatment fraction q=0.5 in (0,1). sample_size is the combined total n, at least 1. Allocation is a continuous planning fraction; arm sizes are not separately rounded.

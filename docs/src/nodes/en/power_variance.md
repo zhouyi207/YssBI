@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.variance -->
 # Normal population variance power
 
 `variance_ratio` defaults to 1.5 and is alternative population variance divided by null variance, r>0. sample_size is n independent observations, at least 2.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.association.bland_altman -->
 # Bland–Altman agreement
 
 Connect paired Numeric measurements from two methods to **X / method A** and **Y / method B**. Require at least two complete aligned observations. Differences use $d_i=X_i-Y_i$; the horizontal coordinate is $(X_i+Y_i)/2$.

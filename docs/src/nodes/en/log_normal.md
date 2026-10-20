@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.log_normal.sample -->
 # Log-Normal
 
 The log-normal distribution arises when $\ln X \sim N(\mu, \sigma^2)$:

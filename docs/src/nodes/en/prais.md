@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.prais.fit -->
 # Prais
 
 Prais–Winsten / Cochrane–Orcutt regression for AR(1) errors:

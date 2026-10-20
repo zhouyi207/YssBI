@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.longitudinal.gee -->
 # GEE
 
 One grouping column identifies independent subjects/clusters. Select Gaussian identity (default), Bernoulli logit, or Poisson log. Binary responses must be 0/1; count responses must be nonnegative integers. Working correlation defaults to exchangeable; independence is also available.

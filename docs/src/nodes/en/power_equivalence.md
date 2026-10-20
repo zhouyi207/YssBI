@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.equivalence -->
 # Mean equivalence power (known variance)
 
 Two independent equal-size normal groups with known common population SD. `difference` defaults to 0: true mean difference divided by that SD, δ. `margin` defaults to 0.3: positive symmetric equivalence margin M in the same units. sample_size is n per group, at least 1.

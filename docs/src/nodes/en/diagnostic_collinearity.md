@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.collinearity -->
 # Collinearity diagnostics
 
 Connect one or more aligned numeric **variables**. At least two observations are required. More variables than observations are allowed so rank deficiency can be diagnosed. Missing or nonfinite values fail.

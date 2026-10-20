@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.doe.range_analysis -->
 # Range analysis (factor-level effects)
 
 Connect a numeric **Y** and aligned categorical **factors**, one factor

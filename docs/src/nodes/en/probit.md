@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.probit.fit -->
 # Probit
 
 Binary probit regression (IRLS). For $y_i \in \{0,1\}$:

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.heatmap.view -->
 # Heatmap
 
 Add 1–64 aligned, equally sized Numeric series as matrix columns. Colors represent raw values without automatic standardization. Missing and nonfinite values are rejected.

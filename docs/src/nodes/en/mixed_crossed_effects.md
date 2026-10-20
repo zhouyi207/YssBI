@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.crossed_effects -->
 # Crossed random-effects model
 
 Connect at least two grouping columns, such as subject and item. Each factor contributes independent random intercepts; observations may cross factor levels. Distinct covariance components must be identifiable; duplicated partitions are rejected.

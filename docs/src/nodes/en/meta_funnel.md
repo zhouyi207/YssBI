@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.plot.funnel -->
 # Funnel plot
 
 Connect effects and positive variances for at least two independent studies. estimator defaults to paule*mandel, with fixed and der_simonian_laird alternatives. confidence_level defaults to 0.95 and must be strictly between 0 and 1.

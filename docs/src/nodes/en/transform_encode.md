@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.encode -->
 # Generate Indicators
 
 Connect a Categorical, Ordinal or Binary Series. Declare Category values as exact original-code text and distinct Output names in matching order. Drop reference indicator defaults to false; when enabled, Reference column must name one declared output column.

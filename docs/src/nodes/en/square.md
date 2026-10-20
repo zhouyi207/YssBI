@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.numeric.square -->
 # Square
 
 Square, element-wise:

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.fuzzy_evaluation -->
 # Fuzzy comprehensive evaluation
 
 Connect **memberships** with one grade per column and one criterion per row.

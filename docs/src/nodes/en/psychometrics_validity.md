@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.psychometrics.validity -->
 # Validity screening (KMO / Bartlett)
 
 Connect at least two aligned numeric **items**, with respondents on rows.

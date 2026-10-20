@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.sdem -->
 # Spatial Durbin error model (SDEM)
 
 Combines lagged predictors with spatial errors and no response feedback, fitted by Gaussian maximum likelihood.

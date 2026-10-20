@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.friedman -->
 # Friedman repeated-measures test
 
 Compares relative locations across three or more conditions measured on the same subjects.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.meta.correlation -->
 # Correlation effect sizes
 
 Connect correlation and sample_size from the same study table. Pearson correlations must satisfy $|r|<1$ and sample sizes must be integers greater than 3. The effect uses Fisher's transform $y=\operatorname{atanh}(r)$ with variance $v=1/(n-3)$. Pool these transformed effects; use $\tanh$ on the pooled estimate and interval limits to recover the correlation scale. Inputs are independent unadjusted correlations, not partial correlations with unspecified covariates.

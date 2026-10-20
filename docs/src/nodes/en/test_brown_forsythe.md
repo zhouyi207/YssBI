@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.brown_forsythe -->
 # Brown–Forsythe test
 
 Compares variances of independent populations using group medians as centers. This is the median-centered Levene variant, not a robust ANOVA of means.

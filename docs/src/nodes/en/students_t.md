@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.students_t.sample -->
 # Student's t
 
 Student's t distribution with degrees of freedom $\nu$ has heavier tails than the normal. This node uses location 0 and scale 1:

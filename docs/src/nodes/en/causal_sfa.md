@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.sfa -->
 # Normal–half-normal stochastic frontier
 
 Maximum-likelihood estimation of a cross-sectional production or cost frontier.

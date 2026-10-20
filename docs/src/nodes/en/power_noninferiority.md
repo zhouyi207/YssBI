@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.noninferiority -->
 # Mean noninferiority power (known variance)
 
 Two independent equal-size normal groups with known common population SD. `difference` defaults to 0: true mean difference divided by that SD, δ. `margin` defaults to 0.3: positive noninferiority margin M in the same units. sample_size is n per group, at least 1.

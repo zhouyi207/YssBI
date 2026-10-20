@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.plot.combination.view -->
 # Combination Chart
 
 Categories is a Text series; Bars and Line are aligned, equally sized Numeric series. Preserves input row order and rejects missing or nonfinite values.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.psychometrics.reliability -->
 # Reliability (Cronbach alpha)
 
 Connect at least two aligned numeric **items**; rows are respondents, with at

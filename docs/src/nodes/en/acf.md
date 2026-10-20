@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.acf -->
 # Autocorrelation function (ACF)
 
 Connect a time-ordered `series` with at least four non-null finite observations. `lags` ranges from 1–40, default 1; the effective maximum is $h=\min(\mathrm{lags},\lfloor n/2\rfloor-1,40)$.

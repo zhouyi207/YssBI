@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.econometrics.sur -->
 # Seemingly unrelated regression (SUR)
 
 Fits multiple linear equations on the same observations, allowing their errors to be correlated.

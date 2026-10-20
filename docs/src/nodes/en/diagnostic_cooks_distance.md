@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.cooks_distance -->
 # Cook's distance
 
 Connect an OLS/WLS **model**. Its fitted residuals, design and precision weights measure the influence of deleting each observation. The source model is not refitted and there are no parameters. The design must have full column rank with $n>k$; GLS is unsupported.

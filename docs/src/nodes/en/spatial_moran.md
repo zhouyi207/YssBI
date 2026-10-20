@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.spatial.moran -->
 # Moran's I
 
 Measure global spatial association between an attribute and neighboring attributes.

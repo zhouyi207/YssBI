@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.bernoulli.sample -->
 # Bernoulli
 
 The Bernoulli distribution $\mathrm{Bernoulli}(p)$ models a single trial with outcomes 1 (success) or 0 (failure):

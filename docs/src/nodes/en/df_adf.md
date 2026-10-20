@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.adf.test -->
 # DF / ADF
 
 Connect a finite numeric series in time order. lags may be zero (DF) or positive (ADF); regression selects none, constant or trend.

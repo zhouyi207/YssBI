@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.glmm -->
 # Generalized linear mixed model (GLMM)
 
 Connect one grouping column. Select Bernoulli logit (default), Poisson log or negative-binomial NB2 log. This node estimates a Gaussian random intercept; random slopes and crossed groups are not offered. Binary responses must be 0/1; counts must be nonnegative integers.

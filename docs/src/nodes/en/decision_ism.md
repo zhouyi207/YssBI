@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.ism -->
 # Interpretive structural modeling
 
 Connect a square 0/1 adjacency matrix to **criteria**. Row i points to column j

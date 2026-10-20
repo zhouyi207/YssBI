@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.plot.forest -->
 # Forest plot
 
 Connect effects and positive variances for at least two independent studies. estimator defaults to paule_mandel, with fixed and der_simonian_laird alternatives. confidence_level defaults to 0.95 (strictly between 0 and 1); inference defaults to wald, with knapp_hartung available for the pooled interval.

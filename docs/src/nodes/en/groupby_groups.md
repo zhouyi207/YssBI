@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.groupby.groups -->
 # GroupBy
 
 Connect a DataFrame to **Source** and choose one or more unique **Group Keys**. You can enter

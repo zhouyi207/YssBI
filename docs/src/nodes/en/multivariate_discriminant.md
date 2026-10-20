@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.multivariate.discriminant -->
 # Discriminant analysis
 
 Provide aligned training **Class** labels and one or more numeric **Training variable** series. Labels accept materializable base scalars and are grouped exactly by value. Missing labels are rejected. Support at least two classes with at least 2 observations each; training inputs must have equal lengths and pair by current position, including mixed database and in-memory inputs.

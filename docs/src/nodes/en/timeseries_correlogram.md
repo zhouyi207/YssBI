@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.plot.correlogram -->
 # Correlogram: ACF and PACF
 
 Connect a finite, equally spaced numeric `series` in time order, with at least four observations and nonzero variation. Missing values are rejected. `ts_maximum_lag=20` selects 1–40 displayed lags; the actual display is limited further to floor(n/2) − 1. This is a lag-display policy, not a data-row ceiling: all observations enter the correlations.

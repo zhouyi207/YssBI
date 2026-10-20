@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.ahp -->
 # AHP judgment weights
 
 Connect the columns of one square judgment matrix to **criteria**.

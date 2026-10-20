@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.random_intercept -->
 # Random-intercept model
 
 Connect one grouping column. Estimate one Gaussian random intercept per group and a common residual variance. This is the random-intercept preset of LMM.

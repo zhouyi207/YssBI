@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.diagnostic.leverage -->
 # Leverage
 
 Connect an OLS or WLS `model` to obtain leverage for each fitted observation. There are no parameters; GLS is unsupported.

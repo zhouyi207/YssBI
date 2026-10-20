@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.anova.one_way -->
 # One-way ANOVA
 
 Compare population means across independent groups. The null is $H_0:\mu_1=\cdots=\mu_k$; the alternative is that at least one mean differs.

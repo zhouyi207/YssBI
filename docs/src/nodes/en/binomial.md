@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.binomial.sample -->
 # Binomial
 
 The binomial distribution $\mathrm{Binomial}(n,p)$ counts successes in $n$ independent Bernoulli trials:

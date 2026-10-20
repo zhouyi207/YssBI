@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.distribution.chi_squared.sample -->
 # Chi-Squared
 
 The chi-squared distribution $\chi^2(\nu)$ is the sum of squares of $\nu$ independent standard normal variables:

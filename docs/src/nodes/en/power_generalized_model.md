@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.power.generalized_model -->
 # GLM power (Poisson rate ratio)
 
 Implements Poisson rate-ratio Wald planning for two independent, equally sized groups with equal exposure. `baseline_rate` defaults to 1 (positive rate λ0 per exposure unit), `rate_ratio` to 1.5 (positive RR), and `exposure` to 1 (positive exposure e per subject). sample_size is n subjects per group, at least 1.

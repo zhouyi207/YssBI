@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.value.to_binary -->
 # To Binary
 
 Convert a scalar or series to Binary. Scalars remain scalar; series retain row order and alignment.

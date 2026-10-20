@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.unpivot -->
 # Unpivot
 
 Keys are retained identifier columns; Columns are the value columns in requested order. Value columns must have identical physical types and compatible semantic metadata. Variable column defaults to variable, and Value column to value. Both names must be distinct and must not collide with keys.

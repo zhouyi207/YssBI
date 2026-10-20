@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.binomial -->
 # Exact binomial test
 
 Tests the success probability of binary trials using binomial probabilities.

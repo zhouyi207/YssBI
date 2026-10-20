@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.normality -->
 # Jarque–Bera / Omnibus normality tests
 
 Connect a numeric `series`, such as regression residuals, to run both normality tests. There are no parameters. At least eight non-null, finite observations are required.

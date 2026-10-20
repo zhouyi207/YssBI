@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.doe.dose_response -->
 # Dose response (four-parameter log-logistic)
 
 Connect aligned nonnegative numeric **dose** and continuous numeric **Y**. Each row is an independent observation; zero dose is evaluated at the continuous limit.

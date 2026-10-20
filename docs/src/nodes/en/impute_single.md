@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.impute.single -->
 # Single imputation
 
 Connect a Numeric **series**. The **result** is a Numeric series with the same rows,

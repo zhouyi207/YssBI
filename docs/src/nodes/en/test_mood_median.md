@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.test.mood_median -->
 # Mood median test
 
 Compares independent-group medians through position relative to the pooled median.

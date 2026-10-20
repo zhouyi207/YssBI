@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.lmm -->
 # Linear mixed model (LMM)
 
 Connect one grouping column. A random intercept is always included. Optionally add numeric random_predictors for independent random slopes; normally include those variables in X₁, X₂, … as well. Random intercepts and slopes have diagonal covariance, without estimated correlations. Random predictors are not centered automatically.

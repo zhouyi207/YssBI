@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.decision.rfm -->
 # RFM customer scoring
 
 Connect three aligned, already aggregated customer columns:

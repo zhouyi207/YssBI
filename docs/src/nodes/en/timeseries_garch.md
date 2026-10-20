@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.timeseries.garch -->
 # GARCH model
 
 Connect an equally spaced, ordered, finite numeric `series`, usually returns or an already stationary residual series. Missing values are rejected and no row limit is imposed. `constant=true` estimates a constant mean; false fixes the mean to zero. The node does not fit an ARMA conditional mean or automatically difference prices.

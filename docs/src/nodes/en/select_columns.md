@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.dataframe.project -->
 # Select Columns
 
 Keep selected columns from the input DataFrame in the order specified by Columns. For example, given `a, b, c`, selecting `["c", "a"]` produces columns `c, a` in that order.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.constant.pi -->
 # Pi (π)
 
 Requires no inputs or parameters. Produces a Numeric scalar for pi, approximately `3.141592653589793`.

@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.poisson -->
 # Poisson mixed model
 
 Connect one grouping column and a nonnegative integer count response. Uses a log link with a Gaussian random intercept; conditional variance equals the mean. No exposure or offset input is provided.

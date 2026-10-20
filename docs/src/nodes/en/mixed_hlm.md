@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.mixed.hlm -->
 # Hierarchical linear model (HLM)
 
 Connect one or more grouping columns from the lowest to the highest grouping level (e.g. class, school). Each child ID must be globally unique and belong to exactly one parent; each additional level must pool multiple lower groups. Independent random intercepts are estimated at each level.

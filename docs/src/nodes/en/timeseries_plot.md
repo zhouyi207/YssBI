@@ -1,3 +1,4 @@
+<!-- nodes: yssbi.statistics.plot.time_series -->
 # Time-series plot
 
 Connect one finite numeric `series` in time order. The optional `time` input accepts one aligned finite numeric series, strictly increasing without duplicate coordinates. If omitted, the horizontal coordinates are 1, 2, ..., n. Convert calendar values to numeric coordinates upstream when an explicit time axis is needed. Missing values are rejected and input rows are not silently reordered.
