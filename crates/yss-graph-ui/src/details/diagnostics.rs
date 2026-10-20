@@ -6,7 +6,7 @@ use gpui_kit::component::{Sizable, button::Button};
 use gpui_kit::{AnyElement, ClipboardItem, Context, IntoElement, div, prelude::*};
 use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorNodeModel};
 use yss_ui::inspector::{self, InlineMessage, InspectorSection, Pager, Severity};
-use yss_ui::text::{format, translate};
+use yss_ui::text::{format, plural, translate};
 
 pub(super) const PAGE_DIAGNOSTICS: usize = 50;
 
@@ -58,10 +58,10 @@ impl GraphDetails {
             InlineMessage::new(severity, translate(action)).subject(format(
                 "detail.diagnosticSummary.counts",
                 &[
-                    ("errors", errors.to_string()),
-                    ("warnings", warnings.to_string()),
-                    ("information", information.to_string()),
-                    ("blocking", blocking.to_string()),
+                    ("errors", plural("counts.errors", errors)),
+                    ("warnings", plural("counts.warnings", warnings)),
+                    ("notes", plural("counts.notes", information)),
+                    ("blocking", plural("counts.blocking", blocking)),
                 ],
             )),
             cx,

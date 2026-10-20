@@ -1,11 +1,9 @@
 //! Decision node declarations split by scoring and system-evaluation responsibilities.
 use super::*;
-use crate::builtin::add_node_messages;
 mod conjoint;
 mod experts;
 mod market;
 mod matrices;
-mod parameters;
 mod preferences;
 mod ranking;
 mod systems;
@@ -21,13 +19,11 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 fn emit(
     fragment: &mut ProviderFragment,
     suffix: &str,
-    en: &'static str,
-    zh: &'static str,
     ports: Vec<PortSpec>,
     mut parameters: Vec<Parameter>,
 ) -> Result<(), BuiltinAssemblyError> {
     let id = format!("yssbi.statistics.{suffix}");
-    parameters::localize(fragment, &id, &mut parameters)?;
+    node_scoped_keys(&id, &mut parameters)?;
     fragment.nodes.push(leaf(
         NodeProtocol {
             type_id: sid(id.as_str(), NodeTypeId::new)?,
@@ -49,6 +45,5 @@ fn emit(
         },
         &id,
     ));
-    add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     Ok(())
 }

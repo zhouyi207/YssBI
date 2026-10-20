@@ -23,14 +23,8 @@ pub fn display(value: &RuntimeValue) -> String {
             TabularScalar::Float64(value) => value.as_f64().to_string(),
             TabularScalar::String(value) => serde_json::to_string(value).unwrap_or_default(),
         },
-        RuntimeValue::List(values) => yss_ui::text::format(
-            "native.results.itemCount",
-            &[("value0", values.len().to_string())],
-        ),
-        RuntimeValue::Record(values) => yss_ui::text::format(
-            "native.results.fieldCount",
-            &[("value0", values.len().to_string())],
-        ),
+        RuntimeValue::List(values) => yss_ui::text::plural("counts.items", values.len()),
+        RuntimeValue::Record(values) => yss_ui::text::plural("counts.fields", values.len()),
         RuntimeValue::Resource(value) => value.to_string(),
         RuntimeValue::Relation(_) => yss_ui::text::t("native.results.dataTable").into(),
         RuntimeValue::Series(_) => yss_ui::text::t("native.results.series").into(),

@@ -7,6 +7,15 @@ publish = false
 [lib]
 path = "src/i18n.rs"
 
+[features]
+default = ["runtime"]
+runtime = ["dep:rust-i18n", "dep:smallvec"]
+codegen = ["dep:serde_json"]
+
 [dependencies]
-rust-i18n.workspace = true
-smallvec = "1"
+rust-i18n = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+smallvec = { version = "1", optional = true }
+
+[dev-dependencies]
+yss-i18n = { path = ".", features = ["codegen"] }

@@ -1,31 +1,14 @@
 //! Explicit estimand/SE intervals and independent-group post-hoc contrasts.
 use super::*;
-use crate::builtin::add_node_messages;
 use yss_data_contract::SemanticType;
-const NODES: &[(&str, &str, &str)] = &[
-    (
-        "inference.confidence_interval",
-        "Confidence intervals",
-        "置信区间 CI",
-    ),
-    (
-        "posthoc.multiple_comparisons",
-        "Post-hoc multiple comparisons",
-        "事后多重比较",
-    ),
-    (
-        "inference.cluster_robust",
-        "Cluster-robust standard errors",
-        "聚类稳健标准误",
-    ),
-    (
-        "postestimation.adjusted_predictions",
-        "Adjusted predictions",
-        "调整预测",
-    ),
+const NODES: &[&str] = &[
+    "inference.confidence_interval",
+    "posthoc.multiple_comparisons",
+    "inference.cluster_robust",
+    "postestimation.adjusted_predictions",
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(suffix, en, zh) in NODES {
+    for &suffix in NODES {
         let id = format!("yssbi.statistics.{suffix}");
         let interval = suffix == "inference.confidence_interval";
         let cluster = suffix == "inference.cluster_robust";
@@ -111,55 +94,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 choice_parameter("adjustment", "holm", &["none", "bonferroni", "holm"])?,
             ]);
         }
-        for parameter in &mut parameters {
-            let key = parameter.key.as_str();
-            let (en, zh, eh, zhh) = match key {
-                "confidence_level" => (
-                    "Confidence level",
-                    "置信水平",
-                    "Strictly between 0 and 1; default 0.95.",
-                    "严格介于 0 和 1，默认 0.95。",
-                ),
-                "degrees_of_freedom" => (
-                    "Reference degrees of freedom",
-                    "参考自由度",
-                    "0 selects normal intervals; a positive value selects Student t intervals.",
-                    "0 表示正态区间；正值表示 Student t 区间。",
-                ),
-                "equal_variances" => (
-                    "Common group variance",
-                    "组间等方差",
-                    "Use the common ANOVA residual variance; turn off for pairwise Welch inference.",
-                    "使用 ANOVA 合并残差方差；关闭时采用两两 Welch 推断。",
-                ),
-                "adjustment" => (
-                    "Multiplicity adjustment",
-                    "多重性校正",
-                    "Holm and Bonferroni control family-wise error; only Bonferroni also adjusts intervals.",
-                    "Holm 与 Bonferroni 控制族错误率；仅 Bonferroni 同时校正区间。",
-                ),
-                "constant" => (
-                    "Include intercept",
-                    "包含截距",
-                    "Fit an intercept; predictors must have full column rank.",
-                    "拟合截距；自变量须列满秩。",
-                ),
-                "evaluation" => (
-                    "Evaluation",
-                    "预测口径",
-                    "Average individual adjusted predictions or predict at covariate means.",
-                    "对各行调整预测取均值，或在协变量均值处预测。",
-                ),
-                "at" => (
-                    "Covariate settings",
-                    "协变量设定",
-                    "Optional comma-separated assignments, e.g. x1=2,x2=0; use fitted coefficient names.",
-                    "可选逗号分隔赋值，如 x1=2,x2=0；使用拟合系数的名称。",
-                ),
-                _ => unreachable!(),
-            };
-            describe_parameter(&mut fragment.messages, &id, parameter, [en, zh], [eh, zhh])?;
-        }
+        node_scoped_keys(&id, &mut parameters)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
@@ -188,7 +123,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }

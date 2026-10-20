@@ -28,6 +28,7 @@ open = "5.4.1"
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-filesystem = { path = "../yss-filesystem" }
+yss-harness-contract = { path = "../yss-harness-contract" }
 yss-i18n = { path = "../yss-i18n" }
 yss-settings = { path = "../yss-settings" }
 
@@ -41,4 +42,4 @@ markdown = "=1.0.0"
 uuid.workspace = true
 
 [build-dependencies]
-rust-i18n-support = { version = "=4.2.4", features = ["codegen"] }
+yss-i18n = { path = "../yss-i18n", default-features = false, features = ["codegen"] }

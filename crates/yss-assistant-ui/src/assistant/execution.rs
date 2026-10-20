@@ -69,9 +69,9 @@ impl ConversationPanel {
                         .items_center()
                         .flex_shrink_0()
                         .gap_1()
-                        .child(yss_ui::text::t(super::options::mode_key(options.mode)))
+                        .child(yss_ui::preferences::mode_label(options.mode))
                         .when_some(options.reasoning_effort, |group, effort| {
-                            group.child(super::options::effort_label(effort))
+                            group.child(yss_ui::preferences::effort_label(effort))
                         }),
                 )
             })

@@ -245,7 +245,7 @@ impl Workbench {
             return;
         }
         let name = match kind {
-            ProjectFormKind::Create => crate::text::t("projectPicker.newProjectModal.title").into(),
+            ProjectFormKind::Create => crate::text::t("native.projects.defaultName").into(),
             ProjectFormKind::SaveAs => crate::text::format(
                 "native.workbench.copyName",
                 &[(

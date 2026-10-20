@@ -219,7 +219,7 @@ impl SettingsPanel {
                 cx,
             ))
             .item(self.render_field(
-                "Temperature",
+                yss_ui::text::t("native.settings.temperature"),
                 yss_ui::text::t("native.settings.serviceDefaultHint"),
                 |view, _| {
                     match &view.model {
@@ -232,7 +232,7 @@ impl SettingsPanel {
                 cx,
             ))
             .item(self.render_field(
-                "Top P",
+                yss_ui::text::t("native.settings.topP"),
                 yss_ui::text::t("native.settings.serviceDefaultHint"),
                 |view, _| {
                     match &view.model {
@@ -253,16 +253,12 @@ impl SettingsPanel {
                     };
                     let epoch = view.epoch;
                     let mut efforts = div().flex().gap_2().flex_wrap();
-                    for (id, label, effort) in [
-                        ("model-effort-low", "Low", ReasoningEffort::Low),
-                        ("model-effort-medium", "Medium", ReasoningEffort::Medium),
-                        ("model-effort-high", "High", ReasoningEffort::High),
-                    ] {
+                    for effort in ReasoningEffort::ALL {
                         efforts = efforts.child(
-                            Button::new(id)
+                            Button::new(("model-effort", effort as usize))
                                 .small()
                                 .ghost()
-                                .label(label)
+                                .label(yss_ui::preferences::effort_label(effort))
                                 .toggled(model.efforts.contains(&effort))
                                 .disabled(view.busy())
                                 .on_click(cx.listener(move |view, _, _, cx| {

@@ -197,15 +197,12 @@ pub(super) fn failure_text(code: &str) -> String {
         "internal_failure" | "output_unavailable" => "assistant_turn_failed".to_owned(),
         _ => format!("assistant_{code}"),
     };
-    for key in [
+    [
         format!("panel.assistantErrors.{code}"),
         format!("panel.assistantErrors.{public_code}"),
         format!("panel.assistantBlockedReasons.{code}"),
-    ] {
-        let localized = yss_ui::text::translate(&key);
-        if localized != key {
-            return localized;
-        }
-    }
-    code.to_owned()
+    ]
+    .iter()
+    .find_map(|key| yss_ui::text::optional(key))
+    .unwrap_or_else(|| code.to_owned())
 }

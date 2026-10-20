@@ -135,9 +135,9 @@ impl ChartEditor {
                             div()
                                 .text_xs()
                                 .text_color(cx.theme().muted_foreground)
-                                .child(yss_ui::text::format(
+                                .child(yss_ui::text::plural(
                                     "native.charts.otherValues",
-                                    &[("other_count", other_count.to_string())],
+                                    *other_count,
                                 )),
                         )
                     })
@@ -157,14 +157,20 @@ impl ChartEditor {
                             "native.charts.plotSummary",
                             &[
                                 (
-                                    "value0",
+                                    "x",
                                     data.result.x_label.as_deref().unwrap_or("X").to_string(),
                                 ),
                                 (
-                                    "value1",
+                                    "y",
                                     data.result.y_label.as_deref().unwrap_or("Y").to_string(),
                                 ),
-                                ("value2", data.result.data.len().to_string()),
+                                (
+                                    "points",
+                                    yss_ui::text::plural(
+                                        "counts.plotPoints",
+                                        data.result.data.len(),
+                                    ),
+                                ),
                             ],
                         )),
                 )

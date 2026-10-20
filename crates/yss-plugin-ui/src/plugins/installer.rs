@@ -225,15 +225,29 @@ impl Render for PackageInstaller {
                             "native.plugins.budgetSummary",
                             &[
                                 (
-                                    "value0",
+                                    "storage",
                                     format!(
                                         "{:.1}",
                                         manifest.resource_budget.private_storage_bytes as f64
                                             / 1048576.
                                     ),
                                 ),
-                                ("value1", manifest.resource_budget.active_tasks.to_string()),
-                                ("value2", manifest.resource_budget.views.to_string()),
+                                (
+                                    "tasks",
+                                    yss_ui::text::plural(
+                                        "counts.concurrentTasks",
+                                        usize::try_from(manifest.resource_budget.active_tasks)
+                                            .unwrap_or(usize::MAX),
+                                    ),
+                                ),
+                                (
+                                    "views",
+                                    yss_ui::text::plural(
+                                        "counts.views",
+                                        usize::try_from(manifest.resource_budget.views)
+                                            .unwrap_or(usize::MAX),
+                                    ),
+                                ),
                             ],
                         )),
                 )

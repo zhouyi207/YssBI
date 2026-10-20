@@ -12835,7 +12835,6 @@ dependencies = [
  "yss-harness-contract",
  "yss-harness-core",
  "yss-project-identity",
- "yss-settings",
  "yss-ui",
 ]
 
@@ -13013,6 +13012,7 @@ dependencies = [
  "anyhow",
  "gpui-kit",
  "tokio",
+ "yss-settings",
  "yss-ui",
  "yss-workbench",
 ]
@@ -13295,7 +13295,9 @@ name = "yss-i18n"
 version = "0.5.0"
 dependencies = [
  "rust-i18n",
+ "serde_json",
  "smallvec",
+ "yss-i18n",
 ]
 
 [[package]]
@@ -13677,6 +13679,8 @@ dependencies = [
  "serde_json",
  "tempfile",
  "yss-filesystem",
+ "yss-harness-contract",
+ "yss-i18n",
 ]
 
 [[package]]
@@ -13717,7 +13721,6 @@ dependencies = [
  "ratex-svg",
  "ratex-types",
  "raw-window-handle",
- "rust-i18n-support",
  "serde",
  "serde_json",
  "tokio",
@@ -13729,6 +13732,7 @@ dependencies = [
  "yss-canonical-hash",
  "yss-data-contract",
  "yss-filesystem",
+ "yss-harness-contract",
  "yss-i18n",
  "yss-settings",
 ]

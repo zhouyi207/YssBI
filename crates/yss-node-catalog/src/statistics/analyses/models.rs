@@ -1,42 +1,21 @@
 //! Additional model diagnostics with explicit fitted-model or aligned-series inputs.
 use super::super::*;
-use crate::builtin::add_node_messages;
 
-const METHODS: &[(&str, &str, &str)] = &[
-    ("collinearity", "Collinearity diagnostics", "共线性分析"),
-    ("nri_idi", "NRI and IDI", "NRI 和 IDI"),
-    (
-        "harman",
-        "Harman single-factor diagnostic",
-        "共同方法偏差（Harman 单因子）",
-    ),
-    ("residual", "Residual diagnostics", "残差分析"),
-    ("cooks_distance", "Cook's distance", "Cook 距离"),
-    (
-        "aic",
-        "Akaike information criterion (AIC)",
-        "AIC 赤池信息准则",
-    ),
-    (
-        "bic",
-        "Bayesian information criterion (BIC)",
-        "BIC 贝叶斯信息准则",
-    ),
-    ("lr", "Likelihood-ratio test", "似然比检验（LR）"),
-    ("score_lm", "Score / LM test", "Score / LM 检验"),
-    (
-        "nested_comparison",
-        "Nested-model comparison",
-        "嵌套模型比较",
-    ),
-    (
-        "ph",
-        "Proportional-hazards score test",
-        "比例风险 PH 假设检验",
-    ),
+const METHODS: &[&str] = &[
+    "collinearity",
+    "nri_idi",
+    "harman",
+    "residual",
+    "cooks_distance",
+    "aic",
+    "bic",
+    "lr",
+    "score_lm",
+    "nested_comparison",
+    "ph",
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh) in METHODS {
+    for &method in METHODS {
         let id = format!("yssbi.statistics.diagnostic.{method}");
         let mut ports = match method {
             "collinearity" | "harman" => vec![bounded_user_data_input(
@@ -108,17 +87,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             ],
             _ => vec![],
         };
-        for parameter in &mut parameters {
-            let key = parameter.key.as_str();
-            let (en, zh, eh, zh_help) = parameter_text(key);
-            describe_parameter(
-                &mut fragment.messages,
-                &id,
-                parameter,
-                [en, zh],
-                [eh, zh_help],
-            )?;
-        }
+        node_scoped_keys(&id, &mut parameters)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
@@ -140,54 +109,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
-}
-fn parameter_text(key: &str) -> (&'static str, &'static str, &'static str, &'static str) {
-    match key {
-        "constant" => (
-            "Include intercept",
-            "包含截距",
-            "Center predictors and include an intercept by default; disabling uses the uncentered design.",
-            "默认中心化自变量并包含截距；关闭后使用未中心化设计。",
-        ),
-        "nri_mode" => (
-            "Reclassification mode",
-            "重分类方式",
-            "Continuous compares probabilities directly; categorical compares configured risk groups.",
-            "连续型直接比较预测概率；分类型比较配置的风险组。",
-        ),
-        "risk_thresholds" => (
-            "Risk thresholds",
-            "风险分界点",
-            "Empty for continuous NRI; categorical NRI requires increasing cut points strictly between 0 and 1. Equality enters the higher group.",
-            "连续型留空；分类型填写严格递增且介于 0 和 1 之间的分界点，等于分界点归入较高组。",
-        ),
-        "survival_ties" => (
-            "Tied events",
-            "并列事件",
-            "Use Efron (default) or Breslow partial likelihood consistently for Cox fitting and the score test.",
-            "Cox 拟合和 Score 检验一致采用 Efron（默认）或 Breslow 偏似然。",
-        ),
-        "time_transform" => (
-            "Time transform",
-            "时间变换",
-            "Rank (default), log(time), or time; tests covariate interactions with transformed event time.",
-            "默认使用时间秩，也可选对数时间或原始时间；检验协变量与变换后事件时间的交互效应。",
-        ),
-        "max_iterations" => (
-            "Maximum iterations",
-            "最大迭代次数",
-            "Positive iteration budget for Cox fitting; default 500.",
-            "Cox 拟合的正整数迭代预算，默认 500。",
-        ),
-        "tolerance" => (
-            "Convergence tolerance",
-            "收敛容差",
-            "Default 1e-7; supported numerical range 1e-12 to 0.01.",
-            "默认 1e-7；数值收敛范围为 1e-12 至 0.01。",
-        ),
-        _ => unreachable!("diagnostic parameter"),
-    }
 }

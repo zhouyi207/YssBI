@@ -1,19 +1,8 @@
 use super::*;
-use crate::builtin::add_node_messages;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for (id, en, zh, surface) in [
-        (
-            "yssbi.statistics.doe.response_surface",
-            "Response surface (full quadratic)",
-            "响应面分析（完整二次模型）",
-            true,
-        ),
-        (
-            "yssbi.statistics.doe.dose_response",
-            "Dose response (four-parameter log-logistic)",
-            "剂量反应（四参数对数逻辑曲线）",
-            false,
-        ),
+    for (id, surface) in [
+        ("yssbi.statistics.doe.response_surface", true),
+        ("yssbi.statistics.doe.dose_response", false),
     ] {
         let mut ports = vec![data_input("y", "Y", numeric_data_series_type())?];
         ports.push(if surface {
@@ -43,31 +32,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 decimal_parameter("tolerance", "0.0000001")?,
             ]
         };
-        for parameter in &mut parameters {
-            let (en_title, zh_title, en_help, zh_help) =
-                if parameter.key.as_str() == "max_iterations" {
-                    (
-                        "Maximum iterations",
-                        "最大迭代次数",
-                        "The nonlinear solver fails explicitly if it does not converge.",
-                        "非线性求解不收敛时明确返回失败。",
-                    )
-                } else {
-                    (
-                        "Convergence tolerance",
-                        "收敛容差",
-                        "Relative nonlinear solver tolerance, from 1e-12 to 0.01.",
-                        "非线性求解相对收敛容差，范围为 1e-12 至 0.01。",
-                    )
-                };
-            describe_parameter(
-                &mut fragment.messages,
-                id,
-                parameter,
-                [en_title, zh_title],
-                [en_help, zh_help],
-            )?;
-        }
+        node_scoped_keys(id, &mut parameters)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id, NodeTypeId::new)?,
@@ -89,7 +54,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        add_node_messages(&mut fragment.messages, id, [en, zh], None);
     }
     Ok(())
 }

@@ -1,25 +1,12 @@
 //! Process-control and balanced crossed measurement-study declarations.
 use super::*;
-use crate::builtin::add_node_messages;
-const ENTRIES: [(&str, &str, &str); 3] = [
-    (
-        "plot.control_chart",
-        "Quality control chart (I / MR)",
-        "质量控制图（I / MR）",
-    ),
-    (
-        "quality.process_capability",
-        "Process capability",
-        "过程能力分析",
-    ),
-    (
-        "quality.measurement_system",
-        "Measurement system (crossed Gage R&R)",
-        "测量系统分析（交叉 Gage R&R）",
-    ),
+const ENTRIES: [(&str,); 3] = [
+    ("plot.control_chart",),
+    ("quality.process_capability",),
+    ("quality.measurement_system",),
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for (suffix, en, zh) in ENTRIES {
+    for (suffix,) in ENTRIES {
         let id = format!("yssbi.statistics.{suffix}");
         let chart = suffix == "plot.control_chart";
         let mut ports = vec![data_input(
@@ -79,7 +66,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 )?,
             ]);
         }
-        localize(fragment, &id, &mut parameters)?;
+        node_scoped_keys(&id, &mut parameters)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
@@ -101,51 +88,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
-    }
-    Ok(())
-}
-fn localize(
-    fragment: &mut ProviderFragment,
-    id: &str,
-    parameters: &mut [Parameter],
-) -> Result<(), BuiltinAssemblyError> {
-    for p in parameters {
-        let key = p.key.as_str();
-        let (en, zh, eh, zhh) = match key {
-            "chart_kind" => (
-                "Chart statistic",
-                "控制图统计量",
-                "Individuals, or the absolute difference between consecutive measurements.",
-                "单值 I 图，或相邻观测绝对差值的移动极差 MR 图；按输入顺序计算。",
-            ),
-            "lower_limit" => (
-                "Lower specification limit",
-                "规格下限",
-                "Engineering specification, not an estimated control limit.",
-                "工程或设计规格下限，与统计控制限不同。",
-            ),
-            "upper_limit" => (
-                "Upper specification limit",
-                "规格上限",
-                "Must exceed the lower specification limit.",
-                "须大于规格下限。",
-            ),
-            "target" => (
-                "Target value",
-                "目标值",
-                "Target for the Cpm index; does not alter Cp or Cpk.",
-                "用于 Cpm 的目标值，不改变 Cp 或 Cpk。",
-            ),
-            "include_interaction" => (
-                "Part × operator interaction",
-                "零件 × 操作者交互",
-                "Retain the random interaction, or pool its sum of squares into repeatability. No automatic significance-based selection.",
-                "保留随机交互项；关闭时将交互平方和与自由度合并入重复性误差。不按显著性自动切换。",
-            ),
-            _ => unreachable!(),
-        };
-        describe_parameter(&mut fragment.messages, id, p, [en, zh], [eh, zhh])?;
     }
     Ok(())
 }

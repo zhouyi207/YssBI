@@ -1,30 +1,13 @@
 //! Item-scale interfaces; numerical estimators live in SCI.
 use super::*;
-use crate::builtin::add_node_messages;
-const ENTRIES: [(&str, &str, &str); 4] = [
-    (
-        "reliability",
-        "Reliability (Cronbach alpha)",
-        "信度（Cronbach α）",
-    ),
-    (
-        "validity",
-        "Validity screening (KMO / Bartlett)",
-        "效度检验（KMO / Bartlett）",
-    ),
-    (
-        "content_validity",
-        "Content validity (expert CVI)",
-        "内容效度（专家 CVI）",
-    ),
-    (
-        "item_analysis",
-        "Item analysis (discrimination)",
-        "题项分析（区分度）",
-    ),
+const ENTRIES: [(&str,); 4] = [
+    ("reliability",),
+    ("validity",),
+    ("content_validity",),
+    ("item_analysis",),
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for (suffix, en, zh) in ENTRIES {
+    for (suffix,) in ENTRIES {
         let id = format!("yssbi.statistics.psychometrics.{suffix}");
         let mut ports = vec![
             bounded_user_data_input(
@@ -77,16 +60,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         }
         let parameters = if suffix == "item_analysis" {
             let mut p = decimal_parameter("tail_fraction", "0.27")?;
-            describe_parameter(
-                &mut fragment.messages,
-                &id,
-                &mut p,
-                ["Tail fraction", "高低分组分位比例"],
-                [
-                    "Between 0 and 0.5; default 0.27. Boundary ties stay together; coincident cutoffs remain in the middle.",
-                    "大于 0 且小于 0.5，默认 0.27；并列边界总分保留在同组，两个分界相等时边界留在中间组。",
-                ],
-            )?;
+            node_scoped_keys(&id, std::slice::from_mut(&mut p))?;
             vec![p]
         } else {
             vec![]
@@ -112,7 +86,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }

@@ -9,12 +9,6 @@ use yss_node_protocol::{
 use yss_node_registry::{RegisteredNode, TransparentNodeRole};
 
 pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    crate::builtin::add_node_messages(
-        &mut fragment.messages,
-        REROUTE_NODE_TYPE,
-        ["Reroute", "重路由"],
-        Some([&[], &[]]),
-    );
     fragment.nodes.push(build_protocol()?);
     Ok(())
 }

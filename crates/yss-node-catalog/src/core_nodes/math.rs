@@ -1,126 +1,23 @@
 use super::support::*;
 use yss_node_protocol::*;
 
-#[derive(Clone, Copy)]
-struct MathSpec {
-    operation: &'static str,
-    title: &'static str,
-    zh_title: &'static str,
-    aliases: &'static [&'static str],
-    zh_aliases: &'static [&'static str],
-}
+const ARITHMETIC_OPERATORS: &[&str] = &["power", "log", "add", "subtract", "multiply", "divide"];
 
-const ARITHMETIC_OPERATORS: &[MathSpec] = &[
-    MathSpec {
-        operation: "power",
-        title: "Power",
-        zh_title: "幂",
-        aliases: &["power", "pow", "exponent", "^"],
-        zh_aliases: &["幂", "乘方", "指数", "次方"],
-    },
-    MathSpec {
-        operation: "log",
-        title: "Logarithm",
-        zh_title: "对数",
-        aliases: &["log", "logarithm", "base"],
-        zh_aliases: &["对数", "底数", "换底"],
-    },
-    MathSpec {
-        operation: "add",
-        title: "Add",
-        zh_title: "加法",
-        aliases: &["add", "plus", "sum", "series add", "+"],
-        zh_aliases: &["加法", "相加", "求和", "序列相加", "+"],
-    },
-    MathSpec {
-        operation: "subtract",
-        title: "Subtract",
-        zh_title: "减法",
-        aliases: &["subtract", "minus", "difference", "series subtract", "-"],
-        zh_aliases: &["减法", "相减", "差", "序列相减", "-"],
-    },
-    MathSpec {
-        operation: "multiply",
-        title: "Multiply",
-        zh_title: "乘法",
-        aliases: &["multiply", "times", "product", "series multiply", "*"],
-        zh_aliases: &["乘法", "相乘", "积", "序列相乘", "*"],
-    },
-    MathSpec {
-        operation: "divide",
-        title: "Divide",
-        zh_title: "除法",
-        aliases: &["divide", "quotient", "series divide", "/"],
-        zh_aliases: &["除法", "相除", "商", "序列相除", "/"],
-    },
-];
-
-const UNARY_FUNCTIONS: &[MathSpec] = &[
-    MathSpec {
-        operation: "ln",
-        title: "Natural Logarithm",
-        zh_title: "自然对数",
-        aliases: &["ln", "natural log", "log e"],
-        zh_aliases: &["自然对数", "ln"],
-    },
-    MathSpec {
-        operation: "log2",
-        title: "Base-2 Logarithm",
-        zh_title: "以 2 为底的对数",
-        aliases: &["log2", "binary logarithm"],
-        zh_aliases: &["二进制对数", "log2"],
-    },
-    MathSpec {
-        operation: "log10",
-        title: "Base-10 Logarithm",
-        zh_title: "常用对数",
-        aliases: &["log10", "common logarithm"],
-        zh_aliases: &["常用对数", "log10"],
-    },
-    MathSpec {
-        operation: "sqrt",
-        title: "Square Root",
-        zh_title: "平方根",
-        aliases: &["sqrt", "square root", "root"],
-        zh_aliases: &["平方根", "开方", "sqrt"],
-    },
-    MathSpec {
-        operation: "square",
-        title: "Square",
-        zh_title: "平方",
-        aliases: &["square", "power two", "x squared"],
-        zh_aliases: &["平方", "二次方"],
-    },
-];
+const UNARY_FUNCTIONS: &[&str] = &["ln", "log2", "log10", "sqrt", "square"];
 
 pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     register_constants(fragment)?;
-    for spec in ARITHMETIC_OPERATORS {
-        register_arithmetic_operator(fragment, *spec)?;
+    for operation in ARITHMETIC_OPERATORS {
+        register_arithmetic_operator(fragment, operation)?;
     }
-    for spec in UNARY_FUNCTIONS {
-        register_unary(fragment, *spec)?;
+    for operation in UNARY_FUNCTIONS {
+        register_unary(fragment, operation)?;
     }
     Ok(())
 }
 
 fn register_constants(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for (id, titles, aliases) in [
-        (
-            "yssbi.constant.pi",
-            ["Pi (π)", "π（圆周率）"],
-            [&["pi", "π", "circle constant"][..], &["pi", "π", "圆周率"]],
-        ),
-        (
-            "yssbi.constant.e",
-            ["Euler's Number (e)", "e（自然常数）"],
-            [
-                &["e", "Euler's number", "natural logarithm base"][..],
-                &["e", "自然常数", "自然对数底数"],
-            ],
-        ),
-    ] {
-        crate::builtin::add_node_messages(&mut fragment.messages, id, titles, Some(aliases));
+    for id in ["yssbi.constant.pi", "yssbi.constant.e"] {
         let protocol = protocol(
             id,
             "constants",
@@ -143,22 +40,16 @@ fn register_constants(fragment: &mut ProviderFragment) -> Result<(), BuiltinAsse
 
 fn register_arithmetic_operator(
     fragment: &mut ProviderFragment,
-    spec: MathSpec,
+    operation: &str,
 ) -> Result<(), BuiltinAssemblyError> {
-    let id = format!("yssbi.numeric.{}", spec.operation);
-    crate::builtin::add_node_messages(
-        &mut fragment.messages,
-        &id,
-        [spec.title, spec.zh_title],
-        Some([spec.aliases, spec.zh_aliases]),
-    );
+    let id = format!("yssbi.numeric.{operation}");
     let numeric = numeric_value_type()?;
-    let (left_title, right_title) = match spec.operation {
+    let (left_title, right_title) = match operation {
         "power" => ("Base", "Exponent"),
         "log" => ("Value", "Base"),
         _ => ("Left", "Right"),
     };
-    let operands = if spec.operation == "add" {
+    let operands = if operation == "add" {
         data_port(
             "operands",
             "Operands",
@@ -178,7 +69,7 @@ fn register_arithmetic_operator(
         )?
     };
     let mut ports = vec![operands];
-    if spec.operation != "add" {
+    if operation != "add" {
         ports.push(data_port(
             "right",
             right_title,
@@ -188,7 +79,7 @@ fn register_arithmetic_operator(
             LiteralPolicy::Allowed,
         )?);
     }
-    let result_type = if matches!(spec.operation, "divide" | "power" | "log") {
+    let result_type = if matches!(operation, "divide" | "power" | "log") {
         float_value_type()?
     } else {
         numeric_value_type()?
@@ -203,7 +94,7 @@ fn register_arithmetic_operator(
     )?);
     let mut protocol = protocol(&id, "numeric", ports, vec![], vec![], pure())?;
     protocol.typing = NodeTypingSpec::NumericFold {
-        inputs: if spec.operation == "add" {
+        inputs: if operation == "add" {
             Box::new([PortSelector::AllInstances(semantic(
                 "operands",
                 PortKey::new,
@@ -223,15 +114,9 @@ fn register_arithmetic_operator(
 
 fn register_unary(
     fragment: &mut ProviderFragment,
-    spec: MathSpec,
+    operation: &str,
 ) -> Result<(), BuiltinAssemblyError> {
-    let id = format!("yssbi.numeric.{}", spec.operation);
-    crate::builtin::add_node_messages(
-        &mut fragment.messages,
-        &id,
-        [spec.title, spec.zh_title],
-        Some([spec.aliases, spec.zh_aliases]),
-    );
+    let id = format!("yssbi.numeric.{operation}");
     let numeric = numeric_value_type()?;
     let output = TypeExpr::Union(vec![concrete("core.numeric")?, numeric_data_series_type()]);
     let mut protocol = protocol(

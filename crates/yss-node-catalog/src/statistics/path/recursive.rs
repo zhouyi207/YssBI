@@ -4,8 +4,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     append_node(
         fragment,
         id,
-        "Path analysis (observed recursive linear models)",
-        "路径分析（观测变量递归线性模型）",
         vec![
             bounded_user_data_input(
                 "variables",

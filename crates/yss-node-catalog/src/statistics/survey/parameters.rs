@@ -1,6 +1,5 @@
 use super::*;
 pub(super) fn build(
-    fragment: &mut ProviderFragment,
     id: &str,
     method: &str,
     regression: bool,
@@ -31,46 +30,6 @@ pub(super) fn build(
             &["mean", "proportion"],
         )?);
     }
-    for p in &mut parameters {
-        let (en, zh, eh, zhh) = match p.key.as_str() {
-            "input_kind" => (
-                "Input meaning",
-                "输入含义",
-                "Positive sampling weights, or inclusion probabilities in (0,1] converted to 1/probability.",
-                "正抽样权重，或 (0,1] 内的纳入概率（转换为概率的倒数）。",
-            ),
-            "lonely_psu" => (
-                "Single-PSU stratum",
-                "单 PSU 层处理",
-                "fail rejects unidentified variance; certainty assigns zero variance only for known certainty strata.",
-                "fail 拒绝无法估计的层内方差；certainty 仅用于已知必选层，将其方差贡献设为零。",
-            ),
-            "statistic" => (
-                "Statistic",
-                "统计量",
-                "Mean, or proportion for a 0/1 response.",
-                "均值，或 0/1 响应的比例。",
-            ),
-            "constant" => (
-                "Include intercept",
-                "包含截距",
-                "Include a constant term in the regression.",
-                "在回归方程中加入截距。",
-            ),
-            "max_iterations" => (
-                "Maximum iterations",
-                "最大迭代次数",
-                "Positive numerical convergence budget, default 500.",
-                "正整数，数值收敛迭代预算，默认 500。",
-            ),
-            _ => (
-                "Convergence tolerance",
-                "收敛容差",
-                "Relative coefficient convergence tolerance from 1e-12 through 0.01; default 1e-7.",
-                "系数相对收敛容差，1e-12 至 0.01，默认 1e-7。",
-            ),
-        };
-        describe_parameter(&mut fragment.messages, id, p, [en, zh], [eh, zhh])?;
-    }
+    node_scoped_keys(id, &mut parameters)?;
     Ok(parameters)
 }

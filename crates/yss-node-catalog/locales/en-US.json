@@ -1,0 +1,5132 @@
+{
+  "nodes": {
+    "yssbi.constant.e": {
+      "title": "Euler's Number (e)",
+      "aliases": ["e", "Euler's number", "natural logarithm base"]
+    },
+    "yssbi.constant.get": {
+      "title": "Get Constant",
+      "aliases": ["get", "read", "constant"]
+    },
+    "yssbi.constant.pi": {
+      "title": "Pi (π)",
+      "aliases": ["pi", "π", "circle constant"]
+    },
+    "yssbi.core.reroute": {
+      "title": "Reroute",
+      "aliases": []
+    },
+    "yssbi.dataframe.combine": {
+      "title": "Assemble DataFrame",
+      "aliases": ["column bind", "append columns", "dataframe"]
+    },
+    "yssbi.dataframe.concat.columns": {
+      "title": "Concatenate Columns",
+      "aliases": ["concat columns", "horizontal concat"]
+    },
+    "yssbi.dataframe.concat.rows": {
+      "title": "Concatenate Rows",
+      "aliases": ["concat", "union all", "append rows"]
+    },
+    "yssbi.dataframe.decompose": {
+      "title": "Decompose DataFrame",
+      "aliases": ["columns", "split dataframe", "projection"]
+    },
+    "yssbi.dataframe.deduplicate": {
+      "title": "Deduplicate Rows",
+      "aliases": ["Deduplicate Rows", "行去重"],
+      "parameters": {
+        "keep": {
+          "title": "Keep",
+          "description": "First, last, or only rows with unique keys."
+        },
+        "keys": {
+          "title": "Keys",
+          "description": "Empty selects all columns for deduplication, and no keys for reshaping."
+        }
+      }
+    },
+    "yssbi.dataframe.drop.columns": {
+      "title": "Drop Columns",
+      "aliases": ["drop columns", "remove columns", "exclude columns"]
+    },
+    "yssbi.dataframe.drop.rows": {
+      "title": "Drop Rows",
+      "aliases": ["drop rows", "remove rows", "exclude rows"]
+    },
+    "yssbi.dataframe.dropna.columns": {
+      "title": "Drop NA Columns",
+      "aliases": ["dropna", "drop null columns", "missing columns"]
+    },
+    "yssbi.dataframe.dropna.rows": {
+      "title": "Drop NA Rows",
+      "aliases": ["dropna", "drop null rows", "missing rows"]
+    },
+    "yssbi.dataframe.encode": {
+      "title": "Generate Indicators",
+      "aliases": ["Generate Indicators", "虚拟变量生成"],
+      "parameters": {
+        "drop_reference": {
+          "title": "Drop reference indicator",
+          "description": "Omit the indicator named by reference."
+        },
+        "levels": {
+          "title": "Category values",
+          "description": "Exact value text; one entry for each output column."
+        },
+        "names": {
+          "title": "Output names",
+          "description": "Matches category values in the same order."
+        },
+        "reference": {
+          "title": "Reference column",
+          "description": "Must match one explicit output name."
+        }
+      }
+    },
+    "yssbi.dataframe.filter.mask": {
+      "title": "Filter by Series",
+      "aliases": ["Filter by Series", "按数列筛选行"],
+      "parameters": {
+        "drop_matches": {
+          "title": "Remove matching rows",
+          "description": "Removal retains false and null conditions."
+        }
+      }
+    },
+    "yssbi.dataframe.filter.rows": {
+      "title": "Filter Rows",
+      "aliases": ["where rows", "predicate", "filter"]
+    },
+    "yssbi.dataframe.groupby": {
+      "title": "Grouped Aggregation",
+      "aliases": ["groupby", "aggregate", "group summary"]
+    },
+    "yssbi.dataframe.groupby.apply": {
+      "title": "Apply to Groups",
+      "aliases": ["groupby", "apply", "transform", "分组函数"]
+    },
+    "yssbi.dataframe.groupby.groups": {
+      "title": "GroupBy",
+      "aliases": ["groupby", "apply", "transform", "分组函数"]
+    },
+    "yssbi.dataframe.groupby.transform": {
+      "title": "Transform Groups",
+      "aliases": ["groupby", "apply", "transform", "分组函数"]
+    },
+    "yssbi.dataframe.impute.mice": {
+      "title": "MICE Imputation",
+      "aliases": ["MICE链式方程多重插补", "MICE", "chained equations"],
+      "scope_note": "MICE is one specific MI algorithm and cannot be treated as the same implementation as the general MI entry."
+    },
+    "yssbi.dataframe.impute.multiple": {
+      "title": "Multiple Imputation",
+      "aliases": ["多重插补MI", "multiple imputation", "MI"],
+      "scope_note": "Imputed datasets, pooled inference and the random seed must be defined together."
+    },
+    "yssbi.dataframe.impute.single": {
+      "title": "Single Imputation",
+      "aliases": ["Single Imputation", "单次插补"],
+      "parameters": {
+        "fill_value": {
+          "title": "Fill value",
+          "description": "Used only for constant imputation."
+        },
+        "imputation_method": {
+          "title": "Imputation method",
+          "description": "Mean, exact median, numeric mode (smallest tie), or constant."
+        }
+      }
+    },
+    "yssbi.dataframe.join": {
+      "title": "Join",
+      "aliases": ["join", "merge", "keys"]
+    },
+    "yssbi.dataframe.labels": {
+      "title": "Data labels (value meanings)",
+      "aliases": ["数据标签", "取值标签", "value labels", "data.labels"],
+      "parameters": {
+        "semantic_domain": {
+          "title": "Codes and labels",
+          "description": "Declare exact codes and their labels; order ordinal levels. Empty configuration inherits a compatible domain; categorical values without a domain receive same-name labels automatically."
+        },
+        "target_type": {
+          "title": "Value meaning",
+          "description": "Categorical or ordered levels. The original codes remain the values."
+        }
+      }
+    },
+    "yssbi.dataframe.limit": {
+      "title": "Limit DataFrame",
+      "aliases": ["limit", "take rows", "head"]
+    },
+    "yssbi.dataframe.panel.align": {
+      "title": "Align Panel Data",
+      "aliases": ["xtset", "panel index", "entity time"]
+    },
+    "yssbi.dataframe.panel.difference": {
+      "title": "Panel Difference",
+      "aliases": ["panel difference", "within entity", "first difference"]
+    },
+    "yssbi.dataframe.pivot": {
+      "title": "Pivot",
+      "aliases": ["Pivot", "转宽表"],
+      "parameters": {
+        "aggregate": {
+          "title": "Aggregation",
+          "description": "Numeric aggregations ignore Null; count counts non-null values."
+        },
+        "category_column": {
+          "title": "Category column",
+          "description": "Values matched by the explicit levels."
+        },
+        "keys": {
+          "title": "Keys",
+          "description": "Empty selects all columns for deduplication, and no keys for reshaping."
+        },
+        "levels": {
+          "title": "Category values",
+          "description": "Exact value text; one entry for each output column."
+        },
+        "names": {
+          "title": "Output names",
+          "description": "Matches category values in the same order."
+        },
+        "value_column": {
+          "title": "Value column",
+          "description": "Source column to aggregate."
+        }
+      }
+    },
+    "yssbi.dataframe.project": {
+      "title": "Select Columns",
+      "aliases": ["select columns", "filter columns", "projection", "dataframe"]
+    },
+    "yssbi.dataframe.rename": {
+      "title": "Rename DataFrame",
+      "aliases": ["rename column", "column name", "dataframe"]
+    },
+    "yssbi.dataframe.resample": {
+      "title": "Resample Time",
+      "aliases": ["Resample Time", "时间重采样"],
+      "parameters": {
+        "aggregate": {
+          "title": "Aggregation",
+          "description": "Numeric aggregations ignore Null; count counts non-null values."
+        },
+        "columns": {
+          "title": "Columns",
+          "description": "Selected columns in output order."
+        },
+        "keys": {
+          "title": "Keys",
+          "description": "Empty selects all columns for deduplication, and no keys for reshaping."
+        },
+        "time_column": {
+          "title": "Time column",
+          "description": "Time column used for grouping."
+        },
+        "unit": {
+          "title": "Unit",
+          "description": "Calendar or duration unit."
+        }
+      }
+    },
+    "yssbi.dataframe.series.annotate_dummy": {
+      "title": "Add Dummy Information",
+      "aliases": ["dummy variable", "indicator", "metadata"]
+    },
+    "yssbi.dataframe.series.backward_fill": {
+      "title": "Backward Fill",
+      "aliases": ["Backward Fill", "后向填充"],
+      "parameters": {
+        "descending": {
+          "title": "Descending",
+          "description": "Apply descending order to the selected window order columns."
+        },
+        "nulls_first": {
+          "title": "Nulls first",
+          "description": "Otherwise Null values sort last."
+        },
+        "order_by": {
+          "title": "Order columns",
+          "description": "Empty uses the current row order; ties retain source order."
+        },
+        "partition_by": {
+          "title": "Partition columns",
+          "description": "Connect context to choose grouping columns; empty means one group."
+        }
+      }
+    },
+    "yssbi.dataframe.series.bin": {
+      "title": "Bin Values",
+      "aliases": ["Bin Values", "数值分箱"],
+      "parameters": {
+        "edges": {
+          "title": "Bin boundaries",
+          "description": "Finite, strictly increasing boundaries."
+        },
+        "labels": {
+          "title": "Bin labels",
+          "description": "One more label than boundaries, in interval order."
+        }
+      }
+    },
+    "yssbi.dataframe.series.choose": {
+      "title": "Conditional Selection",
+      "aliases": ["Conditional Selection", "条件选择"]
+    },
+    "yssbi.dataframe.series.clip": {
+      "title": "Clip Values",
+      "aliases": ["Clip Values", "数值限制"],
+      "parameters": {
+        "lower": {
+          "title": "Lower bound",
+          "description": "Inclusive numeric lower bound."
+        },
+        "upper": {
+          "title": "Upper bound",
+          "description": "Must be at least the lower bound."
+        }
+      }
+    },
+    "yssbi.dataframe.series.count": {
+      "title": "DataSeries Count",
+      "aliases": ["count", "non-null", "series"]
+    },
+    "yssbi.dataframe.series.cumulative": {
+      "title": "Cumulative Statistics",
+      "aliases": ["Cumulative Statistics", "累计运算"],
+      "parameters": {
+        "descending": {
+          "title": "Descending",
+          "description": "Apply descending order to the selected window order columns."
+        },
+        "nulls_first": {
+          "title": "Nulls first",
+          "description": "Otherwise Null values sort last."
+        },
+        "operation": {
+          "title": "Operation",
+          "description": "Standard deviation uses ddof=1."
+        },
+        "order_by": {
+          "title": "Order columns",
+          "description": "Empty uses the current row order; ties retain source order."
+        },
+        "partition_by": {
+          "title": "Partition columns",
+          "description": "Connect context to choose grouping columns; empty means one group."
+        }
+      }
+    },
+    "yssbi.dataframe.series.datetime.add": {
+      "title": "Add Date Interval",
+      "aliases": ["Add Date Interval", "日期加减"],
+      "parameters": {
+        "amount": {
+          "title": "Amount",
+          "description": "Negative values subtract the interval."
+        },
+        "unit": {
+          "title": "Unit",
+          "description": "Calendar or duration unit."
+        }
+      }
+    },
+    "yssbi.dataframe.series.datetime.difference": {
+      "title": "Date Difference",
+      "aliases": ["Date Difference", "日期差值"],
+      "parameters": {
+        "unit": {
+          "title": "Unit",
+          "description": "Calendar or duration unit."
+        }
+      }
+    },
+    "yssbi.dataframe.series.datetime.part": {
+      "title": "Extract Date Part",
+      "aliases": ["Extract Date Part", "日期字段提取"],
+      "parameters": {
+        "part": {
+          "title": "Part",
+          "description": "Date component, or one-based text part; negative parts count from the end."
+        }
+      }
+    },
+    "yssbi.dataframe.series.datetime.truncate": {
+      "title": "Truncate Date",
+      "aliases": ["Truncate Date", "日期截断"],
+      "parameters": {
+        "unit": {
+          "title": "Unit",
+          "description": "Calendar or duration unit."
+        }
+      }
+    },
+    "yssbi.dataframe.series.fill_null": {
+      "title": "Fill Missing Values",
+      "aliases": ["Fill Missing Values", "填充缺失值"]
+    },
+    "yssbi.dataframe.series.forward_fill": {
+      "title": "Forward Fill",
+      "aliases": ["Forward Fill", "前向填充"],
+      "parameters": {
+        "descending": {
+          "title": "Descending",
+          "description": "Apply descending order to the selected window order columns."
+        },
+        "nulls_first": {
+          "title": "Nulls first",
+          "description": "Otherwise Null values sort last."
+        },
+        "order_by": {
+          "title": "Order columns",
+          "description": "Empty uses the current row order; ties retain source order."
+        },
+        "partition_by": {
+          "title": "Partition columns",
+          "description": "Connect context to choose grouping columns; empty means one group."
+        }
+      }
+    },
+    "yssbi.dataframe.series.frequency": {
+      "title": "Frequency",
+      "aliases": ["frequency", "value counts"]
+    },
+    "yssbi.dataframe.series.int_range": {
+      "title": "Integer Range",
+      "aliases": ["range", "sequence", "integers"]
+    },
+    "yssbi.dataframe.series.inverse_standardize": {
+      "title": "Inverse Standardize DataSeries",
+      "aliases": ["inverse z-score", "unscale", "restore"]
+    },
+    "yssbi.dataframe.series.is_not_null": {
+      "title": "Is Present",
+      "aliases": ["Is Present", "非缺失判断"]
+    },
+    "yssbi.dataframe.series.is_null": {
+      "title": "Is Missing",
+      "aliases": ["Is Missing", "缺失判断"]
+    },
+    "yssbi.dataframe.series.length": {
+      "title": "DataSeries Length",
+      "aliases": ["count", "length", "series"]
+    },
+    "yssbi.dataframe.series.map": {
+      "title": "Map Values",
+      "aliases": ["Map Values", "值映射"],
+      "parameters": {
+        "from_values": {
+          "title": "Source values",
+          "description": "Exact value text, matched in order with replacement values."
+        },
+        "keep_unmatched": {
+          "title": "Keep unmatched values",
+          "description": "Otherwise unmatched values become Null."
+        },
+        "to_values": {
+          "title": "Replacement values",
+          "description": "Values must fit the source physical type."
+        }
+      }
+    },
+    "yssbi.dataframe.series.mean": {
+      "title": "DataSeries Mean",
+      "aliases": ["mean", "average", "series"]
+    },
+    "yssbi.dataframe.series.rank": {
+      "title": "Rank Values",
+      "aliases": ["Rank Values", "排名"],
+      "parameters": {
+        "dense": {
+          "title": "Dense ranking",
+          "description": "Dense ranking leaves no gaps after ties."
+        },
+        "descending": {
+          "title": "Descending",
+          "description": "Apply descending order to the selected window order columns."
+        },
+        "nulls_first": {
+          "title": "Nulls first",
+          "description": "Otherwise Null values sort last."
+        },
+        "order_by": {
+          "title": "Order columns",
+          "description": "Empty uses the current row order; ties retain source order."
+        },
+        "partition_by": {
+          "title": "Partition columns",
+          "description": "Connect context to choose grouping columns; empty means one group."
+        }
+      }
+    },
+    "yssbi.dataframe.series.select": {
+      "title": "Get DataSeries",
+      "aliases": ["column", "series", "select"]
+    },
+    "yssbi.dataframe.series.standardize": {
+      "title": "Standardize DataSeries",
+      "aliases": ["z-score", "standardize", "scale"]
+    },
+    "yssbi.dataframe.series.sum": {
+      "title": "DataSeries Sum",
+      "aliases": ["sum", "aggregate", "series"]
+    },
+    "yssbi.dataframe.series.text.concatenate": {
+      "title": "Concatenate Text",
+      "aliases": ["Concatenate Text", "文本拼接"],
+      "parameters": {
+        "separator": {
+          "title": "Separator",
+          "description": "Literal separator for text parts."
+        }
+      }
+    },
+    "yssbi.dataframe.series.text.lower": {
+      "title": "Lowercase Text",
+      "aliases": ["Lowercase Text", "转小写"]
+    },
+    "yssbi.dataframe.series.text.replace": {
+      "title": "Replace Text",
+      "aliases": ["Replace Text", "文本替换"],
+      "parameters": {
+        "from": {
+          "title": "Find",
+          "description": "Literal substring to replace."
+        },
+        "to": {
+          "title": "Replace with",
+          "description": "Empty text removes matching substrings."
+        }
+      }
+    },
+    "yssbi.dataframe.series.text.split": {
+      "title": "Split Text Part",
+      "aliases": ["Split Text Part", "文本拆分取段"],
+      "parameters": {
+        "part": {
+          "title": "Part",
+          "description": "Date component, or one-based text part; negative parts count from the end."
+        },
+        "separator": {
+          "title": "Separator",
+          "description": "Literal separator for text parts."
+        }
+      }
+    },
+    "yssbi.dataframe.series.text.substring": {
+      "title": "Substring",
+      "aliases": ["Substring", "文本截取"],
+      "parameters": {
+        "length": {
+          "title": "Length",
+          "description": "Nonnegative number of Unicode characters."
+        },
+        "start": {
+          "title": "Start",
+          "description": "One-based Unicode character position."
+        }
+      }
+    },
+    "yssbi.dataframe.series.text.trim": {
+      "title": "Trim Text",
+      "aliases": ["Trim Text", "清理首尾空白"]
+    },
+    "yssbi.dataframe.series.text.upper": {
+      "title": "Uppercase Text",
+      "aliases": ["Uppercase Text", "转大写"]
+    },
+    "yssbi.dataframe.set_column": {
+      "title": "Add or Replace Column",
+      "aliases": ["Add or Replace Column", "添加或替换列"],
+      "parameters": {
+        "name": {
+          "title": "Column name",
+          "description": "An existing name replaces its column; a new name appends a column."
+        }
+      }
+    },
+    "yssbi.dataframe.sort": {
+      "title": "Sort Rows",
+      "aliases": ["Sort Rows", "排序行"],
+      "parameters": {
+        "columns": {
+          "title": "Columns",
+          "description": "Selected columns in output order."
+        },
+        "descending_columns": {
+          "title": "Descending columns",
+          "description": "A subset of the sorting columns."
+        },
+        "nulls_first": {
+          "title": "Nulls first",
+          "description": "Otherwise Null values sort last."
+        }
+      }
+    },
+    "yssbi.dataframe.source.get": {
+      "title": "Get DataFrame",
+      "aliases": ["data frame", "table", "source"]
+    },
+    "yssbi.dataframe.timeseries.align": {
+      "title": "Align Time Series",
+      "aliases": ["ts align", "frequency", "time index"]
+    },
+    "yssbi.dataframe.timeseries.difference": {
+      "title": "Time-Series Difference",
+      "aliases": ["difference", "diff", "stationarity"]
+    },
+    "yssbi.dataframe.timeseries.lag": {
+      "title": "Lag Time Series",
+      "aliases": ["lag", "lead", "shift"]
+    },
+    "yssbi.dataframe.timeseries.percent_change": {
+      "title": "Time-Series Percent Change",
+      "aliases": ["percent change", "growth rate", "returns"]
+    },
+    "yssbi.dataframe.timeseries.rolling_mean": {
+      "title": "Time-Series Rolling Mean",
+      "aliases": ["moving average", "rolling window", "smoothing"]
+    },
+    "yssbi.dataframe.unpivot": {
+      "title": "Unpivot",
+      "aliases": ["Unpivot", "转长表"],
+      "parameters": {
+        "columns": {
+          "title": "Columns",
+          "description": "Selected columns in output order."
+        },
+        "include_null": {
+          "title": "Include missing values",
+          "description": "Retain rows whose unpivoted value is Null."
+        },
+        "keys": {
+          "title": "Keys",
+          "description": "Empty selects all columns for deduplication, and no keys for reshaping."
+        },
+        "value_name": {
+          "title": "Value column",
+          "description": "Name of the output value column."
+        },
+        "variable_name": {
+          "title": "Variable column",
+          "description": "Name of the output variable-name column."
+        }
+      }
+    },
+    "yssbi.debug.view": {
+      "title": "View Data",
+      "aliases": ["view", "inspect", "preview", "data inspector"]
+    },
+    "yssbi.distribution.bernoulli.sample": {
+      "title": "Bernoulli Samples",
+      "aliases": ["Bernoulli distribution", "binary trial", "probability"],
+      "parameters": {
+        "probability": {
+          "title": "Success Probability"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.beta.sample": {
+      "title": "Beta Samples",
+      "aliases": ["beta distribution", "alpha beta"],
+      "parameters": {
+        "alpha": {
+          "title": "Alpha"
+        },
+        "beta": {
+          "title": "Beta"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.binomial.sample": {
+      "title": "Binomial Samples",
+      "aliases": ["binomial distribution", "trials probability"],
+      "parameters": {
+        "probability": {
+          "title": "Success Probability"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "trial_count": {
+          "title": "Trial Count"
+        }
+      }
+    },
+    "yssbi.distribution.cauchy.sample": {
+      "title": "Cauchy Samples",
+      "aliases": ["Cauchy distribution", "location scale"],
+      "parameters": {
+        "location": {
+          "title": "Location"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "scale": {
+          "title": "Scale"
+        }
+      }
+    },
+    "yssbi.distribution.chi_squared.sample": {
+      "title": "Chi-squared Samples",
+      "aliases": ["chi squared distribution", "chi-square", "degrees of freedom"],
+      "parameters": {
+        "degrees_of_freedom": {
+          "title": "Degrees of Freedom"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.discrete_uniform.sample": {
+      "title": "Discrete-uniform Samples",
+      "aliases": ["discrete uniform distribution", "random integer"],
+      "parameters": {
+        "lower_bound": {
+          "title": "Lower Bound"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "upper_bound": {
+          "title": "Upper Bound"
+        }
+      }
+    },
+    "yssbi.distribution.erlang.sample": {
+      "title": "Erlang Samples",
+      "aliases": ["Erlang distribution", "integer shape gamma"],
+      "parameters": {
+        "rate": {
+          "title": "Rate"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "shape": {
+          "title": "Integer Shape"
+        }
+      }
+    },
+    "yssbi.distribution.exponential.sample": {
+      "title": "Exponential Samples",
+      "aliases": ["exponential distribution", "Exp", "rate"],
+      "parameters": {
+        "rate": {
+          "title": "Rate"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.fisher_snedecor.sample": {
+      "title": "F-distribution Samples",
+      "aliases": ["Fisher Snedecor distribution", "F distribution", "degrees of freedom"],
+      "parameters": {
+        "denominator_degrees_of_freedom": {
+          "title": "Denominator Degrees of Freedom"
+        },
+        "numerator_degrees_of_freedom": {
+          "title": "Numerator Degrees of Freedom"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.gamma.sample": {
+      "title": "Gamma Samples",
+      "aliases": ["gamma distribution", "shape rate"],
+      "parameters": {
+        "rate": {
+          "title": "Rate"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "shape": {
+          "title": "Shape"
+        }
+      }
+    },
+    "yssbi.distribution.geometric.sample": {
+      "title": "Geometric Samples",
+      "aliases": ["geometric distribution", "waiting time", "probability"],
+      "parameters": {
+        "probability": {
+          "title": "Success Probability"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.hypergeometric.sample": {
+      "title": "Hypergeometric Samples",
+      "aliases": ["hypergeometric distribution", "sampling without replacement"],
+      "parameters": {
+        "draw_count": {
+          "title": "Draw Count"
+        },
+        "population_size": {
+          "title": "Population Size"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "success_population": {
+          "title": "Successes in Population"
+        }
+      }
+    },
+    "yssbi.distribution.inverse_gamma.sample": {
+      "title": "Inverse-gamma Samples",
+      "aliases": ["inverse gamma distribution", "reciprocal gamma"],
+      "parameters": {
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "scale": {
+          "title": "Scale"
+        },
+        "shape": {
+          "title": "Shape"
+        }
+      }
+    },
+    "yssbi.distribution.laplace.sample": {
+      "title": "Laplace Samples",
+      "aliases": ["Laplace distribution", "double exponential"],
+      "parameters": {
+        "location": {
+          "title": "Location"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "scale": {
+          "title": "Scale"
+        }
+      }
+    },
+    "yssbi.distribution.log_normal.sample": {
+      "title": "Log-normal Samples",
+      "aliases": ["lognormal distribution", "log normal", "mu sigma"],
+      "parameters": {
+        "mu": {
+          "title": "Mu"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "sigma": {
+          "title": "Sigma"
+        }
+      }
+    },
+    "yssbi.distribution.negative_binomial.sample": {
+      "title": "Negative-binomial Samples",
+      "aliases": ["negative binomial distribution", "Pascal distribution"],
+      "parameters": {
+        "probability": {
+          "title": "Success Probability"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "success_count": {
+          "title": "Success Count"
+        }
+      }
+    },
+    "yssbi.distribution.normal.sample": {
+      "title": "Normal Samples",
+      "aliases": ["normal distribution", "Gaussian", "random normal"],
+      "parameters": {
+        "mean": {
+          "title": "Mean"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "standard_deviation": {
+          "title": "Standard Deviation"
+        }
+      }
+    },
+    "yssbi.distribution.pareto.sample": {
+      "title": "Pareto Samples",
+      "aliases": ["Pareto distribution", "power law"],
+      "parameters": {
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "scale": {
+          "title": "Scale"
+        },
+        "shape": {
+          "title": "Shape"
+        }
+      }
+    },
+    "yssbi.distribution.poisson.sample": {
+      "title": "Poisson Samples",
+      "aliases": ["Poisson distribution", "lambda", "count distribution"],
+      "parameters": {
+        "rate": {
+          "title": "Lambda"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.students_t.sample": {
+      "title": "Student's t Samples",
+      "aliases": ["Student t distribution", "t distribution", "degrees of freedom"],
+      "parameters": {
+        "degrees_of_freedom": {
+          "title": "Degrees of Freedom"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.triangular.sample": {
+      "title": "Triangular Samples",
+      "aliases": ["triangular distribution", "minimum maximum mode"],
+      "parameters": {
+        "maximum": {
+          "title": "Maximum"
+        },
+        "minimum": {
+          "title": "Minimum"
+        },
+        "mode": {
+          "title": "Mode"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        }
+      }
+    },
+    "yssbi.distribution.uniform.sample": {
+      "title": "Uniform Samples",
+      "aliases": ["continuous uniform distribution", "random uniform"],
+      "parameters": {
+        "lower_bound": {
+          "title": "Lower Bound"
+        },
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "upper_bound": {
+          "title": "Upper Bound"
+        }
+      }
+    },
+    "yssbi.distribution.weibull.sample": {
+      "title": "Weibull Samples",
+      "aliases": ["Weibull distribution", "shape scale"],
+      "parameters": {
+        "sample_count": {
+          "title": "Sample Count"
+        },
+        "scale": {
+          "title": "Scale"
+        },
+        "shape": {
+          "title": "Shape"
+        }
+      }
+    },
+    "yssbi.logic.and": {
+      "title": "And",
+      "aliases": ["all", "&&"]
+    },
+    "yssbi.logic.equal": {
+      "title": "Equal",
+      "aliases": ["equals", "=="]
+    },
+    "yssbi.logic.greater": {
+      "title": "Greater Than",
+      "aliases": ["higher", ">"]
+    },
+    "yssbi.logic.greater_equal": {
+      "title": "Greater or Equal",
+      "aliases": ["at least", ">="]
+    },
+    "yssbi.logic.less": {
+      "title": "Less Than",
+      "aliases": ["lower", "<"]
+    },
+    "yssbi.logic.less_equal": {
+      "title": "Less or Equal",
+      "aliases": ["at most", "<="]
+    },
+    "yssbi.logic.not": {
+      "title": "Not",
+      "aliases": ["invert", "!"]
+    },
+    "yssbi.logic.not_equal": {
+      "title": "Not Equal",
+      "aliases": ["different", "!="]
+    },
+    "yssbi.logic.or": {
+      "title": "Or",
+      "aliases": ["any", "||"]
+    },
+    "yssbi.numeric.add": {
+      "title": "Add",
+      "aliases": ["add", "plus", "sum", "series add", "+"]
+    },
+    "yssbi.numeric.divide": {
+      "title": "Divide",
+      "aliases": ["divide", "quotient", "series divide", "/"]
+    },
+    "yssbi.numeric.ln": {
+      "title": "Natural Logarithm",
+      "aliases": ["ln", "natural log", "log e"]
+    },
+    "yssbi.numeric.log": {
+      "title": "Logarithm",
+      "aliases": ["log", "logarithm", "base"]
+    },
+    "yssbi.numeric.log10": {
+      "title": "Base-10 Logarithm",
+      "aliases": ["log10", "common logarithm"]
+    },
+    "yssbi.numeric.log2": {
+      "title": "Base-2 Logarithm",
+      "aliases": ["log2", "binary logarithm"]
+    },
+    "yssbi.numeric.multiply": {
+      "title": "Multiply",
+      "aliases": ["multiply", "times", "product", "series multiply", "*"]
+    },
+    "yssbi.numeric.power": {
+      "title": "Power",
+      "aliases": ["power", "pow", "exponent", "^"]
+    },
+    "yssbi.numeric.sqrt": {
+      "title": "Square Root",
+      "aliases": ["sqrt", "square root", "root"]
+    },
+    "yssbi.numeric.square": {
+      "title": "Square",
+      "aliases": ["square", "power two", "x squared"]
+    },
+    "yssbi.numeric.subtract": {
+      "title": "Subtract",
+      "aliases": ["subtract", "minus", "difference", "series subtract", "-"]
+    },
+    "yssbi.plot.boxplot.view": {
+      "title": "Box Plot",
+      "aliases": ["boxplot", "box-and-whisker"]
+    },
+    "yssbi.plot.bubble.view": {
+      "title": "Bubble Chart",
+      "aliases": ["bubble plot", "size"]
+    },
+    "yssbi.plot.coefficient.view": {
+      "title": "Coefficient Plot",
+      "aliases": ["coefficient plot", "coefplot", "confidence intervals"]
+    },
+    "yssbi.plot.combination.view": {
+      "title": "Combination Chart",
+      "aliases": ["combo chart", "bar and line"]
+    },
+    "yssbi.plot.correlation.view": {
+      "title": "Correlation Plot",
+      "aliases": ["correlation matrix", "Pearson correlation", "p-value", "heatmap"]
+    },
+    "yssbi.plot.correlogram.view": {
+      "title": "Correlogram (ACF & PACF)",
+      "aliases": ["correlogram", "ACF", "PACF", "Ljung-Box", "autocorrelation"]
+    },
+    "yssbi.plot.ecdf.view": {
+      "title": "Empirical CDF",
+      "aliases": ["ECDF", "empirical cumulative distribution function", "CDF"]
+    },
+    "yssbi.plot.errorbar.view": {
+      "title": "Error Bar Plot",
+      "aliases": ["error bars", "intervals"]
+    },
+    "yssbi.plot.heatmap.view": {
+      "title": "Heatmap",
+      "aliases": ["heat map", "matrix"]
+    },
+    "yssbi.plot.histogram.view": {
+      "title": "Histogram",
+      "aliases": ["frequency distribution", "bins", "Sturges rule"]
+    },
+    "yssbi.plot.kde.view": {
+      "title": "Kernel Density Estimate",
+      "aliases": ["KDE", "kernel density estimation", "density plot", "Silverman bandwidth"]
+    },
+    "yssbi.plot.line.view": {
+      "title": "Line Plot",
+      "aliases": ["line chart", "time series plot", "curve"]
+    },
+    "yssbi.plot.pareto.view": {
+      "title": "Pareto Chart",
+      "aliases": ["Pareto", "cumulative frequency"]
+    },
+    "yssbi.plot.pp_qq.view": {
+      "title": "P-P / Q-Q Plot",
+      "aliases": ["probability plot", "quantile plot"]
+    },
+    "yssbi.plot.quadrant.view": {
+      "title": "Quadrant Plot",
+      "aliases": ["quadrant chart"]
+    },
+    "yssbi.plot.roc.view": {
+      "title": "ROC Curve",
+      "aliases": ["ROC", "AUC", "receiver operating characteristic"]
+    },
+    "yssbi.plot.scatter.view": {
+      "title": "Scatter Plot",
+      "aliases": ["scatterplot", "XY plot", "points"]
+    },
+    "yssbi.plot.violin.view": {
+      "title": "Violin Plot",
+      "aliases": ["violin plot", "distribution"]
+    },
+    "yssbi.plot.wordcloud.view": {
+      "title": "Word Cloud",
+      "aliases": ["word cloud", "term frequency"]
+    },
+    "yssbi.project.function.call": {
+      "title": "Call Function",
+      "aliases": ["call", "invoke", "function"]
+    },
+    "yssbi.project.function.entry": {
+      "title": "Function Entry",
+      "aliases": ["function", "arguments", "parameters"]
+    },
+    "yssbi.project.function.return": {
+      "title": "Function Return",
+      "aliases": ["function", "result", "exit"]
+    },
+    "yssbi.statistics.adf.test": {
+      "title": "Dickey–Fuller / Augmented Dickey–Fuller",
+      "aliases": ["DF", "ADF", "unit root", "Dickey-Fuller"]
+    },
+    "yssbi.statistics.anova.ancova": {
+      "title": "Analysis of covariance (ANCOVA)",
+      "aliases": ["anova.ancova", "ANCOVA", "协方差分析"]
+    },
+    "yssbi.statistics.anova.factorial": {
+      "title": "Factorial ANOVA",
+      "aliases": ["anova.factorial", "factorial ANOVA", "多因素方差", "交互效应"]
+    },
+    "yssbi.statistics.anova.manova": {
+      "title": "Multivariate ANOVA (MANOVA)",
+      "aliases": ["anova.manova", "MANOVA", "多元方差"]
+    },
+    "yssbi.statistics.anova.one_way": {
+      "title": "One-way ANOVA",
+      "aliases": ["anova.one_way", "ANOVA", "单因素方差", "方差"]
+    },
+    "yssbi.statistics.anova.repeated_measures": {
+      "title": "Repeated-measures ANOVA",
+      "aliases": ["anova.repeated_measures", "repeated measures ANOVA", "重复测量方差", "Greenhouse-Geisser"]
+    },
+    "yssbi.statistics.anova.three_way": {
+      "title": "Three-way ANOVA",
+      "aliases": ["anova.three_way", "three way ANOVA", "三因素方差"]
+    },
+    "yssbi.statistics.anova.two_way": {
+      "title": "Two-way ANOVA",
+      "aliases": ["anova.two_way", "two way ANOVA", "双因素方差"]
+    },
+    "yssbi.statistics.association.bland_altman": {
+      "title": "Bland–Altman agreement",
+      "aliases": ["association.bland_altman", "Bland-Altman", "一致性界限"]
+    },
+    "yssbi.statistics.association.canonical": {
+      "title": "Canonical correlation",
+      "aliases": ["association.canonical", "canonical correlation", "典型相关"],
+      "parameters": {
+        "components": {
+          "title": "Retained dimensions",
+          "description": "Positive retained dimension count, no greater than the method's available dimensions."
+        }
+      }
+    },
+    "yssbi.statistics.association.icc": {
+      "title": "Intraclass correlation",
+      "aliases": ["association.icc", "ICC", "组内相关系数"]
+    },
+    "yssbi.statistics.association.kendall": {
+      "title": "Kendall rank correlation",
+      "aliases": ["association.kendall", "Kendall tau-b", "秩相关"]
+    },
+    "yssbi.statistics.association.partial": {
+      "title": "Partial correlation",
+      "aliases": ["association.partial", "partial correlation", "偏相关"]
+    },
+    "yssbi.statistics.association.pearson": {
+      "title": "Pearson correlation",
+      "aliases": ["association.pearson", "Pearson", "相关"]
+    },
+    "yssbi.statistics.association.ridit": {
+      "title": "Ridit analysis",
+      "aliases": ["association.ridit", "Ridit", "Ridit分析"]
+    },
+    "yssbi.statistics.association.rwg": {
+      "title": "Within-group agreement rwg",
+      "aliases": ["association.rwg", "rwg", "组内一致性"]
+    },
+    "yssbi.statistics.association.spearman": {
+      "title": "Spearman rank correlation",
+      "aliases": ["association.spearman", "Spearman", "秩相关"]
+    },
+    "yssbi.statistics.causal.aipw": {
+      "title": "Augmented IPW",
+      "aliases": ["AIPW", "双重稳健"]
+    },
+    "yssbi.statistics.causal.ate": {
+      "title": "Average treatment effect (ATE)",
+      "aliases": ["ATE", "平均处理效应"]
+    },
+    "yssbi.statistics.causal.att": {
+      "title": "Effect on the treated (ATT/ATET)",
+      "aliases": ["ATT", "ATET"]
+    },
+    "yssbi.statistics.causal.ipw": {
+      "title": "Inverse-probability weighting",
+      "aliases": ["IPW", "IPTW"]
+    },
+    "yssbi.statistics.causal.psm": {
+      "title": "Propensity-score matching",
+      "aliases": ["PSM", "匹配"]
+    },
+    "yssbi.statistics.causal.rdd": {
+      "title": "Sharp regression discontinuity",
+      "aliases": ["RDD", "断点回归"]
+    },
+    "yssbi.statistics.causal.regression_adjustment": {
+      "title": "Regression adjustment",
+      "aliases": ["RA", "回归调整"]
+    },
+    "yssbi.statistics.causal.synthetic_control": {
+      "title": "Synthetic control",
+      "aliases": ["SCM", "synthetic control", "合成控制法"]
+    },
+    "yssbi.statistics.decision.ahp": {
+      "title": "AHP judgment weights",
+      "parameters": {
+        "random_index": {
+          "title": "Random consistency index",
+          "description": "0 selects the reference table for orders 3–15; a positive value supplies an external RI."
+        }
+      }
+    },
+    "yssbi.statistics.decision.bwm": {
+      "title": "Decision BWM",
+      "aliases": ["decision.bwm", "最好最差权重BWM"]
+    },
+    "yssbi.statistics.decision.composite_index": {
+      "title": "Composite index",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "normalization": {
+          "title": "Score normalization",
+          "description": "Min–max, vector norm, or unchanged values; objective weights retain their own defined preprocessing."
+        },
+        "weight_method": {
+          "title": "Weight method",
+          "description": "Choose an objective method, equal weights, or an explicit connected weight vector."
+        }
+      }
+    },
+    "yssbi.statistics.decision.conjoint": {
+      "title": "Ratings-based conjoint"
+    },
+    "yssbi.statistics.decision.coupling_coordination": {
+      "title": "Coupling coordination"
+    },
+    "yssbi.statistics.decision.critic": {
+      "title": "CRITIC weights",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "normalization": {
+          "title": "Score normalization",
+          "description": "Min–max, vector norm, or unchanged values; objective weights retain their own defined preprocessing."
+        }
+      }
+    },
+    "yssbi.statistics.decision.dea": {
+      "title": "Decision DEA",
+      "aliases": ["decision.dea", "DEA"]
+    },
+    "yssbi.statistics.decision.dematel": {
+      "title": "DEMATEL influences",
+      "parameters": {
+        "attenuation": {
+          "title": "Influence attenuation",
+          "description": "Explicit multiplier in (0,1], default 1; the resulting spectral radius must be below 1."
+        },
+        "influence_normalization": {
+          "title": "Influence normalization",
+          "description": "Divide by the largest row/column sum, or use the supplied direct-influence scale."
+        }
+      }
+    },
+    "yssbi.statistics.decision.efficacy_coefficient": {
+      "title": "Efficacy coefficient",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "weight_method": {
+          "title": "Weight method",
+          "description": "Choose an objective method, equal weights, or an explicit connected weight vector."
+        }
+      }
+    },
+    "yssbi.statistics.decision.entropy_weight": {
+      "title": "Entropy weights",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "normalization": {
+          "title": "Score normalization",
+          "description": "Min–max, vector norm, or unchanged values; objective weights retain their own defined preprocessing."
+        }
+      }
+    },
+    "yssbi.statistics.decision.fahp": {
+      "title": "Fuzzy AHP weights"
+    },
+    "yssbi.statistics.decision.fuzzy_evaluation": {
+      "title": "Fuzzy comprehensive evaluation",
+      "parameters": {
+        "fuzzy_operator": {
+          "title": "Membership operator",
+          "description": "Weighted sum, max-min, max-product, or bounded sum-min."
+        }
+      }
+    },
+    "yssbi.statistics.decision.grey_relational": {
+      "title": "Grey relational evaluation",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "resolution": {
+          "title": "Grey resolution coefficient",
+          "description": "Greater than 0 and at most 1; default 0.5."
+        },
+        "weight_method": {
+          "title": "Weight method",
+          "description": "Choose an objective method, equal weights, or an explicit connected weight vector."
+        }
+      }
+    },
+    "yssbi.statistics.decision.independence_weight": {
+      "title": "Independence weights",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "normalization": {
+          "title": "Score normalization",
+          "description": "Min–max, vector norm, or unchanged values; objective weights retain their own defined preprocessing."
+        }
+      }
+    },
+    "yssbi.statistics.decision.information_weight": {
+      "title": "Coefficient-of-variation weights",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "normalization": {
+          "title": "Score normalization",
+          "description": "Min–max, vector norm, or unchanged values; objective weights retain their own defined preprocessing."
+        }
+      }
+    },
+    "yssbi.statistics.decision.ism": {
+      "title": "Interpretive structural modeling"
+    },
+    "yssbi.statistics.decision.kano": {
+      "title": "KANO requirements"
+    },
+    "yssbi.statistics.decision.malmquist": {
+      "title": "Decision Malmquist",
+      "aliases": ["decision.malmquist", "Malmquist指数"]
+    },
+    "yssbi.statistics.decision.nps": {
+      "title": "Net promoter score"
+    },
+    "yssbi.statistics.decision.obstacle_degree": {
+      "title": "Obstacle degree",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "rescale": {
+          "title": "Min–max normalization",
+          "description": "Normalize before obstacle attribution; turn off for already normalized [0,1] values."
+        }
+      }
+    },
+    "yssbi.statistics.decision.psm": {
+      "title": "Price sensitivity meter",
+      "parameters": {
+        "range_definition": {
+          "title": "Acceptable range definition",
+          "description": "Original van Westendorp or the narrower four-curve convention."
+        }
+      }
+    },
+    "yssbi.statistics.decision.rfm": {
+      "title": "RFM customer scoring"
+    },
+    "yssbi.statistics.decision.sbm": {
+      "title": "Decision SBM",
+      "aliases": ["decision.sbm", "SBM"]
+    },
+    "yssbi.statistics.decision.topsis": {
+      "title": "TOPSIS",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "normalization": {
+          "title": "Score normalization",
+          "description": "Min–max, vector norm, or unchanged values; objective weights retain their own defined preprocessing."
+        },
+        "weight_method": {
+          "title": "Weight method",
+          "description": "Choose an objective method, equal weights, or an explicit connected weight vector."
+        }
+      }
+    },
+    "yssbi.statistics.decision.turf": {
+      "title": "TURF combination search",
+      "parameters": {
+        "combination_size": {
+          "title": "Combination size",
+          "description": "Number of options to select; every subset of this size is evaluated."
+        }
+      }
+    },
+    "yssbi.statistics.decision.vikor": {
+      "title": "VIKOR compromise ranking",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "majority_weight": {
+          "title": "Majority preference",
+          "description": "VIKOR balance v in [0,1], default 0.5."
+        }
+      }
+    },
+    "yssbi.statistics.decision.weights": {
+      "title": "Decision weights",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "normalization": {
+          "title": "Score normalization",
+          "description": "Min–max, vector norm, or unchanged values; objective weights retain their own defined preprocessing."
+        },
+        "weight_method": {
+          "title": "Weight method",
+          "description": "Choose an objective method, equal weights, or an explicit connected weight vector."
+        }
+      }
+    },
+    "yssbi.statistics.decision.wrsr": {
+      "title": "Weighted rank-sum ratio",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "weight_method": {
+          "title": "Weight method",
+          "description": "Choose an objective method, equal weights, or an explicit connected weight vector."
+        }
+      }
+    },
+    "yssbi.statistics.describe": {
+      "title": "Data Description",
+      "aliases": ["describe", "summary", "descriptive statistics", "描述统计"]
+    },
+    "yssbi.statistics.diagnostic.aic": {
+      "title": "Akaike information criterion (AIC)"
+    },
+    "yssbi.statistics.diagnostic.bic": {
+      "title": "Bayesian information criterion (BIC)"
+    },
+    "yssbi.statistics.diagnostic.breusch_godfrey": {
+      "title": "Breusch–Godfrey"
+    },
+    "yssbi.statistics.diagnostic.breusch_pagan": {
+      "title": "Breusch–Pagan / Koenker"
+    },
+    "yssbi.statistics.diagnostic.collinearity": {
+      "title": "Collinearity diagnostics",
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "Center predictors and include an intercept by default; disabling uses the uncentered design."
+        }
+      }
+    },
+    "yssbi.statistics.diagnostic.cooks_distance": {
+      "title": "Cook's distance"
+    },
+    "yssbi.statistics.diagnostic.durbin_watson": {
+      "title": "Durbin–Watson"
+    },
+    "yssbi.statistics.diagnostic.harman": {
+      "title": "Harman single-factor diagnostic"
+    },
+    "yssbi.statistics.diagnostic.hausman": {
+      "title": "IV Hausman test"
+    },
+    "yssbi.statistics.diagnostic.information_matrix": {
+      "title": "Cameron–Trivedi IM test"
+    },
+    "yssbi.statistics.diagnostic.leverage": {
+      "title": "Leverage"
+    },
+    "yssbi.statistics.diagnostic.ljung_box": {
+      "title": "Ljung–Box"
+    },
+    "yssbi.statistics.diagnostic.lr": {
+      "title": "Likelihood-ratio test"
+    },
+    "yssbi.statistics.diagnostic.nested_comparison": {
+      "title": "Nested-model comparison"
+    },
+    "yssbi.statistics.diagnostic.nri_idi": {
+      "title": "NRI and IDI",
+      "parameters": {
+        "nri_mode": {
+          "title": "Reclassification mode",
+          "description": "Continuous compares probabilities directly; categorical compares configured risk groups."
+        },
+        "risk_thresholds": {
+          "title": "Risk thresholds",
+          "description": "Empty for continuous NRI; categorical NRI requires increasing cut points strictly between 0 and 1. Equality enters the higher group."
+        }
+      }
+    },
+    "yssbi.statistics.diagnostic.ph": {
+      "title": "Proportional-hazards score test",
+      "parameters": {
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive iteration budget for Cox fitting; default 500."
+        },
+        "survival_ties": {
+          "title": "Tied events",
+          "description": "Use Efron (default) or Breslow partial likelihood consistently for Cox fitting and the score test."
+        },
+        "time_transform": {
+          "title": "Time transform",
+          "description": "Rank (default), log(time), or time; tests covariate interactions with transformed event time."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "Default 1e-7; supported numerical range 1e-12 to 0.01."
+        }
+      }
+    },
+    "yssbi.statistics.diagnostic.reset": {
+      "title": "Ramsey RESET"
+    },
+    "yssbi.statistics.diagnostic.residual": {
+      "title": "Residual diagnostics"
+    },
+    "yssbi.statistics.diagnostic.score_lm": {
+      "title": "Score / LM test"
+    },
+    "yssbi.statistics.diagnostic.vif": {
+      "title": "Variance inflation factors"
+    },
+    "yssbi.statistics.diagnostic.wald": {
+      "title": "Linear coefficient hypothesis"
+    },
+    "yssbi.statistics.diagnostic.white": {
+      "title": "White test"
+    },
+    "yssbi.statistics.doe.dose_response": {
+      "title": "Dose response (four-parameter log-logistic)",
+      "parameters": {
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "The nonlinear solver fails explicitly if it does not converge."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "Relative nonlinear solver tolerance, from 1e-12 to 0.01."
+        }
+      }
+    },
+    "yssbi.statistics.doe.family": {
+      "title": "DOE: full factorial design",
+      "parameters": {
+        "factors": {
+          "title": "Factors",
+          "description": "One or more factors; output has one numeric column per factor."
+        },
+        "levels": {
+          "title": "Levels per factor",
+          "description": "At least two equally coded levels. Composite levels use full factorial construction for orthogonal balance."
+        }
+      }
+    },
+    "yssbi.statistics.doe.orthogonal": {
+      "title": "Orthogonal design (equal levels)",
+      "parameters": {
+        "factors": {
+          "title": "Factors",
+          "description": "One or more factors; output has one numeric column per factor."
+        },
+        "levels": {
+          "title": "Levels per factor",
+          "description": "At least two equally coded levels. Composite levels use full factorial construction for orthogonal balance."
+        }
+      }
+    },
+    "yssbi.statistics.doe.range_analysis": {
+      "title": "Range analysis (factor-level effects)",
+      "parameters": {
+        "maximize": {
+          "title": "Larger response is preferred",
+          "description": "Turn off to select the lowest factor-level mean; all tied best levels are retained."
+        }
+      }
+    },
+    "yssbi.statistics.doe.response_surface": {
+      "title": "Response surface (full quadratic)"
+    },
+    "yssbi.statistics.doe.uniform_design": {
+      "title": "Uniform design (centered Latin hypercube)",
+      "parameters": {
+        "candidates": {
+          "title": "Candidate designs",
+          "description": "Choose the smallest centered L2 discrepancy among this many randomized Latin hypercubes; not a global optimality guarantee."
+        },
+        "factors": {
+          "title": "Factors",
+          "description": "One or more factors; output has one numeric column per factor."
+        },
+        "runs": {
+          "title": "Experimental runs",
+          "description": "Every factor uses each coded level from 1 to runs exactly once."
+        },
+        "seed": {
+          "title": "Random seed",
+          "description": "Reproducible candidate generation."
+        }
+      }
+    },
+    "yssbi.statistics.econometrics.gmm": {
+      "title": "Linear IV GMM",
+      "aliases": ["GMM", "矩估计"]
+    },
+    "yssbi.statistics.econometrics.heckman_two_step": {
+      "title": "Heckman two-step",
+      "aliases": ["Heckman", "样本选择"]
+    },
+    "yssbi.statistics.econometrics.panel.between": {
+      "title": "Between estimator",
+      "aliases": ["econometrics.panel.between", "组间估计Between Estimator"]
+    },
+    "yssbi.statistics.econometrics.panel.cointegration": {
+      "title": "Panel cointegration (Fisher Engle–Granger)",
+      "aliases": ["econometrics.panel.cointegration", "Engle Granger", "面板协整检验"]
+    },
+    "yssbi.statistics.econometrics.panel.dynamic": {
+      "title": "Dynamic panel (difference GMM)",
+      "aliases": ["econometrics.panel.dynamic", "Arellano Bond", "动态面板"]
+    },
+    "yssbi.statistics.econometrics.panel.fd": {
+      "title": "First differences",
+      "aliases": ["econometrics.panel.fd", "FD", "第一差分模型"]
+    },
+    "yssbi.statistics.econometrics.panel.fe": {
+      "title": "Fixed effects (FE)",
+      "aliases": ["econometrics.panel.fe", "within", "固定效应FE"]
+    },
+    "yssbi.statistics.econometrics.panel.re": {
+      "title": "Random effects (RE)",
+      "aliases": ["econometrics.panel.re", "FGLS", "随机效应RE"]
+    },
+    "yssbi.statistics.econometrics.panel.unit_root": {
+      "title": "Panel unit root (Fisher ADF)",
+      "aliases": ["econometrics.panel.unit_root", "Maddala Wu", "面板单位根检验"]
+    },
+    "yssbi.statistics.econometrics.sfa": {
+      "title": "Stochastic frontier (half-normal)",
+      "aliases": ["SFA", "效率"]
+    },
+    "yssbi.statistics.econometrics.sur": {
+      "title": "Seemingly unrelated regression",
+      "aliases": ["SUR", "联立回归"]
+    },
+    "yssbi.statistics.inequality.dagum_gini": {
+      "title": "Dagum Gini decomposition",
+      "aliases": ["inequality.dagum_gini", "Dagum Gini", "基尼分解"]
+    },
+    "yssbi.statistics.inequality.gini": {
+      "title": "Gini coefficient",
+      "aliases": ["inequality.gini", "Gini", "基尼系数"]
+    },
+    "yssbi.statistics.inequality.theil": {
+      "title": "Theil index",
+      "aliases": ["inequality.theil", "Theil T", "泰尔指数"]
+    },
+    "yssbi.statistics.inference.bootstrap": {
+      "title": "Inference Bootstrap",
+      "aliases": ["inference.bootstrap", "Bootstrap"],
+      "scope_note": "Needs a callable statistical task and a resampling design; function graph execution is not wired in yet, so wrapping arbitrary nodes cannot be assumed."
+    },
+    "yssbi.statistics.inference.cluster_robust": {
+      "title": "Cluster-robust standard errors",
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "Fit an intercept; predictors must have full column rank."
+        }
+      }
+    },
+    "yssbi.statistics.inference.confidence_interval": {
+      "title": "Confidence intervals",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "degrees_of_freedom": {
+          "title": "Reference degrees of freedom",
+          "description": "0 selects normal intervals; a positive value selects Student t intervals."
+        }
+      }
+    },
+    "yssbi.statistics.inference.jackknife": {
+      "title": "Inference Jackknife",
+      "aliases": ["inference.jackknife", "Jackknife"],
+      "scope_note": "Needs a callable method and a leave-one-out or leave-group-out scheme; a catalog definition alone is not enough."
+    },
+    "yssbi.statistics.iv.2sls.fit": {
+      "title": "Fit IV 2SLS",
+      "aliases": ["IV 2SLS"]
+    },
+    "yssbi.statistics.iv.2sls.summary": {
+      "title": "IV 2SLS Summary",
+      "aliases": ["2SLS report", "instrumental variables", "first stage"]
+    },
+    "yssbi.statistics.iv.liml.fit": {
+      "title": "Fit IV LIML",
+      "aliases": ["IV LIML"]
+    },
+    "yssbi.statistics.iv.liml.summary": {
+      "title": "IV LIML Summary",
+      "aliases": ["LIML", "limited information maximum likelihood", "weak instruments"]
+    },
+    "yssbi.statistics.linear.fit": {
+      "title": "Linear Regression",
+      "aliases": ["OLS", "WLS", "GLS", "ordinary least squares", "weighted least squares", "generalized least squares", "linear regression"]
+    },
+    "yssbi.statistics.linear.predict": {
+      "title": "Linear Prediction",
+      "aliases": ["predict", "fitted values", "linear model"]
+    },
+    "yssbi.statistics.linear.summary": {
+      "title": "Linear Regression Summary",
+      "aliases": ["OLS summary", "WLS summary", "GLS summary", "regression table", "diagnostics"]
+    },
+    "yssbi.statistics.logit.fit": {
+      "title": "Fit Logit",
+      "aliases": ["logit", "logistic regression", "binary classifier"]
+    },
+    "yssbi.statistics.logit.predict": {
+      "title": "Logit Prediction",
+      "aliases": ["predict probability", "logit", "classification"]
+    },
+    "yssbi.statistics.logit.summary": {
+      "title": "Logit Summary",
+      "aliases": ["logit report", "odds", "odds_ratio", "marginal_effects", "maximum likelihood"]
+    },
+    "yssbi.statistics.longitudinal.gee": {
+      "title": "Generalized estimating equations (GEE)",
+      "aliases": ["longitudinal.gee", "GEE", "广义估计方程"]
+    },
+    "yssbi.statistics.meta.begg": {
+      "title": "Begg rank-correlation test"
+    },
+    "yssbi.statistics.meta.binary": {
+      "title": "Binary effect sizes",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "continuity_correction": {
+          "title": "Continuity correction",
+          "description": "Nonnegative; default 0.5, applied only to studies with a zero cell or a boundary proportion."
+        },
+        "effect_measure": {
+          "title": "Effect measure",
+          "description": "Use the same outcome, contrast direction and analysis scale across studies."
+        }
+      }
+    },
+    "yssbi.statistics.meta.cochran_q": {
+      "title": "Cochran Q heterogeneity test"
+    },
+    "yssbi.statistics.meta.combine_p": {
+      "title": "Combine p-values",
+      "parameters": {
+        "p_method": {
+          "title": "Combination method",
+          "description": "Fisher combines independent p-values; Stouffer combines directional one-sided p-values with optional positive weights."
+        }
+      }
+    },
+    "yssbi.statistics.meta.continuous": {
+      "title": "Continuous effect sizes",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "effect_measure": {
+          "title": "Effect measure",
+          "description": "Use the same outcome, contrast direction and analysis scale across studies."
+        }
+      }
+    },
+    "yssbi.statistics.meta.correlation": {
+      "title": "Correlation effect sizes",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        }
+      }
+    },
+    "yssbi.statistics.meta.egger": {
+      "title": "Egger asymmetry test",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        }
+      }
+    },
+    "yssbi.statistics.meta.fixed_effect": {
+      "title": "Fixed-effect meta-analysis",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "inference": {
+          "title": "Coefficient inference",
+          "description": "Wald uses known-variance normal inference; Knapp-Hartung estimates residual scale and uses t(k-p)."
+        }
+      }
+    },
+    "yssbi.statistics.meta.i_squared": {
+      "title": "I-squared heterogeneity"
+    },
+    "yssbi.statistics.meta.inverse_variance": {
+      "title": "Inverse-variance meta-analysis",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "estimator": {
+          "title": "Pooling / heterogeneity method",
+          "description": "Fixed effect, nonnegative DerSimonian-Laird moments, or iterative Paule-Mandel moments."
+        },
+        "inference": {
+          "title": "Coefficient inference",
+          "description": "Wald uses known-variance normal inference; Knapp-Hartung estimates residual scale and uses t(k-p)."
+        }
+      }
+    },
+    "yssbi.statistics.meta.leave_one_out": {
+      "title": "Leave-one-study-out analysis",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "estimator": {
+          "title": "Pooling / heterogeneity method",
+          "description": "Fixed effect, nonnegative DerSimonian-Laird moments, or iterative Paule-Mandel moments."
+        },
+        "inference": {
+          "title": "Coefficient inference",
+          "description": "Wald uses known-variance normal inference; Knapp-Hartung estimates residual scale and uses t(k-p)."
+        }
+      }
+    },
+    "yssbi.statistics.meta.mean": {
+      "title": "Mean effect sizes",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        }
+      }
+    },
+    "yssbi.statistics.meta.or_hr": {
+      "title": "Reported OR / HR effect sizes",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "source_confidence_level": {
+          "title": "Reported CI level",
+          "description": "Confidence level of the supplied ratio intervals; default 0.95."
+        }
+      }
+    },
+    "yssbi.statistics.meta.random_effect": {
+      "title": "Random-effects meta-analysis",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "estimator": {
+          "title": "Pooling / heterogeneity method",
+          "description": "Fixed effect, nonnegative DerSimonian-Laird moments, or iterative Paule-Mandel moments."
+        },
+        "inference": {
+          "title": "Coefficient inference",
+          "description": "Wald uses known-variance normal inference; Knapp-Hartung estimates residual scale and uses t(k-p)."
+        }
+      }
+    },
+    "yssbi.statistics.meta.regression": {
+      "title": "Meta-regression",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "estimator": {
+          "title": "Pooling / heterogeneity method",
+          "description": "Fixed effect, nonnegative DerSimonian-Laird moments, or iterative Paule-Mandel moments."
+        },
+        "inference": {
+          "title": "Coefficient inference",
+          "description": "Wald uses known-variance normal inference; Knapp-Hartung estimates residual scale and uses t(k-p)."
+        }
+      }
+    },
+    "yssbi.statistics.meta.sensitivity": {
+      "title": "Meta-analysis sensitivity",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "estimator": {
+          "title": "Pooling / heterogeneity method",
+          "description": "Fixed effect, nonnegative DerSimonian-Laird moments, or iterative Paule-Mandel moments."
+        },
+        "inference": {
+          "title": "Coefficient inference",
+          "description": "Wald uses known-variance normal inference; Knapp-Hartung estimates residual scale and uses t(k-p)."
+        }
+      }
+    },
+    "yssbi.statistics.meta.single_proportion": {
+      "title": "Single-proportion effect sizes",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "continuity_correction": {
+          "title": "Continuity correction",
+          "description": "Nonnegative; default 0.5, applied only to studies with a zero cell or a boundary proportion."
+        },
+        "effect_measure": {
+          "title": "Effect measure",
+          "description": "Use the same outcome, contrast direction and analysis scale across studies."
+        }
+      }
+    },
+    "yssbi.statistics.meta.tau_squared": {
+      "title": "Between-study variance",
+      "parameters": {
+        "estimator": {
+          "title": "Pooling / heterogeneity method",
+          "description": "Fixed effect, nonnegative DerSimonian-Laird moments, or iterative Paule-Mandel moments."
+        }
+      }
+    },
+    "yssbi.statistics.mixed.crossed_effects": {
+      "title": "Crossed random-effects model",
+      "aliases": ["mixed.crossed_effects", "交叉随机效应模型"]
+    },
+    "yssbi.statistics.mixed.glmm": {
+      "title": "Generalized linear mixed model (GLMM)",
+      "aliases": ["mixed.glmm", "GLMM", "广义线性混合模型"]
+    },
+    "yssbi.statistics.mixed.hlm": {
+      "title": "Hierarchical linear model (HLM)",
+      "aliases": ["mixed.hlm", "HLM", "多层线性模型", "hierarchical"]
+    },
+    "yssbi.statistics.mixed.lmm": {
+      "title": "Linear mixed model (LMM)",
+      "aliases": ["mixed.lmm", "LMM", "线性混合效应模型"]
+    },
+    "yssbi.statistics.mixed.logistic": {
+      "title": "Logistic mixed model",
+      "aliases": ["mixed.logistic", "Logistic混合模型"]
+    },
+    "yssbi.statistics.mixed.negative_binomial": {
+      "title": "Negative-binomial mixed model",
+      "aliases": ["mixed.negative_binomial", "负二项混合模型", "NB2"]
+    },
+    "yssbi.statistics.mixed.poisson": {
+      "title": "Poisson mixed model",
+      "aliases": ["mixed.poisson", "Poisson混合模型"]
+    },
+    "yssbi.statistics.mixed.random_intercept": {
+      "title": "Random-intercept model",
+      "aliases": ["mixed.random_intercept", "随机截距模型"]
+    },
+    "yssbi.statistics.mixed.random_slope": {
+      "title": "Random-slope model",
+      "aliases": ["mixed.random_slope", "随机斜率模型"]
+    },
+    "yssbi.statistics.ml.adaboost": {
+      "title": "Machine Learning AdaBoost",
+      "aliases": ["ml.adaboost", "AdaBoost"]
+    },
+    "yssbi.statistics.ml.apriori": {
+      "title": "Machine Learning Apriori",
+      "aliases": ["ml.apriori", "Apriori关联分析"]
+    },
+    "yssbi.statistics.ml.catboost": {
+      "title": "Machine Learning CatBoost",
+      "aliases": ["ml.catboost", "CatBoost"]
+    },
+    "yssbi.statistics.ml.decision_tree": {
+      "title": "Machine Learning Decision Tree",
+      "aliases": ["ml.decision_tree", "决策树"]
+    },
+    "yssbi.statistics.ml.extra_trees": {
+      "title": "Machine Learning Extra Trees",
+      "aliases": ["ml.extra_trees", "极端随机树"]
+    },
+    "yssbi.statistics.ml.gbdt": {
+      "title": "Machine Learning GBDT",
+      "aliases": ["ml.gbdt", "GBDT"]
+    },
+    "yssbi.statistics.ml.knn": {
+      "title": "Machine Learning KNN",
+      "aliases": ["ml.knn", "KNN"]
+    },
+    "yssbi.statistics.ml.lightgbm": {
+      "title": "Machine Learning LightGBM",
+      "aliases": ["ml.lightgbm", "LightGBM"]
+    },
+    "yssbi.statistics.ml.naive_bayes": {
+      "title": "Machine Learning Naive Bayes",
+      "aliases": ["ml.naive_bayes", "朴素贝叶斯"]
+    },
+    "yssbi.statistics.ml.neural_network": {
+      "title": "Machine Learning Neural Network",
+      "aliases": ["ml.neural_network", "神经网络"],
+      "scope_note": "The neural network's task, architecture and training scope are not yet specified."
+    },
+    "yssbi.statistics.ml.random_forest": {
+      "title": "Machine Learning Random Forest",
+      "aliases": ["ml.random_forest", "随机森林"]
+    },
+    "yssbi.statistics.ml.svm": {
+      "title": "Machine Learning SVM",
+      "aliases": ["ml.svm", "支持向量机SVM"]
+    },
+    "yssbi.statistics.ml.xgboost": {
+      "title": "Machine Learning XGBoost",
+      "aliases": ["ml.xgboost", "XGBoost"]
+    },
+    "yssbi.statistics.multivariate.clustering": {
+      "title": "Multivariate Clustering",
+      "aliases": ["multivariate.clustering", "聚类"],
+      "scope_note": "Clustering is a family of methods; a default algorithm must be chosen, and it cannot simply merge with method 82."
+    },
+    "yssbi.statistics.multivariate.correspondence": {
+      "title": "Correspondence analysis",
+      "aliases": ["multivariate.correspondence", "correspondence analysis", "对应分析"],
+      "parameters": {
+        "components": {
+          "title": "Retained dimensions",
+          "description": "Positive retained dimension count, no greater than the method's available dimensions."
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.discriminant": {
+      "title": "Discriminant analysis",
+      "aliases": ["multivariate.discriminant", "LDA", "QDA", "判别分析"],
+      "parameters": {
+        "class_priors": {
+          "title": "Class priors",
+          "description": "Use observed class frequencies or equal class probabilities."
+        },
+        "discriminant_method": {
+          "title": "Discriminant model",
+          "description": "Linear pooled covariance or quadratic class-specific covariances."
+        },
+        "shrinkage": {
+          "title": "Covariance shrinkage",
+          "description": "A value from 0 to 1 toward an isotropic target in standardized feature units."
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.exploratory_factor": {
+      "title": "Exploratory factor analysis",
+      "aliases": ["multivariate.exploratory_factor", "EFA", "探索性因子", "主轴因子", "varimax"],
+      "parameters": {
+        "components": {
+          "title": "Retained dimensions",
+          "description": "Positive retained dimension count, no greater than the method's available dimensions."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Principal-axis and rotation iteration limit; default 500, positive integer."
+        },
+        "rotation": {
+          "title": "Factor rotation",
+          "description": "Orthogonal varimax or no rotation; varimax does not apply Kaiser normalization."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "Positive tolerance no greater than 0.1; default 1e-6."
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.hierarchical_clustering": {
+      "title": "Multivariate Hierarchical Clustering",
+      "aliases": ["multivariate.hierarchical_clustering", "分层聚类"]
+    },
+    "yssbi.statistics.multivariate.mds": {
+      "title": "Multidimensional scaling (MDS)",
+      "aliases": ["multivariate.mds", "MDS", "多维尺度", "classical MDS"],
+      "parameters": {
+        "components": {
+          "title": "Retained dimensions",
+          "description": "Positive retained dimension count, no greater than the method's available dimensions."
+        },
+        "input_kind": {
+          "title": "MDS input",
+          "description": "Observation variables or a nonnegative symmetric square dissimilarity matrix."
+        },
+        "standardize": {
+          "title": "Standardize variables",
+          "description": "Center variables and divide by their sample standard deviations; otherwise use original units."
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.pca": {
+      "title": "Principal component analysis",
+      "aliases": ["multivariate.pca", "PCA", "主成分"],
+      "parameters": {
+        "components": {
+          "title": "Retained dimensions",
+          "description": "Positive retained dimension count, no greater than the method's available dimensions."
+        },
+        "standardize": {
+          "title": "Standardize variables",
+          "description": "Center variables and divide by their sample standard deviations; otherwise use original units."
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.rda": {
+      "title": "Redundancy analysis (RDA)",
+      "aliases": ["multivariate.rda", "RDA", "冗余分析"],
+      "parameters": {
+        "components": {
+          "title": "Retained dimensions",
+          "description": "Positive retained dimension count, no greater than the method's available dimensions."
+        },
+        "permutations": {
+          "title": "Permutation draws",
+          "description": "0 disables inference; otherwise 1–9999 row permutations with a plus-one p-value."
+        },
+        "seed": {
+          "title": "Random seed",
+          "description": "Nonnegative seed for reproducible permutation inference."
+        },
+        "standardize": {
+          "title": "Standardize variables",
+          "description": "Center variables and divide by their sample standard deviations; otherwise use original units."
+        }
+      }
+    },
+    "yssbi.statistics.panel.compare": {
+      "title": "Compare panel estimators",
+      "aliases": ["panel comparison"]
+    },
+    "yssbi.statistics.panel.did.randomization": {
+      "title": "DID fake-group randomization",
+      "aliases": ["DID", "placebo", "randomization inference"]
+    },
+    "yssbi.statistics.panel.did.twfe": {
+      "title": "Panel DID (TWFE)",
+      "aliases": ["difference in differences", "TWFE"]
+    },
+    "yssbi.statistics.panel.fit": {
+      "title": "Fit Panel Model",
+      "aliases": ["Panel Model"]
+    },
+    "yssbi.statistics.panel.predict": {
+      "title": "Panel estimation-scale prediction",
+      "aliases": ["panel predict"]
+    },
+    "yssbi.statistics.panel.summary": {
+      "title": "Panel Model Summary",
+      "aliases": ["xtreg", "panel regression", "within estimator"]
+    },
+    "yssbi.statistics.plot.calibration": {
+      "title": "Survival calibration curve",
+      "aliases": ["plot.calibration", "校准曲线"]
+    },
+    "yssbi.statistics.plot.control_chart": {
+      "title": "Quality control chart (I / MR)",
+      "parameters": {
+        "chart_kind": {
+          "title": "Chart statistic",
+          "description": "Individuals, or the absolute difference between consecutive measurements."
+        }
+      }
+    },
+    "yssbi.statistics.plot.correlogram": {
+      "title": "Correlogram",
+      "aliases": ["ACF", "PACF", "相关图"]
+    },
+    "yssbi.statistics.plot.decision_curve": {
+      "title": "Survival decision curve",
+      "aliases": ["plot.decision_curve", "DCA曲线"]
+    },
+    "yssbi.statistics.plot.forest": {
+      "title": "Forest plot",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "estimator": {
+          "title": "Pooling / heterogeneity method",
+          "description": "Fixed effect, nonnegative DerSimonian-Laird moments, or iterative Paule-Mandel moments."
+        },
+        "exponentiate": {
+          "title": "Exponentiate effects",
+          "description": "Display log-ratio effects as ratios; default off. Pooling always uses the input analysis scale."
+        },
+        "inference": {
+          "title": "Coefficient inference",
+          "description": "Wald uses known-variance normal inference; Knapp-Hartung estimates residual scale and uses t(k-p)."
+        }
+      }
+    },
+    "yssbi.statistics.plot.funnel": {
+      "title": "Funnel plot",
+      "parameters": {
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "estimator": {
+          "title": "Pooling / heterogeneity method",
+          "description": "Fixed effect, nonnegative DerSimonian-Laird moments, or iterative Paule-Mandel moments."
+        }
+      }
+    },
+    "yssbi.statistics.plot.nomogram": {
+      "title": "Cox nomogram",
+      "aliases": ["plot.nomogram", "列线图"]
+    },
+    "yssbi.statistics.plot.time_series": {
+      "title": "Time-series plot",
+      "aliases": ["time series", "时间序列图"]
+    },
+    "yssbi.statistics.postestimation.adjusted_predictions": {
+      "title": "Adjusted predictions",
+      "parameters": {
+        "at": {
+          "title": "Covariate settings",
+          "description": "Optional comma-separated assignments, e.g. x1=2,x2=0; use fitted coefficient names."
+        },
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "evaluation": {
+          "title": "Evaluation",
+          "description": "Average individual adjusted predictions or predict at covariate means."
+        }
+      }
+    },
+    "yssbi.statistics.posthoc.multiple_comparisons": {
+      "title": "Post-hoc multiple comparisons",
+      "parameters": {
+        "adjustment": {
+          "title": "Multiplicity adjustment",
+          "description": "Holm and Bonferroni control family-wise error; only Bonferroni also adjusts intervals."
+        },
+        "confidence_level": {
+          "title": "Confidence level",
+          "description": "Strictly between 0 and 1; default 0.95."
+        },
+        "equal_variances": {
+          "title": "Common group variance",
+          "description": "Use the common ANOVA residual variance; turn off for pairwise Welch inference."
+        }
+      }
+    },
+    "yssbi.statistics.power.anova": {
+      "title": "Balanced one-way ANOVA power",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "effect_f": {
+          "title": "Cohen f",
+          "description": "Nonnegative ANOVA f, default 0.25."
+        },
+        "groups": {
+          "title": "ANOVA groups",
+          "description": "Integer at least 2, default 3."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.cluster_randomized": {
+      "title": "Cluster randomized power (continuous outcome)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "cluster_size": {
+          "title": "Subjects per cluster",
+          "description": "Positive integer, equal cluster sizes, default 20."
+        },
+        "effect_size": {
+          "title": "Standardized mean effect",
+          "description": "Signed mean difference divided by the relevant population SD; paired tests use SD of differences."
+        },
+        "icc": {
+          "title": "Intraclass correlation",
+          "description": "From 0 through 1, default 0.05."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.correlation": {
+      "title": "Correlation power (Fisher z)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "correlation": {
+          "title": "Alternative correlation",
+          "description": "Strictly between -1 and 1, default 0.3."
+        },
+        "null_correlation": {
+          "title": "Null correlation",
+          "description": "Strictly between -1 and 1, default 0."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.cox": {
+      "title": "Cox power (Schoenfeld approximation)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "event_fraction": {
+          "title": "Expected event fraction",
+          "description": "Greater than 0 through 1; expected observed events / enrolled subjects; default 0.5."
+        },
+        "hazard_ratio": {
+          "title": "Hazard ratio",
+          "description": "Positive proportional hazard ratio, default 0.7."
+        },
+        "predictor_variance": {
+          "title": "Predictor variance",
+          "description": "Positive population variance, default 0.25; assumes no adjustment for other predictors."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.equivalence": {
+      "title": "Mean equivalence power (known variance)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "difference": {
+          "title": "True standardized difference",
+          "description": "Mean difference / common known SD; default 0."
+        },
+        "margin": {
+          "title": "Standardized margin",
+          "description": "Positive margin divided by common known SD, default 0.3."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.generalized_model": {
+      "title": "GLM power (Poisson rate ratio)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "baseline_rate": {
+          "title": "Baseline event rate",
+          "description": "Positive rate per unit exposure, default 1."
+        },
+        "exposure": {
+          "title": "Exposure per subject",
+          "description": "Same positive exposure in both groups, default 1."
+        },
+        "rate_ratio": {
+          "title": "Rate ratio",
+          "description": "Positive group 1 / group 0 rate ratio, default 1.5."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.linear_regression": {
+      "title": "Overall linear regression power",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "effect_f_squared": {
+          "title": "Cohen f squared",
+          "description": "Nonnegative overall R²/(1-R²), default 0.15."
+        },
+        "predictors": {
+          "title": "Regression predictors",
+          "description": "Positive integer excluding the intercept, default 3."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.logistic": {
+      "title": "Logistic power (binary predictor)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "baseline_probability": {
+          "title": "Baseline outcome probability",
+          "description": "Strictly between 0 and 1, default 0.2."
+        },
+        "odds_ratio": {
+          "title": "Odds ratio",
+          "description": "Positive odds ratio, default 1.5."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.logrank": {
+      "title": "Log-rank power (Schoenfeld approximation)",
+      "parameters": {
+        "allocation": {
+          "title": "Treatment allocation fraction",
+          "description": "Strictly between 0 and 1, default 0.5."
+        },
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "event_fraction": {
+          "title": "Expected event fraction",
+          "description": "Greater than 0 through 1; expected observed events / enrolled subjects; default 0.5."
+        },
+        "hazard_ratio": {
+          "title": "Hazard ratio",
+          "description": "Positive proportional hazard ratio, default 0.7."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.mean_difference": {
+      "title": "Mean difference power (t test)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "design": {
+          "title": "Mean design",
+          "description": "independent: equal-size equal-variance groups; one_sample: one mean."
+        },
+        "effect_size": {
+          "title": "Standardized mean effect",
+          "description": "Signed mean difference divided by the relevant population SD; paired tests use SD of differences."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.noninferiority": {
+      "title": "Mean noninferiority power (known variance)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "difference": {
+          "title": "True standardized difference",
+          "description": "Mean difference / common known SD; default 0."
+        },
+        "higher_is_better": {
+          "title": "Higher outcome is better",
+          "description": "True by default; false reverses the direction for noninferiority."
+        },
+        "margin": {
+          "title": "Standardized margin",
+          "description": "Positive margin divided by common known SD, default 0.3."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.paired": {
+      "title": "Paired t-test power",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "effect_size": {
+          "title": "Standardized mean effect",
+          "description": "Signed mean difference divided by the relevant population SD; paired tests use SD of differences."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.principles": {
+      "title": "Power principles (normal mean planning)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "effect_size": {
+          "title": "Standardized mean effect",
+          "description": "Signed mean difference divided by the relevant population SD; paired tests use SD of differences."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.proportion": {
+      "title": "One-proportion power (normal approximation)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "null_proportion": {
+          "title": "Null proportion",
+          "description": "Strictly between 0 and 1, default 0.5."
+        },
+        "proportion": {
+          "title": "Alternative proportion",
+          "description": "From 0 through 1, default 0.6."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.proportion_difference": {
+      "title": "Two-proportion power (normal approximation)",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "proportion1": {
+          "title": "Group 1 proportion",
+          "description": "From 0 through 1, default 0.6."
+        },
+        "proportion2": {
+          "title": "Group 2 proportion",
+          "description": "From 0 through 1, default 0.4."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        }
+      }
+    },
+    "yssbi.statistics.power.variance": {
+      "title": "Normal population variance power",
+      "parameters": {
+        "alpha": {
+          "title": "Significance level",
+          "description": "Strictly between 0 and 1; default 0.05. TOST uses this level for each one-sided test."
+        },
+        "alternative": {
+          "title": "Alternative",
+          "description": "two_sided, greater or less relative to the node's null value."
+        },
+        "sample_size": {
+          "title": "Sample size in design units",
+          "description": "Default 100. May mean per group, pairs or clusters per group; consult this node's help."
+        },
+        "solve_for": {
+          "title": "Calculate",
+          "description": "power uses sample_size; sample_size uses target_power."
+        },
+        "target_power": {
+          "title": "Target power",
+          "description": "Strictly between 0 and 1; default 0.8. Used only when solving for sample size."
+        },
+        "variance_ratio": {
+          "title": "Alternative / null variance",
+          "description": "Positive variance ratio, default 1.5."
+        }
+      }
+    },
+    "yssbi.statistics.prais.fit": {
+      "title": "Fit Prais–Winsten",
+      "aliases": ["Prais-Winsten", "serial correlation", "FGLS"]
+    },
+    "yssbi.statistics.prais.summary": {
+      "title": "Prais–Winsten Summary",
+      "aliases": ["Prais report", "rho", "Durbin-Watson"]
+    },
+    "yssbi.statistics.probit.fit": {
+      "title": "Fit Probit",
+      "aliases": ["probit", "normal link", "binary classifier"]
+    },
+    "yssbi.statistics.probit.predict": {
+      "title": "Probit Prediction",
+      "aliases": ["predict probability", "probit", "normal CDF"]
+    },
+    "yssbi.statistics.probit.summary": {
+      "title": "Probit Summary",
+      "aliases": ["probit report", "marginal effects", "marginal_effects", "maximum likelihood"]
+    },
+    "yssbi.statistics.psychometrics.content_validity": {
+      "title": "Content validity (expert CVI)"
+    },
+    "yssbi.statistics.psychometrics.item_analysis": {
+      "title": "Item analysis (discrimination)",
+      "parameters": {
+        "tail_fraction": {
+          "title": "Tail fraction",
+          "description": "Between 0 and 0.5; default 0.27. Boundary ties stay together; coincident cutoffs remain in the middle."
+        }
+      }
+    },
+    "yssbi.statistics.psychometrics.reliability": {
+      "title": "Reliability (Cronbach alpha)"
+    },
+    "yssbi.statistics.psychometrics.validity": {
+      "title": "Validity screening (KMO / Bartlett)"
+    },
+    "yssbi.statistics.quality.measurement_system": {
+      "title": "Measurement system (crossed Gage R&R)",
+      "parameters": {
+        "include_interaction": {
+          "title": "Part × operator interaction",
+          "description": "Retain the random interaction, or pool its sum of squares into repeatability. No automatic significance-based selection."
+        }
+      }
+    },
+    "yssbi.statistics.quality.process_capability": {
+      "title": "Process capability",
+      "parameters": {
+        "lower_limit": {
+          "title": "Lower specification limit",
+          "description": "Engineering specification, not an estimated control limit."
+        },
+        "target": {
+          "title": "Target value",
+          "description": "Target for the Cpm index; does not alter Cp or Cpk."
+        },
+        "upper_limit": {
+          "title": "Upper specification limit",
+          "description": "Must exceed the lower specification limit."
+        }
+      }
+    },
+    "yssbi.statistics.regression.beta": {
+      "title": "Regression Beta",
+      "aliases": ["regression.beta", "Regression Beta", "Beta回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.cloglog": {
+      "title": "Regression Complementary Log-log",
+      "aliases": ["regression.cloglog", "Regression Complementary Log-log", "Complementary log-log模型"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.curve": {
+      "title": "Regression Curve",
+      "aliases": ["regression.curve", "Regression Curve", "曲线回归"],
+      "parameters": {
+        "curve_family": {
+          "title": "Curve family",
+          "description": "Exponential and power models fit log(response)."
+        },
+        "degree": {
+          "title": "Polynomial degree",
+          "description": "1–8; requires enough distinct predictor values."
+        }
+      }
+    },
+    "yssbi.statistics.regression.deming": {
+      "title": "Regression Deming",
+      "aliases": ["regression.deming", "Regression Deming", "Deming回归"],
+      "parameters": {
+        "variance_ratio": {
+          "title": "Measurement-error variance ratio",
+          "description": "Var(response error)/Var(predictor error); positive, default 1."
+        }
+      }
+    },
+    "yssbi.statistics.regression.fractional_response": {
+      "title": "Regression Fractional Response",
+      "aliases": ["regression.fractional_response", "Regression Fractional Response", "Fractional Response模型"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "response_link": {
+          "title": "Response link",
+          "description": "Logit, probit or complementary log-log."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.gamma": {
+      "title": "Regression Gamma",
+      "aliases": ["regression.gamma", "Regression Gamma", "Gamma回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.glm": {
+      "title": "Regression GLM",
+      "aliases": ["regression.glm", "Regression GLM", "GLM广义线性模型"],
+      "parameters": {
+        "binomial_link": {
+          "title": "Response link",
+          "description": "Logit, probit or complementary log-log."
+        },
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "gaussian_link": {
+          "title": "Gaussian link",
+          "description": "Identity or log; log requires a positive mean."
+        },
+        "glm_family": {
+          "title": "GLM distribution",
+          "description": "Gaussian, binomial, Poisson, Gamma or inverse Gaussian."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.hierarchical": {
+      "title": "Regression Hierarchical",
+      "aliases": ["regression.hierarchical", "Regression Hierarchical", "分层回归"],
+      "parameters": {
+        "block_sizes": {
+          "title": "Predictor block sizes",
+          "description": "Positive integers summing to the predictor count; empty enters one variable at a time."
+        },
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        }
+      }
+    },
+    "yssbi.statistics.regression.inverse_gaussian": {
+      "title": "Regression Inverse Gaussian",
+      "aliases": ["regression.inverse_gaussian", "Regression Inverse Gaussian", "逆高斯回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.lasso": {
+      "title": "Regression Lasso",
+      "aliases": ["regression.lasso", "Regression Lasso", "Lasso回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "lambda": {
+          "title": "Penalty strength",
+          "description": "Nonnegative; the objective uses RSS/(2n)."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "standardize": {
+          "title": "Standardize predictors",
+          "description": "Return coefficients in original units."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.logit.conditional": {
+      "title": "Regression Logit Conditional",
+      "aliases": ["regression.logit.conditional", "Regression Logit Conditional", "条件Logit回归"],
+      "parameters": {
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.logit.firth": {
+      "title": "Regression Logit Firth",
+      "aliases": ["regression.logit.firth", "Regression Logit Firth", "Firth惩罚Logit回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.logit.multinomial": {
+      "title": "Regression Logit Multinomial",
+      "aliases": ["regression.logit.multinomial", "Regression Logit Multinomial", "多分类Logit"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.logit.ordinal": {
+      "title": "Regression Logit Ordinal",
+      "aliases": ["regression.logit.ordinal", "Regression Logit Ordinal", "有序Logit"],
+      "parameters": {
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.negative_binomial": {
+      "title": "Regression Negative Binomial",
+      "aliases": ["regression.negative_binomial", "Regression Negative Binomial", "负二项回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.nonlinear": {
+      "title": "Regression Nonlinear",
+      "aliases": ["regression.nonlinear", "Regression Nonlinear", "非线性回归"],
+      "parameters": {
+        "initial_values": {
+          "title": "Initial parameter values",
+          "description": "b1, b2, …; empty uses automatic starts for built-in models."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "nonlinear_family": {
+          "title": "Nonlinear model",
+          "description": "Exponential, logistic growth, Michaelis–Menten or Gompertz."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.nonlinear_formula": {
+      "title": "Regression Nonlinear Formula",
+      "aliases": ["regression.nonlinear_formula", "Regression Nonlinear Formula", "非线性回归（自定义公式）"],
+      "parameters": {
+        "formula": {
+          "title": "Model formula",
+          "description": "Use x1, x2, … and parameters b1, b2, …."
+        },
+        "initial_values": {
+          "title": "Initial parameter values",
+          "description": "b1, b2, …; empty uses automatic starts for built-in models."
+        },
+        "lower_bounds": {
+          "title": "Parameter lower bounds",
+          "description": "Empty means unbounded; otherwise one finite bound per parameter."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        },
+        "upper_bounds": {
+          "title": "Parameter upper bounds",
+          "description": "Empty means unbounded; otherwise one finite bound per parameter."
+        }
+      }
+    },
+    "yssbi.statistics.regression.pls": {
+      "title": "Regression PLS",
+      "aliases": ["regression.pls", "Regression PLS", "PLS回归"],
+      "parameters": {
+        "components": {
+          "title": "PLS components",
+          "description": "Positive integer, at most the predictor count; univariate response."
+        },
+        "standardize": {
+          "title": "Standardize predictors",
+          "description": "Return coefficients in original units."
+        }
+      }
+    },
+    "yssbi.statistics.regression.poisson": {
+      "title": "Regression Poisson",
+      "aliases": ["regression.poisson", "Regression Poisson", "Poisson回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.quantile": {
+      "title": "Regression Quantile",
+      "aliases": ["regression.quantile", "Regression Quantile", "分位数回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "quantile": {
+          "title": "Conditional quantile",
+          "description": "Strictly between 0 and 1; default 0.5."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.ridge": {
+      "title": "Regression Ridge",
+      "aliases": ["regression.ridge", "Regression Ridge", "岭回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "lambda": {
+          "title": "Penalty strength",
+          "description": "Nonnegative; the objective uses RSS/(2n)."
+        },
+        "standardize": {
+          "title": "Standardize predictors",
+          "description": "Return coefficients in original units."
+        }
+      }
+    },
+    "yssbi.statistics.regression.robust": {
+      "title": "Regression Robust",
+      "aliases": ["regression.robust", "Regression Robust", "Robust回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "robust_loss": {
+          "title": "Robust loss",
+          "description": "Huber or Tukey bisquare M-estimation with MAD scale."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        },
+        "tuning": {
+          "title": "Loss tuning constant",
+          "description": "Positive; Huber commonly uses 1.345, Tukey 4.685."
+        }
+      }
+    },
+    "yssbi.statistics.regression.stepwise": {
+      "title": "Regression Stepwise",
+      "aliases": ["regression.stepwise", "Regression Stepwise", "逐步回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "criterion": {
+          "title": "Selection criterion",
+          "description": "Minimize AIC or BIC; final inference is conditional on selection."
+        },
+        "direction": {
+          "title": "Selection direction",
+          "description": "Forward, backward or both."
+        }
+      }
+    },
+    "yssbi.statistics.regression.threshold": {
+      "title": "Regression Threshold",
+      "aliases": ["regression.threshold", "Regression Threshold", "门槛回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_candidates": {
+          "title": "Threshold search candidates",
+          "description": "1–200; larger candidate sets are sampled evenly in sorted order."
+        },
+        "trimming": {
+          "title": "Minimum regime fraction",
+          "description": "0.05–0.45; each regime requires positive residual degrees of freedom."
+        }
+      }
+    },
+    "yssbi.statistics.regression.tobit": {
+      "title": "Regression Tobit",
+      "aliases": ["regression.tobit", "Regression Tobit", "Tobit模型"],
+      "parameters": {
+        "censoring": {
+          "title": "Censoring boundaries",
+          "description": "Left or both bounds; this is censoring, not truncation."
+        },
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "lower": {
+          "title": "Lower censoring boundary",
+          "description": "Observed values must be at least this bound."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        },
+        "upper": {
+          "title": "Upper censoring boundary",
+          "description": "Must exceed the lower bound."
+        }
+      }
+    },
+    "yssbi.statistics.regression.zero_inflated_negative_binomial": {
+      "title": "Regression Zero Inflated Negative Binomial",
+      "aliases": ["regression.zero_inflated_negative_binomial", "Regression Zero Inflated Negative Binomial", "零膨胀负二项回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.regression.zero_inflated_poisson": {
+      "title": "Regression Zero Inflated Poisson",
+      "aliases": ["regression.zero_inflated_poisson", "Regression Zero Inflated Poisson", "零膨胀泊松回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive integer; nonconvergence fails the calculation."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "1e-12–0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.sem.cfa": {
+      "title": "SEM CFA",
+      "aliases": ["sem.cfa", "验证性因子分析CFA"]
+    },
+    "yssbi.statistics.sem.path": {
+      "title": "Path analysis (observed recursive linear models)",
+      "parameters": {
+        "equations": {
+          "title": "Path equations",
+          "description": "Use x1, x2, … in input order; separate equations by semicolons or newlines. Example: x2 ~ x1; x3 ~ x1 + x2."
+        }
+      }
+    },
+    "yssbi.statistics.sem.structural": {
+      "title": "SEM Structural",
+      "aliases": ["sem.structural", "结构方程模型SEM"]
+    },
+    "yssbi.statistics.spatial.moran": {
+      "title": "Moran's I",
+      "aliases": ["spatial.moran", "莫兰指数", "Moran"]
+    },
+    "yssbi.statistics.spatial.ols": {
+      "title": "Spatial OLS regression",
+      "aliases": ["spatial.ols", "空间OLS回归"]
+    },
+    "yssbi.statistics.spatial.panel": {
+      "title": "Spatial panel: entity fixed effects",
+      "aliases": ["spatial.panel", "空间面板模型"]
+    },
+    "yssbi.statistics.spatial.sac": {
+      "title": "Spatial lag/error model (SAC)",
+      "aliases": ["spatial.sac", "空间滞后误差模型SAC", "SARAR"]
+    },
+    "yssbi.statistics.spatial.sdem": {
+      "title": "Spatial Durbin error model (SDEM)",
+      "aliases": ["spatial.sdem", "空间杜宾误差SDEM"]
+    },
+    "yssbi.statistics.spatial.sdm": {
+      "title": "Spatial Durbin model (SDM)",
+      "aliases": ["spatial.sdm", "空间杜宾SDM"]
+    },
+    "yssbi.statistics.spatial.sem": {
+      "title": "Spatial error model (SEM)",
+      "aliases": ["spatial.sem", "空间误差SEM"]
+    },
+    "yssbi.statistics.spatial.slm": {
+      "title": "Spatial lag model (SLM)",
+      "aliases": ["spatial.slm", "空间滞后SLM", "SAR"]
+    },
+    "yssbi.statistics.spatial.slx": {
+      "title": "Spatially lagged X (SLX)",
+      "aliases": ["spatial.slx", "自变量空间滞后SLX"]
+    },
+    "yssbi.statistics.spatial.weights": {
+      "title": "Spatial weights",
+      "aliases": ["spatial.weights", "空间权重构造"]
+    },
+    "yssbi.statistics.survey.clustered": {
+      "title": "Cluster survey mean/proportion",
+      "parameters": {
+        "lonely_psu": {
+          "title": "Single-PSU stratum",
+          "description": "fail rejects unidentified variance; certainty assigns zero variance only for known certainty strata."
+        },
+        "statistic": {
+          "title": "Statistic",
+          "description": "Mean, or proportion for a 0/1 response."
+        }
+      }
+    },
+    "yssbi.statistics.survey.linear_regression": {
+      "title": "Survey linear regression",
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "Include a constant term in the regression."
+        },
+        "lonely_psu": {
+          "title": "Single-PSU stratum",
+          "description": "fail rejects unidentified variance; certainty assigns zero variance only for known certainty strata."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive numerical convergence budget, default 500."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "Relative coefficient convergence tolerance from 1e-12 through 0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.survey.logistic": {
+      "title": "Survey logistic regression",
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "Include a constant term in the regression."
+        },
+        "lonely_psu": {
+          "title": "Single-PSU stratum",
+          "description": "fail rejects unidentified variance; certainty assigns zero variance only for known certainty strata."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive numerical convergence budget, default 500."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "Relative coefficient convergence tolerance from 1e-12 through 0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.survey.mean_proportion": {
+      "title": "Survey mean/proportion",
+      "parameters": {
+        "lonely_psu": {
+          "title": "Single-PSU stratum",
+          "description": "fail rejects unidentified variance; certainty assigns zero variance only for known certainty strata."
+        },
+        "statistic": {
+          "title": "Statistic",
+          "description": "Mean, or proportion for a 0/1 response."
+        }
+      }
+    },
+    "yssbi.statistics.survey.poisson": {
+      "title": "Survey Poisson regression",
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "Include a constant term in the regression."
+        },
+        "lonely_psu": {
+          "title": "Single-PSU stratum",
+          "description": "fail rejects unidentified variance; certainty assigns zero variance only for known certainty strata."
+        },
+        "max_iterations": {
+          "title": "Maximum iterations",
+          "description": "Positive numerical convergence budget, default 500."
+        },
+        "tolerance": {
+          "title": "Convergence tolerance",
+          "description": "Relative coefficient convergence tolerance from 1e-12 through 0.01; default 1e-7."
+        }
+      }
+    },
+    "yssbi.statistics.survey.stratified": {
+      "title": "Stratified survey mean/proportion",
+      "parameters": {
+        "lonely_psu": {
+          "title": "Single-PSU stratum",
+          "description": "fail rejects unidentified variance; certainty assigns zero variance only for known certainty strata."
+        },
+        "statistic": {
+          "title": "Statistic",
+          "description": "Mean, or proportion for a 0/1 response."
+        }
+      }
+    },
+    "yssbi.statistics.survey.weights": {
+      "title": "Sampling weights",
+      "parameters": {
+        "input_kind": {
+          "title": "Input meaning",
+          "description": "Positive sampling weights, or inclusion probabilities in (0,1] converted to 1/probability."
+        }
+      }
+    },
+    "yssbi.statistics.survival.aft": {
+      "title": "Accelerated failure time (AFT)",
+      "aliases": ["survival.aft", "AFT加速失效时间模型"]
+    },
+    "yssbi.statistics.survival.competing_risks": {
+      "title": "Competing risks (Aalen–Johansen)",
+      "aliases": ["survival.competing_risks", "竞争风险模型", "CIF", "Aalen-Johansen"]
+    },
+    "yssbi.statistics.survival.cox": {
+      "title": "Cox proportional hazards",
+      "aliases": ["survival.cox", "Cox回归", "PH"]
+    },
+    "yssbi.statistics.survival.exponential": {
+      "title": "Exponential survival regression",
+      "aliases": ["survival.exponential", "指数分布生存模型"]
+    },
+    "yssbi.statistics.survival.kaplan_meier": {
+      "title": "Kaplan–Meier survival",
+      "aliases": ["survival.kaplan_meier", "Kaplan-Meier", "KM"]
+    },
+    "yssbi.statistics.survival.loglogistic": {
+      "title": "Log-logistic survival regression",
+      "aliases": ["survival.loglogistic", "Log-logistic生存模型"]
+    },
+    "yssbi.statistics.survival.lognormal": {
+      "title": "Lognormal survival regression",
+      "aliases": ["survival.lognormal", "Lognormal生存模型"]
+    },
+    "yssbi.statistics.survival.logrank": {
+      "title": "Log-rank test",
+      "aliases": ["survival.logrank", "Log-rank检验"]
+    },
+    "yssbi.statistics.survival.nelson_aalen": {
+      "title": "Nelson–Aalen cumulative hazard",
+      "aliases": ["survival.nelson_aalen", "Nelson–Aalen累计风险", "NA"]
+    },
+    "yssbi.statistics.survival.time_dependent_cox": {
+      "title": "Time-dependent Cox regression",
+      "aliases": ["survival.time_dependent_cox", "时间依赖Cox模型"]
+    },
+    "yssbi.statistics.survival.weibull": {
+      "title": "Weibull survival regression",
+      "aliases": ["survival.weibull", "Weibull生存模型"]
+    },
+    "yssbi.statistics.test.bartlett": {
+      "title": "Bartlett test",
+      "aliases": ["bartlett variance"]
+    },
+    "yssbi.statistics.test.binomial": {
+      "title": "Exact binomial test",
+      "aliases": ["binomial test", "exact proportion test"]
+    },
+    "yssbi.statistics.test.brown_forsythe": {
+      "title": "Brown–Forsythe test",
+      "aliases": ["median-centered levene"]
+    },
+    "yssbi.statistics.test.chisquare.crosstab": {
+      "title": "Chi-square test of independence",
+      "aliases": ["crosstab", "chi square independence"]
+    },
+    "yssbi.statistics.test.chisquare.general": {
+      "title": "Pearson chi-square contingency test",
+      "aliases": ["pearson chi square", "contingency table"]
+    },
+    "yssbi.statistics.test.chisquare.goodness_of_fit": {
+      "title": "Chi-square goodness-of-fit test",
+      "aliases": ["chi square goodness of fit"]
+    },
+    "yssbi.statistics.test.cmh": {
+      "title": "Cochran–Mantel–Haenszel test",
+      "aliases": ["cmh stratified test"]
+    },
+    "yssbi.statistics.test.cochran_q": {
+      "title": "Cochran Q repeated-proportions test",
+      "aliases": ["cochran q"]
+    },
+    "yssbi.statistics.test.equivalence": {
+      "title": "One-sample equivalence test (TOST)",
+      "aliases": ["two one-sided tests", "tost"]
+    },
+    "yssbi.statistics.test.fisher_exact": {
+      "title": "Fisher exact test",
+      "aliases": ["fisher exact 2x2"]
+    },
+    "yssbi.statistics.test.friedman": {
+      "title": "Friedman repeated-measures test",
+      "aliases": ["friedman test"]
+    },
+    "yssbi.statistics.test.heterogeneity": {
+      "title": "Treatment-effect heterogeneity",
+      "aliases": ["异质性检验", "interaction"]
+    },
+    "yssbi.statistics.test.kappa": {
+      "title": "Kappa agreement",
+      "aliases": ["test.kappa", "Cohen Kappa", "Fleiss Kappa"]
+    },
+    "yssbi.statistics.test.kendall_w": {
+      "title": "Kendall concordance W",
+      "aliases": ["test.kendall_w", "Kendall W", "协调系数"]
+    },
+    "yssbi.statistics.test.kruskal_wallis": {
+      "title": "Kruskal–Wallis test",
+      "aliases": ["rank one way anova"]
+    },
+    "yssbi.statistics.test.levene": {
+      "title": "Levene test",
+      "aliases": ["variance homogeneity"]
+    },
+    "yssbi.statistics.test.mann_kendall": {
+      "title": "Mann–Kendall trend test",
+      "aliases": ["monotonic trend"]
+    },
+    "yssbi.statistics.test.mann_whitney": {
+      "title": "Mann–Whitney U test",
+      "aliases": ["wilcoxon rank sum"]
+    },
+    "yssbi.statistics.test.mcnemar": {
+      "title": "McNemar test",
+      "aliases": ["paired proportions"]
+    },
+    "yssbi.statistics.test.mood_median": {
+      "title": "Mood median test",
+      "aliases": ["mood median"]
+    },
+    "yssbi.statistics.test.nonparametric.family": {
+      "title": "Nonparametric group-test selector",
+      "aliases": ["nonparametric tests", "rank tests"]
+    },
+    "yssbi.statistics.test.normality": {
+      "title": "Jarque–Bera / Omnibus"
+    },
+    "yssbi.statistics.test.poisson": {
+      "title": "Poisson rate test",
+      "aliases": ["poisson count test"]
+    },
+    "yssbi.statistics.test.proportion.multiple": {
+      "title": "Multiple-proportion homogeneity test",
+      "aliases": ["multiple proportions"]
+    },
+    "yssbi.statistics.test.proportion.two": {
+      "title": "Two-proportion z test",
+      "aliases": ["two proportion", "difference in proportions"]
+    },
+    "yssbi.statistics.test.runs": {
+      "title": "Runs test for randomness",
+      "aliases": ["runs test randomness"]
+    },
+    "yssbi.statistics.test.t.independent": {
+      "title": "Independent-samples t test",
+      "aliases": ["welch t test", "student t test", "two sample mean"]
+    },
+    "yssbi.statistics.test.t.one_sample": {
+      "title": "One-sample t test",
+      "aliases": ["t.test one sample", "one sample mean"]
+    },
+    "yssbi.statistics.test.t.paired": {
+      "title": "Paired t test",
+      "aliases": ["dependent t test", "paired mean"]
+    },
+    "yssbi.statistics.test.t.summary_input": {
+      "title": "Summary-statistics t test",
+      "aliases": ["summary t test", "mean sd n"]
+    },
+    "yssbi.statistics.test.wilcoxon.one_sample": {
+      "title": "One-sample Wilcoxon signed-rank test",
+      "aliases": ["signed rank one sample"]
+    },
+    "yssbi.statistics.test.wilcoxon.paired": {
+      "title": "Paired Wilcoxon signed-rank test",
+      "aliases": ["signed rank paired"]
+    },
+    "yssbi.statistics.test.z.mean": {
+      "title": "One-sample z test for a mean",
+      "aliases": ["known standard deviation", "z test mean"]
+    },
+    "yssbi.statistics.test.z.proportion": {
+      "title": "One-proportion z test",
+      "aliases": ["one proportion", "proportion test"]
+    },
+    "yssbi.statistics.timeseries.acf": {
+      "title": "Autocorrelation"
+    },
+    "yssbi.statistics.timeseries.arch": {
+      "title": "ARCH model",
+      "aliases": ["ARCH", "条件异方差"]
+    },
+    "yssbi.statistics.timeseries.arima": {
+      "title": "ARIMA forecast",
+      "aliases": ["ARIMA", "差分自回归移动平均"]
+    },
+    "yssbi.statistics.timeseries.ecm": {
+      "title": "Error-correction model",
+      "aliases": ["ECM", "误差修正"]
+    },
+    "yssbi.statistics.timeseries.egarch": {
+      "title": "EGARCH model",
+      "aliases": ["EGARCH", "对数波动率"]
+    },
+    "yssbi.statistics.timeseries.ets": {
+      "title": "Additive ETS model",
+      "aliases": ["ETS", "状态空间平滑"]
+    },
+    "yssbi.statistics.timeseries.exponential_smoothing": {
+      "title": "Simple exponential smoothing",
+      "aliases": ["SES", "指数平滑"]
+    },
+    "yssbi.statistics.timeseries.fevd": {
+      "title": "VAR forecast error variance decomposition"
+    },
+    "yssbi.statistics.timeseries.garch": {
+      "title": "GARCH model",
+      "aliases": ["GARCH", "波动率"]
+    },
+    "yssbi.statistics.timeseries.gjr_garch": {
+      "title": "GJR-GARCH model",
+      "aliases": ["GJR", "非对称波动率"]
+    },
+    "yssbi.statistics.timeseries.granger": {
+      "title": "VAR Granger Wald tests"
+    },
+    "yssbi.statistics.timeseries.grey_prediction": {
+      "title": "Grey prediction GM(1,1)",
+      "aliases": ["GM(1,1)", "灰色预测"]
+    },
+    "yssbi.statistics.timeseries.holt_winters": {
+      "title": "Holt–Winters forecast",
+      "aliases": ["Holt-Winters", "三次指数平滑"]
+    },
+    "yssbi.statistics.timeseries.irf": {
+      "title": "VAR orthogonalized impulse responses"
+    },
+    "yssbi.statistics.timeseries.kpss": {
+      "title": "KPSS stationarity test",
+      "aliases": ["KPSS", "平稳性"]
+    },
+    "yssbi.statistics.timeseries.markov_prediction": {
+      "title": "Markov forecast",
+      "aliases": ["Markov", "马尔可夫"]
+    },
+    "yssbi.statistics.timeseries.pacf": {
+      "title": "Partial autocorrelation"
+    },
+    "yssbi.statistics.timeseries.phillips_perron": {
+      "title": "Phillips–Perron test",
+      "aliases": ["PP", "单位根"]
+    },
+    "yssbi.statistics.timeseries.sarima": {
+      "title": "Seasonal ARIMA forecast",
+      "aliases": ["SARIMA", "季节预测"]
+    },
+    "yssbi.statistics.transform.rcs": {
+      "title": "Transform RCS",
+      "aliases": ["transform.rcs", "Transform RCS", "RCS样条分析"],
+      "parameters": {
+        "knot_count": {
+          "title": "Number of spline knots",
+          "description": "3–8; repeated automatic quantiles are rejected."
+        },
+        "knot_mode": {
+          "title": "Spline knot specification",
+          "description": "Automatic sample quantiles or explicit knot locations."
+        },
+        "knots": {
+          "title": "Spline knot locations",
+          "description": "3–8 finite, strictly increasing values."
+        }
+      }
+    },
+    "yssbi.statistics.var.fit": {
+      "title": "Fit VAR",
+      "aliases": ["VAR"]
+    },
+    "yssbi.statistics.var.lag_order": {
+      "title": "VAR Lag-order Selection",
+      "aliases": ["varsoc", "AIC", "BIC", "HQIC"]
+    },
+    "yssbi.statistics.var.summary": {
+      "title": "VAR Summary",
+      "aliases": ["vector autoregression", "VAR", "multivariate time series"]
+    },
+    "yssbi.statistics.vec.fit": {
+      "title": "Vector Error-correction Model",
+      "aliases": ["VECM", "cointegration", "error correction"]
+    },
+    "yssbi.statistics.vec.rank_test": {
+      "title": "Johansen Cointegration Rank",
+      "aliases": ["Johansen", "vecrank", "trace test", "maximum eigenvalue"]
+    },
+    "yssbi.statistics.vec.summary": {
+      "title": "VEC Summary",
+      "aliases": ["VECM report", "LM test", "stability"]
+    },
+    "yssbi.statistics.workflow.delphi": {
+      "title": "Delphi round summary",
+      "parameters": {
+        "full_score": {
+          "title": "Full score",
+          "description": "Maximum possible rating, used for the full-score percentage. Default 5."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.entropy_topsis": {
+      "title": "Entropy-weighted TOPSIS",
+      "parameters": {
+        "cost_criteria": {
+          "title": "Cost criteria",
+          "description": "One-based criterion positions where smaller values are preferred; empty means all benefits."
+        },
+        "normalization": {
+          "title": "Score normalization",
+          "description": "Min–max, vector norm, or unchanged values; objective weights retain their own defined preprocessing."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.mediation": {
+      "title": "Mediation (one observed mediator)",
+      "parameters": {
+        "replications": {
+          "title": "Bootstrap replications",
+          "description": "0 disables inference; otherwise at least 2. Default 1000; more replications improve percentile stability."
+        },
+        "seed": {
+          "title": "Random seed",
+          "description": "Nonnegative seed for reproducible paired-row resampling."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.moderated_mediation": {
+      "title": "Moderated mediation (one moderated stage)",
+      "parameters": {
+        "probe_sd": {
+          "title": "Probe distance (SD)",
+          "description": "Positive multiplier for mean ± sample SD probes; the mean is included."
+        },
+        "replications": {
+          "title": "Bootstrap replications",
+          "description": "0 disables inference; otherwise at least 2. Default 1000; more replications improve percentile stability."
+        },
+        "seed": {
+          "title": "Random seed",
+          "description": "Nonnegative seed for reproducible paired-row resampling."
+        },
+        "stage": {
+          "title": "Moderated path",
+          "description": "first: X → M; second: M → Y. W enters both equations as a main effect."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.moderation": {
+      "title": "Moderation (two-way interaction)",
+      "parameters": {
+        "probe_sd": {
+          "title": "Probe distance (SD)",
+          "description": "Positive multiplier for mean ± sample SD probes; the mean is included."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.moderation_advanced": {
+      "title": "Moderation (three-way interaction)",
+      "parameters": {
+        "probe_sd": {
+          "title": "Probe distance (SD)",
+          "description": "Positive multiplier for mean ± sample SD probes; the mean is included."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.regression.baseline": {
+      "title": "Workflow Regression Baseline",
+      "aliases": ["workflow.regression.baseline", "Workflow Regression Baseline", "基准回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.regression.grouped": {
+      "title": "Workflow Regression Grouped",
+      "aliases": ["workflow.regression.grouped", "Workflow Regression Grouped", "分组回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.regression.univariate_multivariable": {
+      "title": "Workflow Regression Univariate Multivariable",
+      "aliases": ["workflow.regression.univariate_multivariable", "Workflow Regression Univariate Multivariable", "单因素与多因素回归"],
+      "parameters": {
+        "constant": {
+          "title": "Include intercept",
+          "description": "The intercept is not penalized."
+        }
+      }
+    },
+    "yssbi.statistics.workflow.subgroup": {
+      "title": "Stratified Cox subgroup analysis",
+      "aliases": ["workflow.subgroup", "亚组分析"]
+    },
+    "yssbi.value.to_binary": {
+      "title": "To Binary",
+      "aliases": ["convert", "cast", "semantic conversion"],
+      "parameters": {
+        "semantic_domain": {
+          "title": "Value Mapping",
+          "description": "Optionally declare two distinct codes and their positive value. Empty configuration uses supported boolean encodings or the source Binary domain."
+        }
+      }
+    },
+    "yssbi.value.to_categorical": {
+      "title": "To Categorical",
+      "aliases": ["convert", "cast", "semantic conversion"],
+      "parameters": {
+        "semantic_domain": {
+          "title": "Values and Labels",
+          "description": "Optionally declare original codes and labels. Empty configuration inherits a source domain or automatically maps all distinct non-null values to same-name labels."
+        }
+      }
+    },
+    "yssbi.value.to_datetime": {
+      "title": "To Datetime",
+      "aliases": ["convert", "cast", "semantic conversion"],
+      "parameters": {
+        "datetime_format": {
+          "title": "Calendar Format",
+          "description": "Empty uses ISO. Custom formats use strftime, e.g. %d/%m/%Y. Offsets are removed without shifting wall time."
+        },
+        "datetime_kind": {
+          "title": "Calendar Kind",
+          "description": "Auto preserves temporal inputs; text defaults to a date and time."
+        },
+        "datetime_precision": {
+          "title": "Calendar Precision",
+          "description": "Precision for newly parsed values. Precision loss fails."
+        }
+      }
+    },
+    "yssbi.value.to_identifier": {
+      "title": "To Identifier",
+      "aliases": ["convert", "cast", "semantic conversion"]
+    },
+    "yssbi.value.to_numeric": {
+      "title": "To Numeric",
+      "aliases": ["convert", "cast", "semantic conversion"],
+      "parameters": {
+        "numeric_mode": {
+          "title": "Numeric Representation",
+          "description": "Auto preserves numbers, parses text as real numbers and maps Binary to 0/1. Integer rejects fractions; real requires exact conversion."
+        }
+      }
+    },
+    "yssbi.value.to_ordinal": {
+      "title": "To Ordinal",
+      "aliases": ["convert", "cast", "semantic conversion"],
+      "parameters": {
+        "semantic_domain": {
+          "title": "Levels and Labels",
+          "description": "Order original codes and labels from low to high. Empty configuration inherits an existing ordinal domain."
+        }
+      }
+    },
+    "yssbi.value.to_text": {
+      "title": "To Text",
+      "aliases": ["convert", "cast", "semantic conversion"]
+    }
+  },
+  "parameters": {
+    "absolute_tolerance": {
+      "title": "Absolute Tolerance"
+    },
+    "base_level": {
+      "title": "base_level",
+      "description": "Typed node parameter."
+    },
+    "column": {
+      "title": "column",
+      "description": "Typed node parameter."
+    },
+    "column_match": {
+      "title": "Column Matching",
+      "description": "Match columns by name (fill missing columns with null) or by position."
+    },
+    "columns": {
+      "title": "Columns",
+      "description": "Source columns selected for this operation."
+    },
+    "comparison_mode": {
+      "title": "Comparison Mode"
+    },
+    "constant": {
+      "title": "Constant",
+      "description": "Immutable value defined in this graph's Details panel."
+    },
+    "count": {
+      "title": "Count Columns",
+      "description": "Count non-null values in each selected column."
+    },
+    "dataframe": {
+      "title": "dataframe",
+      "description": "Typed node parameter."
+    },
+    "descending": {
+      "title": "Descending",
+      "description": "Apply descending order to the selected window order columns."
+    },
+    "direction": {
+      "title": "Direction",
+      "description": "Lag reads earlier rows; lead reads later rows."
+    },
+    "end": {
+      "title": "End",
+      "description": "Exclusive end of the integer range."
+    },
+    "entity_column": {
+      "title": "Entity Column",
+      "description": "Groups panel alignment or differences by this column; missing keys are rejected."
+    },
+    "from": {
+      "title": "Source column",
+      "description": "Column name to rename."
+    },
+    "function": {
+      "title": "Function",
+      "description": "Bound function resource."
+    },
+    "how": {
+      "title": "Missing Rule",
+      "description": "any: at least one Null; all: every value is Null."
+    },
+    "include_null": {
+      "title": "Include Null",
+      "description": "Include null in frequencies and the denominator."
+    },
+    "interval": {
+      "title": "Grid interval",
+      "description": "Positive step: time units for time-series alignment; shared observed-time positions for panel alignment."
+    },
+    "join_type": {
+      "title": "Join Type",
+      "description": "Inner, left, right, full outer, semi or anti join. Null keys do not match."
+    },
+    "key_prefix": {
+      "title": "Group Key Prefix",
+      "description": "Prefix for the group key columns prepended to Apply results. Collisions are rejected."
+    },
+    "keys": {
+      "title": "Group Keys",
+      "description": "Select one or more grouping columns."
+    },
+    "left_keys": {
+      "title": "Left Keys",
+      "description": "Select the left key columns in matching order."
+    },
+    "max": {
+      "title": "Maximum Columns",
+      "description": "Numeric columns for maximum."
+    },
+    "mean": {
+      "title": "Mean Columns",
+      "description": "Numeric columns to average."
+    },
+    "median": {
+      "title": "Median Columns",
+      "description": "Numeric columns for median."
+    },
+    "min": {
+      "title": "Minimum Columns",
+      "description": "Numeric columns for minimum."
+    },
+    "min_periods": {
+      "title": "Minimum valid values",
+      "description": "Zero requires a complete non-null window."
+    },
+    "nulls_first": {
+      "title": "Nulls first",
+      "description": "Otherwise Null values sort last."
+    },
+    "offset": {
+      "title": "Offset",
+      "description": "Skip this many rows before taking the requested rows."
+    },
+    "operation": {
+      "title": "Operation",
+      "description": "Standard deviation uses ddof=1."
+    },
+    "order": {
+      "title": "order",
+      "description": "Typed node parameter."
+    },
+    "order_by": {
+      "title": "Order columns",
+      "description": "Empty uses the current row order; ties retain source order."
+    },
+    "partition_by": {
+      "title": "Partition columns",
+      "description": "Connect context to choose grouping columns; empty means one group."
+    },
+    "plot": {
+      "bins": {
+        "title": "Bins (0 = automatic)"
+      },
+      "confidence_level": {
+        "title": "Confidence level"
+      },
+      "dual_axis": {
+        "title": "Separate line axis"
+      },
+      "estimate_parameters": {
+        "title": "Estimate normal reference parameters"
+      },
+      "grid_points": {
+        "title": "Density grid points"
+      },
+      "include_intercept": {
+        "title": "Include intercept"
+      },
+      "max_words": {
+        "title": "Maximum words"
+      },
+      "maximum_lag": {
+        "title": "Maximum lag"
+      },
+      "mode": {
+        "title": "Plot type"
+      },
+      "reference_mean": {
+        "title": "Reference mean"
+      },
+      "reference_standard_deviation": {
+        "title": "Reference standard deviation"
+      },
+      "x_cut": {
+        "title": "X split"
+      },
+      "y_cut": {
+        "title": "Y split"
+      }
+    },
+    "predicate": {
+      "title": "Predicate",
+      "description": "Typed condition identifying matching rows."
+    },
+    "relative_tolerance": {
+      "title": "Relative Tolerance"
+    },
+    "right_keys": {
+      "title": "Right Keys",
+      "description": "Select the corresponding right key columns."
+    },
+    "right_suffix": {
+      "title": "Right Column Suffix",
+      "description": "Suffix used for duplicate right column names."
+    },
+    "rows": {
+      "title": "rows",
+      "description": "Typed node parameter."
+    },
+    "start": {
+      "title": "Start",
+      "description": "First value in the integer range."
+    },
+    "statistics": {
+      "acf_max_lag": {
+        "title": "ACF / PACF lags",
+        "description": "Positive lag order up to 40; the available order also depends on the fitted sample."
+      },
+      "acf_pacf": {
+        "title": "ACF / PACF",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "aft_distribution": {
+        "title": "AFT distribution",
+        "description": "Weibull (default), exponential, lognormal or loglogistic. All include an intercept."
+      },
+      "alternative": {
+        "title": "Alternative hypothesis",
+        "description": "Choose a two-sided, greater-than or less-than alternative."
+      },
+      "anova": {
+        "title": "ANOVA",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "bandwidth": {
+        "title": "Bandwidth",
+        "description": "Typed statistical parameter."
+      },
+      "bg_nomiss0": {
+        "title": "BG: fill initial residual lags with zero",
+        "description": "Fill initial lagged residuals with zero in the Breusch–Godfrey test."
+      },
+      "bootstrap_replications": {
+        "title": "Bootstrap replications",
+        "description": "Default 0 (point estimates only), or at least 2. Resample independent rows and refit all stages; failed replicates abort."
+      },
+      "calibration_bins": {
+        "title": "Calibration bins",
+        "description": "Default 10, at least 2. Equal predictions stay together, so the actual number can be smaller."
+      },
+      "classification": {
+        "title": "Classification table",
+        "description": "Typed statistical parameter."
+      },
+      "coefficient_chart": {
+        "title": "Coefficient magnitude",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "coefficient_table": {
+        "title": "Coefficient table",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "cointegration": {
+        "title": "Cointegrating equations",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "columns": {
+        "title": "Contingency table columns",
+        "description": "Number of columns in the contingency table of observed counts."
+      },
+      "confidence_level": {
+        "title": "Confidence level",
+        "description": "A value strictly between 0 and 1; default 0.95."
+      },
+      "constant": {
+        "title": "Include intercept",
+        "description": "Typed statistical parameter."
+      },
+      "continuity_correction": {
+        "title": "Continuity correction",
+        "description": "Apply a half-unit continuity correction to the rank test."
+      },
+      "covariance": {
+        "title": "Standard error method (GLS: nonrobust only)",
+        "description": "Typed statistical parameter."
+      },
+      "coverage": {
+        "title": "Agreement-limit coverage",
+        "description": "The central normal coverage used for limits of agreement, strictly between 0 and 1."
+      },
+      "cutoff": {
+        "title": "Classification cutoff",
+        "description": "Typed statistical parameter."
+      },
+      "decision_points": {
+        "title": "Threshold points",
+        "description": "Default 99, at least 2; evenly spaced including both endpoints."
+      },
+      "decision_threshold_max": {
+        "title": "Maximum threshold",
+        "description": "Default 0.99; strictly below 1 and above the minimum threshold."
+      },
+      "decision_threshold_min": {
+        "title": "Minimum threshold",
+        "description": "Default 0.01; strictly positive and below the maximum threshold."
+      },
+      "design": {
+        "title": "Study design",
+        "description": "Interpret summary values as one sample, independent samples or paired differences."
+      },
+      "dfk": {
+        "title": "VAR covariance degrees-of-freedom adjustment",
+        "description": "Typed statistical parameter."
+      },
+      "diagnostics": {
+        "title": "Diagnostics",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "effects": {
+        "title": "Effect dimension",
+        "description": "Typed statistical parameter."
+      },
+      "effects_statistics": {
+        "title": "Panel effects",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "endogeneity": {
+        "title": "Endogeneity tests",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "equal_variance": {
+        "title": "Assume equal variances",
+        "description": "Use pooled variance for independent samples; otherwise use Welch's test."
+      },
+      "equation": {
+        "title": "Equation",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "equation_predictors": {
+        "title": "Equation predictor indices",
+        "description": "Empty: all predictors in every equation. Otherwise semicolon-separated equations, comma-separated one-based indices, e.g. 1,2;1,3. Use - for no predictors."
+      },
+      "estimator": {
+        "title": "Panel estimator",
+        "description": "Typed statistical parameter."
+      },
+      "estimator_statistics": {
+        "title": "Estimator statistics",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "estimators": {
+        "title": "Estimators (comma separated)",
+        "description": "Typed statistical parameter."
+      },
+      "expected_variance": {
+        "title": "Expected null variance",
+        "description": "A finite positive variance on the same scale as the ratings."
+      },
+      "first_stage": {
+        "title": "First-stage analysis",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "frontier_type": {
+        "title": "Frontier type",
+        "description": "Production (default): noise minus inefficiency; cost: noise plus inefficiency."
+      },
+      "gmm_steps": {
+        "title": "GMM steps",
+        "description": "One-step 2SLS weighting or two-step heteroskedastic GMM; default two-step."
+      },
+      "hypothesis": {
+        "title": "Hypothesis (e.g. x1 = 0)",
+        "description": "Coefficient constraints, for example x1 = 0 or x1 = x2; use names from the fitted model."
+      },
+      "hypothesis_test": {
+        "title": "Hypothesis test",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "icc_type": {
+        "title": "ICC definition",
+        "description": "ICC1: one-way; ICC2: two-way absolute agreement; ICC3: two-way consistency. k means average measurement."
+      },
+      "kappa_method": {
+        "title": "Kappa definition",
+        "description": "Cohen requires exactly two raters; Fleiss pools the category margins across raters."
+      },
+      "kappa_weighting": {
+        "title": "Category weighting",
+        "description": "Linear/quadratic weighting requires numerical scores or identical explicit ordinal category orders."
+      },
+      "kernel": {
+        "title": "Kernel",
+        "description": "Typed statistical parameter."
+      },
+      "koenker": {
+        "title": "Koenker variant",
+        "description": "Typed statistical parameter."
+      },
+      "lag": {
+        "title": "Lag order",
+        "description": "Typed statistical parameter."
+      },
+      "lag_exclusion": {
+        "title": "Lag-exclusion tests",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "lags": {
+        "title": "Lag order",
+        "description": "Typed statistical parameter."
+      },
+      "longitudinal_family": {
+        "title": "Response family",
+        "description": "Gaussian identity, binary logit, Poisson log, or NB2 log, as offered by this node."
+      },
+      "lower_bound": {
+        "title": "Lower equivalence bound",
+        "description": "Lower mean bound for the equivalence test, below the upper bound."
+      },
+      "marginal_at": {
+        "title": "at() values",
+        "description": "Typed statistical parameter."
+      },
+      "marginal_effects": {
+        "title": "Marginal effects",
+        "description": "Typed statistical parameter."
+      },
+      "marginal_evaluation": {
+        "title": "Margins evaluation",
+        "description": "Typed statistical parameter."
+      },
+      "marginal_method": {
+        "title": "Derivative / elasticity",
+        "description": "Typed statistical parameter."
+      },
+      "max_instrument_lag": {
+        "title": "Maximum instrument lag",
+        "description": "Collapsed response-level instruments from lag 2 to this lag; default 3, at least 2 and below the period count."
+      },
+      "max_iterations": {
+        "title": "Maximum iterations",
+        "description": "Typed statistical parameter."
+      },
+      "max_lags": {
+        "title": "Maximum lag order",
+        "description": "Typed statistical parameter."
+      },
+      "method": {
+        "title": "Estimation method",
+        "description": "Typed statistical parameter."
+      },
+      "mixed_estimation": {
+        "title": "Mixed-model estimation",
+        "description": "REML (default) or maximum likelihood. Use ML when comparing different fixed-effect designs."
+      },
+      "model_summary": {
+        "title": "Model summary",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "model_terms": {
+        "title": "Factor terms",
+        "description": "Full factorial includes all factor interactions; main effects includes only additive factor effects. Default: full factorial."
+      },
+      "nomogram_ticks": {
+        "title": "Ticks per axis",
+        "description": "Default 5, at least 2. Points and survival scales are derived from the connected Cox model."
+      },
+      "null_difference": {
+        "title": "Hypothesized proportion difference",
+        "description": "Difference between the two population proportions under the null hypothesis."
+      },
+      "null_distribution": {
+        "title": "Null distribution",
+        "description": "Use equally likely integer response options or specify their expected variance."
+      },
+      "null_mean": {
+        "title": "Hypothesized mean",
+        "description": "Population mean specified by the null hypothesis."
+      },
+      "null_median": {
+        "title": "Hypothesized median",
+        "description": "Reference location for the one-sample signed-rank test."
+      },
+      "null_probability": {
+        "title": "Hypothesized probability",
+        "description": "Success probability under the null hypothesis."
+      },
+      "null_rate": {
+        "title": "Hypothesized Poisson rate",
+        "description": "Expected count per observation under the null hypothesis."
+      },
+      "null_value": {
+        "title": "Hypothesized mean or difference",
+        "description": "Mean or mean difference under the null hypothesis, according to the study design."
+      },
+      "observations": {
+        "title": "Fitted values and residuals",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "observed_coefficient": {
+        "title": "Observed treatment coefficient",
+        "description": "Typed statistical parameter."
+      },
+      "odds_ratios": {
+        "title": "Odds ratios",
+        "description": "Typed statistical parameter."
+      },
+      "overidentification": {
+        "title": "Overidentification test",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "p_value_method": {
+        "title": "P-value method",
+        "description": "Auto uses exact permutations for at most 9 observations; otherwise asymptotic inference."
+      },
+      "population_sd": {
+        "title": "Known population standard deviation",
+        "description": "Positive, known population standard deviation for the z test."
+      },
+      "pre_periods": {
+        "title": "Pre-treatment periods",
+        "description": "First rows used to fit donor weights; default 10, at least 1 and below the row count."
+      },
+      "ps_caliper": {
+        "title": "Matching caliper",
+        "description": "Maximum propensity-probability distance, default 0.2, in (0,1]. Every row must find a match."
+      },
+      "ps_overlap": {
+        "title": "Propensity overlap bound",
+        "description": "Default 0.000001; strictly between 0 and 0.5. Reject scores outside [bound,1-bound]; no trimming or clipping."
+      },
+      "rank": {
+        "title": "Cointegration rank",
+        "description": "Typed statistical parameter."
+      },
+      "rdd_bandwidth": {
+        "title": "RDD bandwidth",
+        "description": "Positive bandwidth in running-variable units; default 1."
+      },
+      "rdd_cutoff": {
+        "title": "Discontinuity cutoff",
+        "description": "Default 0; running values at or above the cutoff are treated."
+      },
+      "rdd_kernel": {
+        "title": "RDD kernel",
+        "description": "Triangular (default) or uniform local-linear weights."
+      },
+      "regression": {
+        "title": "Deterministic terms",
+        "description": "Typed statistical parameter."
+      },
+      "repetitions": {
+        "title": "Permutations (10–2000)",
+        "description": "Typed statistical parameter."
+      },
+      "residual_plot": {
+        "title": "Residual plot",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "rhs": {
+        "title": "Use explanatory variables",
+        "description": "Typed statistical parameter."
+      },
+      "rows": {
+        "title": "Contingency table rows",
+        "description": "Number of rows in the contingency table of observed counts."
+      },
+      "scale": {
+        "title": "Variance scale",
+        "description": "Typed statistical parameter."
+      },
+      "scale_points": {
+        "title": "Response options",
+        "description": "Uniform ratings use integer scores from 1 through this value; default 5."
+      },
+      "seed": {
+        "title": "Random seed",
+        "description": "Typed statistical parameter."
+      },
+      "selected_lags": {
+        "title": "Selected lags (comma separated)",
+        "description": "Typed statistical parameter."
+      },
+      "serial_lags": {
+        "title": "Serial test lags",
+        "description": "Positive lag order up to 40; the available order also depends on the fitted sample."
+      },
+      "serial_tests": {
+        "title": "Serial correlation tests",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "small": {
+        "title": "Small-sample adjustment",
+        "description": "Typed statistical parameter."
+      },
+      "spatial_neighbors": {
+        "title": "Nearest neighbors",
+        "description": "Default 4; at least 1 and smaller than the unit count. Used by KNN."
+      },
+      "spatial_panel_model": {
+        "title": "Panel spatial structure",
+        "description": "SLM (default) or SEM; balanced panel, entity fixed effects removed by orthonormal time contrasts."
+      },
+      "spatial_permutations": {
+        "title": "Moran permutations",
+        "description": "Default 999; 0 disables permutation inference. Two-sided deviations from the null expectation, with a plus-one p-value."
+      },
+      "spatial_power": {
+        "title": "Inverse-distance power",
+        "description": "Positive exponent p in distance^(-p); default 1."
+      },
+      "spatial_radius": {
+        "title": "Distance threshold",
+        "description": "Positive distance in coordinate units; default 1. Used by distance band and inverse distance."
+      },
+      "spatial_row_standardize": {
+        "title": "Row standardization",
+        "description": "Default true. Divide each nonzero row by its sum; islands remain zero rows."
+      },
+      "spatial_symmetrize": {
+        "title": "Symmetrize neighbors",
+        "description": "Default false. Take the union of directed neighbors before standardization."
+      },
+      "spatial_weight_rule": {
+        "title": "Neighbor rule",
+        "description": "KNN (default), distance band, or inverse distance within the radius; planar Euclidean coordinates."
+      },
+      "sphericity_correction": {
+        "title": "Sphericity correction",
+        "description": "Apply Greenhouse-Geisser epsilon to each within-subject effect's degrees of freedom, or use uncorrected inference. Default: Greenhouse-Geisser."
+      },
+      "stability": {
+        "title": "Stability roots",
+        "description": "Only selected summary contents and their dependencies are computed."
+      },
+      "steps": {
+        "title": "Response horizon",
+        "description": "VAR impulse-response or forecast-error variance-decomposition horizons, from 1 to 1000; default 8. Results include period zero."
+      },
+      "sums_of_squares": {
+        "title": "Sums of squares",
+        "description": "I: sequential (covariates first); II: adjust for other terms except higher-order relatives; III: adjust for every other term, with sum contrasts. Default: III."
+      },
+      "survival_horizon": {
+        "title": "Prediction horizon",
+        "description": "Positive time in the input time units; default 1. Evaluation risks must refer to the same horizon."
+      },
+      "survival_ties": {
+        "title": "Tied events",
+        "description": "Efron (default) or Breslow partial likelihood; baseline hazards always use Breslow."
+      },
+      "theil_form": {
+        "title": "Data form",
+        "description": "Individual: equal weights. Grouped: supply group means and add one Weights input in Details for group populations or population shares. Group means measure between-group inequality only."
+      },
+      "tolerance": {
+        "title": "Convergence tolerance",
+        "description": "Typed statistical parameter."
+      },
+      "transform": {
+        "title": "AR(1) transformation",
+        "description": "Typed statistical parameter."
+      },
+      "trend": {
+        "title": "Deterministic terms",
+        "description": "Typed statistical parameter."
+      },
+      "ts_alpha": {
+        "title": "Level smoothing alpha",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_bandwidth": {
+        "title": "Newey–West bandwidth",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_beta": {
+        "title": "Trend smoothing beta",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_confidence": {
+        "title": "Prediction interval coverage",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_d": {
+        "title": "Difference order",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_damped": {
+        "title": "Damped trend",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_deterministic": {
+        "title": "Deterministic terms",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_gamma": {
+        "title": "Seasonal smoothing gamma",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_horizon": {
+        "title": "Forecast steps",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_lags": {
+        "title": "Short-run difference lags",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_maximum_lag": {
+        "title": "Displayed lags",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_optimize": {
+        "title": "Estimate smoothing parameters",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_p": {
+        "title": "AR / ARCH order",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_period": {
+        "title": "Seasonal period",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_phi": {
+        "title": "Trend damping phi",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_pseudocount": {
+        "title": "Transition pseudocount",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_q": {
+        "title": "MA / variance order",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_seasonal_d": {
+        "title": "Seasonal difference order",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_seasonal_p": {
+        "title": "Seasonal AR order",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_seasonal_q": {
+        "title": "Seasonal MA order",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_seasonality": {
+        "title": "Seasonality",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_seed": {
+        "title": "Forecast random seed",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_simulations": {
+        "title": "EGARCH forecast simulations",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "ts_trend": {
+        "title": "Additive trend",
+        "description": "See node help for this parameter's default, valid range and estimation meaning."
+      },
+      "upper_bound": {
+        "title": "Upper equivalence bound",
+        "description": "Upper mean bound for the equivalence test, above the lower bound."
+      },
+      "use_observed_coefficient": {
+        "title": "Specify observed coefficient",
+        "description": "Typed statistical parameter."
+      },
+      "working_correlation": {
+        "title": "Working correlation",
+        "description": "Exchangeable (default) or independence; inference uses a cluster-robust sandwich covariance."
+      }
+    },
+    "std": {
+      "title": "Standard Deviation Columns",
+      "description": "Sample standard deviation, ddof=1."
+    },
+    "step": {
+      "title": "Step",
+      "description": "Increment between consecutive values."
+    },
+    "subset": {
+      "title": "Columns to Check (empty means all)",
+      "description": "Empty checks all columns; otherwise supply unique column names."
+    },
+    "sum": {
+      "title": "Sum Columns",
+      "description": "Numeric columns to sum."
+    },
+    "target": {
+      "title": "Target Function",
+      "description": "Function resource to invoke."
+    },
+    "time_column": {
+      "title": "Time Column",
+      "description": "Orders rows within each entity; duplicate entity-time keys are rejected."
+    },
+    "to": {
+      "title": "Destination column",
+      "description": "New column name."
+    },
+    "window": {
+      "title": "window",
+      "description": "Typed node parameter."
+    }
+  },
+  "parameter_groups": {
+    "configure": {
+      "title": "Configure"
+    },
+    "covariance": {
+      "title": "Covariance"
+    },
+    "distribution": {
+      "title": "Distribution"
+    },
+    "model": {
+      "title": "Model"
+    },
+    "parameters": {
+      "title": "Parameters"
+    },
+    "sampling": {
+      "title": "Sampling"
+    }
+  },
+  "types": {
+    "binary": {
+      "title": "Binary"
+    },
+    "categorical": {
+      "title": "Categorical"
+    },
+    "data_series": {
+      "title": "DataSeries"
+    },
+    "dataframe": {
+      "title": "DataFrame"
+    },
+    "dataframe_filter_predicate": {
+      "title": "DataFrame Filter Predicate"
+    },
+    "dataframe_project_columns": {
+      "title": "Selected Columns"
+    },
+    "datetime": {
+      "title": "Datetime"
+    },
+    "grouped_dataframe": {
+      "title": "Grouped DataFrame"
+    },
+    "identifier": {
+      "title": "Identifier"
+    },
+    "numeric": {
+      "title": "Numeric"
+    },
+    "object": {
+      "title": "Object"
+    },
+    "ordinal": {
+      "title": "Ordinal"
+    },
+    "plot_data": {
+      "title": "Plot data"
+    },
+    "statistics_model_cox": {
+      "title": "Cox survival model"
+    },
+    "statistics_model_iv_2sls": {
+      "title": "IV 2SLS Model"
+    },
+    "statistics_model_iv_liml": {
+      "title": "IV LIML Model"
+    },
+    "statistics_model_linear": {
+      "title": "Linear Regression Model"
+    },
+    "statistics_model_logit": {
+      "title": "Logit Model"
+    },
+    "statistics_model_panel": {
+      "title": "Panel Model"
+    },
+    "statistics_model_prais": {
+      "title": "Prais Model"
+    },
+    "statistics_model_probit": {
+      "title": "Probit Model"
+    },
+    "statistics_model_var": {
+      "title": "VAR Model"
+    },
+    "statistics_model_vec": {
+      "title": "VEC Model"
+    },
+    "statistics_model_vec_rank": {
+      "title": "VEC Rank Result"
+    },
+    "statistics_report": {
+      "title": "Statistical Report"
+    },
+    "statistics_result": {
+      "title": "Statistical Result"
+    },
+    "statistics_result_adf": {
+      "title": "ADF Result"
+    },
+    "statistics_result_panel_did": {
+      "title": "Panel DID Result"
+    },
+    "statistics_result_treatment_effect": {
+      "title": "Treatment-effect estimates"
+    },
+    "statistics_spatial_weights": {
+      "title": "Spatial weights design"
+    },
+    "text": {
+      "title": "Text"
+    }
+  },
+  "categories": {
+    "constants": {
+      "title": "Constants"
+    },
+    "conversion": {
+      "title": "Conversion"
+    },
+    "data": {
+      "title": "Data"
+    },
+    "data_processing": {
+      "title": "Data Processing"
+    },
+    "database": {
+      "title": "Database"
+    },
+    "dataflow": {
+      "title": "Data Flow"
+    },
+    "dataframe": {
+      "title": "DataFrame",
+      "series": {
+        "title": "DataSeries"
+      }
+    },
+    "debug": {
+      "title": "Debug"
+    },
+    "distribution": {
+      "title": "Probability Distributions",
+      "continuous": {
+        "title": "Continuous Distributions"
+      },
+      "discrete": {
+        "title": "Discrete Distributions"
+      }
+    },
+    "logic": {
+      "title": "Logic"
+    },
+    "numeric": {
+      "title": "Arithmetic"
+    },
+    "operations": {
+      "title": "Operations"
+    },
+    "plot": {
+      "title": "Visualization"
+    },
+    "project": {
+      "title": "Project"
+    },
+    "statistics": {
+      "title": "Statistics",
+      "anova": {
+        "title": "Analysis of Variance"
+      },
+      "association": {
+        "title": "Association and Agreement"
+      },
+      "causal": {
+        "title": "Econometrics and Causal Analysis"
+      },
+      "decision": {
+        "title": "Evaluation and Decision Analysis"
+      },
+      "descriptive": {
+        "title": "Descriptive Statistics"
+      },
+      "design_quality": {
+        "title": "Experimental Design and Quality Control"
+      },
+      "diagnostics": {
+        "title": "Model Diagnostics and Comparison"
+      },
+      "imputation": {
+        "title": "Missing Value Handling"
+      },
+      "inference": {
+        "title": "Inference and Resampling"
+      },
+      "longitudinal": {
+        "title": "Longitudinal and Multilevel Models"
+      },
+      "machine_learning": {
+        "title": "Machine Learning"
+      },
+      "meta": {
+        "title": "Meta-analysis"
+      },
+      "multivariate": {
+        "title": "Multivariate Analysis"
+      },
+      "panel": {
+        "title": "Panel Models"
+      },
+      "postestimation": {
+        "title": "Prediction and Post-estimation"
+      },
+      "power": {
+        "title": "Power and Sample Size"
+      },
+      "psychometrics": {
+        "title": "Psychometrics and Structural Equation Models"
+      },
+      "regression": {
+        "title": "Regression Models"
+      },
+      "spatial": {
+        "title": "Spatial Analysis"
+      },
+      "survey": {
+        "title": "Complex Survey Analysis"
+      },
+      "survival": {
+        "title": "Survival Analysis"
+      },
+      "tests": {
+        "title": "Hypothesis Tests"
+      },
+      "timeseries": {
+        "title": "Time Series"
+      }
+    }
+  },
+  "editors": {
+    "dataframe": {
+      "connect_source": "Enter column names now; they will be checked when the input schema is known.",
+      "deferred_columns": "Column membership depends on execution; the configured names are pending validation.",
+      "pending_columns": "The upstream schema is unresolved; you can continue configuring column names.",
+      "schema_error": "The input schema has a problem. Keep editing parameters and check the graph diagnostics."
+    }
+  },
+  "catalog": {
+    "inventory": {
+      "documentation": "# %{title}\n\nCatalog entry only; unavailable for execution. Inputs, outputs, parameters and the execution kernel are not defined yet.\n\nMethod: `%{method}`\n\nCategory: `%{category}`\n\nOriginal product form: %{form}\n\nOriginal method IDs: %{ids} (removed from the pending inventory).",
+      "scope_note": "Scope note: %{note}",
+      "forms": {
+        "node": "Standalone node",
+        "postestimation": "Post-estimation capability or node",
+        "workflow_template": "Workflow template",
+        "plot": "Plot node",
+        "method_preset": "Method preset or input design",
+        "result_option": "Result metric or inference option",
+        "model_design": "Model design or parameter",
+        "model_preset": "Model preset",
+        "analysis_design": "Analysis design object",
+        "resampling_workflow": "Resampling workflow",
+        "analysis_capability": "Analysis node or result capability",
+        "transform_design": "Transformation or model design",
+        "help_entry": "Help page or feature entry",
+        "inference_configuration": "Inference configuration"
+      }
+    }
+  }
+}

@@ -1,37 +1,37 @@
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::Arc;
-use yss_i18n::{Backend, SimpleBackend, resolve_locale, translate};
+use std::collections::BTreeSet;
+use yss_i18n::{Message, StaticCatalog, resolve_locale, translate};
 use yss_node_protocol::{I18nKey, NodeTypeId};
 use yss_node_registry::{I18nManifest, NodeRegistry};
 
-const DEFAULT_LOCALE: &str = yss_i18n::ENGLISH;
+/// Compiled from `locales/<locale>.json` by the build script.
+pub(crate) static MESSAGES: StaticCatalog = include!(concat!(env!("OUT_DIR"), "/messages.rs"));
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Message {
-    Text(&'static str),
-    Aliases(&'static [&'static str]),
+/// Text of the compiled catalog for code that renders without a catalog handle.
+pub(crate) fn catalog_text(locale: &str, key: &str) -> Box<str> {
+    translate(MESSAGES, locale, key).into()
 }
 
-type AliasBundle = BTreeMap<I18nKey, &'static [&'static str]>;
+/// Like [`catalog_text`], for optional messages such as inventory scope notes.
+pub(crate) fn optional_catalog_text(locale: &str, key: &str) -> Option<Box<str>> {
+    yss_i18n::lookup(MESSAGES, locale, key).map(Into::into)
+}
 
 #[derive(Clone)]
 pub struct BuiltinCatalog {
-    messages: Arc<CatalogMessages>,
-}
-
-struct CatalogMessages {
-    text: SimpleBackend,
-    aliases: BTreeMap<&'static str, AliasBundle>,
+    messages: StaticCatalog,
 }
 
 impl std::fmt::Debug for BuiltinCatalog {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let locales = self
+            .messages
+            .iter()
+            .map(|(locale, _)| *locale)
+            .collect::<Vec<_>>();
         formatter
             .debug_struct("BuiltinCatalog")
-            .field("locales", &self.messages.text.available_locales())
-            .field("aliases", &self.messages.aliases)
+            .field("locales", &locales)
             .finish()
     }
 }
@@ -235,44 +235,21 @@ pub fn authoritative_static_descriptor(
 }
 
 impl BuiltinCatalog {
-    pub(crate) fn new(
-        entries: &[(&'static str, String, Message)],
-    ) -> Result<Self, yss_node_protocol::ProtocolError> {
-        let mut bundles = BTreeMap::<&'static str, BTreeMap<I18nKey, Message>>::new();
-        for (locale, key, message) in entries {
-            let key = I18nKey::new(key.as_str()).map_err(|source| {
-                yss_node_protocol::ProtocolError::InvalidSemanticId {
-                    value: key.as_str().into(),
-                    source,
-                }
-            })?;
-            bundles
-                .entry(*locale)
-                .or_default()
-                .insert(key, message.clone());
-        }
-        let mut text = SimpleBackend::new();
-        let mut aliases = BTreeMap::new();
-        for (locale, bundle) in bundles {
-            let mut translations = HashMap::new();
-            let mut alias_bundle = AliasBundle::new();
-            for (key, message) in bundle {
-                match message {
-                    Message::Text(value) => {
-                        translations
-                            .insert(Cow::Owned(key.as_str().to_owned()), Cow::Borrowed(value));
-                    }
-                    Message::Aliases(values) => {
-                        alias_bundle.insert(key, values);
-                    }
-                }
-            }
-            text.add_translations(Cow::Borrowed(locale), translations);
-            aliases.insert(locale, alias_bundle);
-        }
-        Ok(Self {
-            messages: Arc::new(CatalogMessages { text, aliases }),
-        })
+    pub(crate) fn new() -> Self {
+        Self { messages: MESSAGES }
+    }
+
+    #[cfg(test)]
+    fn from_messages(messages: StaticCatalog) -> Self {
+        Self { messages }
+    }
+
+    /// Every key the compiled locale files define; all locales define the same set.
+    pub(crate) fn keys() -> impl Iterator<Item = &'static str> {
+        MESSAGES
+            .first()
+            .into_iter()
+            .flat_map(|(_, messages)| messages.iter().map(|(key, _)| *key))
     }
 
     pub fn localize(&self, registry: &NodeRegistry, locale: &str) -> LocalizedCatalog {
@@ -286,7 +263,7 @@ impl BuiltinCatalog {
         resources: &[CatalogResourceEntry],
     ) -> LocalizedCatalog {
         let requested_locale = locale.trim().replace('_', "-");
-        let locale = resolve_locale(locale, DEFAULT_LOCALE);
+        let locale = resolve_locale(locale);
         let categories = registry
             .categories()
             .iter()
@@ -334,25 +311,22 @@ impl BuiltinCatalog {
         required: &I18nManifest,
         alias_keys: &BTreeSet<I18nKey>,
     ) -> Result<(), I18nBundleValidationError> {
-        let default_aliases = self.messages.aliases.get(DEFAULT_LOCALE);
         let keys: Vec<_> = required
             .keys
             .iter()
             .filter(|key| {
-                self.messages
-                    .text
-                    .translate(DEFAULT_LOCALE, key.as_str())
-                    .is_none()
-                    && default_aliases.is_none_or(|bundle| !bundle.contains_key(*key))
+                yss_i18n::message(self.messages, yss_i18n::FALLBACK_LOCALE, key.as_str()).is_none()
             })
             .map(|key| key.as_str().into())
             .collect();
         if !keys.is_empty() {
             return Err(I18nBundleValidationError::MissingDefaultLocale { keys });
         }
-        for locale in self.messages.aliases.keys() {
+        for (locale, _) in self.messages {
             for key in alias_keys {
-                if self.messages.text.translate(locale, key.as_str()).is_some() {
+                if yss_i18n::message(self.messages, locale, key.as_str())
+                    .is_some_and(|message| !matches!(message, Message::List(_)))
+                {
                     return Err(I18nBundleValidationError::AliasesNotArray {
                         locale: (*locale).into(),
                         key: key.as_str().into(),
@@ -476,12 +450,13 @@ impl BuiltinCatalog {
             .collect()
     }
 
+    /// English aliases double as technical terms, so they stay searchable in every locale.
     fn technical_terms(&self, protocol: &yss_node_protocol::NodeProtocol) -> Vec<Box<str>> {
         match protocol
             .catalog
             .aliases_key
             .as_ref()
-            .and_then(|key| self.messages.aliases.get(DEFAULT_LOCALE)?.get(key))
+            .and_then(|key| yss_i18n::list(self.messages, yss_i18n::ENGLISH, key.as_str()))
         {
             Some(values) => values
                 .iter()
@@ -493,20 +468,11 @@ impl BuiltinCatalog {
 
     /// Looks up node metadata text, returning the key when no translation exists.
     pub fn text(&self, locale: &str, key: &I18nKey) -> Box<str> {
-        translate(&self.messages.text, locale, key.as_str(), DEFAULT_LOCALE)
-            .into_owned()
-            .into_boxed_str()
+        translate(self.messages, locale, key.as_str()).into()
     }
 
     fn aliases(&self, locale: &str, key: &I18nKey) -> Vec<Box<str>> {
-        let locale = resolve_locale(locale, DEFAULT_LOCALE);
-        let values = self
-            .messages
-            .aliases
-            .get(locale)
-            .and_then(|bundle| bundle.get(key))
-            .or_else(|| self.messages.aliases.get(DEFAULT_LOCALE)?.get(key));
-        match values {
+        match yss_i18n::list(self.messages, locale, key.as_str()) {
             Some(values) => values.iter().map(|value| (*value).into()).collect(),
             None => vec![key.as_str().into()],
         }
@@ -519,8 +485,8 @@ fn search<'a>(parts: impl IntoIterator<Item = &'a str>) -> Box<str> {
 
 #[cfg(test)]
 mod tests {
-    use super::Message::{Aliases, Text};
     use super::*;
+    use yss_i18n::Message::{List, Text};
 
     #[test]
     fn node_help_uses_the_same_locale_as_its_metadata() {
@@ -537,11 +503,10 @@ mod tests {
     #[test]
     fn locale_tags_keep_text_across_case_and_separator_variants() {
         let key = I18nKey::new("nodes.example.title").unwrap();
-        let catalog = BuiltinCatalog::new(&[
-            ("en-US", key.as_str().to_owned(), Text("Example")),
-            ("zh-CN", key.as_str().to_owned(), Text("示例")),
-        ])
-        .unwrap();
+        let catalog = BuiltinCatalog::from_messages(&[
+            ("en-US", &[("nodes.example.title", Text("Example"))]),
+            ("zh-CN", &[("nodes.example.title", Text("示例"))]),
+        ]);
         for (locale, expected) in [
             ("en-US", "Example"),
             ("EN-us", "Example"),
@@ -556,22 +521,7 @@ mod tests {
         ] {
             assert_eq!(catalog.text(locale, &key).as_ref(), expected, "{locale}");
         }
-    }
-
-    #[test]
-    fn text_falls_back_to_default_then_preserves_missing_keys() {
-        let key = I18nKey::new("nodes.example.documentation").unwrap();
         let missing = I18nKey::new("nodes.example.missing").unwrap();
-        let catalog = BuiltinCatalog::new(&[(
-            "en-US",
-            key.as_str().to_owned(),
-            Text("Example documentation"),
-        )])
-        .unwrap();
-        assert_eq!(
-            catalog.text("zh-CN", &key).as_ref(),
-            "Example documentation"
-        );
         assert_eq!(catalog.text("zh-CN", &missing).as_ref(), missing.as_str());
     }
 
@@ -608,20 +558,38 @@ mod tests {
             keys: BTreeSet::from([title.clone(), aliases.clone()]),
         };
         let alias_keys = BTreeSet::from([aliases.clone()]);
-        let mut entries = vec![
-            ("zh-CN", title.as_str().to_owned(), Text("示例")),
-            ("en-US", aliases.as_str().to_owned(), Aliases(&["example"])),
-            ("zh-CN", aliases.as_str().to_owned(), Text("not an array")),
-        ];
-        let catalog = BuiltinCatalog::new(&entries).unwrap();
+        let catalog = BuiltinCatalog::from_messages(&[
+            ("en-US", &[("nodes.example.aliases", List(&["example"]))]),
+            (
+                "zh-CN",
+                &[
+                    ("nodes.example.aliases", Text("not an array")),
+                    ("nodes.example.title", Text("示例")),
+                ],
+            ),
+        ]);
         assert_eq!(
             catalog.validate(&required, &alias_keys),
             Err(I18nBundleValidationError::MissingDefaultLocale {
                 keys: vec![title.as_str().into()],
             })
         );
-        entries.push(("en-US", title.as_str().to_owned(), Text("Example")));
-        let catalog = BuiltinCatalog::new(&entries).unwrap();
+        let catalog = BuiltinCatalog::from_messages(&[
+            (
+                "en-US",
+                &[
+                    ("nodes.example.aliases", List(&["example"])),
+                    ("nodes.example.title", Text("Example")),
+                ],
+            ),
+            (
+                "zh-CN",
+                &[
+                    ("nodes.example.aliases", Text("not an array")),
+                    ("nodes.example.title", Text("示例")),
+                ],
+            ),
+        ]);
         assert_eq!(
             catalog.validate(&required, &alias_keys),
             Err(I18nBundleValidationError::AliasesNotArray {

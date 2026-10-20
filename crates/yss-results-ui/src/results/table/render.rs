@@ -149,9 +149,6 @@ impl TableDelegate for ResultGrid {
             .text_sm()
             .text_color(cx.theme().muted_foreground)
             .child(Icon::new(IconName::Table).size_8())
-            .child(yss_ui::text::format(
-                "detail.counts.rows",
-                &[("count", "0".into())],
-            ))
+            .child(yss_ui::text::plural("counts.rows", 0))
     }
 }

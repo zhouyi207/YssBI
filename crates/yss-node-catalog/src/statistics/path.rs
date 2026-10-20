@@ -1,9 +1,7 @@
 //! Observed-variable paths, mediation and interaction interfaces.
 use super::*;
-use crate::builtin::add_node_messages;
 mod mediation;
 mod moderation;
-mod parameters;
 mod recursive;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     moderation::append(fragment)?;
@@ -13,12 +11,10 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
 fn append_node(
     fragment: &mut ProviderFragment,
     id: &str,
-    en: &'static str,
-    zh: &'static str,
     ports: Vec<PortSpec>,
     mut parameters: Vec<Parameter>,
 ) -> Result<(), BuiltinAssemblyError> {
-    parameters::localize(fragment, id, &mut parameters)?;
+    node_scoped_keys(id, &mut parameters)?;
     fragment.nodes.push(leaf(
         NodeProtocol {
             type_id: sid(id, NodeTypeId::new)?,
@@ -40,6 +36,5 @@ fn append_node(
         },
         id,
     ));
-    add_node_messages(&mut fragment.messages, id, [en, zh], None);
     Ok(())
 }

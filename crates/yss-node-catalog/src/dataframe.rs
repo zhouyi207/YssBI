@@ -4,7 +4,7 @@
 //! pin reconciliation, and execution concerns behind their current boundaries.
 
 use crate::builtin::node_key;
-use crate::builtin::{add_described, add_node_messages, add_text, describe_parameter};
+use crate::builtin::node_scoped_keys;
 use crate::builtin::{concrete, data_port, port_key};
 use yss_data_contract::DataValue;
 mod aggregation;
@@ -13,33 +13,12 @@ mod grouping;
 mod inventory;
 mod labels;
 mod transforms;
-pub(crate) use inventory::documentation as inventory_documentation;
-pub(crate) use transforms::documentation as transformation_documentation;
-pub(crate) fn aggregation_documentation(id: &str, locale: &str) -> Option<Box<str>> {
-    if let Some(help) = grouping::documentation(id, locale) {
-        return Some(help);
-    }
-    let kind = match id {
-        "yssbi.dataframe.series.frequency" => InterfaceKind::Frequency,
-        "yssbi.dataframe.groupby" => InterfaceKind::GroupBy,
-        _ => return None,
-    };
-    let (en, zh) = aggregation::help(kind);
-    Some(
-        if crate::documentation::is_chinese_locale(locale) {
-            zh
-        } else {
-            en
-        }
-        .into(),
-    )
-}
+pub(crate) use inventory::ENTRIES as INVENTORY;
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, iid, leaf,
     pure, sid,
 };
-use crate::Message;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
 
@@ -52,19 +31,9 @@ pub const DATAFRAME_RESOURCE_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.res
 pub const DATAFRAME_COMPOSITION_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.composition";
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
-    let mut messages = Vec::new();
-    add_shared_messages(&mut messages);
     let nodes = NODES
         .iter()
-        .map(|spec| {
-            add_node_messages(
-                &mut messages,
-                spec.id,
-                [spec.title, spec.zh_title],
-                Some([spec.aliases, spec.zh_aliases]),
-            );
-            registered_node(spec)
-        })
+        .map(registered_node)
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
 
     let mut fragment = ProviderFragment {
@@ -78,7 +47,6 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
             sid("yssbi.dataframe.schema.aggregate", SchemaResolverId::new)?,
         ],
         nodes,
-        messages,
         ..ProviderFragment::default()
     };
     inventory::append(&mut fragment)?;
@@ -848,200 +816,4 @@ fn derived_schema(
         resolver: sid(resolver, SchemaResolverId::new)?,
         dependencies,
     })
-}
-
-fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
-    aggregation::messages(out);
-    transforms::shared_window_messages(out);
-    for (key, en, zh) in [
-        ("types.dataframe.title", "DataFrame", "数据框"),
-        ("types.series.title", "DataSeries", "数据序列"),
-        (
-            "types.dataframe_project_columns.title",
-            "Selected Columns",
-            "筛选列清单",
-        ),
-        (
-            "types.dataframe_filter_predicate.title",
-            "DataFrame Filter Predicate",
-            "数据框筛选谓词",
-        ),
-        ("categories.database.title", "Database", "数据库"),
-        (
-            "categories.data_processing.title",
-            "Data Processing",
-            "数据处理",
-        ),
-        ("categories.dataframe.title", "DataFrame", "数据帧"),
-        (
-            "categories.dataframe.series.title",
-            "DataSeries",
-            "数据序列",
-        ),
-        (
-            "editors.dataframe.connect_source",
-            "Enter column names now; they will be checked when the input schema is known.",
-            "可先填写列名，输入结构确定后会校验这些列。",
-        ),
-        (
-            "editors.dataframe.deferred_columns",
-            "Column membership depends on execution; the configured names are pending validation.",
-            "列结构取决于执行结果；已配置的列名等待校验。",
-        ),
-        (
-            "editors.dataframe.pending_columns",
-            "The upstream schema is unresolved; you can continue configuring column names.",
-            "上游结构尚未确定，可以继续配置列名。",
-        ),
-        (
-            "editors.dataframe.schema_error",
-            "The input schema has a problem. Keep editing parameters and check the graph diagnostics.",
-            "输入结构存在问题。参数仍可编辑，请查看图诊断。",
-        ),
-    ] {
-        add_text(out, key, [en, zh]);
-    }
-    for key in [
-        "dataframe",
-        "column",
-        "base_level",
-        "order",
-        "window",
-        "rows",
-    ] {
-        add_described(
-            out,
-            &format!("parameters.{key}"),
-            [key, key],
-            ["Typed node parameter.", "类型化节点参数。"],
-        );
-    }
-    for (key, en_title, zh_title, en_description, zh_description) in [
-        (
-            "interval",
-            "Grid interval",
-            "网格间隔",
-            "Positive step: time units for time-series alignment; shared observed-time positions for panel alignment.",
-            "正整数步长：时间序列按时间单位，面板按共享已观测时间序列的位置补齐。",
-        ),
-        (
-            "entity_column",
-            "Entity Column",
-            "实体列",
-            "Groups panel alignment or differences by this column; missing keys are rejected.",
-            "按此列分组对齐面板或计算差分，键不允许缺失。",
-        ),
-        (
-            "time_column",
-            "Time Column",
-            "时间列",
-            "Orders rows within each entity; duplicate entity-time keys are rejected.",
-            "按此列在实体内排序，实体与时间组合不允许重复。",
-        ),
-        (
-            "subset",
-            "Columns to Check (empty means all)",
-            "检查列（不选表示全部）",
-            "Empty checks all columns; otherwise supply unique column names.",
-            "空列表检查全部列；也可填写不重复的列名。",
-        ),
-        (
-            "how",
-            "Missing Rule",
-            "缺失规则",
-            "any: at least one Null; all: every value is Null.",
-            "any：任一值为 Null；all：全部值为 Null。",
-        ),
-        (
-            "column_match",
-            "Column Matching",
-            "列对齐方式",
-            "Match columns by name (fill missing columns with null) or by position.",
-            "按列名对齐并补齐缺失列，或按列位置对齐。",
-        ),
-        (
-            "left_keys",
-            "Left Keys",
-            "左表连接键",
-            "Select the left key columns in matching order.",
-            "按匹配顺序选择左表连接列。",
-        ),
-        (
-            "right_keys",
-            "Right Keys",
-            "右表连接键",
-            "Select the corresponding right key columns.",
-            "按相同顺序选择右表连接列。",
-        ),
-        (
-            "join_type",
-            "Join Type",
-            "连接类型",
-            "Inner, left, right, full outer, semi or anti join. Null keys do not match.",
-            "选择内连接、左连接、右连接、全外连接、半连接或反连接；空键不匹配。",
-        ),
-        (
-            "right_suffix",
-            "Right Column Suffix",
-            "右表重名列后缀",
-            "Suffix used for duplicate right column names.",
-            "右表重名列自动添加的后缀。",
-        ),
-        (
-            "start",
-            "Start",
-            "起点",
-            "First value in the integer range.",
-            "整数范围的起始值。",
-        ),
-        (
-            "end",
-            "End",
-            "终点",
-            "Exclusive end of the integer range.",
-            "整数范围的终止值（不包含）。",
-        ),
-        (
-            "step",
-            "Step",
-            "步长",
-            "Increment between consecutive values.",
-            "相邻整数之间的增量。",
-        ),
-        (
-            "columns",
-            "Columns",
-            "列",
-            "Source columns selected for this operation.",
-            "选择本次操作使用的源列。",
-        ),
-        (
-            "predicate",
-            "Predicate",
-            "谓词",
-            "Typed condition identifying matching rows.",
-            "用于确定匹配行的类型化条件。",
-        ),
-        (
-            "from",
-            "Source column",
-            "源列",
-            "Column name to rename.",
-            "要重命名的列名。",
-        ),
-        (
-            "to",
-            "Destination column",
-            "目标列",
-            "New column name.",
-            "新的列名。",
-        ),
-    ] {
-        add_described(
-            out,
-            &format!("parameters.{key}"),
-            [en_title, zh_title],
-            [en_description, zh_description],
-        );
-    }
 }

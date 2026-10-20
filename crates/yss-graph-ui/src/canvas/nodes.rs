@@ -301,11 +301,12 @@ impl GraphCanvas {
                     if display.cache.state() != display.state {
                         lines.push(display.cache.state().label().into_owned());
                     }
-                    lines.push(text::format(
+                    lines.push(text::plural_format(
                         "canvas.resultCount",
+                        display.cache.total,
                         &[
                             ("valid", display.cache.valid.to_string()),
-                            ("total", display.cache.total.to_string()),
+                            ("count", display.cache.total.to_string()),
                         ],
                     ));
                 }

@@ -324,12 +324,22 @@ impl PluginsPanel {
                 .child(yss_ui::text::format(
                     "native.plugins.authorizedBudget",
                     &[
-                        ("value0", plugin.granted_budget.active_tasks.to_string()),
-                        ("value1", plugin.granted_budget.views.to_string()),
                         (
-                            "value2",
-                            mib(plugin.granted_budget.snapshot_bytes).to_string(),
+                            "tasks",
+                            yss_ui::text::plural(
+                                "counts.concurrentTasks",
+                                usize::try_from(plugin.granted_budget.active_tasks)
+                                    .unwrap_or(usize::MAX),
+                            ),
                         ),
+                        (
+                            "views",
+                            yss_ui::text::plural(
+                                "counts.views",
+                                usize::try_from(plugin.granted_budget.views).unwrap_or(usize::MAX),
+                            ),
+                        ),
+                        ("exchange", mib(plugin.granted_budget.snapshot_bytes)),
                     ],
                 )),
         )

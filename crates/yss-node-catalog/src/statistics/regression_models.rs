@@ -1,115 +1,44 @@
 //! Executable estimators and model-building analyses in the regression category.
 use super::*;
-use crate::builtin::add_node_messages;
-const SPECS: &[[&str; 3]] = &[
-    ["regression.robust", "Regression Robust", "Robust回归"],
-    [
-        "regression.hierarchical",
-        "Regression Hierarchical",
-        "分层回归",
-    ],
-    ["regression.stepwise", "Regression Stepwise", "逐步回归"],
-    ["regression.curve", "Regression Curve", "曲线回归"],
-    ["regression.nonlinear", "Regression Nonlinear", "非线性回归"],
-    [
-        "regression.nonlinear_formula",
-        "Regression Nonlinear Formula",
-        "非线性回归（自定义公式）",
-    ],
-    ["regression.ridge", "Regression Ridge", "岭回归"],
-    ["regression.lasso", "Regression Lasso", "Lasso回归"],
-    ["regression.pls", "Regression PLS", "PLS回归"],
-    [
-        "regression.logit.multinomial",
-        "Regression Logit Multinomial",
-        "多分类Logit",
-    ],
-    [
-        "regression.logit.ordinal",
-        "Regression Logit Ordinal",
-        "有序Logit",
-    ],
-    [
-        "regression.logit.firth",
-        "Regression Logit Firth",
-        "Firth惩罚Logit回归",
-    ],
-    ["regression.poisson", "Regression Poisson", "Poisson回归"],
-    [
-        "regression.negative_binomial",
-        "Regression Negative Binomial",
-        "负二项回归",
-    ],
-    [
-        "regression.zero_inflated_poisson",
-        "Regression Zero Inflated Poisson",
-        "零膨胀泊松回归",
-    ],
-    [
-        "regression.zero_inflated_negative_binomial",
-        "Regression Zero Inflated Negative Binomial",
-        "零膨胀负二项回归",
-    ],
-    ["regression.tobit", "Regression Tobit", "Tobit模型"],
-    [
-        "regression.logit.conditional",
-        "Regression Logit Conditional",
-        "条件Logit回归",
-    ],
-    ["regression.deming", "Regression Deming", "Deming回归"],
-    ["regression.quantile", "Regression Quantile", "分位数回归"],
-    [
-        "workflow.regression.univariate_multivariable",
-        "Workflow Regression Univariate Multivariable",
-        "单因素与多因素回归",
-    ],
-    [
-        "workflow.regression.grouped",
-        "Workflow Regression Grouped",
-        "分组回归",
-    ],
-    [
-        "workflow.regression.baseline",
-        "Workflow Regression Baseline",
-        "基准回归",
-    ],
-    ["regression.threshold", "Regression Threshold", "门槛回归"],
-    ["transform.rcs", "Transform RCS", "RCS样条分析"],
-    ["regression.glm", "Regression GLM", "GLM广义线性模型"],
-    ["regression.gamma", "Regression Gamma", "Gamma回归"],
-    [
-        "regression.inverse_gaussian",
-        "Regression Inverse Gaussian",
-        "逆高斯回归",
-    ],
-    [
-        "regression.cloglog",
-        "Regression Complementary Log-log",
-        "Complementary log-log模型",
-    ],
-    ["regression.beta", "Regression Beta", "Beta回归"],
-    [
-        "regression.fractional_response",
-        "Regression Fractional Response",
-        "Fractional Response模型",
-    ],
+const SPECS: &[&str] = &[
+    "regression.robust",
+    "regression.hierarchical",
+    "regression.stepwise",
+    "regression.curve",
+    "regression.nonlinear",
+    "regression.nonlinear_formula",
+    "regression.ridge",
+    "regression.lasso",
+    "regression.pls",
+    "regression.logit.multinomial",
+    "regression.logit.ordinal",
+    "regression.logit.firth",
+    "regression.poisson",
+    "regression.negative_binomial",
+    "regression.zero_inflated_poisson",
+    "regression.zero_inflated_negative_binomial",
+    "regression.tobit",
+    "regression.logit.conditional",
+    "regression.deming",
+    "regression.quantile",
+    "workflow.regression.univariate_multivariable",
+    "workflow.regression.grouped",
+    "workflow.regression.baseline",
+    "regression.threshold",
+    "transform.rcs",
+    "regression.glm",
+    "regression.gamma",
+    "regression.inverse_gaussian",
+    "regression.cloglog",
+    "regression.beta",
+    "regression.fractional_response",
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for aliases in SPECS {
-        let [method, en, zh] = *aliases;
+    for &method in SPECS {
         let id = format!("yssbi.statistics.{method}");
         let (ports, parameters) = interface(method)?;
         let mut parameters = parameters;
-        for parameter in &mut parameters {
-            let (title_en, title_zh, help_en, help_zh) = parameter_text(parameter.key.as_str());
-            describe_parameter(
-                &mut fragment.messages,
-                &id,
-                parameter,
-                [title_en, title_zh],
-                [help_en, help_zh],
-            )?;
-        }
+        node_scoped_keys(&id, &mut parameters)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
@@ -131,12 +60,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(
-            &mut fragment.messages,
-            &id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
     }
     Ok(())
 }
@@ -370,195 +293,4 @@ fn interface(method: &str) -> Result<(Vec<PortSpec>, Vec<Parameter>), BuiltinAss
         _ => unreachable!("known regression method"),
     }
     Ok((ports, params))
-}
-fn parameter_text(key: &str) -> (&'static str, &'static str, &'static str, &'static str) {
-    match key {
-        "constant" => (
-            "Include intercept",
-            "包含常数项",
-            "The intercept is not penalized.",
-            "截距不受惩罚。",
-        ),
-        "max_iterations" => (
-            "Maximum iterations",
-            "最大迭代次数",
-            "Positive integer; nonconvergence fails the calculation.",
-            "正整数；不收敛时计算失败。",
-        ),
-        "tolerance" => (
-            "Convergence tolerance",
-            "收敛容差",
-            "1e-12–0.01; default 1e-7.",
-            "1e-12–0.01，默认 1e-7。",
-        ),
-        "robust_loss" => (
-            "Robust loss",
-            "稳健损失",
-            "Huber or Tukey bisquare M-estimation with MAD scale.",
-            "采用 MAD 尺度的 Huber 或 Tukey 双权 M 估计。",
-        ),
-        "tuning" => (
-            "Loss tuning constant",
-            "损失调节常数",
-            "Positive; Huber commonly uses 1.345, Tukey 4.685.",
-            "必须为正；Huber 常用 1.345，Tukey 常用 4.685。",
-        ),
-        "lambda" => (
-            "Penalty strength",
-            "惩罚强度",
-            "Nonnegative; the objective uses RSS/(2n).",
-            "非负；目标函数采用 RSS/(2n)。",
-        ),
-        "standardize" => (
-            "Standardize predictors",
-            "标准化自变量",
-            "Return coefficients in original units.",
-            "输出原始单位的系数。",
-        ),
-        "components" => (
-            "PLS components",
-            "PLS 成分数",
-            "Positive integer, at most the predictor count; univariate response.",
-            "正整数，不能超过自变量数；当前为单响应 PLS。",
-        ),
-        "curve_family" => (
-            "Curve family",
-            "曲线族",
-            "Exponential and power models fit log(response).",
-            "指数和幂函数拟合响应的对数。",
-        ),
-        "degree" => (
-            "Polynomial degree",
-            "多项式次数",
-            "1–8; requires enough distinct predictor values.",
-            "1–8；须有足够多的自变量不同取值。",
-        ),
-        "nonlinear_family" => (
-            "Nonlinear model",
-            "非线性模型",
-            "Exponential, logistic growth, Michaelis–Menten or Gompertz.",
-            "指数、Logistic 生长、Michaelis–Menten 或 Gompertz。",
-        ),
-        "initial_values" => (
-            "Initial parameter values",
-            "参数初始值",
-            "b1, b2, …; empty uses automatic starts for built-in models.",
-            "按 b1、b2……排列；内置模型留空时自动初始化。",
-        ),
-        "formula" => (
-            "Model formula",
-            "模型公式",
-            "Use x1, x2, … and parameters b1, b2, ….",
-            "用 x1、x2……引用自变量，用 b1、b2……引用参数。",
-        ),
-        "lower_bounds" => (
-            "Parameter lower bounds",
-            "参数下界",
-            "Empty means unbounded; otherwise one finite bound per parameter.",
-            "留空表示无下界，否则每个参数填写一个有限下界。",
-        ),
-        "upper_bounds" => (
-            "Parameter upper bounds",
-            "参数上界",
-            "Empty means unbounded; otherwise one finite bound per parameter.",
-            "留空表示无上界，否则每个参数填写一个有限上界。",
-        ),
-        "glm_family" => (
-            "GLM distribution",
-            "GLM 分布族",
-            "Gaussian, binomial, Poisson, Gamma or inverse Gaussian.",
-            "Gaussian、Binomial、Poisson、Gamma 或逆高斯。",
-        ),
-        "gaussian_link" => (
-            "Gaussian link",
-            "Gaussian 链接",
-            "Identity or log; log requires a positive mean.",
-            "恒等或对数链接；对数链接要求正均值。",
-        ),
-        "binomial_link" | "response_link" => (
-            "Response link",
-            "响应链接",
-            "Logit, probit or complementary log-log.",
-            "Logit、Probit 或互补 log-log。",
-        ),
-        "censoring" => (
-            "Censoring boundaries",
-            "删失边界",
-            "Left or both bounds; this is censoring, not truncation.",
-            "左删失或双侧删失，不是截断抽样。",
-        ),
-        "lower" => (
-            "Lower censoring boundary",
-            "下删失点",
-            "Observed values must be at least this bound.",
-            "观测响应不得小于此边界。",
-        ),
-        "upper" => (
-            "Upper censoring boundary",
-            "上删失点",
-            "Must exceed the lower bound.",
-            "必须大于下界。",
-        ),
-        "variance_ratio" => (
-            "Measurement-error variance ratio",
-            "测量误差方差比",
-            "Var(response error)/Var(predictor error); positive, default 1.",
-            "响应误差方差/自变量误差方差；必须为正，默认 1。",
-        ),
-        "quantile" => (
-            "Conditional quantile",
-            "条件分位点",
-            "Strictly between 0 and 1; default 0.5.",
-            "严格位于 0 与 1 之间，默认 0.5。",
-        ),
-        "block_sizes" => (
-            "Predictor block sizes",
-            "自变量分块大小",
-            "Positive integers summing to the predictor count; empty enters one variable at a time.",
-            "正整数之和须等于自变量数；留空表示每次进入一个变量。",
-        ),
-        "direction" => (
-            "Selection direction",
-            "选择方向",
-            "Forward, backward or both.",
-            "向前、向后或双向选择。",
-        ),
-        "criterion" => (
-            "Selection criterion",
-            "选择准则",
-            "Minimize AIC or BIC; final inference is conditional on selection.",
-            "最小化 AIC 或 BIC；最终推断以选定模型为条件。",
-        ),
-        "trimming" => (
-            "Minimum regime fraction",
-            "最小区间样本比例",
-            "0.05–0.45; each regime requires positive residual degrees of freedom.",
-            "0.05–0.45；两侧均须有正的残差自由度。",
-        ),
-        "max_candidates" => (
-            "Threshold search candidates",
-            "门槛搜索候选数",
-            "1–200; larger candidate sets are sampled evenly in sorted order.",
-            "1–200；候选更多时按排序后位置均匀取样。",
-        ),
-        "knot_mode" => (
-            "Spline knot specification",
-            "样条节点方式",
-            "Automatic sample quantiles or explicit knot locations.",
-            "自动样本分位点或显式节点位置。",
-        ),
-        "knot_count" => (
-            "Number of spline knots",
-            "样条节点数",
-            "3–8; repeated automatic quantiles are rejected.",
-            "3–8；自动分位点重复时须调整节点。",
-        ),
-        "knots" => (
-            "Spline knot locations",
-            "样条节点位置",
-            "3–8 finite, strictly increasing values.",
-            "3–8 个有限且严格递增的数值。",
-        ),
-        _ => unreachable!("regression parameter localization"),
-    }
 }

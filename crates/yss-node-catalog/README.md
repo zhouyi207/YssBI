@@ -53,13 +53,15 @@ GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配�
 调用方对查询使用 `normalize_catalog_search_text`，按所有查询词均为子串匹配；搜索不改变创建描述或资源身份。
 Application 在构建活动面板投影的 worker 中生成该文本；原生视图只筛选索引，不在每帧重复转写或另存目录实体。
 
-节点标题、说明和参数文案通过共享的 `yss-i18n` 调用 `rust-i18n::SimpleBackend`；目录克隆共享不可变翻译数据，不复制字典，也不依赖 GPUI 或进程级语言状态。
-每次查询显式传入 `locale`。共享语言规则忽略首尾空白与大小写，接受 `_` / `-`；`en`、`zh` 的地区变体分别使用当前支持的 `en-US`、`zh-CN`，未知语言及缺失词条回退 `en-US`，仍缺失则返回 key。
+节点标题、别名、参数文案、类型与分类标题全部位于 [locales](locales) 的 `en-US.json` / `zh-CN.json`，按节点类型 ID 分组；Rust 定义只声明 key，不含翻译文本。构建脚本经 `yss-i18n` 的 `codegen` 把两份文件编译为静态表，各语言必须定义相同的 key、值类型（文本或别名数组）和 `%{name}` 占位符，否则构建失败；测试另要求每个 key 都有协议或已知查找方使用。新增语言需先加入 `yss_i18n::LOCALES`，并在桌面界面、节点目录和图诊断各自添加同名结构的 `<locale>.json`，缺少任一文件都会使构建失败。
+运行期在编译期生成的静态表中二分查找；目录只持有对静态表的引用，克隆不复制数据，也不依赖 GPUI 或进程级语言状态。
+每次查询显式传入 `locale`。共享语言规则忽略首尾空白与大小写，接受 `_` / `-`；`en`、`zh` 的地区变体分别使用当前支持的 `en-US`、`zh-CN`，未知语言解析为 `yss_i18n::FALLBACK_LOCALE`（`en-US`）；各语言词条由构建期保证齐全，不存在的 key 原样返回。
 返回目录的 `locale` 继续保留请求标签，仅去除首尾空白并将 `_` 替换为 `-`，不改写成回退语言，以保留调用方的请求关联。
 搜索别名仍是类型化数组，使用相同语言规则；默认词条完整性、别名类型与 `I18nKey` 校验不变。协议中的字面量端口标题不转换为翻译 key。
 
-嵌入帮助同时提供中英文正文，静态帮助与生成帮助共用 `yss-i18n` 的语言选择规则；Markdown 正文保留原文件与领域所有权。动态目录帮助模板使用 `rust-i18n` 的 `%{name}` 单次插值，参数内容不再次解释为模板。
-`node_documentation` 按类型直接读取同一份嵌入或生成帮助，不构造目录、参数或资源条目。
+节点帮助是 `docs/src/nodes/<语言>/` 下的 Markdown 页面：英文页面首行以 `<!-- nodes: <节点类型 ID…> -->` 声明所说明的节点，其他语言目录以同名文件翻译同一页面。构建脚本据此建立索引并去掉标记行，缺少翻译页、重复声明或缺少标记都会使构建失败；新增帮助无需修改 Rust 代码。语言目录必须对应受支持的语言；查询按 `yss-i18n` 的语言规则选择页面，某种受支持语言尚无翻译目录时使用英文源页面。
+没有手写帮助页的目录条目使用 `catalog.inventory.documentation` 模板生成帮助：标题取自同一目录文案，原始用途取自 `catalog.inventory.forms.<form>`，范围说明取自 `nodes.<节点类型 ID>.scope_note`，测试拒绝为已有手写页面的条目保留范围说明。模板以 `%{name}` 单次插值，参数内容不再次解释为模板。
+`node_documentation` 按类型直接读取页面或生成帮助，不构造目录、参数或资源条目。
 当前会话的注册状态由 Application 校验；纯文档读取不表示该类型可创建或已有执行内核。
 
 `authoritative_static_descriptor(protocol)` 从协议生成普通创建描述。带有尚未填写的必填文本、
@@ -165,9 +167,8 @@ OLS/SLX、SLM/SEM/SAC/SDM/SDEM 和空间面板。权重节点输出
 `category(spec)` 仅提供目录位置映射，不参与端口、模型类型或操作语义的判定。
 
 已执行的独立检验、诊断和后估计节点使用仓库 `docs/src/nodes/zh/`、`docs/src/nodes/en/` 的 Markdown 正文，
-由 `src/documentation.rs` 映射并统一选择语言。这些正文同时作为 mdBook 节点章节与应用内帮助的唯一来源；
-Catalog 使用基于 `CARGO_MANIFEST_DIR` 的 `include_str!` 在编译时嵌入，不在运行时读取文件或维护副本。
-`statistics/analyses.rs` 的简短本地化说明不替代完整帮助；模块实现契约仍维护在本 README。
+由页面首行的节点标记关联并统一选择语言。这些正文同时作为 mdBook 节点章节与应用内帮助的唯一来源；
+构建脚本在编译时嵌入，不在运行时读取文件或维护副本。模块实现契约仍维护在本 README。
 `statistics/classical` 中相同的备择方向参数共用一份声明。
 正文聚焦输入与参数、逐方法的假设与核心公式、输出口径和必要的判读条件；
 符号随公式简要说明，不展开基础知识章节、完整推导或内部数值分支。
@@ -221,7 +222,7 @@ LMM、随机截距和随机斜率使用 ML/REML；随机斜率采用独立方差
 多因素模型可选主效应或完整因素交互及 I/II/III 型平方和，默认完整交互与 III 型；设计含截距，秩亏或无残差自由度明确拒绝。
 ANCOVA 另接 至少一个连续协变量，使用中心化的加性平行斜率；MANOVA 接 至少两个响应，输出 Wilks/Pillai/Hotelling–Lawley/Roy 检验和 SSCP。
 重复测量使用长表的 response、subjects 与 一个或多个受试者内因素，要求每个受试者在全部组合上恰好一行，默认 Greenhouse–Geisser 校正。
-七者均只输出可由 Inspect 查看数值与 JSON 的结构化 `result`，完整中英文帮助由 `src/documentation.rs` 映射。
+七者均只输出可由 Inspect 查看数值与 JSON 的结构化 `result`，完整中英文帮助由页面首行的节点标记关联。
 
 “多元分析”的七个既有 ID 由 `statistics/multivariate.rs` 完善：典型相关、探索性因子、PCA、对应分析、判别分析、RDA 和 MDS。
 典型相关保留 `yssbi.statistics.association.canonical`，目录位置为 `statistics.multivariate`；聚类与分层聚类仍属于机器学习分类。
@@ -267,7 +268,7 @@ PH 节点从原始对齐列拟合静态无分层 Cox，使用与拟合一致的 
 22 篇中英文帮助明确公式、推断、默认值及未定义值；新增接口不设置固定样本行数上限。
 
 Meta 分析的 20 个既有入口由 `statistics/meta/` 提供端口与参数，40 篇中英文帮助
-由 `documentation.rs` 映射。效应量换算、合并/回归和敏感性节点同时输出可分页、
+由页面首行的节点标记关联。效应量换算、合并/回归和敏感性节点同时输出可分页、
 可连接的研究明细表；森林图复用系数区间图，漏斗图复用带参考线和反向纵轴的散点图。
 固定输出表由 Catalog 通过 `SchemaExpr::Fixed` 声明字段；Registry 校验唯一非空列名
 并拒绝预置运行时血缘，Graph 统一解析，不再为这些表重复注册逐方法 Schema resolver。
@@ -412,7 +413,7 @@ Protocol 对 DataSeries 参数逐项检查声明的元素类型。Graph Editor �
 单列名及有序列列表分别声明 `ColumnName` / `ColumnNames` 约束；列表名称必须有效且唯一。
 可空列表与必选的 ProjectColumns 共用协议层列名检查，图分析复用同一解析，不依赖实际表判断格式是否合法。
 
-Classical tests in `statistics.tests` are executable catalog nodes. Their stable IDs and ports are assembled in `statistics/classical.rs`, and Rust kernels are registered in `yss-node-kernel`. Each of these 30 nodes has its own Chinese and English `test_*.md` help page, selected by `src/documentation.rs`, with its inputs, parameters, hypotheses, statistic, reference distribution, outputs and current usage limits. The existing normality node retains its own help page. Treatment-effect `heterogeneity` is implemented by `statistics/causal_models.rs`; Kappa and Kendall W are implemented separately under `statistics.association`. `t.summary_input` accepts `[n, mean, sd]` for one-sample or paired summaries and six values for independent groups; its `design` parameter determines the interpretation.
+Classical tests in `statistics.tests` are executable catalog nodes. Their stable IDs and ports are assembled in `statistics/classical.rs`, and Rust kernels are registered in `yss-node-kernel`. Each of these 30 nodes has its own Chinese and English `test_*.md` help page, linked by the page's first-line node marker, with its inputs, parameters, hypotheses, statistic, reference distribution, outputs and current usage limits. The existing normality node retains its own help page. Treatment-effect `heterogeneity` is implemented by `statistics/causal_models.rs`; Kappa and Kendall W are implemented separately under `statistics.association`. `t.summary_input` accepts `[n, mean, sd]` for one-sample or paired summaries and six values for independent groups; its `design` parameter determines the interpretation.
 
 `statistics/path` declares continuous interaction, single-mediator and recursive observed
 path interfaces. Domain-specific files share node assembly and parameter localization.

@@ -44,8 +44,11 @@ impl ChartEditor {
             .description(yss_ui::text::format(
                 "native.databases.size",
                 &[
-                    ("rows", meta.row_count.to_string()),
-                    ("columns", meta.column_count.to_string()),
+                    ("rows", yss_ui::text::plural("counts.rows", meta.row_count)),
+                    (
+                        "columns",
+                        yss_ui::text::plural("counts.columns", meta.column_count),
+                    ),
                 ],
             ))
             .child(

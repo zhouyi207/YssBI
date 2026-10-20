@@ -104,7 +104,10 @@ impl Render for PlotView {
                             &[
                                 ("current", (self.page + 1).to_string()),
                                 ("total", self.data.page_count().to_string()),
-                                ("count", self.data.paged_count().to_string()),
+                                (
+                                    "items",
+                                    yss_ui::text::plural("counts.items", self.data.paged_count()),
+                                ),
                             ],
                         ))
                         .child(

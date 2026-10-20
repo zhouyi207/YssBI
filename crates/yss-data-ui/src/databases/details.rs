@@ -217,9 +217,12 @@ impl DatabaseEditor {
                     yss_ui::text::format(
                         "native.databases.selectionHint",
                         &[
-                            ("value0", summary.rows.to_string()),
-                            ("value1", summary.columns.to_string()),
-                            ("value2", summary.cells.to_string()),
+                            ("rows", yss_ui::text::plural("counts.rows", summary.rows)),
+                            (
+                                "columns",
+                                yss_ui::text::plural("counts.columns", summary.columns),
+                            ),
+                            ("cells", yss_ui::text::plural("counts.cells", summary.cells)),
                         ],
                     ),
                     cx,

@@ -3,8 +3,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     emit(
         fragment,
         "workflow.delphi",
-        "Delphi round summary",
-        "德尔菲法（单轮汇总）",
         vec![
             bounded_user_data_input(
                 "criteria",

@@ -1,0 +1,5132 @@
+{
+  "nodes": {
+    "yssbi.constant.e": {
+      "title": "e（自然常数）",
+      "aliases": ["e", "自然常数", "自然对数底数"]
+    },
+    "yssbi.constant.get": {
+      "title": "读取常量",
+      "aliases": ["读取", "获取", "常量"]
+    },
+    "yssbi.constant.pi": {
+      "title": "π（圆周率）",
+      "aliases": ["pi", "π", "圆周率"]
+    },
+    "yssbi.core.reroute": {
+      "title": "重路由",
+      "aliases": []
+    },
+    "yssbi.dataframe.combine": {
+      "title": "组装数据帧",
+      "aliases": ["按列合并", "追加列", "数据帧"]
+    },
+    "yssbi.dataframe.concat.columns": {
+      "title": "按列拼接",
+      "aliases": ["按列拼接", "横向拼接"]
+    },
+    "yssbi.dataframe.concat.rows": {
+      "title": "按行拼接",
+      "aliases": ["按行拼接", "追加行", "纵向拼接"]
+    },
+    "yssbi.dataframe.decompose": {
+      "title": "拆分数据帧",
+      "aliases": ["列", "拆分", "投影"]
+    },
+    "yssbi.dataframe.deduplicate": {
+      "title": "行去重",
+      "aliases": ["Deduplicate Rows", "行去重"],
+      "parameters": {
+        "keep": {
+          "title": "保留方式",
+          "description": "保留第一条、最后一条，或仅保留没有重复键的行。"
+        },
+        "keys": {
+          "title": "键列",
+          "description": "去重时留空检查全部列；宽长表转换时留空表示没有保留键。"
+        }
+      }
+    },
+    "yssbi.dataframe.drop.columns": {
+      "title": "移除列",
+      "aliases": ["移除列", "删除列", "排除列"]
+    },
+    "yssbi.dataframe.drop.rows": {
+      "title": "移除行",
+      "aliases": ["移除行", "删除行", "排除行"]
+    },
+    "yssbi.dataframe.dropna.columns": {
+      "title": "删除缺失列",
+      "aliases": ["删除缺失列", "空列", "缺失值"]
+    },
+    "yssbi.dataframe.dropna.rows": {
+      "title": "删除缺失行",
+      "aliases": ["删除缺失行", "空值", "缺失值"]
+    },
+    "yssbi.dataframe.encode": {
+      "title": "虚拟变量生成",
+      "aliases": ["Generate Indicators", "虚拟变量生成"],
+      "parameters": {
+        "drop_reference": {
+          "title": "省略参照组列",
+          "description": "省略参照组列名所指定的指示列。"
+        },
+        "levels": {
+          "title": "类别值",
+          "description": "填写原始编码的精确文本，每项对应一个输出列。"
+        },
+        "names": {
+          "title": "输出列名",
+          "description": "与类别值按相同顺序逐项对应。"
+        },
+        "reference": {
+          "title": "参照组列名",
+          "description": "必须与一个显式输出列名相同。"
+        }
+      }
+    },
+    "yssbi.dataframe.filter.mask": {
+      "title": "按数列筛选行",
+      "aliases": ["Filter by Series", "按数列筛选行"],
+      "parameters": {
+        "drop_matches": {
+          "title": "移除匹配行",
+          "description": "移除模式保留条件为假或 Null 的行。"
+        }
+      }
+    },
+    "yssbi.dataframe.filter.rows": {
+      "title": "筛选行",
+      "aliases": ["筛选行", "谓词", "过滤"]
+    },
+    "yssbi.dataframe.groupby": {
+      "title": "分组聚合",
+      "aliases": ["分组聚合", "分类汇总"]
+    },
+    "yssbi.dataframe.groupby.apply": {
+      "title": "按组调用 Apply",
+      "aliases": ["groupby", "apply", "transform", "分组函数"]
+    },
+    "yssbi.dataframe.groupby.groups": {
+      "title": "分组 GroupBy",
+      "aliases": ["groupby", "apply", "transform", "分组函数"]
+    },
+    "yssbi.dataframe.groupby.transform": {
+      "title": "按组变换 Transform",
+      "aliases": ["groupby", "apply", "transform", "分组函数"]
+    },
+    "yssbi.dataframe.impute.mice": {
+      "title": "MICE链式方程多重插补",
+      "aliases": ["MICE链式方程多重插补", "MICE", "chained equations"],
+      "scope_note": "MICE 是 MI 的具体算法，不能与通用 MI 入口直接视为同一实现。"
+    },
+    "yssbi.dataframe.impute.multiple": {
+      "title": "多重插补MI",
+      "aliases": ["多重插补MI", "multiple imputation", "MI"],
+      "scope_note": "插补数据集、合并推断与随机种子必须一起定义。"
+    },
+    "yssbi.dataframe.impute.single": {
+      "title": "单次插补",
+      "aliases": ["Single Imputation", "单次插补"],
+      "parameters": {
+        "fill_value": {
+          "title": "填补常数",
+          "description": "仅在常数插补时使用。"
+        },
+        "imputation_method": {
+          "title": "插补方法",
+          "description": "均值、精确中位数、数值众数（并列取最小值）或常数。"
+        }
+      }
+    },
+    "yssbi.dataframe.join": {
+      "title": "连接",
+      "aliases": ["连接", "按键匹配", "关联"]
+    },
+    "yssbi.dataframe.labels": {
+      "title": "数据标签（取值含义）",
+      "aliases": ["数据标签", "取值标签", "value labels", "data.labels"],
+      "parameters": {
+        "semantic_domain": {
+          "title": "编码与标签",
+          "description": "填写精确编码及含义；顺序等级从低到高排列。留空时继承兼容值域；分类没有值域时按实际取值自动生成同名标签。"
+        },
+        "target_type": {
+          "title": "取值语义",
+          "description": "选择分类或顺序语义；取值保留原始编码。"
+        }
+      }
+    },
+    "yssbi.dataframe.limit": {
+      "title": "限制行",
+      "aliases": ["限制", "选取行", "前几行"]
+    },
+    "yssbi.dataframe.panel.align": {
+      "title": "对齐面板数据",
+      "aliases": ["面板设定", "面板索引", "个体时间"]
+    },
+    "yssbi.dataframe.panel.difference": {
+      "title": "面板数据差分",
+      "aliases": ["面板差分", "组内", "一阶差分"]
+    },
+    "yssbi.dataframe.pivot": {
+      "title": "转宽表",
+      "aliases": ["Pivot", "转宽表"],
+      "parameters": {
+        "aggregate": {
+          "title": "聚合方式",
+          "description": "数值聚合忽略 Null；计数只统计非空值。"
+        },
+        "category_column": {
+          "title": "类别列",
+          "description": "与显式类别列表匹配的源列。"
+        },
+        "keys": {
+          "title": "键列",
+          "description": "去重时留空检查全部列；宽长表转换时留空表示没有保留键。"
+        },
+        "levels": {
+          "title": "类别值",
+          "description": "填写原始编码的精确文本，每项对应一个输出列。"
+        },
+        "names": {
+          "title": "输出列名",
+          "description": "与类别值按相同顺序逐项对应。"
+        },
+        "value_column": {
+          "title": "取值列",
+          "description": "需要聚合的源列。"
+        }
+      }
+    },
+    "yssbi.dataframe.project": {
+      "title": "筛选列",
+      "aliases": ["筛选列", "选择列", "保留列", "列顺序", "投影", "数据帧"]
+    },
+    "yssbi.dataframe.rename": {
+      "title": "重命名数据帧",
+      "aliases": ["重命名列", "列名", "数据帧"]
+    },
+    "yssbi.dataframe.resample": {
+      "title": "时间重采样",
+      "aliases": ["Resample Time", "时间重采样"],
+      "parameters": {
+        "aggregate": {
+          "title": "聚合方式",
+          "description": "数值聚合忽略 Null；计数只统计非空值。"
+        },
+        "columns": {
+          "title": "列",
+          "description": "按顺序选择列。"
+        },
+        "keys": {
+          "title": "键列",
+          "description": "去重时留空检查全部列；宽长表转换时留空表示没有保留键。"
+        },
+        "time_column": {
+          "title": "时间列",
+          "description": "用于时间分组的源列。"
+        },
+        "unit": {
+          "title": "单位",
+          "description": "日历或时长单位。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.annotate_dummy": {
+      "title": "添加虚拟变量信息",
+      "aliases": ["虚拟变量", "指示变量", "元数据"]
+    },
+    "yssbi.dataframe.series.backward_fill": {
+      "title": "后向填充",
+      "aliases": ["Backward Fill", "后向填充"],
+      "parameters": {
+        "descending": {
+          "title": "降序",
+          "description": "窗口排序列采用降序。"
+        },
+        "nulls_first": {
+          "title": "空值靠前",
+          "description": "关闭时空值排在最后。"
+        },
+        "order_by": {
+          "title": "排序列",
+          "description": "留空使用当前行顺序；同值行保留原顺序。"
+        },
+        "partition_by": {
+          "title": "分组列",
+          "description": "连接上下文后选择分组列；留空表示同一组。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.bin": {
+      "title": "数值分箱",
+      "aliases": ["Bin Values", "数值分箱"],
+      "parameters": {
+        "edges": {
+          "title": "分箱边界",
+          "description": "有限且严格递增的边界。"
+        },
+        "labels": {
+          "title": "区间标签",
+          "description": "标签数比边界数多一项，按区间顺序填写。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.choose": {
+      "title": "条件选择",
+      "aliases": ["Conditional Selection", "条件选择"]
+    },
+    "yssbi.dataframe.series.clip": {
+      "title": "数值限制",
+      "aliases": ["Clip Values", "数值限制"],
+      "parameters": {
+        "lower": {
+          "title": "下限",
+          "description": "数值下限。"
+        },
+        "upper": {
+          "title": "上限",
+          "description": "必须不小于下限。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.count": {
+      "title": "序列非空计数",
+      "aliases": ["计数", "非空", "序列"]
+    },
+    "yssbi.dataframe.series.cumulative": {
+      "title": "累计运算",
+      "aliases": ["Cumulative Statistics", "累计运算"],
+      "parameters": {
+        "descending": {
+          "title": "降序",
+          "description": "窗口排序列采用降序。"
+        },
+        "nulls_first": {
+          "title": "空值靠前",
+          "description": "关闭时空值排在最后。"
+        },
+        "operation": {
+          "title": "运算",
+          "description": "标准差采用样本标准差，ddof=1。"
+        },
+        "order_by": {
+          "title": "排序列",
+          "description": "留空使用当前行顺序；同值行保留原顺序。"
+        },
+        "partition_by": {
+          "title": "分组列",
+          "description": "连接上下文后选择分组列；留空表示同一组。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.datetime.add": {
+      "title": "日期加减",
+      "aliases": ["Add Date Interval", "日期加减"],
+      "parameters": {
+        "amount": {
+          "title": "增减量",
+          "description": "负数表示减去相应间隔。"
+        },
+        "unit": {
+          "title": "单位",
+          "description": "日历或时长单位。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.datetime.difference": {
+      "title": "日期差值",
+      "aliases": ["Date Difference", "日期差值"],
+      "parameters": {
+        "unit": {
+          "title": "单位",
+          "description": "日历或时长单位。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.datetime.part": {
+      "title": "日期字段提取",
+      "aliases": ["Extract Date Part", "日期字段提取"],
+      "parameters": {
+        "part": {
+          "title": "字段或片段",
+          "description": "日期字段，或从 1 开始的文本片段；负数从末尾计数。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.datetime.truncate": {
+      "title": "日期截断",
+      "aliases": ["Truncate Date", "日期截断"],
+      "parameters": {
+        "unit": {
+          "title": "单位",
+          "description": "日历或时长单位。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.fill_null": {
+      "title": "填充缺失值",
+      "aliases": ["Fill Missing Values", "填充缺失值"]
+    },
+    "yssbi.dataframe.series.forward_fill": {
+      "title": "前向填充",
+      "aliases": ["Forward Fill", "前向填充"],
+      "parameters": {
+        "descending": {
+          "title": "降序",
+          "description": "窗口排序列采用降序。"
+        },
+        "nulls_first": {
+          "title": "空值靠前",
+          "description": "关闭时空值排在最后。"
+        },
+        "order_by": {
+          "title": "排序列",
+          "description": "留空使用当前行顺序；同值行保留原顺序。"
+        },
+        "partition_by": {
+          "title": "分组列",
+          "description": "连接上下文后选择分组列；留空表示同一组。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.frequency": {
+      "title": "频数",
+      "aliases": ["频数", "频数表"]
+    },
+    "yssbi.dataframe.series.int_range": {
+      "title": "整数序列",
+      "aliases": ["范围", "序列", "整数"]
+    },
+    "yssbi.dataframe.series.inverse_standardize": {
+      "title": "逆标准化数据序列",
+      "aliases": ["逆标准分", "还原缩放", "恢复"]
+    },
+    "yssbi.dataframe.series.is_not_null": {
+      "title": "非缺失判断",
+      "aliases": ["Is Present", "非缺失判断"]
+    },
+    "yssbi.dataframe.series.is_null": {
+      "title": "缺失判断",
+      "aliases": ["Is Missing", "缺失判断"]
+    },
+    "yssbi.dataframe.series.length": {
+      "title": "序列长度",
+      "aliases": ["计数", "长度", "序列"]
+    },
+    "yssbi.dataframe.series.map": {
+      "title": "值映射",
+      "aliases": ["Map Values", "值映射"],
+      "parameters": {
+        "from_values": {
+          "title": "原值",
+          "description": "原值的精确文本，与替换值逐项对应。"
+        },
+        "keep_unmatched": {
+          "title": "保留未匹配值",
+          "description": "关闭时未匹配值变为 Null。"
+        },
+        "to_values": {
+          "title": "替换值",
+          "description": "替换值必须适合源列的物理类型。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.mean": {
+      "title": "序列均值",
+      "aliases": ["均值", "平均", "序列"]
+    },
+    "yssbi.dataframe.series.rank": {
+      "title": "排名",
+      "aliases": ["Rank Values", "排名"],
+      "parameters": {
+        "dense": {
+          "title": "密集排名",
+          "description": "密集排名在并列值后不跳号。"
+        },
+        "descending": {
+          "title": "降序",
+          "description": "窗口排序列采用降序。"
+        },
+        "nulls_first": {
+          "title": "空值靠前",
+          "description": "关闭时空值排在最后。"
+        },
+        "order_by": {
+          "title": "排序列",
+          "description": "留空使用当前行顺序；同值行保留原顺序。"
+        },
+        "partition_by": {
+          "title": "分组列",
+          "description": "连接上下文后选择分组列；留空表示同一组。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.select": {
+      "title": "获取数据序列",
+      "aliases": ["列", "序列", "选择"]
+    },
+    "yssbi.dataframe.series.standardize": {
+      "title": "标准化数据序列",
+      "aliases": ["标准分", "标准化", "缩放"]
+    },
+    "yssbi.dataframe.series.sum": {
+      "title": "序列求和",
+      "aliases": ["求和", "聚合", "序列"]
+    },
+    "yssbi.dataframe.series.text.concatenate": {
+      "title": "文本拼接",
+      "aliases": ["Concatenate Text", "文本拼接"],
+      "parameters": {
+        "separator": {
+          "title": "分隔符",
+          "description": "文本片段之间的字面分隔符。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.text.lower": {
+      "title": "转小写",
+      "aliases": ["Lowercase Text", "转小写"]
+    },
+    "yssbi.dataframe.series.text.replace": {
+      "title": "文本替换",
+      "aliases": ["Replace Text", "文本替换"],
+      "parameters": {
+        "from": {
+          "title": "查找文本",
+          "description": "需要替换的字面文本。"
+        },
+        "to": {
+          "title": "替换为",
+          "description": "留空可删除匹配文本。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.text.split": {
+      "title": "文本拆分取段",
+      "aliases": ["Split Text Part", "文本拆分取段"],
+      "parameters": {
+        "part": {
+          "title": "字段或片段",
+          "description": "日期字段，或从 1 开始的文本片段；负数从末尾计数。"
+        },
+        "separator": {
+          "title": "分隔符",
+          "description": "文本片段之间的字面分隔符。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.text.substring": {
+      "title": "文本截取",
+      "aliases": ["Substring", "文本截取"],
+      "parameters": {
+        "length": {
+          "title": "长度",
+          "description": "非负的 Unicode 字符数。"
+        },
+        "start": {
+          "title": "起始位置",
+          "description": "从 1 开始的 Unicode 字符位置。"
+        }
+      }
+    },
+    "yssbi.dataframe.series.text.trim": {
+      "title": "清理首尾空白",
+      "aliases": ["Trim Text", "清理首尾空白"]
+    },
+    "yssbi.dataframe.series.text.upper": {
+      "title": "转大写",
+      "aliases": ["Uppercase Text", "转大写"]
+    },
+    "yssbi.dataframe.set_column": {
+      "title": "添加或替换列",
+      "aliases": ["Add or Replace Column", "添加或替换列"],
+      "parameters": {
+        "name": {
+          "title": "列名",
+          "description": "已有列名替换该列；新列名追加一列。"
+        }
+      }
+    },
+    "yssbi.dataframe.sort": {
+      "title": "排序行",
+      "aliases": ["Sort Rows", "排序行"],
+      "parameters": {
+        "columns": {
+          "title": "列",
+          "description": "按顺序选择列。"
+        },
+        "descending_columns": {
+          "title": "降序列",
+          "description": "从排序列中选择需要降序的列。"
+        },
+        "nulls_first": {
+          "title": "空值靠前",
+          "description": "关闭时空值排在最后。"
+        }
+      }
+    },
+    "yssbi.dataframe.source.get": {
+      "title": "获取数据帧",
+      "aliases": ["数据帧", "表", "数据源"]
+    },
+    "yssbi.dataframe.timeseries.align": {
+      "title": "对齐时间序列",
+      "aliases": ["时序对齐", "频率", "时间索引"]
+    },
+    "yssbi.dataframe.timeseries.difference": {
+      "title": "时间序列差分",
+      "aliases": ["差分", "平稳性"]
+    },
+    "yssbi.dataframe.timeseries.lag": {
+      "title": "时间序列滞后",
+      "aliases": ["滞后", "超前", "平移"]
+    },
+    "yssbi.dataframe.timeseries.percent_change": {
+      "title": "时间序列百分比变化",
+      "aliases": ["百分比变化", "增长率", "收益率"]
+    },
+    "yssbi.dataframe.timeseries.rolling_mean": {
+      "title": "时间序列滚动均值",
+      "aliases": ["移动平均", "滚动窗口", "平滑"]
+    },
+    "yssbi.dataframe.unpivot": {
+      "title": "转长表",
+      "aliases": ["Unpivot", "转长表"],
+      "parameters": {
+        "columns": {
+          "title": "列",
+          "description": "按顺序选择列。"
+        },
+        "include_null": {
+          "title": "包含缺失值",
+          "description": "保留转换后取值为 Null 的行。"
+        },
+        "keys": {
+          "title": "键列",
+          "description": "去重时留空检查全部列；宽长表转换时留空表示没有保留键。"
+        },
+        "value_name": {
+          "title": "数值列",
+          "description": "输出中存放原单元格值的列名。"
+        },
+        "variable_name": {
+          "title": "变量名列",
+          "description": "输出中存放原列名的列名。"
+        }
+      }
+    },
+    "yssbi.debug.view": {
+      "title": "查看数据",
+      "aliases": ["查看", "检查", "预览", "数据查看器"]
+    },
+    "yssbi.distribution.bernoulli.sample": {
+      "title": "伯努利分布采样",
+      "aliases": ["伯努利分布", "二元试验", "概率"],
+      "parameters": {
+        "probability": {
+          "title": "成功概率"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.beta.sample": {
+      "title": "贝塔分布采样",
+      "aliases": ["贝塔分布", "阿尔法贝塔"],
+      "parameters": {
+        "alpha": {
+          "title": "Alpha"
+        },
+        "beta": {
+          "title": "Beta"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.binomial.sample": {
+      "title": "二项分布采样",
+      "aliases": ["二项分布", "试验次数概率"],
+      "parameters": {
+        "probability": {
+          "title": "成功概率"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "trial_count": {
+          "title": "试验次数"
+        }
+      }
+    },
+    "yssbi.distribution.cauchy.sample": {
+      "title": "柯西分布采样",
+      "aliases": ["柯西分布", "位置尺度"],
+      "parameters": {
+        "location": {
+          "title": "位置参数"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "scale": {
+          "title": "尺度参数"
+        }
+      }
+    },
+    "yssbi.distribution.chi_squared.sample": {
+      "title": "卡方分布采样",
+      "aliases": ["卡方分布", "自由度"],
+      "parameters": {
+        "degrees_of_freedom": {
+          "title": "自由度"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.discrete_uniform.sample": {
+      "title": "离散均匀分布采样",
+      "aliases": ["离散均匀分布", "随机整数"],
+      "parameters": {
+        "lower_bound": {
+          "title": "下界"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "upper_bound": {
+          "title": "上界"
+        }
+      }
+    },
+    "yssbi.distribution.erlang.sample": {
+      "title": "爱尔朗分布采样",
+      "aliases": ["爱尔朗分布", "整数形状伽马"],
+      "parameters": {
+        "rate": {
+          "title": "率参数"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "shape": {
+          "title": "形状参数"
+        }
+      }
+    },
+    "yssbi.distribution.exponential.sample": {
+      "title": "指数分布采样",
+      "aliases": ["指数分布", "率参数"],
+      "parameters": {
+        "rate": {
+          "title": "率参数"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.fisher_snedecor.sample": {
+      "title": "F 分布采样",
+      "aliases": ["费舍尔斯内德克分布", "F分布", "自由度"],
+      "parameters": {
+        "denominator_degrees_of_freedom": {
+          "title": "分母自由度"
+        },
+        "numerator_degrees_of_freedom": {
+          "title": "分子自由度"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.gamma.sample": {
+      "title": "伽马分布采样",
+      "aliases": ["伽马分布", "形状率参数"],
+      "parameters": {
+        "rate": {
+          "title": "率参数"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "shape": {
+          "title": "形状参数"
+        }
+      }
+    },
+    "yssbi.distribution.geometric.sample": {
+      "title": "几何分布采样",
+      "aliases": ["几何分布", "等待次数", "概率"],
+      "parameters": {
+        "probability": {
+          "title": "成功概率"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.hypergeometric.sample": {
+      "title": "超几何分布采样",
+      "aliases": ["超几何分布", "不放回抽样"],
+      "parameters": {
+        "draw_count": {
+          "title": "抽取次数"
+        },
+        "population_size": {
+          "title": "总体大小"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "success_population": {
+          "title": "总体成功数"
+        }
+      }
+    },
+    "yssbi.distribution.inverse_gamma.sample": {
+      "title": "逆伽马分布采样",
+      "aliases": ["逆伽马分布", "倒数伽马"],
+      "parameters": {
+        "sample_count": {
+          "title": "样本数"
+        },
+        "scale": {
+          "title": "尺度参数"
+        },
+        "shape": {
+          "title": "形状参数"
+        }
+      }
+    },
+    "yssbi.distribution.laplace.sample": {
+      "title": "拉普拉斯分布采样",
+      "aliases": ["拉普拉斯分布", "双指数分布"],
+      "parameters": {
+        "location": {
+          "title": "位置参数"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "scale": {
+          "title": "尺度参数"
+        }
+      }
+    },
+    "yssbi.distribution.log_normal.sample": {
+      "title": "对数正态分布采样",
+      "aliases": ["对数正态分布", "缪西格玛"],
+      "parameters": {
+        "mu": {
+          "title": "Mu"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "sigma": {
+          "title": "Sigma"
+        }
+      }
+    },
+    "yssbi.distribution.negative_binomial.sample": {
+      "title": "负二项分布采样",
+      "aliases": ["负二项分布", "帕斯卡分布"],
+      "parameters": {
+        "probability": {
+          "title": "成功概率"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "success_count": {
+          "title": "成功次数"
+        }
+      }
+    },
+    "yssbi.distribution.normal.sample": {
+      "title": "正态分布采样",
+      "aliases": ["正态分布", "高斯分布", "随机采样"],
+      "parameters": {
+        "mean": {
+          "title": "均值"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "standard_deviation": {
+          "title": "标准差"
+        }
+      }
+    },
+    "yssbi.distribution.pareto.sample": {
+      "title": "帕累托分布采样",
+      "aliases": ["帕累托分布", "幂律分布"],
+      "parameters": {
+        "sample_count": {
+          "title": "样本数"
+        },
+        "scale": {
+          "title": "尺度参数"
+        },
+        "shape": {
+          "title": "形状参数"
+        }
+      }
+    },
+    "yssbi.distribution.poisson.sample": {
+      "title": "泊松分布采样",
+      "aliases": ["泊松分布", "兰布达", "计数分布"],
+      "parameters": {
+        "rate": {
+          "title": "率参数"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.students_t.sample": {
+      "title": "学生 t 分布采样",
+      "aliases": ["学生t分布", "t分布", "自由度"],
+      "parameters": {
+        "degrees_of_freedom": {
+          "title": "自由度"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.triangular.sample": {
+      "title": "三角分布采样",
+      "aliases": ["三角分布", "最小值最大值众数"],
+      "parameters": {
+        "maximum": {
+          "title": "最大值"
+        },
+        "minimum": {
+          "title": "最小值"
+        },
+        "mode": {
+          "title": "众数"
+        },
+        "sample_count": {
+          "title": "样本数"
+        }
+      }
+    },
+    "yssbi.distribution.uniform.sample": {
+      "title": "连续均匀分布采样",
+      "aliases": ["连续均匀分布", "均匀采样"],
+      "parameters": {
+        "lower_bound": {
+          "title": "下界"
+        },
+        "sample_count": {
+          "title": "样本数"
+        },
+        "upper_bound": {
+          "title": "上界"
+        }
+      }
+    },
+    "yssbi.distribution.weibull.sample": {
+      "title": "威布尔分布采样",
+      "aliases": ["威布尔分布", "形状尺度"],
+      "parameters": {
+        "sample_count": {
+          "title": "样本数"
+        },
+        "scale": {
+          "title": "尺度参数"
+        },
+        "shape": {
+          "title": "形状参数"
+        }
+      }
+    },
+    "yssbi.logic.and": {
+      "title": "且",
+      "aliases": ["与", "并且", "&&"]
+    },
+    "yssbi.logic.equal": {
+      "title": "等于",
+      "aliases": ["相等", "=="]
+    },
+    "yssbi.logic.greater": {
+      "title": "大于",
+      "aliases": ["更大", ">"]
+    },
+    "yssbi.logic.greater_equal": {
+      "title": "大于等于",
+      "aliases": ["不小于", ">="]
+    },
+    "yssbi.logic.less": {
+      "title": "小于",
+      "aliases": ["更小", "<"]
+    },
+    "yssbi.logic.less_equal": {
+      "title": "小于等于",
+      "aliases": ["不大于", "<="]
+    },
+    "yssbi.logic.not": {
+      "title": "非",
+      "aliases": ["取反", "!"]
+    },
+    "yssbi.logic.not_equal": {
+      "title": "不等于",
+      "aliases": ["不相等", "!="]
+    },
+    "yssbi.logic.or": {
+      "title": "或",
+      "aliases": ["或者", "||"]
+    },
+    "yssbi.numeric.add": {
+      "title": "加法",
+      "aliases": ["加法", "相加", "求和", "序列相加", "+"]
+    },
+    "yssbi.numeric.divide": {
+      "title": "除法",
+      "aliases": ["除法", "相除", "商", "序列相除", "/"]
+    },
+    "yssbi.numeric.ln": {
+      "title": "自然对数",
+      "aliases": ["自然对数", "ln"]
+    },
+    "yssbi.numeric.log": {
+      "title": "对数",
+      "aliases": ["对数", "底数", "换底"]
+    },
+    "yssbi.numeric.log10": {
+      "title": "常用对数",
+      "aliases": ["常用对数", "log10"]
+    },
+    "yssbi.numeric.log2": {
+      "title": "以 2 为底的对数",
+      "aliases": ["二进制对数", "log2"]
+    },
+    "yssbi.numeric.multiply": {
+      "title": "乘法",
+      "aliases": ["乘法", "相乘", "积", "序列相乘", "*"]
+    },
+    "yssbi.numeric.power": {
+      "title": "幂",
+      "aliases": ["幂", "乘方", "指数", "次方"]
+    },
+    "yssbi.numeric.sqrt": {
+      "title": "平方根",
+      "aliases": ["平方根", "开方", "sqrt"]
+    },
+    "yssbi.numeric.square": {
+      "title": "平方",
+      "aliases": ["平方", "二次方"]
+    },
+    "yssbi.numeric.subtract": {
+      "title": "减法",
+      "aliases": ["减法", "相减", "差", "序列相减", "-"]
+    },
+    "yssbi.plot.boxplot.view": {
+      "title": "箱线图",
+      "aliases": ["箱线图", "四分位数"]
+    },
+    "yssbi.plot.bubble.view": {
+      "title": "气泡图",
+      "aliases": ["气泡图", "气泡大小"]
+    },
+    "yssbi.plot.coefficient.view": {
+      "title": "系数图",
+      "aliases": ["系数图", "Coef图", "置信区间"]
+    },
+    "yssbi.plot.combination.view": {
+      "title": "组合图",
+      "aliases": ["组合图", "柱线图"]
+    },
+    "yssbi.plot.correlation.view": {
+      "title": "相关性图",
+      "aliases": ["相关矩阵", "皮尔逊相关", "P值", "热力图"]
+    },
+    "yssbi.plot.correlogram.view": {
+      "title": "相关图（ACF 与 PACF）",
+      "aliases": ["相关图", "自相关", "偏自相关", "Ljung-Box检验"]
+    },
+    "yssbi.plot.ecdf.view": {
+      "title": "经验累积分布图",
+      "aliases": ["经验分布函数", "累积分布", "ECDF"]
+    },
+    "yssbi.plot.errorbar.view": {
+      "title": "误差线图",
+      "aliases": ["误差线", "区间图"]
+    },
+    "yssbi.plot.heatmap.view": {
+      "title": "热力图",
+      "aliases": ["热力图", "矩阵图"]
+    },
+    "yssbi.plot.histogram.view": {
+      "title": "直方图",
+      "aliases": ["频数分布", "分箱", "斯特吉斯规则"]
+    },
+    "yssbi.plot.kde.view": {
+      "title": "核密度估计图",
+      "aliases": ["核密度估计", "密度图", "KDE"]
+    },
+    "yssbi.plot.line.view": {
+      "title": "折线图",
+      "aliases": ["折线图", "时间序列图", "曲线图"]
+    },
+    "yssbi.plot.pareto.view": {
+      "title": "帕累托图",
+      "aliases": ["帕累托图", "累计频数"]
+    },
+    "yssbi.plot.pp_qq.view": {
+      "title": "P-P/Q-Q图",
+      "aliases": ["概率图", "分位数图"]
+    },
+    "yssbi.plot.quadrant.view": {
+      "title": "象限图",
+      "aliases": ["象限图", "四象限"]
+    },
+    "yssbi.plot.roc.view": {
+      "title": "ROC曲线",
+      "aliases": ["ROC曲线", "AUC"]
+    },
+    "yssbi.plot.scatter.view": {
+      "title": "散点图",
+      "aliases": ["散点图", "XY图", "点图"]
+    },
+    "yssbi.plot.violin.view": {
+      "title": "小提琴图",
+      "aliases": ["小提琴图", "分布密度"]
+    },
+    "yssbi.plot.wordcloud.view": {
+      "title": "词云",
+      "aliases": ["词云", "词频"]
+    },
+    "yssbi.project.function.call": {
+      "title": "调用函数",
+      "aliases": ["调用", "执行", "函数"]
+    },
+    "yssbi.project.function.entry": {
+      "title": "函数入口",
+      "aliases": ["函数", "入口", "参数"]
+    },
+    "yssbi.project.function.return": {
+      "title": "函数返回",
+      "aliases": ["函数", "返回", "结果"]
+    },
+    "yssbi.statistics.adf.test": {
+      "title": "DF / ADF 单位根检验",
+      "aliases": ["单位根", "迪基-富勒"]
+    },
+    "yssbi.statistics.anova.ancova": {
+      "title": "协方差分析（ANCOVA）",
+      "aliases": ["anova.ancova", "ANCOVA", "协方差分析"]
+    },
+    "yssbi.statistics.anova.factorial": {
+      "title": "多因素方差分析",
+      "aliases": ["anova.factorial", "factorial ANOVA", "多因素方差", "交互效应"]
+    },
+    "yssbi.statistics.anova.manova": {
+      "title": "多元方差分析（MANOVA）",
+      "aliases": ["anova.manova", "MANOVA", "多元方差"]
+    },
+    "yssbi.statistics.anova.one_way": {
+      "title": "单因素方差分析",
+      "aliases": ["anova.one_way", "ANOVA", "单因素方差", "方差"]
+    },
+    "yssbi.statistics.anova.repeated_measures": {
+      "title": "重复测量方差分析",
+      "aliases": ["anova.repeated_measures", "repeated measures ANOVA", "重复测量方差", "Greenhouse-Geisser"]
+    },
+    "yssbi.statistics.anova.three_way": {
+      "title": "三因素方差分析",
+      "aliases": ["anova.three_way", "three way ANOVA", "三因素方差"]
+    },
+    "yssbi.statistics.anova.two_way": {
+      "title": "双因素方差分析",
+      "aliases": ["anova.two_way", "two way ANOVA", "双因素方差"]
+    },
+    "yssbi.statistics.association.bland_altman": {
+      "title": "Bland–Altman 一致性",
+      "aliases": ["association.bland_altman", "Bland-Altman", "一致性界限"]
+    },
+    "yssbi.statistics.association.canonical": {
+      "title": "典型相关分析",
+      "aliases": ["association.canonical", "canonical correlation", "典型相关"],
+      "parameters": {
+        "components": {
+          "title": "保留维数",
+          "description": "保留维数须为正，且不能超过该方法可用的维数。"
+        }
+      }
+    },
+    "yssbi.statistics.association.icc": {
+      "title": "ICC 组内相关系数",
+      "aliases": ["association.icc", "ICC", "组内相关系数"]
+    },
+    "yssbi.statistics.association.kendall": {
+      "title": "Kendall 秩相关",
+      "aliases": ["association.kendall", "Kendall tau-b", "秩相关"]
+    },
+    "yssbi.statistics.association.partial": {
+      "title": "偏相关",
+      "aliases": ["association.partial", "partial correlation", "偏相关"]
+    },
+    "yssbi.statistics.association.pearson": {
+      "title": "Pearson 相关",
+      "aliases": ["association.pearson", "Pearson", "相关"]
+    },
+    "yssbi.statistics.association.ridit": {
+      "title": "Ridit 分析",
+      "aliases": ["association.ridit", "Ridit", "Ridit分析"]
+    },
+    "yssbi.statistics.association.rwg": {
+      "title": "组内一致性 rwg",
+      "aliases": ["association.rwg", "rwg", "组内一致性"]
+    },
+    "yssbi.statistics.association.spearman": {
+      "title": "Spearman 秩相关",
+      "aliases": ["association.spearman", "Spearman", "秩相关"]
+    },
+    "yssbi.statistics.causal.aipw": {
+      "title": "双重稳健估计 AIPW",
+      "aliases": ["AIPW", "双重稳健"]
+    },
+    "yssbi.statistics.causal.ate": {
+      "title": "平均处理效应 ATE",
+      "aliases": ["ATE", "平均处理效应"]
+    },
+    "yssbi.statistics.causal.att": {
+      "title": "处理组平均处理效应 ATT/ATET",
+      "aliases": ["ATT", "ATET"]
+    },
+    "yssbi.statistics.causal.ipw": {
+      "title": "逆概率加权 IPW/IPTW",
+      "aliases": ["IPW", "IPTW"]
+    },
+    "yssbi.statistics.causal.psm": {
+      "title": "倾向得分匹配 PSM",
+      "aliases": ["PSM", "匹配"]
+    },
+    "yssbi.statistics.causal.rdd": {
+      "title": "锐断点回归 RDD",
+      "aliases": ["RDD", "断点回归"]
+    },
+    "yssbi.statistics.causal.regression_adjustment": {
+      "title": "回归调整 RA",
+      "aliases": ["RA", "回归调整"]
+    },
+    "yssbi.statistics.causal.synthetic_control": {
+      "title": "合成控制",
+      "aliases": ["SCM", "synthetic control", "合成控制法"]
+    },
+    "yssbi.statistics.decision.ahp": {
+      "title": "AHP 层次分析",
+      "parameters": {
+        "random_index": {
+          "title": "随机一致性 RI",
+          "description": "0 表示 3–15 阶自动查表；正数表示使用自行指定的 RI。其他阶数仍计算权重与 CI。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.bwm": {
+      "title": "最好最差权重BWM",
+      "aliases": ["decision.bwm", "最好最差权重BWM"]
+    },
+    "yssbi.statistics.decision.composite_index": {
+      "title": "综合指数",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "normalization": {
+          "title": "评分标准化",
+          "description": "极差、向量归一化或原值；客观赋权仍使用各自定义的预处理。"
+        },
+        "weight_method": {
+          "title": "赋权方法",
+          "description": "选择客观赋权、等权，或使用单独连接的权重向量。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.conjoint": {
+      "title": "联合分析（评分型）"
+    },
+    "yssbi.statistics.decision.coupling_coordination": {
+      "title": "耦合协调度"
+    },
+    "yssbi.statistics.decision.critic": {
+      "title": "CRITIC 权重",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "normalization": {
+          "title": "评分标准化",
+          "description": "极差、向量归一化或原值；客观赋权仍使用各自定义的预处理。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.dea": {
+      "title": "DEA",
+      "aliases": ["decision.dea", "DEA"]
+    },
+    "yssbi.statistics.decision.dematel": {
+      "title": "DEMATEL",
+      "parameters": {
+        "attenuation": {
+          "title": "影响衰减系数",
+          "description": "标准化后乘以此系数，范围 (0,1]，默认 1；所得矩阵的谱半径须小于 1。"
+        },
+        "influence_normalization": {
+          "title": "直接影响标准化",
+          "description": "除以最大行和或列和，或使用输入的直接影响尺度。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.efficacy_coefficient": {
+      "title": "功效系数",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "weight_method": {
+          "title": "赋权方法",
+          "description": "选择客观赋权、等权，或使用单独连接的权重向量。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.entropy_weight": {
+      "title": "熵值法",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "normalization": {
+          "title": "评分标准化",
+          "description": "极差、向量归一化或原值；客观赋权仍使用各自定义的预处理。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.fahp": {
+      "title": "模糊层次法 FAHP"
+    },
+    "yssbi.statistics.decision.fuzzy_evaluation": {
+      "title": "模糊综合评价",
+      "parameters": {
+        "fuzzy_operator": {
+          "title": "隶属度合成算子",
+          "description": "选择乘积求和、最小值取大、乘积取大或最小值有界求和。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.grey_relational": {
+      "title": "灰色关联法",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "resolution": {
+          "title": "灰色分辨系数",
+          "description": "大于 0 且不超过 1，默认 0.5。"
+        },
+        "weight_method": {
+          "title": "赋权方法",
+          "description": "选择客观赋权、等权，或使用单独连接的权重向量。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.independence_weight": {
+      "title": "独立性权重",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "normalization": {
+          "title": "评分标准化",
+          "description": "极差、向量归一化或原值；客观赋权仍使用各自定义的预处理。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.information_weight": {
+      "title": "信息量权重",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "normalization": {
+          "title": "评分标准化",
+          "description": "极差、向量归一化或原值；客观赋权仍使用各自定义的预处理。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.ism": {
+      "title": "ISM 解释结构模型"
+    },
+    "yssbi.statistics.decision.kano": {
+      "title": "KANO 模型"
+    },
+    "yssbi.statistics.decision.malmquist": {
+      "title": "Malmquist指数",
+      "aliases": ["decision.malmquist", "Malmquist指数"]
+    },
+    "yssbi.statistics.decision.nps": {
+      "title": "NPS 净推荐值"
+    },
+    "yssbi.statistics.decision.obstacle_degree": {
+      "title": "障碍度",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "rescale": {
+          "title": "极差标准化",
+          "description": "计算障碍度前逐列极差标准化；已为 [0,1] 数值时可关闭。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.psm": {
+      "title": "PSM 价格敏感度",
+      "parameters": {
+        "range_definition": {
+          "title": "接受价格区间定义",
+          "description": "选择原始 Van Westendorp 定义或较窄的四曲线交点定义。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.rfm": {
+      "title": "RFM 模型"
+    },
+    "yssbi.statistics.decision.sbm": {
+      "title": "SBM",
+      "aliases": ["decision.sbm", "SBM"]
+    },
+    "yssbi.statistics.decision.topsis": {
+      "title": "TOPSIS",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "normalization": {
+          "title": "评分标准化",
+          "description": "极差、向量归一化或原值；客观赋权仍使用各自定义的预处理。"
+        },
+        "weight_method": {
+          "title": "赋权方法",
+          "description": "选择客观赋权、等权，或使用单独连接的权重向量。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.turf": {
+      "title": "TURF 组合模型",
+      "parameters": {
+        "combination_size": {
+          "title": "组合大小",
+          "description": "组合中选项的数量；精确比较该大小的所有组合。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.vikor": {
+      "title": "VIKOR",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "majority_weight": {
+          "title": "多数效用权重",
+          "description": "VIKOR 权衡系数 v，范围 [0,1]，默认 0.5。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.weights": {
+      "title": "权重",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "normalization": {
+          "title": "评分标准化",
+          "description": "极差、向量归一化或原值；客观赋权仍使用各自定义的预处理。"
+        },
+        "weight_method": {
+          "title": "赋权方法",
+          "description": "选择客观赋权、等权，或使用单独连接的权重向量。"
+        }
+      }
+    },
+    "yssbi.statistics.decision.wrsr": {
+      "title": "WRSR 秩和比",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "weight_method": {
+          "title": "赋权方法",
+          "description": "选择客观赋权、等权，或使用单独连接的权重向量。"
+        }
+      }
+    },
+    "yssbi.statistics.describe": {
+      "title": "数据描述",
+      "aliases": ["describe", "summary", "descriptive statistics", "描述统计"]
+    },
+    "yssbi.statistics.diagnostic.aic": {
+      "title": "AIC 赤池信息准则"
+    },
+    "yssbi.statistics.diagnostic.bic": {
+      "title": "BIC 贝叶斯信息准则"
+    },
+    "yssbi.statistics.diagnostic.breusch_godfrey": {
+      "title": "Breusch–Godfrey 序列相关检验"
+    },
+    "yssbi.statistics.diagnostic.breusch_pagan": {
+      "title": "Breusch–Pagan / Koenker 异方差检验"
+    },
+    "yssbi.statistics.diagnostic.collinearity": {
+      "title": "共线性分析",
+      "parameters": {
+        "constant": {
+          "title": "包含截距",
+          "description": "默认中心化自变量并包含截距；关闭后使用未中心化设计。"
+        }
+      }
+    },
+    "yssbi.statistics.diagnostic.cooks_distance": {
+      "title": "Cook 距离"
+    },
+    "yssbi.statistics.diagnostic.durbin_watson": {
+      "title": "Durbin–Watson 检验"
+    },
+    "yssbi.statistics.diagnostic.harman": {
+      "title": "共同方法偏差（Harman 单因子）"
+    },
+    "yssbi.statistics.diagnostic.hausman": {
+      "title": "IV Hausman 检验"
+    },
+    "yssbi.statistics.diagnostic.information_matrix": {
+      "title": "Cameron–Trivedi IM 分解"
+    },
+    "yssbi.statistics.diagnostic.leverage": {
+      "title": "杠杆值"
+    },
+    "yssbi.statistics.diagnostic.ljung_box": {
+      "title": "Ljung–Box 白噪声检验"
+    },
+    "yssbi.statistics.diagnostic.lr": {
+      "title": "似然比检验（LR）"
+    },
+    "yssbi.statistics.diagnostic.nested_comparison": {
+      "title": "嵌套模型比较"
+    },
+    "yssbi.statistics.diagnostic.nri_idi": {
+      "title": "NRI 和 IDI",
+      "parameters": {
+        "nri_mode": {
+          "title": "重分类方式",
+          "description": "连续型直接比较预测概率；分类型比较配置的风险组。"
+        },
+        "risk_thresholds": {
+          "title": "风险分界点",
+          "description": "连续型留空；分类型填写严格递增且介于 0 和 1 之间的分界点，等于分界点归入较高组。"
+        }
+      }
+    },
+    "yssbi.statistics.diagnostic.ph": {
+      "title": "比例风险 PH 假设检验",
+      "parameters": {
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "Cox 拟合的正整数迭代预算，默认 500。"
+        },
+        "survival_ties": {
+          "title": "并列事件",
+          "description": "Cox 拟合和 Score 检验一致采用 Efron（默认）或 Breslow 偏似然。"
+        },
+        "time_transform": {
+          "title": "时间变换",
+          "description": "默认使用时间秩，也可选对数时间或原始时间；检验协变量与变换后事件时间的交互效应。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "默认 1e-7；数值收敛范围为 1e-12 至 0.01。"
+        }
+      }
+    },
+    "yssbi.statistics.diagnostic.reset": {
+      "title": "Ramsey RESET 设定检验"
+    },
+    "yssbi.statistics.diagnostic.residual": {
+      "title": "残差分析"
+    },
+    "yssbi.statistics.diagnostic.score_lm": {
+      "title": "Score / LM 检验"
+    },
+    "yssbi.statistics.diagnostic.vif": {
+      "title": "VIF 方差膨胀因子"
+    },
+    "yssbi.statistics.diagnostic.wald": {
+      "title": "系数线性约束 t / Wald 检验"
+    },
+    "yssbi.statistics.diagnostic.white": {
+      "title": "White 异方差检验"
+    },
+    "yssbi.statistics.doe.dose_response": {
+      "title": "剂量反应（四参数对数逻辑曲线）",
+      "parameters": {
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "非线性求解不收敛时明确返回失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "非线性求解相对收敛容差，范围为 1e-12 至 0.01。"
+        }
+      }
+    },
+    "yssbi.statistics.doe.family": {
+      "title": "DOE 试验（全析因设计）",
+      "parameters": {
+        "factors": {
+          "title": "因素数",
+          "description": "至少一个因素，每个因素输出一列。"
+        },
+        "levels": {
+          "title": "每个因素的水平数",
+          "description": "至少两个水平。正交设计在非质数水平下使用全析因构造，试验次数可能较多。"
+        }
+      }
+    },
+    "yssbi.statistics.doe.orthogonal": {
+      "title": "正交设计（等水平）",
+      "parameters": {
+        "factors": {
+          "title": "因素数",
+          "description": "至少一个因素，每个因素输出一列。"
+        },
+        "levels": {
+          "title": "每个因素的水平数",
+          "description": "至少两个水平。正交设计在非质数水平下使用全析因构造，试验次数可能较多。"
+        }
+      }
+    },
+    "yssbi.statistics.doe.range_analysis": {
+      "title": "极差分析（因素水平效应）",
+      "parameters": {
+        "maximize": {
+          "title": "响应越大越好",
+          "description": "关闭时选择均值最低的因素水平；保留全部并列最优水平。"
+        }
+      }
+    },
+    "yssbi.statistics.doe.response_surface": {
+      "title": "响应面分析（完整二次模型）"
+    },
+    "yssbi.statistics.doe.uniform_design": {
+      "title": "均匀设计（中心拉丁超立方）",
+      "parameters": {
+        "candidates": {
+          "title": "候选设计数",
+          "description": "从这些随机拉丁超立方中选取中心化 L2 偏差最小者，不保证全局最优。"
+        },
+        "factors": {
+          "title": "因素数",
+          "description": "至少一个因素，每个因素输出一列。"
+        },
+        "runs": {
+          "title": "试验次数",
+          "description": "每个因素的 1 至试验次数各水平恰好使用一次。"
+        },
+        "seed": {
+          "title": "随机种子",
+          "description": "用于复现候选设计。"
+        }
+      }
+    },
+    "yssbi.statistics.econometrics.gmm": {
+      "title": "线性工具变量 GMM",
+      "aliases": ["GMM", "矩估计"]
+    },
+    "yssbi.statistics.econometrics.heckman_two_step": {
+      "title": "Heckman 两步法",
+      "aliases": ["Heckman", "样本选择"]
+    },
+    "yssbi.statistics.econometrics.panel.between": {
+      "title": "组间估计 Between",
+      "aliases": ["econometrics.panel.between", "组间估计Between Estimator"]
+    },
+    "yssbi.statistics.econometrics.panel.cointegration": {
+      "title": "面板协整检验（Fisher Engle–Granger）",
+      "aliases": ["econometrics.panel.cointegration", "Engle Granger", "面板协整检验"]
+    },
+    "yssbi.statistics.econometrics.panel.dynamic": {
+      "title": "动态面板（差分 GMM）",
+      "aliases": ["econometrics.panel.dynamic", "Arellano Bond", "动态面板"]
+    },
+    "yssbi.statistics.econometrics.panel.fd": {
+      "title": "第一差分模型",
+      "aliases": ["econometrics.panel.fd", "FD", "第一差分模型"]
+    },
+    "yssbi.statistics.econometrics.panel.fe": {
+      "title": "固定效应 FE",
+      "aliases": ["econometrics.panel.fe", "within", "固定效应FE"]
+    },
+    "yssbi.statistics.econometrics.panel.re": {
+      "title": "随机效应 RE",
+      "aliases": ["econometrics.panel.re", "FGLS", "随机效应RE"]
+    },
+    "yssbi.statistics.econometrics.panel.unit_root": {
+      "title": "面板单位根检验（Fisher ADF）",
+      "aliases": ["econometrics.panel.unit_root", "Maddala Wu", "面板单位根检验"]
+    },
+    "yssbi.statistics.econometrics.sfa": {
+      "title": "随机前沿 SFA（半正态）",
+      "aliases": ["SFA", "效率"]
+    },
+    "yssbi.statistics.econometrics.sur": {
+      "title": "似不相关回归 SUR",
+      "aliases": ["SUR", "联立回归"]
+    },
+    "yssbi.statistics.inequality.dagum_gini": {
+      "title": "Dagum 基尼系数",
+      "aliases": ["inequality.dagum_gini", "Dagum Gini", "基尼分解"]
+    },
+    "yssbi.statistics.inequality.gini": {
+      "title": "Gini 基尼系数",
+      "aliases": ["inequality.gini", "Gini", "基尼系数"]
+    },
+    "yssbi.statistics.inequality.theil": {
+      "title": "泰尔指数",
+      "aliases": ["inequality.theil", "Theil T", "泰尔指数"]
+    },
+    "yssbi.statistics.inference.bootstrap": {
+      "title": "Bootstrap",
+      "aliases": ["inference.bootstrap", "Bootstrap"],
+      "scope_note": "需要可调用的统计任务与重抽样设计；当前函数图执行未接入，不能假定可以直接包装任意节点。"
+    },
+    "yssbi.statistics.inference.cluster_robust": {
+      "title": "聚类稳健标准误",
+      "parameters": {
+        "constant": {
+          "title": "包含截距",
+          "description": "拟合截距；自变量须列满秩。"
+        }
+      }
+    },
+    "yssbi.statistics.inference.confidence_interval": {
+      "title": "置信区间 CI",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "degrees_of_freedom": {
+          "title": "参考自由度",
+          "description": "0 表示正态区间；正值表示 Student t 区间。"
+        }
+      }
+    },
+    "yssbi.statistics.inference.jackknife": {
+      "title": "Jackknife",
+      "aliases": ["inference.jackknife", "Jackknife"],
+      "scope_note": "需要可调用方法及删一/删组方案，不能只增加目录定义。"
+    },
+    "yssbi.statistics.iv.2sls.fit": {
+      "title": "拟合 工具变量 2SLS",
+      "aliases": ["工具变量 2SLS"]
+    },
+    "yssbi.statistics.iv.2sls.summary": {
+      "title": "工具变量 2SLS 汇总",
+      "aliases": ["2SLS 报告", "工具变量", "第一阶段"]
+    },
+    "yssbi.statistics.iv.liml.fit": {
+      "title": "拟合 工具变量 LIML",
+      "aliases": ["工具变量 LIML"]
+    },
+    "yssbi.statistics.iv.liml.summary": {
+      "title": "工具变量 LIML 汇总",
+      "aliases": ["有限信息极大似然", "弱工具变量"]
+    },
+    "yssbi.statistics.linear.fit": {
+      "title": "线性回归",
+      "aliases": ["普通最小二乘", "加权最小二乘", "广义最小二乘", "线性回归"]
+    },
+    "yssbi.statistics.linear.predict": {
+      "title": "线性预测",
+      "aliases": ["预测", "拟合值", "线性模型"]
+    },
+    "yssbi.statistics.linear.summary": {
+      "title": "线性回归汇总",
+      "aliases": ["回归表", "诊断"]
+    },
+    "yssbi.statistics.logit.fit": {
+      "title": "拟合 Logit",
+      "aliases": ["逻辑回归", "二元分类"]
+    },
+    "yssbi.statistics.logit.predict": {
+      "title": "Logit 预测",
+      "aliases": ["预测概率", "逻辑回归", "分类"]
+    },
+    "yssbi.statistics.logit.summary": {
+      "title": "Logit 汇总",
+      "aliases": ["Logit 报告", "胜算", "极大似然"]
+    },
+    "yssbi.statistics.longitudinal.gee": {
+      "title": "广义估计方程 GEE",
+      "aliases": ["longitudinal.gee", "GEE", "广义估计方程"]
+    },
+    "yssbi.statistics.meta.begg": {
+      "title": "Begg 检验"
+    },
+    "yssbi.statistics.meta.binary": {
+      "title": "二分类效应量",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "continuity_correction": {
+          "title": "连续性校正",
+          "description": "非负，默认 0.5；仅在某格为零或比例处于边界时校正。"
+        },
+        "effect_measure": {
+          "title": "效应量口径",
+          "description": "所有研究应使用相同结局、对照方向与分析尺度。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.cochran_q": {
+      "title": "Cochran Q 异质性检验"
+    },
+    "yssbi.statistics.meta.combine_p": {
+      "title": "P 值合并",
+      "parameters": {
+        "p_method": {
+          "title": "合并方法",
+          "description": "Fisher 合并独立 P 值；Stouffer 合并方向一致的单侧 P 值，可连接正权重。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.continuous": {
+      "title": "连续型效应量",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "effect_measure": {
+          "title": "效应量口径",
+          "description": "所有研究应使用相同结局、对照方向与分析尺度。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.correlation": {
+      "title": "相关系数效应量",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.egger": {
+      "title": "Egger 检验",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.fixed_effect": {
+      "title": "固定效应 Meta 分析",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "inference": {
+          "title": "系数推断",
+          "description": "Wald 使用已知方差的正态推断；Knapp-Hartung 估计残差尺度并使用 t(k-p)。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.i_squared": {
+      "title": "I² 异质性统计量"
+    },
+    "yssbi.statistics.meta.inverse_variance": {
+      "title": "一般倒方差 Meta 分析",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "estimator": {
+          "title": "合并与异质性方法",
+          "description": "固定效应、非负 DerSimonian-Laird 矩估计或迭代 Paule-Mandel 矩估计。"
+        },
+        "inference": {
+          "title": "系数推断",
+          "description": "Wald 使用已知方差的正态推断；Knapp-Hartung 估计残差尺度并使用 t(k-p)。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.leave_one_out": {
+      "title": "逐研究剔除分析",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "estimator": {
+          "title": "合并与异质性方法",
+          "description": "固定效应、非负 DerSimonian-Laird 矩估计或迭代 Paule-Mandel 矩估计。"
+        },
+        "inference": {
+          "title": "系数推断",
+          "description": "Wald 使用已知方差的正态推断；Knapp-Hartung 估计残差尺度并使用 t(k-p)。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.mean": {
+      "title": "平均值效应量",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.or_hr": {
+      "title": "OR / HR 效应量",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "source_confidence_level": {
+          "title": "原报告置信水平",
+          "description": "输入 OR/HR 区间的置信水平，默认 0.95。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.random_effect": {
+      "title": "随机效应 Meta 分析",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "estimator": {
+          "title": "合并与异质性方法",
+          "description": "固定效应、非负 DerSimonian-Laird 矩估计或迭代 Paule-Mandel 矩估计。"
+        },
+        "inference": {
+          "title": "系数推断",
+          "description": "Wald 使用已知方差的正态推断；Knapp-Hartung 估计残差尺度并使用 t(k-p)。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.regression": {
+      "title": "Meta 回归",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "estimator": {
+          "title": "合并与异质性方法",
+          "description": "固定效应、非负 DerSimonian-Laird 矩估计或迭代 Paule-Mandel 矩估计。"
+        },
+        "inference": {
+          "title": "系数推断",
+          "description": "Wald 使用已知方差的正态推断；Knapp-Hartung 估计残差尺度并使用 t(k-p)。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.sensitivity": {
+      "title": "Meta 敏感性分析",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "estimator": {
+          "title": "合并与异质性方法",
+          "description": "固定效应、非负 DerSimonian-Laird 矩估计或迭代 Paule-Mandel 矩估计。"
+        },
+        "inference": {
+          "title": "系数推断",
+          "description": "Wald 使用已知方差的正态推断；Knapp-Hartung 估计残差尺度并使用 t(k-p)。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.single_proportion": {
+      "title": "单个率效应量",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "continuity_correction": {
+          "title": "连续性校正",
+          "description": "非负，默认 0.5；仅在某格为零或比例处于边界时校正。"
+        },
+        "effect_measure": {
+          "title": "效应量口径",
+          "description": "所有研究应使用相同结局、对照方向与分析尺度。"
+        }
+      }
+    },
+    "yssbi.statistics.meta.tau_squared": {
+      "title": "τ² 研究间方差",
+      "parameters": {
+        "estimator": {
+          "title": "合并与异质性方法",
+          "description": "固定效应、非负 DerSimonian-Laird 矩估计或迭代 Paule-Mandel 矩估计。"
+        }
+      }
+    },
+    "yssbi.statistics.mixed.crossed_effects": {
+      "title": "交叉随机效应模型",
+      "aliases": ["mixed.crossed_effects", "交叉随机效应模型"]
+    },
+    "yssbi.statistics.mixed.glmm": {
+      "title": "广义线性混合模型 GLMM",
+      "aliases": ["mixed.glmm", "GLMM", "广义线性混合模型"]
+    },
+    "yssbi.statistics.mixed.hlm": {
+      "title": "多层线性模型 HLM",
+      "aliases": ["mixed.hlm", "HLM", "多层线性模型", "hierarchical"]
+    },
+    "yssbi.statistics.mixed.lmm": {
+      "title": "线性混合效应模型 LMM",
+      "aliases": ["mixed.lmm", "LMM", "线性混合效应模型"]
+    },
+    "yssbi.statistics.mixed.logistic": {
+      "title": "Logistic 混合模型",
+      "aliases": ["mixed.logistic", "Logistic混合模型"]
+    },
+    "yssbi.statistics.mixed.negative_binomial": {
+      "title": "负二项混合模型",
+      "aliases": ["mixed.negative_binomial", "负二项混合模型", "NB2"]
+    },
+    "yssbi.statistics.mixed.poisson": {
+      "title": "Poisson 混合模型",
+      "aliases": ["mixed.poisson", "Poisson混合模型"]
+    },
+    "yssbi.statistics.mixed.random_intercept": {
+      "title": "随机截距模型",
+      "aliases": ["mixed.random_intercept", "随机截距模型"]
+    },
+    "yssbi.statistics.mixed.random_slope": {
+      "title": "随机斜率模型",
+      "aliases": ["mixed.random_slope", "随机斜率模型"]
+    },
+    "yssbi.statistics.ml.adaboost": {
+      "title": "AdaBoost",
+      "aliases": ["ml.adaboost", "AdaBoost"]
+    },
+    "yssbi.statistics.ml.apriori": {
+      "title": "Apriori关联分析",
+      "aliases": ["ml.apriori", "Apriori关联分析"]
+    },
+    "yssbi.statistics.ml.catboost": {
+      "title": "CatBoost",
+      "aliases": ["ml.catboost", "CatBoost"]
+    },
+    "yssbi.statistics.ml.decision_tree": {
+      "title": "决策树",
+      "aliases": ["ml.decision_tree", "决策树"]
+    },
+    "yssbi.statistics.ml.extra_trees": {
+      "title": "极端随机树",
+      "aliases": ["ml.extra_trees", "极端随机树"]
+    },
+    "yssbi.statistics.ml.gbdt": {
+      "title": "GBDT",
+      "aliases": ["ml.gbdt", "GBDT"]
+    },
+    "yssbi.statistics.ml.knn": {
+      "title": "KNN",
+      "aliases": ["ml.knn", "KNN"]
+    },
+    "yssbi.statistics.ml.lightgbm": {
+      "title": "LightGBM",
+      "aliases": ["ml.lightgbm", "LightGBM"]
+    },
+    "yssbi.statistics.ml.naive_bayes": {
+      "title": "朴素贝叶斯",
+      "aliases": ["ml.naive_bayes", "朴素贝叶斯"]
+    },
+    "yssbi.statistics.ml.neural_network": {
+      "title": "神经网络",
+      "aliases": ["ml.neural_network", "神经网络"],
+      "scope_note": "神经网络的任务、结构和训练范围尚未指定。"
+    },
+    "yssbi.statistics.ml.random_forest": {
+      "title": "随机森林",
+      "aliases": ["ml.random_forest", "随机森林"]
+    },
+    "yssbi.statistics.ml.svm": {
+      "title": "支持向量机SVM",
+      "aliases": ["ml.svm", "支持向量机SVM"]
+    },
+    "yssbi.statistics.ml.xgboost": {
+      "title": "XGBoost",
+      "aliases": ["ml.xgboost", "XGBoost"]
+    },
+    "yssbi.statistics.multivariate.clustering": {
+      "title": "聚类",
+      "aliases": ["multivariate.clustering", "聚类"],
+      "scope_note": "聚类是方法族；需指定默认算法，不能直接与 82 合并。"
+    },
+    "yssbi.statistics.multivariate.correspondence": {
+      "title": "对应分析",
+      "aliases": ["multivariate.correspondence", "correspondence analysis", "对应分析"],
+      "parameters": {
+        "components": {
+          "title": "保留维数",
+          "description": "保留维数须为正，且不能超过该方法可用的维数。"
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.discriminant": {
+      "title": "判别分析",
+      "aliases": ["multivariate.discriminant", "LDA", "QDA", "判别分析"],
+      "parameters": {
+        "class_priors": {
+          "title": "类别先验",
+          "description": "使用训练类别频数占比或各类别等概率先验。"
+        },
+        "discriminant_method": {
+          "title": "判别模型",
+          "description": "选择线性共同协方差模型或二次类别专属协方差模型。"
+        },
+        "shrinkage": {
+          "title": "协方差收缩",
+          "description": "取值 0–1，按标准化变量单位向各向同性目标收缩。"
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.exploratory_factor": {
+      "title": "探索性因子分析",
+      "aliases": ["multivariate.exploratory_factor", "EFA", "探索性因子", "主轴因子", "varimax"],
+      "parameters": {
+        "components": {
+          "title": "保留维数",
+          "description": "保留维数须为正，且不能超过该方法可用的维数。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "主轴因子与旋转的迭代上限，默认 500，正整数。"
+        },
+        "rotation": {
+          "title": "因子旋转",
+          "description": "选择正交 varimax 或不旋转；varimax 不使用 Kaiser 归一化。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "正容差且不超过 0.1，默认 1e-6。"
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.hierarchical_clustering": {
+      "title": "分层聚类",
+      "aliases": ["multivariate.hierarchical_clustering", "分层聚类"]
+    },
+    "yssbi.statistics.multivariate.mds": {
+      "title": "多维尺度分析（MDS）",
+      "aliases": ["multivariate.mds", "MDS", "多维尺度", "classical MDS"],
+      "parameters": {
+        "components": {
+          "title": "保留维数",
+          "description": "保留维数须为正，且不能超过该方法可用的维数。"
+        },
+        "input_kind": {
+          "title": "MDS 输入形式",
+          "description": "选择观测变量或非负、对称的方形相异度矩阵。"
+        },
+        "standardize": {
+          "title": "标准化变量",
+          "description": "按样本标准差标准化变量；关闭时使用原始单位。"
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.pca": {
+      "title": "主成分分析",
+      "aliases": ["multivariate.pca", "PCA", "主成分"],
+      "parameters": {
+        "components": {
+          "title": "保留维数",
+          "description": "保留维数须为正，且不能超过该方法可用的维数。"
+        },
+        "standardize": {
+          "title": "标准化变量",
+          "description": "按样本标准差标准化变量；关闭时使用原始单位。"
+        }
+      }
+    },
+    "yssbi.statistics.multivariate.rda": {
+      "title": "冗余分析（RDA）",
+      "aliases": ["multivariate.rda", "RDA", "冗余分析"],
+      "parameters": {
+        "components": {
+          "title": "保留维数",
+          "description": "保留维数须为正，且不能超过该方法可用的维数。"
+        },
+        "permutations": {
+          "title": "置换次数",
+          "description": "0 关闭推断；否则使用 1–9999 次行置换和加一修正的 p 值。"
+        },
+        "seed": {
+          "title": "随机种子",
+          "description": "用于可复现置换推断的非负随机种子。"
+        },
+        "standardize": {
+          "title": "标准化变量",
+          "description": "按样本标准差标准化变量；关闭时使用原始单位。"
+        }
+      }
+    },
+    "yssbi.statistics.panel.compare": {
+      "title": "比较面板估计器",
+      "aliases": ["多模型比较"]
+    },
+    "yssbi.statistics.panel.did.randomization": {
+      "title": "DID 伪处理组随机化检验",
+      "aliases": ["安慰剂", "随机化推断"]
+    },
+    "yssbi.statistics.panel.did.twfe": {
+      "title": "面板双重差分（双向固定效应）",
+      "aliases": ["双重差分", "双向固定效应"]
+    },
+    "yssbi.statistics.panel.fit": {
+      "title": "拟合 面板模型",
+      "aliases": ["面板模型"]
+    },
+    "yssbi.statistics.panel.predict": {
+      "title": "面板估计尺度预测",
+      "aliases": ["面板预测"]
+    },
+    "yssbi.statistics.panel.summary": {
+      "title": "面板模型汇总",
+      "aliases": ["面板回归", "组内估计"]
+    },
+    "yssbi.statistics.plot.calibration": {
+      "title": "生存校准曲线",
+      "aliases": ["plot.calibration", "校准曲线"]
+    },
+    "yssbi.statistics.plot.control_chart": {
+      "title": "质量控制图（I / MR）",
+      "parameters": {
+        "chart_kind": {
+          "title": "控制图统计量",
+          "description": "单值 I 图，或相邻观测绝对差值的移动极差 MR 图；按输入顺序计算。"
+        }
+      }
+    },
+    "yssbi.statistics.plot.correlogram": {
+      "title": "偏（自）相关图",
+      "aliases": ["ACF", "PACF", "相关图"]
+    },
+    "yssbi.statistics.plot.decision_curve": {
+      "title": "生存决策曲线",
+      "aliases": ["plot.decision_curve", "DCA曲线"]
+    },
+    "yssbi.statistics.plot.forest": {
+      "title": "森林图",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "estimator": {
+          "title": "合并与异质性方法",
+          "description": "固定效应、非负 DerSimonian-Laird 矩估计或迭代 Paule-Mandel 矩估计。"
+        },
+        "exponentiate": {
+          "title": "效应取指数",
+          "description": "将对数比值显示为比值，默认关闭；合并始终使用输入的分析尺度。"
+        },
+        "inference": {
+          "title": "系数推断",
+          "description": "Wald 使用已知方差的正态推断；Knapp-Hartung 估计残差尺度并使用 t(k-p)。"
+        }
+      }
+    },
+    "yssbi.statistics.plot.funnel": {
+      "title": "漏斗图",
+      "parameters": {
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "estimator": {
+          "title": "合并与异质性方法",
+          "description": "固定效应、非负 DerSimonian-Laird 矩估计或迭代 Paule-Mandel 矩估计。"
+        }
+      }
+    },
+    "yssbi.statistics.plot.nomogram": {
+      "title": "Cox 列线图",
+      "aliases": ["plot.nomogram", "列线图"]
+    },
+    "yssbi.statistics.plot.time_series": {
+      "title": "时序图",
+      "aliases": ["time series", "时间序列图"]
+    },
+    "yssbi.statistics.postestimation.adjusted_predictions": {
+      "title": "调整预测",
+      "parameters": {
+        "at": {
+          "title": "协变量设定",
+          "description": "可选逗号分隔赋值，如 x1=2,x2=0；使用拟合系数的名称。"
+        },
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "evaluation": {
+          "title": "预测口径",
+          "description": "对各行调整预测取均值，或在协变量均值处预测。"
+        }
+      }
+    },
+    "yssbi.statistics.posthoc.multiple_comparisons": {
+      "title": "事后多重比较",
+      "parameters": {
+        "adjustment": {
+          "title": "多重性校正",
+          "description": "Holm 与 Bonferroni 控制族错误率；仅 Bonferroni 同时校正区间。"
+        },
+        "confidence_level": {
+          "title": "置信水平",
+          "description": "严格介于 0 和 1，默认 0.95。"
+        },
+        "equal_variances": {
+          "title": "组间等方差",
+          "description": "使用 ANOVA 合并残差方差；关闭时采用两两 Welch 推断。"
+        }
+      }
+    },
+    "yssbi.statistics.power.anova": {
+      "title": "平衡单因素 ANOVA 功效",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "effect_f": {
+          "title": "Cohen f 效应量",
+          "description": "非负 ANOVA 效应量 f，默认 0.25。"
+        },
+        "groups": {
+          "title": "ANOVA 组数",
+          "description": "至少 2 组，默认 3。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.cluster_randomized": {
+      "title": "整群随机功效（连续结果）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "cluster_size": {
+          "title": "每群人数",
+          "description": "正整数、等群大小，默认 20。"
+        },
+        "effect_size": {
+          "title": "标准化均值效应",
+          "description": "均值差除以对应总体标准差，保留正负号；配对检验使用差值的标准差。"
+        },
+        "icc": {
+          "title": "组内相关系数 ICC",
+          "description": "0 至 1，默认 0.05。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.correlation": {
+      "title": "相关性功效（Fisher z）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "correlation": {
+          "title": "备择相关系数",
+          "description": "-1 与 1 之间，默认 0.3。"
+        },
+        "null_correlation": {
+          "title": "零假设相关系数",
+          "description": "-1 与 1 之间，默认 0。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.cox": {
+      "title": "Cox 功效（Schoenfeld 近似）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "event_fraction": {
+          "title": "预期事件比例",
+          "description": "大于 0 且不超过 1；预期观测事件数／入组人数，默认 0.5。"
+        },
+        "hazard_ratio": {
+          "title": "风险比 HR",
+          "description": "比例风险假设下的正风险比，默认 0.7。"
+        },
+        "predictor_variance": {
+          "title": "预测变量方差",
+          "description": "正总体方差，默认 0.25；假定无其他协变量调整。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.equivalence": {
+      "title": "均值等效功效（已知方差）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "difference": {
+          "title": "真实标准化差异",
+          "description": "均值差／共同已知标准差，默认 0。"
+        },
+        "margin": {
+          "title": "标准化界值",
+          "description": "界值除以共同已知标准差，必须为正，默认 0.3。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.generalized_model": {
+      "title": "广义模型功效（Poisson 发生率比）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "baseline_rate": {
+          "title": "基准事件率",
+          "description": "单位暴露量的正事件率，默认 1。"
+        },
+        "exposure": {
+          "title": "每人暴露量",
+          "description": "两组相同的正暴露量，默认 1。"
+        },
+        "rate_ratio": {
+          "title": "发生率比",
+          "description": "第 1 组／基准组的正发生率比，默认 1.5。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.linear_regression": {
+      "title": "线性回归整体检验功效",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "effect_f_squared": {
+          "title": "Cohen f² 效应量",
+          "description": "非负整体 R²/(1-R²)，默认 0.15。"
+        },
+        "predictors": {
+          "title": "回归自变量数",
+          "description": "不含截距的正整数，默认 3。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.logistic": {
+      "title": "Logistic 功效（二元预测变量）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "baseline_probability": {
+          "title": "基准结果概率",
+          "description": "0 与 1 之间，默认 0.2。"
+        },
+        "odds_ratio": {
+          "title": "优势比 OR",
+          "description": "正优势比，默认 1.5。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.logrank": {
+      "title": "Log-rank 功效（Schoenfeld 近似）",
+      "parameters": {
+        "allocation": {
+          "title": "处理组分配比例",
+          "description": "0 与 1 之间，默认 0.5。"
+        },
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "event_fraction": {
+          "title": "预期事件比例",
+          "description": "大于 0 且不超过 1；预期观测事件数／入组人数，默认 0.5。"
+        },
+        "hazard_ratio": {
+          "title": "风险比 HR",
+          "description": "比例风险假设下的正风险比，默认 0.7。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.mean_difference": {
+      "title": "均值差功效（t 检验）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "design": {
+          "title": "均值设计",
+          "description": "independent：等样本量等方差两组；one_sample：单样本均值。"
+        },
+        "effect_size": {
+          "title": "标准化均值效应",
+          "description": "均值差除以对应总体标准差，保留正负号；配对检验使用差值的标准差。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.noninferiority": {
+      "title": "均值非劣效功效（已知方差）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "difference": {
+          "title": "真实标准化差异",
+          "description": "均值差／共同已知标准差，默认 0。"
+        },
+        "higher_is_better": {
+          "title": "结果越高越好",
+          "description": "默认 true；false 反转非劣效检验方向。"
+        },
+        "margin": {
+          "title": "标准化界值",
+          "description": "界值除以共同已知标准差，必须为正，默认 0.3。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.paired": {
+      "title": "配对 t 检验功效",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "effect_size": {
+          "title": "标准化均值效应",
+          "description": "均值差除以对应总体标准差，保留正负号；配对检验使用差值的标准差。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.principles": {
+      "title": "功效原理（正态均值规划）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "effect_size": {
+          "title": "标准化均值效应",
+          "description": "均值差除以对应总体标准差，保留正负号；配对检验使用差值的标准差。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.proportion": {
+      "title": "单比例功效（正态近似）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "null_proportion": {
+          "title": "零假设比例",
+          "description": "0 与 1 之间，默认 0.5。"
+        },
+        "proportion": {
+          "title": "备择比例",
+          "description": "0 至 1，默认 0.6。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.proportion_difference": {
+      "title": "两比例差功效（正态近似）",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "proportion1": {
+          "title": "第 1 组比例",
+          "description": "0 至 1，默认 0.6。"
+        },
+        "proportion2": {
+          "title": "第 2 组比例",
+          "description": "0 至 1，默认 0.4。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        }
+      }
+    },
+    "yssbi.statistics.power.variance": {
+      "title": "正态总体方差功效",
+      "parameters": {
+        "alpha": {
+          "title": "显著性水平",
+          "description": "0 与 1 之间，默认 0.05；TOST 的每个单侧检验均使用此水平。"
+        },
+        "alternative": {
+          "title": "备择方向",
+          "description": "相对于零假设取 two_sided（双侧）、greater（大于）或 less（小于）。"
+        },
+        "sample_size": {
+          "title": "按设计单位的样本量",
+          "description": "默认 100；按节点可能表示每组人数、配对数或每组群数，详见帮助。"
+        },
+        "solve_for": {
+          "title": "计算目标",
+          "description": "power 按给定样本量算功效；sample_size 按目标功效求样本量。"
+        },
+        "target_power": {
+          "title": "目标功效",
+          "description": "0 与 1 之间，默认 0.8；仅求样本量时使用。"
+        },
+        "variance_ratio": {
+          "title": "备择方差／零假设方差",
+          "description": "正方差比，默认 1.5。"
+        }
+      }
+    },
+    "yssbi.statistics.prais.fit": {
+      "title": "拟合 Prais–Winsten",
+      "aliases": ["普莱斯-温斯坦", "序列相关", "可行广义最小二乘"]
+    },
+    "yssbi.statistics.prais.summary": {
+      "title": "Prais–Winsten 汇总",
+      "aliases": ["Prais 报告", "自相关系数", "德宾-沃森"]
+    },
+    "yssbi.statistics.probit.fit": {
+      "title": "拟合 Probit",
+      "aliases": ["概率单位", "正态链接", "二元分类"]
+    },
+    "yssbi.statistics.probit.predict": {
+      "title": "Probit 预测",
+      "aliases": ["预测概率", "概率单位", "正态分布函数"]
+    },
+    "yssbi.statistics.probit.summary": {
+      "title": "Probit 汇总",
+      "aliases": ["Probit 报告", "边际效应", "极大似然"]
+    },
+    "yssbi.statistics.psychometrics.content_validity": {
+      "title": "内容效度（专家 CVI）"
+    },
+    "yssbi.statistics.psychometrics.item_analysis": {
+      "title": "题项分析（区分度）",
+      "parameters": {
+        "tail_fraction": {
+          "title": "高低分组分位比例",
+          "description": "大于 0 且小于 0.5，默认 0.27；并列边界总分保留在同组，两个分界相等时边界留在中间组。"
+        }
+      }
+    },
+    "yssbi.statistics.psychometrics.reliability": {
+      "title": "信度（Cronbach α）"
+    },
+    "yssbi.statistics.psychometrics.validity": {
+      "title": "效度检验（KMO / Bartlett）"
+    },
+    "yssbi.statistics.quality.measurement_system": {
+      "title": "测量系统分析（交叉 Gage R&R）",
+      "parameters": {
+        "include_interaction": {
+          "title": "零件 × 操作者交互",
+          "description": "保留随机交互项；关闭时将交互平方和与自由度合并入重复性误差。不按显著性自动切换。"
+        }
+      }
+    },
+    "yssbi.statistics.quality.process_capability": {
+      "title": "过程能力分析",
+      "parameters": {
+        "lower_limit": {
+          "title": "规格下限",
+          "description": "工程或设计规格下限，与统计控制限不同。"
+        },
+        "target": {
+          "title": "目标值",
+          "description": "用于 Cpm 的目标值，不改变 Cp 或 Cpk。"
+        },
+        "upper_limit": {
+          "title": "规格上限",
+          "description": "须大于规格下限。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.beta": {
+      "title": "Beta回归",
+      "aliases": ["regression.beta", "Regression Beta", "Beta回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.cloglog": {
+      "title": "Complementary log-log模型",
+      "aliases": ["regression.cloglog", "Regression Complementary Log-log", "Complementary log-log模型"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.curve": {
+      "title": "曲线回归",
+      "aliases": ["regression.curve", "Regression Curve", "曲线回归"],
+      "parameters": {
+        "curve_family": {
+          "title": "曲线族",
+          "description": "指数和幂函数拟合响应的对数。"
+        },
+        "degree": {
+          "title": "多项式次数",
+          "description": "1–8；须有足够多的自变量不同取值。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.deming": {
+      "title": "Deming回归",
+      "aliases": ["regression.deming", "Regression Deming", "Deming回归"],
+      "parameters": {
+        "variance_ratio": {
+          "title": "测量误差方差比",
+          "description": "响应误差方差/自变量误差方差；必须为正，默认 1。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.fractional_response": {
+      "title": "Fractional Response模型",
+      "aliases": ["regression.fractional_response", "Regression Fractional Response", "Fractional Response模型"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "response_link": {
+          "title": "响应链接",
+          "description": "Logit、Probit 或互补 log-log。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.gamma": {
+      "title": "Gamma回归",
+      "aliases": ["regression.gamma", "Regression Gamma", "Gamma回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.glm": {
+      "title": "GLM广义线性模型",
+      "aliases": ["regression.glm", "Regression GLM", "GLM广义线性模型"],
+      "parameters": {
+        "binomial_link": {
+          "title": "响应链接",
+          "description": "Logit、Probit 或互补 log-log。"
+        },
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "gaussian_link": {
+          "title": "Gaussian 链接",
+          "description": "恒等或对数链接；对数链接要求正均值。"
+        },
+        "glm_family": {
+          "title": "GLM 分布族",
+          "description": "Gaussian、Binomial、Poisson、Gamma 或逆高斯。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.hierarchical": {
+      "title": "分层回归",
+      "aliases": ["regression.hierarchical", "Regression Hierarchical", "分层回归"],
+      "parameters": {
+        "block_sizes": {
+          "title": "自变量分块大小",
+          "description": "正整数之和须等于自变量数；留空表示每次进入一个变量。"
+        },
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.inverse_gaussian": {
+      "title": "逆高斯回归",
+      "aliases": ["regression.inverse_gaussian", "Regression Inverse Gaussian", "逆高斯回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.lasso": {
+      "title": "Lasso回归",
+      "aliases": ["regression.lasso", "Regression Lasso", "Lasso回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "lambda": {
+          "title": "惩罚强度",
+          "description": "非负；目标函数采用 RSS/(2n)。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "standardize": {
+          "title": "标准化自变量",
+          "description": "输出原始单位的系数。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.logit.conditional": {
+      "title": "条件Logit回归",
+      "aliases": ["regression.logit.conditional", "Regression Logit Conditional", "条件Logit回归"],
+      "parameters": {
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.logit.firth": {
+      "title": "Firth惩罚Logit回归",
+      "aliases": ["regression.logit.firth", "Regression Logit Firth", "Firth惩罚Logit回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.logit.multinomial": {
+      "title": "多分类Logit",
+      "aliases": ["regression.logit.multinomial", "Regression Logit Multinomial", "多分类Logit"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.logit.ordinal": {
+      "title": "有序Logit",
+      "aliases": ["regression.logit.ordinal", "Regression Logit Ordinal", "有序Logit"],
+      "parameters": {
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.negative_binomial": {
+      "title": "负二项回归",
+      "aliases": ["regression.negative_binomial", "Regression Negative Binomial", "负二项回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.nonlinear": {
+      "title": "非线性回归",
+      "aliases": ["regression.nonlinear", "Regression Nonlinear", "非线性回归"],
+      "parameters": {
+        "initial_values": {
+          "title": "参数初始值",
+          "description": "按 b1、b2……排列；内置模型留空时自动初始化。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "nonlinear_family": {
+          "title": "非线性模型",
+          "description": "指数、Logistic 生长、Michaelis–Menten 或 Gompertz。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.nonlinear_formula": {
+      "title": "非线性回归（自定义公式）",
+      "aliases": ["regression.nonlinear_formula", "Regression Nonlinear Formula", "非线性回归（自定义公式）"],
+      "parameters": {
+        "formula": {
+          "title": "模型公式",
+          "description": "用 x1、x2……引用自变量，用 b1、b2……引用参数。"
+        },
+        "initial_values": {
+          "title": "参数初始值",
+          "description": "按 b1、b2……排列；内置模型留空时自动初始化。"
+        },
+        "lower_bounds": {
+          "title": "参数下界",
+          "description": "留空表示无下界，否则每个参数填写一个有限下界。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        },
+        "upper_bounds": {
+          "title": "参数上界",
+          "description": "留空表示无上界，否则每个参数填写一个有限上界。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.pls": {
+      "title": "PLS回归",
+      "aliases": ["regression.pls", "Regression PLS", "PLS回归"],
+      "parameters": {
+        "components": {
+          "title": "PLS 成分数",
+          "description": "正整数，不能超过自变量数；当前为单响应 PLS。"
+        },
+        "standardize": {
+          "title": "标准化自变量",
+          "description": "输出原始单位的系数。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.poisson": {
+      "title": "Poisson回归",
+      "aliases": ["regression.poisson", "Regression Poisson", "Poisson回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.quantile": {
+      "title": "分位数回归",
+      "aliases": ["regression.quantile", "Regression Quantile", "分位数回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "quantile": {
+          "title": "条件分位点",
+          "description": "严格位于 0 与 1 之间，默认 0.5。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.ridge": {
+      "title": "岭回归",
+      "aliases": ["regression.ridge", "Regression Ridge", "岭回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "lambda": {
+          "title": "惩罚强度",
+          "description": "非负；目标函数采用 RSS/(2n)。"
+        },
+        "standardize": {
+          "title": "标准化自变量",
+          "description": "输出原始单位的系数。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.robust": {
+      "title": "Robust回归",
+      "aliases": ["regression.robust", "Regression Robust", "Robust回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "robust_loss": {
+          "title": "稳健损失",
+          "description": "采用 MAD 尺度的 Huber 或 Tukey 双权 M 估计。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        },
+        "tuning": {
+          "title": "损失调节常数",
+          "description": "必须为正；Huber 常用 1.345，Tukey 常用 4.685。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.stepwise": {
+      "title": "逐步回归",
+      "aliases": ["regression.stepwise", "Regression Stepwise", "逐步回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "criterion": {
+          "title": "选择准则",
+          "description": "最小化 AIC 或 BIC；最终推断以选定模型为条件。"
+        },
+        "direction": {
+          "title": "选择方向",
+          "description": "向前、向后或双向选择。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.threshold": {
+      "title": "门槛回归",
+      "aliases": ["regression.threshold", "Regression Threshold", "门槛回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_candidates": {
+          "title": "门槛搜索候选数",
+          "description": "1–200；候选更多时按排序后位置均匀取样。"
+        },
+        "trimming": {
+          "title": "最小区间样本比例",
+          "description": "0.05–0.45；两侧均须有正的残差自由度。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.tobit": {
+      "title": "Tobit模型",
+      "aliases": ["regression.tobit", "Regression Tobit", "Tobit模型"],
+      "parameters": {
+        "censoring": {
+          "title": "删失边界",
+          "description": "左删失或双侧删失，不是截断抽样。"
+        },
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "lower": {
+          "title": "下删失点",
+          "description": "观测响应不得小于此边界。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        },
+        "upper": {
+          "title": "上删失点",
+          "description": "必须大于下界。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.zero_inflated_negative_binomial": {
+      "title": "零膨胀负二项回归",
+      "aliases": ["regression.zero_inflated_negative_binomial", "Regression Zero Inflated Negative Binomial", "零膨胀负二项回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.regression.zero_inflated_poisson": {
+      "title": "零膨胀泊松回归",
+      "aliases": ["regression.zero_inflated_poisson", "Regression Zero Inflated Poisson", "零膨胀泊松回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数；不收敛时计算失败。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "1e-12–0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.sem.cfa": {
+      "title": "验证性因子分析CFA",
+      "aliases": ["sem.cfa", "验证性因子分析CFA"]
+    },
+    "yssbi.statistics.sem.path": {
+      "title": "路径分析（观测变量递归线性模型）",
+      "parameters": {
+        "equations": {
+          "title": "路径方程",
+          "description": "按输入顺序用 x1、x2……引用变量，分号或换行分隔方程，例如 x2 ~ x1; x3 ~ x1 + x2。"
+        }
+      }
+    },
+    "yssbi.statistics.sem.structural": {
+      "title": "结构方程模型SEM",
+      "aliases": ["sem.structural", "结构方程模型SEM"]
+    },
+    "yssbi.statistics.spatial.moran": {
+      "title": "莫兰指数",
+      "aliases": ["spatial.moran", "莫兰指数", "Moran"]
+    },
+    "yssbi.statistics.spatial.ols": {
+      "title": "空间 OLS 回归",
+      "aliases": ["spatial.ols", "空间OLS回归"]
+    },
+    "yssbi.statistics.spatial.panel": {
+      "title": "空间面板模型（实体固定效应）",
+      "aliases": ["spatial.panel", "空间面板模型"]
+    },
+    "yssbi.statistics.spatial.sac": {
+      "title": "空间滞后误差 SAC",
+      "aliases": ["spatial.sac", "空间滞后误差模型SAC", "SARAR"]
+    },
+    "yssbi.statistics.spatial.sdem": {
+      "title": "空间杜宾误差 SDEM",
+      "aliases": ["spatial.sdem", "空间杜宾误差SDEM"]
+    },
+    "yssbi.statistics.spatial.sdm": {
+      "title": "空间杜宾 SDM",
+      "aliases": ["spatial.sdm", "空间杜宾SDM"]
+    },
+    "yssbi.statistics.spatial.sem": {
+      "title": "空间误差 SEM",
+      "aliases": ["spatial.sem", "空间误差SEM"]
+    },
+    "yssbi.statistics.spatial.slm": {
+      "title": "空间滞后 SLM",
+      "aliases": ["spatial.slm", "空间滞后SLM", "SAR"]
+    },
+    "yssbi.statistics.spatial.slx": {
+      "title": "自变量空间滞后 SLX",
+      "aliases": ["spatial.slx", "自变量空间滞后SLX"]
+    },
+    "yssbi.statistics.spatial.weights": {
+      "title": "空间权重构造",
+      "aliases": ["spatial.weights", "空间权重构造"]
+    },
+    "yssbi.statistics.survey.clustered": {
+      "title": "整群抽样均值／比例",
+      "parameters": {
+        "lonely_psu": {
+          "title": "单 PSU 层处理",
+          "description": "fail 拒绝无法估计的层内方差；certainty 仅用于已知必选层，将其方差贡献设为零。"
+        },
+        "statistic": {
+          "title": "统计量",
+          "description": "均值，或 0/1 响应的比例。"
+        }
+      }
+    },
+    "yssbi.statistics.survey.linear_regression": {
+      "title": "复杂抽样线性回归",
+      "parameters": {
+        "constant": {
+          "title": "包含截距",
+          "description": "在回归方程中加入截距。"
+        },
+        "lonely_psu": {
+          "title": "单 PSU 层处理",
+          "description": "fail 拒绝无法估计的层内方差；certainty 仅用于已知必选层，将其方差贡献设为零。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数，数值收敛迭代预算，默认 500。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "系数相对收敛容差，1e-12 至 0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.survey.logistic": {
+      "title": "复杂抽样 Logistic 回归",
+      "parameters": {
+        "constant": {
+          "title": "包含截距",
+          "description": "在回归方程中加入截距。"
+        },
+        "lonely_psu": {
+          "title": "单 PSU 层处理",
+          "description": "fail 拒绝无法估计的层内方差；certainty 仅用于已知必选层，将其方差贡献设为零。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数，数值收敛迭代预算，默认 500。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "系数相对收敛容差，1e-12 至 0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.survey.mean_proportion": {
+      "title": "复杂抽样均值／比例",
+      "parameters": {
+        "lonely_psu": {
+          "title": "单 PSU 层处理",
+          "description": "fail 拒绝无法估计的层内方差；certainty 仅用于已知必选层，将其方差贡献设为零。"
+        },
+        "statistic": {
+          "title": "统计量",
+          "description": "均值，或 0/1 响应的比例。"
+        }
+      }
+    },
+    "yssbi.statistics.survey.poisson": {
+      "title": "复杂抽样 Poisson 回归",
+      "parameters": {
+        "constant": {
+          "title": "包含截距",
+          "description": "在回归方程中加入截距。"
+        },
+        "lonely_psu": {
+          "title": "单 PSU 层处理",
+          "description": "fail 拒绝无法估计的层内方差；certainty 仅用于已知必选层，将其方差贡献设为零。"
+        },
+        "max_iterations": {
+          "title": "最大迭代次数",
+          "description": "正整数，数值收敛迭代预算，默认 500。"
+        },
+        "tolerance": {
+          "title": "收敛容差",
+          "description": "系数相对收敛容差，1e-12 至 0.01，默认 1e-7。"
+        }
+      }
+    },
+    "yssbi.statistics.survey.stratified": {
+      "title": "分层抽样均值／比例",
+      "parameters": {
+        "lonely_psu": {
+          "title": "单 PSU 层处理",
+          "description": "fail 拒绝无法估计的层内方差；certainty 仅用于已知必选层，将其方差贡献设为零。"
+        },
+        "statistic": {
+          "title": "统计量",
+          "description": "均值，或 0/1 响应的比例。"
+        }
+      }
+    },
+    "yssbi.statistics.survey.weights": {
+      "title": "抽样权重",
+      "parameters": {
+        "input_kind": {
+          "title": "输入含义",
+          "description": "正抽样权重，或 (0,1] 内的纳入概率（转换为概率的倒数）。"
+        }
+      }
+    },
+    "yssbi.statistics.survival.aft": {
+      "title": "加速失效时间模型 AFT",
+      "aliases": ["survival.aft", "AFT加速失效时间模型"]
+    },
+    "yssbi.statistics.survival.competing_risks": {
+      "title": "竞争风险（Aalen–Johansen）",
+      "aliases": ["survival.competing_risks", "竞争风险模型", "CIF", "Aalen-Johansen"]
+    },
+    "yssbi.statistics.survival.cox": {
+      "title": "Cox 比例风险回归",
+      "aliases": ["survival.cox", "Cox回归", "PH"]
+    },
+    "yssbi.statistics.survival.exponential": {
+      "title": "指数生存回归",
+      "aliases": ["survival.exponential", "指数分布生存模型"]
+    },
+    "yssbi.statistics.survival.kaplan_meier": {
+      "title": "Kaplan–Meier 生存估计",
+      "aliases": ["survival.kaplan_meier", "Kaplan-Meier", "KM"]
+    },
+    "yssbi.statistics.survival.loglogistic": {
+      "title": "对数逻辑斯蒂生存回归",
+      "aliases": ["survival.loglogistic", "Log-logistic生存模型"]
+    },
+    "yssbi.statistics.survival.lognormal": {
+      "title": "对数正态生存回归",
+      "aliases": ["survival.lognormal", "Lognormal生存模型"]
+    },
+    "yssbi.statistics.survival.logrank": {
+      "title": "Log-rank 检验",
+      "aliases": ["survival.logrank", "Log-rank检验"]
+    },
+    "yssbi.statistics.survival.nelson_aalen": {
+      "title": "Nelson–Aalen 累积风险",
+      "aliases": ["survival.nelson_aalen", "Nelson–Aalen累计风险", "NA"]
+    },
+    "yssbi.statistics.survival.time_dependent_cox": {
+      "title": "时变 Cox 回归",
+      "aliases": ["survival.time_dependent_cox", "时间依赖Cox模型"]
+    },
+    "yssbi.statistics.survival.weibull": {
+      "title": "Weibull 生存回归",
+      "aliases": ["survival.weibull", "Weibull生存模型"]
+    },
+    "yssbi.statistics.test.bartlett": {
+      "title": "Bartlett 方差齐性检验",
+      "aliases": ["bartlett variance"]
+    },
+    "yssbi.statistics.test.binomial": {
+      "title": "精确二项检验",
+      "aliases": ["binomial test", "exact proportion test"]
+    },
+    "yssbi.statistics.test.brown_forsythe": {
+      "title": "Brown–Forsythe 方差齐性检验",
+      "aliases": ["median-centered levene"]
+    },
+    "yssbi.statistics.test.chisquare.crosstab": {
+      "title": "列联表卡方独立性检验",
+      "aliases": ["crosstab", "chi square independence"]
+    },
+    "yssbi.statistics.test.chisquare.general": {
+      "title": "Pearson 列联表卡方检验",
+      "aliases": ["pearson chi square", "contingency table"]
+    },
+    "yssbi.statistics.test.chisquare.goodness_of_fit": {
+      "title": "卡方拟合优度检验",
+      "aliases": ["chi square goodness of fit"]
+    },
+    "yssbi.statistics.test.cmh": {
+      "title": "Cochran–Mantel–Haenszel 分层检验",
+      "aliases": ["cmh stratified test"]
+    },
+    "yssbi.statistics.test.cochran_q": {
+      "title": "Cochran Q 重复比例检验",
+      "aliases": ["cochran q"]
+    },
+    "yssbi.statistics.test.equivalence": {
+      "title": "单样本等价检验（TOST）",
+      "aliases": ["two one-sided tests", "tost"]
+    },
+    "yssbi.statistics.test.fisher_exact": {
+      "title": "Fisher 精确检验",
+      "aliases": ["fisher exact 2x2"]
+    },
+    "yssbi.statistics.test.friedman": {
+      "title": "Friedman 重复测量检验",
+      "aliases": ["friedman test"]
+    },
+    "yssbi.statistics.test.heterogeneity": {
+      "title": "处理效应异质性检验",
+      "aliases": ["异质性检验", "interaction"]
+    },
+    "yssbi.statistics.test.kappa": {
+      "title": "Kappa 一致性",
+      "aliases": ["test.kappa", "Cohen Kappa", "Fleiss Kappa"]
+    },
+    "yssbi.statistics.test.kendall_w": {
+      "title": "Kendall 协调系数 W",
+      "aliases": ["test.kendall_w", "Kendall W", "协调系数"]
+    },
+    "yssbi.statistics.test.kruskal_wallis": {
+      "title": "Kruskal–Wallis 检验",
+      "aliases": ["rank one way anova"]
+    },
+    "yssbi.statistics.test.levene": {
+      "title": "Levene 方差齐性检验",
+      "aliases": ["variance homogeneity"]
+    },
+    "yssbi.statistics.test.mann_kendall": {
+      "title": "Mann–Kendall 趋势检验",
+      "aliases": ["monotonic trend"]
+    },
+    "yssbi.statistics.test.mann_whitney": {
+      "title": "Mann–Whitney U 检验",
+      "aliases": ["wilcoxon rank sum"]
+    },
+    "yssbi.statistics.test.mcnemar": {
+      "title": "McNemar 配对二分类检验",
+      "aliases": ["paired proportions"]
+    },
+    "yssbi.statistics.test.mood_median": {
+      "title": "Mood 中位数检验",
+      "aliases": ["mood median"]
+    },
+    "yssbi.statistics.test.nonparametric.family": {
+      "title": "非参数组间检验选择器",
+      "aliases": ["nonparametric tests", "rank tests"]
+    },
+    "yssbi.statistics.test.normality": {
+      "title": "Jarque–Bera / Omnibus 正态性检验"
+    },
+    "yssbi.statistics.test.poisson": {
+      "title": "Poisson 率检验",
+      "aliases": ["poisson count test"]
+    },
+    "yssbi.statistics.test.proportion.multiple": {
+      "title": "多组比例齐性检验",
+      "aliases": ["multiple proportions"]
+    },
+    "yssbi.statistics.test.proportion.two": {
+      "title": "两比例 z 检验",
+      "aliases": ["two proportion", "difference in proportions"]
+    },
+    "yssbi.statistics.test.runs": {
+      "title": "游程随机性检验",
+      "aliases": ["runs test randomness"]
+    },
+    "yssbi.statistics.test.t.independent": {
+      "title": "独立样本 t 检验",
+      "aliases": ["welch t test", "student t test", "two sample mean"]
+    },
+    "yssbi.statistics.test.t.one_sample": {
+      "title": "单样本 t 检验",
+      "aliases": ["t.test one sample", "one sample mean"]
+    },
+    "yssbi.statistics.test.t.paired": {
+      "title": "配对样本 t 检验",
+      "aliases": ["dependent t test", "paired mean"]
+    },
+    "yssbi.statistics.test.t.summary_input": {
+      "title": "概要统计 t 检验",
+      "aliases": ["summary t test", "mean sd n"]
+    },
+    "yssbi.statistics.test.wilcoxon.one_sample": {
+      "title": "单样本 Wilcoxon 符号秩检验",
+      "aliases": ["signed rank one sample"]
+    },
+    "yssbi.statistics.test.wilcoxon.paired": {
+      "title": "配对 Wilcoxon 符号秩检验",
+      "aliases": ["signed rank paired"]
+    },
+    "yssbi.statistics.test.z.mean": {
+      "title": "单样本均值 z 检验",
+      "aliases": ["known standard deviation", "z test mean"]
+    },
+    "yssbi.statistics.test.z.proportion": {
+      "title": "单样本比例 z 检验",
+      "aliases": ["one proportion", "proportion test"]
+    },
+    "yssbi.statistics.timeseries.acf": {
+      "title": "ACF 自相关函数"
+    },
+    "yssbi.statistics.timeseries.arch": {
+      "title": "ARCH 模型",
+      "aliases": ["ARCH", "条件异方差"]
+    },
+    "yssbi.statistics.timeseries.arima": {
+      "title": "ARIMA 预测",
+      "aliases": ["ARIMA", "差分自回归移动平均"]
+    },
+    "yssbi.statistics.timeseries.ecm": {
+      "title": "ECM 误差修正模型",
+      "aliases": ["ECM", "误差修正"]
+    },
+    "yssbi.statistics.timeseries.egarch": {
+      "title": "EGARCH 模型",
+      "aliases": ["EGARCH", "对数波动率"]
+    },
+    "yssbi.statistics.timeseries.ets": {
+      "title": "ETS 指数平滑状态空间模型",
+      "aliases": ["ETS", "状态空间平滑"]
+    },
+    "yssbi.statistics.timeseries.exponential_smoothing": {
+      "title": "指数平滑",
+      "aliases": ["SES", "指数平滑"]
+    },
+    "yssbi.statistics.timeseries.fevd": {
+      "title": "VAR 预测误差方差分解"
+    },
+    "yssbi.statistics.timeseries.garch": {
+      "title": "GARCH 模型",
+      "aliases": ["GARCH", "波动率"]
+    },
+    "yssbi.statistics.timeseries.gjr_garch": {
+      "title": "GJR-GARCH 模型",
+      "aliases": ["GJR", "非对称波动率"]
+    },
+    "yssbi.statistics.timeseries.granger": {
+      "title": "VAR Granger 因果检验"
+    },
+    "yssbi.statistics.timeseries.grey_prediction": {
+      "title": "灰色预测 GM(1,1)",
+      "aliases": ["GM(1,1)", "灰色预测"]
+    },
+    "yssbi.statistics.timeseries.holt_winters": {
+      "title": "Holt–Winters 预测",
+      "aliases": ["Holt-Winters", "三次指数平滑"]
+    },
+    "yssbi.statistics.timeseries.irf": {
+      "title": "VAR 正交脉冲响应"
+    },
+    "yssbi.statistics.timeseries.kpss": {
+      "title": "KPSS 平稳性检验",
+      "aliases": ["KPSS", "平稳性"]
+    },
+    "yssbi.statistics.timeseries.markov_prediction": {
+      "title": "马尔可夫预测",
+      "aliases": ["Markov", "马尔可夫"]
+    },
+    "yssbi.statistics.timeseries.pacf": {
+      "title": "PACF 偏自相关函数"
+    },
+    "yssbi.statistics.timeseries.phillips_perron": {
+      "title": "Phillips–Perron 检验",
+      "aliases": ["PP", "单位根"]
+    },
+    "yssbi.statistics.timeseries.sarima": {
+      "title": "季节 SARIMA 预测",
+      "aliases": ["SARIMA", "季节预测"]
+    },
+    "yssbi.statistics.transform.rcs": {
+      "title": "RCS样条分析",
+      "aliases": ["transform.rcs", "Transform RCS", "RCS样条分析"],
+      "parameters": {
+        "knot_count": {
+          "title": "样条节点数",
+          "description": "3–8；自动分位点重复时须调整节点。"
+        },
+        "knot_mode": {
+          "title": "样条节点方式",
+          "description": "自动样本分位点或显式节点位置。"
+        },
+        "knots": {
+          "title": "样条节点位置",
+          "description": "3–8 个有限且严格递增的数值。"
+        }
+      }
+    },
+    "yssbi.statistics.var.fit": {
+      "title": "拟合 VAR",
+      "aliases": ["VAR"]
+    },
+    "yssbi.statistics.var.lag_order": {
+      "title": "VAR 滞后阶数选择",
+      "aliases": ["滞后阶数", "赤池信息准则", "贝叶斯信息准则"]
+    },
+    "yssbi.statistics.var.summary": {
+      "title": "VAR 汇总",
+      "aliases": ["向量自回归", "多变量时间序列"]
+    },
+    "yssbi.statistics.vec.fit": {
+      "title": "向量误差修正模型",
+      "aliases": ["向量误差修正", "协整", "误差修正"]
+    },
+    "yssbi.statistics.vec.rank_test": {
+      "title": "Johansen 协整秩检验",
+      "aliases": ["约翰森", "协整秩", "迹检验", "最大特征值"]
+    },
+    "yssbi.statistics.vec.summary": {
+      "title": "VEC 汇总",
+      "aliases": ["VECM"]
+    },
+    "yssbi.statistics.workflow.delphi": {
+      "title": "德尔菲法（单轮汇总）",
+      "parameters": {
+        "full_score": {
+          "title": "满分值",
+          "description": "量表允许的满分值，用于满分频率，默认 5；不是本次观测最大值。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.entropy_topsis": {
+      "title": "熵权 TOPSIS",
+      "parameters": {
+        "cost_criteria": {
+          "title": "负向指标",
+          "description": "从 1 开始的负向指标位置；留空表示全部越大越好。"
+        },
+        "normalization": {
+          "title": "评分标准化",
+          "description": "极差、向量归一化或原值；客观赋权仍使用各自定义的预处理。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.mediation": {
+      "title": "中介作用（单一观测中介）",
+      "parameters": {
+        "replications": {
+          "title": "Bootstrap 重采样次数",
+          "description": "0 只计算点估计，否则至少 2 次；默认 1000 次，增加次数可提高百分位区间稳定性。"
+        },
+        "seed": {
+          "title": "随机种子",
+          "description": "非负整数，用于复现整行配对重采样。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.moderated_mediation": {
+      "title": "有调节的中介作用（单阶段调节）",
+      "parameters": {
+        "probe_sd": {
+          "title": "探查距离（标准差倍数）",
+          "description": "使用均值及均值上下若干个样本标准差作为探查点，倍数须为正。"
+        },
+        "replications": {
+          "title": "Bootstrap 重采样次数",
+          "description": "0 只计算点估计，否则至少 2 次；默认 1000 次，增加次数可提高百分位区间稳定性。"
+        },
+        "seed": {
+          "title": "随机种子",
+          "description": "非负整数，用于复现整行配对重采样。"
+        },
+        "stage": {
+          "title": "被调节路径",
+          "description": "first：X → M；second：M → Y。W 主效应进入两个方程。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.moderation": {
+      "title": "调节作用（二阶交互）",
+      "parameters": {
+        "probe_sd": {
+          "title": "探查距离（标准差倍数）",
+          "description": "使用均值及均值上下若干个样本标准差作为探查点，倍数须为正。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.moderation_advanced": {
+      "title": "调节作用（双调节变量三阶交互）",
+      "parameters": {
+        "probe_sd": {
+          "title": "探查距离（标准差倍数）",
+          "description": "使用均值及均值上下若干个样本标准差作为探查点，倍数须为正。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.regression.baseline": {
+      "title": "基准回归",
+      "aliases": ["workflow.regression.baseline", "Workflow Regression Baseline", "基准回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.regression.grouped": {
+      "title": "分组回归",
+      "aliases": ["workflow.regression.grouped", "Workflow Regression Grouped", "分组回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.regression.univariate_multivariable": {
+      "title": "单因素与多因素回归",
+      "aliases": ["workflow.regression.univariate_multivariable", "Workflow Regression Univariate Multivariable", "单因素与多因素回归"],
+      "parameters": {
+        "constant": {
+          "title": "包含常数项",
+          "description": "截距不受惩罚。"
+        }
+      }
+    },
+    "yssbi.statistics.workflow.subgroup": {
+      "title": "分层 Cox 亚组分析",
+      "aliases": ["workflow.subgroup", "亚组分析"]
+    },
+    "yssbi.value.to_binary": {
+      "title": "转二元",
+      "aliases": ["转换", "类型转换", "语义转换"],
+      "parameters": {
+        "semantic_domain": {
+          "title": "取值映射",
+          "description": "可配置两个不同编码及正值；留空时使用支持的布尔编码或源二元值域。"
+        }
+      }
+    },
+    "yssbi.value.to_categorical": {
+      "title": "转分类",
+      "aliases": ["转换", "类型转换", "语义转换"],
+      "parameters": {
+        "semantic_domain": {
+          "title": "取值与标签",
+          "description": "可配置原始编码与标签；留空时继承源值域，没有值域时按全部非空取值去重并自动生成同名标签。"
+        }
+      }
+    },
+    "yssbi.value.to_datetime": {
+      "title": "转日期时间",
+      "aliases": ["转换", "类型转换", "语义转换"],
+      "parameters": {
+        "datetime_format": {
+          "title": "时间格式",
+          "description": "留空按 ISO 格式解析。自定义格式如 %d/%m/%Y；移除时区时保留原钟面时间。"
+        },
+        "datetime_kind": {
+          "title": "日期时间形式",
+          "description": "自动保留已有时间表示，文本默认解析为日期时间；也可明确选择日期或时间。"
+        },
+        "datetime_precision": {
+          "title": "时间精度",
+          "description": "新解析时间值使用的精度；不能静默截断更高精度。"
+        }
+      }
+    },
+    "yssbi.value.to_identifier": {
+      "title": "转标识",
+      "aliases": ["转换", "类型转换", "语义转换"]
+    },
+    "yssbi.value.to_numeric": {
+      "title": "转数值",
+      "aliases": ["转换", "类型转换", "语义转换"],
+      "parameters": {
+        "numeric_mode": {
+          "title": "数值表示",
+          "description": "自动保留数值表示，文本解析为实数，二元转为 0/1；整数不允许小数；实数转换不得丢失精度。"
+        }
+      }
+    },
+    "yssbi.value.to_ordinal": {
+      "title": "转顺序",
+      "aliases": ["转换", "类型转换", "语义转换"],
+      "parameters": {
+        "semantic_domain": {
+          "title": "等级与标签",
+          "description": "按由低到高的等级配置原始编码与标签；留空时继承已有顺序值域。"
+        }
+      }
+    },
+    "yssbi.value.to_text": {
+      "title": "转文本",
+      "aliases": ["转换", "类型转换", "语义转换"]
+    }
+  },
+  "parameters": {
+    "absolute_tolerance": {
+      "title": "绝对容差"
+    },
+    "base_level": {
+      "title": "base_level",
+      "description": "类型化节点参数。"
+    },
+    "column": {
+      "title": "column",
+      "description": "类型化节点参数。"
+    },
+    "column_match": {
+      "title": "列对齐方式",
+      "description": "按列名对齐并补齐缺失列，或按列位置对齐。"
+    },
+    "columns": {
+      "title": "列",
+      "description": "选择本次操作使用的源列。"
+    },
+    "comparison_mode": {
+      "title": "比较模式"
+    },
+    "constant": {
+      "title": "常量",
+      "description": "在当前图详情面板中定义的常量值。"
+    },
+    "count": {
+      "title": "非空计数列",
+      "description": "对所选列分别统计非空值数量。"
+    },
+    "dataframe": {
+      "title": "dataframe",
+      "description": "类型化节点参数。"
+    },
+    "descending": {
+      "title": "降序",
+      "description": "窗口排序列采用降序。"
+    },
+    "direction": {
+      "title": "移动方向",
+      "description": "滞后读取前面的行；超前读取后面的行。"
+    },
+    "end": {
+      "title": "终点",
+      "description": "整数范围的终止值（不包含）。"
+    },
+    "entity_column": {
+      "title": "实体列",
+      "description": "按此列分组对齐面板或计算差分，键不允许缺失。"
+    },
+    "from": {
+      "title": "源列",
+      "description": "要重命名的列名。"
+    },
+    "function": {
+      "title": "函数",
+      "description": "绑定的函数资源。"
+    },
+    "how": {
+      "title": "缺失规则",
+      "description": "any：任一值为 Null；all：全部值为 Null。"
+    },
+    "include_null": {
+      "title": "包含空值",
+      "description": "将 Null 纳入频数表和比例分母。"
+    },
+    "interval": {
+      "title": "网格间隔",
+      "description": "正整数步长：时间序列按时间单位，面板按共享已观测时间序列的位置补齐。"
+    },
+    "join_type": {
+      "title": "连接类型",
+      "description": "选择内连接、左连接、右连接、全外连接、半连接或反连接；空键不匹配。"
+    },
+    "key_prefix": {
+      "title": "分组键前缀",
+      "description": "Apply 在结果前追加分组键列，使用此前缀；名称冲突时明确报错。"
+    },
+    "keys": {
+      "title": "分组键",
+      "description": "选择一个或多个分组列。"
+    },
+    "left_keys": {
+      "title": "左表连接键",
+      "description": "按匹配顺序选择左表连接列。"
+    },
+    "max": {
+      "title": "最大值列",
+      "description": "选择需要计算最大值的数值列。"
+    },
+    "mean": {
+      "title": "均值列",
+      "description": "选择需要计算均值的数值列。"
+    },
+    "median": {
+      "title": "中位数列",
+      "description": "选择需要计算中位数的数值列。"
+    },
+    "min": {
+      "title": "最小值列",
+      "description": "选择需要计算最小值的数值列。"
+    },
+    "min_periods": {
+      "title": "最少有效值",
+      "description": "零表示要求完整非空窗口。"
+    },
+    "nulls_first": {
+      "title": "空值靠前",
+      "description": "关闭时空值排在最后。"
+    },
+    "offset": {
+      "title": "跳过行数",
+      "description": "取行前先跳过指定数量的行。"
+    },
+    "operation": {
+      "title": "运算",
+      "description": "标准差采用样本标准差，ddof=1。"
+    },
+    "order": {
+      "title": "order",
+      "description": "类型化节点参数。"
+    },
+    "order_by": {
+      "title": "排序列",
+      "description": "留空使用当前行顺序；同值行保留原顺序。"
+    },
+    "partition_by": {
+      "title": "分组列",
+      "description": "连接上下文后选择分组列；留空表示同一组。"
+    },
+    "plot": {
+      "bins": {
+        "title": "分箱数（0 为自动）"
+      },
+      "confidence_level": {
+        "title": "置信水平"
+      },
+      "dual_axis": {
+        "title": "折线使用独立纵轴"
+      },
+      "estimate_parameters": {
+        "title": "估计正态参考分布参数"
+      },
+      "grid_points": {
+        "title": "密度网格点数"
+      },
+      "include_intercept": {
+        "title": "显示截距"
+      },
+      "max_words": {
+        "title": "最多显示词数"
+      },
+      "maximum_lag": {
+        "title": "最大滞后阶数"
+      },
+      "mode": {
+        "title": "图形类型"
+      },
+      "reference_mean": {
+        "title": "参考均值"
+      },
+      "reference_standard_deviation": {
+        "title": "参考标准差"
+      },
+      "x_cut": {
+        "title": "X 分界值"
+      },
+      "y_cut": {
+        "title": "Y 分界值"
+      }
+    },
+    "predicate": {
+      "title": "谓词",
+      "description": "用于确定匹配行的类型化条件。"
+    },
+    "relative_tolerance": {
+      "title": "相对容差"
+    },
+    "right_keys": {
+      "title": "右表连接键",
+      "description": "按相同顺序选择右表连接列。"
+    },
+    "right_suffix": {
+      "title": "右表重名列后缀",
+      "description": "右表重名列自动添加的后缀。"
+    },
+    "rows": {
+      "title": "rows",
+      "description": "类型化节点参数。"
+    },
+    "start": {
+      "title": "起点",
+      "description": "整数范围的起始值。"
+    },
+    "statistics": {
+      "acf_max_lag": {
+        "title": "自相关滞后阶数",
+        "description": "正整数滞后阶数，最大 40；可用阶数还受拟合样本限制。"
+      },
+      "acf_pacf": {
+        "title": "自相关与偏自相关",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "aft_distribution": {
+        "title": "AFT 分布",
+        "description": "Weibull（默认）、指数、对数正态或对数逻辑斯蒂分布；均包含截距。"
+      },
+      "alternative": {
+        "title": "备择假设",
+        "description": "选择双侧、大于或小于方向的备择假设。"
+      },
+      "anova": {
+        "title": "方差分析",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "bandwidth": {
+        "title": "带宽",
+        "description": "类型化统计参数。"
+      },
+      "bg_nomiss0": {
+        "title": "BG：初始滞后残差补零",
+        "description": "在 Breusch–Godfrey 检验中将初始滞后残差补零。"
+      },
+      "bootstrap_replications": {
+        "title": "自助抽样次数",
+        "description": "默认 0（仅点估计），启用时至少 2 次。按独立观测整行有放回抽样并重新拟合全部阶段；抽样拟合失败时终止。"
+      },
+      "calibration_bins": {
+        "title": "校准分组数",
+        "description": "默认 10，至少 2；相同预测值不拆组，实际组数可能更少。"
+      },
+      "classification": {
+        "title": "分类表",
+        "description": "类型化统计参数。"
+      },
+      "coefficient_chart": {
+        "title": "系数大小图",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "coefficient_table": {
+        "title": "系数表",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "cointegration": {
+        "title": "协整方程",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "columns": {
+        "title": "列联表列数",
+        "description": "观测频数列联表的列数。"
+      },
+      "confidence_level": {
+        "title": "置信水平",
+        "description": "必须在 0 与 1 之间，默认 0.95。"
+      },
+      "constant": {
+        "title": "包含常数项",
+        "description": "类型化统计参数。"
+      },
+      "continuity_correction": {
+        "title": "连续性修正",
+        "description": "对秩检验应用半单位连续性修正。"
+      },
+      "covariance": {
+        "title": "标准误方法（GLS 仅支持 nonrobust）",
+        "description": "类型化统计参数。"
+      },
+      "coverage": {
+        "title": "一致性界限覆盖率",
+        "description": "一致性界限采用的正态中央覆盖率，必须在 0 与 1 之间。"
+      },
+      "cutoff": {
+        "title": "分类阈值",
+        "description": "类型化统计参数。"
+      },
+      "decision_points": {
+        "title": "阈值点数",
+        "description": "默认 99，至少 2；包含两端点的等距阈值网格。"
+      },
+      "decision_threshold_max": {
+        "title": "最大阈值",
+        "description": "默认 0.99，必须小于 1 且大于最小阈值。"
+      },
+      "decision_threshold_min": {
+        "title": "最小阈值",
+        "description": "默认 0.01，必须大于 0 且小于最大阈值。"
+      },
+      "design": {
+        "title": "研究设计",
+        "description": "将概要统计量解释为单样本、独立样本或配对差值。"
+      },
+      "dfk": {
+        "title": "VAR 协方差自由度修正",
+        "description": "类型化统计参数。"
+      },
+      "diagnostics": {
+        "title": "诊断信息",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "effects": {
+        "title": "效应维度",
+        "description": "类型化统计参数。"
+      },
+      "effects_statistics": {
+        "title": "面板效应统计",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "endogeneity": {
+        "title": "内生性检验",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "equal_variance": {
+        "title": "假定方差相等",
+        "description": "独立样本使用合并方差；关闭时使用 Welch 检验。"
+      },
+      "equation": {
+        "title": "回归方程",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "equation_predictors": {
+        "title": "各方程自变量索引",
+        "description": "留空时每个方程使用全部自变量；否则用分号分隔方程、逗号分隔从 1 开始的索引，例如 1,2;1,3；无自变量用 -。"
+      },
+      "estimator": {
+        "title": "面板估计器",
+        "description": "类型化统计参数。"
+      },
+      "estimator_statistics": {
+        "title": "估计方法统计",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "estimators": {
+        "title": "估计器（逗号分隔）",
+        "description": "类型化统计参数。"
+      },
+      "expected_variance": {
+        "title": "零假设期望方差",
+        "description": "与评分同一尺度上的有限正方差。"
+      },
+      "first_stage": {
+        "title": "第一阶段分析",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "frontier_type": {
+        "title": "前沿类型",
+        "description": "生产前沿（默认）：随机扰动减无效率；成本前沿：随机扰动加无效率。"
+      },
+      "gmm_steps": {
+        "title": "GMM 步数",
+        "description": "一阶段 2SLS 权重或两阶段异方差 GMM；默认两阶段。"
+      },
+      "hypothesis": {
+        "title": "检验假设（例如 x1 = 0）",
+        "description": "系数约束，例如 x1 = 0 或 x1 = x2；使用已拟合模型中的系数名称。"
+      },
+      "hypothesis_test": {
+        "title": "假设检验",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "icc_type": {
+        "title": "ICC 定义",
+        "description": "ICC1：单向；ICC2：双向绝对一致；ICC3：双向一致性。k 表示平均测量。"
+      },
+      "kappa_method": {
+        "title": "Kappa 定义",
+        "description": "Cohen 必须恰好两位评定者；Fleiss 使用各评定者合并的类别边际分布。"
+      },
+      "kappa_weighting": {
+        "title": "类别权重",
+        "description": "线性/二次加权要求数值评分或相同的显式有序类别表。"
+      },
+      "kernel": {
+        "title": "核函数",
+        "description": "类型化统计参数。"
+      },
+      "koenker": {
+        "title": "Koenker 变体",
+        "description": "类型化统计参数。"
+      },
+      "lag": {
+        "title": "滞后阶数",
+        "description": "类型化统计参数。"
+      },
+      "lag_exclusion": {
+        "title": "滞后排除检验",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "lags": {
+        "title": "滞后阶数",
+        "description": "类型化统计参数。"
+      },
+      "longitudinal_family": {
+        "title": "响应分布",
+        "description": "按节点选择 Gaussian 恒等、二项 logit、Poisson log 或 NB2 log。"
+      },
+      "lower_bound": {
+        "title": "等价区间下界",
+        "description": "等价检验的均值下界，必须小于上界。"
+      },
+      "marginal_at": {
+        "title": "at() 指定值",
+        "description": "类型化统计参数。"
+      },
+      "marginal_effects": {
+        "title": "边际效应",
+        "description": "类型化统计参数。"
+      },
+      "marginal_evaluation": {
+        "title": "边际效应求值方式",
+        "description": "类型化统计参数。"
+      },
+      "marginal_method": {
+        "title": "导数或弹性",
+        "description": "类型化统计参数。"
+      },
+      "max_instrument_lag": {
+        "title": "工具变量最大滞后阶",
+        "description": "使用因变量从第 2 阶到指定阶的折叠水平工具变量；默认 3，至少 2 且小于实际期数。"
+      },
+      "max_iterations": {
+        "title": "最大迭代次数",
+        "description": "类型化统计参数。"
+      },
+      "max_lags": {
+        "title": "最大滞后阶数",
+        "description": "类型化统计参数。"
+      },
+      "method": {
+        "title": "估计方法",
+        "description": "类型化统计参数。"
+      },
+      "mixed_estimation": {
+        "title": "混合模型估计",
+        "description": "默认 REML，亦可选最大似然 ML；比较不同固定效应设计时使用 ML。"
+      },
+      "model_summary": {
+        "title": "模型概览",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "model_terms": {
+        "title": "因素效应",
+        "description": "完整因子模型包含所有因素交互；主效应模型只包含各因素的加性效应。默认完整因子模型。"
+      },
+      "nomogram_ticks": {
+        "title": "每轴刻度数",
+        "description": "默认 5，至少 2；积分与生存概率刻度由连接的 Cox 模型计算。"
+      },
+      "null_difference": {
+        "title": "原假设比例差",
+        "description": "原假设指定的两个总体比例之差。"
+      },
+      "null_distribution": {
+        "title": "零假设分布",
+        "description": "使用等概率的整数评分选项，或指定零假设的期望方差。"
+      },
+      "null_mean": {
+        "title": "原假设均值",
+        "description": "原假设指定的总体均值。"
+      },
+      "null_median": {
+        "title": "原假设中位数",
+        "description": "单样本符号秩检验使用的参照位置。"
+      },
+      "null_probability": {
+        "title": "原假设概率",
+        "description": "原假设指定的成功概率。"
+      },
+      "null_rate": {
+        "title": "原假设 Poisson 率",
+        "description": "原假设指定的每次观测期望计数。"
+      },
+      "null_value": {
+        "title": "原假设均值或差值",
+        "description": "研究设计所对应的原假设均值或均值差。"
+      },
+      "observations": {
+        "title": "拟合值与残差表",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "observed_coefficient": {
+        "title": "观测处理效应系数",
+        "description": "类型化统计参数。"
+      },
+      "odds_ratios": {
+        "title": "胜算比",
+        "description": "类型化统计参数。"
+      },
+      "overidentification": {
+        "title": "过度识别检验",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "p_value_method": {
+        "title": "p 值方法",
+        "description": "auto 在不超过 9 个观测时使用精确置换，否则使用渐近检验。"
+      },
+      "population_sd": {
+        "title": "已知总体标准差",
+        "description": "z 检验使用的已知总体标准差，必须为正。"
+      },
+      "pre_periods": {
+        "title": "干预前期数",
+        "description": "使用前若干行拟合供体权重；默认 10，至少 1 且小于总行数。"
+      },
+      "ps_caliper": {
+        "title": "匹配卡尺",
+        "description": "倾向概率距离上限，默认 0.2，范围 (0,1]；每行均须有符合条件的匹配。"
+      },
+      "ps_overlap": {
+        "title": "倾向得分重叠边界",
+        "description": "默认 0.000001，严格介于 0 与 0.5 之间；得分超出 [边界,1−边界] 时拒绝计算，不裁剪或删行。"
+      },
+      "rank": {
+        "title": "协整秩",
+        "description": "类型化统计参数。"
+      },
+      "rdd_bandwidth": {
+        "title": "断点带宽",
+        "description": "运行变量原单位下的正带宽；默认 1。"
+      },
+      "rdd_cutoff": {
+        "title": "断点位置",
+        "description": "默认 0；运行变量大于或等于断点时归入处理侧。"
+      },
+      "rdd_kernel": {
+        "title": "断点核权重",
+        "description": "局部线性拟合采用三角核（默认）或均匀核。"
+      },
+      "regression": {
+        "title": "确定性项",
+        "description": "类型化统计参数。"
+      },
+      "repetitions": {
+        "title": "置换次数（10–2000）",
+        "description": "类型化统计参数。"
+      },
+      "residual_plot": {
+        "title": "残差图",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "rhs": {
+        "title": "使用解释变量扩展",
+        "description": "类型化统计参数。"
+      },
+      "rows": {
+        "title": "列联表行数",
+        "description": "观测频数列联表的行数。"
+      },
+      "scale": {
+        "title": "方差尺度",
+        "description": "类型化统计参数。"
+      },
+      "scale_points": {
+        "title": "评分选项数",
+        "description": "均匀评分采用从 1 到该值的整数分数，默认 5。"
+      },
+      "seed": {
+        "title": "随机种子",
+        "description": "类型化统计参数。"
+      },
+      "selected_lags": {
+        "title": "指定滞后阶（逗号分隔）",
+        "description": "类型化统计参数。"
+      },
+      "serial_lags": {
+        "title": "序列检验滞后阶数",
+        "description": "正整数滞后阶数，最大 40；可用阶数还受拟合样本限制。"
+      },
+      "serial_tests": {
+        "title": "序列相关检验",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "small": {
+        "title": "小样本修正",
+        "description": "类型化统计参数。"
+      },
+      "spatial_neighbors": {
+        "title": "近邻数",
+        "description": "默认 4，至少 1 且小于地区数；用于 K 近邻。"
+      },
+      "spatial_panel_model": {
+        "title": "面板空间结构",
+        "description": "默认 SLM，也可选 SEM；平衡面板，通过正交时间对比消去实体固定效应。"
+      },
+      "spatial_permutations": {
+        "title": "Moran 置换次数",
+        "description": "默认 999；0 关闭置换推断。以偏离零假设期望的绝对值作双侧比较，p 值采用加一校正。"
+      },
+      "spatial_power": {
+        "title": "反距离幂次",
+        "description": "反距离权重 distance^(-p) 中的正幂次，默认 1。"
+      },
+      "spatial_radius": {
+        "title": "距离阈值",
+        "description": "坐标单位下的正距离，默认 1；用于距离阈值和反距离。"
+      },
+      "spatial_row_standardize": {
+        "title": "行标准化",
+        "description": "默认开启；非零行除以行和，孤立地区保留为零行。"
+      },
+      "spatial_symmetrize": {
+        "title": "邻接对称化",
+        "description": "默认关闭；标准化之前取双向邻接的并集。"
+      },
+      "spatial_weight_rule": {
+        "title": "邻接规则",
+        "description": "默认 K 近邻；也支持距离阈值或阈值内反距离，使用平面欧氏坐标。"
+      },
+      "sphericity_correction": {
+        "title": "球形性校正",
+        "description": "对每个受试者内效应的自由度应用 Greenhouse-Geisser 校正，或使用未校正推断。默认 Greenhouse-Geisser。"
+      },
+      "stability": {
+        "title": "稳定性特征根",
+        "description": "仅计算选中的汇总内容及其必要依赖。"
+      },
+      "steps": {
+        "title": "响应期数",
+        "description": "VAR 脉冲响应或预测误差方差分解的期数，范围 1–1000，默认 8；结果包含第 0 期。"
+      },
+      "sums_of_squares": {
+        "title": "平方和类型",
+        "description": "I：顺序检验（协变量优先）；II：调整除本项高阶关联项外的其他项；III：使用和为零对比，调整所有其他项。默认 III。"
+      },
+      "survival_horizon": {
+        "title": "预测时点",
+        "description": "输入时间单位下的正时点，默认 1；评估用的预测风险必须对应同一时点。"
+      },
+      "survival_ties": {
+        "title": "并列事件",
+        "description": "偏似然采用 Efron（默认）或 Breslow；基线累积风险均采用 Breslow。"
+      },
+      "theil_form": {
+        "title": "数据形式",
+        "description": "个体形式等权计算；分组形式输入组均值，并在详细面板添加一个 Weights 输入，连接组人数或人口占比。组均值仅反映组间差异。"
+      },
+      "tolerance": {
+        "title": "收敛容差",
+        "description": "类型化统计参数。"
+      },
+      "transform": {
+        "title": "AR(1) 变换",
+        "description": "类型化统计参数。"
+      },
+      "trend": {
+        "title": "确定性项",
+        "description": "类型化统计参数。"
+      },
+      "ts_alpha": {
+        "title": "水平平滑系数 alpha",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_bandwidth": {
+        "title": "Newey–West 带宽",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_beta": {
+        "title": "趋势平滑系数 beta",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_confidence": {
+        "title": "预测区间置信水平",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_d": {
+        "title": "普通差分阶数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_damped": {
+        "title": "阻尼趋势",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_deterministic": {
+        "title": "确定性项",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_gamma": {
+        "title": "季节平滑系数 gamma",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_horizon": {
+        "title": "预测期数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_lags": {
+        "title": "短期差分滞后阶数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_maximum_lag": {
+        "title": "显示滞后数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_optimize": {
+        "title": "估计平滑系数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_p": {
+        "title": "AR / ARCH 阶数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_period": {
+        "title": "季节周期",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_phi": {
+        "title": "趋势阻尼系数 phi",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_pseudocount": {
+        "title": "转移伪计数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_q": {
+        "title": "MA / 方差滞后阶数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_seasonal_d": {
+        "title": "季节差分阶数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_seasonal_p": {
+        "title": "季节 AR 阶数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_seasonal_q": {
+        "title": "季节 MA 阶数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_seasonality": {
+        "title": "季节形式",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_seed": {
+        "title": "预测随机种子",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_simulations": {
+        "title": "EGARCH 预测模拟次数",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "ts_trend": {
+        "title": "加性趋势",
+        "description": "默认值、有效范围及统计含义见节点帮助。"
+      },
+      "upper_bound": {
+        "title": "等价区间上界",
+        "description": "等价检验的均值上界，必须大于下界。"
+      },
+      "use_observed_coefficient": {
+        "title": "指定观测系数",
+        "description": "类型化统计参数。"
+      },
+      "working_correlation": {
+        "title": "工作相关结构",
+        "description": "默认可交换，亦可选独立；推断使用按组稳健的三明治协方差。"
+      }
+    },
+    "std": {
+      "title": "标准差列",
+      "description": "计算样本标准差，ddof=1。"
+    },
+    "step": {
+      "title": "步长",
+      "description": "相邻整数之间的增量。"
+    },
+    "subset": {
+      "title": "检查列（不选表示全部）",
+      "description": "空列表检查全部列；也可填写不重复的列名。"
+    },
+    "sum": {
+      "title": "求和列",
+      "description": "选择需要求和的数值列。"
+    },
+    "target": {
+      "title": "目标函数",
+      "description": "要调用的函数资源。"
+    },
+    "time_column": {
+      "title": "时间列",
+      "description": "按此列在实体内排序，实体与时间组合不允许重复。"
+    },
+    "to": {
+      "title": "目标列",
+      "description": "新的列名。"
+    },
+    "window": {
+      "title": "window",
+      "description": "类型化节点参数。"
+    }
+  },
+  "parameter_groups": {
+    "configure": {
+      "title": "配置"
+    },
+    "covariance": {
+      "title": "协方差估计"
+    },
+    "distribution": {
+      "title": "分布参数"
+    },
+    "model": {
+      "title": "模型参数"
+    },
+    "parameters": {
+      "title": "参数"
+    },
+    "sampling": {
+      "title": "采样设置"
+    }
+  },
+  "types": {
+    "binary": {
+      "title": "二元"
+    },
+    "categorical": {
+      "title": "分类"
+    },
+    "data_series": {
+      "title": "数据序列"
+    },
+    "dataframe": {
+      "title": "数据框"
+    },
+    "dataframe_filter_predicate": {
+      "title": "数据框筛选谓词"
+    },
+    "dataframe_project_columns": {
+      "title": "筛选列清单"
+    },
+    "datetime": {
+      "title": "日期时间"
+    },
+    "grouped_dataframe": {
+      "title": "已分组数据帧"
+    },
+    "identifier": {
+      "title": "标识"
+    },
+    "numeric": {
+      "title": "数值"
+    },
+    "object": {
+      "title": "对象"
+    },
+    "ordinal": {
+      "title": "有序分类"
+    },
+    "plot_data": {
+      "title": "绘图数据"
+    },
+    "statistics_model_cox": {
+      "title": "Cox 生存模型"
+    },
+    "statistics_model_iv_2sls": {
+      "title": "IV 2SLS 模型"
+    },
+    "statistics_model_iv_liml": {
+      "title": "IV LIML 模型"
+    },
+    "statistics_model_linear": {
+      "title": "线性回归模型"
+    },
+    "statistics_model_logit": {
+      "title": "Logit 模型"
+    },
+    "statistics_model_panel": {
+      "title": "面板模型"
+    },
+    "statistics_model_prais": {
+      "title": "Prais 模型"
+    },
+    "statistics_model_probit": {
+      "title": "Probit 模型"
+    },
+    "statistics_model_var": {
+      "title": "VAR 模型"
+    },
+    "statistics_model_vec": {
+      "title": "VEC 模型"
+    },
+    "statistics_model_vec_rank": {
+      "title": "VEC 秩检验结果"
+    },
+    "statistics_report": {
+      "title": "统计报告"
+    },
+    "statistics_result": {
+      "title": "统计结果"
+    },
+    "statistics_result_adf": {
+      "title": "ADF 结果"
+    },
+    "statistics_result_panel_did": {
+      "title": "面板 DID 结果"
+    },
+    "statistics_result_treatment_effect": {
+      "title": "处理效应估计结果"
+    },
+    "statistics_spatial_weights": {
+      "title": "空间权重设计"
+    },
+    "text": {
+      "title": "文本"
+    }
+  },
+  "categories": {
+    "constants": {
+      "title": "常量"
+    },
+    "conversion": {
+      "title": "转换"
+    },
+    "data": {
+      "title": "数据"
+    },
+    "data_processing": {
+      "title": "数据处理"
+    },
+    "database": {
+      "title": "数据库"
+    },
+    "dataflow": {
+      "title": "数据流"
+    },
+    "dataframe": {
+      "title": "数据帧",
+      "series": {
+        "title": "数据序列"
+      }
+    },
+    "debug": {
+      "title": "调试"
+    },
+    "distribution": {
+      "title": "概率分布",
+      "continuous": {
+        "title": "连续分布"
+      },
+      "discrete": {
+        "title": "离散分布"
+      }
+    },
+    "logic": {
+      "title": "逻辑"
+    },
+    "numeric": {
+      "title": "算术"
+    },
+    "operations": {
+      "title": "运算"
+    },
+    "plot": {
+      "title": "可视化"
+    },
+    "project": {
+      "title": "项目"
+    },
+    "statistics": {
+      "title": "统计",
+      "anova": {
+        "title": "方差分析"
+      },
+      "association": {
+        "title": "相关与一致性"
+      },
+      "causal": {
+        "title": "计量与因果分析"
+      },
+      "decision": {
+        "title": "综合评价与决策"
+      },
+      "descriptive": {
+        "title": "描述统计"
+      },
+      "design_quality": {
+        "title": "实验设计与质量控制"
+      },
+      "diagnostics": {
+        "title": "模型诊断与比较"
+      },
+      "imputation": {
+        "title": "缺失值处理"
+      },
+      "inference": {
+        "title": "推断与重抽样"
+      },
+      "longitudinal": {
+        "title": "纵向与多层模型"
+      },
+      "machine_learning": {
+        "title": "机器学习"
+      },
+      "meta": {
+        "title": "Meta 分析"
+      },
+      "multivariate": {
+        "title": "多元分析"
+      },
+      "panel": {
+        "title": "面板模型"
+      },
+      "postestimation": {
+        "title": "预测与估计后分析"
+      },
+      "power": {
+        "title": "功效与样本量"
+      },
+      "psychometrics": {
+        "title": "测量、问卷与结构方程"
+      },
+      "regression": {
+        "title": "回归模型"
+      },
+      "spatial": {
+        "title": "空间分析"
+      },
+      "survey": {
+        "title": "复杂抽样分析"
+      },
+      "survival": {
+        "title": "生存分析"
+      },
+      "tests": {
+        "title": "假设检验"
+      },
+      "timeseries": {
+        "title": "时间序列"
+      }
+    }
+  },
+  "editors": {
+    "dataframe": {
+      "connect_source": "可先填写列名，输入结构确定后会校验这些列。",
+      "deferred_columns": "列结构取决于执行结果；已配置的列名等待校验。",
+      "pending_columns": "上游结构尚未确定，可以继续配置列名。",
+      "schema_error": "输入结构存在问题。参数仍可编辑，请查看图诊断。"
+    }
+  },
+  "catalog": {
+    "inventory": {
+      "documentation": "# %{title}\n\n目录入口，暂不可执行。输入、输出、参数和执行内核尚未定义。\n\n方法：`%{method}`\n\n分类：`%{category}`\n\n原始用途：%{form}\n\n原始方法编号：%{ids}（已从待登记清单移除）。",
+      "scope_note": "范围说明：%{note}",
+      "forms": {
+        "node": "独立节点",
+        "postestimation": "估计后能力/节点",
+        "workflow_template": "工作流模板",
+        "plot": "绘图节点",
+        "method_preset": "方法预设/输入设计",
+        "result_option": "结果指标/推断选项",
+        "model_design": "模型设计/参数",
+        "model_preset": "模型预设",
+        "analysis_design": "分析设计对象",
+        "resampling_workflow": "重抽样工作流",
+        "analysis_capability": "分析节点/结果能力",
+        "transform_design": "变换/模型设计",
+        "help_entry": "帮助文档/功能入口",
+        "inference_configuration": "推断配置"
+      }
+    }
+  }
+}

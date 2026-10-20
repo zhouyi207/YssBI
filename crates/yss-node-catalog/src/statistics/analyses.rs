@@ -1,125 +1,90 @@
 //! Executable diagnostics and post-estimation protocols.
 use super::*;
-use crate::builtin::add_node_messages;
 mod models;
 
-const SPECS: &[(&str, &str, &str, &str, &str)] = &[
+const SPECS: &[(&str, &str, &str)] = &[
     (
         "yssbi.statistics.diagnostic.breusch_pagan",
-        "Breusch–Pagan / Koenker",
-        "Breusch–Pagan / Koenker 异方差检验",
         "statistics.diagnostics",
         "linear",
     ),
     (
         "yssbi.statistics.diagnostic.white",
-        "White test",
-        "White 异方差检验",
         "statistics.diagnostics",
         "linear",
     ),
     (
         "yssbi.statistics.diagnostic.information_matrix",
-        "Cameron–Trivedi IM test",
-        "Cameron–Trivedi IM 分解",
         "statistics.diagnostics",
         "linear",
     ),
     (
         "yssbi.statistics.diagnostic.reset",
-        "Ramsey RESET",
-        "Ramsey RESET 设定检验",
         "statistics.diagnostics",
         "linear",
     ),
     (
         "yssbi.statistics.diagnostic.vif",
-        "Variance inflation factors",
-        "VIF 方差膨胀因子",
         "statistics.diagnostics",
         "linear",
     ),
     (
         "yssbi.statistics.diagnostic.leverage",
-        "Leverage",
-        "杠杆值",
         "statistics.diagnostics",
         "linear",
     ),
     (
         "yssbi.statistics.diagnostic.breusch_godfrey",
-        "Breusch–Godfrey",
-        "Breusch–Godfrey 序列相关检验",
         "statistics.diagnostics",
         "linear",
     ),
     (
         "yssbi.statistics.diagnostic.wald",
-        "Linear coefficient hypothesis",
-        "系数线性约束 t / Wald 检验",
         "statistics.diagnostics",
         "linear",
     ),
     (
         "yssbi.statistics.test.normality",
-        "Jarque–Bera / Omnibus",
-        "Jarque–Bera / Omnibus 正态性检验",
         "statistics.tests",
         "series",
     ),
     (
         "yssbi.statistics.diagnostic.durbin_watson",
-        "Durbin–Watson",
-        "Durbin–Watson 检验",
         "statistics.diagnostics",
         "series",
     ),
     (
         "yssbi.statistics.diagnostic.ljung_box",
-        "Ljung–Box",
-        "Ljung–Box 白噪声检验",
         "statistics.diagnostics",
         "series",
     ),
     (
         "yssbi.statistics.timeseries.acf",
-        "Autocorrelation",
-        "ACF 自相关函数",
         "statistics.timeseries",
         "series",
     ),
     (
         "yssbi.statistics.timeseries.pacf",
-        "Partial autocorrelation",
-        "PACF 偏自相关函数",
         "statistics.timeseries",
         "series",
     ),
     (
         "yssbi.statistics.timeseries.granger",
-        "VAR Granger Wald tests",
-        "VAR Granger 因果检验",
         "statistics.timeseries",
         "var",
     ),
     (
         "yssbi.statistics.timeseries.irf",
-        "VAR orthogonalized impulse responses",
-        "VAR 正交脉冲响应",
         "statistics.timeseries",
         "var",
     ),
     (
         "yssbi.statistics.timeseries.fevd",
-        "VAR forecast error variance decomposition",
-        "VAR 预测误差方差分解",
         "statistics.timeseries",
         "var",
     ),
     (
         "yssbi.statistics.diagnostic.hausman",
-        "IV Hausman test",
-        "IV Hausman 检验",
         "statistics.diagnostics",
         "iv_2sls",
     ),
@@ -127,7 +92,7 @@ const SPECS: &[(&str, &str, &str, &str, &str)] = &[
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     models::append(fragment)?;
-    for &(id, en, zh, category, input) in SPECS {
+    for &(id, category, input) in SPECS {
         let port = if input == "series" {
             data_input("series", "DataSeries", numeric_data_series_type())?
         } else {
@@ -194,7 +159,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        add_node_messages(&mut fragment.messages, id, [en, zh], None);
     }
     Ok(())
 }

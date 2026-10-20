@@ -41,7 +41,10 @@ impl Title {
             Self::Key(key) => yss_ui::text::translate(key),
             Self::Array { name, count } => yss_ui::text::format(
                 "native.reports.arrayTitle",
-                &[("name", name.clone()), ("count", count.to_string())],
+                &[
+                    ("name", name.clone()),
+                    ("rows", yss_ui::text::plural("counts.rows", *count)),
+                ],
             ),
             Self::Unavailable(name) => {
                 yss_ui::text::format("native.reports.unavailableTitle", &[("name", name.clone())])

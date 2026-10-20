@@ -23,11 +23,11 @@ pub(super) fn t_test(
     let k = r.ncols();
 
     if q != 1 {
-        return Err("t 检验仅支持单约束 (q=1)".to_string());
+        return Err("the t test supports only a single constraint (q = 1)".to_string());
     }
     if betas.nrows() != k {
         return Err(format!(
-            "betas 长度 {} 与 R 列数 {} 不一致",
+            "betas length {} differs from R column count {}",
             betas.nrows(),
             k
         ));
@@ -39,13 +39,13 @@ pub(super) fn t_test(
     let r_cov_r = (r * cov_beta) * r.transpose();
     let variance = r_cov_r[(0, 0)];
     if variance.is_nan() || variance <= 0.0 {
-        return Err("R Σ R' 非正，无法计算标准误".to_string());
+        return Err("R Σ R' is not positive, so the standard error is undefined".to_string());
     }
     let se = variance.sqrt();
 
     let t_stat = c / se;
     let dist = StudentsT::new(0.0, 1.0, df_residual as f64)
-        .map_err(|e| format!("t 分布参数错误: {}", e))?;
+        .map_err(|e| format!("invalid t distribution parameters: {}", e))?;
 
     let p_value = crate::distribution::student_t_probability(&dist, t_stat, alternative);
 

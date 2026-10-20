@@ -107,17 +107,17 @@ pub struct AdfResult {
 pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<AdfResult, String> {
     let n_raw = y.len();
     if n_raw < 4 {
-        return Err("ADF: 至少需要 4 个观测值".to_string());
+        return Err("ADF: at least 4 observations are required".to_string());
     }
     if lags >= n_raw - 1 {
-        return Err("ADF: 滞后阶数过大，有效样本不足".to_string());
+        return Err("ADF: the lag order leaves too few effective observations".to_string());
     }
 
     let reg = match (constant, trend) {
         (false, false) => AdfRegression::NoConstant,
         (true, false) => AdfRegression::Drift,
         (true, true) => AdfRegression::Trend,
-        (false, true) => return Err("ADF: 时间趋势需要同时包含常数项".into()),
+        (false, true) => return Err("ADF: a time trend requires a constant".into()),
     };
 
     // 有效样本: 需要 y_{t-1} 和最多 lags 个 Δy_{t-j}，所以从 t = 1 + lags 开始
@@ -127,7 +127,7 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     let lagged_col = usize::from(constant) + usize::from(trend);
     let ncols = lagged_col + 1 + lags;
     if n_obs <= ncols {
-        return Err("ADF: 回归剩余自由度不足".into());
+        return Err("ADF: the regression has too few residual degrees of freedom".into());
     }
     let df_resid = n_obs - ncols;
 
@@ -154,7 +154,7 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
 
     let xtx_inv = xtx
         .checked_cholesky()
-        .map_err(|_| "ADF: 设计矩阵秩不足".to_string())?
+        .map_err(|_| "ADF: the design matrix is rank deficient".to_string())?
         .solve(&Mat::<f64>::identity(xtx.nrows(), xtx.nrows()));
 
     let betas = xtx_inv.as_ref() * xty.as_ref();
@@ -173,7 +173,7 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
 
     let test_statistic = coef_lagged / std_err_lagged;
     if !test_statistic.is_finite() {
-        return Err("ADF: 单位根检验统计量无定义或非有限".into());
+        return Err("ADF: the unit-root test statistic is undefined or not finite".into());
     }
     let t_dist =
         StudentsT::new(0.0, 1.0, df_resid as f64).map_err(|error| format!("ADF: {error}"))?;
@@ -227,7 +227,7 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
         let se = cov_beta[(c, c)].sqrt();
         let t_val = coef / se;
         if !t_val.is_finite() {
-            return Err("ADF: 辅助回归统计量无定义或非有限".into());
+            return Err("ADF: an auxiliary regression statistic is undefined or not finite".into());
         }
         let p_val = crate::distribution::student_t_probability(
             &t_dist,

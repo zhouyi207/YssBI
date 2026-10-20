@@ -1,23 +1,16 @@
-//! Authoritative graph diagnostic codes, localization templates, and definition validation.
+//! Authoritative graph diagnostic codes and definition validation. Message templates live in
+//! `locales/<locale>.json`, keyed by each definition's message key.
 //!
 //! Runtime diagnostic values remain in `yss-graph-analysis-contract`, independent of
 //! display-language selection and sanitized message rendering.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
-use std::sync::LazyLock;
 use yss_graph_analysis_contract::{DiagnosticArguments, DiagnosticSeverity};
-use yss_i18n::SimpleBackend;
 
-/// Diagnostics follow the desktop's default language when a locale has no template.
-const FALLBACK_LOCALE: &str = yss_i18n::CHINESE;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct DiagnosticTemplate {
-    pub locale: &'static str,
-    pub text: &'static str,
-}
+/// Compiled from `locales/<locale>.json` by the build script.
+static MESSAGES: yss_i18n::StaticCatalog = include!(concat!(env!("OUT_DIR"), "/messages.rs"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GraphDiagnosticDefinition {
@@ -26,7 +19,6 @@ pub struct GraphDiagnosticDefinition {
     pub default_severity: DiagnosticSeverity,
     pub blocking: bool,
     pub argument_names: &'static [&'static str],
-    pub templates: &'static [DiagnosticTemplate],
 }
 
 macro_rules! define_graph_diagnostics {
@@ -36,9 +28,7 @@ macro_rules! define_graph_diagnostics {
                 code: $code:literal,
                 message_key: $message_key:literal,
                 severity: $severity:ident,
-                blocking: $blocking:literal,
-                en: $en:literal,
-                zh: $zh:literal $(,)?
+                blocking: $blocking:literal $(,)?
             }
         ),* $(,)?
     ) => {
@@ -69,10 +59,6 @@ macro_rules! define_graph_diagnostics {
                     default_severity: DiagnosticSeverity::$severity,
                     blocking: $blocking,
                     argument_names: &[$(stringify!($argument)),*],
-                    templates: &[
-                        DiagnosticTemplate { locale: yss_i18n::ENGLISH, text: $en },
-                        DiagnosticTemplate { locale: yss_i18n::CHINESE, text: $zh },
-                    ],
                 },
             )*
         ];
@@ -85,48 +71,36 @@ define_graph_diagnostics! {
         message_key: "diagnostics.graph.connection.input_direction",
         severity: Error,
         blocking: true,
-        en: "Connection target %{port} must be an input port.",
-        zh: "连接目标 %{port} 必须是输入端口。",
     },
     ConnectionLimit { port } => {
         code: "graph.connection.limit",
         message_key: "diagnostics.graph.connection.limit",
         severity: Error,
         blocking: true,
-        en: "Connection limit exceeded for %{port}.",
-        zh: "端口 %{port} 超出连接数量限制。",
     },
     ConnectionOrderForbidden { port } => {
         code: "graph.connection.order_forbidden",
         message_key: "diagnostics.graph.connection.order_forbidden",
         severity: Error,
         blocking: true,
-        en: "Connection order is forbidden for %{port}.",
-        zh: "端口 %{port} 不允许连接顺序。",
     },
     ConnectionOrderRequired { port } => {
         code: "graph.connection.order_required",
         message_key: "diagnostics.graph.connection.order_required",
         severity: Error,
         blocking: true,
-        en: "Connection order is required for %{port}.",
-        zh: "端口 %{port} 需要连接顺序。",
     },
     ConnectionOutputDirection { port } => {
         code: "graph.connection.output_direction",
         message_key: "diagnostics.graph.connection.output_direction",
         severity: Error,
         blocking: true,
-        en: "Connection source %{port} must be an output port.",
-        zh: "连接源 %{port} 必须是输出端口。",
     },
     DependencyValueCycle {} => {
         code: "graph.dependency.value_cycle",
         message_key: "diagnostics.graph.dependency.value_cycle",
         severity: Error,
         blocking: true,
-        en: "Value dependencies contain a cycle.",
-        zh: "值依赖包含循环。",
     },
 
     ResourceResolutionFailed { resource_key } => {
@@ -134,64 +108,48 @@ define_graph_diagnostics! {
         message_key: "diagnostics.graph.resource.resolution_failed",
         severity: Error,
         blocking: true,
-        en: "Resource %{resource_key} could not be resolved.",
-        zh: "无法解析资源 %{resource_key}。",
     },
     InputConflictingBindings { port } => {
         code: "graph.input.conflicting_bindings",
         message_key: "diagnostics.graph.input.conflicting_bindings",
         severity: Error,
         blocking: true,
-        en: "Input %{port} has conflicting bindings.",
-        zh: "输入 %{port} 存在冲突绑定。",
     },
     InputLiteralForbidden { port } => {
         code: "graph.input.literal_forbidden",
         message_key: "diagnostics.graph.input.literal_forbidden",
         severity: Error,
         blocking: true,
-        en: "Input %{port} does not allow a literal binding.",
-        zh: "输入 %{port} 不允许字面量绑定。",
     },
     InputLiteralInvalid { port } => {
         code: "graph.input.literal_invalid",
         message_key: "diagnostics.graph.input.literal_invalid",
         severity: Error,
         blocking: true,
-        en: "Input %{port} has an invalid persisted literal.",
-        zh: "输入 %{port} 的持久化字面量无效。",
     },
     InputNotInput { port } => {
         code: "graph.input.not_input",
         message_key: "diagnostics.graph.input.not_input",
         severity: Error,
         blocking: true,
-        en: "Port %{port} is not an input.",
-        zh: "端口 %{port} 不是输入端口。",
     },
     InputUnbound { port } => {
         code: "graph.input.unbound",
         message_key: "diagnostics.graph.input.unbound",
         severity: Warning,
         blocking: true,
-        en: "Required input %{port} is unbound.",
-        zh: "必需输入 %{port} 尚未绑定。",
     },
     InputUnknownPort { port } => {
         code: "graph.input.unknown_port",
         message_key: "diagnostics.graph.input.unknown_port",
         severity: Error,
         blocking: true,
-        en: "Input port %{port} is unknown.",
-        zh: "输入端口 %{port} 未知。",
     },
     InterfaceSchemaDependencyUnresolved {} => {
         code: "graph.interface.schema_dependency_unresolved",
         message_key: "diagnostics.graph.interface.schema_dependency_unresolved",
         severity: Error,
         blocking: true,
-        en: "Schema-dependent interface requirements could not be resolved.",
-        zh: "无法解析依赖架构的接口要求。",
     },
 
     NodeUnknown { node_type } => {
@@ -199,144 +157,108 @@ define_graph_diagnostics! {
         message_key: "diagnostics.graph.node.unknown",
         severity: Error,
         blocking: true,
-        en: "Node type %{node_type} is unknown.",
-        zh: "节点类型 %{node_type} 未知。",
     },
     NodeKernelUnavailable { node_type } => {
         code: "graph.node.kernel_unavailable",
         message_key: "diagnostics.graph.node.kernel_unavailable",
         severity: Error,
         blocking: true,
-        en: "Node type %{node_type} has no execution kernel in this build.",
-        zh: "当前版本尚未实现节点类型 %{node_type} 的执行内核。",
     },
     ParameterInvalid { parameter_key } => {
         code: "graph.parameter.invalid",
         message_key: "diagnostics.graph.parameter.invalid",
         severity: Error,
         blocking: true,
-        en: "Parameter %{parameter_key} is invalid.",
-        zh: "参数 %{parameter_key} 无效。",
     },
     ParameterRequired { parameter_key } => {
         code: "graph.parameter.required",
         message_key: "diagnostics.graph.parameter.required",
         severity: Error,
         blocking: true,
-        en: "Parameter %{parameter_key} is required.",
-        zh: "参数 %{parameter_key} 是必需的。",
     },
     ParameterUnknown { parameter_key } => {
         code: "graph.parameter.unknown",
         message_key: "diagnostics.graph.parameter.unknown",
         severity: Error,
         blocking: true,
-        en: "Parameter %{parameter_key} is unknown.",
-        zh: "参数 %{parameter_key} 未知。",
     },
     PortBindingKindMismatch { expected_kind, actual_kind } => {
         code: "graph.port.binding_kind_mismatch",
         message_key: "diagnostics.graph.port.binding_kind_mismatch",
         severity: Error,
         blocking: true,
-        en: "Port binding kind %{actual_kind} does not match %{expected_kind}.",
-        zh: "端口绑定类型 %{actual_kind} 与 %{expected_kind} 不匹配。",
     },
     PortOrphan { port } => {
         code: "graph.port.orphan",
         message_key: "diagnostics.graph.port.orphan",
         severity: Error,
         blocking: true,
-        en: "Port %{port} is orphaned.",
-        zh: "端口 %{port} 已孤立。",
     },
     PortUnknown { port } => {
         code: "graph.port.unknown",
         message_key: "diagnostics.graph.port.unknown",
         severity: Error,
         blocking: true,
-        en: "Port %{port} is unknown.",
-        zh: "端口 %{port} 未知。",
     },
     SchemaParameterInvalid { parameter_key } => {
         code: "graph.schema.parameter_invalid",
         message_key: "diagnostics.graph.schema.parameter_invalid",
         severity: Error,
         blocking: true,
-        en: "Schema parameter %{parameter_key} is invalid.",
-        zh: "架构参数 %{parameter_key} 无效。",
     },
     SemanticInvalid {} => {
         code: "graph.semantic.invalid",
         message_key: "diagnostics.graph.semantic.invalid",
         severity: Error,
         blocking: true,
-        en: "Semantic graph is invalid.",
-        zh: "语义图无效。",
     },
     TypeConnectionMismatch { output, input } => {
         code: "graph.type.connection_mismatch",
         message_key: "diagnostics.graph.type.connection_mismatch",
         severity: Error,
         blocking: true,
-        en: "Resolved output type at %{output} is not accepted by %{input}.",
-        zh: "输出端口 %{output} 的已解析类型不被输入端口 %{input} 接受。",
     },
     TypeGenericConflict { type_parameter } => {
         code: "graph.type.generic_conflict",
         message_key: "diagnostics.graph.type.generic_conflict",
         severity: Error,
         blocking: true,
-        en: "Type parameter %{type_parameter} received incompatible input types.",
-        zh: "类型参数 %{type_parameter} 收到了不兼容的输入类型。",
     },
     TypeInputNotAccepted { port } => {
         code: "graph.type.input_not_accepted",
         message_key: "diagnostics.graph.type.input_not_accepted",
         severity: Error,
         blocking: true,
-        en: "Input value type is not accepted by port %{port}.",
-        zh: "输入值类型不被端口 %{port} 接受。",
     },
     TypeResolutionIncomplete { port } => {
         code: "graph.type.resolution_incomplete",
         message_key: "diagnostics.graph.type.resolution_incomplete",
         severity: Error,
         blocking: true,
-        en: "Port %{port} does not have one exact resolved type.",
-        zh: "端口 %{port} 尚未求解为唯一确定类型。",
     },
     FunctionBodyUnavailable { function } => {
         code: "graph.function.body_unavailable",
         message_key: "diagnostics.graph.function.body_unavailable",
         severity: Error,
         blocking: true,
-        en: "Function %{function} has no available body.",
-        zh: "函数 %{function} 的正文不可用。",
     },
     FunctionAbiMismatch { function } => {
         code: "graph.function.abi_mismatch",
         message_key: "diagnostics.graph.function.abi_mismatch",
         severity: Error,
         blocking: true,
-        en: "Function %{function} entry or return does not match its signature.",
-        zh: "函数 %{function} 的入口或返回与签名不一致。",
     },
     FunctionDependencyCycle { function } => {
         code: "graph.function.dependency_cycle",
         message_key: "diagnostics.graph.function.dependency_cycle",
         severity: Error,
         blocking: true,
-        en: "Function %{function} participates in a recursive call cycle.",
-        zh: "函数 %{function} 参与了递归调用循环。",
     },
     FunctionBlocked { function } => {
         code: "graph.function.blocked",
         message_key: "diagnostics.graph.function.blocked",
         severity: Error,
         blocking: true,
-        en: "Function %{function} contains blocking graph problems.",
-        zh: "函数 %{function} 中存在阻止运行的图问题。",
     },
 }
 
@@ -346,18 +268,6 @@ pub fn render_diagnostic(
     message_key: &str,
     arguments: &DiagnosticArguments,
 ) -> Option<String> {
-    static TRANSLATIONS: LazyLock<SimpleBackend> = LazyLock::new(|| {
-        let mut locales = HashMap::<_, HashMap<_, _>>::new();
-        for definition in GRAPH_DIAGNOSTIC_DEFINITIONS {
-            for template in definition.templates {
-                locales
-                    .entry(template.locale.into())
-                    .or_default()
-                    .insert(definition.message_key.into(), template.text.into());
-            }
-        }
-        locales.into_iter().collect()
-    });
     let definition = GRAPH_DIAGNOSTIC_DEFINITIONS
         .iter()
         .find(|definition| definition.code == code && definition.message_key == message_key)?;
@@ -366,7 +276,7 @@ pub fn render_diagnostic(
         .iter()
         .map(|name| {
             arguments.get(*name).map(|argument| {
-                argument
+                let value = argument
                     .chars()
                     .take(512)
                     .map(|character| {
@@ -376,16 +286,13 @@ pub fn render_diagnostic(
                             character
                         }
                     })
-                    .collect::<String>()
+                    .collect::<String>();
+                (*name, value)
             })
         })
         .collect::<Option<Vec<_>>>()?;
-    let template = yss_i18n::translate(&*TRANSLATIONS, locale, message_key, FALLBACK_LOCALE);
-    Some(yss_i18n::format_values(
-        &template,
-        definition.argument_names,
-        &values,
-    ))
+    let template = yss_i18n::translate(MESSAGES, locale, message_key);
+    Some(yss_i18n::format(template, &values))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -428,7 +335,8 @@ impl fmt::Display for GraphDiagnosticDefinitionError {
             }
             Self::MissingDefaultTemplate { code, message_key } => write!(
                 formatter,
-                "diagnostic {code} ({message_key}) has no {FALLBACK_LOCALE} template"
+                "diagnostic {code} ({message_key}) has no {} template",
+                yss_i18n::FALLBACK_LOCALE
             ),
             Self::ArgumentTemplateMismatch {
                 code,
@@ -461,6 +369,13 @@ impl Error for GraphDiagnosticDefinitionError {}
 pub fn validate_graph_diagnostic_definitions(
     definitions: &[GraphDiagnosticDefinition],
 ) -> Result<(), GraphDiagnosticDefinitionError> {
+    validate_definitions(definitions, MESSAGES)
+}
+
+fn validate_definitions(
+    definitions: &[GraphDiagnosticDefinition],
+    catalog: &[(&str, &[(&str, yss_i18n::Message)])],
+) -> Result<(), GraphDiagnosticDefinitionError> {
     let mut codes = BTreeSet::new();
     let mut message_keys = BTreeSet::new();
 
@@ -475,10 +390,21 @@ pub fn validate_graph_diagnostic_definitions(
                 message_key: definition.message_key.into(),
             });
         }
-        if !definition
-            .templates
+        let templates = catalog
             .iter()
-            .any(|template| template.locale == FALLBACK_LOCALE)
+            .filter_map(|(locale, messages)| {
+                let index = messages
+                    .binary_search_by(|(key, _)| (*key).cmp(definition.message_key))
+                    .ok()?;
+                match messages.get(index)?.1 {
+                    yss_i18n::Message::Text(text) => Some((*locale, text)),
+                    yss_i18n::Message::List(_) | yss_i18n::Message::Plural(_) => None,
+                }
+            })
+            .collect::<Vec<_>>();
+        if !templates
+            .iter()
+            .any(|(locale, _)| *locale == yss_i18n::FALLBACK_LOCALE)
         {
             return Err(GraphDiagnosticDefinitionError::MissingDefaultTemplate {
                 code: definition.code.into(),
@@ -487,12 +413,12 @@ pub fn validate_graph_diagnostic_definitions(
         }
 
         let declared = canonical_names(definition.argument_names.iter().copied());
-        for template in definition.templates {
-            let referenced = extract_placeholders(template.text).map_err(|error| match error {
+        for (locale, text) in templates {
+            let referenced = extract_placeholders(text).map_err(|error| match error {
                 TemplatePlaceholderError::UnmatchedBrace { brace, offset } => {
                     GraphDiagnosticDefinitionError::UnmatchedTemplateBrace {
                         code: definition.code.into(),
-                        locale: template.locale.into(),
+                        locale: locale.into(),
                         brace,
                         offset,
                     }
@@ -500,7 +426,7 @@ pub fn validate_graph_diagnostic_definitions(
                 TemplatePlaceholderError::InvalidName { name } => {
                     GraphDiagnosticDefinitionError::InvalidTemplatePlaceholder {
                         code: definition.code.into(),
-                        locale: template.locale.into(),
+                        locale: locale.into(),
                         name,
                     }
                 }
@@ -508,7 +434,7 @@ pub fn validate_graph_diagnostic_definitions(
             if declared != referenced {
                 return Err(GraphDiagnosticDefinitionError::ArgumentTemplateMismatch {
                     code: definition.code.into(),
-                    locale: template.locale.into(),
+                    locale: locale.into(),
                     declared,
                     referenced,
                 });
@@ -629,7 +555,7 @@ mod tests {
                 definition.message_key,
                 &arguments
             ),
-            Some(chinese),
+            Some(rendered),
         );
     }
 
@@ -641,50 +567,53 @@ mod tests {
             Err(GraphDiagnosticDefinitionError::DuplicateCode { .. }),
         ));
         assert!(matches!(
-            validate_graph_diagnostic_definitions(&[GraphDiagnosticDefinition {
-                templates: &[],
-                ..definition
-            }]),
+            validate_definitions(&[definition], &[(yss_i18n::FALLBACK_LOCALE, &[])]),
             Err(GraphDiagnosticDefinitionError::MissingDefaultTemplate { .. }),
         ));
     }
 
-    fn test_definition(templates: &'static [DiagnosticTemplate]) -> GraphDiagnosticDefinition {
-        GraphDiagnosticDefinition {
-            code: "graph.test.template",
-            message_key: "diagnostics.graph.test.template",
-            default_severity: DiagnosticSeverity::Error,
-            blocking: true,
-            argument_names: &["value"],
-            templates,
+    #[test]
+    fn every_template_belongs_to_a_definition() {
+        for (locale, messages) in MESSAGES {
+            for (key, _) in *messages {
+                assert!(
+                    GRAPH_DIAGNOSTIC_DEFINITIONS
+                        .iter()
+                        .any(|definition| definition.message_key == *key),
+                    "{locale} template {key} has no diagnostic definition"
+                );
+            }
         }
+    }
+
+    const TEST_DEFINITION: GraphDiagnosticDefinition = GraphDiagnosticDefinition {
+        code: "graph.test.template",
+        message_key: "diagnostics.graph.test.template",
+        default_severity: DiagnosticSeverity::Error,
+        blocking: true,
+        argument_names: &["value"],
+    };
+
+    fn validate_template(text: &'static str) -> Result<(), GraphDiagnosticDefinitionError> {
+        let messages = [(TEST_DEFINITION.message_key, yss_i18n::Message::Text(text))];
+        validate_definitions(
+            &[TEST_DEFINITION],
+            &[(yss_i18n::FALLBACK_LOCALE, &messages)],
+        )
     }
 
     #[test]
     fn malformed_template_placeholders_are_typed_definition_errors() {
-        const UNMATCHED_OPEN: &[DiagnosticTemplate] = &[DiagnosticTemplate {
-            locale: FALLBACK_LOCALE,
-            text: "Broken %{value",
-        }];
-        const UNMATCHED_CLOSE: &[DiagnosticTemplate] = &[DiagnosticTemplate {
-            locale: FALLBACK_LOCALE,
-            text: "Broken value}",
-        }];
-        const INVALID_NAME: &[DiagnosticTemplate] = &[DiagnosticTemplate {
-            locale: FALLBACK_LOCALE,
-            text: "Broken %{Value}",
-        }];
-
         assert!(matches!(
-            validate_graph_diagnostic_definitions(&[test_definition(UNMATCHED_OPEN)]),
+            validate_template("Broken %{value"),
             Err(GraphDiagnosticDefinitionError::UnmatchedTemplateBrace { brace: '{', .. })
         ));
         assert!(matches!(
-            validate_graph_diagnostic_definitions(&[test_definition(UNMATCHED_CLOSE)]),
+            validate_template("Broken value}"),
             Err(GraphDiagnosticDefinitionError::UnmatchedTemplateBrace { brace: '}', .. })
         ));
         assert!(matches!(
-            validate_graph_diagnostic_definitions(&[test_definition(INVALID_NAME)]),
+            validate_template("Broken %{Value}"),
             Err(GraphDiagnosticDefinitionError::InvalidTemplatePlaceholder {
                 name,
                 ..

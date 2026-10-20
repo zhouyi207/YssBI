@@ -1,65 +1,17 @@
 //! Complete the existing panel-category entries without duplicating their identities.
 use super::*;
-use crate::builtin::add_node_messages;
 use yss_sci_contract::panel::MAX_COINTEGRATION_PREDICTORS;
 
-const SPECS: &[(&str, &str, &str, &str, &[&str])] = &[
-    (
-        "fe",
-        "yssbi.statistics.econometrics.panel.fe",
-        "Fixed effects (FE)",
-        "固定效应 FE",
-        &["econometrics.panel.fe", "within", "固定效应FE"],
-    ),
-    (
-        "re",
-        "yssbi.statistics.econometrics.panel.re",
-        "Random effects (RE)",
-        "随机效应 RE",
-        &["econometrics.panel.re", "FGLS", "随机效应RE"],
-    ),
-    (
-        "fd",
-        "yssbi.statistics.econometrics.panel.fd",
-        "First differences",
-        "第一差分模型",
-        &["econometrics.panel.fd", "FD", "第一差分模型"],
-    ),
-    (
-        "between",
-        "yssbi.statistics.econometrics.panel.between",
-        "Between estimator",
-        "组间估计 Between",
-        &["econometrics.panel.between", "组间估计Between Estimator"],
-    ),
-    (
-        "dynamic",
-        "yssbi.statistics.econometrics.panel.dynamic",
-        "Dynamic panel (difference GMM)",
-        "动态面板（差分 GMM）",
-        &["econometrics.panel.dynamic", "Arellano Bond", "动态面板"],
-    ),
-    (
-        "unit_root",
-        "yssbi.statistics.econometrics.panel.unit_root",
-        "Panel unit root (Fisher ADF)",
-        "面板单位根检验（Fisher ADF）",
-        &[
-            "econometrics.panel.unit_root",
-            "Maddala Wu",
-            "面板单位根检验",
-        ],
-    ),
+const SPECS: &[(&str, &str)] = &[
+    ("fe", "yssbi.statistics.econometrics.panel.fe"),
+    ("re", "yssbi.statistics.econometrics.panel.re"),
+    ("fd", "yssbi.statistics.econometrics.panel.fd"),
+    ("between", "yssbi.statistics.econometrics.panel.between"),
+    ("dynamic", "yssbi.statistics.econometrics.panel.dynamic"),
+    ("unit_root", "yssbi.statistics.econometrics.panel.unit_root"),
     (
         "cointegration",
         "yssbi.statistics.econometrics.panel.cointegration",
-        "Panel cointegration (Fisher Engle–Granger)",
-        "面板协整检验（Fisher Engle–Granger）",
-        &[
-            "econometrics.panel.cointegration",
-            "Engle Granger",
-            "面板协整检验",
-        ],
     ),
 ];
 
@@ -107,7 +59,7 @@ fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
 }
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, id, en, zh, aliases) in SPECS {
+    for &(method, id) in SPECS {
         let model = matches!(method, "fe" | "re" | "fd" | "between");
         let mut ports = vec![data_input(
             if method == "unit_root" { "series" } else { "y" },
@@ -161,21 +113,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        add_node_messages(
-            &mut fragment.messages,
-            id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
     }
-    add_described(
-        &mut fragment.messages,
-        "parameters.statistics.max_instrument_lag",
-        ["Maximum instrument lag", "工具变量最大滞后阶"],
-        [
-            "Collapsed response-level instruments from lag 2 to this lag; default 3, at least 2 and below the period count.",
-            "使用因变量从第 2 阶到指定阶的折叠水平工具变量；默认 3，至少 2 且小于实际期数。",
-        ],
-    );
     Ok(())
 }

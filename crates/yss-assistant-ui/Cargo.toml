@@ -23,5 +23,4 @@ yss-harness-contract = { path = "../yss-harness-contract" }
 yss-assistant-contract = { path = "../yss-assistant-contract" }
 yss-harness-core = { path = "../yss-harness-core" }
 yss-project-identity = { path = "../yss-project-identity" }
-yss-settings = { path = "../yss-settings" }
 yss-ui = { path = "../yss-ui" }

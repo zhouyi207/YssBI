@@ -82,9 +82,9 @@ impl LinearReport {
             return div()
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child(yss_ui::text::format(
+                .child(yss_ui::text::plural(
                     "native.reports.equationLimit",
-                    &[("count", COEFFICIENT_PAGE_ROWS.to_string())],
+                    COEFFICIENT_PAGE_ROWS,
                 ));
         };
         let formula = if self.symbolic {

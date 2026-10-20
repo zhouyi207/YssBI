@@ -113,7 +113,7 @@ impl ResultPanel {
 
 fn row_range(offset: usize, count: usize, total: Option<usize>) -> String {
     if count == 0 {
-        return yss_ui::text::format("detail.counts.rows", &[("count", "0".into())]);
+        return yss_ui::text::plural("counts.rows", 0);
     }
     let mut fields = vec![
         ("start", (offset + 1).to_string()),

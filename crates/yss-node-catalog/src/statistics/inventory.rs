@@ -5,7 +5,7 @@ use crate::catalog_entry::{self, Entry};
 use std::collections::BTreeSet;
 
 mod entries;
-use entries::ENTRIES;
+pub(crate) use entries::ENTRIES;
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     let declared = fragment
@@ -25,10 +25,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         )?;
     }
     Ok(())
-}
-
-pub(crate) fn documentation(id: &str, locale: &str) -> Option<Box<str>> {
-    catalog_entry::documentation(ENTRIES, id, locale)
 }
 
 #[cfg(test)]
@@ -115,10 +111,7 @@ mod tests {
                 .map(|item| item.category_id.as_ref())
                 .filter(|category| category.starts_with("statistics."))
                 .collect::<BTreeSet<_>>(),
-            super::super::CATEGORIES
-                .iter()
-                .map(|&(id, _, _)| id)
-                .collect()
+            super::super::CATEGORIES.iter().copied().collect()
         );
     }
 }

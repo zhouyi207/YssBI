@@ -1,89 +1,28 @@
 //! Prospective scalar power interfaces with model-specific units and assumptions.
 use super::*;
-use crate::builtin::add_node_messages;
 mod parameters;
-const METHODS: &[(&str, &str, &str)] = &[
-    (
-        "principles",
-        "Power principles (normal mean planning)",
-        "功效原理（正态均值规划）",
-    ),
-    (
-        "mean_difference",
-        "Mean difference power (t test)",
-        "均值差功效（t 检验）",
-    ),
-    ("paired", "Paired t-test power", "配对 t 检验功效"),
-    (
-        "variance",
-        "Normal population variance power",
-        "正态总体方差功效",
-    ),
-    (
-        "proportion",
-        "One-proportion power (normal approximation)",
-        "单比例功效（正态近似）",
-    ),
-    (
-        "proportion_difference",
-        "Two-proportion power (normal approximation)",
-        "两比例差功效（正态近似）",
-    ),
-    (
-        "correlation",
-        "Correlation power (Fisher z)",
-        "相关性功效（Fisher z）",
-    ),
-    (
-        "anova",
-        "Balanced one-way ANOVA power",
-        "平衡单因素 ANOVA 功效",
-    ),
-    (
-        "linear_regression",
-        "Overall linear regression power",
-        "线性回归整体检验功效",
-    ),
-    (
-        "generalized_model",
-        "GLM power (Poisson rate ratio)",
-        "广义模型功效（Poisson 发生率比）",
-    ),
-    (
-        "logistic",
-        "Logistic power (binary predictor)",
-        "Logistic 功效（二元预测变量）",
-    ),
-    (
-        "cox",
-        "Cox power (Schoenfeld approximation)",
-        "Cox 功效（Schoenfeld 近似）",
-    ),
-    (
-        "logrank",
-        "Log-rank power (Schoenfeld approximation)",
-        "Log-rank 功效（Schoenfeld 近似）",
-    ),
-    (
-        "cluster_randomized",
-        "Cluster randomized power (continuous outcome)",
-        "整群随机功效（连续结果）",
-    ),
-    (
-        "noninferiority",
-        "Mean noninferiority power (known variance)",
-        "均值非劣效功效（已知方差）",
-    ),
-    (
-        "equivalence",
-        "Mean equivalence power (known variance)",
-        "均值等效功效（已知方差）",
-    ),
+const METHODS: &[&str] = &[
+    "principles",
+    "mean_difference",
+    "paired",
+    "variance",
+    "proportion",
+    "proportion_difference",
+    "correlation",
+    "anova",
+    "linear_regression",
+    "generalized_model",
+    "logistic",
+    "cox",
+    "logrank",
+    "cluster_randomized",
+    "noninferiority",
+    "equivalence",
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh) in METHODS {
+    for &method in METHODS {
         let id = format!("yssbi.statistics.power.{method}");
-        let parameters = parameters::build(fragment, &id, method)?;
+        let parameters = parameters::build(&id, method)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
@@ -114,7 +53,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }

@@ -1,31 +1,18 @@
 //! Executable variance-analysis nodes retain their inventory identities.
 use super::*;
-use crate::builtin::add_node_messages;
 
-const METHODS: &[(&str, &str, &str)] = &[
-    ("one_way", "One-way ANOVA", "单因素方差分析"),
-    ("two_way", "Two-way ANOVA", "双因素方差分析"),
-    ("three_way", "Three-way ANOVA", "三因素方差分析"),
-    ("factorial", "Factorial ANOVA", "多因素方差分析"),
-    (
-        "ancova",
-        "Analysis of covariance (ANCOVA)",
-        "协方差分析（ANCOVA）",
-    ),
-    (
-        "manova",
-        "Multivariate ANOVA (MANOVA)",
-        "多元方差分析（MANOVA）",
-    ),
-    (
-        "repeated_measures",
-        "Repeated-measures ANOVA",
-        "重复测量方差分析",
-    ),
+const METHODS: &[&str] = &[
+    "one_way",
+    "two_way",
+    "three_way",
+    "factorial",
+    "ancova",
+    "manova",
+    "repeated_measures",
 ];
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh) in METHODS {
+    for &method in METHODS {
         let id = format!("yssbi.statistics.anova.{method}");
         let mut ports = if method == "manova" {
             vec![bounded_user_data_input(
@@ -105,62 +92,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        let aliases: &'static [&'static str] = match method {
-            "one_way" => &["anova.one_way", "ANOVA", "单因素方差", "方差"],
-            "two_way" => &["anova.two_way", "two way ANOVA", "双因素方差"],
-            "three_way" => &["anova.three_way", "three way ANOVA", "三因素方差"],
-            "factorial" => &[
-                "anova.factorial",
-                "factorial ANOVA",
-                "多因素方差",
-                "交互效应",
-            ],
-            "ancova" => &["anova.ancova", "ANCOVA", "协方差分析"],
-            "manova" => &["anova.manova", "MANOVA", "多元方差"],
-            "repeated_measures" => &[
-                "anova.repeated_measures",
-                "repeated measures ANOVA",
-                "重复测量方差",
-                "Greenhouse-Geisser",
-            ],
-            _ => unreachable!(),
-        };
-        add_node_messages(
-            &mut fragment.messages,
-            &id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
-    }
-    for (key, en, zh, en_help, zh_help) in [
-        (
-            "model_terms",
-            "Factor terms",
-            "因素效应",
-            "Full factorial includes all factor interactions; main effects includes only additive factor effects. Default: full factorial.",
-            "完整因子模型包含所有因素交互；主效应模型只包含各因素的加性效应。默认完整因子模型。",
-        ),
-        (
-            "sums_of_squares",
-            "Sums of squares",
-            "平方和类型",
-            "I: sequential (covariates first); II: adjust for other terms except higher-order relatives; III: adjust for every other term, with sum contrasts. Default: III.",
-            "I：顺序检验（协变量优先）；II：调整除本项高阶关联项外的其他项；III：使用和为零对比，调整所有其他项。默认 III。",
-        ),
-        (
-            "sphericity_correction",
-            "Sphericity correction",
-            "球形性校正",
-            "Apply Greenhouse-Geisser epsilon to each within-subject effect's degrees of freedom, or use uncorrected inference. Default: Greenhouse-Geisser.",
-            "对每个受试者内效应的自由度应用 Greenhouse-Geisser 校正，或使用未校正推断。默认 Greenhouse-Geisser。",
-        ),
-    ] {
-        add_described(
-            &mut fragment.messages,
-            &format!("parameters.statistics.{key}"),
-            [en, zh],
-            [en_help, zh_help],
-        );
     }
     Ok(())
 }
@@ -174,7 +105,7 @@ mod tests {
         let system = crate::build_builtin_node_system().unwrap();
         for locale in ["en-US", "zh-CN"] {
             let catalog = system.catalog.localize(&system.registry, locale);
-            for &(method, _, _) in METHODS {
+            for &method in METHODS {
                 let id = format!("yssbi.statistics.anova.{method}");
                 let protocol = system
                     .registry

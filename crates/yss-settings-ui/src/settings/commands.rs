@@ -216,10 +216,7 @@ impl SettingsPanel {
                             draft.changed |= added > 0;
                         }
                         view.report_success(
-                            yss_ui::text::format(
-                                "settings.models.discoveryAdded",
-                                &[("count", added.to_string())],
-                            ),
+                            yss_ui::text::plural("settings.models.discoveryAdded", added),
                             cx,
                         );
                     }

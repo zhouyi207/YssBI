@@ -113,8 +113,20 @@ impl Render for Inspection {
                     yss_ui::text::format(
                         "panel.assistantToolResources",
                         &[
-                            ("artifacts", detail.artifacts.len().to_string()),
-                            ("results", detail.results.len().to_string()),
+                            (
+                                "changes",
+                                yss_ui::text::plural(
+                                    "counts.resourceChanges",
+                                    detail.artifacts.len(),
+                                ),
+                            ),
+                            (
+                                "results",
+                                yss_ui::text::plural(
+                                    "counts.computationResults",
+                                    detail.results.len(),
+                                ),
+                            ),
                         ],
                     ),
                 ));
@@ -310,13 +322,7 @@ fn fact(key: &str, value: &Value, translate_value: bool, cx: &gpui_kit::App) -> 
 }
 
 fn translated(prefix: &str, value: &str) -> String {
-    let key = format!("{prefix}.{value}");
-    let label = yss_ui::text::translate(&key);
-    if label == key {
-        value.to_owned()
-    } else {
-        label
-    }
+    yss_ui::text::optional(&format!("{prefix}.{value}")).unwrap_or_else(|| value.to_owned())
 }
 
 fn preview_fact(key: &str, value: &Value, cx: &gpui_kit::App) -> impl IntoElement {
@@ -377,14 +383,8 @@ fn value_preview(value: &Value) -> String {
             }
             preview
         }
-        Value::Array(items) => yss_ui::text::format(
-            "panel.assistantPreviewItems",
-            &[("count", items.len().to_string())],
-        ),
-        Value::Object(fields) => yss_ui::text::format(
-            "panel.assistantPreviewFields",
-            &[("count", fields.len().to_string())],
-        ),
+        Value::Array(items) => yss_ui::text::plural("counts.items", items.len()),
+        Value::Object(fields) => yss_ui::text::plural("counts.fields", fields.len()),
         value => value.to_string(),
     }
 }

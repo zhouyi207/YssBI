@@ -1,15 +1,7 @@
 use super::*;
-const NODES: &[(&str, &str, &str)] = &[
-    ("vikor", "VIKOR compromise ranking", "VIKOR"),
-    (
-        "coupling_coordination",
-        "Coupling coordination",
-        "耦合协调度",
-    ),
-    ("obstacle_degree", "Obstacle degree", "障碍度"),
-];
+const NODES: &[&str] = &["vikor", "coupling_coordination", "obstacle_degree"];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh) in NODES {
+    for &method in NODES {
         let mut parameters = vec![];
         if method != "coupling_coordination" {
             parameters.push(parameter(
@@ -71,14 +63,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             fixed_numeric_table("scores", "Observations", fields)?,
             data_output("weights", "Criterion weights", numeric_data_series_type())?,
         ];
-        emit(
-            fragment,
-            &format!("decision.{method}"),
-            en,
-            zh,
-            ports,
-            parameters,
-        )?;
+        emit(fragment, &format!("decision.{method}"), ports, parameters)?;
     }
     Ok(())
 }

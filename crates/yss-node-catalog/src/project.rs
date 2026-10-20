@@ -1,10 +1,8 @@
 use super::builtin::{
     BuiltinAssemblyError, assembled_interface, assembled_parameters, iid, leaf, sid,
 };
-use crate::Message;
 use crate::builtin::data_port;
 use crate::builtin::node_key;
-use crate::builtin::{add_node_messages, add_text};
 use std::sync::Arc;
 use yss_node_protocol::*;
 use yss_node_registry::{
@@ -24,43 +22,7 @@ pub(crate) fn builtin_function_interface_resolver_ids() -> Box<[InterfaceResolve
     .into()
 }
 
-pub(super) fn register(
-    nodes: &mut Vec<RegisteredNode>,
-    messages: &mut Vec<(&'static str, String, Message)>,
-) -> Result<(), BuiltinAssemblyError> {
-    for (id, en, zh, aliases, zh_aliases) in [
-        (
-            crate::FUNCTION_ENTRY_NODE_TYPE,
-            "Function Entry",
-            "函数入口",
-            &["function", "arguments", "parameters"][..],
-            &["函数", "入口", "参数"][..],
-        ),
-        (
-            crate::FUNCTION_RETURN_NODE_TYPE,
-            "Function Return",
-            "函数返回",
-            &["function", "result", "exit"][..],
-            &["函数", "返回", "结果"][..],
-        ),
-        (
-            crate::FUNCTION_CALL_NODE_TYPE,
-            "Call Function",
-            "调用函数",
-            &["call", "invoke", "function"][..],
-            &["调用", "执行", "函数"][..],
-        ),
-        (
-            crate::CONSTANT_GET_NODE_TYPE,
-            "Get Constant",
-            "读取常量",
-            &["get", "read", "constant"][..],
-            &["读取", "获取", "常量"][..],
-        ),
-    ] {
-        add_node_messages(messages, id, [en, zh], Some([aliases, zh_aliases]));
-    }
-
+pub(super) fn register(nodes: &mut Vec<RegisteredNode>) -> Result<(), BuiltinAssemblyError> {
     nodes.extend([
         RegisteredNode::structural(
             Arc::new(function_entry_protocol()?),
@@ -76,7 +38,6 @@ pub(super) fn register(
         ),
         leaf(constant_get_protocol()?, "constant.get"),
     ]);
-    add_messages(messages);
     Ok(())
 }
 
@@ -256,30 +217,5 @@ pub(crate) fn resource_parameter(key: &'static str) -> Result<Parameter, Builtin
 fn environment_dependent() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::EnvironmentDependent,
-    }
-}
-
-fn add_messages(out: &mut Vec<(&'static str, String, Message)>) {
-    for (key, en, zh) in [
-        ("parameters.function.title", "Function", "函数"),
-        (
-            "parameters.function.description",
-            "Bound function resource.",
-            "绑定的函数资源。",
-        ),
-        ("parameters.target.title", "Target Function", "目标函数"),
-        (
-            "parameters.target.description",
-            "Function resource to invoke.",
-            "要调用的函数资源。",
-        ),
-        ("parameters.constant.title", "Constant", "常量"),
-        (
-            "parameters.constant.description",
-            "Immutable value defined in this graph's Details panel.",
-            "在当前图详情面板中定义的常量值。",
-        ),
-    ] {
-        add_text(out, key, [en, zh]);
     }
 }

@@ -23,6 +23,10 @@ pub enum ReasoningEffort {
     High,
 }
 
+impl ReasoningEffort {
+    pub const ALL: [Self; 3] = [Self::Low, Self::Medium, Self::High];
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HarnessTurnOptions {

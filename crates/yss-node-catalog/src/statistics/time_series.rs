@@ -1,104 +1,23 @@
 //! Executable entries for the remaining time-series inventory.
 use super::*;
-use crate::builtin::add_node_messages;
 
-const METHODS: &[(&str, &str, &str, &[&str])] = &[
-    (
-        "timeseries.arima",
-        "ARIMA forecast",
-        "ARIMA 预测",
-        &["ARIMA", "差分自回归移动平均"],
-    ),
-    (
-        "timeseries.sarima",
-        "Seasonal ARIMA forecast",
-        "季节 SARIMA 预测",
-        &["SARIMA", "季节预测"],
-    ),
-    (
-        "plot.correlogram",
-        "Correlogram",
-        "偏（自）相关图",
-        &["ACF", "PACF", "相关图"],
-    ),
-    (
-        "plot.time_series",
-        "Time-series plot",
-        "时序图",
-        &["time series", "时间序列图"],
-    ),
-    (
-        "timeseries.ecm",
-        "Error-correction model",
-        "ECM 误差修正模型",
-        &["ECM", "误差修正"],
-    ),
-    (
-        "timeseries.arch",
-        "ARCH model",
-        "ARCH 模型",
-        &["ARCH", "条件异方差"],
-    ),
-    (
-        "timeseries.grey_prediction",
-        "Grey prediction GM(1,1)",
-        "灰色预测 GM(1,1)",
-        &["GM(1,1)", "灰色预测"],
-    ),
-    (
-        "timeseries.exponential_smoothing",
-        "Simple exponential smoothing",
-        "指数平滑",
-        &["SES", "指数平滑"],
-    ),
-    (
-        "timeseries.markov_prediction",
-        "Markov forecast",
-        "马尔可夫预测",
-        &["Markov", "马尔可夫"],
-    ),
-    (
-        "timeseries.phillips_perron",
-        "Phillips–Perron test",
-        "Phillips–Perron 检验",
-        &["PP", "单位根"],
-    ),
-    (
-        "timeseries.kpss",
-        "KPSS stationarity test",
-        "KPSS 平稳性检验",
-        &["KPSS", "平稳性"],
-    ),
-    (
-        "timeseries.ets",
-        "Additive ETS model",
-        "ETS 指数平滑状态空间模型",
-        &["ETS", "状态空间平滑"],
-    ),
-    (
-        "timeseries.holt_winters",
-        "Holt–Winters forecast",
-        "Holt–Winters 预测",
-        &["Holt-Winters", "三次指数平滑"],
-    ),
-    (
-        "timeseries.garch",
-        "GARCH model",
-        "GARCH 模型",
-        &["GARCH", "波动率"],
-    ),
-    (
-        "timeseries.egarch",
-        "EGARCH model",
-        "EGARCH 模型",
-        &["EGARCH", "对数波动率"],
-    ),
-    (
-        "timeseries.gjr_garch",
-        "GJR-GARCH model",
-        "GJR-GARCH 模型",
-        &["GJR", "非对称波动率"],
-    ),
+const METHODS: &[&str] = &[
+    "timeseries.arima",
+    "timeseries.sarima",
+    "plot.correlogram",
+    "plot.time_series",
+    "timeseries.ecm",
+    "timeseries.arch",
+    "timeseries.grey_prediction",
+    "timeseries.exponential_smoothing",
+    "timeseries.markov_prediction",
+    "timeseries.phillips_perron",
+    "timeseries.kpss",
+    "timeseries.ets",
+    "timeseries.holt_winters",
+    "timeseries.garch",
+    "timeseries.egarch",
+    "timeseries.gjr_garch",
 ];
 fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     let mut p = match method {
@@ -212,7 +131,7 @@ fn parameters(method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     Ok(p)
 }
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh, aliases) in METHODS {
+    for &method in METHODS {
         let id = format!("yssbi.statistics.{method}");
         let input = if method == "timeseries.markov_prediction" {
             label_series()?
@@ -268,60 +187,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(
-            &mut fragment.messages,
-            &id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
-    }
-    for (key, en, zh) in [
-        ("ts_p", "AR / ARCH order", "AR / ARCH 阶数"),
-        ("ts_d", "Difference order", "普通差分阶数"),
-        ("ts_q", "MA / variance order", "MA / 方差滞后阶数"),
-        ("ts_seasonal_p", "Seasonal AR order", "季节 AR 阶数"),
-        ("ts_seasonal_d", "Seasonal difference order", "季节差分阶数"),
-        ("ts_seasonal_q", "Seasonal MA order", "季节 MA 阶数"),
-        ("ts_period", "Seasonal period", "季节周期"),
-        ("ts_horizon", "Forecast steps", "预测期数"),
-        (
-            "ts_confidence",
-            "Prediction interval coverage",
-            "预测区间置信水平",
-        ),
-        ("ts_lags", "Short-run difference lags", "短期差分滞后阶数"),
-        ("ts_alpha", "Level smoothing alpha", "水平平滑系数 alpha"),
-        ("ts_beta", "Trend smoothing beta", "趋势平滑系数 beta"),
-        ("ts_gamma", "Seasonal smoothing gamma", "季节平滑系数 gamma"),
-        ("ts_phi", "Trend damping phi", "趋势阻尼系数 phi"),
-        (
-            "ts_optimize",
-            "Estimate smoothing parameters",
-            "估计平滑系数",
-        ),
-        ("ts_trend", "Additive trend", "加性趋势"),
-        ("ts_damped", "Damped trend", "阻尼趋势"),
-        ("ts_seasonality", "Seasonality", "季节形式"),
-        ("ts_pseudocount", "Transition pseudocount", "转移伪计数"),
-        ("ts_bandwidth", "Newey–West bandwidth", "Newey–West 带宽"),
-        ("ts_deterministic", "Deterministic terms", "确定性项"),
-        ("ts_maximum_lag", "Displayed lags", "显示滞后数"),
-        (
-            "ts_simulations",
-            "EGARCH forecast simulations",
-            "EGARCH 预测模拟次数",
-        ),
-        ("ts_seed", "Forecast random seed", "预测随机种子"),
-    ] {
-        add_described(
-            &mut fragment.messages,
-            &format!("parameters.statistics.{key}"),
-            [en, zh],
-            [
-                "See node help for this parameter's default, valid range and estimation meaning.",
-                "默认值、有效范围及统计含义见节点帮助。",
-            ],
-        );
     }
     Ok(())
 }

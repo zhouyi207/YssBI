@@ -33,7 +33,7 @@ fn parse_expression_with_budget(
     if input.is_empty() {
         return Err(MathError::new(
             MathErrorKind::EmptyInput,
-            "数学表达式不能为空",
+            "math expression is empty",
         ));
     }
     let normalized_latex;
@@ -64,7 +64,10 @@ pub(super) fn parse_relations(
 ) -> Result<Vec<MathRelation>, MathError> {
     let mut budget = ParseBudget::new(input)?;
     if input.trim().is_empty() {
-        return Err(MathError::new(MathErrorKind::EmptyInput, "关系式不能为空"));
+        return Err(MathError::new(
+            MathErrorKind::EmptyInput,
+            "relation is empty",
+        ));
     }
     let mut relations = Vec::new();
     for segment in split_top_level(input, ',')? {
@@ -72,7 +75,7 @@ pub(super) fn parse_relations(
         if parts.operators.is_empty() {
             return Err(MathError::new(
                 MathErrorKind::MissingRelation,
-                "每条约束必须包含比较运算符",
+                "each constraint needs a comparison operator",
             ));
         }
         budget.add_relations(parts.operators.len())?;
@@ -107,7 +110,7 @@ impl ParseBudget {
         if input.len() > MAX_INPUT_BYTES {
             return Err(MathError::new(
                 MathErrorKind::InputLimit,
-                format!("数学输入不能超过 {MAX_INPUT_BYTES} 字节"),
+                format!("math input exceeds {MAX_INPUT_BYTES} bytes"),
             ));
         }
         Ok(Self {
@@ -121,7 +124,7 @@ impl ParseBudget {
         if self.nodes > MAX_NODES {
             return Err(MathError::new(
                 MathErrorKind::NodeLimit,
-                format!("数学表达式总节点数不能超过 {MAX_NODES}"),
+                format!("math expression exceeds {MAX_NODES} nodes"),
             ));
         }
         Ok(())
@@ -137,7 +140,7 @@ pub(super) fn ensure_relation_count(count: usize) -> Result<(), MathError> {
     if count > MAX_RELATIONS {
         return Err(MathError::new(
             MathErrorKind::RelationLimit,
-            format!("关系数量不能超过 {MAX_RELATIONS}"),
+            format!("relation count exceeds {MAX_RELATIONS}"),
         ));
     }
     Ok(())
@@ -147,14 +150,17 @@ fn ensure_depth(depth: usize) -> Result<(), MathError> {
     if depth > MAX_DEPTH {
         return Err(MathError::new(
             MathErrorKind::DepthLimit,
-            "数学表达式深度不能超过 32",
+            "math expression is nested deeper than 32 levels",
         ));
     }
     Ok(())
 }
 
 fn parser_error(error: mathlex::ParseError) -> MathError {
-    MathError::new(MathErrorKind::Parse, format!("数学表达式解析失败: {error}"))
+    MathError::new(
+        MathErrorKind::Parse,
+        format!("math expression could not be parsed: {error}"),
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -275,7 +281,7 @@ fn check_parser_depth(
         if depth > MAX_PARSER_DEPTH {
             return Err(MathError::new(
                 MathErrorKind::DepthLimit,
-                format!("数学输入递归嵌套不能超过 {MAX_PARSER_DEPTH}"),
+                format!("math input nesting exceeds {MAX_PARSER_DEPTH} levels"),
             ));
         }
     }
@@ -331,7 +337,7 @@ fn convert(
                 LexBinaryOp::Mul => BinaryOp::Mul,
                 LexBinaryOp::Div => BinaryOp::Div,
                 LexBinaryOp::Pow => BinaryOp::Pow,
-                _ => return unsupported("不支持该二元运算符"),
+                _ => return unsupported("unsupported binary operator"),
             };
             Ok(MathExpr::Binary {
                 op,
@@ -343,7 +349,7 @@ fn convert(
             if !is_allowed_call(name) {
                 return Err(MathError::new(
                     MathErrorKind::UnknownFunction,
-                    format!("不支持函数 {name}()"),
+                    format!("unsupported function {name}()"),
                 ));
             }
             Ok(MathExpr::Call {
@@ -354,7 +360,7 @@ fn convert(
                     .collect::<Result<Vec<_>, _>>()?,
             })
         }
-        _ => unsupported("表达式超出项目支持的数学子集"),
+        _ => unsupported("expression is outside the supported math subset"),
     }
 }
 
@@ -367,9 +373,12 @@ fn parse_latex_operator_call(
     let rest = input
         .strip_prefix("\\operatorname{")
         .expect("captured operator call");
-    let name_end = rest
-        .find('}')
-        .ok_or_else(|| MathError::new(MathErrorKind::Parse, "\\operatorname 的花括号不匹配"))?;
+    let name_end = rest.find('}').ok_or_else(|| {
+        MathError::new(
+            MathErrorKind::Parse,
+            "unbalanced braces after \\operatorname",
+        )
+    })?;
     let name = &rest[..name_end];
     if name.is_empty()
         || !name
@@ -378,25 +387,28 @@ fn parse_latex_operator_call(
     {
         return Err(MathError::new(
             MathErrorKind::Parse,
-            "\\operatorname 仅支持函数或分布名称",
+            "\\operatorname accepts only function or distribution names",
         ));
     }
     if !is_allowed_call(name) {
         return Err(MathError::new(
             MathErrorKind::UnknownFunction,
-            format!("不支持函数或分布 {name}()"),
+            format!("unsupported function or distribution {name}()"),
         ));
     }
     let call = rest[name_end + 1..].trim();
     let Some(arguments) = call.strip_prefix('(') else {
         return Err(MathError::new(
             MathErrorKind::Parse,
-            "函数或分布名称后需要参数列表",
+            "function or distribution name needs an argument list",
         ));
     };
-    let arguments = arguments
-        .strip_suffix(')')
-        .ok_or_else(|| MathError::new(MathErrorKind::Parse, "函数参数括号不匹配"))?;
+    let arguments = arguments.strip_suffix(')').ok_or_else(|| {
+        MathError::new(
+            MathErrorKind::Parse,
+            "unbalanced parentheses in function arguments",
+        )
+    })?;
     let args = if arguments.trim().is_empty() {
         Vec::new()
     } else {
@@ -479,10 +491,9 @@ fn prepare_latex_input<'a>(
             continue;
         }
         if rest.starts_with("\\mathrm{") {
-            let end = rest
-                .find('}')
-                .ok_or_else(|| MathError::new(MathErrorKind::Parse, "\\mathrm 的花括号不匹配"))?
-                + 1;
+            let end = rest.find('}').ok_or_else(|| {
+                MathError::new(MathErrorKind::Parse, "unbalanced braces after \\mathrm")
+            })? + 1;
             let identifier = parse_mathrm_identifier(&rest[..end])?;
             text.push_str(&protect(ProtectedLatexAtom::Symbol(identifier)));
             index += end;
@@ -535,7 +546,9 @@ fn prepare_latex_input<'a>(
                     SymbolSegmentation::Ambiguous => {
                         return Err(MathError::new(
                             MathErrorKind::AmbiguousSymbol,
-                            format!("标识符 '{run}' 可按已知符号进行多种分词"),
+                            format!(
+                                "identifier '{run}' splits into known symbols in more than one way"
+                            ),
                         ));
                     }
                     _ => {}
@@ -549,14 +562,17 @@ fn prepare_latex_input<'a>(
 }
 
 fn latex_operator_call_end(input: &str) -> Result<usize, MathError> {
-    let name_end = input
-        .find('}')
-        .ok_or_else(|| MathError::new(MathErrorKind::Parse, "\\operatorname 的花括号不匹配"))?;
+    let name_end = input.find('}').ok_or_else(|| {
+        MathError::new(
+            MathErrorKind::Parse,
+            "unbalanced braces after \\operatorname",
+        )
+    })?;
     let arguments = input[name_end + 1..].trim_start();
     if !arguments.starts_with('(') {
         return Err(MathError::new(
             MathErrorKind::Parse,
-            "函数或分布名称后需要参数列表",
+            "function or distribution name needs an argument list",
         ));
     }
     let start = input.len() - arguments.len();
@@ -573,7 +589,10 @@ fn latex_operator_call_end(input: &str) -> Result<usize, MathError> {
             _ => {}
         }
     }
-    Err(MathError::new(MathErrorKind::Parse, "函数参数括号不匹配"))
+    Err(MathError::new(
+        MathErrorKind::Parse,
+        "unbalanced parentheses in function arguments",
+    ))
 }
 
 fn parse_mathrm_identifier(input: &str) -> Result<&str, MathError> {
@@ -588,7 +607,7 @@ fn parse_mathrm_identifier(input: &str) -> Result<&str, MathError> {
     {
         return Err(MathError::new(
             MathErrorKind::Unsupported,
-            "\\mathrm 仅支持标识符",
+            "\\mathrm accepts only identifiers",
         ));
     }
     Ok(content)
@@ -623,7 +642,7 @@ fn number(value: f64) -> Result<MathExpr, MathError> {
     } else {
         Err(MathError::new(
             MathErrorKind::NonFiniteNumber,
-            "数值必须是有限数",
+            "number is not finite",
         ))
     }
 }
@@ -664,7 +683,7 @@ fn resolve_symbol(
         }
         SymbolSegmentation::Ambiguous => Err(MathError::new(
             MathErrorKind::AmbiguousSymbol,
-            format!("标识符 '{name}' 可按已知符号进行多种分词"),
+            format!("identifier '{name}' splits into known symbols in more than one way"),
         )),
         SymbolSegmentation::Unknown | SymbolSegmentation::Unique(_) => {
             Ok(MathExpr::Symbol(name.to_string()))
@@ -736,16 +755,18 @@ fn scan_relation_parts(input: &str) -> Result<RelationParts<'_>, MathError> {
             _ => {}
         }
         if nesting < 0 {
-            return Err(MathError::new(MathErrorKind::Parse, "括号不匹配").at(index));
+            return Err(MathError::new(MathErrorKind::Parse, "unbalanced brackets").at(index));
         }
         if nesting == 0
             && let Some((length, op)) = relation_operator(rest)
         {
             let expression = input[start..index].trim();
             if expression.is_empty() {
-                return Err(
-                    MathError::new(MathErrorKind::Parse, "比较运算符两侧都需要表达式").at(index),
-                );
+                return Err(MathError::new(
+                    MathErrorKind::Parse,
+                    "comparison operator needs expressions on both sides",
+                )
+                .at(index));
             }
             expressions.push(expression);
             operators.push(op);
@@ -756,13 +777,13 @@ fn scan_relation_parts(input: &str) -> Result<RelationParts<'_>, MathError> {
         index += ch.len_utf8();
     }
     if nesting != 0 {
-        return Err(MathError::new(MathErrorKind::Parse, "括号不匹配"));
+        return Err(MathError::new(MathErrorKind::Parse, "unbalanced brackets"));
     }
     let last = input[start..].trim();
     if last.is_empty() && !operators.is_empty() {
         return Err(MathError::new(
             MathErrorKind::Parse,
-            "比较运算符右侧需要表达式",
+            "comparison operator needs an expression on its right side",
         ));
     }
     expressions.push(last);
@@ -812,23 +833,30 @@ fn split_top_level(input: &str, delimiter: char) -> Result<Vec<&str>, MathError>
             _ => {}
         }
         if nesting < 0 {
-            return Err(MathError::new(MathErrorKind::Parse, "括号不匹配").at(index));
+            return Err(MathError::new(MathErrorKind::Parse, "unbalanced brackets").at(index));
         }
         if ch == delimiter && nesting == 0 {
             let segment = input[start..index].trim();
             if segment.is_empty() {
-                return Err(MathError::new(MathErrorKind::Parse, "逗号之间缺少约束").at(index));
+                return Err(MathError::new(
+                    MathErrorKind::Parse,
+                    "missing constraint between commas",
+                )
+                .at(index));
             }
             segments.push(segment);
             start = index + ch.len_utf8();
         }
     }
     if nesting != 0 {
-        return Err(MathError::new(MathErrorKind::Parse, "括号不匹配"));
+        return Err(MathError::new(MathErrorKind::Parse, "unbalanced brackets"));
     }
     let last = input[start..].trim();
     if last.is_empty() {
-        return Err(MathError::new(MathErrorKind::Parse, "逗号后缺少约束"));
+        return Err(MathError::new(
+            MathErrorKind::Parse,
+            "missing constraint after comma",
+        ));
     }
     segments.push(last);
     Ok(segments)

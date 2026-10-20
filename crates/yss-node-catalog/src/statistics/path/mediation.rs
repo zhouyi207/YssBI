@@ -1,18 +1,8 @@
 use super::*;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for (id, en, zh, moderated) in [
-        (
-            "yssbi.statistics.workflow.mediation",
-            "Mediation (one observed mediator)",
-            "中介作用（单一观测中介）",
-            false,
-        ),
-        (
-            "yssbi.statistics.workflow.moderated_mediation",
-            "Moderated mediation (one moderated stage)",
-            "有调节的中介作用（单阶段调节）",
-            true,
-        ),
+    for (id, moderated) in [
+        ("yssbi.statistics.workflow.mediation", false),
+        ("yssbi.statistics.workflow.moderated_mediation", true),
     ] {
         let mut ports = vec![
             data_input("y", "Y", numeric_data_series_type())?,
@@ -57,7 +47,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 ],
             )?,
         ]);
-        append_node(fragment, id, en, zh, ports, params)?;
+        append_node(fragment, id, ports, params)?;
     }
     Ok(())
 }

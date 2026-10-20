@@ -1,0 +1,62 @@
+{
+  "diagnostics": {
+    "graph": {
+      "connection": {
+        "input_direction": "连接目标 %{port} 必须是输入端口。",
+        "limit": "端口 %{port} 超出连接数量限制。",
+        "order_forbidden": "端口 %{port} 不允许连接顺序。",
+        "order_required": "端口 %{port} 需要连接顺序。",
+        "output_direction": "连接源 %{port} 必须是输出端口。"
+      },
+      "dependency": {
+        "value_cycle": "值依赖包含循环。"
+      },
+      "resource": {
+        "resolution_failed": "无法解析资源 %{resource_key}。"
+      },
+      "input": {
+        "conflicting_bindings": "输入 %{port} 存在冲突绑定。",
+        "literal_forbidden": "输入 %{port} 不允许字面量绑定。",
+        "literal_invalid": "输入 %{port} 的持久化字面量无效。",
+        "not_input": "端口 %{port} 不是输入端口。",
+        "unbound": "必需输入 %{port} 尚未绑定。",
+        "unknown_port": "输入端口 %{port} 未知。"
+      },
+      "interface": {
+        "schema_dependency_unresolved": "无法解析依赖架构的接口要求。"
+      },
+      "node": {
+        "unknown": "节点类型 %{node_type} 未知。",
+        "kernel_unavailable": "当前版本尚未实现节点类型 %{node_type} 的执行内核。"
+      },
+      "parameter": {
+        "invalid": "参数 %{parameter_key} 无效。",
+        "required": "参数 %{parameter_key} 是必需的。",
+        "unknown": "参数 %{parameter_key} 未知。"
+      },
+      "port": {
+        "binding_kind_mismatch": "端口绑定类型 %{actual_kind} 与 %{expected_kind} 不匹配。",
+        "orphan": "端口 %{port} 已孤立。",
+        "unknown": "端口 %{port} 未知。"
+      },
+      "schema": {
+        "parameter_invalid": "架构参数 %{parameter_key} 无效。"
+      },
+      "semantic": {
+        "invalid": "语义图无效。"
+      },
+      "type": {
+        "connection_mismatch": "输出端口 %{output} 的已解析类型不被输入端口 %{input} 接受。",
+        "generic_conflict": "类型参数 %{type_parameter} 收到了不兼容的输入类型。",
+        "input_not_accepted": "输入值类型不被端口 %{port} 接受。",
+        "resolution_incomplete": "端口 %{port} 尚未求解为唯一确定类型。"
+      },
+      "function": {
+        "body_unavailable": "函数 %{function} 的正文不可用。",
+        "abi_mismatch": "函数 %{function} 的入口或返回与签名不一致。",
+        "dependency_cycle": "函数 %{function} 参与了递归调用循环。",
+        "blocked": "函数 %{function} 中存在阻止运行的图问题。"
+      }
+    }
+  }
+}

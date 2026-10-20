@@ -32,10 +32,7 @@ impl ResourceRows {
                 (count > 0).then(|| {
                     (
                         cx.theme().warning,
-                        crate::text::format(
-                            "graphDiagnostics.sidebarTooltip",
-                            &[("count", count.to_string())],
-                        ),
+                        crate::text::plural("graphDiagnostics.sidebarTooltip", count),
                     )
                 })
             }

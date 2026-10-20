@@ -3,7 +3,6 @@ use super::builtin::{
     assembled_parameters, leaf, pure, sid,
 };
 use crate::builtin::node_key;
-use crate::builtin::{add_node_messages, add_text};
 use crate::builtin::{category_id, concrete, data_port, icon_id, node_type_id, type_id};
 use yss_data_contract::DataValue;
 use yss_node_protocol::*;
@@ -30,220 +29,90 @@ enum PlotInputs {
 #[derive(Clone, Copy)]
 struct PlotSpec {
     id: &'static str,
-    en: &'static str,
-    zh: &'static str,
-    aliases: &'static [&'static str],
-    zh_aliases: &'static [&'static str],
     inputs: PlotInputs,
 }
 
 const SPECS: &[PlotSpec] = &[
     PlotSpec {
         id: "yssbi.plot.scatter.view",
-        en: "Scatter Plot",
-        zh: "散点图",
-        aliases: &["scatterplot", "XY plot", "points"],
-        zh_aliases: &["散点图", "XY图", "点图"],
         inputs: PlotInputs::Pair,
     },
     PlotSpec {
         id: "yssbi.plot.line.view",
-        en: "Line Plot",
-        zh: "折线图",
-        aliases: &["line chart", "time series plot", "curve"],
-        zh_aliases: &["折线图", "时间序列图", "曲线图"],
         inputs: PlotInputs::Pair,
     },
     PlotSpec {
         id: "yssbi.plot.ecdf.view",
-        en: "Empirical CDF",
-        zh: "经验累积分布图",
-        aliases: &["ECDF", "empirical cumulative distribution function", "CDF"],
-        zh_aliases: &["经验分布函数", "累积分布", "ECDF"],
         inputs: PlotInputs::NumericSeries,
     },
     PlotSpec {
         id: "yssbi.plot.kde.view",
-        en: "Kernel Density Estimate",
-        zh: "核密度估计图",
-        aliases: &[
-            "KDE",
-            "kernel density estimation",
-            "density plot",
-            "Silverman bandwidth",
-        ],
-        zh_aliases: &["核密度估计", "密度图", "KDE"],
         inputs: PlotInputs::NumericSeries,
     },
     PlotSpec {
         id: "yssbi.plot.histogram.view",
-        en: "Histogram",
-        zh: "直方图",
-        aliases: &["frequency distribution", "bins", "Sturges rule"],
-        zh_aliases: &["频数分布", "分箱", "斯特吉斯规则"],
         inputs: PlotInputs::NumericSeries,
     },
     PlotSpec {
         id: "yssbi.plot.correlation.view",
-        en: "Correlation Plot",
-        zh: "相关性图",
-        aliases: &[
-            "correlation matrix",
-            "Pearson correlation",
-            "p-value",
-            "heatmap",
-        ],
-        zh_aliases: &["相关矩阵", "皮尔逊相关", "P值", "热力图"],
         inputs: PlotInputs::CorrelationSeries,
     },
     PlotSpec {
         id: "yssbi.plot.correlogram.view",
-        en: "Correlogram (ACF & PACF)",
-        zh: "相关图（ACF 与 PACF）",
-        aliases: &["correlogram", "ACF", "PACF", "Ljung-Box", "autocorrelation"],
-        zh_aliases: &["相关图", "自相关", "偏自相关", "Ljung-Box检验"],
         inputs: PlotInputs::Correlogram,
     },
     PlotSpec {
         id: "yssbi.plot.boxplot.view",
-        en: "Box Plot",
-        zh: "箱线图",
-        aliases: &["boxplot", "box-and-whisker"],
-        zh_aliases: &["箱线图", "四分位数"],
         inputs: PlotInputs::Groups,
     },
     PlotSpec {
         id: "yssbi.plot.wordcloud.view",
-        en: "Word Cloud",
-        zh: "词云",
-        aliases: &["word cloud", "term frequency"],
-        zh_aliases: &["词云", "词频"],
         inputs: PlotInputs::Words,
     },
     PlotSpec {
         id: "yssbi.plot.errorbar.view",
-        en: "Error Bar Plot",
-        zh: "误差线图",
-        aliases: &["error bars", "intervals"],
-        zh_aliases: &["误差线", "区间图"],
         inputs: PlotInputs::ErrorBars,
     },
     PlotSpec {
         id: "yssbi.plot.pp_qq.view",
-        en: "P-P / Q-Q Plot",
-        zh: "P-P/Q-Q图",
-        aliases: &["probability plot", "quantile plot"],
-        zh_aliases: &["概率图", "分位数图"],
         inputs: PlotInputs::NumericSeries,
     },
     PlotSpec {
         id: "yssbi.plot.roc.view",
-        en: "ROC Curve",
-        zh: "ROC曲线",
-        aliases: &["ROC", "AUC", "receiver operating characteristic"],
-        zh_aliases: &["ROC曲线", "AUC"],
         inputs: PlotInputs::Roc,
     },
     PlotSpec {
         id: "yssbi.plot.quadrant.view",
-        en: "Quadrant Plot",
-        zh: "象限图",
-        aliases: &["quadrant chart"],
-        zh_aliases: &["象限图", "四象限"],
         inputs: PlotInputs::Pair,
     },
     PlotSpec {
         id: "yssbi.plot.pareto.view",
-        en: "Pareto Chart",
-        zh: "帕累托图",
-        aliases: &["Pareto", "cumulative frequency"],
-        zh_aliases: &["帕累托图", "累计频数"],
         inputs: PlotInputs::Categories,
     },
     PlotSpec {
         id: "yssbi.plot.combination.view",
-        en: "Combination Chart",
-        zh: "组合图",
-        aliases: &["combo chart", "bar and line"],
-        zh_aliases: &["组合图", "柱线图"],
         inputs: PlotInputs::Combination,
     },
     PlotSpec {
         id: "yssbi.plot.bubble.view",
-        en: "Bubble Chart",
-        zh: "气泡图",
-        aliases: &["bubble plot", "size"],
-        zh_aliases: &["气泡图", "气泡大小"],
         inputs: PlotInputs::Bubble,
     },
     PlotSpec {
         id: "yssbi.plot.violin.view",
-        en: "Violin Plot",
-        zh: "小提琴图",
-        aliases: &["violin plot", "distribution"],
-        zh_aliases: &["小提琴图", "分布密度"],
         inputs: PlotInputs::Groups,
     },
     PlotSpec {
         id: "yssbi.plot.heatmap.view",
-        en: "Heatmap",
-        zh: "热力图",
-        aliases: &["heat map", "matrix"],
-        zh_aliases: &["热力图", "矩阵图"],
         inputs: PlotInputs::Groups,
     },
     PlotSpec {
         id: "yssbi.plot.coefficient.view",
-        en: "Coefficient Plot",
-        zh: "系数图",
-        aliases: &["coefficient plot", "coefplot", "confidence intervals"],
-        zh_aliases: &["系数图", "Coef图", "置信区间"],
         inputs: PlotInputs::Model,
     },
 ];
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut nodes = Vec::with_capacity(SPECS.len());
-    let mut messages = Vec::new();
-    for (key, en, zh) in [
-        ("categories.plot.title", "Visualization", "可视化"),
-        (
-            "parameters.plot.maximum_lag.title",
-            "Maximum lag",
-            "最大滞后阶数",
-        ),
-        ("types.plot_data.title", "Plot data", "绘图数据"),
-    ] {
-        add_text(&mut messages, key, [en, zh]);
-    }
-    for (key, en, zh) in [
-        ("bins", "Bins (0 = automatic)", "分箱数（0 为自动）"),
-        ("grid_points", "Density grid points", "密度网格点数"),
-        ("max_words", "Maximum words", "最多显示词数"),
-        ("mode", "Plot type", "图形类型"),
-        (
-            "estimate_parameters",
-            "Estimate normal reference parameters",
-            "估计正态参考分布参数",
-        ),
-        ("reference_mean", "Reference mean", "参考均值"),
-        (
-            "reference_standard_deviation",
-            "Reference standard deviation",
-            "参考标准差",
-        ),
-        ("x_cut", "X split", "X 分界值"),
-        ("y_cut", "Y split", "Y 分界值"),
-        ("dual_axis", "Separate line axis", "折线使用独立纵轴"),
-        ("confidence_level", "Confidence level", "置信水平"),
-        ("include_intercept", "Include intercept", "显示截距"),
-    ] {
-        add_text(
-            &mut messages,
-            format!("parameters.plot.{key}.title"),
-            [en, zh],
-        );
-    }
     let categories = vec![CategoryRegistration {
         id: category_id(CATEGORY)?,
         title_key: i18n_key("categories.plot.title")?,
@@ -251,18 +120,11 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         order: 70,
     }];
     for spec in SPECS {
-        add_node_messages(
-            &mut messages,
-            spec.id,
-            [spec.en, spec.zh],
-            Some([spec.aliases, spec.zh_aliases]),
-        );
         nodes.push(leaf(protocol(spec)?, spec.id));
     }
     let fragment = ProviderFragment {
         categories,
         nodes,
-        messages,
         types: vec![TypeRegistration {
             id: type_id("plot.data")?,
             title_key: i18n_key("types.plot_data.title")?,

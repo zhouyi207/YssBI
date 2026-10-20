@@ -8,5 +8,6 @@ publish = false
 anyhow = "1"
 gpui-kit.workspace = true
 tokio.workspace = true
+yss-settings = { path = "../yss-settings" }
 yss-ui = { path = "../yss-ui" }
 yss-workbench = { path = "../yss-workbench" }

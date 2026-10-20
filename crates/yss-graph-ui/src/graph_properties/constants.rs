@@ -68,22 +68,13 @@ impl ConstantSummary {
             Self::Tabular(columns, rows) => yss_ui::text::format(
                 "native.workbench.constantDimensions",
                 &[
-                    ("value0", columns.to_string()),
-                    ("value1", rows.to_string()),
+                    ("columns", yss_ui::text::plural("counts.columns", *columns)),
+                    ("rows", yss_ui::text::plural("counts.rows", *rows)),
                 ],
             ),
-            Self::Elements(count) => yss_ui::text::format(
-                "native.workbench.elementCount",
-                &[("value0", count.to_string())],
-            ),
-            Self::Fields(count) => yss_ui::text::format(
-                "native.results.fieldCount",
-                &[("value0", count.to_string())],
-            ),
-            Self::TextBytes(count) => yss_ui::text::format(
-                "native.workbench.textBytes",
-                &[("value0", count.to_string())],
-            ),
+            Self::Elements(count) => yss_ui::text::plural("counts.elements", *count),
+            Self::Fields(count) => yss_ui::text::plural("counts.fields", *count),
+            Self::TextBytes(count) => yss_ui::text::plural("native.workbench.textBytes", *count),
             Self::Structured => yss_ui::text::translate("native.workbench.structuredValue"),
         }
     }

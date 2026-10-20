@@ -21,7 +21,7 @@ use yss_graph_editor::{
 };
 use yss_ui::appearance::HEADER_BUTTON_SIZE;
 use yss_ui::inspector::{self, InlineMessage};
-use yss_ui::text::{format, translate};
+use yss_ui::text::{format, plural, translate};
 
 pub(super) struct PortField {
     pub model: EditorPortModel,
@@ -315,9 +315,9 @@ impl GraphDetails {
         }
         if port.connections.current > 0 {
             actions.push(PortAction {
-                label: format(
+                label: plural(
                     "native.workbench.disconnectCount",
-                    &[("value0", port.connections.current.to_string())],
+                    usize::try_from(port.connections.current).unwrap_or(usize::MAX),
                 ),
                 icon: IconName::Unlink,
                 mutation: EditorGraphMutation::DisconnectPort {

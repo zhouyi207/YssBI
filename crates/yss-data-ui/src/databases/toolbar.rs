@@ -140,14 +140,17 @@ impl DatabaseEditor {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .when_some(selection, |view, selection| {
-                        view.child(yss_ui::text::format(
+                        view.child(yss_ui::text::plural(
                             "native.databases.selectionSize",
-                            &[("count", selection.cells.to_string())],
+                            selection.cells,
                         ))
                     })
                     .child(yss_ui::text::format(
                         "native.databases.size",
-                        &[("rows", rows.to_string()), ("columns", columns.to_string())],
+                        &[
+                            ("rows", yss_ui::text::plural("counts.rows", rows)),
+                            ("columns", yss_ui::text::plural("counts.columns", columns)),
+                        ],
                     ))
                     .child(
                         div()

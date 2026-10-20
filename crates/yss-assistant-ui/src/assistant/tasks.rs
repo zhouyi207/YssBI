@@ -132,9 +132,9 @@ impl ConversationPanel {
                 div()
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
-                    .child(yss_ui::text::format(
+                    .child(yss_ui::text::plural(
                         "panel.assistantTaskToolCalls",
-                        &[("count", tool_count.to_string())],
+                        tool_count,
                     )),
             );
         }
@@ -157,9 +157,9 @@ impl ConversationPanel {
                     .text_xs()
                     .text_color(cx.theme().warning)
                     .child(Icon::new(IconName::CircleAlert).small())
-                    .child(yss_ui::text::format(
+                    .child(yss_ui::text::plural(
                         "panel.assistantTaskWarnings",
-                        &[("count", task.warnings.len().to_string())],
+                        task.warnings.len(),
                     )),
             );
         }
@@ -187,14 +187,9 @@ impl ConversationPanel {
             );
         }
         if let Some(reason) = &task.blocked_reason {
-            let key = format!("panel.assistantBlockedReasons.{reason}");
-            let label = yss_ui::text::translate(&key);
-            card = card.child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().danger)
-                    .child(if label == key { reason.clone() } else { label }),
-            );
+            let label = yss_ui::text::optional(&format!("panel.assistantBlockedReasons.{reason}"))
+                .unwrap_or_else(|| reason.clone());
+            card = card.child(div().text_xs().text_color(cx.theme().danger).child(label));
         }
         div()
             .min_w_0()
@@ -278,9 +273,27 @@ impl ConversationPanel {
                     .child(yss_ui::text::format(
                         "panel.assistantPlanRequirements",
                         &[
-                            ("variables", plan.variable_roles.len().to_string()),
-                            ("diagnostics", plan.required_diagnostics.len().to_string()),
-                            ("checks", plan.robustness_checks.len().to_string()),
+                            (
+                                "roles",
+                                yss_ui::text::plural(
+                                    "counts.variableRoles",
+                                    plan.variable_roles.len(),
+                                ),
+                            ),
+                            (
+                                "diagnostics",
+                                yss_ui::text::plural(
+                                    "counts.diagnostics",
+                                    plan.required_diagnostics.len(),
+                                ),
+                            ),
+                            (
+                                "checks",
+                                yss_ui::text::plural(
+                                    "counts.robustnessChecks",
+                                    plan.robustness_checks.len(),
+                                ),
+                            ),
                         ],
                     )),
             )

@@ -13,13 +13,19 @@ impl Render for ResidualView {
             .child(self.controls(cx))
             .when_some(self.data.as_ref(), |body, data| {
                 body.child(div().text_xs().child(yss_ui::text::format(
-                    if data.sampled {
-                        "native.reports.sampledResiduals"
-                    } else {
-                        "native.reports.residualCount"
-                    },
+                    "native.reports.residualCount",
                     &[
-                        ("shown", data.displayed.to_string()),
+                        (
+                            "shown",
+                            yss_ui::text::plural(
+                                if data.sampled {
+                                    "counts.sampledObservations"
+                                } else {
+                                    "counts.observations"
+                                },
+                                data.displayed,
+                            ),
+                        ),
                         ("matched", data.matched.to_string()),
                         ("total", data.total.to_string()),
                     ],

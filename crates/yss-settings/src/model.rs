@@ -1,6 +1,7 @@
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::ops::RangeInclusive;
+use yss_harness_contract::{HarnessMode, ReasoningEffort};
 
 pub const UI_FONT_SIZES: RangeInclusive<f32> = 8.0..=32.0;
 pub const MONO_FONT_SIZES: RangeInclusive<f32> = 8.0..=48.0;
@@ -36,8 +37,8 @@ pub enum Language {
 impl Language {
     pub fn locale(self) -> &'static str {
         match self {
-            Self::Chinese => "zh-CN",
-            Self::English => "en-US",
+            Self::Chinese => yss_i18n::CHINESE,
+            Self::English => yss_i18n::ENGLISH,
         }
     }
 }
@@ -151,26 +152,11 @@ impl Default for WorkspaceSettings {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AssistantMode {
-    Ask,
-    #[default]
-    Write,
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ReasoningEffort {
-    Low,
-    Medium,
-    High,
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 #[non_exhaustive]
 pub struct AssistantSettings {
-    pub mode: AssistantMode,
+    pub mode: HarnessMode,
     pub reasoning_effort: Option<ReasoningEffort>,
 }
 

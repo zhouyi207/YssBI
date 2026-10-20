@@ -90,7 +90,7 @@ impl MathError {
 impl fmt::Display for MathError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(offset) = self.offset {
-            write!(f, "{}（位置 {}）", self.message, offset)
+            write!(f, "{} at byte {}", self.message, offset)
         } else {
             f.write_str(&self.message)
         }

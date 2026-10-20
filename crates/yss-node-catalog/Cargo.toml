@@ -14,3 +14,6 @@ unicode-normalization.workspace = true
 unicode-casefold.workspace = true
 yss-node-protocol = { path = "../yss-node-protocol" }
 yss-node-registry = { path = "../yss-node-registry" }
+
+[build-dependencies]
+yss-i18n = { path = "../yss-i18n", default-features = false, features = ["codegen"] }

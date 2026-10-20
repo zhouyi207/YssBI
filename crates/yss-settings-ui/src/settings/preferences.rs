@@ -2,12 +2,16 @@ use super::SettingsPanel;
 use gpui_kit::component::setting::SettingGroup;
 use gpui_kit::{Context, SharedString};
 use std::time::Duration;
+use yss_harness_contract::{HarnessMode, ReasoningEffort};
 use yss_settings::{
-    AUTOSAVE_DELAYS_MS, AssistantMode, Autosave, CHART_PREVIEW_POINTS, Density, LOG_RETENTION_DAYS,
-    LOG_STORAGE_MIB, Language, LogLevel, MONO_FONT_SIZES, ReasoningEffort, TABLE_PAGE_SIZES,
-    ThemeMode, UI_FONT_SIZES, UserSettings,
+    AUTOSAVE_DELAYS_MS, Autosave, CHART_PREVIEW_POINTS, Density, LOG_RETENTION_DAYS,
+    LOG_STORAGE_MIB, Language, LogLevel, MONO_FONT_SIZES, TABLE_PAGE_SIZES, ThemeMode,
+    UI_FONT_SIZES, UserSettings,
 };
-use yss_ui::{preferences, text::t};
+use yss_ui::{
+    preferences,
+    text::{self, t},
+};
 
 /// Number input bounds `(min, max, step)` for a validated preference range.
 macro_rules! bounds {
@@ -23,6 +27,17 @@ fn choices<T: Clone>(entries: &[(T, &'static str)]) -> Vec<(T, SharedString)> {
         .collect()
 }
 
+/// Each language is named in itself, so it stays recognizable whatever the current language.
+fn language_choices() -> Vec<(Language, SharedString)> {
+    [Language::Chinese, Language::English]
+        .into_iter()
+        .map(|language| {
+            let name = text::translate_in(language.locale(), "locale.name");
+            (language, name.into())
+        })
+        .collect()
+}
+
 impl SettingsPanel {
     pub(super) fn appearance_preferences(&self, cx: &mut Context<Self>) -> SettingGroup {
         SettingGroup::new()
@@ -31,10 +46,7 @@ impl SettingsPanel {
                 "settings.descriptions.language",
                 |s| s.language,
                 |s, v| s.language = v,
-                vec![
-                    (Language::Chinese, "简体中文".into()),
-                    (Language::English, "English".into()),
-                ],
+                language_choices(),
                 cx,
             ))
             .item(self.preference_choice(
@@ -202,33 +214,34 @@ impl SettingsPanel {
 
     pub(super) fn assistant_preferences(&self, cx: &mut Context<Self>) -> SettingGroup {
         SettingGroup::new()
-            .item(self.preference_choice(
-                "preferences.assistant.mode",
-                "preferences.assistant.modeHint",
-                |s| s.assistant.mode,
-                |s, v| s.assistant.mode = v,
-                choices(&[
-                    (AssistantMode::Ask, "panel.assistantModes.ask"),
-                    (AssistantMode::Write, "panel.assistantModes.write"),
-                ]),
-                cx,
-            ))
-            .item(self.preference_choice(
-                "preferences.assistant.effort",
-                "preferences.assistant.effortHint",
-                |s| s.assistant.reasoning_effort,
-                |s, v| s.assistant.reasoning_effort = v,
-                choices(&[
-                    (None, "preferences.assistant.modelDefault"),
-                    (Some(ReasoningEffort::Low), "panel.assistantEffort.low"),
-                    (
-                        Some(ReasoningEffort::Medium),
-                        "panel.assistantEffort.medium",
-                    ),
-                    (Some(ReasoningEffort::High), "panel.assistantEffort.high"),
-                ]),
-                cx,
-            ))
+            .item(
+                self.preference_choice(
+                    "preferences.assistant.mode",
+                    "preferences.assistant.modeHint",
+                    |s| s.assistant.mode,
+                    |s, v| s.assistant.mode = v,
+                    [HarnessMode::Ask, HarnessMode::Write]
+                        .map(|mode| (mode, preferences::mode_label(mode).into()))
+                        .to_vec(),
+                    cx,
+                ),
+            )
+            .item(
+                self.preference_choice(
+                    "preferences.assistant.effort",
+                    "preferences.assistant.effortHint",
+                    |s| s.assistant.reasoning_effort,
+                    |s, v| s.assistant.reasoning_effort = v,
+                    std::iter::once((None, t("preferences.assistant.modelDefault").into()))
+                        .chain(
+                            ReasoningEffort::ALL.map(|effort| {
+                                (Some(effort), preferences::effort_label(effort).into())
+                            }),
+                        )
+                        .collect(),
+                    cx,
+                ),
+            )
     }
 
     pub(super) fn log_preferences(&self, cx: &mut Context<Self>) -> SettingGroup {

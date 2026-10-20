@@ -131,8 +131,14 @@ impl Plot for WordCloud {
                 "plot.wordCounts",
                 &[
                     ("displayed", layout.placed.len().to_string()),
-                    ("unique", self.data.unique_words.to_string()),
-                    ("observations", self.data.observations.to_string()),
+                    (
+                        "terms",
+                        yss_ui::text::plural("counts.terms", self.data.unique_words),
+                    ),
+                    (
+                        "occurrences",
+                        yss_ui::text::plural("counts.occurrences", self.data.observations),
+                    ),
                 ],
             )
             .into();

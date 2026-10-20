@@ -1,19 +1,9 @@
 //! Observed-variable interaction/path interfaces; latent-variable SEM stays separate.
 use super::*;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for (id, en, zh, advanced) in [
-        (
-            "yssbi.statistics.workflow.moderation",
-            "Moderation (two-way interaction)",
-            "调节作用（二阶交互）",
-            false,
-        ),
-        (
-            "yssbi.statistics.workflow.moderation_advanced",
-            "Moderation (three-way interaction)",
-            "调节作用（双调节变量三阶交互）",
-            true,
-        ),
+    for (id, advanced) in [
+        ("yssbi.statistics.workflow.moderation", false),
+        ("yssbi.statistics.workflow.moderation_advanced", true),
     ] {
         let mut ports = vec![
             data_input("y", "Y", numeric_data_series_type())?,
@@ -49,8 +39,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         append_node(
             fragment,
             id,
-            en,
-            zh,
             ports,
             vec![decimal_parameter("probe_sd", "1")?],
         )?;

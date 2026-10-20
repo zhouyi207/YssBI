@@ -37,12 +37,15 @@ fn resolve_linear_hypothesis(
     hypothesis: &str,
     param_names: &[String],
 ) -> Result<ResolvedLinearHypothesis, HypothesisError> {
-    let constraints = parse_relations(hypothesis, ParseOptions::plain(param_names))
-        .map_err(|error| HypothesisError::InvalidInput(format!("解析假设失败: {error}")))?;
+    let constraints =
+        parse_relations(hypothesis, ParseOptions::plain(param_names)).map_err(|error| {
+            HypothesisError::InvalidInput(format!("hypothesis could not be parsed: {error}"))
+        })?;
     let kind = constraint_kind(&constraints).map_err(HypothesisError::from)?;
     if constraints.len() > 1 && kind != LinearConstraintKind::Eq {
         return Err(HypothesisError::InvalidInput(
-            "Wald 检验仅支持等式约束 (Rβ = r)，请使用 = 而非 > 或 <".to_string(),
+            "the Wald test supports only equality constraints (Rβ = r); use = instead of > or <"
+                .to_string(),
         ));
     }
 
@@ -59,7 +62,7 @@ fn resolve_linear_hypothesis(
             .and_then(|left| linearize(&relation.right, &columns).map(|right| left.sub(right)))
             .map_err(|error| {
                 HypothesisError::InvalidInput(format!(
-                    "线性展开失败: 第 {} 条约束: {error}",
+                    "constraint {} could not be expanded linearly: {error}",
                     row + 1
                 ))
             })?;
@@ -114,7 +117,7 @@ pub fn run_hypothesis_test(
     }
     if input.param_names.len() != k {
         return Err(HypothesisError::InvalidInput(format!(
-            "param_names 长度 {} 与 betas 长度 {} 不一致",
+            "param_names length {} differs from betas length {}",
             input.param_names.len(),
             k
         )));
@@ -131,7 +134,7 @@ pub fn run_hypothesis_test(
     let covariance_values = input.cov_beta.into_iter().flatten().collect::<Vec<_>>();
     if k.checked_mul(k) != Some(covariance_values.len()) {
         return Err(HypothesisError::InvalidInput(
-            "cov_beta 形状错误: 协方差矩阵维度必须与参数数量一致".to_owned(),
+            "cov_beta shape mismatch: the covariance matrix dimension must equal the parameter count".to_owned(),
         ));
     }
     let cov_beta = Mat::from_fn(k, k, |row, column| covariance_values[row * k + column]);
@@ -213,7 +216,7 @@ pub fn parse_at_values(
     let resolved = resolve_linear_hypothesis(at_spec, param_names)?;
     if resolved.kind != LinearConstraintKind::Eq {
         return Err(HypothesisError::InvalidInput(
-            "at() 仅支持线性等式约束 (param = value)".to_string(),
+            "at() supports only linear equality constraints (param = value)".to_string(),
         ));
     }
 
@@ -227,14 +230,14 @@ pub fn parse_at_values(
             .collect::<Vec<_>>();
         if columns.len() != 1 {
             return Err(HypothesisError::InvalidInput(format!(
-                "at() 约束 {} 必须是简单形式 param = value",
+                "at() constraint {} must have the simple form param = value",
                 row_index + 1
             )));
         }
         let (column, coefficient) = columns[0];
         if coefficient.abs() <= f64::EPSILON {
             return Err(HypothesisError::InvalidInput(format!(
-                "at() 约束 {} 的参数系数不能为零",
+                "at() constraint {} has a zero parameter coefficient",
                 row_index + 1
             )));
         }
@@ -292,7 +295,7 @@ fn linearize(expr: &MathExpr, columns: &HashMap<&str, usize>) -> Result<LinearFo
             let column = columns
                 .get(name.as_str())
                 .copied()
-                .ok_or_else(|| format!("假设中的参数 '{name}' 不在 param_names 中"))?;
+                .ok_or_else(|| format!("hypothesis parameter '{name}' is not in param_names"))?;
             Ok(LinearForm {
                 coefficients: HashMap::from([(column, 1.0)]),
                 constant: 0.0,
@@ -334,7 +337,7 @@ fn linearize(expr: &MathExpr, columns: &HashMap<&str, usize>) -> Result<LinearFo
                     left.scale(right.constant);
                     Ok(left)
                 }
-                _ => Err("乘法至少一侧必须是常数".to_string()),
+                _ => Err("multiplication needs a constant on at least one side".to_string()),
             }
         }
         MathExpr::Binary {
@@ -345,18 +348,18 @@ fn linearize(expr: &MathExpr, columns: &HashMap<&str, usize>) -> Result<LinearFo
             let mut left = linearize(left, columns)?;
             let right = linearize(right, columns)?;
             if !right.is_constant() {
-                return Err("除法仅支持除以常数".to_string());
+                return Err("division is supported only by a constant".to_string());
             }
             if right.constant.abs() <= f64::EPSILON {
-                return Err("除数不能为零".to_string());
+                return Err("division by zero".to_string());
             }
             left.scale(1.0 / right.constant);
             Ok(left)
         }
         MathExpr::Binary {
             op: BinaryOp::Pow, ..
-        } => Err("幂运算不是线性表达式".to_string()),
-        MathExpr::Call { name, .. } => Err(format!("函数 {name}() 不是线性表达式")),
+        } => Err("a power is not a linear expression".to_string()),
+        MathExpr::Call { name, .. } => Err(format!("function {name}() is not a linear expression")),
     }
 }
 
@@ -365,16 +368,18 @@ fn constraint_kind(relations: &[MathRelation]) -> Result<LinearConstraintKind, S
         .iter()
         .any(|relation| relation.op == ComparisonOp::DistributedAs)
     {
-        return Err("假设约束不支持分布关系 ~".to_string());
+        return Err(
+            "hypothesis constraints do not support the distribution relation ~".to_string(),
+        );
     }
     let first = relations
         .first()
-        .ok_or_else(|| "至少需要一条约束".to_string())?;
+        .ok_or_else(|| "at least one constraint is required".to_string())?;
     let direction = relation_direction(first.op);
     for (index, relation) in relations.iter().enumerate().skip(1) {
         if relation_direction(relation.op) != direction {
             return Err(format!(
-                "不等式方向必须一致，第 {} 条约束方向不一致",
+                "inequalities must point the same way; constraint {} differs",
                 index + 1
             ));
         }
@@ -506,7 +511,11 @@ mod tests {
     #[test]
     fn parses_chain_before_rejecting_multi_inequality_wald() {
         let error = resolve_linear_hypothesis("0 < x1 < 2", &names()).unwrap_err();
-        assert!(error.to_string().contains("Wald 检验仅支持等式约束"));
+        assert!(
+            error
+                .to_string()
+                .contains("supports only equality constraints")
+        );
     }
 
     #[test]
@@ -515,7 +524,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join(", ");
         let error = resolve_linear_hypothesis(&input, &names()).unwrap_err();
-        assert!(error.to_string().contains("关系数量不能超过"));
+        assert!(error.to_string().contains("relation count exceeds"));
     }
 
     #[test]
@@ -524,19 +533,19 @@ mod tests {
             resolve_linear_hypothesis("x1 / 0 = 1", &names())
                 .unwrap_err()
                 .to_string()
-                .contains("除数不能为零")
+                .contains("division by zero")
         );
         assert!(
             resolve_linear_hypothesis("exp(x1) = 2", &names())
                 .unwrap_err()
                 .to_string()
-                .contains("不是线性表达式")
+                .contains("is not a linear expression")
         );
         assert!(
             resolve_linear_hypothesis("ln(x1) = 2", &names())
                 .unwrap_err()
                 .to_string()
-                .contains("不是线性表达式")
+                .contains("is not a linear expression")
         );
     }
 
@@ -553,7 +562,7 @@ mod tests {
             parse_at_values("x1 + x2 = 1", &names())
                 .unwrap_err()
                 .to_string()
-                .contains("简单形式")
+                .contains("simple form")
         );
     }
 }

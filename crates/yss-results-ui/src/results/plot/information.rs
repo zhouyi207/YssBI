@@ -4,17 +4,26 @@ impl PlotData {
     pub(super) fn information(&self) -> Vec<String> {
         let mut information = Vec::new();
         if let Some(meta) = &self.metadata {
-            information.push(yss_ui::text::format(
-                if meta.sampled {
-                    "plot.sampled"
-                } else {
-                    "plot.observations"
-                },
-                &[
-                    ("observations", meta.observations.to_string()),
-                    ("displayed", meta.displayed.to_string()),
-                ],
-            ));
+            information.push(if meta.sampled {
+                yss_ui::text::format(
+                    "plot.sampled",
+                    &[
+                        (
+                            "points",
+                            yss_ui::text::plural("counts.points", meta.displayed),
+                        ),
+                        (
+                            "observations",
+                            yss_ui::text::plural("counts.observations", meta.observations),
+                        ),
+                    ],
+                )
+            } else {
+                yss_ui::text::format(
+                    "plot.observations",
+                    &[("observations", meta.observations.to_string())],
+                )
+            });
         }
         match &self.annotation {
             PlotAnnotation::Roc {

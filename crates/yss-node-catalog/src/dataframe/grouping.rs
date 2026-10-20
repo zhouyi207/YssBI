@@ -1,25 +1,15 @@
 use super::*;
-use crate::builtin::add_node_messages;
 use std::sync::Arc;
 use yss_node_registry::StructuralNodeRole;
 
-const NODES: &[(&str, &str, &str, Option<StructuralNodeRole>)] = &[
-    (
-        "yssbi.dataframe.groupby.groups",
-        "GroupBy",
-        "分组 GroupBy",
-        None,
-    ),
+const NODES: &[(&str, Option<StructuralNodeRole>)] = &[
+    ("yssbi.dataframe.groupby.groups", None),
     (
         "yssbi.dataframe.groupby.apply",
-        "Apply to Groups",
-        "按组调用 Apply",
         Some(StructuralNodeRole::GroupApply),
     ),
     (
         "yssbi.dataframe.groupby.transform",
-        "Transform Groups",
-        "按组变换 Transform",
         Some(StructuralNodeRole::GroupTransform),
     ),
 ];
@@ -30,21 +20,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         title_key: iid("types.grouped_dataframe.title")?,
         classes: Default::default(),
     });
-    add_text(
-        &mut fragment.messages,
-        "types.grouped_dataframe.title",
-        ["Grouped DataFrame", "已分组数据帧"],
-    );
-    add_described(
-        &mut fragment.messages,
-        "parameters.key_prefix",
-        ["Group Key Prefix", "分组键前缀"],
-        [
-            "Prefix for the group key columns prepended to Apply results. Collisions are rejected.",
-            "Apply 在结果前追加分组键列，使用此前缀；名称冲突时明确报错。",
-        ],
-    );
-    for &(id, en, zh, role) in NODES {
+    for &(id, role) in NODES {
         let group_type = concrete(yss_data_contract::GROUPED_DATAFRAME_TYPE_ID)?;
         let (ports, parameters) = if let Some(role) = role {
             let mut parameters = vec![crate::project::resource_parameter("target")?];
@@ -113,49 +89,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             Some(role) => RegisteredNode::structural(Arc::new(protocol), role),
             None => leaf(protocol, id),
         });
-        let aliases: &'static [&'static str] = &["groupby", "apply", "transform", "分组函数"];
-        add_node_messages(
-            &mut fragment.messages,
-            id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
     }
     Ok(())
-}
-
-fn help(id: &str, locale: &str) -> &'static str {
-    match (id, crate::documentation::is_chinese_locale(locale)) {
-        ("yssbi.dataframe.groupby.groups", true) => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/src/nodes/zh/groupby_groups.md"
-        )),
-        ("yssbi.dataframe.groupby.groups", false) => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/src/nodes/en/groupby_groups.md"
-        )),
-        ("yssbi.dataframe.groupby.apply", true) => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/src/nodes/zh/groupby_apply.md"
-        )),
-        ("yssbi.dataframe.groupby.apply", false) => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/src/nodes/en/groupby_apply.md"
-        )),
-        (_, true) => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/src/nodes/zh/groupby_transform.md"
-        )),
-        (_, false) => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/src/nodes/en/groupby_transform.md"
-        )),
-    }
-}
-
-pub(super) fn documentation(id: &str, locale: &str) -> Option<Box<str>> {
-    NODES
-        .iter()
-        .any(|entry| entry.0 == id)
-        .then(|| help(id, locale).into())
 }

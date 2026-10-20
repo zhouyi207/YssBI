@@ -290,9 +290,12 @@ impl SettingsPanel {
             let info = yss_ui::text::format(
                 "native.settings.providerSummary",
                 &[
-                    ("value0", provider.config.models.len().to_string()),
                     (
-                        "value1",
+                        "models",
+                        yss_ui::text::plural("counts.models", provider.config.models.len()),
+                    ),
+                    (
+                        "authentication",
                         t(
                             if provider.config.authentication == LanguageModelAuthentication::None {
                                 "settings.models.noAuthentication"

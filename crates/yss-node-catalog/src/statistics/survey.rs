@@ -1,48 +1,17 @@
 //! Survey interfaces; sampling weights are distinct from precision and treatment weights.
 use super::*;
-use crate::builtin::add_node_messages;
 mod parameters;
-const METHODS: &[(&str, &str, &str, bool)] = &[
-    ("weights", "Sampling weights", "抽样权重", false),
-    (
-        "mean_proportion",
-        "Survey mean/proportion",
-        "复杂抽样均值／比例",
-        false,
-    ),
-    (
-        "stratified",
-        "Stratified survey mean/proportion",
-        "分层抽样均值／比例",
-        false,
-    ),
-    (
-        "clustered",
-        "Cluster survey mean/proportion",
-        "整群抽样均值／比例",
-        false,
-    ),
-    (
-        "linear_regression",
-        "Survey linear regression",
-        "复杂抽样线性回归",
-        true,
-    ),
-    (
-        "logistic",
-        "Survey logistic regression",
-        "复杂抽样 Logistic 回归",
-        true,
-    ),
-    (
-        "poisson",
-        "Survey Poisson regression",
-        "复杂抽样 Poisson 回归",
-        true,
-    ),
+const METHODS: &[(&str, bool)] = &[
+    ("weights", false),
+    ("mean_proportion", false),
+    ("stratified", false),
+    ("clustered", false),
+    ("linear_regression", true),
+    ("logistic", true),
+    ("poisson", true),
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh, regression) in METHODS {
+    for &(method, regression) in METHODS {
         let id = format!("yssbi.statistics.survey.{method}");
         let ports = if method == "weights" {
             vec![
@@ -61,7 +30,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         } else {
             estimate_ports(method, regression)?
         };
-        let parameters = parameters::build(fragment, &id, method, regression)?;
+        let parameters = parameters::build(&id, method, regression)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id.as_str(), NodeTypeId::new)?,
@@ -83,7 +52,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(&mut fragment.messages, &id, [en, zh], None);
     }
     Ok(())
 }

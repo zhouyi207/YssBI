@@ -22,14 +22,6 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     fragment
         .categories
         .push(category("debug", "categories.debug.title", 60)?);
-    for (key, en, zh) in [
-        ("types.categorical.title", "Categorical", "分类"),
-        ("types.data_series.title", "DataSeries", "数据序列"),
-        ("categories.debug.title", "Debug", "调试"),
-    ] {
-        crate::builtin::add_text(&mut fragment.messages, key, [en, zh]);
-    }
-
     value::register(&mut fragment)?;
     math::register(&mut fragment)?;
     debug::register(&mut fragment)?;

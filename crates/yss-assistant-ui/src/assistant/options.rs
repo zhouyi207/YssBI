@@ -9,6 +9,7 @@ use gpui_kit::component::{
 use gpui_kit::{AnyElement, Context, div, prelude::*, px};
 use yss_harness_contract::{HarnessMode, ReasoningEffort};
 use yss_ui::lifecycle::LogReleased;
+use yss_ui::preferences::{effort_label, mode_label};
 
 impl ConversationPanel {
     pub(super) fn effort_choices(&self) -> (Vec<ReasoningEffort>, Option<ReasoningEffort>) {
@@ -20,11 +21,7 @@ impl ConversationPanel {
         };
         let mut choices = model.reasoning_efforts.clone();
         if choices.is_empty() {
-            choices.extend([
-                ReasoningEffort::Low,
-                ReasoningEffort::Medium,
-                ReasoningEffort::High,
-            ]);
+            choices.extend(ReasoningEffort::ALL);
         }
         let default = provider.reasoning_defaults.get(&model.id).copied();
         if let Some(default) = default
@@ -72,7 +69,7 @@ impl ConversationPanel {
             .xsmall()
             .ghost()
             .dropdown_caret(true)
-            .label(yss_ui::text::t(mode_key(selected)))
+            .label(mode_label(selected))
             .accessibility_label(yss_ui::text::t("panel.assistantMode"))
             .tooltip(yss_ui::text::t(mode_hint(selected)))
             .dropdown_menu(move |mut menu, _, _| {
@@ -85,7 +82,7 @@ impl ConversationPanel {
                                 .flex()
                                 .flex_col()
                                 .gap_1()
-                                .child(div().text_xs().child(yss_ui::text::t(mode_key(mode))))
+                                .child(div().text_xs().child(mode_label(mode)))
                                 .child(
                                     div()
                                         .text_xs()
@@ -173,22 +170,9 @@ impl ConversationPanel {
     }
 }
 
-pub(super) fn mode_key(mode: HarnessMode) -> &'static str {
-    match mode {
-        HarnessMode::Ask => "panel.assistantModes.ask",
-        HarnessMode::Write => "panel.assistantModes.write",
-    }
-}
 fn mode_hint(mode: HarnessMode) -> &'static str {
     match mode {
         HarnessMode::Ask => "panel.assistantModeHint.ask",
         HarnessMode::Write => "panel.assistantModeHint.write",
     }
-}
-pub(super) fn effort_label(effort: ReasoningEffort) -> std::borrow::Cow<'static, str> {
-    yss_ui::text::t(match effort {
-        ReasoningEffort::Low => "panel.assistantEffort.low",
-        ReasoningEffort::Medium => "panel.assistantEffort.medium",
-        ReasoningEffort::High => "panel.assistantEffort.high",
-    })
 }

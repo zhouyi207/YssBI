@@ -53,7 +53,6 @@ pub fn reroute_node_type() -> yss_node_protocol::NodeTypeId {
         .expect("built-in reroute identifier is valid")
 }
 
-pub(crate) use localization::Message;
 pub use localization::{
     BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, I18nBundleValidationError,
     LocalizedCatalog, LocalizedCatalogItem, LocalizedCategory, LocalizedParameter, LocalizedPort,

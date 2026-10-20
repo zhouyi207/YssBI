@@ -87,8 +87,12 @@ impl ModelDraft {
                 &yss_ui::text::t("native.settings.maxOutput"),
                 cx,
             )?,
-            temperature: optional(&self.temperature, "Temperature", cx)?,
-            top_p: optional(&self.top_p, "Top P", cx)?,
+            temperature: optional(
+                &self.temperature,
+                &yss_ui::text::t("native.settings.temperature"),
+                cx,
+            )?,
+            top_p: optional(&self.top_p, &yss_ui::text::t("native.settings.topP"), cx)?,
             additional_parameters,
             reasoning_efforts: self.efforts.clone(),
         })

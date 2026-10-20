@@ -927,10 +927,10 @@ Details 只保留当前目标的一份订阅，比较借用的显示投影；正
   关闭日志窗口释放该订阅，关闭主工作台一并关闭日志窗口。
 - `services/paths`：保持应用标识和各平台数据/日志目录约定；`YSSBI_APP_DATA_DIR` 可指定绝对路径，
   用于隔离迁移验收的项目注册、Harness、模型设置、插件状态和日志；示例优先使用可执行文件旁的 resources/samples。
-- `text`：原生 UI 本地化由 `assets/zh-CN.json` / `assets/en-US.json` 提供，原生专用提示放在 `native` 下。
-  `build.rs` 使用 `rust-i18n-support` 在编译时加载资源并生成借用静态文案的 `SimpleBackend`，不在首次查询时重设全局语言。
-  运行时通过无 GPUI 依赖的 `yss-i18n` 复用 `rust-i18n` 查询和插值；`t` 返回借用型 `Cow<str>`，需要拥有字符串时使用 `translate`。
-  默认及缺失翻译回退为简体中文；组件库的进程 locale 仍是界面运行时唯一语言 owner，应用 `en-US` 对应组件库 `en`。
+- `text`：原生 UI 本地化由 `yss-ui/locales/zh-CN.json` / `en-US.json` 提供，构建期校验两种语言的 key 与占位符一致；原生专用提示放在 `native` 下。
+  `build.rs` 经 `yss-i18n` 的 `codegen` 在编译时把资源编译为按 key 排序的静态表，运行时二分查找，不在首次查询时构建字典或重设全局语言。
+  运行时通过无 GPUI 依赖的 `yss-i18n` 查询，插值复用 `rust-i18n`；随数量变化的文案是复数消息（JSON 以 CLDR 类别为键，英文 `one` / `other`，中文只有 `other`），用 `plural` / `plural_format` 按当前语言规则选择，带名词的计数短语统一放在 `counts` 下供组合模板引用；`t` 返回借用型 `Cow<str>`，需要拥有字符串时使用 `translate`；由运行期代码拼出、可能没有文案的 key 使用 `optional`，由调用方显示代码本身或自身回退，不比较返回值与 key。
+  启动语言取偏好默认值（简体中文），无法识别的语言按 `yss-i18n` 回退为 `en-US`；语言选择器经 `translate_in` 以各语言自身的 `locale.name` 显示名称。组件库的进程 locale 仍是界面运行时唯一语言 owner，应用 `en-US` 对应组件库 `en`。
   资源随二进制嵌入，不依赖 Node 或在线服务。`format` 使用原生 `%{name}` 单次插值，用户名称中的占位符保持字面量；用户正文、资源名、模型 ID 与协议值不翻译。
   图诊断委派 `yss-graph-diagnostics::render_diagnostic`，复用同一引擎并保留 code/message key、必需参数校验与安全截断；无效诊断由宿主显示通用提示。
   Problems 按后端 severity 呈现图标和颜色，blocking 仍由后端独立决定。

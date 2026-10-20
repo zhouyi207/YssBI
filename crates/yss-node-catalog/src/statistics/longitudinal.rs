@@ -1,54 +1,21 @@
 //! Executable longitudinal nodes preserve the ten inventory identities.
 use super::*;
-use crate::builtin::add_node_messages;
 
-const METHODS: &[(&str, &str, &str)] = &[
-    (
-        "longitudinal.gee",
-        "Generalized estimating equations (GEE)",
-        "广义估计方程 GEE",
-    ),
-    (
-        "mixed.hlm",
-        "Hierarchical linear model (HLM)",
-        "多层线性模型 HLM",
-    ),
-    (
-        "mixed.lmm",
-        "Linear mixed model (LMM)",
-        "线性混合效应模型 LMM",
-    ),
-    (
-        "mixed.glmm",
-        "Generalized linear mixed model (GLMM)",
-        "广义线性混合模型 GLMM",
-    ),
-    (
-        "mixed.random_intercept",
-        "Random-intercept model",
-        "随机截距模型",
-    ),
-    ("mixed.random_slope", "Random-slope model", "随机斜率模型"),
-    (
-        "mixed.crossed_effects",
-        "Crossed random-effects model",
-        "交叉随机效应模型",
-    ),
-    (
-        "mixed.logistic",
-        "Logistic mixed model",
-        "Logistic 混合模型",
-    ),
-    ("mixed.poisson", "Poisson mixed model", "Poisson 混合模型"),
-    (
-        "mixed.negative_binomial",
-        "Negative-binomial mixed model",
-        "负二项混合模型",
-    ),
+const METHODS: &[&str] = &[
+    "longitudinal.gee",
+    "mixed.hlm",
+    "mixed.lmm",
+    "mixed.glmm",
+    "mixed.random_intercept",
+    "mixed.random_slope",
+    "mixed.crossed_effects",
+    "mixed.logistic",
+    "mixed.poisson",
+    "mixed.negative_binomial",
 ];
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh) in METHODS {
+    for &method in METHODS {
         let id = format!("yssbi.statistics.{method}");
         let gee = method == "longitudinal.gee";
         let generalized = matches!(
@@ -134,54 +101,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        let aliases: &'static [&'static str] = match method {
-            "longitudinal.gee" => &["longitudinal.gee", "GEE", "广义估计方程"],
-            "mixed.hlm" => &["mixed.hlm", "HLM", "多层线性模型", "hierarchical"],
-            "mixed.lmm" => &["mixed.lmm", "LMM", "线性混合效应模型"],
-            "mixed.glmm" => &["mixed.glmm", "GLMM", "广义线性混合模型"],
-            "mixed.random_intercept" => &["mixed.random_intercept", "随机截距模型"],
-            "mixed.random_slope" => &["mixed.random_slope", "随机斜率模型"],
-            "mixed.crossed_effects" => &["mixed.crossed_effects", "交叉随机效应模型"],
-            "mixed.logistic" => &["mixed.logistic", "Logistic混合模型"],
-            "mixed.poisson" => &["mixed.poisson", "Poisson混合模型"],
-            _ => &["mixed.negative_binomial", "负二项混合模型", "NB2"],
-        };
-        add_node_messages(
-            &mut fragment.messages,
-            &id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
-    }
-    for (key, en, zh, help_en, help_zh) in [
-        (
-            "longitudinal_family",
-            "Response family",
-            "响应分布",
-            "Gaussian identity, binary logit, Poisson log, or NB2 log, as offered by this node.",
-            "按节点选择 Gaussian 恒等、二项 logit、Poisson log 或 NB2 log。",
-        ),
-        (
-            "working_correlation",
-            "Working correlation",
-            "工作相关结构",
-            "Exchangeable (default) or independence; inference uses a cluster-robust sandwich covariance.",
-            "默认可交换，亦可选独立；推断使用按组稳健的三明治协方差。",
-        ),
-        (
-            "mixed_estimation",
-            "Mixed-model estimation",
-            "混合模型估计",
-            "REML (default) or maximum likelihood. Use ML when comparing different fixed-effect designs.",
-            "默认 REML，亦可选最大似然 ML；比较不同固定效应设计时使用 ML。",
-        ),
-    ] {
-        add_described(
-            &mut fragment.messages,
-            &format!("parameters.statistics.{key}"),
-            [en, zh],
-            [help_en, help_zh],
-        );
     }
     Ok(())
 }
@@ -194,7 +113,7 @@ mod tests {
         let system = crate::build_builtin_node_system().unwrap();
         for locale in ["en-US", "zh-CN"] {
             let catalog = system.catalog.localize(&system.registry, locale);
-            for &(suffix, _, _) in METHODS {
+            for &suffix in METHODS {
                 let id = format!("yssbi.statistics.{suffix}");
                 let protocol = system
                     .registry

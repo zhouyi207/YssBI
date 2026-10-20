@@ -1,29 +1,13 @@
 use super::*;
-use crate::builtin::add_node_messages;
 const RESOLVER: &str = "yssbi.statistics.doe.schema.design";
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     fragment
         .schema_resolvers
         .push(sid(RESOLVER, SchemaResolverId::new)?);
-    for (id, en, zh, uniform) in [
-        (
-            "yssbi.statistics.doe.family",
-            "DOE: full factorial design",
-            "DOE 试验（全析因设计）",
-            false,
-        ),
-        (
-            "yssbi.statistics.doe.orthogonal",
-            "Orthogonal design (equal levels)",
-            "正交设计（等水平）",
-            false,
-        ),
-        (
-            "yssbi.statistics.doe.uniform_design",
-            "Uniform design (centered Latin hypercube)",
-            "均匀设计（中心拉丁超立方）",
-            true,
-        ),
+    for (id, uniform) in [
+        ("yssbi.statistics.doe.family", false),
+        ("yssbi.statistics.doe.orthogonal", false),
+        ("yssbi.statistics.doe.uniform_design", true),
     ] {
         let mut parameters = vec![positive_integer_parameter("factors", 3)?];
         if uniform {
@@ -35,47 +19,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         } else {
             parameters.push(minimum_integer_parameter("levels", 2, 2)?);
         }
-        for parameter in &mut parameters {
-            let (en_title, zh_title, en_help, zh_help) = match parameter.key.as_str() {
-                "factors" => (
-                    "Factors",
-                    "因素数",
-                    "One or more factors; output has one numeric column per factor.",
-                    "至少一个因素，每个因素输出一列。",
-                ),
-                "levels" => (
-                    "Levels per factor",
-                    "每个因素的水平数",
-                    "At least two equally coded levels. Composite levels use full factorial construction for orthogonal balance.",
-                    "至少两个水平。正交设计在非质数水平下使用全析因构造，试验次数可能较多。",
-                ),
-                "runs" => (
-                    "Experimental runs",
-                    "试验次数",
-                    "Every factor uses each coded level from 1 to runs exactly once.",
-                    "每个因素的 1 至试验次数各水平恰好使用一次。",
-                ),
-                "candidates" => (
-                    "Candidate designs",
-                    "候选设计数",
-                    "Choose the smallest centered L2 discrepancy among this many randomized Latin hypercubes; not a global optimality guarantee.",
-                    "从这些随机拉丁超立方中选取中心化 L2 偏差最小者，不保证全局最优。",
-                ),
-                _ => (
-                    "Random seed",
-                    "随机种子",
-                    "Reproducible candidate generation.",
-                    "用于复现候选设计。",
-                ),
-            };
-            describe_parameter(
-                &mut fragment.messages,
-                id,
-                parameter,
-                [en_title, zh_title],
-                [en_help, zh_help],
-            )?;
-        }
+        node_scoped_keys(id, &mut parameters)?;
         let mut design = data_output("design", "Coded design", concrete("tabular.dataframe")?)?;
         design.schema = Some(SchemaExpr::Derived {
             resolver: sid(RESOLVER, SchemaResolverId::new)?,
@@ -113,7 +57,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        add_node_messages(&mut fragment.messages, id, [en, zh], None);
     }
     Ok(())
 }

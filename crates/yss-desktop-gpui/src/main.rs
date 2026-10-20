@@ -8,7 +8,7 @@ use gpui_kit::component::{Root, TitleBar};
 use gpui_kit::{App, AppContext, Bounds, WindowBounds, WindowDecorations, WindowOptions, px, size};
 
 fn main() -> Result<()> {
-    text::set_locale(text::DEFAULT_LANGUAGE);
+    text::set_locale(yss_settings::Language::default().locale());
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
     if args.len() > 2 {
         bail!(crate::text::t("native.main.usage"));

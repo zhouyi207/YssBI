@@ -58,13 +58,11 @@ impl ImportDialog {
             let id = sample.id.clone();
             let version = sample.version;
             let pending = matches!(self.task.as_ref(), Some(ImportTask::ImportSample(current)) if current == &id);
-            let name_key = format!("importModal.samples.datasets.{id}.name");
-            let name = translated_or(&name_key, &sample.name);
-            let description_key = format!("importModal.samples.datasets.{id}.description");
-            let description = translated_or(
-                &description_key,
-                &t("importModal.samples.defaultDescription"),
-            );
+            let name = yss_ui::text::optional(&format!("importModal.samples.datasets.{id}.name"))
+                .unwrap_or_else(|| sample.name.clone());
+            let description =
+                yss_ui::text::optional(&format!("importModal.samples.datasets.{id}.description"))
+                    .unwrap_or_else(|| t("importModal.samples.defaultDescription"));
             let size = if sample.byte_size >= 1_000_000 {
                 format!("{:.1} MB", sample.byte_size as f64 / 1_000_000.)
             } else {
@@ -73,10 +71,16 @@ impl ImportDialog {
             let metadata = format!(
                 "{} · {size}",
                 yss_ui::text::format(
-                    "importModal.samples.dimensions",
+                    "native.databases.size",
                     &[
-                        ("rows", sample.row_count.to_string()),
-                        ("columns", sample.column_count.to_string()),
+                        (
+                            "rows",
+                            yss_ui::text::plural("counts.rows", sample.row_count)
+                        ),
+                        (
+                            "columns",
+                            yss_ui::text::plural("counts.columns", sample.column_count),
+                        ),
                     ],
                 )
             );
@@ -148,14 +152,5 @@ impl ImportDialog {
             )
             .child(list);
         content.into_any_element()
-    }
-}
-
-fn translated_or(key: &str, fallback: &str) -> String {
-    let value = t(key);
-    if value == key {
-        fallback.to_owned()
-    } else {
-        value
     }
 }

@@ -1,40 +1,20 @@
 //! Objective weights and multi-criteria rankings with reusable weight outputs.
 use super::*;
-const NODES: &[(&str, &str, &str)] = &[
-    ("decision.weights", "Decision weights", "权重"),
-    ("decision.entropy_weight", "Entropy weights", "熵值法"),
-    ("decision.critic", "CRITIC weights", "CRITIC 权重"),
-    (
-        "decision.information_weight",
-        "Coefficient-of-variation weights",
-        "信息量权重",
-    ),
-    (
-        "decision.independence_weight",
-        "Independence weights",
-        "独立性权重",
-    ),
-    ("decision.composite_index", "Composite index", "综合指数"),
-    ("decision.topsis", "TOPSIS", "TOPSIS"),
-    (
-        "decision.grey_relational",
-        "Grey relational evaluation",
-        "灰色关联法",
-    ),
-    ("decision.wrsr", "Weighted rank-sum ratio", "WRSR 秩和比"),
-    (
-        "decision.efficacy_coefficient",
-        "Efficacy coefficient",
-        "功效系数",
-    ),
-    (
-        "workflow.entropy_topsis",
-        "Entropy-weighted TOPSIS",
-        "熵权 TOPSIS",
-    ),
+const NODES: &[&str] = &[
+    "decision.weights",
+    "decision.entropy_weight",
+    "decision.critic",
+    "decision.information_weight",
+    "decision.independence_weight",
+    "decision.composite_index",
+    "decision.topsis",
+    "decision.grey_relational",
+    "decision.wrsr",
+    "decision.efficacy_coefficient",
+    "workflow.entropy_topsis",
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(suffix, en, zh) in NODES {
+    for &suffix in NODES {
         let method = suffix.rsplit_once('.').map_or(suffix, |(_, method)| method);
         let customizable = matches!(
             method,
@@ -119,7 +99,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             )?,
             data_output("weights", "Criterion weights", numeric_data_series_type())?,
         ]);
-        emit(fragment, suffix, en, zh, ports, parameters)?;
+        emit(fragment, suffix, ports, parameters)?;
     }
     Ok(())
 }

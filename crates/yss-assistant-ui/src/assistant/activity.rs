@@ -82,7 +82,6 @@ impl Activity {
 
 pub(super) fn tool_name(kind: &AssistantToolIdentity) -> String {
     let code = kind.name();
-    let key = format!("panel.assistantToolNames.{code}");
-    let label = yss_ui::text::translate(&key);
-    if label == key { code.to_owned() } else { label }
+    yss_ui::text::optional(&format!("panel.assistantToolNames.{code}"))
+        .unwrap_or_else(|| code.to_owned())
 }

@@ -144,10 +144,7 @@ impl MindCanvas {
                 if self.selected.is_empty() {
                     translate("native.minds.selectTopicHint")
                 } else {
-                    yss_ui::text::format(
-                        "native.minds.selectedTopics",
-                        &[("value0", self.selected.len().to_string())],
-                    )
+                    yss_ui::text::plural("native.minds.selectedTopics", self.selected.len())
                 },
                 cx,
             ));

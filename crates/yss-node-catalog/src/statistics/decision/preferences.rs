@@ -1,21 +1,9 @@
 use super::*;
-type PreferenceNode = (
-    &'static str,
-    &'static str,
-    &'static str,
-    &'static [(&'static str, &'static str)],
-);
+type PreferenceNode = (&'static str, &'static [(&'static str, &'static str)]);
 const NODES: &[PreferenceNode] = &[
-    (
-        "nps",
-        "Net promoter score",
-        "NPS 净推荐值",
-        &[("ratings", "Ratings (0–10)")],
-    ),
+    ("nps", &[("ratings", "Ratings (0–10)")]),
     (
         "kano",
-        "KANO requirements",
-        "KANO 模型",
         &[
             ("functional", "Functional answer (1–5)"),
             ("dysfunctional", "Dysfunctional answer (1–5)"),
@@ -23,8 +11,6 @@ const NODES: &[PreferenceNode] = &[
     ),
     (
         "rfm",
-        "RFM customer scoring",
-        "RFM 模型",
         &[
             ("recency", "Days since purchase"),
             ("frequency", "Purchase count"),
@@ -33,7 +19,7 @@ const NODES: &[PreferenceNode] = &[
     ),
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh, inputs) in NODES {
+    for &(method, inputs) in NODES {
         let mut ports = inputs
             .iter()
             .map(|&(key, title)| data_input(key, title, numeric_data_series_type()))
@@ -52,14 +38,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 ],
             )?);
         }
-        emit(
-            fragment,
-            &format!("decision.{method}"),
-            en,
-            zh,
-            ports,
-            vec![],
-        )?;
+        emit(fragment, &format!("decision.{method}"), ports, vec![])?;
     }
     Ok(())
 }

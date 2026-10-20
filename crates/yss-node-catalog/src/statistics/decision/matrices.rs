@@ -1,21 +1,7 @@
 use super::*;
-const NODES: &[(&str, &str, &str)] = &[
-    ("ahp", "AHP judgment weights", "AHP 层次分析"),
-    ("fahp", "Fuzzy AHP weights", "模糊层次法 FAHP"),
-    ("dematel", "DEMATEL influences", "DEMATEL"),
-    (
-        "ism",
-        "Interpretive structural modeling",
-        "ISM 解释结构模型",
-    ),
-    (
-        "fuzzy_evaluation",
-        "Fuzzy comprehensive evaluation",
-        "模糊综合评价",
-    ),
-];
+const NODES: &[&str] = &["ahp", "fahp", "dematel", "ism", "fuzzy_evaluation"];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh) in NODES {
+    for &method in NODES {
         let mut parameters = vec![];
         let mut ports = vec![bounded_user_data_input(
             if method == "fuzzy_evaluation" {
@@ -108,14 +94,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
                 numeric_data_series_type(),
             )?),
         }
-        emit(
-            fragment,
-            &format!("decision.{method}"),
-            en,
-            zh,
-            ports,
-            parameters,
-        )?;
+        emit(fragment, &format!("decision.{method}"), ports, parameters)?;
     }
     Ok(())
 }

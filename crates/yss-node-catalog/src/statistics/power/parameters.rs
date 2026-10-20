@@ -1,10 +1,5 @@
 use super::*;
-mod labels;
-pub(super) fn build(
-    fragment: &mut ProviderFragment,
-    id: &str,
-    method: &str,
-) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
+pub(super) fn build(id: &str, method: &str) -> Result<Vec<Parameter>, BuiltinAssemblyError> {
     let mut params = vec![
         choice_parameter("solve_for", "power", &["power", "sample_size"])?,
         positive_integer_parameter("sample_size", 100)?,
@@ -57,6 +52,6 @@ pub(super) fn build(
         "noninferiority" => params.push(toggle_parameter("higher_is_better", true)?),
         _ => (),
     }
-    labels::localize(fragment, id, &mut params)?;
+    node_scoped_keys(id, &mut params)?;
     Ok(params)
 }

@@ -117,8 +117,9 @@ impl ConversationPanel {
                     .border_color(cx.theme().border)
                     .pt_2()
                     .font_weight(gpui_kit::FontWeight::MEDIUM)
-                    .child(yss_ui::text::format(
+                    .child(yss_ui::text::plural_format(
                         "panel.assistantTurnUsage",
+                        usize::try_from(usage.calls).unwrap_or(usize::MAX),
                         &[("count", count(Some(u128::from(usage.calls))))],
                     )),
             );

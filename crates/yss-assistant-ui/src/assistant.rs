@@ -142,26 +142,10 @@ impl ConversationPanel {
             references: vec![],
             resource_catalog: None,
             options: HarnessTurnOptions {
-                mode: match yss_ui::preferences::current(cx).assistant.mode {
-                    yss_settings::AssistantMode::Ask => yss_harness_contract::HarnessMode::Ask,
-                    yss_settings::AssistantMode::Write => yss_harness_contract::HarnessMode::Write,
-                },
+                mode: yss_ui::preferences::current(cx).assistant.mode,
                 reasoning_effort: None,
             },
-            preferred_effort: yss_ui::preferences::current(cx)
-                .assistant
-                .reasoning_effort
-                .map(|effort| match effort {
-                    yss_settings::ReasoningEffort::Low => {
-                        yss_harness_contract::ReasoningEffort::Low
-                    }
-                    yss_settings::ReasoningEffort::Medium => {
-                        yss_harness_contract::ReasoningEffort::Medium
-                    }
-                    yss_settings::ReasoningEffort::High => {
-                        yss_harness_contract::ReasoningEffort::High
-                    }
-                }),
+            preferred_effort: yss_ui::preferences::current(cx).assistant.reasoning_effort,
             pending: None,
             unsent: None,
             queue: VecDeque::new(),

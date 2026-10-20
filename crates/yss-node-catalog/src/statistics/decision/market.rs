@@ -3,8 +3,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     emit(
         fragment,
         "decision.turf",
-        "TURF combination search",
-        "TURF 组合模型",
         vec![
             bounded_user_data_input(
                 "criteria",
@@ -42,8 +40,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     emit(
         fragment,
         "decision.psm",
-        "Price sensitivity meter",
-        "PSM 价格敏感度",
         ports,
         vec![choice_parameter(
             "range_definition",

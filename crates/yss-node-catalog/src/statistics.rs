@@ -4,7 +4,7 @@
 //! owns executable adapters; Graph Analysis owns connected types and schemas.
 
 use crate::builtin::node_key;
-use crate::builtin::{add_described, add_node_messages, add_text, describe_parameter};
+use crate::builtin::node_scoped_keys;
 use crate::builtin::{choice_condition, concrete, data_port};
 use yss_data_contract::DataValue;
 mod analyses;
@@ -33,13 +33,12 @@ mod survey;
 mod survival;
 mod time_series;
 
-pub(crate) use inventory::documentation as inventory_documentation;
+pub(crate) use inventory::ENTRIES as INVENTORY;
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_decimal, assembled_interface,
     assembled_parameters, iid, leaf, pure, sid,
 };
-use crate::Message;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, TypeRegistration};
 
@@ -56,25 +55,14 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
 }
 
 fn defined_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
-    let mut messages = Vec::new();
-    add_shared_messages(&mut messages);
     let nodes = NODES
         .iter()
-        .map(|spec| {
-            add_node_messages(
-                &mut messages,
-                spec.id,
-                [spec.title, spec.zh_title],
-                Some([spec.aliases, spec.zh_aliases]),
-            );
-            Ok(leaf(protocol(spec)?, spec.id))
-        })
+        .map(|spec| Ok(leaf(protocol(spec)?, spec.id)))
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
     let mut fragment = ProviderFragment {
         types: statistics_types()?,
         categories: statistics_categories()?,
         nodes,
-        messages,
         ..ProviderFragment::default()
     };
     decision::append(&mut fragment)?;
@@ -949,86 +937,30 @@ fn statistics_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
     .collect()
 }
 // Navigation categories are independent of method families and execution stages.
-const CATEGORIES: &[(&str, &str, &str)] = &[
-    (
-        "statistics.descriptive",
-        "Descriptive Statistics",
-        "描述统计",
-    ),
-    ("statistics.tests", "Hypothesis Tests", "假设检验"),
-    (
-        "statistics.imputation",
-        "Missing Value Handling",
-        "缺失值处理",
-    ),
-    (
-        "statistics.association",
-        "Association and Agreement",
-        "相关与一致性",
-    ),
-    ("statistics.regression", "Regression Models", "回归模型"),
-    ("statistics.anova", "Analysis of Variance", "方差分析"),
-    (
-        "statistics.multivariate",
-        "Multivariate Analysis",
-        "多元分析",
-    ),
-    (
-        "statistics.longitudinal",
-        "Longitudinal and Multilevel Models",
-        "纵向与多层模型",
-    ),
-    ("statistics.panel", "Panel Models", "面板模型"),
-    (
-        "statistics.causal",
-        "Econometrics and Causal Analysis",
-        "计量与因果分析",
-    ),
-    ("statistics.timeseries", "Time Series", "时间序列"),
-    ("statistics.survival", "Survival Analysis", "生存分析"),
-    ("statistics.spatial", "Spatial Analysis", "空间分析"),
-    (
-        "statistics.psychometrics",
-        "Psychometrics and Structural Equation Models",
-        "测量、问卷与结构方程",
-    ),
-    (
-        "statistics.decision",
-        "Evaluation and Decision Analysis",
-        "综合评价与决策",
-    ),
-    (
-        "statistics.machine_learning",
-        "Machine Learning",
-        "机器学习",
-    ),
-    ("statistics.meta", "Meta-analysis", "Meta 分析"),
-    (
-        "statistics.design_quality",
-        "Experimental Design and Quality Control",
-        "实验设计与质量控制",
-    ),
-    ("statistics.power", "Power and Sample Size", "功效与样本量"),
-    (
-        "statistics.survey",
-        "Complex Survey Analysis",
-        "复杂抽样分析",
-    ),
-    (
-        "statistics.inference",
-        "Inference and Resampling",
-        "推断与重抽样",
-    ),
-    (
-        "statistics.diagnostics",
-        "Model Diagnostics and Comparison",
-        "模型诊断与比较",
-    ),
-    (
-        "statistics.postestimation",
-        "Prediction and Post-estimation",
-        "预测与估计后分析",
-    ),
+const CATEGORIES: &[&str] = &[
+    "statistics.descriptive",
+    "statistics.tests",
+    "statistics.imputation",
+    "statistics.association",
+    "statistics.regression",
+    "statistics.anova",
+    "statistics.multivariate",
+    "statistics.longitudinal",
+    "statistics.panel",
+    "statistics.causal",
+    "statistics.timeseries",
+    "statistics.survival",
+    "statistics.spatial",
+    "statistics.psychometrics",
+    "statistics.decision",
+    "statistics.machine_learning",
+    "statistics.meta",
+    "statistics.design_quality",
+    "statistics.power",
+    "statistics.survey",
+    "statistics.inference",
+    "statistics.diagnostics",
+    "statistics.postestimation",
 ];
 
 fn statistics_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyError> {
@@ -1038,7 +970,7 @@ fn statistics_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyE
         parent: None,
         order: 70,
     }];
-    for (index, &(id, _, _)) in CATEGORIES.iter().enumerate() {
+    for (index, &id) in CATEGORIES.iter().enumerate() {
         categories.push(CategoryRegistration {
             id: sid(id, NodeCategoryId::new)?,
             title_key: iid(format!("categories.{id}.title"))?,
@@ -1109,242 +1041,4 @@ fn result_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 fn report_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("statistics.report")
-}
-
-fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
-    add_text(
-        out,
-        "parameter_groups.configure.title",
-        ["Configure", "配置"],
-    );
-    for (key, en, zh) in [
-        ("model_summary", "Model summary", "模型概览"),
-        ("coefficient_table", "Coefficient table", "系数表"),
-        ("coefficient_chart", "Coefficient magnitude", "系数大小图"),
-        ("equation", "Equation", "回归方程"),
-        ("anova", "ANOVA", "方差分析"),
-        ("diagnostics", "Diagnostics", "诊断信息"),
-        ("residual_plot", "Residual plot", "残差图"),
-        (
-            "observations",
-            "Fitted values and residuals",
-            "拟合值与残差表",
-        ),
-        ("acf_pacf", "ACF / PACF", "自相关与偏自相关"),
-        ("acf_max_lag", "ACF / PACF lags", "自相关滞后阶数"),
-        ("serial_tests", "Serial correlation tests", "序列相关检验"),
-        ("serial_lags", "Serial test lags", "序列检验滞后阶数"),
-        ("first_stage", "First-stage analysis", "第一阶段分析"),
-        (
-            "overidentification",
-            "Overidentification test",
-            "过度识别检验",
-        ),
-        ("endogeneity", "Endogeneity tests", "内生性检验"),
-        ("effects_statistics", "Panel effects", "面板效应统计"),
-        (
-            "estimator_statistics",
-            "Estimator statistics",
-            "估计方法统计",
-        ),
-        ("lag_exclusion", "Lag-exclusion tests", "滞后排除检验"),
-        ("stability", "Stability roots", "稳定性特征根"),
-        ("cointegration", "Cointegrating equations", "协整方程"),
-        ("steps", "Response horizon", "响应期数"),
-        (
-            "bg_nomiss0",
-            "BG: fill initial residual lags with zero",
-            "BG：初始滞后残差补零",
-        ),
-        ("hypothesis_test", "Hypothesis test", "假设检验"),
-        (
-            "hypothesis",
-            "Hypothesis (e.g. x1 = 0)",
-            "检验假设（例如 x1 = 0）",
-        ),
-    ] {
-        let (en_description, zh_description) = match key {
-            "steps" => (
-                "VAR impulse-response or forecast-error variance-decomposition horizons, from 1 to 1000; default 8. Results include period zero.",
-                "VAR 脉冲响应或预测误差方差分解的期数，范围 1–1000，默认 8；结果包含第 0 期。",
-            ),
-            "acf_max_lag" | "serial_lags" => (
-                "Positive lag order up to 40; the available order also depends on the fitted sample.",
-                "正整数滞后阶数，最大 40；可用阶数还受拟合样本限制。",
-            ),
-            "bg_nomiss0" => (
-                "Fill initial lagged residuals with zero in the Breusch–Godfrey test.",
-                "在 Breusch–Godfrey 检验中将初始滞后残差补零。",
-            ),
-            "hypothesis" => (
-                "Coefficient constraints, for example x1 = 0 or x1 = x2; use names from the fitted model.",
-                "系数约束，例如 x1 = 0 或 x1 = x2；使用已拟合模型中的系数名称。",
-            ),
-            _ => (
-                "Only selected summary contents and their dependencies are computed.",
-                "仅计算选中的汇总内容及其必要依赖。",
-            ),
-        };
-        add_described(
-            out,
-            &format!("parameters.statistics.{key}"),
-            [en, zh],
-            [en_description, zh_description],
-        );
-    }
-    for (key, en, zh) in [
-        (
-            "types.statistics_model_linear.title",
-            "Linear Regression Model",
-            "线性回归模型",
-        ),
-        (
-            "types.statistics_model_logit.title",
-            "Logit Model",
-            "Logit 模型",
-        ),
-        (
-            "types.statistics_model_probit.title",
-            "Probit Model",
-            "Probit 模型",
-        ),
-        (
-            "types.statistics_model_prais.title",
-            "Prais Model",
-            "Prais 模型",
-        ),
-        ("types.statistics_model_vec.title", "VEC Model", "VEC 模型"),
-        (
-            "types.statistics_model_iv_2sls.title",
-            "IV 2SLS Model",
-            "IV 2SLS 模型",
-        ),
-        (
-            "types.statistics_model_iv_liml.title",
-            "IV LIML Model",
-            "IV LIML 模型",
-        ),
-        (
-            "types.statistics_model_panel.title",
-            "Panel Model",
-            "面板模型",
-        ),
-        (
-            "types.statistics_result_panel_did.title",
-            "Panel DID Result",
-            "面板 DID 结果",
-        ),
-        ("types.statistics_model_var.title", "VAR Model", "VAR 模型"),
-        (
-            "types.statistics_result_adf.title",
-            "ADF Result",
-            "ADF 结果",
-        ),
-        (
-            "types.statistics_model_vec_rank.title",
-            "VEC Rank Result",
-            "VEC 秩检验结果",
-        ),
-        (
-            "types.statistics_result.title",
-            "Statistical Result",
-            "统计结果",
-        ),
-        (
-            "types.statistics_report.title",
-            "Statistical Report",
-            "统计报告",
-        ),
-        ("categories.statistics.title", "Statistics", "统计"),
-    ] {
-        add_text(out, key, [en, zh]);
-    }
-    for &(id, en, zh) in CATEGORIES {
-        add_text(out, format!("categories.{id}.title"), [en, zh]);
-    }
-    for key in [
-        "method",
-        "scale",
-        "kernel",
-        "bandwidth",
-        "lag",
-        "constant",
-        "max_iterations",
-        "tolerance",
-        "covariance",
-        "estimator",
-        "effects",
-        "transform",
-        "lags",
-        "regression",
-        "max_lags",
-        "trend",
-        "rank",
-        "small",
-        "repetitions",
-        "seed",
-        "rhs",
-        "koenker",
-        "odds_ratios",
-        "marginal_effects",
-        "marginal_evaluation",
-        "marginal_method",
-        "marginal_at",
-        "classification",
-        "cutoff",
-        "selected_lags",
-        "dfk",
-        "estimators",
-        "use_observed_coefficient",
-        "observed_coefficient",
-    ] {
-        let (en, zh) = match key {
-            "odds_ratios" => ("Odds ratios", "胜算比"),
-            "marginal_effects" => ("Marginal effects", "边际效应"),
-            "marginal_evaluation" => ("Margins evaluation", "边际效应求值方式"),
-            "marginal_method" => ("Derivative / elasticity", "导数或弹性"),
-            "marginal_at" => ("at() values", "at() 指定值"),
-            "classification" => ("Classification table", "分类表"),
-            "cutoff" => ("Classification cutoff", "分类阈值"),
-            "selected_lags" => ("Selected lags (comma separated)", "指定滞后阶（逗号分隔）"),
-            "dfk" => (
-                "VAR covariance degrees-of-freedom adjustment",
-                "VAR 协方差自由度修正",
-            ),
-            "estimators" => ("Estimators (comma separated)", "估计器（逗号分隔）"),
-            "use_observed_coefficient" => ("Specify observed coefficient", "指定观测系数"),
-            "observed_coefficient" => ("Observed treatment coefficient", "观测处理效应系数"),
-            "method" => ("Estimation method", "估计方法"),
-            "constant" => ("Include intercept", "包含常数项"),
-            "covariance" => (
-                "Standard error method (GLS: nonrobust only)",
-                "标准误方法（GLS 仅支持 nonrobust）",
-            ),
-            "kernel" => ("Kernel", "核函数"),
-            "bandwidth" => ("Bandwidth", "带宽"),
-            "lag" => ("Lag order", "滞后阶数"),
-            "scale" => ("Variance scale", "方差尺度"),
-            "small" => ("Small-sample adjustment", "小样本修正"),
-            "repetitions" => ("Permutations (10–2000)", "置换次数（10–2000）"),
-            "seed" => ("Random seed", "随机种子"),
-            "rhs" => ("Use explanatory variables", "使用解释变量扩展"),
-            "koenker" => ("Koenker variant", "Koenker 变体"),
-            "max_iterations" => ("Maximum iterations", "最大迭代次数"),
-            "tolerance" => ("Convergence tolerance", "收敛容差"),
-            "estimator" => ("Panel estimator", "面板估计器"),
-            "effects" => ("Effect dimension", "效应维度"),
-            "transform" => ("AR(1) transformation", "AR(1) 变换"),
-            "lags" => ("Lag order", "滞后阶数"),
-            "max_lags" => ("Maximum lag order", "最大滞后阶数"),
-            "trend" | "regression" => ("Deterministic terms", "确定性项"),
-            "rank" => ("Cointegration rank", "协整秩"),
-            _ => (key, key),
-        };
-        add_described(
-            out,
-            &format!("parameters.statistics.{key}"),
-            [en, zh],
-            ["Typed statistical parameter.", "类型化统计参数。"],
-        );
-    }
 }

@@ -28,18 +28,18 @@ pub(super) fn wald_test(
     let k = r.ncols();
 
     if q == 0 {
-        return Err("约束个数不能为 0".to_string());
+        return Err("constraint count is zero".to_string());
     }
     if betas.nrows() != k {
         return Err(format!(
-            "betas 长度 {} 与 R 列数 {} 不一致",
+            "betas length {} differs from R column count {}",
             betas.nrows(),
             k
         ));
     }
     if r_vec.nrows() != q {
         return Err(format!(
-            "r_vec 长度 {} 与 R 行数 {} 不一致",
+            "r_vec length {} differs from R row count {}",
             r_vec.nrows(),
             q
         ));
@@ -54,14 +54,14 @@ pub(super) fn wald_test(
     // 解 r_cov_r @ x = contrast，则 W = contrast' @ x
     let x = r_cov_r
         .checked_cholesky()
-        .map_err(|_| "R Σ R' 矩阵奇异，约束可能冗余".to_string())?
+        .map_err(|_| "R Σ R' is singular; the constraints may be redundant".to_string())?
         .solve(&contrast);
 
     let w: f64 = contrast.iter().zip(x.iter()).map(|(c, xi)| c * xi).sum();
 
     let f_stat = w / q as f64;
     let dist = FisherSnedecor::new(q as f64, df_residual as f64)
-        .map_err(|e| format!("F 分布参数错误: {}", e))?;
+        .map_err(|e| format!("invalid F distribution parameters: {}", e))?;
     let mut p_value = crate::distribution::fisher_snedecor_sf(&dist, f_stat);
 
     // 单侧：q=1 时按方向调整

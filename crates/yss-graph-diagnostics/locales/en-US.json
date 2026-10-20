@@ -1,0 +1,62 @@
+{
+  "diagnostics": {
+    "graph": {
+      "connection": {
+        "input_direction": "Connection target %{port} must be an input port.",
+        "limit": "Connection limit exceeded for %{port}.",
+        "order_forbidden": "Connection order is forbidden for %{port}.",
+        "order_required": "Connection order is required for %{port}.",
+        "output_direction": "Connection source %{port} must be an output port."
+      },
+      "dependency": {
+        "value_cycle": "Value dependencies contain a cycle."
+      },
+      "resource": {
+        "resolution_failed": "Resource %{resource_key} could not be resolved."
+      },
+      "input": {
+        "conflicting_bindings": "Input %{port} has conflicting bindings.",
+        "literal_forbidden": "Input %{port} does not allow a literal binding.",
+        "literal_invalid": "Input %{port} has an invalid persisted literal.",
+        "not_input": "Port %{port} is not an input.",
+        "unbound": "Required input %{port} is unbound.",
+        "unknown_port": "Input port %{port} is unknown."
+      },
+      "interface": {
+        "schema_dependency_unresolved": "Schema-dependent interface requirements could not be resolved."
+      },
+      "node": {
+        "unknown": "Node type %{node_type} is unknown.",
+        "kernel_unavailable": "Node type %{node_type} has no execution kernel in this build."
+      },
+      "parameter": {
+        "invalid": "Parameter %{parameter_key} is invalid.",
+        "required": "Parameter %{parameter_key} is required.",
+        "unknown": "Parameter %{parameter_key} is unknown."
+      },
+      "port": {
+        "binding_kind_mismatch": "Port binding kind %{actual_kind} does not match %{expected_kind}.",
+        "orphan": "Port %{port} is orphaned.",
+        "unknown": "Port %{port} is unknown."
+      },
+      "schema": {
+        "parameter_invalid": "Schema parameter %{parameter_key} is invalid."
+      },
+      "semantic": {
+        "invalid": "Semantic graph is invalid."
+      },
+      "type": {
+        "connection_mismatch": "Resolved output type at %{output} is not accepted by %{input}.",
+        "generic_conflict": "Type parameter %{type_parameter} received incompatible input types.",
+        "input_not_accepted": "Input value type is not accepted by port %{port}.",
+        "resolution_incomplete": "Port %{port} does not have one exact resolved type."
+      },
+      "function": {
+        "body_unavailable": "Function %{function} has no available body.",
+        "abi_mismatch": "Function %{function} entry or return does not match its signature.",
+        "dependency_cycle": "Function %{function} participates in a recursive call cycle.",
+        "blocked": "Function %{function} contains blocking graph problems."
+      }
+    }
+  }
+}

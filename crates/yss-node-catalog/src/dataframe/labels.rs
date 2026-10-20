@@ -1,6 +1,5 @@
 //! Value-label authoring over the existing semantic-domain conversion contract.
 use super::*;
-use crate::builtin::add_node_messages;
 use yss_data_contract::SemanticType;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     const ID: &str = "yssbi.dataframe.labels";
@@ -18,30 +17,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             vec![],
         )?,
     ];
-    for parameter in &mut parameters {
-        let (en, zh, eh, zh_help) = if parameter.key.as_str() == "target_type" {
-            (
-                "Value meaning",
-                "取值语义",
-                "Categorical or ordered levels. The original codes remain the values.",
-                "选择分类或顺序语义；取值保留原始编码。",
-            )
-        } else {
-            (
-                "Codes and labels",
-                "编码与标签",
-                "Declare exact codes and their labels; order ordinal levels. Empty configuration inherits a compatible domain; categorical values without a domain receive same-name labels automatically.",
-                "填写精确编码及含义；顺序等级从低到高排列。留空时继承兼容值域；分类没有值域时按实际取值自动生成同名标签。",
-            )
-        };
-        describe_parameter(
-            &mut fragment.messages,
-            ID,
-            parameter,
-            [en, zh],
-            [eh, zh_help],
-        )?;
-    }
+    node_scoped_keys(ID, &mut parameters)?;
     let series = |kind: &'static str| -> Result<TypeExpr, BuiltinAssemblyError> {
         Ok(data_series_type(concrete(kind)?))
     };
@@ -90,12 +66,5 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         },
         ID,
     ));
-    let aliases: &'static [&'static str] = &["数据标签", "取值标签", "value labels", "data.labels"];
-    add_node_messages(
-        &mut fragment.messages,
-        ID,
-        ["Data labels (value meanings)", "数据标签（取值含义）"],
-        Some([aliases, aliases]),
-    );
     Ok(())
 }

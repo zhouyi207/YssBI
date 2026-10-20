@@ -1,6 +1,5 @@
 //! Descriptive summaries and inequality statistics.
 use super::*;
-use crate::builtin::add_node_messages;
 
 pub(super) const THEIL_ID: &str = "yssbi.statistics.inequality.theil";
 pub(super) const GINI_ID: &str = "yssbi.statistics.inequality.gini";
@@ -8,20 +7,7 @@ pub(super) const DAGUM_ID: &str = "yssbi.statistics.inequality.dagum_gini";
 
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     append_description(fragment)?;
-    for (id, en, zh, aliases) in [
-        (
-            GINI_ID,
-            "Gini coefficient",
-            "Gini 基尼系数",
-            &["inequality.gini", "Gini", "基尼系数"][..],
-        ),
-        (
-            DAGUM_ID,
-            "Dagum Gini decomposition",
-            "Dagum 基尼系数",
-            &["inequality.dagum_gini", "Dagum Gini", "基尼分解"][..],
-        ),
-    ] {
+    for (id,) in [(GINI_ID,), (DAGUM_ID,)] {
         let mut ports = vec![data_input("series", "Values", numeric_data_series_type())?];
         if id == DAGUM_ID {
             let members = [
@@ -66,12 +52,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        add_node_messages(
-            &mut fragment.messages,
-            id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
     }
     fragment.nodes.push(leaf(
         NodeProtocol {
@@ -116,22 +96,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         },
         THEIL_ID,
     ));
-    const THEIL_ALIASES: &[&str] = &["inequality.theil", "Theil T", "泰尔指数"];
-    add_node_messages(
-        &mut fragment.messages,
-        THEIL_ID,
-        ["Theil index", "泰尔指数"],
-        Some([THEIL_ALIASES, THEIL_ALIASES]),
-    );
-    add_described(
-        &mut fragment.messages,
-        "parameters.statistics.theil_form",
-        ["Data form", "数据形式"],
-        [
-            "Individual: equal weights. Grouped: supply group means and add one Weights input in Details for group populations or population shares. Group means measure between-group inequality only.",
-            "个体形式等权计算；分组形式输入组均值，并在详细面板添加一个 Weights 输入，连接组人数或人口占比。组均值仅反映组间差异。",
-        ],
-    );
     Ok(())
 }
 
@@ -166,13 +130,5 @@ fn append_description(fragment: &mut ProviderFragment) -> Result<(), BuiltinAsse
         },
         ID,
     ));
-    let aliases: &'static [&'static str] =
-        &["describe", "summary", "descriptive statistics", "描述统计"];
-    add_node_messages(
-        &mut fragment.messages,
-        ID,
-        ["Data Description", "数据描述"],
-        Some([aliases, aliases]),
-    );
     Ok(())
 }

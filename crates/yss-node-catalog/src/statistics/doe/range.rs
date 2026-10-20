@@ -1,18 +1,8 @@
 use super::*;
-use crate::builtin::add_node_messages;
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     let id = "yssbi.statistics.doe.range_analysis";
     let mut maximize = toggle_parameter("maximize", true)?;
-    describe_parameter(
-        &mut fragment.messages,
-        id,
-        &mut maximize,
-        ["Larger response is preferred", "响应越大越好"],
-        [
-            "Turn off to select the lowest factor-level mean; all tied best levels are retained.",
-            "关闭时选择均值最低的因素水平；保留全部并列最优水平。",
-        ],
-    )?;
+    node_scoped_keys(id, std::slice::from_mut(&mut maximize))?;
     fragment.nodes.push(leaf(
         NodeProtocol {
             type_id: sid(id, NodeTypeId::new)?,
@@ -54,14 +44,5 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
         },
         id,
     ));
-    add_node_messages(
-        &mut fragment.messages,
-        id,
-        [
-            "Range analysis (factor-level effects)",
-            "极差分析（因素水平效应）",
-        ],
-        None,
-    );
     Ok(())
 }

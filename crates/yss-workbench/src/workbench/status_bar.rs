@@ -415,19 +415,13 @@ impl GraphStatus {
                 "status-graph-nodes",
                 IconName::Workflow,
                 self.nodes.to_string(),
-                crate::text::format(
-                    "native.workbench.nodeCount",
-                    &[("value0", self.nodes.to_string())],
-                ),
+                crate::text::plural("counts.nodes", self.nodes),
             ))
             .child(status_item(
                 "status-graph-connections",
                 IconName::Cable,
                 self.connections.to_string(),
-                crate::text::format(
-                    "native.workbench.edgeCount",
-                    &[("value0", self.connections.to_string())],
-                ),
+                crate::text::plural("counts.connections", self.connections),
             ))
             .child(status_item(
                 "status-graph-position",

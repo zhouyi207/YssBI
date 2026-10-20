@@ -9,7 +9,7 @@
 - **应用层**：`yss-application` 提供平台中立的服务与类型化用例；宿主在 worker 中执行阻塞业务，向视图交付类型化回执、事件和只读投影。
 - **领域层**：Project、Graph、Database、Execution、SCI 和 Harness 各自拥有业务状态；领域与应用层不依赖 GPUI。
 - **基础设施**：文件系统、日志、数据库存储与插件适配按各自模块边界接入。外部计算插件不改变桌面前端的 Rust 架构。
-- **本地化**：`yss-i18n` 封装 `rust-i18n` 的文本查询与单次插值，供原生业务文案、节点元数据和图诊断复用；领域查询显式传入语言，不依赖 GPUI 的界面语言状态。桌面组件自身沿用 GPUI Kit 的间接依赖。
+- **本地化**：桌面界面、节点目录和图诊断各自在 crate 内的 `locales/<locale>.json` 维护文案，代码只引用 key；`yss-i18n` 在构建期把它们编译为静态表，校验每个目录恰好提供 `yss_i18n::LOCALES` 中的语言且各语言 key 与占位符一致，运行期负责语言解析（不支持的语言回退 `en-US`）、查询与单次插值。随数量变化的文案按 CLDR 复数类别编写，各语言只定义自身规则需要的类别。领域查询显式传入语言，不依赖 GPUI 的界面语言状态。节点帮助位于 `docs/src/nodes/<语言>/`，由页面首行标记关联节点。桌面组件自身沿用 GPUI Kit 的间接依赖。
 - **用户偏好**：`yss-settings` 拥有平台中立的分组类型、默认值、校验和原子持久化；`yss-ui::preferences` 发布已生效快照，各业务视图订阅使用。模型凭据、项目布局和日志历史继续归原服务。
 - **桌面共享边界**：`yss-ui` 复用产品呈现与 GPUI Kit，不依赖 Application、Project 或图执行链；不含 GPUI 的 `yss-desktop-services` 共享 Application 后台调用、事件交付和只读资源目录投影。图专属目录行与反馈归 Graph UI。功能 crate 不反向依赖 Workbench，也不接收完整 `NativeServices`。
 

@@ -7,3 +7,6 @@ publish = false
 [dependencies]
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-i18n = { path = "../yss-i18n" }
+
+[build-dependencies]
+yss-i18n = { path = "../yss-i18n", default-features = false, features = ["codegen"] }

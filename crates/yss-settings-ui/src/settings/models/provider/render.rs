@@ -87,7 +87,7 @@ impl SettingsPanel {
             .is_some_and(|draft| draft.authentication == Authentication::ApiKey)
         {
             group = group.item(self.render_field(
-                "API Key",
+                t("settings.models.apiKey"),
                 t(if self.replacement_key_required() {
                     "settings.models.newProviderKeyHint"
                 } else {
@@ -170,12 +170,12 @@ impl SettingsPanel {
                     .label(if selected == Authentication::None {
                         t("settings.models.noAuthentication")
                     } else {
-                        "API Key".into()
+                        t("settings.models.apiKey")
                     })
                     .disabled(view.busy())
                     .dropdown_menu(move |mut menu, _, _| {
                         for (label, value) in [
-                            ("API Key".into(), Authentication::ApiKey),
+                            (t("settings.models.apiKey"), Authentication::ApiKey),
                             (t("settings.models.noAuthentication"), Authentication::None),
                         ] {
                             let owner = owner.clone();

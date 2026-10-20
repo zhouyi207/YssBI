@@ -1,44 +1,15 @@
 //! Executable multivariate analyses and parameter-derived coordinate tables.
 use super::*;
-use crate::builtin::add_node_messages;
 
 const RESOLVER: &str = "yssbi.statistics.multivariate.schema.coordinates";
-const SPECS: &[(&str, &str, &str)] = &[
-    (
-        "yssbi.statistics.association.canonical",
-        "Canonical correlation",
-        "典型相关分析",
-    ),
-    (
-        "yssbi.statistics.multivariate.exploratory_factor",
-        "Exploratory factor analysis",
-        "探索性因子分析",
-    ),
-    (
-        "yssbi.statistics.multivariate.pca",
-        "Principal component analysis",
-        "主成分分析",
-    ),
-    (
-        "yssbi.statistics.multivariate.correspondence",
-        "Correspondence analysis",
-        "对应分析",
-    ),
-    (
-        "yssbi.statistics.multivariate.discriminant",
-        "Discriminant analysis",
-        "判别分析",
-    ),
-    (
-        "yssbi.statistics.multivariate.rda",
-        "Redundancy analysis (RDA)",
-        "冗余分析（RDA）",
-    ),
-    (
-        "yssbi.statistics.multivariate.mds",
-        "Multidimensional scaling (MDS)",
-        "多维尺度分析（MDS）",
-    ),
+const SPECS: &[&str] = &[
+    "yssbi.statistics.association.canonical",
+    "yssbi.statistics.multivariate.exploratory_factor",
+    "yssbi.statistics.multivariate.pca",
+    "yssbi.statistics.multivariate.correspondence",
+    "yssbi.statistics.multivariate.discriminant",
+    "yssbi.statistics.multivariate.rda",
+    "yssbi.statistics.multivariate.mds",
 ];
 fn numeric_group(
     key: &'static str,
@@ -66,7 +37,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
     fragment
         .schema_resolvers
         .push(sid(RESOLVER, SchemaResolverId::new)?);
-    for &(id, en, zh) in SPECS {
+    for &id in SPECS {
         let method = id.rsplit_once('.').map_or(id, |(_, method)| method);
         let label = TypeExpr::Generic(sid("class_label", TypeParameterId::new)?);
         let mut ports = match method {
@@ -154,11 +125,7 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             _ => {}
         }
         // Per-node text avoids changing shared regression parameter descriptions.
-        for parameter in &mut parameters {
-            let key = parameter.key.as_str();
-            let (en, zh, eh, zhh) = parameter_text(key);
-            describe_parameter(&mut fragment.messages, id, parameter, [en, zh], [eh, zhh])?;
-        }
+        node_scoped_keys(id, &mut parameters)?;
         fragment.nodes.push(leaf(
             NodeProtocol {
                 type_id: sid(id, NodeTypeId::new)?,
@@ -189,108 +156,8 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             id,
         ));
-        let aliases = aliases(method);
-        add_node_messages(
-            &mut fragment.messages,
-            id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
     }
     Ok(())
-}
-fn aliases(method: &str) -> &'static [&'static str] {
-    match method {
-        "canonical" => &["association.canonical", "canonical correlation", "典型相关"],
-        "pca" => &["multivariate.pca", "PCA", "主成分"],
-        "exploratory_factor" => &[
-            "multivariate.exploratory_factor",
-            "EFA",
-            "探索性因子",
-            "主轴因子",
-            "varimax",
-        ],
-        "correspondence" => &[
-            "multivariate.correspondence",
-            "correspondence analysis",
-            "对应分析",
-        ],
-        "discriminant" => &["multivariate.discriminant", "LDA", "QDA", "判别分析"],
-        "rda" => &["multivariate.rda", "RDA", "冗余分析"],
-        "mds" => &["multivariate.mds", "MDS", "多维尺度", "classical MDS"],
-        _ => unreachable!(),
-    }
-}
-fn parameter_text(key: &str) -> (&'static str, &'static str, &'static str, &'static str) {
-    match key {
-        "components" => (
-            "Retained dimensions",
-            "保留维数",
-            "Positive retained dimension count, no greater than the method's available dimensions.",
-            "保留维数须为正，且不能超过该方法可用的维数。",
-        ),
-        "standardize" => (
-            "Standardize variables",
-            "标准化变量",
-            "Center variables and divide by their sample standard deviations; otherwise use original units.",
-            "按样本标准差标准化变量；关闭时使用原始单位。",
-        ),
-        "rotation" => (
-            "Factor rotation",
-            "因子旋转",
-            "Orthogonal varimax or no rotation; varimax does not apply Kaiser normalization.",
-            "选择正交 varimax 或不旋转；varimax 不使用 Kaiser 归一化。",
-        ),
-        "max_iterations" => (
-            "Maximum iterations",
-            "最大迭代次数",
-            "Principal-axis and rotation iteration limit; default 500, positive integer.",
-            "主轴因子与旋转的迭代上限，默认 500，正整数。",
-        ),
-        "tolerance" => (
-            "Convergence tolerance",
-            "收敛容差",
-            "Positive tolerance no greater than 0.1; default 1e-6.",
-            "正容差且不超过 0.1，默认 1e-6。",
-        ),
-        "discriminant_method" => (
-            "Discriminant model",
-            "判别模型",
-            "Linear pooled covariance or quadratic class-specific covariances.",
-            "选择线性共同协方差模型或二次类别专属协方差模型。",
-        ),
-        "class_priors" => (
-            "Class priors",
-            "类别先验",
-            "Use observed class frequencies or equal class probabilities.",
-            "使用训练类别频数占比或各类别等概率先验。",
-        ),
-        "shrinkage" => (
-            "Covariance shrinkage",
-            "协方差收缩",
-            "A value from 0 to 1 toward an isotropic target in standardized feature units.",
-            "取值 0–1，按标准化变量单位向各向同性目标收缩。",
-        ),
-        "permutations" => (
-            "Permutation draws",
-            "置换次数",
-            "0 disables inference; otherwise 1–9999 row permutations with a plus-one p-value.",
-            "0 关闭推断；否则使用 1–9999 次行置换和加一修正的 p 值。",
-        ),
-        "seed" => (
-            "Random seed",
-            "随机种子",
-            "Nonnegative seed for reproducible permutation inference.",
-            "用于可复现置换推断的非负随机种子。",
-        ),
-        "input_kind" => (
-            "MDS input",
-            "MDS 输入形式",
-            "Observation variables or a nonnegative symmetric square dissimilarity matrix.",
-            "选择观测变量或非负、对称的方形相异度矩阵。",
-        ),
-        _ => unreachable!(),
-    }
 }
 
 #[cfg(test)]
@@ -301,7 +168,7 @@ mod tests {
         let system = crate::build_builtin_node_system().unwrap();
         for locale in ["en-US", "zh-CN"] {
             let catalog = system.catalog.localize(&system.registry, locale);
-            for &(id, _, _) in SPECS {
+            for &id in SPECS {
                 let protocol = system.registry.protocol(&id.parse().unwrap()).unwrap();
                 let item = catalog
                     .items

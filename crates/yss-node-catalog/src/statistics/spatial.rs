@@ -1,71 +1,11 @@
 //! Executable spatial-analysis protocols and weight design objects.
 use super::*;
-use crate::builtin::add_node_messages;
 
-const METHODS: &[(&str, &str, &str, &[&str])] = &[
-    (
-        "weights",
-        "Spatial weights",
-        "空间权重构造",
-        &["spatial.weights", "空间权重构造"],
-    ),
-    (
-        "moran",
-        "Moran's I",
-        "莫兰指数",
-        &["spatial.moran", "莫兰指数", "Moran"],
-    ),
-    (
-        "ols",
-        "Spatial OLS regression",
-        "空间 OLS 回归",
-        &["spatial.ols", "空间OLS回归"],
-    ),
-    (
-        "slm",
-        "Spatial lag model (SLM)",
-        "空间滞后 SLM",
-        &["spatial.slm", "空间滞后SLM", "SAR"],
-    ),
-    (
-        "sem",
-        "Spatial error model (SEM)",
-        "空间误差 SEM",
-        &["spatial.sem", "空间误差SEM"],
-    ),
-    (
-        "sac",
-        "Spatial lag/error model (SAC)",
-        "空间滞后误差 SAC",
-        &["spatial.sac", "空间滞后误差模型SAC", "SARAR"],
-    ),
-    (
-        "sdm",
-        "Spatial Durbin model (SDM)",
-        "空间杜宾 SDM",
-        &["spatial.sdm", "空间杜宾SDM"],
-    ),
-    (
-        "sdem",
-        "Spatial Durbin error model (SDEM)",
-        "空间杜宾误差 SDEM",
-        &["spatial.sdem", "空间杜宾误差SDEM"],
-    ),
-    (
-        "slx",
-        "Spatially lagged X (SLX)",
-        "自变量空间滞后 SLX",
-        &["spatial.slx", "自变量空间滞后SLX"],
-    ),
-    (
-        "panel",
-        "Spatial panel: entity fixed effects",
-        "空间面板模型（实体固定效应）",
-        &["spatial.panel", "空间面板模型"],
-    ),
+const METHODS: &[&str] = &[
+    "weights", "moran", "ols", "slm", "sem", "sac", "sdm", "sdem", "slx", "panel",
 ];
 pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    for &(method, en, zh, aliases) in METHODS {
+    for &method in METHODS {
         let id = format!("yssbi.statistics.spatial.{method}");
         let weights = method == "weights";
         let mut ports = vec![];
@@ -163,82 +103,6 @@ pub(super) fn append(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssem
             },
             &id,
         ));
-        add_node_messages(
-            &mut fragment.messages,
-            &id,
-            [en, zh],
-            Some([aliases, aliases]),
-        );
-    }
-    add_text(
-        &mut fragment.messages,
-        "types.statistics_spatial_weights.title",
-        ["Spatial weights design", "空间权重设计"],
-    );
-    for (key, en, zh, en_description, zh_description) in [
-        (
-            "spatial_weight_rule",
-            "Neighbor rule",
-            "邻接规则",
-            "KNN (default), distance band, or inverse distance within the radius; planar Euclidean coordinates.",
-            "默认 K 近邻；也支持距离阈值或阈值内反距离，使用平面欧氏坐标。",
-        ),
-        (
-            "spatial_neighbors",
-            "Nearest neighbors",
-            "近邻数",
-            "Default 4; at least 1 and smaller than the unit count. Used by KNN.",
-            "默认 4，至少 1 且小于地区数；用于 K 近邻。",
-        ),
-        (
-            "spatial_radius",
-            "Distance threshold",
-            "距离阈值",
-            "Positive distance in coordinate units; default 1. Used by distance band and inverse distance.",
-            "坐标单位下的正距离，默认 1；用于距离阈值和反距离。",
-        ),
-        (
-            "spatial_power",
-            "Inverse-distance power",
-            "反距离幂次",
-            "Positive exponent p in distance^(-p); default 1.",
-            "反距离权重 distance^(-p) 中的正幂次，默认 1。",
-        ),
-        (
-            "spatial_symmetrize",
-            "Symmetrize neighbors",
-            "邻接对称化",
-            "Default false. Take the union of directed neighbors before standardization.",
-            "默认关闭；标准化之前取双向邻接的并集。",
-        ),
-        (
-            "spatial_row_standardize",
-            "Row standardization",
-            "行标准化",
-            "Default true. Divide each nonzero row by its sum; islands remain zero rows.",
-            "默认开启；非零行除以行和，孤立地区保留为零行。",
-        ),
-        (
-            "spatial_permutations",
-            "Moran permutations",
-            "Moran 置换次数",
-            "Default 999; 0 disables permutation inference. Two-sided deviations from the null expectation, with a plus-one p-value.",
-            "默认 999；0 关闭置换推断。以偏离零假设期望的绝对值作双侧比较，p 值采用加一校正。",
-        ),
-        (
-            "spatial_panel_model",
-            "Panel spatial structure",
-            "面板空间结构",
-            "SLM (default) or SEM; balanced panel, entity fixed effects removed by orthonormal time contrasts.",
-            "默认 SLM，也可选 SEM；平衡面板，通过正交时间对比消去实体固定效应。",
-        ),
-    ] {
-        add_described(
-            &mut fragment.messages,
-            &format!("parameters.statistics.{key}"),
-            [en, zh],
-            [en_description, zh_description],
-        );
     }
     Ok(())
 }

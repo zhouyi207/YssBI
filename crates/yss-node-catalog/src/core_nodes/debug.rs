@@ -8,15 +8,6 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
 
 fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     const ID: &str = crate::DEBUG_VIEW_NODE_TYPE;
-    crate::builtin::add_node_messages(
-        &mut fragment.messages,
-        ID,
-        ["View Data", "查看数据"],
-        Some([
-            &["view", "inspect", "preview", "data inspector"],
-            &["查看", "检查", "预览", "数据查看器"],
-        ]),
-    );
     let value_type = TypeParameterId::new("value").map_err(|source| {
         BuiltinAssemblyError::InvalidSemanticId {
             value: "value".into(),

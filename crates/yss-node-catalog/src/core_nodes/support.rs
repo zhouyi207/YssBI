@@ -1,5 +1,5 @@
+use crate::builtin::node_key_text;
 pub(crate) use crate::builtin::{BuiltinAssemblyError, ProviderFragment, leaf, pure};
-use crate::builtin::{add_described, node_key_text};
 use crate::builtin::{assembled_interface, assembled_parameters};
 use std::sync::Arc;
 use yss_node_protocol::*;
@@ -83,21 +83,6 @@ pub(crate) fn parameter_key(
     suffix: &'static str,
 ) -> Result<I18nKey, BuiltinAssemblyError> {
     i18n(format!("nodes.{node_id}.parameters.{key}.{suffix}"))
-}
-
-pub(crate) fn add_parameter_messages(
-    fragment: &mut ProviderFragment,
-    node_id: &str,
-    key: &str,
-    title: [&'static str; 2],
-    description: [&'static str; 2],
-) {
-    add_described(
-        &mut fragment.messages,
-        &node_key_text(node_id, &format!("parameters.{key}")),
-        title,
-        description,
-    );
 }
 
 pub(crate) fn category(

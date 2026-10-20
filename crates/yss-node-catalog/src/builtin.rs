@@ -1,11 +1,11 @@
 use super::{core_nodes, dataframe, distribution, plot, project, statistics};
-use crate::{BuiltinCatalog, Message, data_connections};
+use crate::{BuiltinCatalog, data_connections};
 use yss_data_contract::DataValue;
 use yss_data_contract::{DecimalLiteral, InvalidDecimal};
 use yss_node_protocol::*;
 use yss_node_registry::*;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 const PROVIDER: &str = "yssbi.builtin";
@@ -42,10 +42,6 @@ pub enum BuiltinAssemblyError {
     InvalidDefaultBinding {
         node_type: Box<str>,
         source: ProtocolError,
-    },
-    LocalizationConflict {
-        locale: Box<str>,
-        key: Box<str>,
     },
     UnsupportedBuiltinConfiguration {
         context: &'static str,
@@ -102,10 +98,6 @@ impl std::fmt::Display for BuiltinAssemblyError {
                 formatter,
                 "built-in default binding for '{node_type}' is invalid: {source}",
             ),
-            Self::LocalizationConflict { locale, key } => write!(
-                formatter,
-                "built-in localization key '{key}' has conflicting values for '{locale}'",
-            ),
             Self::UnsupportedBuiltinConfiguration { context, value } => {
                 write!(formatter, "unsupported built-in {context}: '{value}'")
             }
@@ -126,8 +118,7 @@ impl std::error::Error for BuiltinAssemblyError {
             Self::InvalidParameterSchema { source, .. } => Some(source),
             Self::InvalidDecimal { source, .. } => Some(source),
             Self::InvalidDefaultBinding { source, .. } => Some(source),
-            Self::LocalizationConflict { .. }
-            | Self::UnsupportedBuiltinConfiguration { .. }
+            Self::UnsupportedBuiltinConfiguration { .. }
             | Self::UnsupportedStatisticsPredictionFamily { .. } => None,
             Self::Registration(error) => Some(error),
         }
@@ -208,7 +199,6 @@ pub(crate) struct ProviderFragment {
     pub interface_resolvers: Vec<InterfaceResolverId>,
     pub schema_resolvers: Vec<SchemaResolverId>,
     pub nodes: Vec<RegisteredNode>,
-    pub messages: Vec<(&'static str, String, Message)>,
 }
 
 impl ProviderFragment {
@@ -221,16 +211,9 @@ impl ProviderFragment {
             .extend(fragment.interface_resolvers);
         self.schema_resolvers.extend(fragment.schema_resolvers);
         self.nodes.extend(fragment.nodes);
-        self.messages.extend(fragment.messages);
     }
 
-    pub(crate) fn finish(mut self) -> Result<Self, BuiltinAssemblyError> {
-        let message_keys = self
-            .messages
-            .iter()
-            .map(|(_, key, _)| iid(key))
-            .collect::<Result<Vec<_>, _>>()?;
-        self.i18n.keys.extend(message_keys);
+    pub(crate) fn finish(mut self) -> Self {
         self.types.sort_by(|left, right| left.id.cmp(&right.id));
         self.type_constructors
             .sort_by(|left, right| left.id.cmp(&right.id));
@@ -240,105 +223,20 @@ impl ProviderFragment {
         self.schema_resolvers.sort();
         self.nodes
             .sort_by(|left, right| left.protocol().type_id.cmp(&right.protocol().type_id));
-
-        let mut messages = BTreeMap::new();
-        for (locale, key, message) in self.messages {
-            if let Some(existing) = messages.insert((locale, key.clone()), message.clone())
-                && existing != message
-            {
-                return Err(BuiltinAssemblyError::LocalizationConflict {
-                    locale: locale.into(),
-                    key: key.into(),
-                });
-            }
-        }
-        self.messages = messages
-            .into_iter()
-            .map(|((locale, key), message)| (locale, key, message))
-            .collect();
-        Ok(self)
+        self
     }
 }
 
-#[derive(Clone, Copy)]
-struct FamilySpec {
-    id: &'static str,
-    title: &'static str,
-    zh_title: &'static str,
-    aliases: &'static [&'static str],
-    zh_aliases: &'static [&'static str],
-    kernel: &'static str,
-}
-
-const COMPARISONS: &[FamilySpec] = &[
-    FamilySpec {
-        id: "equal",
-        title: "Equal",
-        zh_title: "等于",
-        aliases: &["equals", "=="],
-        zh_aliases: &["相等", "=="],
-        kernel: "compare.equal",
-    },
-    FamilySpec {
-        id: "not_equal",
-        title: "Not Equal",
-        zh_title: "不等于",
-        aliases: &["different", "!="],
-        zh_aliases: &["不相等", "!="],
-        kernel: "compare.not_equal",
-    },
-    FamilySpec {
-        id: "less",
-        title: "Less Than",
-        zh_title: "小于",
-        aliases: &["lower", "<"],
-        zh_aliases: &["更小", "<"],
-        kernel: "compare.less",
-    },
-    FamilySpec {
-        id: "less_equal",
-        title: "Less or Equal",
-        zh_title: "小于等于",
-        aliases: &["at most", "<="],
-        zh_aliases: &["不大于", "<="],
-        kernel: "compare.less_equal",
-    },
-    FamilySpec {
-        id: "greater",
-        title: "Greater Than",
-        zh_title: "大于",
-        aliases: &["higher", ">"],
-        zh_aliases: &["更大", ">"],
-        kernel: "compare.greater",
-    },
-    FamilySpec {
-        id: "greater_equal",
-        title: "Greater or Equal",
-        zh_title: "大于等于",
-        aliases: &["at least", ">="],
-        zh_aliases: &["不小于", ">="],
-        kernel: "compare.greater_equal",
-    },
+const COMPARISONS: &[&str] = &[
+    "equal",
+    "not_equal",
+    "less",
+    "less_equal",
+    "greater",
+    "greater_equal",
 ];
 
-const LOGIC: &[FamilySpec] = &[
-    FamilySpec {
-        id: "and",
-        title: "And",
-        zh_title: "且",
-        aliases: &["all", "&&"],
-        zh_aliases: &["与", "并且", "&&"],
-        kernel: "logic.and",
-    },
-    FamilySpec {
-        id: "or",
-        title: "Or",
-        zh_title: "或",
-        aliases: &["any", "||"],
-        zh_aliases: &["或者", "||"],
-        kernel: "logic.or",
-    },
-];
+const LOGIC: &[&str] = &["and", "or"];
 
 pub fn build_builtin_node_system() -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
     let mut builder = NodeRegistryBuilder::new();
@@ -385,66 +283,28 @@ fn register_builtin_nominal_validators(
     Ok(())
 }
 
-fn assemble_builtin_parts()
--> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinAssemblyError> {
+fn builtin_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut fragment = ProviderFragment::default();
-    let messages = &mut fragment.messages;
     let nodes = &mut fragment.nodes;
-    add_shared_messages(messages);
-
-    add_text(
-        messages,
-        "parameters.comparison_mode.title",
-        ["Comparison Mode", "比较模式"],
-    );
-    for (key, en, zh) in [
-        (
-            "parameters.absolute_tolerance.title",
-            "Absolute Tolerance",
-            "绝对容差",
-        ),
-        (
-            "parameters.relative_tolerance.title",
-            "Relative Tolerance",
-            "相对容差",
-        ),
-    ] {
-        add_text(messages, key, [en, zh]);
-    }
-    for spec in COMPARISONS {
-        let id = format!("yssbi.logic.{}", spec.id);
-        add_node_messages(
-            messages,
-            &id,
-            [spec.title, spec.zh_title],
-            Some([spec.aliases, spec.zh_aliases]),
-        );
-        let mut protocol = comparison_protocol(&id, matches!(spec.id, "equal" | "not_equal"))?;
+    for name in COMPARISONS {
+        let id = format!("yssbi.logic.{name}");
+        let mut protocol = comparison_protocol(&id, matches!(*name, "equal" | "not_equal"))?;
         protocol.parameters = comparison_parameters(&id)?;
-        nodes.push(leaf(protocol, spec.kernel));
+        nodes.push(leaf(protocol, &format!("compare.{name}")));
     }
-    for spec in LOGIC {
-        let id = format!("yssbi.logic.{}", spec.id);
-        add_node_messages(
-            messages,
-            &id,
-            [spec.title, spec.zh_title],
-            Some([spec.aliases, spec.zh_aliases]),
-        );
-        nodes.push(leaf(boolean_protocol(&id, false)?, spec.kernel));
+    for name in LOGIC {
+        let id = format!("yssbi.logic.{name}");
+        nodes.push(leaf(
+            boolean_protocol(&id, false)?,
+            &format!("logic.{name}"),
+        ));
     }
-    add_node_messages(
-        messages,
-        "yssbi.logic.not",
-        ["Not", "非"],
-        Some([&["invert", "!"], &["取反", "!"]]),
-    );
     nodes.push(leaf(
         boolean_protocol("yssbi.logic.not", true)?,
         "logic.not",
     ));
 
-    project::register(nodes, messages)?;
+    project::register(nodes)?;
 
     for semantic in SemanticType::ALL {
         let name = semantic
@@ -498,17 +358,21 @@ fn assemble_builtin_parts()
     fragment.merge(statistics::build_provider_fragment()?);
     fragment.merge(distribution::build_provider_fragment()?);
     fragment.merge(plot::build_provider_fragment()?);
-    let fragment = fragment.finish()?;
-    let (required_i18n, alias_keys) =
-        i18n_requirements(&fragment.types, &fragment.categories, &fragment.nodes);
+    Ok(fragment.finish())
+}
+
+fn assemble_builtin_parts()
+-> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinAssemblyError> {
+    let fragment = builtin_fragment()?;
+    let (required_i18n, alias_keys) = i18n_requirements(&fragment);
     let mut i18n = fragment.i18n;
     i18n.keys.extend(required_i18n.keys);
-    let catalog = BuiltinCatalog::new(&fragment.messages).map_err(|source| {
-        BuiltinAssemblyError::InvalidProtocol {
-            node_type: PROVIDER.into(),
-            source,
-        }
-    })?;
+    i18n.keys.extend(
+        BuiltinCatalog::keys()
+            .map(iid)
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    let catalog = BuiltinCatalog::new();
     let mut provider = ProviderRegistration::new(sid(PROVIDER, ProviderId::new)?);
     provider.types = fragment.types.into_boxed_slice();
     provider.type_constructors = fragment.type_constructors.into_boxed_slice();
@@ -793,16 +657,23 @@ pub(crate) fn data_port(
     })
 }
 
-fn i18n_requirements(
-    types: &[TypeRegistration],
-    categories: &[CategoryRegistration],
-    nodes: &[RegisteredNode],
-) -> (I18nManifest, BTreeSet<I18nKey>) {
+fn i18n_requirements(fragment: &ProviderFragment) -> (I18nManifest, BTreeSet<I18nKey>) {
     let mut keys = BTreeSet::new();
     let mut alias_keys = BTreeSet::new();
-    keys.extend(types.iter().map(|item| item.title_key.clone()));
-    keys.extend(categories.iter().map(|item| item.title_key.clone()));
-    for node in nodes {
+    keys.extend(fragment.types.iter().map(|item| item.title_key.clone()));
+    keys.extend(
+        fragment
+            .type_constructors
+            .iter()
+            .map(|item| item.title_key.clone()),
+    );
+    keys.extend(
+        fragment
+            .categories
+            .iter()
+            .map(|item| item.title_key.clone()),
+    );
+    for node in &fragment.nodes {
         let protocol = node.protocol();
         keys.insert(protocol.catalog.title_key.clone());
         if let Some(key) = &protocol.catalog.aliases_key {
@@ -821,101 +692,17 @@ fn i18n_requirements(
     (I18nManifest { keys }, alias_keys)
 }
 
-fn add_shared_messages(out: &mut Vec<(&'static str, String, Message)>) {
-    for (key, en, zh) in [
-        ("types.binary.title", "Binary", "二元"),
-        ("types.text.title", "Text", "文本"),
-        ("types.object.title", "Object", "对象"),
-        ("parameter_groups.parameters.title", "Parameters", "参数"),
-        (
-            "parameter_groups.distribution.title",
-            "Distribution",
-            "分布参数",
-        ),
-        ("parameter_groups.sampling.title", "Sampling", "采样设置"),
-        ("parameter_groups.model.title", "Model", "模型参数"),
-        (
-            "parameter_groups.covariance.title",
-            "Covariance",
-            "协方差估计",
-        ),
-        ("types.numeric.title", "Numeric", "数值"),
-        ("types.datetime.title", "Datetime", "日期时间"),
-        ("types.ordinal.title", "Ordinal", "有序分类"),
-        ("types.identifier.title", "Identifier", "标识"),
-        ("categories.data.title", "Data", "数据"),
-        ("categories.constants.title", "Constants", "常量"),
-        ("categories.operations.title", "Operations", "运算"),
-        ("categories.numeric.title", "Arithmetic", "算术"),
-        ("categories.logic.title", "Logic", "逻辑"),
-        ("categories.conversion.title", "Conversion", "转换"),
-        ("categories.dataflow.title", "Data Flow", "数据流"),
-        ("categories.project.title", "Project", "项目"),
-        ("parameters.value.title", "Value", "值"),
-        (
-            "parameters.value.description",
-            "The constant value.",
-            "常量的值。",
-        ),
-    ] {
-        add_text(out, key, [en, zh]);
-    }
-}
-/// One text message in every shipped locale; texts are `[English, Chinese]`.
-pub(crate) fn add_text(
-    out: &mut Vec<(&'static str, String, Message)>,
-    key: impl Into<String>,
-    [en, zh]: [&'static str; 2],
-) {
-    let key = key.into();
-    out.extend([
-        (yss_i18n::ENGLISH, key.clone(), Message::Text(en)),
-        (yss_i18n::CHINESE, key, Message::Text(zh)),
-    ]);
-}
-
-/// The `{prefix}.title` and `{prefix}.description` messages in every shipped locale.
-pub(crate) fn add_described(
-    out: &mut Vec<(&'static str, String, Message)>,
-    prefix: &str,
-    title: [&'static str; 2],
-    description: [&'static str; 2],
-) {
-    add_text(out, format!("{prefix}.title"), title);
-    add_text(out, format!("{prefix}.description"), description);
-}
-
-/// Gives `parameter` node-scoped title and description keys and registers their text.
-pub(crate) fn describe_parameter(
-    out: &mut Vec<(&'static str, String, Message)>,
+/// Points each parameter at its node-scoped title and description messages.
+pub(crate) fn node_scoped_keys(
     node_id: &str,
-    parameter: &mut Parameter,
-    title: [&'static str; 2],
-    description: [&'static str; 2],
+    parameters: &mut [Parameter],
 ) -> Result<(), BuiltinAssemblyError> {
-    let prefix = node_key_text(node_id, &format!("parameters.{}", parameter.key.as_str()));
-    parameter.title_key = iid(format!("{prefix}.title"))?;
-    parameter.description_key = Some(iid(format!("{prefix}.description"))?);
-    add_described(out, &prefix, title, description);
-    Ok(())
-}
-
-/// Title and alias messages of one node in every shipped locale (English, then Chinese).
-/// `aliases` is `None` exactly when the node's catalog protocol declares no alias key.
-pub(crate) fn add_node_messages(
-    out: &mut Vec<(&'static str, String, Message)>,
-    id: &str,
-    title: [&'static str; 2],
-    aliases: Option<[&'static [&'static str]; 2]>,
-) {
-    add_text(out, node_key_text(id, "title"), title);
-    if let Some([en_aliases, zh_aliases]) = aliases {
-        let key = node_key_text(id, "aliases");
-        out.extend([
-            (yss_i18n::ENGLISH, key.clone(), Message::Aliases(en_aliases)),
-            (yss_i18n::CHINESE, key, Message::Aliases(zh_aliases)),
-        ]);
+    for parameter in parameters {
+        let prefix = node_key_text(node_id, &format!("parameters.{}", parameter.key.as_str()));
+        parameter.title_key = iid(format!("{prefix}.title"))?;
+        parameter.description_key = Some(iid(format!("{prefix}.description"))?);
     }
+    Ok(())
 }
 
 pub(super) fn node_key_text(id: &str, suffix: &str) -> String {
@@ -924,4 +711,35 @@ pub(super) fn node_key_text(id: &str, suffix: &str) -> String {
 
 pub(super) fn node_key(id: &str, suffix: &str) -> Result<I18nKey, BuiltinAssemblyError> {
     iid(node_key_text(id, suffix))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_catalog_message_has_a_consumer() {
+        let fragment = builtin_fragment().unwrap();
+        let (required, _) = i18n_requirements(&fragment);
+        let required = required
+            .keys
+            .iter()
+            .map(I18nKey::as_str)
+            .collect::<BTreeSet<_>>();
+        // Graph analysis hints and generated inventory help look these up by key.
+        let mut looked_up = BTreeSet::from([
+            "catalog.inventory.documentation".to_owned(),
+            "catalog.inventory.scope_note".to_owned(),
+        ]);
+        for entry in crate::catalog_entry::inventory() {
+            looked_up.insert(format!("catalog.inventory.forms.{}", entry.form));
+            looked_up.insert(node_key_text(entry.id, "scope_note"));
+        }
+        let unused = BuiltinCatalog::keys()
+            .filter(|key| {
+                !required.contains(key) && !key.starts_with("editors.") && !looked_up.contains(*key)
+            })
+            .collect::<Vec<_>>();
+        assert!(unused.is_empty(), "unused catalog messages: {unused:?}");
+    }
 }

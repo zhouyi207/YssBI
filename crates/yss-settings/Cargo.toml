@@ -12,6 +12,8 @@ anyhow = "1"
 serde.workspace = true
 serde_json.workspace = true
 yss-filesystem = { path = "../yss-filesystem" }
+yss-harness-contract = { path = "../yss-harness-contract" }
+yss-i18n = { path = "../yss-i18n", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
