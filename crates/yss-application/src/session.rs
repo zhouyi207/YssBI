@@ -15,8 +15,6 @@ pub use factory::{
 };
 pub(crate) use slot::ProjectReplacement;
 pub use slot::{
-    ApplicationSessionRefreshError, ApplicationSessionSlot, ApplicationState, RecoveryRequired,
-    SessionCaptureError, SessionInstallationError, SessionRecoveryControl, SessionRecoveryDeadline,
-    SessionRecoveryError, SessionRecoveryId, SessionRecoveryOutcome, SessionRecoveryPhase,
-    SessionRevalidationError,
+    ApplicationSessionRefreshError, ApplicationSessionSlot, ApplicationState, SessionCaptureError,
+    SessionInstallationError, SessionRecoveryError, SessionRecoveryPhase, SessionRevalidationError,
 };

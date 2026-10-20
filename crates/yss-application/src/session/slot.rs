@@ -1,5 +1,5 @@
-use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
@@ -9,13 +9,12 @@ use super::{ApplicationSession, ApplicationSessionEpoch};
 mod recovery;
 mod replacement;
 
-use recovery::RetainedSessionRecovery;
-pub use recovery::{
-    RecoveryRequired, SessionRecoveryControl, SessionRecoveryDeadline, SessionRecoveryError,
-    SessionRecoveryId, SessionRecoveryOutcome, SessionRecoveryPhase,
-};
+pub use recovery::{SessionRecoveryError, SessionRecoveryPhase};
 pub(crate) use replacement::ProjectReplacement;
-use replacement::{ReplacementPhase, SessionReplacementError};
+use replacement::SessionReplacementError;
+
+/// How long one replacement or recovery attempt waits for the old session's work to stop.
+const DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
 pub enum SessionCaptureError {
@@ -47,23 +46,17 @@ pub enum SessionInstallationError {
     CandidateEpochMismatch,
 }
 
-struct SessionSlotInner {
-    state: RwLock<SessionSlotState>,
-    next_attempt: AtomicU64,
-}
-
 enum SessionSlotState {
     Inactive {
         next_epoch: ApplicationSessionEpoch,
     },
     Replacing {
         epoch: ApplicationSessionEpoch,
-        phase: ReplacementPhase,
     },
     Recovering {
         epoch: ApplicationSessionEpoch,
-        recovery: SessionRecoveryId,
-        retained: RetainedSessionRecovery,
+        old: Arc<ApplicationSession>,
+        pending: SessionRecoveryPhase,
     },
     Active(Arc<ApplicationSession>),
 }
@@ -73,19 +66,16 @@ enum SessionSlotState {
 // complete Project/Graph/Execution/Database envelope.
 pub struct ApplicationSessionSlot {
     nodes: super::NodeComponents,
-    inner: Arc<SessionSlotInner>,
+    state: Arc<RwLock<SessionSlotState>>,
 }
 
 impl ApplicationSessionSlot {
     pub fn new(nodes: super::NodeComponents) -> Self {
         Self {
             nodes,
-            inner: Arc::new(SessionSlotInner {
-                state: RwLock::new(SessionSlotState::Inactive {
-                    next_epoch: ApplicationSessionEpoch::INITIAL,
-                }),
-                next_attempt: AtomicU64::new(1),
-            }),
+            state: Arc::new(RwLock::new(SessionSlotState::Inactive {
+                next_epoch: ApplicationSessionEpoch::INITIAL,
+            })),
         }
     }
 
@@ -96,7 +86,6 @@ impl ApplicationSessionSlot {
         let session = candidate.into_session();
         let components_match = self.nodes.matches(&session);
         let mut state = self
-            .inner
             .state
             .write()
             .unwrap_or_else(|error| error.into_inner());
@@ -121,11 +110,7 @@ impl ApplicationSessionSlot {
     }
 
     pub fn capture_session(&self) -> Result<Arc<ApplicationSession>, SessionCaptureError> {
-        let state = self
-            .inner
-            .state
-            .read()
-            .unwrap_or_else(|error| error.into_inner());
+        let state = self.state.read().unwrap_or_else(|error| error.into_inner());
         match &*state {
             SessionSlotState::Inactive { .. } => Err(SessionCaptureError::Inactive),
             SessionSlotState::Replacing { .. } => Err(SessionCaptureError::Replacing),
@@ -138,11 +123,7 @@ impl ApplicationSessionSlot {
         &self,
         captured: &Arc<ApplicationSession>,
     ) -> Result<(), SessionRevalidationError> {
-        let state = self
-            .inner
-            .state
-            .read()
-            .unwrap_or_else(|error| error.into_inner());
+        let state = self.state.read().unwrap_or_else(|error| error.into_inner());
         match &*state {
             SessionSlotState::Inactive { .. } => Err(SessionRevalidationError::Unavailable(
                 SessionCaptureError::Inactive,
@@ -161,7 +142,6 @@ impl ApplicationSessionSlot {
     #[cfg(any(test, feature = "test-support"))]
     pub fn publish_for_test(&self, session: Arc<ApplicationSession>) {
         let mut state = self
-            .inner
             .state
             .write()
             .unwrap_or_else(|error| error.into_inner());
@@ -209,7 +189,8 @@ impl ApplicationState {
         &self,
         captured: &Arc<ApplicationSession>,
     ) -> Result<ProjectReplacement, SessionReplacementError> {
-        self.session_slot.begin_project_replacement(captured)
+        self.session_slot
+            .begin_project_replacement(captured, Instant::now() + DRAIN_TIMEOUT)
     }
 
     pub(crate) fn finish_project_replacement(
@@ -219,20 +200,11 @@ impl ApplicationState {
         self.session_slot.finish_project_replacement(replacement)
     }
 
-    pub fn retry_session_recovery(
-        &self,
-        recovery: SessionRecoveryId,
-        control: &SessionRecoveryControl,
-    ) -> Result<SessionRecoveryOutcome, SessionRecoveryError> {
-        self.session_slot.retry_session_recovery(recovery, control)
-    }
-
-    pub fn resolve_session_database_recovery(
-        &self,
-        recovery: SessionRecoveryId,
-    ) -> Result<SessionRecoveryOutcome, SessionRecoveryError> {
-        self.session_slot
-            .resolve_session_database_recovery(recovery)
+    /// Finishes the work a failed replacement left on the old session, closes that
+    /// session's project and publishes an empty-project session in its place. Returns
+    /// whether a recovery ran; a slot that is not recovering is left unchanged.
+    pub fn recover_session(&self) -> Result<bool, SessionRecoveryError> {
+        self.session_slot.recover(Instant::now() + DRAIN_TIMEOUT)
     }
 
     pub(crate) fn rebuild_application_session(

@@ -100,7 +100,7 @@ API Key 认证必须显式提供替换密钥；拒绝不会修改配置或凭据
 | [application_session.rs](src/session/application_session.rs) | 不可拆分发布的身份与运行时组合，以及会话内活动入口             |
 | [slot.rs](src/session/slot.rs)                               | 唯一会话状态、候选安装、捕获和重验，以及 ApplicationState 入口 |
 | [slot/replacement.rs](src/session/slot/replacement.rs)       | 关闭准入、排空、构造和发布替换候选；未完成的替换转交恢复       |
-| [slot/recovery.rs](src/session/slot/recovery.rs)             | 单次恢复的独占领取、阶段推进与中断后归还                       |
+| [slot/recovery.rs](src/session/slot/recovery.rs)             | 从中断阶段继续排空、清空旧项目并发布空项目会话                 |
 | [factory.rs](src/session/factory.rs)                         | 检查跨子系统身份并构造完整候选                                 |
 
 `ApplicationState::initialize()` 在现有 [session_factory](src/session/factory.rs) 中创建 Project、构造初始 candidate 并完成 slot 安装；失败通过 `ApplicationInitializationError` 返回。桌面入口无需逐步组装 Project 和应用会话。
@@ -134,7 +134,11 @@ Session slot 区分 `Inactive`、`Active`、`Replacing` 和 `Recovering`。子�
 
 替换入口必须携带用例捕获的 `Arc<ApplicationSession>`。slot 在同一个状态写锁内核对当前会话的 Arc 身份并进入 `Replacing`；过期请求在关闭 Execution/Database 准入或推进 epoch 之前被拒绝。锁外提前重验不能替代这一原子判断，Database 提交后的刷新和 Project 生命周期替换共用此入口。
 
-替换和恢复共享 slot 的一个状态锁；耗时排空、候选构造和项目 I/O 在锁外执行。发布时只在锁内重验 epoch、阶段并安装候选；释放锁后才通知旧会话订阅者并释放旧 owner，因此通知回调可捕获已经发布的新会话。拒绝的候选也在锁外释放。执行排空直接采用 `cancel_and_drain` 的结果，不重复查询同一个排空期限。
+替换和恢复共享 slot 的一个状态锁；耗时排空、候选构造和项目 I/O 在锁外执行。发布时只在锁内重验 epoch 并安装候选；释放锁后才通知旧会话订阅者并释放旧 owner，因此通知回调可捕获已经发布的新会话。拒绝的候选也在锁外释放。执行排空直接采用 `cancel_and_drain` 的结果，不重复查询同一个排空期限。
+
+排空在 30 秒内未完成，或候选构造失败时，旧会话以 `Recovering` 保留，并记录尚未完成的阶段：执行排空、数据库排空或清空旧项目。
+工作台在下一次打开、新建或关闭项目时调用 `ApplicationState::recover_session`。恢复用同一种替换 worker 从记录的阶段继续，期间 slot 处于 `Replacing`，并发调用不会重复执行；完成后旧项目已清空，slot 发布空项目会话，原命令随后继续。
+数据库排空在关闭准入后先解决遗弃的存储交接；这些交接计入未完成工作，不解决时排空只能超时。
 
 例如，项目 A 的计算尚未结束时用户切换到项目 B，Application 协调准入关闭、旧任务收尾与会话替换。相关用例在关键提交或返回位置重验捕获的会话、资源版本和结果身份，防止旧会话的迟到结果进入新项目。
 

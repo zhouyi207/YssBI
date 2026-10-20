@@ -37,6 +37,8 @@ Save As creates a target copy through the project lifecycle. The desktop first a
 
 Opening another project, creating a project, closing the project, and quitting use the workbench's save checks. Choose to save, continue without saving, or cancel as offered. Closing a project returns to the welcome page.
 
+If a switch stops because the previous project's work does not finish in time, the workbench reports the failure. The next open, create, or close first finishes stopping the previous project, which closes it, and then continues.
+
 Dirty resource tabs cannot simply be closed without resolving their pending work. On window exit, discarding unsaved file or model-setting input does not revert database settings already committed. A save failure keeps the relevant input and prevents the pending switch or exit from proceeding.
 
 A failed create or Save As operation may already have written its target. Read the failure message and recovery path before retrying. If the workbench offers to open the written project, use that recovery route rather than creating the same target again.

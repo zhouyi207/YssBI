@@ -64,6 +64,15 @@ fn commit(
         ProjectCommand::Open { .. } | ProjectCommand::Create { .. } | ProjectCommand::SaveAs(_)
     );
     let result = (|| -> anyhow::Result<()> {
+        // A failed replacement retains the old session until an open, create or close recovers
+        // it, and that recovery has already closed the project this view expected.
+        let expected = if !matches!(command, ProjectCommand::SaveAs(_))
+            && services.application.recover_session()?
+        {
+            None
+        } else {
+            expected
+        };
         if let Some(expected) = &expected
             && services
                 .application

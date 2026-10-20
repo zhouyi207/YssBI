@@ -1,16 +1,20 @@
-use super::recovery::RecoveryWorkState;
-use super::replacement::ReplacementAdvanceOutcome;
 use super::*;
 use std::num::NonZeroU64;
-use std::sync::{Arc, Barrier};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Instant;
 use yss_database_contract::{
-    DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
+    DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
     DatabaseSessionIdentity, DatabaseSessionOpenRequest,
 };
 use yss_database_runtime::error::DatabaseOperation;
-use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
+use yss_database_runtime::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
+use yss_database_runtime::session_api::{
+    DatabaseDeclarationTransition, DatabaseMutationOperation, DatabaseMutationRequest,
+    commit_database_runtime_change, prepare_database_runtime_change,
+};
+use yss_database_runtime::test_support::{DatasetFixture, SALES_ID};
+use yss_database_schema::DatabaseRuntimeRevision;
 use yss_graph_execution::identity::ExecutionSessionId;
 use yss_graph_execution::identity::RuntimeGeneration;
 use yss_graph_execution::resource_preparation::ResourceProviderFactory;
@@ -21,7 +25,28 @@ use yss_node_catalog::build_builtin_node_system;
 use yss_project::ProjectState;
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
+fn empty_database(identity: &str) -> DatabaseRuntimeSession {
+    let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(
+        DatabaseId,
+        DatabaseDeclarationObservation,
+    )>())
+    .expect("empty observation set is valid");
+    let declarations: Arc<[DatabaseDecl]> = Vec::new().into();
+    DatabaseRuntimeRegistry::new()
+        .open_session(DatabaseSessionOpenRequest::new(
+            DatabaseSessionIdentity::from_existing(identity.into()),
+            NonZeroU64::new(1).expect("non-zero test generation"),
+            declarations,
+            observations,
+        ))
+        .expect("empty database session is valid")
+}
+
 fn session(epoch: u64) -> Arc<ApplicationSession> {
+    session_with_database(epoch, empty_database(&format!("session-{epoch}")))
+}
+
+fn session_with_database(epoch: u64, database: DatabaseRuntimeSession) -> Arc<ApplicationSession> {
     let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));
     let execution_session_id = ExecutionSessionId::new(uuid::Uuid::from_u128(epoch as u128));
     let project = Arc::new(ProjectState::new());
@@ -35,22 +60,6 @@ fn session(epoch: u64) -> Arc<ApplicationSession> {
             },
         )
         .unwrap(),
-    );
-    let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(
-        DatabaseId,
-        DatabaseDeclarationObservation,
-    )>())
-    .expect("empty observation set is valid");
-    let declarations: Arc<[DatabaseDecl]> = Vec::new().into();
-    let database = Arc::new(
-        DatabaseRuntimeRegistry::new()
-            .open_session(DatabaseSessionOpenRequest::new(
-                DatabaseSessionIdentity::from_existing(project_session_id.as_str().into()),
-                NonZeroU64::new(1).expect("non-zero test generation"),
-                declarations,
-                observations,
-            ))
-            .expect("empty database session is valid"),
     );
     let execution = Arc::new(ExecutionRuntimeState::new(
         execution_session_id,
@@ -70,7 +79,7 @@ fn session(epoch: u64) -> Arc<ApplicationSession> {
         project,
         graph,
         execution,
-        database,
+        Arc::new(database),
         resource_provider_factory,
     ))
 }
@@ -150,7 +159,7 @@ fn replacement_observer_can_capture_the_published_session() {
             assert!(matches!(event, yss_ui_contract::UiEvent::SessionChanged));
             let slot = slot.upgrade().expect("application still owns its slot");
             // A blocking capture would deadlock if publication kept the write lock.
-            let unlocked = slot.inner.state.try_read().is_ok();
+            let unlocked = slot.state.try_read().is_ok();
             let epoch = unlocked.then(|| {
                 slot.capture_session()
                     .expect("replacement is active before notification")
@@ -175,158 +184,147 @@ fn replacement_observer_can_capture_the_published_session() {
 }
 
 #[test]
-fn stale_replacement_worker_stops_after_recovery_supersedes_its_phase() {
+fn undrained_replacement_is_recovered_from_its_pending_phase() {
     let slot = ApplicationSessionSlot::new(crate::session::NodeComponents::builtins().unwrap());
     let old = session(1);
     slot.publish_for_test(Arc::clone(&old));
-    let mut worker = slot
-        .begin_replacement_for_test(&old)
-        .expect("active slot replaces");
-    let required = slot.install_recovery_for_test(
-        Arc::clone(&old),
-        worker.epoch,
-        SessionRecoveryPhase::DrainOldExecution,
-    );
+    let running = old.execution().admit().expect("old session admits work");
 
-    assert_eq!(
-        worker
-            .complete_phase_for_test(ReplacementPhase::CloseAdmissions)
-            .expect("superseded worker reports retained recovery"),
-        ReplacementAdvanceOutcome::Superseded(required)
-    );
+    assert!(matches!(
+        slot.begin_project_replacement(&old, Instant::now()),
+        Err(SessionReplacementError::RecoveryRequired)
+    ));
     assert!(matches!(
         slot.capture_session(),
         Err(SessionCaptureError::Recovering)
     ));
-    let state = slot
-        .inner
-        .state
-        .read()
-        .unwrap_or_else(|error| error.into_inner());
     assert!(matches!(
-        &*state,
+        slot.recover(Instant::now()),
+        Err(SessionRecoveryError::DeadlineElapsed {
+            phase: SessionRecoveryPhase::DrainOldExecution,
+        })
+    ));
+    assert!(matches!(
+        &*slot.state.read().unwrap_or_else(|error| error.into_inner()),
         SessionSlotState::Recovering {
             epoch,
-            recovery,
-            retained: RetainedSessionRecovery {
-                old: retained,
-                work: RecoveryWorkState::Available(SessionRecoveryPhase::DrainOldExecution),
-            },
-        } if *epoch == worker.epoch
-            && *recovery == required.recovery
-            && Arc::ptr_eq(retained, &old)
+            old: retained,
+            pending: SessionRecoveryPhase::DrainOldExecution,
+        } if epoch.get() == 3 && Arc::ptr_eq(retained, &old)
     ));
+
+    let (sent, received) = std::sync::mpsc::channel();
+    let _subscription = old
+        .presentation
+        .subscribe(Arc::new(move |event| {
+            sent.send(matches!(event, yss_ui_contract::UiEvent::SessionChanged))
+                .expect("test receiver remains alive");
+        }))
+        .expect("old session accepts an observer");
+    drop(running);
+    assert!(
+        slot.recover(Instant::now())
+            .expect("drained recovery publishes a session")
+    );
+    let recovered = slot.capture_session().expect("recovered session is active");
+    assert_eq!(recovered.epoch().get(), 4);
+    assert!(recovered.project().get_path().is_none());
+    assert_eq!(received.try_recv(), Ok(true));
+    assert!(
+        !slot
+            .recover(Instant::now())
+            .expect("an active slot has nothing to recover")
+    );
 }
 
 #[test]
-fn recovery_claim_is_single_owner_and_drop_reinstalls_exact_work() {
-    let slot = Arc::new(ApplicationSessionSlot::new(
-        crate::session::NodeComponents::builtins().unwrap(),
-    ));
-    let old = session(1);
-    let required = slot.install_recovery_for_test(
-        Arc::clone(&old),
-        ApplicationSessionEpoch::from_existing(2),
-        SessionRecoveryPhase::ResolveOldDatabase,
+fn abandoned_storage_handoff_does_not_block_replacement() {
+    let fixture = DatasetFixture::single_i64(SALES_ID, "value", vec![1]);
+    let declaration = fixture.instance.decl.clone();
+    let observation = DatabaseDeclarationObservation::new(
+        DatabaseDeclarationRevision::from_existing(1),
+        DatabaseDeclarationFingerprint::from_decl(&declaration),
     );
-    let application = ApplicationState::new(Arc::clone(&slot));
-    let control = SessionRecoveryControl::new(SessionRecoveryDeadline::at(
-        Instant::now() + Duration::from_secs(1),
-    ));
-    assert!(matches!(
-        application.retry_session_recovery(required.recovery, &control),
-        Err(SessionRecoveryError::WrongPhase)
-    ));
-    let first = slot
-        .claim_recovery(required.recovery)
-        .expect("first recovery claimant owns the work");
-    let barrier = Arc::new(Barrier::new(2));
-    let concurrent_slot = Arc::clone(&slot);
-    let concurrent_barrier = Arc::clone(&barrier);
-    let recovery = required.recovery;
-    let second = thread::spawn(move || {
-        concurrent_barrier.wait();
-        concurrent_slot.claim_recovery(recovery)
-    });
-    barrier.wait();
-    assert!(matches!(
-        second.join().expect("claim thread completes"),
-        Err(SessionRecoveryError::AlreadyInProgress)
-    ));
-    drop(first);
-
-    let state = slot
-        .inner
-        .state
-        .read()
-        .unwrap_or_else(|error| error.into_inner());
-    assert!(matches!(
-        &*state,
-        SessionSlotState::Recovering {
-            recovery: current,
-            retained: RetainedSessionRecovery {
-                old: retained,
-                work: RecoveryWorkState::Available(SessionRecoveryPhase::ResolveOldDatabase),
-            },
-            ..
-        } if *current == recovery && Arc::ptr_eq(retained, &old)
-    ));
-    drop(state);
-
-    let second_claim = slot
-        .claim_recovery(recovery)
-        .expect("reinstalled recovery can be claimed again");
-    assert!(Arc::ptr_eq(&second_claim.old, &old));
-    assert_eq!(
-        second_claim.phase(),
-        SessionRecoveryPhase::ResolveOldDatabase
-    );
-    drop(second_claim);
-
-    assert_eq!(
-        slot.complete_recovery_phase_for_test(
-            recovery,
-            Some(SessionRecoveryPhase::DrainOldDatabase),
+    let database = DatabaseRuntimeRegistry::new()
+        .open_session_with_instances(
+            DatabaseSessionOpenRequest::new(
+                DatabaseSessionIdentity::from_existing("session-1".into()),
+                NonZeroU64::new(1).expect("non-zero test generation"),
+                vec![declaration.clone()].into(),
+                DatabaseDeclarationObservationSet::try_from_iter([(
+                    declaration.id.clone(),
+                    observation.clone(),
+                )])
+                .expect("observation set is valid"),
+            ),
+            [fixture.instance.clone()],
         )
-        .expect("recovery advances with the same retained owner"),
-        SessionRecoveryOutcome::RetryRequired(RecoveryRequired {
-            recovery,
-            failed_epoch: ApplicationSessionEpoch::from_existing(2),
-            phase: SessionRecoveryPhase::DrainOldDatabase,
-        })
+        .expect("database session is valid");
+    let physical = database
+        .prepare_physical_mutation(
+            &declaration.id,
+            &DatabaseMutationOperation::EditCell {
+                row: 0,
+                column: "value".into(),
+                value: yss_data_contract::TabularScalar::Null,
+                row_id: None,
+            },
+            "abandoned-handoff",
+        )
+        .expect("mutation prepares");
+    let prepared = prepare_database_runtime_change(
+        &database,
+        DatabaseMutationRequest::new(
+            declaration.id.clone(),
+            DatabaseRuntimeRevision::from_existing(0),
+            DatabaseDeclarationTransition {
+                expected: observation.clone(),
+                next: observation,
+            },
+        ),
+        &physical,
+    )
+    .expect("runtime change prepares");
+    drop(commit_database_runtime_change(&database, prepared).expect("runtime change commits"));
+    drop(physical);
+
+    let slot = ApplicationSessionSlot::new(crate::session::NodeComponents::builtins().unwrap());
+    let old = session_with_database(1, database);
+    slot.publish_for_test(Arc::clone(&old));
+    let replacement = slot
+        .begin_project_replacement(&old, Instant::now())
+        .expect("resolving the abandoned handoff lets the database drain");
+    assert!(
+        !slot
+            .recover(Instant::now())
+            .expect("an in-flight replacement is not a recovery")
     );
-    let terminal = slot
-        .complete_recovery_phase_for_test(recovery, None)
-        .expect("terminal recovery consumes the retained owner");
-    assert_eq!(
-        terminal,
-        SessionRecoveryOutcome::ReplacementMayRestart {
-            next_epoch: ApplicationSessionEpoch::from_existing(3),
-        }
-    );
-    assert!(matches!(
-        slot.capture_session(),
-        Err(SessionCaptureError::Inactive)
-    ));
+    slot.finish_project_replacement(replacement)
+        .expect("drained replacement publishes");
+    assert_eq!(slot.capture_session().unwrap().epoch().get(), 2);
 }
 
 #[test]
 fn non_active_capture_errors_remain_fieldless() {
     let slot = ApplicationSessionSlot::new(crate::session::NodeComponents::builtins().unwrap());
-    slot.set_replacing_for_test(
-        ApplicationSessionEpoch::from_existing(1),
-        ReplacementPhase::DrainDatabase,
-    );
+    *slot
+        .state
+        .write()
+        .unwrap_or_else(|error| error.into_inner()) = SessionSlotState::Replacing {
+        epoch: ApplicationSessionEpoch::from_existing(1),
+    };
     assert!(matches!(
         slot.capture_session(),
         Err(SessionCaptureError::Replacing)
     ));
-    slot.set_recovering_for_test(
-        ApplicationSessionEpoch::from_existing(1),
-        SessionRecoveryId::from_existing(1),
-        session(1),
-        SessionRecoveryPhase::ClearOldProject,
-    );
+    *slot
+        .state
+        .write()
+        .unwrap_or_else(|error| error.into_inner()) = SessionSlotState::Recovering {
+        epoch: ApplicationSessionEpoch::from_existing(1),
+        old: session(1),
+        pending: SessionRecoveryPhase::ClearOldProject,
+    };
     assert!(matches!(
         slot.capture_session(),
         Err(SessionCaptureError::Recovering)

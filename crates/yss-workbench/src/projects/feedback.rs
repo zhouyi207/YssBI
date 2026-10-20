@@ -2,7 +2,7 @@
 use yss_application::{
     events::{ProjectLifecycleApplicationEvent, ProjectLifecycleOutcome},
     project::lifecycle::{ApplicationProjectLifecycleError, ProjectLifecycleError},
-    session::{SessionCaptureError, SessionRevalidationError},
+    session::{SessionCaptureError, SessionRecoveryError, SessionRevalidationError},
 };
 
 pub(crate) struct ProjectFeedback {
@@ -44,6 +44,8 @@ impl ProjectFeedback {
                 Self::lifecycle(error)
             } else if let Some(error) = error.downcast_ref::<SessionCaptureError>() {
                 Self::session(*error)
+            } else if let Some(error) = error.downcast_ref::<SessionRecoveryError>() {
+                Self::recovery(error)
             } else {
                 Self::message("native.workbench.projectOperationFailed")
             };
@@ -107,6 +109,17 @@ impl ProjectFeedback {
             SessionCaptureError::Inactive => "native.projects.contextChanged",
             SessionCaptureError::Replacing => "projectPicker.issues.errors.busy",
             SessionCaptureError::Recovering => "projectPicker.issues.errors.recoveryRequired",
+        })
+    }
+
+    fn recovery(error: &SessionRecoveryError) -> Self {
+        Self::message(match error {
+            // The old project's runs or database work are still stopping; a later retry resumes.
+            SessionRecoveryError::DeadlineElapsed { .. } => "projectPicker.issues.errors.busy",
+            SessionRecoveryError::DatabaseRecovery(_)
+            | SessionRecoveryError::ProjectClear(_)
+            | SessionRecoveryError::EpochExhausted
+            | SessionRecoveryError::Publish(_) => "projectPicker.issues.errors.recoveryRequired",
         })
     }
 
