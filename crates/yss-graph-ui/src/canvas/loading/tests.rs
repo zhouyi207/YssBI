@@ -796,11 +796,14 @@ fn cached_node_geometry_tracks_inline_parameters_ports_and_compact_style() {
     projection.nodes[0].display.style_id = Some("builtin.reroute".into());
     layer.install(&projection);
     let layout = layer.node(fixture.source).unwrap().layout;
-    assert_eq!((layout.width, layout.height), (32., 40.));
-    assert_eq!(
-        layer.port_position(&extra_address, &idle),
-        Some(point(px(132.), px(100.)))
-    );
+    assert_eq!((layout.width, layout.height), (20., 20.));
+    // A reroute is a dot: every wire meets at its center, whatever its port rows.
+    for address in [&output, &extra_address] {
+        assert_eq!(
+            layer.port_position(address, &idle),
+            Some(point(px(110.), px(80.)))
+        );
+    }
 }
 
 #[gpui_kit::test]
@@ -1025,4 +1028,167 @@ fn pointer_targets_follow_painted_geometry_and_raise_the_selection(cx: &mut Test
         });
     })
     .unwrap();
+}
+
+#[gpui_kit::test]
+async fn reroute_dot_is_the_node_body_and_its_sides_pull_wires(cx: &mut TestAppContext) {
+    use crate::canvas::{CanvasTarget, GraphEditCommand};
+    use gpui_kit::{Bounds, MouseMoveEvent, MouseUpEvent, size};
+    use yss_node_protocol::PortDirection;
+
+    let fixture = Fixture::new();
+    let graph = fixture.open();
+    let output = graph
+        .projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id == fixture.source)
+        .and_then(|node| {
+            node.ports
+                .iter()
+                .find(|port| port.direction == PortDirection::Output)
+        })
+        .unwrap()
+        .address
+        .clone();
+    fixture.edit(
+        &graph,
+        EditorGraphMutation::CreateNode {
+            descriptor: yss_node_catalog::NodeCreation::Static {
+                node_type_id: "yssbi.debug.view".parse().unwrap(),
+            },
+            position: NodePosition { x: 600., y: 0. },
+            connect_from: Some(output),
+            parameters: Default::default(),
+            port_counts: Default::default(),
+            user_label: None,
+        },
+    );
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (window, canvas) = fixture.canvas(&runtime, cx);
+    let click = point(px(420.), px(160.));
+    cx.update_window(window, |_, window, cx| {
+        canvas.update(cx, |canvas, cx| {
+            canvas.bounds.set(Bounds::new(
+                point(px(0.), px(0.)),
+                size(px(1200.), px(800.)),
+            ));
+            canvas.offset = point(px(0.), px(0.));
+            canvas.zoom = canvas.font_scale;
+            let connection = canvas.graph.projection.connections[0].connection_id;
+            canvas.begin_connection(
+                connection,
+                &MouseDownEvent {
+                    button: MouseButton::Left,
+                    position: click,
+                    click_count: 2,
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+        });
+    })
+    .unwrap();
+    cx.condition(&canvas, |canvas, _| !canvas.busy).await;
+
+    let reroute = canvas.update(cx, |canvas, _| {
+        let reroute = canvas
+            .graph
+            .projection
+            .nodes
+            .iter()
+            .find(|node| node.display.style_id.as_deref() == Some("builtin.reroute"))
+            .unwrap();
+        let rect = canvas.node_screen_rect(
+            reroute,
+            canvas.connection_layer.node(reroute.node_id).unwrap(),
+            point(px(0.), px(0.)),
+        );
+        // The dot lands where the wire was double-clicked, and both wires meet at it.
+        assert_eq!(rect.center(), click);
+        let port = |direction| {
+            reroute
+                .ports
+                .iter()
+                .find(|port| port.direction == direction)
+                .unwrap()
+                .address
+                .clone()
+        };
+        for direction in [PortDirection::Input, PortDirection::Output] {
+            let anchor = canvas
+                .connection_layer
+                .port_position(&port(direction), &canvas.preview)
+                .unwrap();
+            assert_eq!(canvas.offset + anchor * canvas.zoom, click);
+        }
+        // The dot is the node itself; its sides still start wires in either direction.
+        assert_eq!(
+            canvas.target_at(click),
+            Some(CanvasTarget::Node(reroute.node_id))
+        );
+        assert_eq!(
+            canvas.target_at(point(rect.right() + px(4.), click.y)),
+            Some(CanvasTarget::Port(port(PortDirection::Output)))
+        );
+        assert_eq!(
+            canvas.target_at(point(rect.left() - px(4.), click.y)),
+            Some(CanvasTarget::Port(port(PortDirection::Input)))
+        );
+        reroute.node_id
+    });
+
+    let moved = click + point(px(30.), px(20.));
+    cx.update_window(window, |_, window, cx| {
+        canvas.update(cx, |canvas, cx| {
+            canvas.begin_pane(
+                &MouseDownEvent {
+                    button: MouseButton::Left,
+                    position: click,
+                    click_count: 1,
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            assert_eq!(canvas.selected, [reroute].into());
+            assert!(canvas.is_edit_command_enabled(GraphEditCommand::Cut));
+            assert!(canvas.is_edit_command_enabled(GraphEditCommand::Delete));
+            canvas.pointer_move(
+                &MouseMoveEvent {
+                    position: moved,
+                    pressed_button: Some(MouseButton::Left),
+                    ..Default::default()
+                },
+                cx,
+            );
+            canvas.pointer_up(
+                &MouseUpEvent {
+                    button: MouseButton::Left,
+                    position: moved,
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+        });
+    })
+    .unwrap();
+    cx.condition(&canvas, |canvas, _| !canvas.busy).await;
+    canvas.update(cx, |canvas, _| {
+        let node = canvas
+            .graph
+            .projection
+            .nodes
+            .iter()
+            .find(|node| node.node_id == reroute)
+            .unwrap();
+        let rect = canvas.node_screen_rect(
+            node,
+            canvas.connection_layer.node(reroute).unwrap(),
+            point(px(0.), px(0.)),
+        );
+        assert_eq!(rect.center(), moved);
+    });
 }

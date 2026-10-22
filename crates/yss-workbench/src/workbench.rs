@@ -264,6 +264,12 @@ impl Workbench {
 
     fn connect_panels(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.connect_logs(window, cx);
+        // The node catalog marks the entry the inspector documents, for as long as it does.
+        self.subscriptions
+            .push(cx.observe(&self.details, |view, details, cx| {
+                let entry = details.read(cx).inspected_node(cx).map(str::to_owned);
+                view.mark_activity("nodes", entry.as_deref(), cx);
+            }));
         self.subscriptions.push(cx.subscribe_in(
             &self.problems,
             window,
@@ -361,14 +367,19 @@ impl Workbench {
                         };
                         view.dispatch_menu(&command, window, cx);
                     }
-                    ActivityEvent::InspectNode(node_type) => {
+                    ActivityEvent::InspectNode { entry, node_type } => {
                         if view.is_closing(cx) {
                             return;
                         }
                         if let Some(project) = &view.project {
                             let project = project.identity.clone();
                             view.details.update(cx, |details, cx| {
-                                details.show_node_definition(project, node_type.clone(), cx);
+                                details.show_node_definition(
+                                    project,
+                                    node_type.clone(),
+                                    entry.clone(),
+                                    cx,
+                                );
                             });
                             view.show_panel(menus::WorkbenchPanel::Details, window, cx);
                         }
@@ -416,11 +427,13 @@ impl Workbench {
     }
 
     fn mark_project_resource(&self, path: Option<&str>, cx: &mut Context<Self>) {
-        for panel in ["project", "nodes"]
-            .into_iter()
-            .filter_map(|id| self.activities.get(id).and_then(WeakEntity::upgrade))
-        {
-            panel.update(cx, |panel, cx| panel.set_active_resource(path, cx));
+        self.mark_activity("project", path, cx);
+    }
+
+    /// Marks the row that stands for what another surface currently shows.
+    fn mark_activity(&self, panel: &str, identity: Option<&str>, cx: &mut Context<Self>) {
+        if let Some(panel) = self.activities.get(panel).and_then(WeakEntity::upgrade) {
+            panel.update(cx, |panel, cx| panel.set_active_resource(identity, cx));
         }
     }
 

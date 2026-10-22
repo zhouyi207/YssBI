@@ -47,7 +47,7 @@ impl Render for ActivityPanel {
                     )
                     .flex_1()
                     .min_h_0()
-                    .when(self.panel_id != "assistant", |list| list.px_1())
+                    .map(yss_ui::appearance::row_gutter)
                     .track_scroll(&self.scroll),
                 )
             })
@@ -96,27 +96,28 @@ impl ActivityPanel {
                 .is_some_and(|identity| self.active_resource.as_deref() == Some(identity)),
             _ => false,
         };
+        let keyboard_focus =
+            focused && self.focus.is_focused(window) && window.last_input_was_keyboard();
         let item = if matches!(
             &row.content,
             ActivityRowContent::Item(ActivityItem::Conversation { .. })
         ) {
-            sidebar::list_item(item, current, cx)
+            sidebar::list_item(item, current, keyboard_focus, cx)
         } else {
-            item.pl(px(16. + row.depth as f32 * 16.))
-                .pr_2()
-                .h(px(28.))
-                .rounded_sm()
-                .flex()
-                .items_center()
-                .gap_1p5()
-                .text_size(px(13.))
+            yss_ui::appearance::row_outline(
+                item.pl(px(16. + row.depth as f32 * 16.))
+                    .pr_2()
+                    .h(px(28.))
+                    .rounded_sm()
+                    .flex()
+                    .items_center()
+                    .gap_1p5()
+                    .text_size(px(13.)),
+                current,
+                keyboard_focus,
+                cx,
+            )
         };
-        let item = yss_ui::appearance::row_outline(
-            item,
-            current,
-            focused && self.focus.is_focused(window) && window.last_input_was_keyboard(),
-            cx,
-        );
         let item = match &row.content {
             ActivityRowContent::Item(ActivityItem::Conversation { .. }) => {
                 return Some(self.render_conversation(index, item, cx));

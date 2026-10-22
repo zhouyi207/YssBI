@@ -2,10 +2,13 @@
 use std::collections::HashMap;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme, Icon, Theme, ThemeMode};
+use gpui_kit::component::{
+    ActiveTheme, Icon, Selectable, Theme, ThemeMode,
+    button::{Button, ButtonVariants},
+};
 use gpui_kit::{
-    Anchor, App, Global, IntoElement, Rems, SharedString, Subscription, Window, WindowAppearance,
-    WindowId, div, prelude::*, px, rems,
+    Anchor, App, Div, Global, IntoElement, Rems, SharedString, Subscription, Window,
+    WindowAppearance, WindowId, div, prelude::*, px, rems,
 };
 use yss_settings::AppearanceSettings;
 
@@ -127,7 +130,7 @@ pub fn install(window: &mut Window, cx: &mut App) {
 
 /// Rows mark the current item and keyboard focus with a hairline outline instead of a
 /// fill; focus takes the ring color. Every row reserves the outline, so marking one never
-/// moves its content.
+/// moves its content. Lists hosting such rows keep them inside [`row_gutter`].
 pub fn row_outline<E: Styled>(row: E, current: bool, keyboard_focus: bool, cx: &App) -> E {
     let theme = cx.theme();
     row.border_1().border_color(if keyboard_focus {
@@ -137,6 +140,33 @@ pub fn row_outline<E: Styled>(row: E, current: bool, keyboard_focus: bool, cx: &
     } else {
         gpui_kit::transparent_black()
     })
+}
+
+/// A list row built from a text [`Button`], marked like [`row_outline`]. The current row is
+/// also the button's selected state, which keeps its outline through hover and press.
+pub fn button_row(button: Button, current: bool, cx: &App) -> Button {
+    row_outline(
+        button
+            .text()
+            .rounded_sm()
+            .text_color(cx.theme().foreground)
+            .selected(current),
+        current,
+        false,
+        cx,
+    )
+}
+
+/// The space between a list's edges and its outlined rows, so neither a row's outline nor a
+/// focused button's outward ring meets the list's clip or a dock divider painted over it.
+pub fn row_gutter<E: Styled>(list: E) -> E {
+    list.p_1()
+}
+
+/// Carries the horizontal half of [`row_gutter`] for one row of a variable-height `list`,
+/// which lays rows out at its full width and applies only vertical padding.
+pub fn inset_row(row: impl IntoElement) -> Div {
+    div().w_full().px_1().child(row)
 }
 
 pub fn empty_state(

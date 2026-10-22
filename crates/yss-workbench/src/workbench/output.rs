@@ -5,7 +5,7 @@ mod failure;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Sizable,
-    button::{Button, ButtonVariants},
+    button::Button,
     dock::{BasePanel, Panel, PanelEvent},
     scroll::Scrollbar,
     spinner::Spinner,
@@ -35,6 +35,8 @@ pub struct OutputPanel {
     runs: Rc<[RunRecord]>,
     collapsed: BTreeSet<RunId>,
     rows: ListState,
+    /// The run last clicked in this panel.
+    current: Option<RunId>,
 }
 
 impl OutputPanel {
@@ -48,6 +50,7 @@ impl OutputPanel {
             runs: Rc::default(),
             collapsed: BTreeSet::new(),
             rows: ListState::new(0, ListAlignment::Top, px(160.)),
+            current: None,
         }
     }
 
@@ -96,16 +99,20 @@ impl OutputPanel {
         }
     }
 
-    fn toggle(&mut self, run: RunId, cx: &mut Context<Self>) {
-        if !self.collapsed.remove(&run) {
-            self.collapsed.insert(run);
-        }
-        if let Some(index) = self
-            .runs
-            .iter()
-            .position(|record| record.identity().run_id() == run)
-        {
-            self.rows.splice(index..index + 1, 1);
+    /// Marks a run as the current row; a failed run also shows or hides its details.
+    fn select(&mut self, run: RunId, failed: bool, cx: &mut Context<Self>) {
+        self.current = Some(run);
+        if failed {
+            if !self.collapsed.remove(&run) {
+                self.collapsed.insert(run);
+            }
+            if let Some(index) = self
+                .runs
+                .iter()
+                .position(|record| record.identity().run_id() == run)
+            {
+                self.rows.splice(index..index + 1, 1);
+            }
         }
         cx.notify();
     }
@@ -233,8 +240,9 @@ impl OutputPanel {
             );
         }
         let font = cx.theme().mono_font_family.clone();
-        // Only failures have details to expand; other runs are plain rows.
-        let header = if failure.is_some() {
+        // Only failures have details to expand; every run can be the current row.
+        let failed = failure.is_some();
+        if failed {
             cells.push(
                 Icon::new(if expanded {
                     IconName::ChevronDown
@@ -245,8 +253,9 @@ impl OutputPanel {
                 .text_color(muted)
                 .into_any_element(),
             );
+        }
+        let header = appearance::button_row(
             Button::new(SharedString::from(format!("output-run-{}", run.get())))
-                .text()
                 .w_full()
                 .h_8()
                 .px_3()
@@ -255,24 +264,13 @@ impl OutputPanel {
                 .text_xs()
                 .font_family(font)
                 .accessibility_label(format!("{graph}: {}", crate::text::t(status)))
-                .toggled(expanded)
+                .when(failed, |button| button.toggled(expanded))
                 .children(cells)
-                .on_click(cx.listener(move |view, _, _, cx| view.toggle(run, cx)))
-                .into_any_element()
-        } else {
-            div()
-                .w_full()
-                .h_8()
-                .px_3()
-                .flex()
-                .items_center()
-                .gap_2()
-                .text_xs()
-                .font_family(font)
-                .children(cells)
-                .into_any_element()
-        };
-        div()
+                .on_click(cx.listener(move |view, _, _, cx| view.select(run, failed, cx))),
+            self.current == Some(run),
+            cx,
+        );
+        let entry = div()
             .id(SharedString::from(format!("output-entry-{}", run.get())))
             .w_full()
             .flex()
@@ -301,8 +299,8 @@ impl OutputPanel {
                         })
                 });
                 entry.child(failure::render(identity, failure, node, cx))
-            })
-            .into_any_element()
+            });
+        appearance::inset_row(entry).into_any_element()
     }
 }
 
@@ -327,7 +325,8 @@ impl Render for OutputPanel {
                             .update(cx, |view, cx| view.render_run(index, cx))
                             .unwrap_or_else(|_| div().into_any_element())
                     })
-                    .size_full(),
+                    .size_full()
+                    .map(appearance::row_gutter),
                 )
                 .child(Scrollbar::vertical(&self.rows))
                 .into_any_element()

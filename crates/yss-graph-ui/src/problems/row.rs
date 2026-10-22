@@ -1,16 +1,15 @@
-use super::{ProblemsPanel, location};
+use super::{Located, ProblemsPanel, location};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{
-    ActiveTheme, Icon,
-    button::{Button, ButtonVariants},
-};
+use gpui_kit::component::{ActiveTheme, Icon, button::Button};
 use gpui_kit::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use std::sync::Arc;
 use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorProjectionModel};
+use yss_ui::appearance;
 
 pub(super) fn render(
     projection: &Arc<EditorProjectionModel>,
     index: usize,
+    located: Option<&Located>,
     cx: &mut Context<ProblemsPanel>,
 ) -> AnyElement {
     let Some(diagnostic) = projection.diagnostics.get(index) else {
@@ -25,6 +24,9 @@ pub(super) fn render(
         .unwrap_or_else(|| projection.graph_path.to_string());
     let message = crate::feedback::diagnostic_description(diagnostic, projection, None);
     let source = projection.clone();
+    let marked = |related: Option<&location::Location>| {
+        located.is_some_and(|located| located.marks(&projection.graph_path, diagnostic, related))
+    };
     // Rows of several graphs share one list, so identities include the graph.
     let graph = projection.graph_path.as_str();
     div()
@@ -33,12 +35,8 @@ pub(super) fn render(
         .min_w_0()
         .flex()
         .flex_col()
-        .border_b_1()
-        .border_color(cx.theme().border.opacity(0.5))
-        .child(
+        .child(appearance::button_row(
             Button::new((SharedString::from(format!("problem-{graph}")), index))
-                .text()
-                .rounded_none()
                 .w_full()
                 .h_auto()
                 .min_h_0()
@@ -89,7 +87,9 @@ pub(super) fn render(
                         .child(div().whitespace_normal().child(message)),
                 )
                 .on_click(cx.listener(move |view, _, _, cx| view.locate(&source, index, None, cx))),
-        )
+            marked(None),
+            cx,
+        ))
         .children(
             diagnostic
                 .related
@@ -99,31 +99,38 @@ pub(super) fn render(
                     let label = location::label(address, projection, None)
                         .unwrap_or_else(|| projection.graph_path.to_string());
                     let source = projection.clone();
-                    Button::new((
-                        SharedString::from(format!("problem-related-{graph}-{index}")),
-                        related,
-                    ))
-                    .tooltip(label.clone())
-                    .text()
-                    .rounded_none()
-                    .w_full()
-                    .h_auto()
-                    .min_h_0()
-                    .pl_8()
-                    .pr_3()
-                    .py_1()
-                    .justify_start()
-                    .text_xs()
-                    .text_color(cx.theme().primary)
-                    .child(div().flex_1().min_w_0().truncate().text_left().child(
-                        yss_ui::text::format(
-                            "panel.problemsRelatedLocation",
-                            &[("location", label)],
-                        ),
-                    ))
-                    .on_click(cx.listener(move |view, _, _, cx| {
-                        view.locate(&source, index, Some(related), cx)
-                    }))
+                    appearance::button_row(
+                        Button::new((
+                            SharedString::from(format!("problem-related-{graph}-{index}")),
+                            related,
+                        ))
+                        .tooltip(label.clone())
+                        .w_full()
+                        .h_auto()
+                        .min_h_0()
+                        .pl_8()
+                        .pr_3()
+                        .py_1()
+                        .justify_start()
+                        .text_xs()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_left()
+                                .text_color(cx.theme().primary)
+                                .child(yss_ui::text::format(
+                                    "panel.problemsRelatedLocation",
+                                    &[("location", label)],
+                                )),
+                        )
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.locate(&source, index, Some(related), cx)
+                        })),
+                        marked(Some(address)),
+                        cx,
+                    )
                 }),
         )
         .into_any_element()

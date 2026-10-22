@@ -1,5 +1,5 @@
 //! Connection selection and commands belong to the same canvas as node gestures.
-use crate::canvas::{GraphCanvas, GraphCommand};
+use crate::canvas::{GraphCanvas, GraphCommand, geometry};
 use gpui_kit::{Context, MouseButton, MouseDownEvent, Window};
 use std::{collections::BTreeSet, sync::Arc};
 use yss_graph_document::{ConnectionId, NodeId};
@@ -42,7 +42,7 @@ impl GraphCanvas {
             self.submit(
                 GraphCommand::Edit(EditorGraphMutation::InsertReroute {
                     connection_id: id,
-                    position: self.world(event.position),
+                    position: geometry::reroute_position(self.world(event.position)),
                 }),
                 Some(self.graph.editing.version),
                 cx,

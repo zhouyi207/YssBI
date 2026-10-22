@@ -10,7 +10,7 @@ use super::{
     style::{CanvasStyle, DataKind},
     text::Label,
 };
-use gpui_kit::{AnyElement, App, Bounds, Hsla, Pixels, Point, Window, point, px, size};
+use gpui_kit::{AnyElement, App, Bounds, Hsla, Pixels, Point, Window, px};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_graph_editor::projection::{
     ConnectionDecision, EditorDiagnosticSeverity, EditorPortModel, EditorPortTypeState,
@@ -139,48 +139,21 @@ impl GraphCanvas {
         };
         let ink = port_ink(port, style).opacity(alpha);
         let diameter = px(geometry::GLYPH_SIZE * zoom).max(px(3.));
-        // Emphasis never fills behind a pin: it grows under the pointer or as the drop
-        // target, and a ring names the source, menu target, drop decision or its own problem.
+        // Pins show emphasis by size and fill alone, never by an outline or fill around them:
+        // the pending wire's color explains a drop decision and the label carries the port's
+        // own problem.
         let grown = if hovered || target || active || marked {
             diameter * 1.3
         } else {
             diameter
         };
-        let ring = if active || marked {
-            Some(style.selection)
-        } else {
-            match decision {
-                Some(ConnectionDecision::Append) => Some(style.success),
-                Some(ConnectionDecision::Replace { .. }) => Some(style.warning),
-                Some(ConnectionDecision::Invalid { .. }) if target => Some(style.danger),
-                // A failed node already shows its error; rings mark problems of the port itself.
-                _ => diagnostic.map(|diagnostic| match diagnostic.severity {
-                    EditorDiagnosticSeverity::Error => style.danger,
-                    EditorDiagnosticSeverity::Warning => style.warning,
-                    EditorDiagnosticSeverity::Information => style.info,
-                }),
-            }
-        };
-        if let Some(color) = ring {
-            let extent = grown + px(6.);
-            window.paint_quad(gpui_kit::quad(
-                Bounds::new(
-                    anchor - point(extent / 2., extent / 2.),
-                    size(extent, extent),
-                ),
-                extent / 2.,
-                gpui_kit::transparent_black(),
-                px(1.5),
-                color.opacity(alpha),
-                gpui_kit::BorderStyle::Solid,
-            ));
-        }
+        let accepting = target && !matches!(decision, Some(ConnectionDecision::Invalid { .. }));
         glyph::Glyph::new(&port.type_state).paint(
             anchor,
             grown,
             ink,
             style.card,
-            port.connections.current > 0 || active,
+            port.connections.current > 0 || active || accepting,
             window,
         );
 
@@ -189,6 +162,12 @@ impl GraphCanvas {
         };
         let color = if marked {
             style.selection
+        } else if let Some(diagnostic) = diagnostic {
+            match diagnostic.severity {
+                EditorDiagnosticSeverity::Error => style.danger,
+                EditorDiagnosticSeverity::Warning => style.warning,
+                EditorDiagnosticSeverity::Information => style.info,
+            }
         } else if port.connections.current > 0 || active {
             style.text
         } else {

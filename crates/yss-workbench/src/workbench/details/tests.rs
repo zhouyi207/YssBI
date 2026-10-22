@@ -315,12 +315,17 @@ fn database_errors_and_overlay_return_follow_current_target(cx: &mut TestAppCont
             details.show_node_definition(
                 ProjectInstanceId::new(),
                 yss_node_protocol::NodeTypeId::new("yssbi.value.int64").unwrap(),
+                "static:yssbi.value.int64".into(),
                 cx,
             )
         });
         assert!(details.read(cx).graph.read(cx).showing_node_definition());
         assert!(details.read(cx).graph_visible(cx));
         assert!(!details.read(cx).target_visible(cx));
+        assert_eq!(
+            details.read(cx).inspected_node(cx),
+            Some("static:yssbi.value.int64")
+        );
     });
     notifications(&view, cx);
     cx.update(|cx| {
@@ -342,6 +347,8 @@ fn database_errors_and_overlay_return_follow_current_target(cx: &mut TestAppCont
         assert!(!details.read(cx).graph_visible(cx));
         assert!(details.read(cx).target_visible(cx));
         assert_eq!(details.read(cx).target_id(), Some(database.entity_id()));
+        // The node catalog stops marking an entry once its definition is covered.
+        assert_eq!(details.read(cx).inspected_node(cx), None);
     });
     assert!(
         notifications(&view, cx) > 0,

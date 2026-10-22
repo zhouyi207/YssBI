@@ -82,8 +82,11 @@ pub const CONTENT_INSET: f32 = 12.;
 pub const GLYPH_SIZE: f32 = 10.;
 /// Pins stay grabbable a little outside the card edge they straddle.
 pub const PORT_REACH: f32 = 10.;
-const REROUTE_WIDTH: f32 = 32.;
-const REROUTE_ROW_HEIGHT: f32 = 20.;
+/// A reroute is drawn as a single dot that its wires meet at the center.
+pub const REROUTE_DOT: f32 = 12.;
+/// The square around a reroute's dot that grabs the node itself; its pins reach out from
+/// the sides, so the dot moves like a node body while wires still pull from its edges.
+const REROUTE_SIZE: f32 = 20.;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NodeLayout {
@@ -97,22 +100,22 @@ pub struct NodeLayout {
 
 impl NodeLayout {
     pub fn new(node: &EditorNodeModel) -> Self {
+        if node.display.style_id.as_deref() == Some("builtin.reroute") {
+            return Self {
+                compact: true,
+                width: REROUTE_SIZE,
+                height: REROUTE_SIZE,
+                parameters: 0,
+                ports_top: 0.,
+                port_height: REROUTE_SIZE,
+            };
+        }
         let inputs = node
             .ports
             .iter()
             .filter(|p| p.direction == PortDirection::Input)
             .count();
         let rows = inputs.max(node.ports.len() - inputs).max(1) as f32;
-        if node.display.style_id.as_deref() == Some("builtin.reroute") {
-            return Self {
-                compact: true,
-                width: REROUTE_WIDTH,
-                height: rows * REROUTE_ROW_HEIGHT,
-                parameters: 0,
-                ports_top: 0.,
-                port_height: REROUTE_ROW_HEIGHT,
-            };
-        }
         let parameters = inline_parameters(node).count();
         let ports_top = HEADER_HEIGHT
             + PORTS_TOP_PADDING
@@ -139,6 +142,9 @@ impl NodeLayout {
     }
 
     pub fn port_offset(self, output: bool, index: usize) -> Point<Pixels> {
+        if self.compact {
+            return point(px(self.width / 2.), px(self.height / 2.));
+        }
         point(
             px(if output { self.width } else { 0. }),
             px(self.ports_top + (index as f32 + 0.5) * self.port_height),
@@ -162,14 +168,16 @@ impl NodeLayout {
         HEADER_HEIGHT + PARAMETER_MARGIN + PARAMETER_PADDING + index as f32 * PARAMETER_HEIGHT
     }
 
-    /// The pointer region of a port row half, including the reach outside the card.
+    /// The pointer region of a port row half, including the reach outside the card. A
+    /// compact node keeps its whole box for the node, so its pins only reach outward.
     pub fn port_region(self, output: bool, index: usize) -> Bounds<Pixels> {
         let half = self.width / 2.;
         let top = self.ports_top + index as f32 * self.port_height;
-        let (left, right) = if output {
-            (half, self.width + PORT_REACH)
-        } else {
-            (-PORT_REACH, half)
+        let (left, right) = match (self.compact, output) {
+            (true, true) => (self.width, self.width + PORT_REACH),
+            (true, false) => (-PORT_REACH, 0.),
+            (false, true) => (half, self.width + PORT_REACH),
+            (false, false) => (-PORT_REACH, half),
         };
         Bounds::from_corners(
             point(px(left), px(top)),
@@ -213,6 +221,15 @@ pub fn inline_parameters(node: &EditorNodeModel) -> impl Iterator<Item = &Editor
 
 pub fn position(node: &EditorNodeModel, preview: &NodeMovement) -> NodePosition {
     preview.position(node.node_id).unwrap_or(node.position)
+}
+
+/// The origin that centers a new reroute's dot on `center`.
+pub fn reroute_position(center: NodePosition) -> NodePosition {
+    let half = f64::from(REROUTE_SIZE / 2.);
+    NodePosition {
+        x: center.x - half,
+        y: center.y - half,
+    }
 }
 
 pub(super) struct NodeGeometry {

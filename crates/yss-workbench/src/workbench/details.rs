@@ -48,6 +48,9 @@ pub struct DetailsPanel {
     graph: Entity<GraphDetails>,
     target: Option<DetailsTarget>,
     log: Option<WeakEntity<super::logs::LogDetails>>,
+    /// The node catalog entry whose definition was last shown; current only while the
+    /// graph inspector still shows a definition.
+    node_entry: Option<String>,
     focus: FocusHandle,
     scroll: gpui_kit::ScrollHandle,
     _graph_observer: gpui_kit::Subscription,
@@ -69,6 +72,7 @@ impl DetailsPanel {
             graph,
             target: None,
             log: None,
+            node_entry: None,
             focus,
             scroll: gpui_kit::ScrollHandle::new(),
             _graph_observer: observer,
@@ -205,13 +209,22 @@ impl DetailsPanel {
         &mut self,
         project: ProjectInstanceId,
         node_type: NodeTypeId,
+        entry: String,
         cx: &mut Context<Self>,
     ) {
         self.log = None;
+        self.node_entry = Some(entry);
         self.graph.update(cx, |graph, cx| {
             graph.show_node_definition(project, node_type, cx)
         });
         cx.notify();
+    }
+
+    /// The node catalog entry this panel documents, while it shows a node definition.
+    pub(super) fn inspected_node(&self, cx: &App) -> Option<&str> {
+        self.node_entry
+            .as_deref()
+            .filter(|_| self.graph.read(cx).showing_node_definition())
     }
     pub(super) fn show_node_properties(&mut self, cx: &mut Context<Self>) {
         if !self.graph.read(cx).showing_node_definition() {

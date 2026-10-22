@@ -31,7 +31,13 @@ pub fn search(input: &Entity<InputState>) -> Div {
     )
 }
 
-pub fn list_item(item: Stateful<Div>, selected: bool, cx: &App) -> Stateful<Div> {
+/// A two- or three-line card row; sits in a list with [`crate::appearance::row_gutter`].
+pub fn list_item(
+    item: Stateful<Div>,
+    selected: bool,
+    keyboard_focus: bool,
+    cx: &App,
+) -> Stateful<Div> {
     crate::appearance::row_outline(
         item.h(rems(5.5))
             .w_full()
@@ -45,7 +51,7 @@ pub fn list_item(item: Stateful<Div>, selected: bool, cx: &App) -> Stateful<Div>
             .aria_selected(selected)
             .text_color(cx.theme().foreground),
         selected,
-        false,
+        keyboard_focus,
         cx,
     )
 }

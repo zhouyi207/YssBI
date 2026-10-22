@@ -199,6 +199,7 @@ impl PluginsPanel {
                         sidebar::list_item(
                             div().id(gpui_kit::SharedString::from(key.id.clone())),
                             selected,
+                            false,
                             cx,
                         )
                         .child(sidebar::item_title(name.clone()))
@@ -226,6 +227,7 @@ impl PluginsPanel {
             }),
         )
         .flex_1()
+        .map(appearance::row_gutter)
         .into_any_element()
     }
 }

@@ -246,7 +246,8 @@ impl ActivityPanel {
     }
 }
 
-/// The resource or conversation an item stands for, as the workbench names its active editor.
+/// What an item stands for, as the workbench names the current one: the active editor's
+/// resource, the visible conversation or the node entry the inspector documents.
 pub(super) fn identity(item: &ActivityItem) -> Option<&str> {
     match item {
         ActivityItem::Database { id, .. } => Some(id),
@@ -256,7 +257,8 @@ pub(super) fn identity(item: &ActivityItem) -> Option<&str> {
         | ActivityItem::Mind { path, .. }
         | ActivityItem::Doc { path, .. } => Some(path),
         ActivityItem::Conversation { session_id, .. } => Some(session_id),
-        _ => None,
+        ActivityItem::Node { key, .. } => Some(key),
+        ActivityItem::Plugin { .. } => None,
     }
 }
 

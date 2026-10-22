@@ -36,7 +36,11 @@ pub enum ActivityEvent {
     /// Manages a graph or authored file by path.
     Resource(String, super::resources::ResourceAction),
     RevealResource(yss_project::RevealProjectResourceRequest),
-    InspectNode(NodeTypeId),
+    /// Shows a node catalog entry's definition; `entry` is the row's catalog key.
+    InspectNode {
+        entry: String,
+        node_type: NodeTypeId,
+    },
     CreateNode(NodeCreation),
     DatabaseResource(String, super::resources::ResourceAction),
     ActivateConversation(String),

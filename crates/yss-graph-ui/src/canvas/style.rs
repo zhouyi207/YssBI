@@ -45,7 +45,6 @@ pub(super) struct CanvasStyle {
     pub card: Hsla,
     pub header: Hsla,
     pub border: Hsla,
-    pub hover_border: Hsla,
     pub text: Hsla,
     pub muted_text: Hsla,
     pub skeleton: Hsla,
@@ -85,7 +84,6 @@ impl CanvasStyle {
             card,
             header: card.blend(theme.muted.opacity(if dark { 0.45 } else { 0.6 })),
             border: theme.border,
-            hover_border: theme.ring,
             text: theme.foreground,
             muted_text: theme.muted_foreground,
             skeleton: theme

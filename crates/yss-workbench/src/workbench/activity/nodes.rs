@@ -32,12 +32,13 @@ impl ActivityPanel {
             .cursor_pointer()
             .on_click(cx.listener(move |view, _, _, cx| {
                 if view.accepts(&expected)
-                    && let ActivityRowContent::Item(ActivityItem::Node { creation, .. }) =
+                    && let ActivityRowContent::Item(ActivityItem::Node { key, creation, .. }) =
                         &expected.rows[index].content
                 {
-                    cx.emit(ActivityEvent::InspectNode(
-                        crate::catalog_rows::node_type(creation).clone(),
-                    ));
+                    cx.emit(ActivityEvent::InspectNode {
+                        entry: key.clone(),
+                        node_type: crate::catalog_rows::node_type(creation).clone(),
+                    });
                 }
             }))
             .when(*available, |item| {

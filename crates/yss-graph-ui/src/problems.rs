@@ -6,7 +6,7 @@ use crate::overview::ProjectOverview;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Icon,
-    button::{Button, ButtonVariants},
+    button::Button,
     dock::{BasePanel, Panel, PanelEvent},
     scroll::Scrollbar,
 };
@@ -17,7 +17,7 @@ use gpui_kit::{
 };
 use std::{cell::Cell, collections::BTreeSet, rc::Rc, sync::Arc};
 use yss_graph_document::GraphResourcePath;
-use yss_graph_editor::projection::EditorProjectionModel;
+use yss_graph_editor::projection::{EditorDiagnosticModel, EditorProjectionModel};
 use yss_ui::{appearance, text::t, tool_panel::ToolPanel};
 
 #[derive(Clone)]
@@ -38,6 +38,29 @@ impl LocateProblem {
             Some(index) => diagnostic.related.get(index),
             None => Some(&diagnostic.location),
         }
+    }
+}
+
+/// The location last opened from this panel, by its diagnostic's identity rather than its
+/// row, so the mark survives re-validation and changes in other graphs.
+struct Located {
+    graph: GraphResourcePath,
+    code: Box<str>,
+    location: location::Location,
+    related: Option<location::Location>,
+}
+
+impl Located {
+    fn marks(
+        &self,
+        graph: &GraphResourcePath,
+        diagnostic: &EditorDiagnosticModel,
+        related: Option<&location::Location>,
+    ) -> bool {
+        self.graph == *graph
+            && self.code == diagnostic.code
+            && self.location == diagnostic.location
+            && self.related.as_ref() == related
     }
 }
 
@@ -65,6 +88,7 @@ pub struct ProblemsPanel {
     rows: ListState,
     estimated_width: Rc<Cell<Pixels>>,
     language: &'static str,
+    located: Option<Located>,
 }
 
 impl ProblemsPanel {
@@ -80,6 +104,7 @@ impl ProblemsPanel {
             rows: ListState::new(0, ListAlignment::Top, px(160.)),
             estimated_width: Default::default(),
             language: yss_ui::text::locale(),
+            located: None,
         }
     }
 
@@ -138,7 +163,7 @@ impl ProblemsPanel {
     }
 
     fn locate(
-        &self,
+        &mut self,
         projection: &Arc<EditorProjectionModel>,
         diagnostic: usize,
         related: Option<usize>,
@@ -150,13 +175,21 @@ impl ProblemsPanel {
                 .graph(&projection.graph_path)
                 .is_some_and(|graph| Arc::ptr_eq(&graph.projection, projection))
         });
-        if current {
-            cx.emit(LocateProblem {
-                projection: projection.clone(),
-                diagnostic,
-                related,
-            });
-        }
+        let Some(model) = projection.diagnostics.get(diagnostic).filter(|_| current) else {
+            return;
+        };
+        self.located = Some(Located {
+            graph: projection.graph_path.clone(),
+            code: model.code.clone(),
+            location: model.location.clone(),
+            related: related.and_then(|index| model.related.get(index).cloned()),
+        });
+        cx.emit(LocateProblem {
+            projection: projection.clone(),
+            diagnostic,
+            related,
+        });
+        cx.notify();
     }
 
     fn render_item(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
@@ -164,8 +197,10 @@ impl ProblemsPanel {
             return div().into_any_element();
         };
         let muted = cx.theme().muted_foreground;
-        match item {
-            ProblemRow::Diagnostic { projection, index } => row::render(projection, *index, cx),
+        appearance::inset_row(match item {
+            ProblemRow::Diagnostic { projection, index } => {
+                row::render(projection, *index, self.located.as_ref(), cx)
+            }
             ProblemRow::Unavailable(path) => div()
                 .h_8()
                 .px_2()
@@ -199,46 +234,50 @@ impl ProblemsPanel {
                 collapsed,
             } => {
                 let path = path.clone();
-                Button::new(SharedString::from(format!(
-                    "problem-graph-{}",
-                    path.as_str()
-                )))
-                .text()
-                .w_full()
-                .h_8()
-                .px_2()
-                .gap_1p5()
-                .justify_start()
-                .text_xs()
-                .accessibility_label(name.clone())
-                .toggled(!collapsed)
-                .child(
-                    Icon::new(if *collapsed {
-                        IconName::ChevronRight
-                    } else {
-                        IconName::ChevronDown
-                    })
-                    .size_3()
-                    .text_color(muted),
+                appearance::button_row(
+                    Button::new(SharedString::from(format!(
+                        "problem-graph-{}",
+                        path.as_str()
+                    )))
+                    .w_full()
+                    .h_8()
+                    .px_2()
+                    .gap_1p5()
+                    .justify_start()
+                    .text_xs()
+                    .accessibility_label(name.clone())
+                    .toggled(!collapsed)
+                    .child(
+                        Icon::new(if *collapsed {
+                            IconName::ChevronRight
+                        } else {
+                            IconName::ChevronDown
+                        })
+                        .size_3()
+                        .text_color(muted),
+                    )
+                    .child(
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
+                            .child(name.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .text_color(muted)
+                            .child(count.to_string()),
+                    )
+                    .child(div().flex_1())
+                    .on_click(cx.listener(move |view, _, _, cx| view.toggle_graph(&path, cx))),
+                    false,
+                    cx,
                 )
-                .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                        .child(name.clone()),
-                )
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .text_color(muted)
-                        .child(count.to_string()),
-                )
-                .child(div().flex_1())
-                .on_click(cx.listener(move |view, _, _, cx| view.toggle_graph(&path, cx)))
                 .into_any_element()
             }
-        }
+        })
+        .into_any_element()
     }
 }
 
@@ -273,6 +312,7 @@ impl Render for ProblemsPanel {
                     .unwrap_or_else(|_| div().into_any_element())
             })
             .size_full()
+            .map(appearance::row_gutter)
             .into_any_element()
         };
         let rows = self.rows.clone();

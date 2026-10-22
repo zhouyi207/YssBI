@@ -10,7 +10,7 @@ use gpui_kit::{
     Window, fill, point, px, quad, size, transparent_black,
 };
 use yss_data_contract::SemanticType;
-use yss_graph_document::NodeId;
+use yss_graph_document::{NodeId, PortAddress};
 use yss_graph_editor::projection::{
     EditorDiagnosticSeverity, EditorNodeModel, EditorProjectionModel,
 };
@@ -464,16 +464,15 @@ impl GraphCanvas {
             .copied()
             .unwrap_or_default();
         let selected = self.selected.contains(&id);
-        let hovered = self.hovered_node() == Some(id);
         let dimmed = self
             .connection_drag()
             .is_some_and(|drag| drag.dimmed_nodes.contains(&id));
         let alpha = if dimmed { 0.4 } else { 1. };
-        let radius = if layout.compact {
-            rect.size.height.min(rect.size.width) / 2.
-        } else {
-            px(style.radius * zoom)
-        };
+        if layout.compact {
+            self.paint_reroute(node, rect, (display.state, selected, alpha), style, window);
+            return;
+        }
+        let radius = px(style.radius * zoom);
 
         if let Some(shadows) = shadows {
             let lifted =
@@ -487,47 +486,46 @@ impl GraphCanvas {
             };
             window.paint_drop_shadows(rect, Corners::all(radius), shadow);
         }
-        if selected {
-            let ring = rect.dilate(px(3.));
-            window.paint_quad(quad(
-                ring,
-                radius + px(3.),
-                transparent_black(),
+        // Selection recolors and thickens the card's own edge instead of adding a second
+        // contour around it; the outer pixel grows outward so the content never shifts.
+        let card = if selected {
+            quad(
+                rect.dilate(px(1.)),
+                radius + px(1.),
+                style.card.opacity(alpha),
                 px(2.),
-                style.selection,
+                style.selection.opacity(alpha),
                 BorderStyle::Solid,
-            ));
-        }
-        let border = match display.state {
-            State::Error => style.danger,
-            State::Running => style.info,
-            _ if hovered => style.hover_border,
-            _ => style.border,
-        };
-        window.paint_quad(quad(
-            rect,
-            radius,
-            style.card.opacity(alpha),
-            px(1.),
-            border.opacity(alpha),
-            BorderStyle::Solid,
-        ));
-        if !layout.compact {
-            self.paint_header(
-                node,
+            )
+        } else {
+            let edge = if display.state == State::Error {
+                style.danger
+            } else {
+                style.border
+            };
+            quad(
                 rect,
-                detail,
-                display,
-                (alpha, radius),
-                style,
-                window,
-                cx,
-            );
-            self.paint_parameters(node, rect, detail, alpha, style, window);
-        }
+                radius,
+                style.card.opacity(alpha),
+                px(1.),
+                edge.opacity(alpha),
+                BorderStyle::Solid,
+            )
+        };
+        window.paint_quad(card);
+        self.paint_header(
+            node,
+            rect,
+            detail,
+            display,
+            (alpha, radius),
+            style,
+            window,
+            cx,
+        );
+        self.paint_parameters(node, rect, detail, alpha, style, window);
 
         let texts = self.node_texts.nodes.get(&id);
-        let label_alpha = if layout.compact { 0. } else { detail.labels };
         for (output, indices) in [(false, &geometry.inputs), (true, &geometry.outputs)] {
             for (row, index) in indices.iter().enumerate() {
                 let Some(port) = node.ports.get(*index) else {
@@ -549,16 +547,66 @@ impl GraphCanvas {
                         anchor,
                         row: row_bounds,
                         zoom,
-                        label_alpha: label_alpha * alpha,
+                        label_alpha: detail.labels * alpha,
                     },
                     style,
                     window,
                 );
-                if !output && !layout.compact && !controls {
+                if !output && !controls {
                     self.paint_value_placeholder(port, rect, row_bounds, alpha, style, window);
                 }
             }
         }
+    }
+
+    /// A reroute is one dot in the color of the data it forwards. Its wires meet at the
+    /// center, pointer and drag emphasis grow it like a pin, and selection rims it in the
+    /// accent color.
+    fn paint_reroute(
+        &self,
+        node: &EditorNodeModel,
+        rect: Bounds<Pixels>,
+        (state, selected, alpha): (State, bool, f32),
+        style: &CanvasStyle,
+        window: &mut Window,
+    ) {
+        let id = node.node_id;
+        let ours = |address: &PortAddress| address.node_id == id;
+        let engaged = self.hovered_node() == Some(id)
+            || self
+                .connection_drag()
+                .is_some_and(|drag| ours(&drag.source) || drag.target.as_ref().is_some_and(ours))
+            || self
+                .context_menu
+                .as_ref()
+                .and_then(|menu| menu.port.as_ref())
+                .is_some_and(ours)
+            || self.located_port.as_ref().is_some_and(ours);
+        let ink = if state == State::Error || node.ports.iter().any(|port| port.orphan) {
+            style.danger
+        } else {
+            style.data(category(node).1)
+        };
+        let diameter =
+            px(geometry::REROUTE_DOT * self.zoom).max(px(4.)) * if engaged { 1.25 } else { 1. };
+        let dot = Bounds::new(
+            rect.center() - point(diameter / 2., diameter / 2.),
+            size(diameter, diameter),
+        );
+        if selected {
+            // Data colors include the accent hue, so the rim stands off the dot on a
+            // halo of canvas that also hides the wire beneath it.
+            let halo = dot.dilate(px(3.5));
+            window.paint_quad(quad(
+                halo,
+                halo.size.width / 2.,
+                style.surface.opacity(alpha),
+                px(2.),
+                style.selection.opacity(alpha),
+                BorderStyle::Solid,
+            ));
+        }
+        window.paint_quad(fill(dot, ink.opacity(alpha)).corner_radii(diameter / 2.));
     }
 
     #[allow(clippy::too_many_arguments)]

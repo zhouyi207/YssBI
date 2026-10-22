@@ -3,7 +3,7 @@ use crate::overview::ProjectOverview;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, Selectable, Sizable,
-    button::{Button, ButtonVariants},
+    button::Button,
     dock::{BasePanel, Panel, PanelEvent},
     spinner::Spinner,
 };
@@ -31,6 +31,8 @@ pub struct ResultsPanel {
     rows: Rc<[ResultRow]>,
     collapsed: BTreeSet<GraphResourcePath>,
     show_all: bool,
+    /// The pin last opened or computed from this panel.
+    current: Option<PlanOutputRef>,
 }
 
 pub enum ResultsEvent {
@@ -76,6 +78,7 @@ impl ResultsPanel {
             rows: Rc::default(),
             collapsed: BTreeSet::new(),
             show_all: false,
+            current: None,
         }
     }
 
@@ -212,11 +215,13 @@ impl ResultsPanel {
         else {
             return;
         };
+        self.current = Some(output.clone());
         match state {
             PinState::Computed(reference) => cx.emit(ResultsEvent::Open(reference)),
             PinState::Uncomputed => cx.emit(ResultsEvent::Compute { graph, output }),
             PinState::Computing => {}
         }
+        cx.notify();
     }
 
     fn render_row(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
@@ -233,43 +238,46 @@ impl ResultsPanel {
                 collapsed,
             } => {
                 let path = path.clone();
-                Button::new(SharedString::from(format!(
-                    "result-graph-{}",
-                    path.as_str()
-                )))
-                .text()
-                .w_full()
-                .h_8()
-                .px_2()
-                .gap_1p5()
-                .justify_start()
-                .text_xs()
-                .accessibility_label(name.clone())
-                .toggled(!collapsed)
-                .child(
-                    Icon::new(if *collapsed {
-                        IconName::ChevronRight
-                    } else {
-                        IconName::ChevronDown
-                    })
-                    .size_3()
-                    .text_color(muted),
+                appearance::button_row(
+                    Button::new(SharedString::from(format!(
+                        "result-graph-{}",
+                        path.as_str()
+                    )))
+                    .w_full()
+                    .h_8()
+                    .px_2()
+                    .gap_1p5()
+                    .justify_start()
+                    .text_xs()
+                    .accessibility_label(name.clone())
+                    .toggled(!collapsed)
+                    .child(
+                        Icon::new(if *collapsed {
+                            IconName::ChevronRight
+                        } else {
+                            IconName::ChevronDown
+                        })
+                        .size_3()
+                        .text_color(muted),
+                    )
+                    .child(
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
+                            .child(name.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .text_color(muted)
+                            .child(format!("{computed}/{total}")),
+                    )
+                    .child(div().flex_1())
+                    .on_click(cx.listener(move |view, _, _, cx| view.toggle_graph(&path, cx))),
+                    false,
+                    cx,
                 )
-                .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .font_weight(gpui_kit::FontWeight::MEDIUM)
-                        .child(name.clone()),
-                )
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .text_color(muted)
-                        .child(format!("{computed}/{total}")),
-                )
-                .child(div().flex_1())
-                .on_click(cx.listener(move |view, _, _, cx| view.toggle_graph(&path, cx)))
                 .into_any_element()
             }
             ResultRow::Pin {
@@ -314,33 +322,36 @@ impl ResultsPanel {
                     PinState::Computing => "panel.resultStates.computing",
                     PinState::Uncomputed => "panel.resultActions.compute",
                 };
-                Button::new(SharedString::from(format!(
-                    "result-pin-{}#{}",
-                    graph.as_str(),
-                    output.port().as_str()
-                )))
-                .text()
-                .w_full()
-                .h_8()
-                .pl_7()
-                .pr_2()
-                .gap_2()
-                .justify_start()
-                .text_xs()
-                .disabled(*state == PinState::Computing)
-                .accessibility_label(format!("{title}: {}", t(status)))
-                .tooltip(t(action))
-                .child(icon)
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .text_left()
-                        .child(title.clone()),
+                appearance::button_row(
+                    Button::new(SharedString::from(format!(
+                        "result-pin-{}#{}",
+                        graph.as_str(),
+                        output.port().as_str()
+                    )))
+                    .w_full()
+                    .h_8()
+                    .pl_7()
+                    .pr_2()
+                    .gap_2()
+                    .justify_start()
+                    .text_xs()
+                    .disabled(*state == PinState::Computing)
+                    .accessibility_label(format!("{title}: {}", t(status)))
+                    .tooltip(t(action))
+                    .child(icon)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_left()
+                            .child(title.clone()),
+                    )
+                    .child(div().flex_shrink_0().text_color(muted).child(t(status)))
+                    .on_click(cx.listener(move |view, _, _, cx| view.activate(index, cx))),
+                    self.current.as_ref() == Some(output),
+                    cx,
                 )
-                .child(div().flex_shrink_0().text_color(muted).child(t(status)))
-                .on_click(cx.listener(move |view, _, _, cx| view.activate(index, cx)))
                 .into_any_element()
             }
         }
@@ -371,6 +382,7 @@ impl Render for ResultsPanel {
                 }),
             )
             .size_full()
+            .map(appearance::row_gutter)
             .into_any_element()
         };
         let show_all = self.show_all;

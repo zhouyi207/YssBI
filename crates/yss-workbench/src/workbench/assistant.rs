@@ -294,14 +294,6 @@ impl Workbench {
         let active = self
             .visible_conversation(cx)
             .map(|panel| panel.read(cx).session_id().to_string());
-        if let Some(panel) = self
-            .activities
-            .get("assistant")
-            .and_then(gpui_kit::WeakEntity::upgrade)
-        {
-            panel.update(cx, |view, cx| {
-                view.set_active_resource(active.as_deref(), cx)
-            });
-        }
+        self.mark_activity("assistant", active.as_deref(), cx);
     }
 }

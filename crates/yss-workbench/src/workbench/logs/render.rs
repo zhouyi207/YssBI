@@ -54,6 +54,7 @@ impl Render for LogsPanel {
             )
             .track_scroll(&self.scroll)
             .size_full()
+            .map(crate::appearance::row_gutter)
             .into_any_element()
         };
         div()

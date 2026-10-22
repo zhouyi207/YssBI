@@ -317,6 +317,12 @@ impl GraphCanvas {
     ) -> Bounds<Pixels> {
         let zoom = self.zoom;
         let region = layout.port_region(output, row);
+        if layout.compact {
+            return Bounds::new(
+                rect.origin + region.origin * zoom,
+                region.size.map(|length| length * zoom),
+            );
+        }
         let top = rect.top() + region.top() * zoom;
         let bottom = rect.top() + region.bottom() * zoom;
         let reach = px(geometry::PORT_REACH * zoom);

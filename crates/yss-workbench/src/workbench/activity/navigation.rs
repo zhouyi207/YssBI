@@ -74,10 +74,11 @@ impl ActivityPanel {
                 self.rebuild_rows(cx);
                 cx.notify();
             }
-            ActivityRowContent::Item(ActivityItem::Node { creation, .. }) => {
-                cx.emit(ActivityEvent::InspectNode(
-                    crate::catalog_rows::node_type(creation).clone(),
-                ));
+            ActivityRowContent::Item(ActivityItem::Node { key, creation, .. }) => {
+                cx.emit(ActivityEvent::InspectNode {
+                    entry: key.clone(),
+                    node_type: crate::catalog_rows::node_type(creation).clone(),
+                });
             }
             ActivityRowContent::Item(ActivityItem::Conversation { session_id, .. }) => {
                 cx.emit(ActivityEvent::ActivateConversation(session_id.clone()));
