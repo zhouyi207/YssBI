@@ -80,7 +80,8 @@ pub fn provider_presets() -> Result<Vec<LanguageModelProviderPreset>, RigProvide
         .map(|(id, name, adapter, protocol)| {
             let config = ProviderId::resolve(adapter)
                 .map_err(|_| RigProviderConfigurationError::Invalid)?
-                .config("");
+                .config("")
+                .ok_or(RigProviderConfigurationError::Invalid)?;
             let base_url = match config {
                 ProviderConfig::OpenAi(config) => config.base_url,
                 ProviderConfig::Anthropic(config) => config.base_url,

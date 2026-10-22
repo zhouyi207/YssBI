@@ -51,7 +51,7 @@ impl RigProviderClient {
         };
         let adapter = ProviderId::resolve(&settings.adapter)
             .map_err(|_| RigProviderConfigurationError::Invalid)?;
-        if adapter.format() != format {
+        if adapter.format() != Some(format) {
             return Err(RigProviderConfigurationError::Invalid);
         }
         let key = match settings.authentication {
@@ -60,7 +60,9 @@ impl RigProviderClient {
                 .expose(),
             LanguageModelAuthentication::None => "",
         };
-        let config = adapter.config(key);
+        let config = adapter
+            .config(key)
+            .ok_or(RigProviderConfigurationError::Invalid)?;
         let base_url = settings.base_url.trim_end_matches('/');
         let config = match config {
             ProviderConfig::OpenAi(mut config) => {

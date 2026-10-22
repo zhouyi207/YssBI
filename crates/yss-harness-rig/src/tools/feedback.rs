@@ -12,8 +12,11 @@ impl AgentHook for ToolCallFeedback {
         event: &InvalidToolCallContext,
     ) -> Option<InvalidToolCallAction> {
         let reason = match event.reason {
-            InvalidToolCallReason::UnknownTool => "tool_not_available",
+            InvalidToolCallReason::UnknownTool | InvalidToolCallReason::DisallowedByToolChoice => {
+                "tool_not_available"
+            }
             InvalidToolCallReason::MalformedArguments { .. } => "malformed_tool_arguments",
+            _ => "invalid_tool_call",
         };
         // Arguments/history may contain user data; record only structural diagnostics.
         tracing::warn!(
@@ -23,7 +26,11 @@ impl AgentHook for ToolCallFeedback {
             available_tools = event.allowed_tools.len(),
             "Harness rejected a provider tool call"
         );
-        if !matches!(event.reason, InvalidToolCallReason::UnknownTool) {
+        // 0.44 split tool-choice rejections out of UnknownTool; both are unavailable to this turn.
+        if !matches!(
+            event.reason,
+            InvalidToolCallReason::UnknownTool | InvalidToolCallReason::DisallowedByToolChoice
+        ) {
             return None;
         }
         Some(InvalidToolCallAction::skip(serde_json::json!({

@@ -9,7 +9,7 @@ use rig_core::Model;
 use rig_core::driver::{Exchange, Opened, Opening, Transport};
 use rig_core::error::ProviderError;
 use rig_core::operation::Finish;
-use rig_core::streaming::{Item, StreamEvent, Transcript};
+use rig_core::streaming::{Item, StreamEvent, StreamRecord};
 use rig_core::test_utils::{MockCompletionModel, MockFrame, MockScript, MockStreamEvent};
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,7 +38,7 @@ fn scripted_events(
             AssistantContent::ToolCall(call) => events.push(MockStreamEvent::tool_call(
                 call.id.wire(),
                 call.function.name.to_string(),
-                call.function.arguments,
+                Value::Object(call.function.arguments),
             )),
             _ => unreachable!(),
         }
@@ -59,7 +59,7 @@ fn scripted_model(turns: impl IntoIterator<Item = Vec<AssistantContent>>) -> Moc
 }
 
 fn text_item(text: &str) -> MultiTurnStreamItem {
-    let transcript = Transcript::parse(serde_json::json!([
+    let transcript = StreamRecord::parse(serde_json::json!([
         {"item":"event", "value":{"event":"start", "part":0, "kind":"text"}},
         {"item":"event", "value":{"event":"text", "part":0, "text":text}},
         {"item":"event", "value":{"event":"end", "part":0, "content":{"type":"text", "text":text}}}
@@ -244,14 +244,24 @@ pub(crate) fn request(mut tools: Vec<ToolSpec>) -> AgentTurnRequest {
     }
 }
 
-fn chat_wire(history: Vec<rig_core::completion::Message>) -> Vec<Value> {
-    history
-        .into_iter()
-        .flat_map(|message| {
-            Vec::<rig_core::providers::openai::completion::Message>::try_from(message).unwrap()
-        })
-        .map(|message| serde_json::to_value(message).unwrap())
-        .collect()
+fn chat_wire(
+    history: impl IntoIterator<Item = impl Into<rig_core::completion::Message>>,
+) -> Vec<Value> {
+    use rig_core::providers::openai::{OpenAIConfig, wire::Chat};
+    use rig_core::wire::{Body, Mode, Wire};
+    // 0.44 removed the typed OpenAI messages; encode the real Chat request body instead.
+    let request = CompletionRequest::from(history.into_iter().map(Into::into).collect::<Vec<_>>());
+    let encoded = Chat::new(OpenAIConfig::new("test"), "test-model")
+        .encode(request, Mode::Unary)
+        .unwrap();
+    let Body::Bytes(bytes) = encoded.request.body() else {
+        panic!("Chat requests have a JSON body");
+    };
+    let mut body: Value = serde_json::from_slice(bytes).unwrap();
+    match body["messages"].take() {
+        Value::Array(messages) => messages,
+        other => panic!("Chat body has no messages: {other}"),
+    }
 }
 
 #[tokio::test]
@@ -260,14 +270,12 @@ async fn delivers_reasoning_and_usage_and_applies_only_explicit_effort_restricti
         MockStreamEvent::reasoning_delta("Checking evidence"),
         MockStreamEvent::text("Answer"),
         MockStreamEvent::FinalResponse(Finish {
-            usage: Usage {
-                input_tokens: Some(100),
-                output_tokens: Some(20),
-                total_tokens: Some(120),
-                cached_input_tokens: Some(60),
-                reasoning_tokens: Some(10),
-                ..Default::default()
-            },
+            usage: Usage::new()
+                .input_tokens(100)
+                .output_tokens(20)
+                .total_tokens(120)
+                .cached_input_tokens(60)
+                .reasoning_tokens(10),
             ..Default::default()
         }),
     ]]);
@@ -351,7 +359,7 @@ fn context_capacity_failure_is_explicit_without_treating_other_rejections_as_cap
             serde_json::json!({"error": {"code": code}}).to_string(),
         );
         assert_eq!(
-            map_prompt_failure(PromptError::CompletionError(error)).code,
+            map_prompt_failure(PromptError::Provider(error)).code,
             expected
         );
     }
@@ -456,8 +464,7 @@ fn message_mapping_preserves_complete_history_and_correlated_tool_messages() {
         prepared
             .history
             .into_iter()
-            .chain(std::iter::once(prepared.prompt))
-            .collect(),
+            .chain(std::iter::once(prepared.prompt)),
     );
     let encoded = serde_json::to_string(&wire).unwrap();
     assert!(encoded.contains(&text));
@@ -737,11 +744,11 @@ async fn incomplete_model_responses_have_distinct_failures_and_preserve_progress
         assert_eq!(*output.events.lock().unwrap(), expected_events);
     }
     assert_eq!(
-        map_prompt_failure(PromptError::CompletionError(ProviderError::Truncated)).code,
+        map_prompt_failure(PromptError::Provider(ProviderError::Truncated)).code,
         AgentDriverFailureCode::ProviderStreamInterrupted
     );
     assert_eq!(
-        map_prompt_failure(PromptError::CompletionError(
+        map_prompt_failure(PromptError::Provider(
             ProviderError::from_http_response(402u16.try_into().unwrap(), "payment required"),
         ))
         .code,
@@ -895,15 +902,7 @@ async fn unavailable_tools_return_feedback_without_dispatch_or_replaying_complet
     assert_eq!(executor.0.load(Ordering::SeqCst), 1);
     let requests = model.requests();
     assert_eq!(requests.len(), 3);
-    let wire = requests[2]
-        .chat_history
-        .clone()
-        .into_iter()
-        .flat_map(|message| {
-            Vec::<rig_core::providers::openai::completion::Message>::try_from(message).unwrap()
-        })
-        .map(|message| serde_json::to_value(message).unwrap())
-        .collect::<Vec<_>>();
+    let wire = chat_wire(requests[2].chat_history.clone());
     let feedback = wire
         .iter()
         .find(|message| message["tool_call_id"] == "unavailable")

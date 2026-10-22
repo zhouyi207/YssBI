@@ -1,6 +1,7 @@
 //! Map Harness tool declarations into Rig tools. Calls and results stay opaque JSON.
 
 use rig_agent::tool::{DynamicTool, ToolExecutionError, ToolOutput};
+use rig_core::completion::message::ToolName;
 use std::sync::{Arc, Mutex};
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentToolExecutor, ToolCall, ToolSpec,
@@ -29,10 +30,12 @@ pub(crate) fn dynamic_tool(
     executor: Arc<dyn AgentToolExecutor>,
     tasks: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
     tool_failure: tokio::sync::watch::Sender<Option<AgentDriverFailure>>,
-) -> DynamicTool {
-    let name = spec.name.clone();
-    DynamicTool::new(
-        spec.name,
+) -> Result<DynamicTool, AgentDriverFailure> {
+    let tool_name = ToolName::new(spec.name.clone())
+        .map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::InternalFailure))?;
+    let name = spec.name;
+    Ok(DynamicTool::new(
+        tool_name,
         spec.description,
         spec.input_schema,
         move |arguments| {
@@ -66,5 +69,5 @@ pub(crate) fn dynamic_tool(
                 Ok(ToolOutput::json(outcome.output))
             })
         },
-    )
+    ))
 }

@@ -151,7 +151,11 @@ impl AgentHook for ContextHook {
             // Capture this sampling boundary before compaction can fail. Every earlier
             // tool has already settled; a summary failure must not replay those tools.
             let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-            state.boundary.messages.history = event.history.to_vec();
+            state.boundary.messages.history = event
+                .history
+                .iter()
+                .map(|message| Message::clone(message))
+                .collect();
             state.boundary.messages.prompt = event.prompt.clone();
             state.boundary.text_position = self.output.position();
             state.boundary.completed_calls = state.completed_calls;
@@ -159,6 +163,7 @@ impl AgentHook for ContextHook {
         let all: Vec<_> = event
             .history
             .iter()
+            .map(Arc::as_ref)
             .chain(std::iter::once(event.prompt))
             .collect();
         let size = match serde_json::to_vec(&all) {

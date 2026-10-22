@@ -6,13 +6,11 @@ use yss_harness_contract::{AgentDriverFailure, AgentDriverFailureCode};
 pub(crate) fn map_prompt_failure(error: PromptError) -> AgentDriverFailure {
     use AgentDriverFailureCode::*;
     match error {
-        PromptError::CompletionError(error) => map_provider_failure(error),
+        PromptError::Provider(error) => map_provider_failure(error),
         PromptError::Report(report) => map_report(&report),
-        PromptError::PromptCancelled { .. } => cancelled(),
+        PromptError::Cancelled { .. } => cancelled(),
         PromptError::UnknownToolCall { .. } => invalid_response(),
-        PromptError::MaxTurnsError { .. } | PromptError::MemoryError(_) => {
-            AgentDriverFailure::new(InternalFailure)
-        }
+        _ => AgentDriverFailure::new(InternalFailure),
     }
 }
 

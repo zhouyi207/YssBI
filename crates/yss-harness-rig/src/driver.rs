@@ -102,7 +102,7 @@ impl RigAgentDriver {
                     tool_failure.clone(),
                 )
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, _>>()?;
         let output = Arc::new(TurnOutput::new(output));
         let hook = ContextHook::new(
             self.model.clone(),

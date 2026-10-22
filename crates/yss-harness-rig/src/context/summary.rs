@@ -191,5 +191,5 @@ fn interrupted() -> AgentDriverFailure {
     AgentDriverFailure::new(AgentDriverFailureCode::ProviderStreamInterrupted)
 }
 fn map_failure(error: rig_core::error::ProviderError) -> AgentDriverFailure {
-    crate::error::map_prompt_failure(rig_agent::completion::PromptError::CompletionError(error))
+    crate::error::map_prompt_failure(rig_agent::completion::PromptError::Provider(error))
 }

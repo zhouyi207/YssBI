@@ -1,7 +1,7 @@
 //! Provider message mapping for replayed Harness history.
 
 use crate::error::invalid_response;
-use rig_core::completion::Message;
+use rig_core::completion::{AssistantMessage, Message};
 use rig_core::completion::message::{AssistantContent, CallId, ToolCall, ToolFunction, ToolName};
 use yss_harness_contract::{AgentDriverFailure, AgentMessage};
 
@@ -67,7 +67,7 @@ impl PendingTools {
             content.push(AssistantContent::ToolCall(call));
             results.push(result.ok_or_else(invalid_response)?);
         }
-        conversation.push(Message::Assistant { id: None, content });
+        conversation.push(Message::Assistant(AssistantMessage::new(content)));
         conversation.extend(results);
         conversation.append(&mut self.after_results);
         Ok(())

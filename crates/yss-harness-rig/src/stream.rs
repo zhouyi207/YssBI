@@ -1,7 +1,7 @@
 //! Streaming text delivery, cancellation and fatal tool signals.
 
 use crate::error::{cancelled, map_prompt_failure};
-use rig_agent::agent::{MultiTurnStreamItem, StreamingError, StreamingResult};
+use rig_agent::agent::{MultiTurnStreamItem, StreamingResult};
 use rig_agent::completion::PromptError;
 use rig_core::completion::FinishReason;
 use rig_core::streaming::{Item, StreamEvent};
@@ -69,10 +69,8 @@ pub(crate) async fn consume_text_stream_with_activity(
                 };
                 let item = match item {
                     Ok(item) => item,
-                    Err(StreamingError::Report(report)) => break Err(map_prompt_failure(PromptError::Report(report))),
-                    Err(StreamingError::Completion(error)) => break Err(map_prompt_failure(PromptError::CompletionError(error))),
-                    Err(StreamingError::Prompt(error)) => {
-                        if matches!(&error, PromptError::PromptCancelled { reason, .. } if reason.starts_with("harness_context_") || reason == "harness_output_failure") {
+                    Err(error) => {
+                        if matches!(&error, PromptError::Cancelled { reason, .. } if reason.starts_with("harness_context_") || reason == "harness_output_failure") {
                             break Err(cancelled());
                         }
                         break Err(map_prompt_failure(error));
@@ -109,7 +107,7 @@ pub(crate) async fn consume_text_stream_with_activity(
                             Some(FinishReason::ToolCalls) => "tool_calls",
                             Some(FinishReason::Length) => "length",
                             Some(FinishReason::ContentFilter) => "content_filter",
-                            Some(FinishReason::Other(_)) => "other",
+                            Some(_) => "other",
                             None => "unspecified",
                         };
                         tracing::info!(
@@ -130,7 +128,7 @@ pub(crate) async fn consume_text_stream_with_activity(
                     }
                     MultiTurnStreamItem::FinalResponse(response) => {
                         final_seen = true;
-                        final_response = response.output;
+                        final_response = response.output();
                     }
                     MultiTurnStreamItem::ModelTurnRetried { .. } => {
                         flush_text(output.as_ref(), &mut pending).await?;

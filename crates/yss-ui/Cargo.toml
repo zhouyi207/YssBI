@@ -24,7 +24,7 @@ serde_json = { workspace = true, features = ["raw_value"] }
 tokio = { workspace = true, features = ["sync", "time"] }
 tracing.workspace = true
 url.workspace = true
-open = "5.4.1"
+open = "5.4.5"
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-filesystem = { path = "../yss-filesystem" }
