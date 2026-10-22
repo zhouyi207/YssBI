@@ -1,6 +1,6 @@
 //! Connection selection and commands belong to the same canvas as node gestures.
 use crate::canvas::{GraphCanvas, GraphCommand};
-use gpui_kit::{Context, MouseButton, MouseDownEvent, Pixels, Point, Window};
+use gpui_kit::{Context, MouseButton, MouseDownEvent, Window};
 use std::{collections::BTreeSet, sync::Arc};
 use yss_graph_document::{ConnectionId, NodeId};
 use yss_graph_editor::{EditorGraphMutation, projection::EditorProjectionModel};
@@ -14,34 +14,13 @@ pub(in crate::canvas) struct ConnectionClick {
 }
 
 impl GraphCanvas {
-    pub(super) fn hit_connection(&mut self, screen: Point<Pixels>) -> Option<ConnectionId> {
-        let bounds = self.bounds.get();
-        if !bounds.contains(&screen) {
-            return None;
-        }
-        let local = screen - bounds.origin - self.offset;
-        // Nodes cover the line layer, including right presses that bubble from their body.
-        if self.node_at(screen).is_some() {
-            return None;
-        }
-        self.connection_layer
-            .borrow_mut()
-            .hit_test(local, self.zoom, &self.preview)
-    }
-
     pub(in crate::canvas) fn begin_connection(
         &mut self,
+        id: ConnectionId,
         event: &MouseDownEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> bool {
-        if event.button == MouseButton::Middle {
-            return false;
-        }
-        let Some(id) = self.hit_connection(event.position) else {
-            return false;
-        };
-        cx.stop_propagation();
+    ) {
         self.cancel_gesture();
         self.located_port = None;
         self.palette = None;
@@ -90,7 +69,6 @@ impl GraphCanvas {
         }
         self.emit_selection(cx);
         cx.notify();
-        true
     }
 
     pub(in crate::canvas) fn restore_connection_click(
@@ -105,22 +83,6 @@ impl GraphCanvas {
             self.selected = click.nodes;
             self.selected_connections = click.connections;
             self.emit_selection(cx);
-        }
-    }
-
-    pub(in crate::canvas) fn hover_connection(
-        &mut self,
-        screen: Point<Pixels>,
-        cx: &mut Context<Self>,
-    ) {
-        let hovered = if !self.can_edit() || self.context_menu.is_some() {
-            None
-        } else {
-            self.hit_connection(screen)
-        };
-        if hovered != self.hovered_connection {
-            self.hovered_connection = hovered;
-            cx.notify();
         }
     }
 
@@ -145,7 +107,12 @@ impl GraphCanvas {
                 .iter()
                 .any(|edge| edge.connection_id == *id)
         };
-        self.hovered_connection = self.hovered_connection.filter(exists);
+        if self
+            .hovered_connection()
+            .is_some_and(|connection| !exists(&connection))
+        {
+            self.hover = None;
+        }
         self.connection_click = None;
         self.context_menu = None;
     }

@@ -171,7 +171,6 @@ impl NodePalette {
                 ))
                 .when(!self.browser.searching() && !self.creating, |body| {
                     body.cursor_pointer()
-                        .hover(|s| s.bg(cx.theme().muted))
                         .on_click(cx.listener(move |view, _, _, cx| {
                             if view.browser.generation == generation {
                                 view.browser.toggle(index);
@@ -186,21 +185,21 @@ impl NodePalette {
                 available,
                 creation,
                 ..
-            }) => body
-                .child(crate::catalog_rows::node(title, creation, *available, cx))
-                .when(*available && self.browser.active == Some(index), |body| {
-                    body.bg(cx.theme().accent)
-                })
-                .when(*available && enabled, |body| {
-                    body.cursor_pointer()
-                        .hover(|s| s.bg(cx.theme().muted))
-                        .on_click(cx.listener(move |view, _, window, cx| {
-                            if view.browser.generation == generation {
-                                view.choose(index, window, cx);
-                            }
-                        }))
-                })
-                .into_any_element(),
+            }) => yss_ui::appearance::row_outline(
+                body.child(crate::catalog_rows::node(title, creation, *available, cx)),
+                *available && self.browser.active == Some(index),
+                false,
+                cx,
+            )
+            .when(*available && enabled, |body| {
+                body.cursor_pointer()
+                    .on_click(cx.listener(move |view, _, window, cx| {
+                        if view.browser.generation == generation {
+                            view.choose(index, window, cx);
+                        }
+                    }))
+            })
+            .into_any_element(),
             _ => return None,
         })
     }

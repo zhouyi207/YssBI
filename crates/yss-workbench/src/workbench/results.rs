@@ -2,10 +2,12 @@
 pub(super) mod window;
 
 use super::Workbench;
+use gpui_kit::component::WindowExt;
 use gpui_kit::component::dock::DockPlacement;
 use gpui_kit::{AppContext, Context, Window};
 use yss_graph_execution::result::ResultReference;
 use yss_results_ui::results::{ResultEvent, ResultPanel};
+use yss_ui::lifecycle::LogReleased;
 
 impl Workbench {
     pub(super) fn open_result(
@@ -103,6 +105,51 @@ impl Workbench {
         panel.update(cx, |panel, cx| panel.load_retained(handoff, window, cx));
     }
 
+    /// Computes an uncomputed pin of any project graph, then opens its result.
+    pub(super) fn compute_result(
+        &mut self,
+        graph: yss_graph_document::GraphResourcePath,
+        output: yss_graph_execution::plan::PlanOutputRef,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(overview) = &self.overview else {
+            return;
+        };
+        let task = overview.read(cx).compute(graph, output);
+        let lifecycle = self.lifecycle;
+        cx.spawn_in(window, async move |view, cx| {
+            let result = task
+                .await
+                .map_err(anyhow::Error::from)
+                .and_then(|result| result);
+            view.update_in(cx, |view, window, cx| {
+                if view.lifecycle != lifecycle {
+                    return;
+                }
+                match result {
+                    Ok(Some(reference)) => view.open_result(reference, None, None, window, cx),
+                    // A failed or cancelled run publishes nothing; Output shows why.
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            code = "native_compute_rejected",
+                            "Result computation was rejected"
+                        );
+                        window.push_notification(
+                            gpui_kit::component::notification::Notification::error(
+                                yss_graph_ui::feedback::run_rejection(&error),
+                            ),
+                            cx,
+                        );
+                    }
+                }
+            })
+            .log_released();
+        })
+        .detach();
+    }
+
     fn observe_result_intent(
         &mut self,
         panel: &gpui_kit::Entity<ResultPanel>,
@@ -137,10 +184,5 @@ impl Workbench {
         cx.notify();
         self.mark_project_resource(None, cx);
         self.details.update(cx, |panel, cx| panel.clear(cx));
-        self.problems.update(cx, |panel, cx| panel.clear(cx));
-        self.output
-            .update(cx, |panel, cx| panel.set_graph(None, cx));
-        self.results
-            .update(cx, |panel, cx| panel.set_graph(None, cx));
     }
 }

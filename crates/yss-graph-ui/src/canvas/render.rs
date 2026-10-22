@@ -1,68 +1,55 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme, Disableable, Sizable};
 use gpui_kit::{
-    Bounds, Context, IntoElement, MouseButton, Pixels, Render, Window, canvas, div, point,
-    prelude::*, px,
+    AnyElement, Bounds, Context, IntoElement, MouseButton, Pixels, Render, SharedString, Window,
+    canvas, div, point, prelude::*, px,
 };
+use yss_graph_editor::projection::EditorNodeModel;
 
-use super::{Gesture, GraphCanvas, commands::*, geometry};
+use super::{CanvasTarget, Gesture, GraphCanvas, commands::*, ports, style::CanvasStyle};
+
+type TooltipBuilder = Box<dyn Fn(&mut Window, &mut gpui_kit::App) -> gpui_kit::AnyView>;
 
 impl Render for GraphCanvas {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let owner = cx.entity().downgrade();
         let layout_owner = owner.clone();
-        let zoom = self.zoom;
-        let offset = self.offset;
         let bounds_cell = self.bounds.clone();
-        let connection_layer = self.connection_layer.clone();
-        let presentation = self.presentation.clone();
-        let preview = self.preview.clone();
-        let selected_connections = self.selected_connections.clone();
-        let hovered_connection = self.hovered_connection;
-        let pending = self.pending_connection(cx);
-        let feedback = pending
-            .as_ref()
+        let feedback = self
+            .pending_connection(cx)
             .and_then(|pending| pending.feedback(self.bounds.get().size, cx));
-        let replacements = pending.as_ref().map(|_| {
-            self.connection_drag()
-                .map(|drag| drag.replaced.clone())
-                .unwrap_or_default()
-        });
         let label = self
-            .hovered_connection
-            .map(|id| presentation.connection(id).label());
-        let running_visible = connection_layer.borrow().has_visible_running(
-            &presentation,
-            self.bounds.get(),
-            offset,
-            zoom,
-            &self.preview,
-        );
-        let activity = running_visible.then(|| self.render_connection_activity(pending.is_some()));
+            .hovered_connection()
+            .map(|id| self.presentation.connection(id).label());
         let projection = self.graph.projection.clone();
-        let visible = self.bounds.get().size;
-        let focused_node = self.port_inputs.focused_node(window, cx);
-        let layer = self.connection_layer.borrow();
-        let visible_nodes = projection
-            .nodes
-            .iter()
-            .zip(layer.nodes())
-            .filter_map(|(node, geometry)| {
-                let rect = geometry
-                    .layout
-                    .bounds(geometry::position(node, &self.preview));
-                let top_left = offset + rect.origin * zoom;
-                (focused_node == Some(node.node_id)
-                    || (top_left.x + rect.size.width * zoom >= px(0.)
-                        && top_left.y + rect.size.height * zoom >= px(0.)
-                        && (visible.width == px(0.) || top_left.x <= visible.width)
-                        && (visible.height == px(0.) || top_left.y <= visible.height)))
-                    .then_some(node)
-            })
-            .collect::<Vec<_>>();
-        drop(layer);
-        self.prepare_port_inputs(&visible_nodes, window, cx);
+        let focused = self.port_inputs.focused_node(window, cx);
+        let visible_nodes = self.visible_nodes(&projection, focused);
+        let controls = self.controls_visible();
+        if controls {
+            self.prepare_port_inputs(&visible_nodes, window, cx);
+        } else {
+            let editing = visible_nodes
+                .iter()
+                .copied()
+                .filter(|node| focused == Some(node.node_id))
+                .collect::<Vec<_>>();
+            self.prepare_port_inputs(&editing, window, cx);
+        }
+        self.prepare_node_texts(&visible_nodes, window);
+        let inputs = self.render_port_inputs(&visible_nodes, controls, focused, cx);
+        let hover = self.render_hover_target(cx);
+        let located = self.render_located_port();
+        let activity = self.activity_visible().then(|| self.activity.clone());
+        let cursor = match (&self.gesture, &self.hover) {
+            (Some(Gesture::Pan { moved: true, .. }), _) => gpui_kit::CursorStyle::ClosedHand,
+            (Some(Gesture::Connection(_)), _) | (None, Some(CanvasTarget::Port(_))) => {
+                gpui_kit::CursorStyle::Crosshair
+            }
+            (None, Some(CanvasTarget::Connection(_))) => gpui_kit::CursorStyle::PointingHand,
+            _ => gpui_kit::CursorStyle::Arrow,
+        };
 
         let surface = div()
             .id("graph-canvas")
@@ -75,8 +62,9 @@ impl Render for GraphCanvas {
             .min_h_0()
             .relative()
             .overflow_hidden()
-            .bg(cx.theme().table)
+            .bg(CanvasStyle::new(cx).surface)
             .text_color(cx.theme().foreground)
+            .cursor(cursor)
             .on_action(
                 cx.listener(|view, _: &SaveGraph, _, cx| view.submit(GraphCommand::Save, None, cx)),
             )
@@ -164,18 +152,15 @@ impl Render for GraphCanvas {
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::begin_pane))
             .on_drop(cx.listener(Self::drop_activity))
             .on_drop(cx.listener(Self::drop_constant))
-            .when(self.hovered_connection.is_some(), |view| {
-                view.cursor_pointer()
-            })
             .on_hover(cx.listener(|view, hovered, _, cx| {
-                if !hovered && view.hovered_connection.take().is_some() {
+                if !hovered && view.hover.take().is_some() {
                     cx.notify();
                 }
             }))
             .on_mouse_move(
                 cx.listener(|view, event: &gpui_kit::MouseMoveEvent, _, cx| {
                     if view.gesture.is_none() {
-                        view.hover_connection(event.position, cx);
+                        view.update_hover(event.position, cx);
                     }
                 }),
             )
@@ -194,29 +179,9 @@ impl Render for GraphCanvas {
                         }
                     },
                     move |bounds, _, window, cx| {
-                        Self::register_gesture_events(owner, window);
-                        let mut layer = connection_layer.borrow_mut();
-                        layer.paint(
-                            bounds,
-                            (offset, zoom),
-                            &preview,
-                            super::connections::Interaction {
-                                presentation: &presentation,
-                                selected: &selected_connections,
-                                hovered: hovered_connection,
-                                replacements: replacements.as_ref(),
-                            },
-                            window,
-                            cx,
-                        );
-                        if let Some(pending) = pending {
-                            layer.paint_pending(
-                                bounds.origin + pending.start,
-                                bounds.origin + pending.end,
-                                pending.from_input,
-                                pending.color,
-                                window,
-                            );
+                        Self::register_gesture_events(owner.clone(), window);
+                        if let Some(view) = owner.upgrade() {
+                            view.read(cx).paint_scene(bounds, window, cx);
                         }
                     },
                 )
@@ -224,11 +189,9 @@ impl Render for GraphCanvas {
                 .size_full(),
             )
             .children(activity)
-            .children(
-                visible_nodes
-                    .into_iter()
-                    .filter_map(|node| self.render_node(node, cx)),
-            )
+            .children(inputs)
+            .children(hover)
+            .children(located)
             .children(feedback)
             .when(
                 projection.nodes.is_empty() && self.palette.is_none(),
@@ -270,19 +233,6 @@ impl Render for GraphCanvas {
             .when_some(self.context_menu.as_ref(), |view, menu| {
                 view.child(menu.render())
             })
-            .when_some(self.selection_bounds(), |view, rect| {
-                view.child(
-                    div()
-                        .absolute()
-                        .left(rect.origin.x)
-                        .top(rect.origin.y)
-                        .w(rect.size.width)
-                        .h(rect.size.height)
-                        .border_1()
-                        .border_color(cx.theme().primary)
-                        .bg(cx.theme().primary.opacity(0.1)),
-                )
-            })
             .child(
                 div().absolute().bottom_2().right_2().child(
                     Button::new("reset-view")
@@ -321,7 +271,135 @@ impl Render for GraphCanvas {
 }
 
 impl GraphCanvas {
-    fn selection_bounds(&self) -> Option<Bounds<Pixels>> {
+    /// Nodes on screen in the last laid-out frame, plus any node whose inline field
+    /// holds focus, so its draft stays alive while scrolled away.
+    fn visible_nodes<'a>(
+        &self,
+        projection: &'a yss_graph_editor::projection::EditorProjectionModel,
+        focused: Option<yss_graph_document::NodeId>,
+    ) -> Vec<&'a EditorNodeModel> {
+        let bounds = self.bounds.get();
+        if bounds.size.width <= px(0.) || bounds.size.height <= px(0.) {
+            return projection
+                .nodes
+                .iter()
+                .filter(|node| focused == Some(node.node_id))
+                .collect();
+        }
+        projection
+            .nodes
+            .iter()
+            .zip(self.connection_layer.nodes())
+            .filter(|(node, geometry)| {
+                focused == Some(node.node_id)
+                    || self
+                        .node_screen_rect(node, geometry, bounds.origin)
+                        .intersects(&bounds)
+            })
+            .map(|(node, _)| node)
+            .collect()
+    }
+
+    fn render_port_inputs(
+        &self,
+        nodes: &[&EditorNodeModel],
+        controls: bool,
+        focused: Option<yss_graph_document::NodeId>,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let origin = point(px(0.), px(0.));
+        let mut elements = Vec::new();
+        for node in nodes {
+            if !controls && focused != Some(node.node_id) {
+                continue;
+            }
+            let Some(geometry) = self.connection_layer.node(node.node_id) else {
+                continue;
+            };
+            if geometry.layout.compact {
+                continue;
+            }
+            let rect = self.node_screen_rect(node, geometry, origin);
+            for (row, index) in geometry.inputs.iter().enumerate() {
+                let Some(port) = node.ports.get(*index) else {
+                    continue;
+                };
+                let Some(width) = self.field_width(port) else {
+                    continue;
+                };
+                let region = geometry.layout.port_region(false, row);
+                let row = Bounds::new(
+                    rect.origin + region.origin * self.zoom,
+                    region.size.map(|length| length * self.zoom),
+                );
+                let lane = self.field_lane(rect, row, width);
+                elements.extend(self.render_port_input(port, lane, cx));
+            }
+        }
+        elements
+    }
+
+    /// An invisible element over the hovered pin or status lane that owns its tooltip.
+    fn render_hover_target(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if self.gesture.is_some() || self.context_menu.is_some() {
+            return None;
+        }
+        let origin = point(px(0.), px(0.));
+        let (id, bounds, tooltip): (SharedString, _, TooltipBuilder) = match self.hover.as_ref()? {
+            CanvasTarget::Port(address) => {
+                let bounds = self.port_screen_bounds(address, origin)?;
+                let owner = cx.entity().downgrade();
+                let address = address.clone();
+                (
+                    format!("port-tooltip-{address}").into(),
+                    bounds,
+                    Box::new(move |_, cx| {
+                        ports::details::tooltip(owner.clone(), address.clone(), cx)
+                    }),
+                )
+            }
+            CanvasTarget::Status(id) => {
+                let (node, geometry) =
+                    self.painted_nodes().find(|(node, _)| node.node_id == *id)?;
+                let bounds = self.status_bounds(self.node_screen_rect(node, geometry, origin));
+                let text = SharedString::from(self.status_tooltip(*id)?);
+                (
+                    format!("status-tooltip-{id}").into(),
+                    bounds,
+                    Box::new(move |window, cx| Tooltip::new(text.clone()).build(window, cx)),
+                )
+            }
+            CanvasTarget::Node(_) | CanvasTarget::Connection(_) => return None,
+        };
+        Some(
+            div()
+                .id(id)
+                .absolute()
+                .left(bounds.left())
+                .top(bounds.top())
+                .w(bounds.size.width)
+                .h(bounds.size.height)
+                .tooltip(tooltip)
+                .into_any_element(),
+        )
+    }
+
+    /// Keyboard focus for a port revealed from another panel.
+    fn render_located_port(&self) -> Option<AnyElement> {
+        let bounds = self.port_screen_bounds(self.located_port.as_ref()?, point(px(0.), px(0.)))?;
+        Some(
+            div()
+                .absolute()
+                .left(bounds.left())
+                .top(bounds.top())
+                .w(bounds.size.width)
+                .h(bounds.size.height)
+                .track_focus(&self.port_focus)
+                .into_any_element(),
+        )
+    }
+
+    pub(super) fn selection_bounds(&self) -> Option<Bounds<Pixels>> {
         if let Some(Gesture::Selection { press, current, .. }) = &self.gesture {
             let a = *press - self.bounds.get().origin;
             let b = *current - self.bounds.get().origin;

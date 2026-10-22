@@ -94,7 +94,7 @@ impl ConnectionDrag {
                     "canvas.connection.errors.{reason}"
                 ))),
             ),
-            _ => (cx.theme().primary, None),
+            _ => (cx.theme().list_active_border, None),
         }
     }
 }
@@ -173,26 +173,14 @@ impl GraphCanvas {
         cx.notify();
     }
 
-    pub(in crate::canvas) fn end_port(
+    /// Commits a drag released over `target`, which the drag's candidates already judged.
+    pub(in crate::canvas) fn finish_connection(
         &mut self,
+        drag: ConnectionDrag,
         target: PortAddress,
-        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.finish_port(target, cx);
-        self.commit_blurred_port_inputs(window, cx);
-    }
-
-    fn finish_port(&mut self, target: PortAddress, cx: &mut Context<Self>) {
-        if self.connection_drag().is_none() {
-            return;
-        }
-        let Some(Gesture::Connection(drag)) = self.gesture.take() else {
-            return;
-        };
-        cx.stop_propagation();
         if drag.source == target {
-            cx.notify();
             return;
         }
         if let Some(ConnectionDecision::Invalid { reason }) = drag.decision(&target) {
@@ -200,31 +188,30 @@ impl GraphCanvas {
                 yss_ui::text::translate(&format!("canvas.connection.errors.{reason}")),
                 cx,
             );
-        } else {
-            // Missing preview decisions are neutral, including failed reads.
-            // The mutation still validates the captured version and connection.
-            let mutation = if drag.moving {
-                EditorGraphMutation::MoveConnections {
-                    source: drag.source,
-                    target,
-                }
-            } else {
-                let output = self.connection_layer.borrow().port_direction(&drag.source)
-                    == Some(PortDirection::Output);
-                let (output, input) = if output {
-                    (drag.source, target)
-                } else {
-                    (target, drag.source)
-                };
-                EditorGraphMutation::Connect {
-                    output,
-                    input,
-                    order: None,
-                }
-            };
-            self.submit(GraphCommand::Edit(mutation), Some(drag.version), cx);
+            return;
         }
-        cx.notify();
+        // Missing preview decisions are neutral, including failed reads.
+        // The mutation still validates the captured version and connection.
+        let mutation = if drag.moving {
+            EditorGraphMutation::MoveConnections {
+                source: drag.source,
+                target,
+            }
+        } else {
+            let output =
+                self.connection_layer.port_direction(&drag.source) == Some(PortDirection::Output);
+            let (output, input) = if output {
+                (drag.source, target)
+            } else {
+                (target, drag.source)
+            };
+            EditorGraphMutation::Connect {
+                output,
+                input,
+                order: None,
+            }
+        };
+        self.submit(GraphCommand::Edit(mutation), Some(drag.version), cx);
     }
 
     fn query_connections(

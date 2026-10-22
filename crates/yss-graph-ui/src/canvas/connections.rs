@@ -1,16 +1,14 @@
 mod curve;
 mod drag;
-mod hit;
 mod interaction;
 mod menu;
 mod render;
 
+pub(super) use curve::Tessellator;
 pub(super) use drag::ConnectionDrag;
 pub(super) use interaction::ConnectionClick;
 
-use gpui_kit::base::plot::{PathCache, ShapeKey};
-use gpui_kit::component::ActiveTheme;
-use gpui_kit::{App, Bounds, Hsla, Pixels, Point, Window, fill, point, px, size};
+use gpui_kit::{Bounds, Hsla, Path, Pixels, Point, Window, point, px};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -21,9 +19,12 @@ use yss_node_protocol::PortDirection;
 
 use super::geometry::NodeMovement;
 use super::presentation::{Presentation, State};
+use super::style::{CanvasStyle, DataKind};
 use super::{geometry, ports};
-use curve::Curve;
-use yss_ui::appearance as theme;
+use curve::{Curve, Dash};
+
+/// The pointer tolerance around a connection, in screen pixels.
+const HIT_DISTANCE: f32 = 6.;
 
 #[derive(Clone)]
 struct PortAnchor {
@@ -32,7 +33,7 @@ struct PortAnchor {
     offset: Point<Pixels>,
     key: Arc<str>,
     direction: PortDirection,
-    color: u32,
+    kind: DataKind,
 }
 
 impl PortAnchor {
@@ -50,9 +51,6 @@ struct Connection {
     id: ConnectionId,
     output: PortAnchor,
     input: PortAnchor,
-    path: PathCache,
-    highlight: PathCache,
-    hit: hit::HitPath,
 }
 
 impl Connection {
@@ -65,10 +63,11 @@ impl Connection {
         let output = self.output.position(preview) * zoom;
         (
             offset + output,
-            Curve {
-                delta: self.input.position(preview) * zoom - output,
-                from_input: self.output.direction == PortDirection::Input,
-            },
+            Curve::new(
+                self.input.position(preview) * zoom - output,
+                zoom,
+                self.output.direction == PortDirection::Input,
+            ),
         )
     }
 }
@@ -80,13 +79,89 @@ pub(super) struct Interaction<'a> {
     pub replacements: Option<&'a BTreeSet<ConnectionId>>,
 }
 
+/// The stroke width of a connection: it thickens gently with zoom but stays crisp.
+pub(super) fn stroke_width(zoom: f32) -> Pixels {
+    px((2. * zoom.sqrt()).clamp(1.25, 3.))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Pass {
+    Line,
+    /// Hovered and selected connections stay above the rest.
+    Emphasis,
+}
+
+struct StrokeGroup {
+    pass: Pass,
+    color: Hsla,
+    width: Pixels,
+    dash: Option<Dash>,
+    path: Option<Path<Pixels>>,
+}
+
+/// Strokes merged per appearance, so a frame paints a handful of paths however many
+/// connections are visible.
+#[derive(Default)]
+struct Strokes {
+    tessellator: Tessellator,
+    groups: Vec<StrokeGroup>,
+}
+
+impl Strokes {
+    #[allow(clippy::too_many_arguments)]
+    fn add(
+        &mut self,
+        pass: Pass,
+        color: Hsla,
+        width: Pixels,
+        dash: Option<Dash>,
+        origin: Point<Pixels>,
+        curve: Curve,
+        hidden: &dyn Fn(Point<Pixels>) -> bool,
+    ) {
+        if color.a <= 0. {
+            return;
+        }
+        let index = match self.groups.iter().position(|group| {
+            group.pass == pass && group.color == color && group.width == width && group.dash == dash
+        }) {
+            Some(index) => index,
+            None => {
+                self.groups.push(StrokeGroup {
+                    pass,
+                    color,
+                    width,
+                    dash,
+                    path: None,
+                });
+                self.groups.len() - 1
+            }
+        };
+        let path = &mut self.groups[index].path;
+        self.tessellator
+            .stroke(curve, origin, width, dash, hidden, path);
+    }
+
+    fn paint(mut self, window: &mut Window) {
+        // Emphasized lines go above every other; within a pass, first use keeps its place.
+        self.groups.sort_by_key(|group| group.pass);
+        for group in self.groups {
+            if let Some(path) = group.path {
+                window.paint_path(path, group.color);
+            }
+        }
+    }
+}
+
+fn shown(_: Point<Pixels>) -> bool {
+    false
+}
+
 pub(super) struct ConnectionLayer {
     nodes: Vec<geometry::NodeGeometry>,
     node_indices: BTreeMap<NodeId, usize>,
     anchors: BTreeMap<PortAddress, PortAnchor>,
     connections: Vec<Connection>,
-    pending: PathCache,
-    grid: PathCache,
 }
 
 impl ConnectionLayer {
@@ -96,8 +171,6 @@ impl ConnectionLayer {
             node_indices: BTreeMap::new(),
             anchors: BTreeMap::new(),
             connections: Vec::new(),
-            pending: PathCache::default(),
-            grid: PathCache::default(),
         };
         layer.install(projection);
         layer
@@ -127,43 +200,27 @@ impl ConnectionLayer {
                         offset,
                         key: port.address.to_string().into(),
                         direction: port.direction,
-                        color: ports::type_color(port),
+                        kind: ports::data_kind(port),
                     });
                     anchor.node_position =
                         point(px(node.position.x as f32), px(node.position.y as f32));
                     anchor.offset = offset;
                     anchor.direction = port.direction;
-                    anchor.color = ports::type_color(port);
+                    anchor.kind = ports::data_kind(port);
                     self.anchors.insert(port.address.clone(), anchor);
                 }
             }
             self.node_indices.insert(node.node_id, self.nodes.len());
             self.nodes.push(geometry);
         }
-        let mut previous = std::mem::take(&mut self.connections)
-            .into_iter()
-            .map(|connection| (connection.id, connection))
-            .collect::<BTreeMap<_, _>>();
         self.connections = projection
             .connections
             .iter()
             .filter_map(|connection| {
-                let output = self.anchors.get(&connection.output)?.clone();
-                let input = self.anchors.get(&connection.input)?.clone();
-                Some(match previous.remove(&connection.connection_id) {
-                    Some(mut retained) => {
-                        retained.output = output;
-                        retained.input = input;
-                        retained
-                    }
-                    None => Connection {
-                        id: connection.connection_id,
-                        output,
-                        input,
-                        path: PathCache::default(),
-                        highlight: PathCache::default(),
-                        hit: hit::HitPath::default(),
-                    },
+                Some(Connection {
+                    id: connection.connection_id,
+                    output: self.anchors.get(&connection.output)?.clone(),
+                    input: self.anchors.get(&connection.input)?.clone(),
                 })
             })
             .collect();
@@ -198,18 +255,29 @@ impl ConnectionLayer {
     }
 
     pub fn paint(
-        &mut self,
+        &self,
         bounds: Bounds<Pixels>,
         (offset, zoom): (Point<Pixels>, f32),
         preview: &NodeMovement,
         interaction: Interaction<'_>,
+        style: &CanvasStyle,
         window: &mut Window,
-        cx: &App,
     ) {
-        self.paint_grid(bounds, offset, zoom, window, cx);
-        for connection in &mut self.connections {
+        let width = stroke_width(zoom);
+        let replaced_dash = Some(Dash {
+            on: 6.,
+            off: 4.,
+            phase: 0.,
+        });
+        let stale_dash = Some(Dash {
+            on: 8.,
+            off: 5.,
+            phase: 0.,
+        });
+        let mut strokes = Strokes::default();
+        for connection in &self.connections {
             let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
-            if !visible(curve, origin, bounds) {
+            if !curve.visible(origin, bounds) {
                 continue;
             }
             let state = interaction.presentation.connection(connection.id);
@@ -218,85 +286,59 @@ impl ConnectionLayer {
             let replaced = interaction
                 .replacements
                 .is_some_and(|ids| ids.contains(&connection.id));
-            let opacity = if interaction.replacements.is_some() && !replaced {
+            let fade = if interaction.replacements.is_some() && !replaced {
                 0.25
             } else {
                 1.
             };
-            if selected || hovered || state == State::Valid {
-                let (width, color, alpha) = if selected {
-                    (16., cx.theme().primary, 0.55)
-                } else if hovered {
-                    (7., cx.theme().primary, 0.35)
-                } else {
-                    (6., theme::data_color(connection.output.color, cx), 0.16)
-                };
-                paint_connection(
-                    &mut connection.highlight,
-                    origin,
-                    curve,
-                    (px(width), State::Valid),
-                    color.opacity(alpha * opacity),
-                    window,
-                );
-            }
-            let color = if replaced {
-                cx.theme().warning
-            } else if state == State::Error {
-                cx.theme().danger
+            let ink = style.data(connection.output.kind);
+            let (color, dash) = if replaced {
+                (style.warning, replaced_dash)
+            } else if selected {
+                (style.selection, None)
             } else {
-                theme::data_color(connection.output.color, cx)
+                match state {
+                    State::Error => (style.danger, None),
+                    State::Stale => (ink.opacity(0.8), stale_dash),
+                    State::Unexecuted => (ink.opacity(0.6), None),
+                    // The activity overlay runs bright pulses along the dimmed line.
+                    State::Running => (ink.opacity(0.4), None),
+                    State::Valid | State::Partial => (ink, None),
+                }
             };
-            let width = if replaced || state == State::Valid {
-                3.
+            // Emphasis is weight, not glow: the line turns opaque, heavier and comes forward.
+            let (color, width, pass) = if (selected || hovered) && !replaced {
+                (color.alpha(1.), width + px(1.5), Pass::Emphasis)
             } else {
-                2.
+                (color, width, Pass::Line)
             };
-            paint_connection(
-                &mut connection.path,
+            strokes.add(
+                pass,
+                color.opacity(fade),
+                width,
+                dash,
                 origin,
                 curve,
-                (px(width), state),
-                color.opacity(state.opacity() * opacity),
-                window,
+                &shown,
             );
         }
+        strokes.paint(window);
     }
 
     pub fn hit_test(
-        &mut self,
-        point: Point<Pixels>,
+        &self,
+        target: Point<Pixels>,
         zoom: f32,
         preview: &NodeMovement,
     ) -> Option<ConnectionId> {
-        self.connections.iter_mut().rev().find_map(|connection| {
+        let mut tessellator = Tessellator::default();
+        self.connections.iter().rev().find_map(|connection| {
             let (origin, curve) = connection.geometry(Point::default(), zoom, preview);
-            connection
-                .hit
-                .contains(curve, point - origin)
-                .then_some(connection.id)
+            let relative = target - origin;
+            (curve.bounds().dilate(px(HIT_DISTANCE)).contains(&relative)
+                && tessellator.distance(curve, relative) <= px(HIT_DISTANCE))
+            .then_some(connection.id)
         })
-    }
-
-    pub fn paint_pending(
-        &mut self,
-        a: Point<Pixels>,
-        b: Point<Pixels>,
-        from_input: bool,
-        color: Hsla,
-        window: &mut Window,
-    ) {
-        paint_connection(
-            &mut self.pending,
-            a,
-            Curve {
-                delta: b - a,
-                from_input,
-            },
-            (px(2.), State::Valid),
-            color,
-            window,
-        );
     }
 
     pub fn has_visible_running(
@@ -312,149 +354,77 @@ impl ConnectionLayer {
             .filter(|connection| presentation.connection(connection.id) == State::Running)
             .any(|connection| {
                 let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
-                visible(curve, origin, bounds)
+                curve.visible(origin, bounds)
             })
     }
 
+    /// Pulses travelling from output to input along running connections. They are drawn
+    /// above the graph, so stretches passing under a node are left out.
+    #[allow(clippy::too_many_arguments)]
     pub fn paint_activity(
         &self,
         bounds: Bounds<Pixels>,
         (offset, zoom): (Point<Pixels>, f32),
         preview: &NodeMovement,
-        (presentation, progress): (&Presentation, f32),
+        (presentation, travelled): (&Presentation, f32),
+        occluders: &[Bounds<Pixels>],
+        (style, fade): (&CanvasStyle, f32),
         window: &mut Window,
-        cx: &App,
     ) {
+        let width = stroke_width(zoom) + px(0.5);
+        let mut strokes = Strokes::default();
         for connection in self
             .connections
             .iter()
             .filter(|connection| presentation.connection(connection.id) == State::Running)
         {
             let (origin, curve) = connection.geometry(bounds.origin + offset, zoom, preview);
-            if !visible(curve, origin, bounds) {
+            if !curve.visible(origin, bounds) {
                 continue;
             }
-            for marker in 0..3 {
-                let t = (progress + marker as f32 / 3.) % 1.;
-                let position = origin + curve.position(t);
-                window.paint_quad(
-                    fill(
-                        Bounds::new(position - point(px(3.), px(3.)), size(px(6.), px(6.))),
-                        theme::data_color(connection.output.color, cx),
-                    )
-                    .corner_radii(px(3.)),
-                );
-            }
+            let mut extent = curve.bounds();
+            extent.origin += origin;
+            let covering = occluders
+                .iter()
+                .filter(|occluder| occluder.intersects(&extent))
+                .collect::<Vec<_>>();
+            let hidden =
+                |point: Point<Pixels>| covering.iter().any(|occluder| occluder.contains(&point));
+            strokes.add(
+                Pass::Line,
+                style.data(connection.output.kind).opacity(fade),
+                width,
+                Some(Dash {
+                    on: 10.,
+                    off: 14.,
+                    phase: -travelled,
+                }),
+                origin,
+                curve,
+                &hidden,
+            );
         }
+        strokes.paint(window);
     }
 
-    fn paint_grid(
-        &mut self,
-        bounds: Bounds<Pixels>,
-        offset: Point<Pixels>,
-        zoom: f32,
+    pub fn paint_pending(
+        &self,
+        (start, end): (Point<Pixels>, Point<Pixels>),
+        (from_input, zoom): (bool, f32),
+        color: Hsla,
         window: &mut Window,
-        cx: &App,
     ) {
-        let spacing = grid_spacing(zoom);
-        let phase = point(
-            px(f32::from(offset.x).rem_euclid(spacing.into())),
-            px(f32::from(offset.y).rem_euclid(spacing.into())),
+        let mut strokes = Strokes::default();
+        let curve = Curve::new(end - start, zoom, from_input);
+        strokes.add(Pass::Line, color, px(2.), None, start, curve, &shown);
+        strokes.paint(window);
+        let dot = px(7.);
+        window.paint_quad(
+            gpui_kit::fill(
+                Bounds::new(end - point(dot / 2., dot / 2.), gpui_kit::size(dot, dot)),
+                color,
+            )
+            .corner_radii(dot / 2.),
         );
-        // Repeat a bounded mesh instead of tessellating the whole viewport or
-        // issuing one scene primitive per dot at low zoom.
-        const CELLS: usize = 32;
-        let key = ShapeKey::new(()).f32(spacing.into()).finish();
-        let mut y = phase.y - spacing;
-        while y < bounds.size.height {
-            let mut x = phase.x - spacing;
-            while x < bounds.size.width {
-                if let Some(path) = self.grid.get(key, bounds.origin + point(x, y), || {
-                    let mut path = gpui_kit::PathBuilder::fill();
-                    for row in 0..CELLS {
-                        for column in 0..CELLS {
-                            let x = spacing * column as f32;
-                            let y = spacing * row as f32 + px(1.);
-                            path.move_to(point(x, y));
-                            path.arc_to(
-                                point(px(1.), px(1.)),
-                                px(0.),
-                                false,
-                                true,
-                                point(x + px(2.), y),
-                            );
-                            path.arc_to(point(px(1.), px(1.)), px(0.), false, true, point(x, y));
-                            path.close();
-                        }
-                    }
-                    path.build().ok()
-                }) {
-                    window.paint_path(path, cx.theme().input);
-                }
-                x += spacing * CELLS as f32;
-            }
-            y += spacing * CELLS as f32;
-        }
-    }
-}
-
-const GRID_WORLD_SPACING: f32 = 40.;
-const GRID_MIN_SCREEN_SPACING: f32 = 20.;
-
-fn grid_spacing(zoom: f32) -> Pixels {
-    let mut spacing = GRID_WORLD_SPACING * zoom;
-    // Coarser world-aligned levels keep dots legible and bound low-zoom mesh work.
-    while spacing < GRID_MIN_SCREEN_SPACING {
-        spacing *= 2.;
-    }
-    px(spacing)
-}
-
-fn visible(curve: Curve, origin: Point<Pixels>, bounds: Bounds<Pixels>) -> bool {
-    let mut curve_bounds = curve.bounds().dilate(px(8.));
-    curve_bounds.origin += origin;
-    curve_bounds.intersects(&bounds)
-}
-
-fn paint_connection(
-    cache: &mut PathCache,
-    origin: Point<Pixels>,
-    curve: Curve,
-    (width, state): (Pixels, State),
-    color: Hsla,
-    window: &mut Window,
-) {
-    let key = ShapeKey::new((curve.from_input, state))
-        .point(curve.delta)
-        .f32(width.into())
-        .finish();
-    if let Some(path) = cache.get(key, origin, || curve.build(width, state.dashes())) {
-        window.paint_path(path, color);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn low_zoom_grid_keeps_world_alignment_and_bounded_screen_density() {
-        let threshold = GRID_MIN_SCREEN_SPACING / GRID_WORLD_SPACING;
-        let at_threshold = grid_spacing(threshold);
-        assert_eq!(at_threshold, px(GRID_MIN_SCREEN_SPACING));
-        assert_eq!(grid_spacing(threshold / 2.), at_threshold);
-
-        let zoom = threshold / 5.;
-        let spacing = f32::from(grid_spacing(zoom));
-        assert!(spacing >= GRID_MIN_SCREEN_SPACING);
-        assert!(spacing < 2. * GRID_MIN_SCREEN_SPACING);
-        let world_steps = spacing / (GRID_WORLD_SPACING * zoom);
-        assert_eq!(world_steps.fract(), 0.);
-        assert!((world_steps as u32).is_power_of_two());
-
-        let offset = -113_f32;
-        let phase = offset.rem_euclid(spacing);
-        let world_grid_index = (phase - offset) / zoom / GRID_WORLD_SPACING;
-        assert_eq!(world_grid_index.fract(), 0.);
     }
 }

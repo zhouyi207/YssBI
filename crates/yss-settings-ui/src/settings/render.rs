@@ -1,7 +1,7 @@
 use super::{BackInSettings, Page, SaveSettings, SettingsPanel, models::provider_name};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
-    ActiveTheme, Disableable,
+    ActiveTheme, Disableable, ThemeStyled,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     button::Button,
     group_box::GroupBoxVariant,
@@ -20,9 +20,9 @@ impl Render for SettingsPanel {
         let owner = cx.weak_entity();
         let mut groups = vec![
             SettingGroup::new().item(
-                SettingItem::render(move |_, _, cx| {
+                SettingItem::render(move |_, window, cx| {
                     owner
-                        .update(cx, |view, cx| view.header(cx))
+                        .update(cx, |view, cx| view.header(window, cx))
                         .unwrap_or_else(|_| div().into_any_element())
                 })
                 .keywords([t("settings.sections.ai"), t("settings.models.providers")]),
@@ -120,7 +120,7 @@ impl Render for SettingsPanel {
 }
 
 impl SettingsPanel {
-    fn header(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn header(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let mut breadcrumb = Breadcrumb::new().text_lg().flex_1().min_w_0();
         let mut overview = BreadcrumbItem::new(t("settings.sections.ai"));
         if self.page != Page::Overview {
@@ -155,9 +155,11 @@ impl SettingsPanel {
         }
         breadcrumb_row()
             .id("settings-breadcrumb")
-            .focusable()
-            .focus_visible(|style| style.bg(cx.theme().secondary))
-            .tab_stop(true)
+            .track_focus(&self.breadcrumb_focus)
+            .when(
+                self.breadcrumb_focus.is_focused(window) && window.last_input_was_keyboard(),
+                |row| row.relative().focus_ring_style(window, cx),
+            )
             .key_context("SettingsBreadcrumb")
             .on_action(cx.listener(|view, _: &BackInSettings, window, cx| {
                 if !view.busy() {

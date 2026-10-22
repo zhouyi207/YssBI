@@ -224,7 +224,6 @@ impl ResultStore {
             .map(|entry| entry.snapshot.clone())
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn query_cache_states(
         &self,
         graph: &str,

@@ -1,4 +1,5 @@
 //! Graph diagnostics and execution failures use the shared desktop locale and translations.
+use yss_application::graph::run::ExecutionApplicationError;
 use yss_graph_editor::projection::{
     EditorDiagnosticModel, EditorDiagnosticSeverity, EditorNodeModel, EditorProjectionModel,
 };
@@ -94,6 +95,26 @@ pub fn run_failure_key(code: yss_graph_execution::error::RunFailureCode) -> &'st
 
 pub fn run_failure(code: yss_graph_execution::error::RunFailureCode) -> String {
     translate(&format!("runFailure.causes.{}", run_failure_key(code)))
+}
+
+/// Explains a run that Application refused before it started.
+pub fn run_rejection(error: &anyhow::Error) -> String {
+    let cause = match error.downcast_ref::<ExecutionApplicationError>() {
+        Some(ExecutionApplicationError::DraftChanged) => "graph_draft_changed",
+        Some(ExecutionApplicationError::GraphNotReady) => "graph_not_ready",
+        Some(ExecutionApplicationError::GraphResolutionFailed { .. }) => "graph_resolution_failed",
+        Some(ExecutionApplicationError::GraphPlan(_)) => "graph_plan_failed",
+        Some(
+            ExecutionApplicationError::SessionCapture(_)
+            | ExecutionApplicationError::StaleSession(_),
+        ) => "stale_project_lifecycle",
+        Some(ExecutionApplicationError::Cancelled) => {
+            return yss_ui::text::t("native.canvas.runCancelled").into();
+        }
+        Some(ExecutionApplicationError::DeadlineExceeded) => "deadlineExceeded",
+        _ => return yss_ui::text::t("native.canvas.runRequestFailed").into(),
+    };
+    yss_ui::text::translate(&format!("runFailure.causes.{cause}"))
 }
 
 #[cfg(test)]

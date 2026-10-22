@@ -4,7 +4,7 @@ use gpui_kit::component::{
     ActiveTheme, Icon,
     button::{Button, ButtonVariants},
 };
-use gpui_kit::{AnyElement, Context, IntoElement, div, prelude::*};
+use gpui_kit::{AnyElement, Context, IntoElement, SharedString, div, prelude::*};
 use std::sync::Arc;
 use yss_graph_editor::projection::{EditorDiagnosticSeverity, EditorProjectionModel};
 
@@ -25,8 +25,10 @@ pub(super) fn render(
         .unwrap_or_else(|| projection.graph_path.to_string());
     let message = crate::feedback::diagnostic_description(diagnostic, projection, None);
     let source = projection.clone();
+    // Rows of several graphs share one list, so identities include the graph.
+    let graph = projection.graph_path.as_str();
     div()
-        .id(("problem-row", index))
+        .id((SharedString::from(format!("problem-row-{graph}")), index))
         .w_full()
         .min_w_0()
         .flex()
@@ -34,8 +36,8 @@ pub(super) fn render(
         .border_b_1()
         .border_color(cx.theme().border.opacity(0.5))
         .child(
-            Button::new(("problem", index))
-                .ghost()
+            Button::new((SharedString::from(format!("problem-{graph}")), index))
+                .text()
                 .rounded_none()
                 .w_full()
                 .h_auto()
@@ -97,28 +99,31 @@ pub(super) fn render(
                     let label = location::label(address, projection, None)
                         .unwrap_or_else(|| projection.graph_path.to_string());
                     let source = projection.clone();
-                    Button::new(("problem-related", related))
-                        .tooltip(label.clone())
-                        .ghost()
-                        .rounded_none()
-                        .w_full()
-                        .h_auto()
-                        .min_h_0()
-                        .pl_8()
-                        .pr_3()
-                        .py_1()
-                        .justify_start()
-                        .text_xs()
-                        .text_color(cx.theme().primary)
-                        .child(div().flex_1().min_w_0().truncate().text_left().child(
-                            yss_ui::text::format(
-                                "panel.problemsRelatedLocation",
-                                &[("location", label)],
-                            ),
-                        ))
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            view.locate(&source, index, Some(related), cx)
-                        }))
+                    Button::new((
+                        SharedString::from(format!("problem-related-{graph}-{index}")),
+                        related,
+                    ))
+                    .tooltip(label.clone())
+                    .text()
+                    .rounded_none()
+                    .w_full()
+                    .h_auto()
+                    .min_h_0()
+                    .pl_8()
+                    .pr_3()
+                    .py_1()
+                    .justify_start()
+                    .text_xs()
+                    .text_color(cx.theme().primary)
+                    .child(div().flex_1().min_w_0().truncate().text_left().child(
+                        yss_ui::text::format(
+                            "panel.problemsRelatedLocation",
+                            &[("location", label)],
+                        ),
+                    ))
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.locate(&source, index, Some(related), cx)
+                    }))
                 }),
         )
         .into_any_element()

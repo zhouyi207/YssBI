@@ -710,7 +710,11 @@ fn connection_install_tracks_move_reconnect_port_reorder_delete_and_restore() {
 
 #[test]
 fn cached_node_geometry_tracks_inline_parameters_ports_and_compact_style() {
-    use crate::canvas::{connections::ConnectionLayer, geometry::NodeMovement, presentation};
+    use crate::canvas::{
+        connections::ConnectionLayer,
+        geometry::{NodeMovement, PARAMETER_CHROME, PARAMETER_HEIGHT, PORT_HEIGHT},
+        presentation,
+    };
     use yss_graph_document::PortAddress;
     use yss_node_protocol::ParameterPresentation;
 
@@ -760,13 +764,14 @@ fn cached_node_geometry_tracks_inline_parameters_ports_and_compact_style() {
         .presentation = ParameterPresentation::InlineAndDetail;
     assert!(!presentation::same_content(&original, &projection));
     layer.install(&projection);
+    let parameter = PARAMETER_HEIGHT + PARAMETER_CHROME;
     assert_eq!(
         layer.node(fixture.source).unwrap().layout.height,
-        original_height + 36.
+        original_height + parameter
     );
     assert_eq!(
         layer.port_position(&output, &idle).unwrap().y,
-        anchor.y + px(106.)
+        anchor.y + px(70. + parameter)
     );
 
     let mut extra = projection.nodes[0].ports[0].clone();
@@ -778,7 +783,7 @@ fn cached_node_geometry_tracks_inline_parameters_ports_and_compact_style() {
     layer.install(&projection);
     assert_eq!(
         layer.port_position(&extra_address, &idle).unwrap().y,
-        layer.port_position(&output, &idle).unwrap().y + px(28.)
+        layer.port_position(&output, &idle).unwrap().y + px(PORT_HEIGHT)
     );
     let bounds = layer
         .node(fixture.source)
@@ -949,6 +954,75 @@ fn empty_canvas_button_and_keyboard_open_palette_and_restore_focus(cx: &mut Test
     cx.update_window(window, |_, window, cx| {
         assert!(canvas.read(cx).palette.is_none());
         assert!(canvas.read(cx).focus.is_focused(window));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn pointer_targets_follow_painted_geometry_and_raise_the_selection(cx: &mut TestAppContext) {
+    use crate::canvas::CanvasTarget;
+    use gpui_kit::{Bounds, size};
+    use yss_node_protocol::PortDirection;
+
+    let fixture = Fixture::new();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (window, canvas) = fixture.canvas(&runtime, cx);
+    cx.update_window(window, |_, _, cx| {
+        canvas.update(cx, |canvas, _| {
+            canvas.bounds.set(Bounds::new(
+                point(px(0.), px(0.)),
+                size(px(1200.), px(800.)),
+            ));
+            canvas.offset = point(px(40.), px(40.));
+            canvas.zoom = canvas.font_scale;
+            let origin = point(px(0.), px(0.));
+            // Both fixture nodes sit at the origin; the later one is drawn and picked on top.
+            let nodes = canvas
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .map(|node| node.node_id)
+                .collect::<Vec<_>>();
+            let (bottom, top) = (nodes[0], nodes[1]);
+            let rect = {
+                let layer = &canvas.connection_layer;
+                let node = &canvas.graph.projection.nodes[1];
+                canvas.node_screen_rect(node, layer.node(top).unwrap(), origin)
+            };
+            let header = point(rect.left() + px(100.), rect.top() + px(10.));
+            assert_eq!(canvas.target_at(header), Some(CanvasTarget::Node(top)));
+            assert_eq!(
+                canvas.target_at(canvas.status_center(rect)),
+                Some(CanvasTarget::Status(top))
+            );
+            canvas.selected = [bottom].into();
+            assert_eq!(canvas.target_at(header), Some(CanvasTarget::Node(bottom)));
+
+            let (owner, port) = canvas
+                .graph
+                .projection
+                .nodes
+                .iter()
+                .find_map(|node| {
+                    let port = node
+                        .ports
+                        .iter()
+                        .find(|port| port.direction == PortDirection::Output)?;
+                    Some((node.node_id, port.address.clone()))
+                })
+                .unwrap();
+            canvas.selected = [owner].into();
+            let anchor = canvas
+                .connection_layer
+                .port_position(&port, &canvas.preview)
+                .unwrap();
+            // Pins reach a little past the card edge they straddle.
+            let outside = canvas.offset + anchor * canvas.zoom + point(px(6.), px(0.));
+            assert_eq!(canvas.target_at(outside), Some(CanvasTarget::Port(port)));
+            assert_eq!(canvas.target_at(point(px(1100.), px(700.))), None);
+            assert_eq!(canvas.target_at(point(px(1300.), px(10.))), None);
+        });
     })
     .unwrap();
 }

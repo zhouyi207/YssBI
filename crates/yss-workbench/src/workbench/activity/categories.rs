@@ -88,7 +88,6 @@ impl ActivityPanel {
             .font_weight(gpui_kit::FontWeight::MEDIUM)
             .cursor_pointer()
             .text_color(cx.theme().muted_foreground)
-            .hover(|style| style.bg(cx.theme().muted))
             .child(crate::catalog_rows::category(
                 label.resolve_with(translate),
                 expanded,

@@ -5,17 +5,17 @@ pub(super) mod input;
 mod inspection;
 mod menu;
 
-use super::{GraphCanvas, presentation::State};
-use gpui_kit::component::ActiveTheme;
-use gpui_kit::{
-    AnyElement, App, Context, Hsla, IntoElement, MouseButton, Pixels, div, prelude::*, px,
+use super::{
+    GraphCanvas, geometry,
+    style::{CanvasStyle, DataKind},
+    text::Label,
 };
+use gpui_kit::{AnyElement, App, Bounds, Hsla, Pixels, Point, Window, point, px, size};
 use yss_data_contract::{SemanticType, ValueType};
 use yss_graph_editor::projection::{
     ConnectionDecision, EditorDiagnosticSeverity, EditorPortModel, EditorPortTypeState,
 };
 use yss_node_protocol::PortDirection;
-use yss_ui::appearance;
 
 pub(crate) fn scalar_input_type(port: &EditorPortModel) -> Option<SemanticType> {
     if port.direction != PortDirection::Input || port.orphan {
@@ -33,227 +33,174 @@ pub(crate) fn scalar_input_type(port: &EditorPortModel) -> Option<SemanticType> 
     }
 }
 
-fn port_color(port: &EditorPortModel, cx: &App) -> Hsla {
-    if port.orphan {
-        cx.theme().danger
-    } else {
-        appearance::data_color(type_color(port), cx)
+/// The element kind a port carries; a constrained port has one when all its candidates agree.
+pub(super) fn data_kind(port: &EditorPortModel) -> DataKind {
+    match &port.type_state {
+        EditorPortTypeState::Exact {
+            data_type: Some(value),
+            ..
+        } => value_kind(value),
+        EditorPortTypeState::Constrained { domain, .. } => {
+            let mut kinds = domain.iter().map(value_kind);
+            let first = kinds.next().unwrap_or_default();
+            if kinds.all(|kind| kind == first) {
+                first
+            } else {
+                DataKind::Other
+            }
+        }
+        _ => DataKind::Other,
     }
 }
 
-/// The port as drawn on the canvas, so other surfaces show the same type shape and color.
-pub(crate) fn port_glyph(port: &EditorPortModel, diameter: Pixels, cx: &App) -> AnyElement {
-    glyph::Glyph::new(&port.type_state).render(
-        diameter,
-        port_color(port, cx),
-        port.connections.current > 0,
-        false,
-    )
-}
-
-pub(super) fn type_color(port: &EditorPortModel) -> u32 {
-    let EditorPortTypeState::Exact {
-        data_type: Some(value),
-        ..
-    } = &port.type_state
-    else {
-        return 0xd4d4d4;
-    };
+fn value_kind(value: &ValueType) -> DataKind {
     let mut value = value;
     while let ValueType::Array(inner) | ValueType::DataSeries(inner) = value {
         value = inner;
     }
     match value {
-        ValueType::Scalar(SemanticType::Numeric) => 0x5eead4,
-        ValueType::Scalar(SemanticType::Binary) => 0xfb7185,
-        ValueType::Scalar(SemanticType::Text) => 0xfbbf24,
-        ValueType::Scalar(SemanticType::Datetime) => 0xc084fc,
-        ValueType::DataFrame => 0x60a5fa,
-        _ => 0xd4d4d4,
+        ValueType::Scalar(SemanticType::Numeric) => DataKind::Numeric,
+        ValueType::Scalar(SemanticType::Binary) => DataKind::Binary,
+        ValueType::Scalar(SemanticType::Text) => DataKind::Text,
+        ValueType::Scalar(SemanticType::Datetime) => DataKind::Datetime,
+        ValueType::DataFrame => DataKind::Frame,
+        _ => DataKind::Other,
     }
 }
 
+fn port_ink(port: &EditorPortModel, style: &CanvasStyle) -> Hsla {
+    if port.orphan {
+        style.danger
+    } else {
+        style.data(data_kind(port))
+    }
+}
+
+/// The port as drawn on the canvas, so other surfaces show the same type shape and color.
+pub(crate) fn port_glyph(port: &EditorPortModel, diameter: Pixels, cx: &App) -> AnyElement {
+    use gpui_kit::component::ActiveTheme;
+    let theme = cx.theme();
+    glyph::element(
+        glyph::Glyph::new(&port.type_state),
+        diameter,
+        if port.orphan {
+            theme.danger
+        } else {
+            data_kind(port).color(theme)
+        },
+        theme.background,
+        port.connections.current > 0,
+    )
+}
+
+/// Where a port row sits on screen, derived from its node's transform.
+pub(super) struct PortSlot<'a> {
+    pub port: &'a EditorPortModel,
+    pub label: Option<&'a Label>,
+    pub anchor: Point<Pixels>,
+    pub row: Bounds<Pixels>,
+    pub zoom: f32,
+    pub label_alpha: f32,
+}
+
 impl GraphCanvas {
-    pub(super) fn render_port(
-        &self,
-        port: &EditorPortModel,
-        compact: bool,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement + use<> {
-        let start = port.address.clone();
-        let end = start.clone();
-        let menu_address = start.clone();
+    pub(super) fn paint_port(&self, slot: PortSlot<'_>, style: &CanvasStyle, window: &mut Window) {
+        let PortSlot {
+            port,
+            label,
+            anchor,
+            row,
+            zoom,
+            label_alpha,
+        } = slot;
         let output = port.direction == PortDirection::Output;
-        let input = (!compact
-            && self
-                .connection_drag()
-                .is_none_or(|drag| drag.source != port.address))
-        .then(|| self.render_port_input(port, cx))
-        .flatten();
-        let label = port
-            .display
-            .instance_label
-            .as_deref()
-            .unwrap_or(&port.display.label)
-            .to_owned();
-        let hovered = start.clone();
         let drag = self.connection_drag();
         let decision = drag.and_then(|drag| drag.decision(&port.address));
         let active = drag.is_some_and(|drag| drag.source == port.address);
         let target = drag.is_some_and(|drag| drag.target.as_ref() == Some(&port.address));
-        let dimmed = !active && matches!(decision, Some(ConnectionDecision::Invalid { .. }));
-        let color = port_color(port, cx);
-        let display = self
-            .presentation
-            .ports
-            .get(&port.address)
-            .copied()
-            .unwrap_or_default();
-        let state = display.state;
+        let dimmed =
+            !active && !target && matches!(decision, Some(ConnectionDecision::Invalid { .. }));
+        let marked = self
+            .context_menu
+            .as_ref()
+            .is_some_and(|menu| menu.port.as_ref() == Some(&port.address))
+            || self.located_port.as_ref() == Some(&port.address);
+        let hovered = drag.is_none() && self.hovered_port() == Some(&port.address);
         let diagnostic = self
             .port_details
             .as_ref()
             .and_then(|details| details.diagnostic(&port.address));
-        let emphasized = !port.orphan
-            && !active
-            && port.connections.current == 0
-            && port.direction == PortDirection::Input
-            && diagnostic
-                .is_some_and(|diagnostic| diagnostic.code.as_ref() == "graph.input.unbound");
-        let menu_open = self
-            .context_menu
-            .as_ref()
-            .is_some_and(|menu| menu.port.as_ref() == Some(&port.address));
-        let ring = if active || menu_open {
-            Some(cx.theme().primary)
+        let alpha = if port.orphan {
+            0.35
+        } else if dimmed {
+            0.3
+        } else {
+            1.
+        };
+        let ink = port_ink(port, style).opacity(alpha);
+        let diameter = px(geometry::GLYPH_SIZE * zoom).max(px(3.));
+        // Emphasis never fills behind a pin: it grows under the pointer or as the drop
+        // target, and a ring names the source, menu target, drop decision or its own problem.
+        let grown = if hovered || target || active || marked {
+            diameter * 1.3
+        } else {
+            diameter
+        };
+        let ring = if active || marked {
+            Some(style.selection)
         } else {
             match decision {
-                Some(ConnectionDecision::Append) => Some(cx.theme().success),
-                Some(ConnectionDecision::Replace { .. }) => Some(cx.theme().warning),
-                Some(ConnectionDecision::Invalid { .. }) if target => Some(cx.theme().danger),
-                _ if diagnostic.is_some() => {
-                    diagnostic.map(|diagnostic| match diagnostic.severity {
-                        EditorDiagnosticSeverity::Error => cx.theme().danger,
-                        EditorDiagnosticSeverity::Warning => cx.theme().warning,
-                        EditorDiagnosticSeverity::Information => cx.theme().primary,
-                    })
-                }
-                _ => match state {
-                    State::Error => Some(cx.theme().danger),
-                    State::Stale | State::Running => Some(cx.theme().warning),
-                    State::Valid => Some(color),
-                    State::Unexecuted | State::Partial => None,
-                },
+                Some(ConnectionDecision::Append) => Some(style.success),
+                Some(ConnectionDecision::Replace { .. }) => Some(style.warning),
+                Some(ConnectionDecision::Invalid { .. }) if target => Some(style.danger),
+                // A failed node already shows its error; rings mark problems of the port itself.
+                _ => diagnostic.map(|diagnostic| match diagnostic.severity {
+                    EditorDiagnosticSeverity::Error => style.danger,
+                    EditorDiagnosticSeverity::Warning => style.warning,
+                    EditorDiagnosticSeverity::Information => style.info,
+                }),
             }
         };
-        let diameter = if compact { 20. } else { 12. };
-        let dot = || {
-            div()
-                .relative()
-                .size(px(diameter * self.zoom))
-                .flex_shrink_0()
-                .rounded_full()
-                .when_some(ring, |dot, ring| {
-                    dot.child(
-                        div()
-                            .absolute()
-                            .inset(px(-2. * self.zoom))
-                            .rounded_full()
-                            .border_1()
-                            .border_color(ring)
-                            .when(state == State::Stale, |dot| dot.border_dashed()),
-                    )
-                })
-                .child(glyph::Glyph::new(&port.type_state).render(
-                    px(diameter * self.zoom),
-                    color,
-                    port.connections.current > 0 || active,
-                    emphasized,
-                ))
+        if let Some(color) = ring {
+            let extent = grown + px(6.);
+            window.paint_quad(gpui_kit::quad(
+                Bounds::new(
+                    anchor - point(extent / 2., extent / 2.),
+                    size(extent, extent),
+                ),
+                extent / 2.,
+                gpui_kit::transparent_black(),
+                px(1.5),
+                color.opacity(alpha),
+                gpui_kit::BorderStyle::Solid,
+            ));
+        }
+        glyph::Glyph::new(&port.type_state).paint(
+            anchor,
+            grown,
+            ink,
+            style.card,
+            port.connections.current > 0 || active,
+            window,
+        );
+
+        let Some(label) = label.filter(|_| label_alpha > 0.) else {
+            return;
         };
-        let tooltip_address = port.address.clone();
-        let tooltip_owner = cx.entity().downgrade();
-        div()
-            .id(gpui_kit::SharedString::from(format!(
-                "port-{}-{:?}",
-                port.address.node_id, port.address.port
-            )))
-            .flex()
-            .items_center()
-            .gap(px(6. * self.zoom))
-            .w_full()
-            .min_w_0()
-            .text_size(px(12. * self.zoom))
-            .text_color(if menu_open {
-                cx.theme().primary
-            } else if port.connections.current > 0 || active {
-                cx.theme().foreground
-            } else {
-                cx.theme().muted_foreground
-            })
-            .opacity(if port.orphan {
-                0.25
-            } else if dimmed && !target {
-                0.3
-            } else {
-                1.
-            })
-            .when(drag.is_none() && self.context_menu.is_none(), |view| {
-                view.tooltip(move |_, cx| {
-                    details::tooltip(tooltip_owner.clone(), tooltip_address.clone(), cx)
-                })
-            })
-            .when(self.located_port.as_ref() == Some(&port.address), |view| {
-                view.track_focus(&self.port_focus)
-                    .bg(cx.theme().primary.opacity(0.2))
-            })
-            .cursor_crosshair()
-            .on_hover(cx.listener(move |view, over, _, cx| {
-                if let Some(drag) = view.connection_drag_mut() {
-                    let target = if *over {
-                        Some(hovered.clone())
-                    } else if drag.target.as_ref() == Some(&hovered) {
-                        None
-                    } else {
-                        return;
-                    };
-                    if drag.set_target(target) {
-                        cx.notify();
-                    }
-                }
-            }))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |view, event, window, cx| {
-                    view.begin_port(start.clone(), event, window, cx)
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |view, event: &gpui_kit::MouseDownEvent, window, cx| {
-                    view.show_port_menu(menu_address.clone(), event.position, window, cx)
-                }),
-            )
-            .on_mouse_down(MouseButton::Middle, |_, _, cx| cx.stop_propagation())
-            .on_mouse_up(
-                MouseButton::Left,
-                cx.listener(move |view, _, window, cx| view.end_port(end.clone(), window, cx)),
-            )
-            .when(!output, |view| {
-                view.ml(px(-diameter / 2. * self.zoom))
-                    .child(dot())
-                    .when(!compact, |view| {
-                        view.child(div().min_w_0().truncate().child(label.clone()))
-                    })
-                    .children(input)
-            })
-            .when(output, |view| {
-                view.mr(px(-diameter / 2. * self.zoom))
-                    .justify_end()
-                    .when(!compact, |view| {
-                        view.child(div().min_w_0().truncate().child(label))
-                    })
-                    .child(dot())
-            })
+        let color = if marked {
+            style.selection
+        } else if port.connections.current > 0 || active {
+            style.text
+        } else {
+            style.muted_text
+        };
+        let color = color.opacity(alpha * label_alpha);
+        let inset = px(geometry::CONTENT_INSET * zoom) + diameter / 2.;
+        let center = row.center().y;
+        if output {
+            label.paint_end(anchor.x - inset, center, zoom, color, window);
+        } else {
+            label.paint(anchor.x + inset, center, zoom, color, window);
+        }
     }
 }

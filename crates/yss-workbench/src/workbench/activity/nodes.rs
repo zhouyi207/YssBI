@@ -1,7 +1,7 @@
 //! Node interactions retain the exact Application catalog descriptor.
 use super::*;
 use gpui_kit::component::{
-    ActiveTheme, Sizable,
+    Sizable,
     button::{Button, ButtonVariants},
 };
 use gpui_kit::{AnyElement, Div, Stateful};
@@ -30,7 +30,6 @@ impl ActivityPanel {
         let expected_creation = expected.clone();
         item.child(crate::catalog_rows::node(title, creation, *available, cx))
             .cursor_pointer()
-            .hover(|view| view.bg(cx.theme().muted))
             .on_click(cx.listener(move |view, _, _, cx| {
                 if view.accepts(&expected)
                     && let ActivityRowContent::Item(ActivityItem::Node { creation, .. }) =

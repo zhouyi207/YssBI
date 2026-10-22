@@ -1,5 +1,3 @@
-use gpui_kit::component::ActiveTheme;
-use gpui_kit::{App, Hsla};
 use yss_ui::text;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -33,32 +31,6 @@ impl State {
             Self::Stale => "canvas.graphState.stale",
             Self::Partial => "canvas.graphState.partial",
         })
-    }
-
-    pub fn color(self, cx: &App) -> Hsla {
-        match self {
-            Self::Error => cx.theme().danger,
-            Self::Running | Self::Stale => cx.theme().warning,
-            Self::Valid | Self::Partial => cx.theme().success,
-            Self::Unexecuted => cx.theme().muted_foreground,
-        }
-    }
-
-    pub fn dashes(self) -> &'static [f32] {
-        match self {
-            Self::Unexecuted => &[3., 6.],
-            Self::Stale => &[8., 4., 2., 4.],
-            Self::Error => &[2., 3.],
-            Self::Running | Self::Valid | Self::Partial => &[],
-        }
-    }
-
-    pub fn opacity(self) -> f32 {
-        if matches!(self, Self::Unexecuted | Self::Stale) {
-            0.6
-        } else {
-            1.
-        }
     }
 }
 

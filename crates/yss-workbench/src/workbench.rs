@@ -82,6 +82,8 @@ pub struct Workbench {
     logs: Entity<LogsPanel>,
     output: Entity<OutputPanel>,
     results: Entity<ResultsPanel>,
+    /// Project-wide graph facts behind Problems, Output and Results.
+    overview: Option<Entity<yss_graph_ui::overview::ProjectOverview>>,
     result_panels: BTreeMap<(uuid::Uuid, u64), WeakEntity<crate::results::ResultPanel>>,
     result_windows: Vec<results::window::ResultWindowHandle>,
     graphs: BTreeMap<String, WeakEntity<GraphCanvas>>,
@@ -176,6 +178,7 @@ impl Workbench {
             logs,
             output,
             results,
+            overview: None,
             result_panels: BTreeMap::new(),
             result_windows: vec![],
             graphs: BTreeMap::new(),
@@ -281,14 +284,18 @@ impl Workbench {
                 );
             },
         ));
-        self.subscriptions.push(
-            cx.subscribe_in(&self.results, window, |view, _, event, _, cx| {
-                let ResultsEvent::Open(reference) = event;
-                if let Some(canvas) = view.active_graph(cx) {
-                    canvas.update(cx, |canvas, cx| canvas.inspect_result(*reference, cx));
+        self.subscriptions.push(cx.subscribe_in(
+            &self.results,
+            window,
+            |view, _, event, window, cx| match event {
+                ResultsEvent::Open(reference) => {
+                    view.open_result(*reference, None, None, window, cx)
                 }
-            }),
-        );
+                ResultsEvent::Compute { graph, output } => {
+                    view.compute_result(graph.clone(), output.clone(), window, cx)
+                }
+            },
+        ));
     }
 
     fn install_activity(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -404,11 +411,6 @@ impl Workbench {
     }
 
     fn activate_file(&mut self, path: String, cx: &mut Context<Self>) {
-        self.problems.update(cx, |problems, cx| problems.clear(cx));
-        self.output
-            .update(cx, |output, cx| output.set_graph(None, cx));
-        self.results
-            .update(cx, |results, cx| results.set_graph(None, cx));
         self.mark_project_resource(Some(&path), cx);
         cx.notify();
     }

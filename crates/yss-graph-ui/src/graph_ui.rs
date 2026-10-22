@@ -7,6 +7,7 @@ pub mod feedback;
 mod graph_properties;
 mod node_creation;
 mod opened_graph;
+pub mod overview;
 mod parameters;
 pub mod problems;
 pub mod results;

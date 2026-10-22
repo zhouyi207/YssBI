@@ -80,7 +80,7 @@ impl GraphCanvas {
                 self.graph.projection.clone(),
             )));
         }
-        let layer = self.connection_layer.borrow();
+        let layer = &self.connection_layer;
         let addresses = layer.addresses().collect::<BTreeMap<_, _>>();
         let keys = addresses
             .iter()

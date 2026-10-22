@@ -91,16 +91,16 @@ impl ActivityPanel {
             )
             .w_full()
             .min_w_0();
-        let selected_conversation = matches!(
-            &row.content,
-            ActivityRowContent::Item(ActivityItem::Conversation { session_id, .. })
-                if self.active_resource.as_deref() == Some(session_id)
-        );
+        let current = match &row.content {
+            ActivityRowContent::Item(item) => resources::identity(item)
+                .is_some_and(|identity| self.active_resource.as_deref() == Some(identity)),
+            _ => false,
+        };
         let item = if matches!(
             &row.content,
             ActivityRowContent::Item(ActivityItem::Conversation { .. })
         ) {
-            sidebar::list_item(item, selected_conversation, cx)
+            sidebar::list_item(item, current, cx)
         } else {
             item.pl(px(16. + row.depth as f32 * 16.))
                 .pr_2()
@@ -110,13 +110,12 @@ impl ActivityPanel {
                 .items_center()
                 .gap_1p5()
                 .text_size(px(13.))
-        }
-        .when(
-            focused
-                && !selected_conversation
-                && self.focus.is_focused(window)
-                && window.last_input_was_keyboard(),
-            |row| row.bg(cx.theme().muted),
+        };
+        let item = yss_ui::appearance::row_outline(
+            item,
+            current,
+            focused && self.focus.is_focused(window) && window.last_input_was_keyboard(),
+            cx,
         );
         let item = match &row.content {
             ActivityRowContent::Item(ActivityItem::Conversation { .. }) => {

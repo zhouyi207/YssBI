@@ -1,9 +1,5 @@
-use std::time::Duration;
-
 use gpui_kit::component::ActiveTheme;
-use gpui_kit::{
-    Animation, AnimationExt, App, Hsla, IntoElement, Pixels, Point, canvas, div, prelude::*, px,
-};
+use gpui_kit::{App, Hsla, IntoElement, Pixels, Point, div, prelude::*, px};
 use yss_node_protocol::PortDirection;
 
 use crate::canvas::GraphCanvas;
@@ -44,7 +40,7 @@ impl PendingConnection {
 
 impl GraphCanvas {
     pub(in crate::canvas) fn pending_connection(&self, cx: &App) -> Option<PendingConnection> {
-        let layer = self.connection_layer.borrow();
+        let layer = &self.connection_layer;
         let (source, end, color, feedback) = if let Some(drag) = self.connection_drag() {
             let (color, feedback) = drag.feedback(cx);
             let end = drag
@@ -70,47 +66,5 @@ impl GraphCanvas {
             feedback,
             from_input: layer.port_direction(source) == Some(PortDirection::Input),
         })
-    }
-
-    pub(in crate::canvas) fn render_connection_activity(
-        &self,
-        dimmed: bool,
-    ) -> impl IntoElement + use<> {
-        let layer = self.connection_layer.clone();
-        let presentation = self.presentation.clone();
-        let offset = self.offset;
-        let zoom = self.zoom;
-        let preview = self.preview.clone();
-        // Animate small markers; static strokes and hit meshes keep their geometry caches.
-        // GPUI stops this when the element is hidden or reduced motion is enabled.
-        div()
-            .absolute()
-            .size_full()
-            .opacity(if dimmed { 0.25 } else { 1. })
-            .with_animation(
-                "connection-activity",
-                Animation::new(Duration::from_millis(1200)).repeat(),
-                move |view, progress| {
-                    let layer = layer.clone();
-                    let presentation = presentation.clone();
-                    let preview = preview.clone();
-                    view.child(
-                        canvas(
-                            |_, _, _| (),
-                            move |bounds, _, window, cx| {
-                                layer.borrow().paint_activity(
-                                    bounds,
-                                    (offset, zoom),
-                                    &preview,
-                                    (&presentation, progress),
-                                    window,
-                                    cx,
-                                );
-                            },
-                        )
-                        .size_full(),
-                    )
-                },
-            )
     }
 }

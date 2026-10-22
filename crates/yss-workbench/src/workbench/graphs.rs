@@ -278,14 +278,6 @@ impl Workbench {
                                 details.show_node_properties(cx);
                             }
                         });
-                        view.problems.update(cx, |problems, cx| {
-                            problems.set_projection(projection.clone(), cx)
-                        });
-                        view.output.update(cx, |output, cx| {
-                            output.set_graph(Some(canvas.downgrade()), cx)
-                        });
-                        view.results
-                            .update(cx, |results, cx| results.set_graph(Some(canvas), cx));
                     }
                     CanvasEvent::RevealNodeDetails => {
                         if view
@@ -304,17 +296,6 @@ impl Workbench {
                                 .focus(&gpui_kit::Focusable::focus_handle(canvas.read(cx), cx), cx);
                         }
                     }
-                    CanvasEvent::Execution => {
-                        if view
-                            .details
-                            .read(cx)
-                            .graph(cx)
-                            .is_some_and(|graph| graph.entity_id() == canvas.entity_id())
-                        {
-                            view.results
-                                .update(cx, |results, cx| results.set_graph(Some(canvas), cx));
-                        }
-                    }
                     CanvasEvent::ShowOutput => {
                         if view
                             .details
@@ -330,6 +311,7 @@ impl Workbench {
                             );
                         }
                     }
+                    CanvasEvent::Execution => {}
                     CanvasEvent::ShowResults => {
                         view.present_panel(
                             gpui_kit::component::dock::panel_handle(view.results.clone()),

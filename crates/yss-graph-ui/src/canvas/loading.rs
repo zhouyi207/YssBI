@@ -307,9 +307,7 @@ impl GraphCanvas {
         if self.graph.language != yss_ui::text::locale() {
             self.refresh(cx);
         }
-        self.connection_layer
-            .borrow_mut()
-            .install(&self.graph.projection);
+        self.connection_layer.install(&self.graph.projection);
         if !preserve_presentation {
             self.refresh_presentation();
         }

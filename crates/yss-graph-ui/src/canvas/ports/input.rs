@@ -36,6 +36,11 @@ impl Inputs {
             .find_map(|(address, field)| field.focused(window, cx).then_some(address.node_id))
     }
 
+    /// The measured width of a port's inline field, in world units.
+    pub(in crate::canvas) fn width(&self, address: &PortAddress) -> Option<f32> {
+        self.fields.get(address).map(|field| f32::from(field.width))
+    }
+
     pub(in crate::canvas) fn remeasure(
         &mut self,
         text_system: &gpui_kit::WindowTextSystem,
@@ -47,7 +52,7 @@ impl Inputs {
     }
 }
 
-fn eligible(port: &EditorPortModel) -> Option<SemanticType> {
+pub(in crate::canvas) fn eligible(port: &EditorPortModel) -> Option<SemanticType> {
     (port.connections.current == 0)
         .then(|| super::scalar_input_type(port))
         .flatten()

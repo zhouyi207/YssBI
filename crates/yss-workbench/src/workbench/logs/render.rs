@@ -81,14 +81,15 @@ fn log_row(
         LogLevel::Warn => cx.theme().warning,
         _ => cx.theme().foreground,
     };
-    div()
+    let row = div()
         .id(entry.key.clone())
         .role(gpui_kit::accesskit::Role::ListItem)
         .aria_label(entry.preview.clone())
         .aria_selected(selected)
         .cursor_pointer()
-        .when(selected, |row| row.bg(cx.theme().accent))
-        .hover(|row| row.bg(cx.theme().muted))
+        .w_full()
+        .rounded_sm();
+    yss_ui::appearance::row_outline(row, selected, false, cx)
         .on_click(
             cx.listener(move |view, _, window, cx| view.inspect(inspected.clone(), window, cx)),
         )

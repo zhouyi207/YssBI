@@ -228,11 +228,6 @@ impl Workbench {
             .is_some_and(|current| current.entity_id() == canvas.entity_id())
         {
             self.details.update(cx, |details, cx| details.clear(cx));
-            self.problems.update(cx, |problems, cx| problems.clear(cx));
-            self.output
-                .update(cx, |output, cx| output.set_graph(None, cx));
-            self.results
-                .update(cx, |results, cx| results.set_graph(None, cx));
         }
         self.dock
             .update(cx, |dock, cx| dock.remove_panel(canvas, window, cx));

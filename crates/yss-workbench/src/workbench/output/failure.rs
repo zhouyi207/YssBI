@@ -3,17 +3,18 @@ use gpui_kit::component::{
     ActiveTheme, Sizable,
     button::{Button, ButtonVariants},
 };
-use gpui_kit::{AnyElement, Context, FontWeight, IntoElement, WeakEntity, div, prelude::*};
-use yss_application::graph::run::{RunApplicationEvent, RunIdentity};
+use gpui_kit::{AnyElement, Context, FontWeight, IntoElement, div, prelude::*};
+use yss_application::graph::run::RunIdentity;
 use yss_graph_execution::error::{RunFailure, RunPhase};
 use yss_graph_ui::feedback;
 
-use super::{OutputEvent, OutputPanel};
+use super::OutputPanel;
 use crate::text;
 
 pub(super) fn render(
     run: &RunIdentity,
     failure: &RunFailure,
+    node_title: Option<String>,
     cx: &Context<OutputPanel>,
 ) -> AnyElement {
     let code = feedback::run_failure_key(failure.code);
@@ -55,36 +56,26 @@ pub(super) fn render(
                 .as_ref()
                 .filter(|source| source.node().is_some()),
             |view, source| {
-                let run = run.clone();
+                let run = run.run_id();
                 let source = source.clone();
-                let node = source.node().expect("node failure source");
+                let node = source
+                    .node()
+                    .map(|node| node.as_str().to_owned())
+                    .unwrap_or_default();
                 view.child(
-                    Button::new("locate-run-failure")
+                    Button::new(("locate-run-failure", run.get()))
                         .small()
                         .link()
                         .self_start()
                         .justify_start()
                         .label(text::format(
                             "runFailure.node",
-                            &[("name", node.as_str().to_owned())],
+                            &[("name", node_title.unwrap_or_else(|| node.clone()))],
                         ))
-                        .tooltip(format!("{} · {}", source.graph().as_str(), node.as_str()))
-                        .on_click(cx.listener(move |view, _, _, cx| {
-                            let current = view
-                                .graph
-                                .as_ref()
-                                .and_then(WeakEntity::upgrade)
-                                .is_some_and(|graph| {
-                                    graph
-                                        .read(cx)
-                                        .run_failure()
-                                        .map(RunApplicationEvent::identity)
-                                        == Some(&run)
-                                });
-                            if current {
-                                cx.emit(OutputEvent::Locate(source.clone()));
-                            }
-                        })),
+                        .tooltip(format!("{} · {node}", source.graph().as_str()))
+                        .on_click(
+                            cx.listener(move |view, _, _, cx| view.locate(run, source.clone(), cx)),
+                        ),
                 )
             },
         )

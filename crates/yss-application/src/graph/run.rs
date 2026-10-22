@@ -318,6 +318,60 @@ pub fn run_graph(
     run_graph_with_sink(state, request, |_| true).map(|receipt| receipt.identity.run_id())
 }
 
+/// Computes outputs of any project graph, open or not, reusing current upstream
+/// results. Execution reads resident documents, so a closed graph is loaded and
+/// stays resident like one opened by the assistant.
+pub fn run_graph_outputs(
+    state: &ApplicationState,
+    project: &ProjectInstanceId,
+    graph_path: &GraphResourcePath,
+    outputs: Box<[PlanOutputRef]>,
+    cancellation: Arc<AtomicBool>,
+) -> Result<RunGraphReceipt, ExecutionApplicationError> {
+    let captured = state
+        .capture_session()
+        .map_err(ExecutionApplicationError::SessionCapture)?;
+    let project_error = |error| {
+        ExecutionApplicationError::ProjectFacts(super::catalog::map_project_catalog_error(error))
+    };
+    let (document, analysis) = {
+        let _permit = captured
+            .coordinate_graph_edit(graph_path)
+            .map_err(|_| ExecutionApplicationError::DraftChanged)?;
+        if !captured
+            .project()
+            .has_resident_graph(graph_path)
+            .map_err(project_error)?
+        {
+            captured
+                .project()
+                .load_graph_document(project, graph_path)
+                .map_err(project_error)?;
+        }
+        let document = captured
+            .project()
+            .read_graph_resource_snapshot(project, graph_path)
+            .map_err(project_error)?
+            .document;
+        let analysis = GraphResolutionContext::capture(&captured, &document)?
+            .resolve(&captured, graph_path, &document, "en-US");
+        (document, analysis)
+    };
+    let request = RunGraphRequest::new(
+        project.clone(),
+        graph_path.clone(),
+        document,
+        *analysis.semantic_input_hash(),
+    )
+    .with_demand(RunDemand::Outputs {
+        outputs,
+        include_default_results: false,
+        reuse_inputs: true,
+    })
+    .with_cancellation(cancellation);
+    run_graph_with_sink(state, request, |_| true)
+}
+
 pub fn run_graph_with_sink<D>(
     state: &ApplicationState,
     mut request: RunGraphRequest,

@@ -41,6 +41,7 @@ impl gpui_kit::EventEmitter<SettingsEvent> for SettingsPanel {}
 pub struct SettingsPanel {
     services: Arc<SettingsServices>,
     focus: FocusHandle,
+    breadcrumb_focus: FocusHandle,
     catalog: Option<Arc<LanguageModelCatalog>>,
     knowledge: knowledge::KnowledgeSettings,
     notifications: yss_ui::notifications::Notifications,
@@ -76,6 +77,7 @@ impl SettingsPanel {
         Self {
             services,
             focus: cx.focus_handle(),
+            breadcrumb_focus: cx.focus_handle().tab_stop(true),
             catalog: None,
             knowledge: knowledge::KnowledgeSettings::default(),
             notifications: yss_ui::notifications::Notifications::new(window),

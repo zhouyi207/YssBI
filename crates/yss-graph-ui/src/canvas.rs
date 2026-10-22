@@ -1,4 +1,6 @@
 mod authoring;
+#[cfg(test)]
+mod benchmark;
 mod catalog;
 mod clipboard;
 mod commands;
@@ -18,18 +20,21 @@ mod presentation;
 mod render;
 mod result_catalog;
 mod result_search;
+mod scene;
 mod selection;
+mod style;
+mod text;
 mod toolbar;
 mod viewport;
 
 use std::{
-    cell::{Cell, RefCell},
+    cell::Cell,
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
     sync::Arc,
 };
 
-use gestures::Gesture;
+use gestures::{CanvasTarget, Gesture};
 use gpui_kit::{
     App, Bounds, Context, EventEmitter, FocusHandle, Focusable, Pixels, Point, Window, point, px,
 };
@@ -104,7 +109,7 @@ pub struct GraphCanvas {
     port_focus: FocusHandle,
     located_port: Option<PortAddress>,
     selected_connections: BTreeSet<ConnectionId>,
-    hovered_connection: Option<ConnectionId>,
+    hover: Option<CanvasTarget>,
     context_menu: Option<menu::CanvasMenu>,
     connection_click: Option<connections::ConnectionClick>,
     read_task: Option<gpui_kit::Task<()>>,
@@ -118,9 +123,11 @@ pub struct GraphCanvas {
     gesture: Option<Gesture>,
     _activation: gpui_kit::Subscription,
     preview: geometry::NodeMovement,
-    connection_layer: Rc<RefCell<connections::ConnectionLayer>>,
+    connection_layer: connections::ConnectionLayer,
     presentation: Rc<presentation::Presentation>,
     node_contents: nodes::summary::Contents,
+    node_texts: nodes::NodeTexts,
+    activity: gpui_kit::Entity<scene::ActivityOverlay>,
     port_inputs: ports::input::Inputs,
     parameter_forms: BTreeMap<
         NodeId,
@@ -161,12 +168,11 @@ impl GraphCanvas {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let connection_layer = Rc::new(RefCell::new(connections::ConnectionLayer::new(
-            &graph.projection,
-        )));
+        let connection_layer = connections::ConnectionLayer::new(&graph.projection);
         let font_scale = yss_ui::preferences::current(cx).appearance.ui_font_size / 14.;
         let text_system = window.text_system().clone();
         let owner = cx.entity();
+        let activity = cx.new(|_| scene::ActivityOverlay::new(owner.downgrade()));
         let mut view = Self {
             graph,
             services,
@@ -177,7 +183,7 @@ impl GraphCanvas {
             port_focus: cx.focus_handle(),
             located_port: None,
             selected_connections: BTreeSet::new(),
-            hovered_connection: None,
+            hover: None,
             context_menu: None,
             connection_click: None,
             read_task: None,
@@ -219,6 +225,8 @@ impl GraphCanvas {
             connection_layer,
             presentation: Rc::default(),
             node_contents: Default::default(),
+            node_texts: Default::default(),
+            activity,
             port_inputs: Default::default(),
             parameter_forms: BTreeMap::new(),
             port_details: None,

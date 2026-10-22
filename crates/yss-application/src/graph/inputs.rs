@@ -344,6 +344,7 @@ pub(crate) fn result_resource_versions(
     Ok(versions)
 }
 
+#[derive(Clone)]
 pub(crate) struct GraphResolutionContext {
     pub(super) project: crate::graph::catalog::LocalizedCatalogProjectFacts,
     pub(super) database: yss_database_runtime::session_api::DatabaseCatalogSnapshot,

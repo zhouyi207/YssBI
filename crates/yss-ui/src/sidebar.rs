@@ -32,28 +32,22 @@ pub fn search(input: &Entity<InputState>) -> Div {
 }
 
 pub fn list_item(item: Stateful<Div>, selected: bool, cx: &App) -> Stateful<Div> {
-    item.h(rems(5.5))
-        .w_full()
-        .min_w_0()
-        .px_3()
-        .py_2()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .aria_selected(selected)
-        .bg(if selected {
-            cx.theme().accent
-        } else {
-            cx.theme().background
-        })
-        .text_color(if selected {
-            cx.theme().accent_foreground
-        } else {
-            cx.theme().foreground
-        })
-        .when(!selected, |item| {
-            item.hover(|style| style.bg(cx.theme().muted))
-        })
+    crate::appearance::row_outline(
+        item.h(rems(5.5))
+            .w_full()
+            .min_w_0()
+            .px_3()
+            .py_2()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .rounded(cx.theme().radius)
+            .aria_selected(selected)
+            .text_color(cx.theme().foreground),
+        selected,
+        false,
+        cx,
+    )
 }
 
 pub fn item_title(title: impl Into<SharedString>) -> Div {

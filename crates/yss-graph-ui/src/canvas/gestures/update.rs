@@ -61,7 +61,7 @@ impl GraphCanvas {
                     .projection
                     .nodes
                     .iter()
-                    .zip(self.connection_layer.borrow().nodes())
+                    .zip(self.connection_layer.nodes())
                     .filter(|(node, geometry)| {
                         let rect = geometry.layout.bounds(node.position);
                         !node.capabilities.managed
@@ -82,7 +82,14 @@ impl GraphCanvas {
             }
             Gesture::Connection(drag) => drag.current = position,
         }
+        let connecting = matches!(gesture, Gesture::Connection(_));
         self.gesture = Some(gesture);
+        if connecting {
+            let target = self.snap_target(position);
+            if let Some(drag) = self.connection_drag_mut() {
+                drag.set_target(target);
+            }
+        }
     }
 
     pub(in crate::canvas) fn pointer_up(
@@ -136,13 +143,16 @@ impl GraphCanvas {
                     self.show_palette(event.position, None, window, cx);
                 }
             }
-            Some(Gesture::Connection(drag))
-                if !drag.moving
+            Some(Gesture::Connection(mut drag)) => {
+                if let Some(target) = drag.target.take() {
+                    self.finish_connection(drag, target, cx);
+                } else if !drag.moving
                     && (event.position - drag.press).magnitude() >= 5.
                     && self.bounds.get().contains(&event.position)
-                    && self.node_at(event.position).is_none() =>
-            {
-                self.show_palette(event.position, Some(drag.source), window, cx);
+                    && self.node_at(event.position).is_none()
+                {
+                    self.show_palette(event.position, Some(drag.source), window, cx);
+                }
             }
             _ => {}
         }

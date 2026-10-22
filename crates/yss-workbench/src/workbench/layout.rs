@@ -132,11 +132,6 @@ impl Workbench {
         } else if closed(self.active_editor) {
             self.active_editor = None;
             self.mark_project_resource(None, cx);
-            self.problems.update(cx, |panel, cx| panel.clear(cx));
-            self.output
-                .update(cx, |panel, cx| panel.set_graph(None, cx));
-            self.results
-                .update(cx, |panel, cx| panel.set_graph(None, cx));
             cx.notify();
         }
     }

@@ -160,7 +160,7 @@ impl ExecutionRuntimeState {
         self.results.capture_run_basis(graph, inputs)
     }
 
-    #[cfg(any(test, feature = "test-support"))]
+    /// Read-only: a summary exists only while the graph's observed inputs have this hash.
     pub fn query_result_cache_states(
         &self,
         graph: &str,

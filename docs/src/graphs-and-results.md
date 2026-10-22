@@ -44,18 +44,22 @@ Editing relevant inputs discards affected results. Once a run is admitted, outpu
 
 ## Choose the right panel
 
-| Panel    | Use it for                                                                                                                                 |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Problems | Current graph diagnostics, including severity, blocking status, and links to affected nodes, parameters, ports, connections, or resources. |
-| Output   | The current graph's execution status and failures, including the execution phase and stable error code when available.                     |
-| Results  | Current valid graph outputs. Outputs being recomputed or awaiting synchronization are not listed.                                         |
-| Logs     | Application diagnostic records, filtered by domain, level, or text. These are not the graph's authoritative Problems or execution state.   |
+All four panels cover the whole project, not only the graph you are editing, and switching tabs does not change them.
 
-Fix the graph to resolve Problems; there is no manual clear operation for canonical diagnostics. Clearing a completed Output notice only acknowledges its presentation: it does not delete cached results, undo the run, or save the graph. Clearing Logs clears the display, not the underlying persistent log history.
+| Panel    | Use it for                                                                                                                                                  |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Problems | Diagnostics of every graph, grouped by graph, including graphs that are not open: severity, blocking status, and links to the affected location.           |
+| Output   | Runs of every graph since the project opened, newest first, with the execution phase and stable error code of each failure.                                 |
+| Results  | Output ports of every event graph and whether each is computed, computing or not computed. By default only computed ports are listed; show all to see the rest. |
+| Logs     | Application diagnostic records, filtered by domain, level, or text. These are not the graph's authoritative Problems or execution state.                    |
+
+Fix the graph to resolve Problems; there is no manual clear operation for canonical diagnostics. Clearing Output acknowledges the finished runs it lists: their notices also disappear from the graphs, but cached results stay, the runs are not undone and nothing is saved. Clearing Logs clears the display, not the underlying persistent log history.
+
+Results exist only while the project is open. After reopening the project every port is not computed until you run the graph again.
 
 ## Inspect a result
 
-Open a result from Results or an output port's inspection action. Connected input ports can inspect their upstream output. Tables load bounded pages; structured results can expose nested tables, and supported statistical reports offer numerical and report views. These views use backend values rather than recomputing statistics in the interface.
+Open a result from Results or an output port's inspection action. Selecting a port that is not computed in Results computes it, reusing any valid upstream results, and opens it when the run finishes; the graph does not need to be open. Connected input ports can inspect their upstream output. Tables load bounded pages; structured results can expose nested tables, and supported statistical reports offer numerical and report views. These views use backend values rather than recomputing statistics in the interface.
 
 An open result tab retains the specific execution result you selected. Rerunning the graph does not silently turn that tab into the new result. This explicitly held snapshot is not part of the current Results list or port inspection; open the new output to inspect the new computation.
 

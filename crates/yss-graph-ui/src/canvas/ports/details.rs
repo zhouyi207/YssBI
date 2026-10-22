@@ -8,7 +8,7 @@ use yss_graph_editor::projection::{
     EditorDiagnosticModel, EditorPortModel, EditorPortTypeState, EditorProjectionModel,
 };
 
-use crate::canvas::presentation::PortAppearance;
+use crate::canvas::presentation::{PortAppearance, State};
 use yss_ui::text;
 
 struct PortDetails {
@@ -113,7 +113,7 @@ impl Details {
             lines.push(format!("{title} · {label}"));
         }
         lines.push(appearance.state.label().into_owned());
-        if appearance.state == super::State::Error && appearance.cache != super::State::Unexecuted {
+        if appearance.state == State::Error && appearance.cache != State::Unexecuted {
             lines.push(appearance.cache.label().into_owned());
         }
         lines.join("\n")
@@ -122,7 +122,7 @@ impl Details {
 
 // Only an open tooltip observes the canvas. Its content owns the subscription,
 // so closing it releases both the observation and its weak graph reference.
-pub(super) fn tooltip(
+pub(in crate::canvas) fn tooltip(
     owner: WeakEntity<crate::canvas::GraphCanvas>,
     address: PortAddress,
     cx: &mut App,

@@ -120,6 +120,10 @@ impl ApplicationSession {
         self.graph_activity.execution_snapshot()
     }
 
+    pub(crate) fn graph_activity(&self) -> &crate::graph::editing::GraphActivitySource {
+        &self.graph_activity
+    }
+
     pub(crate) fn coordinate_graph_edit(
         &self,
         path: &yss_graph_document::GraphResourcePath,

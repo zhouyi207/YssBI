@@ -1,8 +1,8 @@
-//! Resolve intents against the active canvas's exact displayed projection.
+//! Problems come from project-wide projections. A problem in the active graph is located
+//! against the canvas's current projection; any other graph is opened at its node.
 use super::Workbench;
 use gpui_kit::component::dock::{DockPlacement, panel_handle};
 use gpui_kit::{App, Context, Entity, FocusHandle, Window};
-use std::sync::Arc;
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_ui::canvas::GraphCanvas;
 use yss_graph_ui::problems::LocateProblem;
@@ -21,7 +21,7 @@ impl Workbench {
         if self
             .active_editor_panel(cx)
             .is_none_or(|panel| panel.view().entity_id() != graph.entity_id())
-            || !Arc::ptr_eq(event.projection(), graph.read(cx).graph().projection())
+            || graph.read(cx).graph().projection().basis != event.projection().basis
         {
             return None;
         }
@@ -34,12 +34,35 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.problem_graph(event, cx).is_none() {
+        if self.is_closing(cx) {
             return;
         }
         let Some(location) = event.location() else {
             return;
         };
+        if self.problem_graph(event, cx).is_none()
+            && !matches!(location, DiagnosticLocation::Resource(_))
+        {
+            let node = match location {
+                DiagnosticLocation::Node(id)
+                | DiagnosticLocation::Parameter { node_id: id, .. } => Some(*id),
+                DiagnosticLocation::Port(address) => Some(address.node_id),
+                DiagnosticLocation::Connection(id) => event
+                    .projection()
+                    .connections
+                    .iter()
+                    .find(|connection| connection.connection_id == *id)
+                    .map(|connection| connection.input.node_id),
+                DiagnosticLocation::Graph | DiagnosticLocation::Resource(_) => None,
+            };
+            self.focus_graph(
+                event.projection().graph_path.as_str().to_owned(),
+                node.map(|node| node.to_string()),
+                window,
+                cx,
+            );
+            return;
+        }
         if let DiagnosticLocation::Resource(identity) = location {
             let resource = self.project.as_ref().and_then(|project| {
                 project

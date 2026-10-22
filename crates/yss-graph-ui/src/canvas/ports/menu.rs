@@ -43,7 +43,7 @@ impl GraphCanvas {
         self.cancel_gesture();
         self.palette = None;
         self.connection_click = None;
-        self.located_port = Some(address.clone());
+        self.located_port = None;
         let owner = cx.entity().downgrade();
         let projection = self.graph.projection.clone();
         let version = self.graph.editing.version;

@@ -173,7 +173,6 @@ impl GraphProperties {
                 .rounded_sm()
                 .cursor_grab()
                 .text_color(cx.theme().muted_foreground)
-                .hover(|handle| handle.bg(cx.theme().muted))
                 .child(Icon::new(IconName::GripVertical).xsmall())
                 .on_drag(drag, |drag, _, _, cx| {
                     cx.stop_propagation();

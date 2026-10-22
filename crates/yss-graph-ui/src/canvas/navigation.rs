@@ -113,7 +113,7 @@ impl GraphCanvas {
             .projection
             .nodes
             .iter()
-            .zip(self.connection_layer.borrow().nodes())
+            .zip(self.connection_layer.nodes())
             .filter(|(node, _)| ids.is_none_or(|ids| ids.contains(&node.node_id)))
             .map(|(node, geometry)| geometry.layout.bounds(node.position))
             .reduce(|a, b| {

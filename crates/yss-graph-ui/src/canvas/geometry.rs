@@ -67,15 +67,30 @@ impl NodeMovement {
 // These are world units. Canvas font_scale participates in the shared screen transform,
 // so font-size/zoom changes move bounds, ports and painted controls together.
 pub const NODE_WIDTH: f32 = 280.;
-pub const TITLE_HEIGHT: f32 = 44.;
-pub const PORT_HEIGHT: f32 = 28.;
-pub const PARAMETER_HEIGHT: f32 = 24.;
+pub const HEADER_HEIGHT: f32 = 36.;
+pub const PORT_HEIGHT: f32 = 26.;
+pub const PARAMETER_HEIGHT: f32 = 22.;
+const PARAMETER_MARGIN: f32 = 8.;
+const PARAMETER_PADDING: f32 = 4.;
+/// The gap above the parameter well plus the well's own top and bottom padding.
+pub const PARAMETER_CHROME: f32 = PARAMETER_MARGIN + 2. * PARAMETER_PADDING;
+const WELL_INSET: f32 = 8.;
+const PORTS_TOP_PADDING: f32 = 6.;
+const PORTS_BOTTOM_PADDING: f32 = 8.;
+/// Leading and trailing padding shared by the header, the parameter well and port labels.
+pub const CONTENT_INSET: f32 = 12.;
+pub const GLYPH_SIZE: f32 = 10.;
+/// Pins stay grabbable a little outside the card edge they straddle.
+pub const PORT_REACH: f32 = 10.;
+const REROUTE_WIDTH: f32 = 32.;
+const REROUTE_ROW_HEIGHT: f32 = 20.;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NodeLayout {
     pub compact: bool,
     pub width: f32,
     pub height: f32,
+    pub parameters: usize,
     pub ports_top: f32,
     pub port_height: f32,
 }
@@ -91,23 +106,26 @@ impl NodeLayout {
         if node.display.style_id.as_deref() == Some("builtin.reroute") {
             return Self {
                 compact: true,
-                width: 32.,
-                height: rows * 20.,
+                width: REROUTE_WIDTH,
+                height: rows * REROUTE_ROW_HEIGHT,
+                parameters: 0,
                 ports_top: 0.,
-                port_height: 20.,
+                port_height: REROUTE_ROW_HEIGHT,
             };
         }
         let parameters = inline_parameters(node).count();
-        let ports_top = TITLE_HEIGHT
+        let ports_top = HEADER_HEIGHT
+            + PORTS_TOP_PADDING
             + if parameters == 0 {
                 0.
             } else {
-                parameters as f32 * PARAMETER_HEIGHT + 12.
+                parameters as f32 * PARAMETER_HEIGHT + PARAMETER_CHROME
             };
         Self {
             compact: false,
             width: NODE_WIDTH,
-            height: ports_top + rows * PORT_HEIGHT + 12.,
+            height: ports_top + rows * PORT_HEIGHT + PORTS_BOTTOM_PADDING,
+            parameters,
             ports_top,
             port_height: PORT_HEIGHT,
         }
@@ -126,6 +144,64 @@ impl NodeLayout {
             px(self.ports_top + (index as f32 + 0.5) * self.port_height),
         )
     }
+
+    /// The well holding inline parameter rows, relative to the node origin.
+    pub fn parameter_well(self) -> Option<Bounds<Pixels>> {
+        (self.parameters > 0).then(|| {
+            Bounds::new(
+                point(px(WELL_INSET), px(HEADER_HEIGHT + PARAMETER_MARGIN)),
+                size(
+                    px(self.width - 2. * WELL_INSET),
+                    px(self.parameters as f32 * PARAMETER_HEIGHT + 2. * PARAMETER_PADDING),
+                ),
+            )
+        })
+    }
+
+    pub fn parameter_row_top(self, index: usize) -> f32 {
+        HEADER_HEIGHT + PARAMETER_MARGIN + PARAMETER_PADDING + index as f32 * PARAMETER_HEIGHT
+    }
+
+    /// The pointer region of a port row half, including the reach outside the card.
+    pub fn port_region(self, output: bool, index: usize) -> Bounds<Pixels> {
+        let half = self.width / 2.;
+        let top = self.ports_top + index as f32 * self.port_height;
+        let (left, right) = if output {
+            (half, self.width + PORT_REACH)
+        } else {
+            (-PORT_REACH, half)
+        };
+        Bounds::from_corners(
+            point(px(left), px(top)),
+            point(px(right), px(top + self.port_height)),
+        )
+    }
+}
+
+/// How much of a node remains legible at a given user zoom. Faded ranges keep
+/// zooming continuous instead of popping between levels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Detail {
+    pub title: f32,
+    pub labels: f32,
+    pub controls: bool,
+    pub shadows: bool,
+}
+
+impl Detail {
+    pub fn at(scale: f32) -> Self {
+        Self {
+            title: ramp(scale, 0.36, 0.46),
+            labels: ramp(scale, 0.5, 0.6),
+            controls: scale >= 0.55,
+            shadows: scale >= 0.3,
+        }
+    }
+}
+
+fn ramp(value: f32, start: f32, end: f32) -> f32 {
+    let t = ((value - start) / (end - start)).clamp(0., 1.);
+    t * t * (3. - 2. * t)
 }
 
 pub fn inline_parameters(node: &EditorNodeModel) -> impl Iterator<Item = &EditorParameterModel> {
@@ -141,7 +217,6 @@ pub fn position(node: &EditorNodeModel, preview: &NodeMovement) -> NodePosition 
 
 pub(super) struct NodeGeometry {
     pub node_id: NodeId,
-    pub element_id: gpui_kit::SharedString,
     pub layout: NodeLayout,
     pub inputs: Box<[usize]>,
     pub outputs: Box<[usize]>,
@@ -151,7 +226,6 @@ impl NodeGeometry {
     pub fn new(node: &EditorNodeModel) -> Self {
         Self {
             node_id: node.node_id,
-            element_id: format!("node-{}", node.node_id).into(),
             layout: NodeLayout::new(node),
             inputs: port_indices(node, PortDirection::Input).collect(),
             outputs: port_indices(node, PortDirection::Output).collect(),

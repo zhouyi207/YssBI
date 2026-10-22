@@ -747,13 +747,28 @@
     "logs": "日志",
     "output": "输出",
     "results": "结果",
+    "resultsLoading": "正在读取项目中的图…",
+    "resultsNoneComputed": "还没有已计算的结果。运行图，或显示全部输出端口后点击一个开始计算",
+    "resultsNoGraphs": "项目中没有可运行的图",
+    "resultsShowAll": "显示全部输出端口",
+    "resultsShowComputed": "只显示已计算的端口",
+    "resultStates": {
+      "computed": "已计算",
+      "computing": "计算中",
+      "uncomputed": "未计算"
+    },
+    "resultActions": {
+      "open": "打开结果",
+      "compute": "计算并打开结果"
+    },
     "problems": "问题",
     "problemsRelatedLocation": "关联位置：%{location}",
     "problemsBlocking": "阻止运行",
-    "outputNoGraph": "请打开图以查看程序输出",
-    "outputEmpty": "当前图暂无运行错误",
-    "problemsNoGraph": "请打开图以查看问题",
-    "problemsEmpty": "当前图没有问题"
+    "outputEmpty": "暂无运行记录",
+    "outputDuration": "%{value} 秒",
+    "problemsEmpty": "项目中没有问题",
+    "problemsChecking": "正在检查项目中的图…",
+    "problemsUnreadable": "无法读取该图"
   },
   "runFailure": {
     "title": "执行失败",
@@ -1547,7 +1562,6 @@
       "settingsWindowTitle": "设置",
       "settingsWindowFailed": "设置窗口未能打开，请重试。",
       "settingsWindowDirtyTitle": "设置 •",
-      "resultsHint": "运行图后，在这里选择要查看的数据",
       "getStarted": "开始",
       "openProjectDirectory": "打开项目目录…",
       "newProject": "新建项目…",

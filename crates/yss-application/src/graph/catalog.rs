@@ -597,7 +597,7 @@ pub(crate) fn revalidate_project_catalog_facts(
         .map_err(map_project_catalog_error)
 }
 
-fn map_project_catalog_error(error: ProjectOperationError) -> ProjectCatalogReadError {
+pub(super) fn map_project_catalog_error(error: ProjectOperationError) -> ProjectCatalogReadError {
     match error {
         ProjectOperationError::StaleProjectLifecycle { .. } => {
             ProjectCatalogReadError::ProjectLifecycleChanged

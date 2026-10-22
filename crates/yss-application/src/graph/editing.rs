@@ -27,16 +27,63 @@ pub enum GraphActivity {
         cause: GraphChangeCause,
     },
     Execution(super::run::RunApplicationEvent),
+    /// Finished runs whose notices were dismissed; their records stay in the journal.
+    RunsAcknowledged(Vec<super::run::RunIdentity>),
 }
 
 pub type GraphActivityObserver = Arc<dyn Fn(GraphActivity) + Send + Sync>;
 
+/// Finished runs kept beyond the active ones and each graph's newest run.
+const MAX_FINISHED_RUNS: usize = 100;
+
+/// One run of the current execution session, as Application delivered it.
+#[derive(Clone, Debug)]
+pub struct RunRecord {
+    started: super::run::RunApplicationEvent,
+    terminal: Option<super::run::RunApplicationEvent>,
+    started_at: std::time::SystemTime,
+    finished_at: Option<std::time::SystemTime>,
+    acknowledged: bool,
+}
+
+impl RunRecord {
+    pub fn identity(&self) -> &super::run::RunIdentity {
+        self.started.identity()
+    }
+
+    pub fn outputs(&self) -> &[yss_graph_execution::plan::PlanOutputRef] {
+        match self.started.kind() {
+            super::run::RunApplicationEventKind::RunStarted { outputs } => outputs,
+            _ => &[],
+        }
+    }
+
+    /// The terminal event once the run finished, otherwise its start.
+    pub fn latest(&self) -> &super::run::RunApplicationEvent {
+        self.terminal.as_ref().unwrap_or(&self.started)
+    }
+
+    pub fn events(&self) -> impl Iterator<Item = &super::run::RunApplicationEvent> {
+        std::iter::once(&self.started).chain(self.terminal.as_ref())
+    }
+
+    pub fn started_at(&self) -> std::time::SystemTime {
+        self.started_at
+    }
+
+    pub fn finished_at(&self) -> Option<std::time::SystemTime> {
+        self.finished_at
+    }
+
+    pub fn acknowledged(&self) -> bool {
+        self.acknowledged
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct GraphActivitySource {
     observers: Arc<Mutex<BTreeMap<uuid::Uuid, GraphActivityObserver>>>,
-    runs: Mutex<
-        BTreeMap<yss_graph_execution::run_registry::RunId, Vec<super::run::RunApplicationEvent>>,
-    >,
+    runs: Mutex<BTreeMap<yss_graph_execution::run_registry::RunId, RunRecord>>,
 }
 
 pub struct GraphActivitySubscription {
@@ -56,12 +103,52 @@ impl Drop for GraphActivitySubscription {
 }
 
 impl GraphActivitySource {
+    /// Every active run and each graph's newest run, in run order.
+    pub(crate) fn execution_records(&self) -> Vec<RunRecord> {
+        let runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
+        let newest = newest_runs(&runs);
+        runs.iter()
+            .filter(|(id, record)| {
+                record.terminal.is_none() || newest.get(record.identity().graph_path()) == Some(*id)
+            })
+            .map(|(_, record)| record.clone())
+            .collect()
+    }
+
     pub(crate) fn execution_snapshot(&self) -> Vec<super::run::RunApplicationEvent> {
+        self.execution_records()
+            .iter()
+            .flat_map(RunRecord::events)
+            .cloned()
+            .collect()
+    }
+
+    pub(crate) fn run_journal(&self) -> Vec<RunRecord> {
         self.runs
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .values()
-            .flatten()
+            .cloned()
+            .collect()
+    }
+
+    /// Marks finished runs as seen and returns the identities that changed.
+    pub(crate) fn acknowledge(
+        &self,
+        identities: &[super::run::RunIdentity],
+    ) -> Vec<super::run::RunIdentity> {
+        let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
+        identities
+            .iter()
+            .filter(|identity| {
+                runs.get_mut(&identity.run_id()).is_some_and(|record| {
+                    let changed = record.identity() == *identity
+                        && record.terminal.is_some()
+                        && !record.acknowledged;
+                    record.acknowledged |= changed;
+                    changed
+                })
+            })
             .cloned()
             .collect()
     }
@@ -73,26 +160,41 @@ impl GraphActivitySource {
             let id = event.identity().run_id();
             match event.kind() {
                 RunApplicationEventKind::RunStarted { .. } => {
-                    runs.insert(id, vec![event.clone()]);
+                    runs.insert(
+                        id,
+                        RunRecord {
+                            started: event.clone(),
+                            terminal: None,
+                            started_at: std::time::SystemTime::now(),
+                            finished_at: None,
+                            acknowledged: false,
+                        },
+                    );
                 }
                 RunApplicationEventKind::RunCompleted
                 | RunApplicationEventKind::RunCancelled
                 | RunApplicationEventKind::RunErrored { .. } => {
-                    if let Some(events) = runs.get_mut(&id) {
-                        events.push(event.clone());
+                    if let Some(record) = runs.get_mut(&id)
+                        && record.terminal.is_none()
+                    {
+                        record.terminal = Some(event.clone());
+                        record.finished_at = Some(std::time::SystemTime::now());
                     }
                 }
-                _ => {}
+                RunApplicationEventKind::ResultInspectionRequested { .. } => {}
             }
-            // Keep every active run and each graph's newest run, never an event history.
-            let latest = runs
+            let newest = newest_runs(&runs);
+            let recent = runs
                 .iter()
-                .fold(BTreeMap::new(), |mut latest, (id, events)| {
-                    latest.insert(events[0].identity().graph_path().clone(), *id);
-                    latest
-                });
-            runs.retain(|id, events| {
-                events.len() == 1 || latest.get(events[0].identity().graph_path()) == Some(id)
+                .rev()
+                .filter(|(_, record)| record.terminal.is_some())
+                .take(MAX_FINISHED_RUNS)
+                .map(|(id, _)| *id)
+                .collect::<std::collections::BTreeSet<_>>();
+            runs.retain(|id, record| {
+                record.terminal.is_none()
+                    || recent.contains(id)
+                    || newest.get(record.identity().graph_path()) == Some(id)
             });
         }
         let observers = self
@@ -132,6 +234,14 @@ impl GraphActivitySource {
             id,
         })
     }
+}
+
+fn newest_runs(
+    runs: &BTreeMap<yss_graph_execution::run_registry::RunId, RunRecord>,
+) -> BTreeMap<GraphResourcePath, yss_graph_execution::run_registry::RunId> {
+    runs.iter()
+        .map(|(id, record)| (record.identity().graph_path().clone(), *id))
+        .collect()
 }
 
 #[derive(Default)]
@@ -580,14 +690,43 @@ impl ApplicationState {
         captured.subscribe_graph_activity(observer)
     }
 
+    /// Every active run and each graph's newest run.
     pub fn execution_snapshot(
         &self,
         project: &ProjectInstanceId,
-    ) -> Result<Vec<super::run::RunApplicationEvent>, ResourceMutationApplicationError> {
+    ) -> Result<Vec<RunRecord>, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(project)?;
-        let snapshot = captured.execution_snapshot();
+        let snapshot = captured.graph_activity().execution_records();
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
         Ok(snapshot)
+    }
+
+    /// Recent runs of every graph in this execution session, in run order.
+    pub fn run_journal(
+        &self,
+        project: &ProjectInstanceId,
+    ) -> Result<Vec<RunRecord>, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(project)?;
+        let journal = captured.graph_activity().run_journal();
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        Ok(journal)
+    }
+
+    /// Dismisses the notices of finished runs for every view of their graphs.
+    pub fn acknowledge_runs(
+        &self,
+        project: &ProjectInstanceId,
+        runs: &[super::run::RunIdentity],
+    ) -> Result<(), ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(project)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        let acknowledged = captured.graph_activity().acknowledge(runs);
+        if !acknowledged.is_empty() {
+            captured.publish_graph_activity(GraphActivity::RunsAcknowledged(acknowledged));
+        }
+        Ok(())
     }
 }

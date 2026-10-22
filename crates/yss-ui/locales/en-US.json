@@ -776,13 +776,28 @@
     "logs": "Logs",
     "output": "Outputs",
     "results": "Results",
+    "resultsLoading": "Reading project graphs…",
+    "resultsNoneComputed": "No computed results yet. Run a graph, or show all output ports and select one to compute it",
+    "resultsNoGraphs": "This project has no runnable graphs",
+    "resultsShowAll": "Show all output ports",
+    "resultsShowComputed": "Show computed ports only",
+    "resultStates": {
+      "computed": "Computed",
+      "computing": "Computing",
+      "uncomputed": "Not computed"
+    },
+    "resultActions": {
+      "open": "Open result",
+      "compute": "Compute and open the result"
+    },
     "problems": "Problems",
     "problemsRelatedLocation": "Related: %{location}",
     "problemsBlocking": "Blocks execution",
-    "outputNoGraph": "Open a graph to view its program output",
-    "outputEmpty": "The current graph has no run failure",
-    "problemsNoGraph": "Open a graph to view its problems",
-    "problemsEmpty": "No problems were reported for the current graph"
+    "outputEmpty": "No runs to show",
+    "outputDuration": "%{value} s",
+    "problemsEmpty": "No problems in this project",
+    "problemsChecking": "Checking project graphs…",
+    "problemsUnreadable": "This graph could not be read"
   },
   "runFailure": {
     "title": "Execution failed",
@@ -1580,7 +1595,6 @@
       "settingsWindowTitle": "Settings",
       "settingsWindowFailed": "Could not open the settings window. Try again.",
       "settingsWindowDirtyTitle": "Settings •",
-      "resultsHint": "Run a graph, then select data to inspect here",
       "getStarted": "Get started",
       "openProjectDirectory": "Open project directory…",
       "newProject": "New project…",

@@ -1,6 +1,6 @@
 use super::{Workbench, activity::ReadState, files::FileKind};
 use crate::project::{DesktopProject, FileIndexUpdate};
-use gpui_kit::{Context, Window};
+use gpui_kit::{AppContext, Context, Window};
 use tokio::sync::broadcast::error::RecvError;
 use yss_application::events::{CommittedResourceMutation, ResourceRoute};
 use yss_application::graph::editing::GraphActivity;
@@ -26,6 +26,22 @@ impl Workbench {
         {
             opening.update(cx, |opening, _| opening.clear_intent());
         }
+        let overview = self.project.as_ref().map(|project| {
+            cx.new(|cx| {
+                yss_graph_ui::overview::ProjectOverview::new(
+                    self.services.graph.clone(),
+                    project.identity.clone(),
+                    cx,
+                )
+            })
+        });
+        self.problems
+            .update(cx, |panel, cx| panel.set_overview(overview.clone(), cx));
+        self.results
+            .update(cx, |panel, cx| panel.set_overview(overview.clone(), cx));
+        self.output
+            .update(cx, |panel, cx| panel.set_overview(overview.clone(), cx));
+        self.overview = overview;
         let Some(project) = &self.project else {
             return;
         };
@@ -84,7 +100,13 @@ impl Workbench {
             return;
         };
         match event {
-            DesktopEvent::Graph(identity, GraphActivity::Execution(event)) if identity == project.identity => {
+            DesktopEvent::Graph(identity, GraphActivity::Execution(event))
+                if identity == project.identity =>
+            {
+                if let Some(overview) = &self.overview {
+                    let graph = event.identity().graph_path().clone();
+                    overview.update(cx, |overview, cx| overview.invalidate_execution(graph, cx));
+                }
                 if let yss_application::graph::run::RunApplicationEventKind::ResultInspectionRequested { result_id, .. } = event.kind() {
                     self.open_result(yss_graph_execution::result::ResultReference {
                         execution_session_id: *event.identity().execution_session_id(), result_id: *result_id,
@@ -93,15 +115,45 @@ impl Workbench {
                     graph.update(cx, |graph, cx| graph.accept_execution(event, cx));
                 }
             }
-            DesktopEvent::Graph(identity, GraphActivity::Changed { graph_path, cause, .. })
+            DesktopEvent::Graph(identity, GraphActivity::RunsAcknowledged(runs))
                 if identity == project.identity =>
             {
-                let resource = GraphResourcePath::new(graph_path.clone()).ok()
+                if let Some(overview) = &self.overview {
+                    overview.update(cx, |overview, cx| overview.invalidate_runs(cx));
+                }
+                for run in &runs {
+                    if let Some(graph) = self
+                        .graphs
+                        .get(run.graph_path().as_str())
+                        .and_then(gpui_kit::WeakEntity::upgrade)
+                    {
+                        graph.update(cx, |graph, cx| graph.accept_acknowledged(&runs, cx));
+                    }
+                }
+            }
+            DesktopEvent::Graph(
+                identity,
+                GraphActivity::Changed {
+                    graph_path, cause, ..
+                },
+            ) if identity == project.identity => {
+                if let (Some(overview), Ok(path)) =
+                    (&self.overview, GraphResourcePath::new(graph_path.clone()))
+                {
+                    overview.update(cx, |overview, cx| overview.invalidate_graph(path, cx));
+                }
+                let resource = GraphResourcePath::new(graph_path.clone())
+                    .ok()
                     .map(yss_project_history::ResourceKey::Graph);
-                for graph in self.graphs.values().filter_map(gpui_kit::WeakEntity::upgrade) {
+                for graph in self
+                    .graphs
+                    .values()
+                    .filter_map(gpui_kit::WeakEntity::upgrade)
+                {
                     let canvas = graph.read(cx);
                     let own_graph = canvas.path() == graph_path;
-                    let dependency = resource.as_ref()
+                    let dependency = resource
+                        .as_ref()
                         .is_some_and(|resource| canvas.graph().depends_on_resource(resource));
                     if own_graph {
                         graph.update(cx, |graph, cx| graph.accept_graph_change(&cause, cx));
@@ -113,6 +165,9 @@ impl Workbench {
             DesktopEvent::Index(invalidation)
                 if invalidation.project_instance_id() == &project.identity =>
             {
+                if let Some(overview) = &self.overview {
+                    overview.update(cx, |overview, cx| overview.invalidate_all(cx));
+                }
                 self.refresh_project(window, cx);
                 match invalidation.resources() {
                     Some(resources) => {
@@ -125,7 +180,12 @@ impl Workbench {
                     None => self.resync_editors(window, cx),
                 }
             }
-            DesktopEvent::Resource(mutation) if mutation.project_instance_id == project.identity => {
+            DesktopEvent::Resource(mutation)
+                if mutation.project_instance_id == project.identity =>
+            {
+                if let Some(overview) = &self.overview {
+                    overview.update(cx, |overview, cx| overview.invalidate_all(cx));
+                }
                 let refreshing = self.refreshing_index;
                 let update = match self.project.as_mut() {
                     Some(project) if !refreshing => project.accept_file_receipt(&mutation),
@@ -134,7 +194,10 @@ impl Workbench {
                 match update {
                     FileIndexUpdate::Rejected => self.refresh_project(window, cx),
                     FileIndexUpdate::Revisions | FileIndexUpdate::Rows => {
-                        let resources = self.project.as_ref().map(|project| project.resources.clone());
+                        let resources = self
+                            .project
+                            .as_ref()
+                            .map(|project| project.resources.clone());
                         self.assistant.update(cx, |assistant, cx| {
                             assistant.set_resource_catalog(resources, cx);
                         });
@@ -146,14 +209,17 @@ impl Workbench {
                 self.accept_resource_mutation(&mutation, window, cx);
             }
             DesktopEvent::Ui(identity, delivery, event)
-                if identity == project.identity && self.ui_delivery == Some(delivery) => match event {
-                yss_ui_contract::UiEvent::Intent { receipt } => {
-                    self.enqueue_intent(receipt, window, cx)
+                if identity == project.identity && self.ui_delivery == Some(delivery) =>
+            {
+                match event {
+                    yss_ui_contract::UiEvent::Intent { receipt } => {
+                        self.enqueue_intent(receipt, window, cx)
+                    }
+                    yss_ui_contract::UiEvent::SessionChanged => {
+                        self.rebind_session(window, cx);
+                    }
                 }
-                yss_ui_contract::UiEvent::SessionChanged => {
-                    self.rebind_session(window, cx);
-                }
-            },
+            }
             DesktopEvent::Harness(event) => {
                 tracing::trace!(session_id=?event.session_id,sequence=event.sequence,"Native Harness event delivered");
             }

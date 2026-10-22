@@ -155,14 +155,8 @@ impl ActivityPanel {
         let ActivityRowContent::Item(item) = &document.rows[index].content else {
             return row.into_any_element();
         };
-        let id = match item {
-            ActivityItem::Database { id, .. } => id,
-            ActivityItem::EventGraph { path, .. }
-            | ActivityItem::FunctionGraph { path, .. }
-            | ActivityItem::Chart { path, .. }
-            | ActivityItem::Mind { path, .. }
-            | ActivityItem::Doc { path, .. } => path,
-            _ => return row.into_any_element(),
+        let Some(id) = identity(item) else {
+            return row.into_any_element();
         };
         let selected = self.active_resource.as_deref() == Some(id);
         let expected = document.clone();
@@ -187,8 +181,6 @@ impl ActivityPanel {
             .aria_selected(selected)
             .child(label(item, cx))
             .cursor_pointer()
-            .when(selected, |row| row.bg(cx.theme().sidebar_accent))
-            .hover(|row| row.bg(cx.theme().muted))
             .when_some(
                 self.resources
                     .as_ref()
@@ -251,6 +243,20 @@ impl ActivityPanel {
             menu::resource_menu(menu, owner.clone(), expected_menu.clone(), index)
         })
         .into_any_element()
+    }
+}
+
+/// The resource or conversation an item stands for, as the workbench names its active editor.
+pub(super) fn identity(item: &ActivityItem) -> Option<&str> {
+    match item {
+        ActivityItem::Database { id, .. } => Some(id),
+        ActivityItem::EventGraph { path, .. }
+        | ActivityItem::FunctionGraph { path, .. }
+        | ActivityItem::Chart { path, .. }
+        | ActivityItem::Mind { path, .. }
+        | ActivityItem::Doc { path, .. } => Some(path),
+        ActivityItem::Conversation { session_id, .. } => Some(session_id),
+        _ => None,
     }
 }
 

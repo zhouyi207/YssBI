@@ -285,7 +285,7 @@ impl GraphCanvas {
         }
         self.read_task = None;
         self.context_menu = None;
-        self.hovered_connection = None;
+        self.hover = None;
         if self.gesture.is_some() {
             self.cancel_gesture();
             self.emit_selection(cx);
@@ -408,9 +408,7 @@ impl GraphCanvas {
         self.refresh_pending |= self.graph.language != yss_ui::text::locale();
         self.refresh_task = None;
         self.refresh_failed = false;
-        self.connection_layer
-            .borrow_mut()
-            .install(&self.graph.projection);
+        self.connection_layer.install(&self.graph.projection);
         if !preserve_presentation {
             self.refresh_presentation();
         }

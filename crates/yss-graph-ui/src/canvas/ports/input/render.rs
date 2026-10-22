@@ -1,19 +1,23 @@
 use super::*;
+use crate::canvas::nodes::FIELD_HEIGHT;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Sizable,
     button::{Button, ButtonVariants},
     input::{Escape, Input},
     tooltip::Tooltip,
 };
-use gpui_kit::{AnyElement, IntoElement, MouseButton, div, px};
+use gpui_kit::{AnyElement, Bounds, IntoElement, MouseButton, Pixels, div, px};
 
 impl GraphCanvas {
-    pub(in crate::canvas::ports) fn render_port_input(
+    /// The editable control for an input's literal, placed over `lane` in canvas coordinates.
+    pub(in crate::canvas) fn render_port_input(
         &self,
         port: &EditorPortModel,
+        lane: Bounds<Pixels>,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let kind = eligible(port)?;
+        let zoom = self.zoom;
         let address = port.address.clone();
         let version = self.graph.editing.version;
         let label = port
@@ -25,6 +29,8 @@ impl GraphCanvas {
         let field = self.port_inputs.fields.get(&address);
         let input = if kind == SemanticType::Binary {
             let checked = field::text(port, kind) == "true";
+            let track = gpui_kit::size(lane.size.width, px(16. * zoom));
+            let knob = px(12. * zoom);
             // The regular Switch has fixed pixel geometry; a toggle button keeps
             // its keyboard/accessibility behavior while this canvas track scales.
             Button::new(gpui_kit::SharedString::from(format!(
@@ -34,8 +40,8 @@ impl GraphCanvas {
             .ghost()
             .accessibility_label(label)
             .toggled(checked)
-            .w(px(28. * self.zoom))
-            .h(px(16. * self.zoom))
+            .w(track.width)
+            .h(track.height)
             .min_w_0()
             .min_h_0()
             .p_0()
@@ -43,8 +49,8 @@ impl GraphCanvas {
             .child(
                 div()
                     .relative()
-                    .w(px(28. * self.zoom))
-                    .h(px(16. * self.zoom))
+                    .w(track.width)
+                    .h(track.height)
                     .rounded_full()
                     .bg(if checked {
                         cx.theme().primary
@@ -54,9 +60,13 @@ impl GraphCanvas {
                     .child(
                         div()
                             .absolute()
-                            .top(px(2. * self.zoom))
-                            .left(px(if checked { 14. } else { 2. } * self.zoom))
-                            .size(px(12. * self.zoom))
+                            .top((track.height - knob) / 2.)
+                            .left(if checked {
+                                track.width - knob - px(2. * zoom)
+                            } else {
+                                px(2. * zoom)
+                            })
+                            .size(knob)
                             .rounded_full()
                             .bg(cx.theme().background),
                     ),
@@ -79,15 +89,15 @@ impl GraphCanvas {
                 .id(field.element_id.clone())
                 .small()
                 .aria_label(label)
-                .w(field.width * self.zoom)
+                .w(lane.size.width)
                 // Input::h configures multiline content; the single-line frame uses Styled.
-                .map(|input| gpui_kit::Styled::h(input, px(18. * self.zoom)))
+                .map(|input| gpui_kit::Styled::h(input, px(FIELD_HEIGHT * zoom)))
                 .min_h_0()
-                .text_size(px(10. * self.zoom))
-                .line_height(px(18. * self.zoom))
-                .px(px(4. * self.zoom))
+                .text_size(px(11. * zoom))
+                .line_height(px(FIELD_HEIGHT * zoom))
+                .px(px(6. * zoom))
                 .py_0()
-                .rounded(px(2. * self.zoom))
+                .rounded(px(FIELD_HEIGHT / 2. * zoom))
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
                 .border_color(if field.error.is_some() {
@@ -108,10 +118,14 @@ impl GraphCanvas {
                 .id(gpui_kit::SharedString::from(format!(
                     "port-input-{address}"
                 )))
-                .flex_shrink_0()
+                .absolute()
+                .left(lane.left())
+                .top(lane.top())
+                .w(lane.size.width)
+                .h(lane.size.height)
                 .flex()
-                .h(px(18. * self.zoom))
                 .items_center()
+                .justify_end()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
                 .on_mouse_down(MouseButton::Middle, |_, _, cx| cx.stop_propagation())

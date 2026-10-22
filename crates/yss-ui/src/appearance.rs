@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme, Icon, Theme, ThemeMode};
 use gpui_kit::{
-    Anchor, App, Global, Hsla, IntoElement, Rems, SharedString, Subscription, Window,
-    WindowAppearance, WindowId, div, prelude::*, px, rems, rgb,
+    Anchor, App, Global, IntoElement, Rems, SharedString, Subscription, Window, WindowAppearance,
+    WindowId, div, prelude::*, px, rems,
 };
 use yss_settings::AppearanceSettings;
 
@@ -125,13 +125,18 @@ pub fn install(window: &mut Window, cx: &mut App) {
     window.set_rem_size(cx.theme().font_size);
 }
 
-/// Adapts domain-supplied category colors to the active canvas contrast.
-pub fn data_color(color: u32, cx: &App) -> Hsla {
-    let mut color: Hsla = rgb(color).into();
-    if !cx.theme().is_dark() {
-        color.l = color.l.min(0.34);
-    }
-    color
+/// Rows mark the current item and keyboard focus with a hairline outline instead of a
+/// fill; focus takes the ring color. Every row reserves the outline, so marking one never
+/// moves its content.
+pub fn row_outline<E: Styled>(row: E, current: bool, keyboard_focus: bool, cx: &App) -> E {
+    let theme = cx.theme();
+    row.border_1().border_color(if keyboard_focus {
+        theme.ring
+    } else if current {
+        theme.list_active_border
+    } else {
+        gpui_kit::transparent_black()
+    })
 }
 
 pub fn empty_state(

@@ -9,9 +9,10 @@ use std::{
 use yss_ui::lifecycle::LogReleased;
 
 use gpui_kit::Context;
+use yss_application::graph::editing::RunRecord;
 use yss_application::graph::run::{
-    ExecutionApplicationError, RunApplicationEvent, RunApplicationEventKind, RunDemand,
-    RunGraphRequest, RunIdentity, cancel_run, run_graph_with_sink,
+    RunApplicationEvent, RunApplicationEventKind, RunDemand, RunGraphRequest, RunIdentity,
+    cancel_run, run_graph_with_sink,
 };
 use yss_graph_execution::plan::PlanOutputRef;
 use yss_graph_execution::run_registry::RunId;
@@ -268,7 +269,8 @@ impl GraphCanvas {
                             code = "native_run_request_rejected",
                             "Native run request rejected"
                         );
-                        view.notifications.error(run_rejection(&error), cx);
+                        view.notifications
+                            .error(crate::feedback::run_rejection(&error), cx);
                     }
                 }
                 view.resync_execution(cx);
@@ -376,12 +378,23 @@ impl GraphCanvas {
                     return;
                 }
                 match result {
-                    Ok(events) => {
+                    Ok(records) => {
                         view.execution.unknown = false;
                         view.execution.runs.clear();
-                        for event in events.into_iter().chain(buffered) {
+                        let acknowledged = records
+                            .iter()
+                            .filter(|record| record.acknowledged())
+                            .map(|record| record.identity().clone())
+                            .collect::<Vec<_>>();
+                        for event in records
+                            .iter()
+                            .flat_map(RunRecord::events)
+                            .cloned()
+                            .chain(buffered)
+                        {
                             view.accept_execution(event, cx);
                         }
+                        view.accept_acknowledged(&acknowledged, cx);
                     }
                     Err(_) => {
                         view.execution.unknown = true;
@@ -433,14 +446,43 @@ impl GraphCanvas {
             .map(RunApplicationEvent::identity)
     }
 
+    /// Dismissal belongs to Application, so every view and later reopen agree.
     pub fn clear_run_notice(&mut self, run: &RunIdentity, cx: &mut Context<Self>) {
         if self.clearable_run() != Some(run) {
             return;
         }
         self.execution.cleared = Some(run.clone());
+        let project = self.graph.project.clone();
+        let runs = vec![run.clone()];
+        let task = self.services.run(move |services| {
+            services.acknowledge_runs(&project, &runs)?;
+            Ok(())
+        });
+        cx.spawn(async move |_, _| {
+            if let Err(error) = task
+                .await
+                .map_err(anyhow::Error::from)
+                .and_then(|result| result)
+            {
+                tracing::warn!(%error, code = "run_acknowledge_failed", "Run notice was not dismissed");
+            }
+        })
+        .detach();
         self.refresh_presentation();
         cx.emit(CanvasEvent::Execution);
         cx.notify();
+    }
+
+    pub fn accept_acknowledged(&mut self, runs: &[RunIdentity], cx: &mut Context<Self>) {
+        let Some(notice) = self.run_notice().map(|event| event.identity().clone()) else {
+            return;
+        };
+        if runs.contains(&notice) {
+            self.execution.cleared = Some(notice);
+            self.refresh_presentation();
+            cx.emit(CanvasEvent::Execution);
+            cx.notify();
+        }
     }
 
     pub fn inspect_results(&self, cx: &mut Context<Self>) {
@@ -486,23 +528,4 @@ impl Drop for GraphCanvas {
             });
         }
     }
-}
-
-fn run_rejection(error: &anyhow::Error) -> String {
-    let cause = match error.downcast_ref::<ExecutionApplicationError>() {
-        Some(ExecutionApplicationError::DraftChanged) => "graph_draft_changed",
-        Some(ExecutionApplicationError::GraphNotReady) => "graph_not_ready",
-        Some(ExecutionApplicationError::GraphResolutionFailed { .. }) => "graph_resolution_failed",
-        Some(ExecutionApplicationError::GraphPlan(_)) => "graph_plan_failed",
-        Some(
-            ExecutionApplicationError::SessionCapture(_)
-            | ExecutionApplicationError::StaleSession(_),
-        ) => "stale_project_lifecycle",
-        Some(ExecutionApplicationError::Cancelled) => {
-            return yss_ui::text::t("native.canvas.runCancelled").into();
-        }
-        Some(ExecutionApplicationError::DeadlineExceeded) => "deadlineExceeded",
-        _ => return yss_ui::text::t("native.canvas.runRequestFailed").into(),
-    };
-    yss_ui::text::translate(&format!("runFailure.causes.{cause}"))
 }
