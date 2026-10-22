@@ -26,7 +26,7 @@ pub struct NodeDeclaration {
     pub label: Option<String>,
     #[serde(default)]
     pub position: NodePositionInput,
-    /// Exact resourcePath returned by browse_nodes for a bound type.
+    /// Exact resourcePath returned by catalog_search_nodes for a bound type.
     #[serde(default)]
     pub resource_path: Option<String>,
     /// Existing constant identity; only valid for yssbi.constant.get.
@@ -183,18 +183,18 @@ impl GraphMutationInput {
 
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
-            Self::CreateNodes(_) => CapabilityId::CreateNodes,
-            Self::CreateConstants(_) => CapabilityId::CreateConstants,
-            Self::UpdateConstants(_) => CapabilityId::UpdateConstants,
-            Self::DeleteConstants(_) => CapabilityId::DeleteConstants,
+            Self::CreateNodes(_) => CapabilityId::GraphCreateNodes,
+            Self::CreateConstants(_) => CapabilityId::GraphCreateConstants,
+            Self::UpdateConstants(_) => CapabilityId::GraphUpdateConstants,
+            Self::DeleteConstants(_) => CapabilityId::GraphDeleteConstants,
 
-            Self::UpdateNodes(_) => CapabilityId::UpdateNodes,
-            Self::DeleteNodes(_) => CapabilityId::DeleteNodes,
-            Self::DuplicateNodes(_) => CapabilityId::DuplicateNodes,
-            Self::MoveNodes(_) => CapabilityId::MoveNodes,
-            Self::CreateConnections(_) => CapabilityId::CreateConnections,
-            Self::UpdateConnections(_) => CapabilityId::UpdateConnections,
-            Self::DeleteConnections(_) => CapabilityId::DeleteConnections,
+            Self::UpdateNodes(_) => CapabilityId::GraphUpdateNodes,
+            Self::DeleteNodes(_) => CapabilityId::GraphDeleteNodes,
+            Self::DuplicateNodes(_) => CapabilityId::GraphDuplicateNodes,
+            Self::MoveNodes(_) => CapabilityId::GraphMoveNodes,
+            Self::CreateConnections(_) => CapabilityId::GraphCreateConnections,
+            Self::UpdateConnections(_) => CapabilityId::GraphUpdateConnections,
+            Self::DeleteConnections(_) => CapabilityId::GraphDeleteConnections,
         }
     }
 
@@ -444,18 +444,18 @@ fn create_operations(value: &CreateNodesInput) -> Vec<GraphEditOperation> {
 impl From<GraphMutationInput> for super::CapabilityInput {
     fn from(value: GraphMutationInput) -> Self {
         match value {
-            GraphMutationInput::CreateNodes(value) => Self::CreateNodes(value),
-            GraphMutationInput::CreateConstants(value) => Self::CreateConstants(value),
-            GraphMutationInput::UpdateConstants(value) => Self::UpdateConstants(value),
-            GraphMutationInput::DeleteConstants(value) => Self::DeleteConstants(value),
+            GraphMutationInput::CreateNodes(value) => Self::GraphCreateNodes(value),
+            GraphMutationInput::CreateConstants(value) => Self::GraphCreateConstants(value),
+            GraphMutationInput::UpdateConstants(value) => Self::GraphUpdateConstants(value),
+            GraphMutationInput::DeleteConstants(value) => Self::GraphDeleteConstants(value),
 
-            GraphMutationInput::UpdateNodes(value) => Self::UpdateNodes(value),
-            GraphMutationInput::DeleteNodes(value) => Self::DeleteNodes(value),
-            GraphMutationInput::DuplicateNodes(value) => Self::DuplicateNodes(value),
-            GraphMutationInput::MoveNodes(value) => Self::MoveNodes(value),
-            GraphMutationInput::CreateConnections(value) => Self::CreateConnections(value),
-            GraphMutationInput::UpdateConnections(value) => Self::UpdateConnections(value),
-            GraphMutationInput::DeleteConnections(value) => Self::DeleteConnections(value),
+            GraphMutationInput::UpdateNodes(value) => Self::GraphUpdateNodes(value),
+            GraphMutationInput::DeleteNodes(value) => Self::GraphDeleteNodes(value),
+            GraphMutationInput::DuplicateNodes(value) => Self::GraphDuplicateNodes(value),
+            GraphMutationInput::MoveNodes(value) => Self::GraphMoveNodes(value),
+            GraphMutationInput::CreateConnections(value) => Self::GraphCreateConnections(value),
+            GraphMutationInput::UpdateConnections(value) => Self::GraphUpdateConnections(value),
+            GraphMutationInput::DeleteConnections(value) => Self::GraphDeleteConnections(value),
         }
     }
 }

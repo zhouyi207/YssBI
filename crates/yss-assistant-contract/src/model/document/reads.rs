@@ -103,9 +103,9 @@ impl DocumentReadInput {
     }
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
-            Self::Outline(_) => CapabilityId::InspectDocument,
-            Self::Text(_) => CapabilityId::ReadDocument,
-            Self::Search(_) => CapabilityId::SearchDocument,
+            Self::Outline(_) => CapabilityId::DocumentInspect,
+            Self::Text(_) => CapabilityId::DocumentRead,
+            Self::Search(_) => CapabilityId::DocumentSearch,
         }
     }
     pub fn validate(&self) -> Result<(), CapabilityContractError> {

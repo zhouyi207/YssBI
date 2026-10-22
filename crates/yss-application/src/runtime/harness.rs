@@ -19,6 +19,7 @@ pub struct HarnessServices {
     pub host: Arc<HarnessHost>,
     pub models: Arc<crate::harness::models::LanguageModelService>,
     pub knowledge: Arc<crate::harness::knowledge::ProjectKnowledgeService>,
+    pub web: Arc<crate::harness::web::WebSearchService>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -29,6 +30,8 @@ pub enum HarnessStartupError {
     Application(#[from] crate::harness::HarnessInitializationError),
     #[error("Assistant extension could not be initialized: {0}")]
     Extension(#[from] yss_assistant_extension::AssistantExtensionError),
+    #[error("Web access could not be initialized: {0}")]
+    Web(#[from] crate::harness::web::WebSearchSettingsError),
 }
 
 struct SystemHarnessClock;
@@ -56,6 +59,11 @@ pub(super) async fn initialize(
     transport: HarnessTransportPorts,
 ) -> Result<HarnessServices, HarnessStartupError> {
     let store = Arc::new(yss_harness_sqlite::SqliteHarnessStore::connect(app_dir.clone()).await?);
+    let python_dir = app_dir.clone();
+    let web = Arc::new(crate::harness::web::WebSearchService::new(
+        app_dir.clone(),
+        Arc::new(crate::harness::models::SystemModelCredentials),
+    )?);
     let models = Arc::new(crate::harness::models::LanguageModelService::new(
         app_dir,
         Arc::new(crate::harness::models::SystemModelCredentials),
@@ -82,6 +90,11 @@ pub(super) async fn initialize(
             tool_ledger: store.clone(),
             knowledge: knowledge.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+            web: web.port(),
+            python: Arc::new(crate::harness::python::ApplicationPython::new(
+                application.clone(),
+                python_dir,
+            )),
             clock,
             ids: Arc::new(HarnessIdGenerator),
         })
@@ -90,5 +103,6 @@ pub(super) async fn initialize(
         host,
         models,
         knowledge,
+        web,
     })
 }

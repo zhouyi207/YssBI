@@ -140,7 +140,7 @@ impl AgentRunHooks for AssistantRun {
     }
 
     fn replay(&self, record: &ToolInvocationRecord, project: &ProjectSessionBinding) {
-        if crate::tools::is_harness_tool(&record.tool) {
+        if crate::contract::is_harness_tool(&record.tool) {
             return;
         }
         let Some(result) = &record.result else {
@@ -274,7 +274,7 @@ impl AgentRunHooks for AssistantRun {
         call: &PreparedToolCall,
         outcome: &Result<ToolInvocationOutcome, CapabilityFailure>,
     ) {
-        if crate::tools::is_harness_tool(&call.tool) {
+        if crate::contract::is_harness_tool(&call.tool) {
             return;
         }
         if call.tool == PROPOSE_STATISTICAL_PLAN_TOOL {
@@ -376,7 +376,7 @@ impl AgentRunHooks for AssistantRun {
             .collect();
         (!pending.is_empty()).then(|| serde_json::json!({
             "reason": "report_delivery_incomplete", "pending": pending,
-            "nextStep": "Use followup_task to continue these workers from their receipts and finish saving the requested documents. Inspect changed inputs and reassess the task before resuming. Do not claim delivery without successful saves. If an external requirement prevents completion, explain the actual blocker."
+            "nextStep": "Use agent_continue_task to continue these workers from their receipts and finish saving the requested documents. Inspect changed inputs and reassess the task before resuming. Do not claim delivery without successful saves. If an external requirement prevents completion, explain the actual blocker."
         }).to_string())
     }
 
@@ -389,7 +389,7 @@ impl AgentRunHooks for AssistantRun {
         };
         if evidence.delivery_pending() && finish.blocked_reason.is_none() {
             finish.blocked_reason = Some("report_resource_not_saved".into());
-            finish.next_steps.push("Use followup_task to continue this worker from committed receipts. Use the authorized document or topic editing tools and finish with save_resource. A Mind-only task does not require a Doc.".into());
+            finish.next_steps.push("Use agent_continue_task to continue this worker from committed receipts. Use the authorized document or topic editing tools and finish with save_resource. A Mind-only task does not require a Doc.".into());
         }
         let facts = AgentTaskFacts {
             artifacts: evidence.artifacts.clone(),

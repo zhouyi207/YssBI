@@ -128,7 +128,7 @@ fn configured_driver(config: LanguageModelProviderConfig) -> Arc<dyn AgentDriver
     .unwrap()
 }
 
-pub(crate) const SCHEMA_TOOL: &str = "inspect_database_schema";
+pub(crate) const SCHEMA_TOOL: &str = "data_inspect_schema";
 
 /// A fixture tool whose arguments name one database resource.
 pub(crate) fn schema_tool() -> ToolSpec {
@@ -156,7 +156,7 @@ pub(crate) fn tool(name: &str, schema: Value) -> ToolSpec {
 }
 
 fn plan_tool() -> ToolSpec {
-    tool("propose_statistical_plan", json!({"type": "object"}))
+    tool("analysis_propose_plan", json!({"type": "object"}))
 }
 
 fn schema_output() -> Value {
@@ -444,12 +444,12 @@ fn message_mapping_preserves_complete_history_and_correlated_tool_messages() {
         },
         AgentMessage::ToolCall {
             invocation_id: "saved-call-1".into(),
-            tool: "inspect_result".into(),
+            tool: "result_inspect".into(),
             arguments: json!({"resultRef": {"executionSessionId": "session", "resultId": "17"}}),
         },
         AgentMessage::ToolResult {
             invocation_id: "saved-call-1".into(),
-            tool: "inspect_result".into(),
+            tool: "result_inspect".into(),
             output: json!({"type": "result_inspection", "payload": {"value": {"value": payload}}}),
         },
         AgentMessage::Assistant {
@@ -478,7 +478,7 @@ fn message_mapping_preserves_complete_history_and_correlated_tool_messages() {
         .find(|message| message["role"] == "tool")
         .unwrap();
     assert_eq!(call["tool_calls"][0]["id"], result["tool_call_id"]);
-    assert_eq!(call["tool_calls"][0]["function"]["name"], "inspect_result");
+    assert_eq!(call["tool_calls"][0]["function"]["name"], "result_inspect");
     let value: Value = serde_json::from_str(result["content"].as_str().unwrap()).unwrap();
     assert!(value["payload"]["value"]["value"] == payload);
 }
@@ -631,7 +631,7 @@ async fn driver_continues_past_previous_model_and_output_limits() {
             vec![AssistantContent::ToolCall(ToolCall::from_wire(
                 format!("plan-{index}"),
                 ToolFunction::new(
-                    ToolName::new("propose_statistical_plan").unwrap(),
+                    ToolName::new("analysis_propose_plan").unwrap(),
                     sample_plan(),
                 ),
             ))]
@@ -674,7 +674,7 @@ async fn incomplete_model_responses_have_distinct_failures_and_preserve_progress
         vec![AssistantContent::ToolCall(ToolCall::from_wire(
             "cut-short",
             ToolFunction::new(
-                ToolName::new("inspect_database_schema").unwrap(),
+                ToolName::new("data_inspect_schema").unwrap(),
                 serde_json::json!({"database":{"kind":"database","id":"database-1"}}),
             ),
         ))],
@@ -748,9 +748,10 @@ async fn incomplete_model_responses_have_distinct_failures_and_preserve_progress
         AgentDriverFailureCode::ProviderStreamInterrupted
     );
     assert_eq!(
-        map_prompt_failure(PromptError::Provider(
-            ProviderError::from_http_response(402u16.try_into().unwrap(), "payment required"),
-        ))
+        map_prompt_failure(PromptError::Provider(ProviderError::from_http_response(
+            402u16.try_into().unwrap(),
+            "payment required"
+        ),))
         .code,
         AgentDriverFailureCode::ProviderPaymentRequired
     );
@@ -796,7 +797,7 @@ async fn rig_driver_passes_tool_calls_through_and_emits_ordered_events() {
         vec![AssistantContent::ToolCall(ToolCall::from_wire(
             "plan-call",
             ToolFunction::new(
-                ToolName::new("propose_statistical_plan").unwrap(),
+                ToolName::new("analysis_propose_plan").unwrap(),
                 plan.clone(),
             ),
         ))],
@@ -844,7 +845,7 @@ async fn rig_driver_passes_tool_calls_through_and_emits_ordered_events() {
     let receipt: Value = serde_json::from_str(receipt["content"].as_str().unwrap()).unwrap();
     assert_eq!(
         receipt,
-        json!({ "accepted": true, "tool": "propose_statistical_plan" })
+        json!({ "accepted": true, "tool": "analysis_propose_plan" })
     );
 }
 
@@ -870,7 +871,7 @@ async fn unavailable_tools_return_feedback_without_dispatch_or_replaying_complet
     let valid = || {
         call(
             "valid",
-            "inspect_database_schema",
+            "data_inspect_schema",
             serde_json::json!({"database":{"kind":"database","id":"database-1"}}),
         )
     };
@@ -878,7 +879,7 @@ async fn unavailable_tools_return_feedback_without_dispatch_or_replaying_complet
         vec![valid()],
         vec![call(
             "unavailable",
-            "delegate_task",
+            "agent_delegate_task",
             serde_json::json!({"private":"secret"}),
         )],
         vec![AssistantContent::text(
@@ -917,7 +918,7 @@ async fn unavailable_tools_return_feedback_without_dispatch_or_replaying_complet
         !failure["failure"]["details"]["allowedTools"]
             .as_array()
             .unwrap()
-            .contains(&serde_json::json!("delegate_task"))
+            .contains(&serde_json::json!("agent_delegate_task"))
     );
     assert!(!text.contains("secret"));
 
@@ -1230,7 +1231,7 @@ async fn cancelling_a_model_turn_waits_for_admitted_tool_cleanup() {
     let model = scripted_model([vec![AssistantContent::ToolCall(ToolCall::from_wire(
         "call-1",
         ToolFunction::new(
-            ToolName::new("inspect_database_schema").unwrap(),
+            ToolName::new("data_inspect_schema").unwrap(),
             serde_json::json!({"database":{"kind":"database","id":"database-1"}}),
         ),
     ))]]);
@@ -1406,7 +1407,10 @@ fn ui_intent_schema() -> Value {
 }
 
 fn protocol_tools() -> Vec<ToolSpec> {
-    vec![schema_tool(), tool("inspect_ui_intent", ui_intent_schema())]
+    vec![
+        schema_tool(),
+        tool("ui_inspect_receipt", ui_intent_schema()),
+    ]
 }
 
 #[tokio::test]
@@ -1622,8 +1626,8 @@ async fn native_provider_protocols_preserve_routes_auth_tools_and_streaming() {
             let inspect = tools
                 .iter()
                 .find(|tool| {
-                    tool["name"] == "inspect_ui_intent"
-                        || tool["function"]["name"] == "inspect_ui_intent"
+                    tool["name"] == "ui_inspect_receipt"
+                        || tool["function"]["name"] == "ui_inspect_receipt"
                 })
                 .unwrap();
             let parameters = match protocol {
@@ -1729,7 +1733,7 @@ impl AgentToolExecutor for WritingExecutor {
         call: yss_harness_contract::ToolCall,
     ) -> AgentFuture<'a, ToolCallOutcome> {
         Box::pin(async move {
-            assert_eq!(call.name, "create_resource");
+            assert_eq!(call.name, "project_create_resource");
             self.0.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
             completed(json!({"type": "resource_managed", "payload": {
                 "changes": [{"resource": {"kind": "doc", "id": "docs/retry-proof.md"}, "deleted": false}]
@@ -1741,13 +1745,13 @@ impl AgentToolExecutor for WritingExecutor {
     }
 }
 fn document_tool() -> ToolSpec {
-    tool("create_resource", json!({"type": "object"}))
+    tool("project_create_resource", json!({"type": "object"}))
 }
 fn document_call() -> AssistantContent {
     AssistantContent::ToolCall(ToolCall::from_wire(
         "write-doc",
         ToolFunction::new(
-            ToolName::new("create_resource").unwrap(),
+            ToolName::new("project_create_resource").unwrap(),
             json!({"kind":"doc", "name":"Retry proof"}),
         ),
     ))
@@ -2007,6 +2011,51 @@ async fn compaction_checkpoints_working_context_without_replaying_large_history(
             .len()
             < 4096
     );
+}
+
+#[tokio::test]
+async fn large_old_tool_outputs_are_cleared_before_any_summary() {
+    let model = scripted_model([vec![AssistantContent::text("Answered from receipts.")]]);
+    let mut request = request(vec![]);
+    request.messages = vec![AgentMessage::User {
+        content: "Compare the profiles.".into(),
+    }];
+    for index in 0..8 {
+        let invocation_id = format!("profile-{index}");
+        request.messages.push(AgentMessage::ToolCall {
+            invocation_id: invocation_id.clone(),
+            tool: "data_inspect_profile".into(),
+            arguments: json!({"database": {"id": format!("db-{index}")}}),
+        });
+        request.messages.push(AgentMessage::ToolResult {
+            invocation_id,
+            tool: "data_inspect_profile".into(),
+            output: json!({"rows": "profile row ".repeat(3_000)}),
+        });
+    }
+    request.messages.push(AgentMessage::User {
+        content: "Continue.".into(),
+    });
+    let output = Arc::new(CollectingOutput::default());
+    let result = RigAgentDriver::new(model.clone())
+        .run_turn(
+            request,
+            Arc::new(StaticExecutor),
+            output.clone(),
+            CancellationToken::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.final_text, "Answered from receipts.");
+    assert!(!output.events.lock().unwrap().iter().any(|event| matches!(
+        event,
+        AgentEvent::ContextCompacted { .. } | AgentEvent::ContextCompactionProgress { .. }
+    )));
+    let requests = model.requests();
+    assert_eq!(requests.len(), 1, "clearing needs no summary request");
+    let history = serde_json::to_string(&requests[0].chat_history).unwrap();
+    assert!(history.contains(rig_memory::ClearToolOutputs::PLACEHOLDER));
+    assert!(history.contains("profile-7"), "tool calls stay in place");
 }
 
 #[tokio::test]

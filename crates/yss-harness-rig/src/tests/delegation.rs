@@ -84,7 +84,7 @@ async fn read_request(stream: &mut tokio::net::TcpStream) -> Value {
 fn delegation_stream(arguments: &Value, id: usize) -> String {
     let start = json!({"id":format!("chat-{id}"),"choices":[{"index":0,"delta":{
         "role":"assistant", "tool_calls":[{"index":0,"id":format!("call-{id}"),
-        "type":"function","function":{"name":"delegate_task","arguments":""}}]
+        "type":"function","function":{"name":"agent_delegate_task","arguments":""}}]
     },"finish_reason":null}]});
     let mut events = format!("data: {start}\n\n");
     // Split inside field names, escaped strings and non-ASCII content.

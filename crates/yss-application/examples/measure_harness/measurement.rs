@@ -56,10 +56,11 @@ pub async fn write(
                 role,
                 task: Some(task),
                 ..
-            } => controls
-                .push(json!({"event": "delegate_task", "role": role, "task": task.objective})),
+            } => controls.push(
+                json!({"event": "agent_delegate_task", "role": role, "task": task.objective}),
+            ),
             HarnessEvent::AgentRunResumed { .. } => {
-                controls.push(json!({"event": "followup_task"}))
+                controls.push(json!({"event": "agent_continue_task"}))
             }
             HarnessEvent::Agent(event) | HarnessEvent::AgentRunOutput { event, .. } => {
                 match event {

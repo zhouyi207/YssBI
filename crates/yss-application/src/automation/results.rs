@@ -244,7 +244,7 @@ fn selected_columns(
     if names.is_empty() && !schema.is_empty() {
         return Err(contract_failure(
             CapabilityContractError::InvalidField("columnOffset"),
-            CapabilityId::ReadResultTable,
+            CapabilityId::ResultReadTable,
         ));
     }
     let page = InspectionPage::known(request.column_offset, names.len(), candidates.len());
@@ -296,7 +296,7 @@ pub(super) fn list_results(
         .map_err(|_| {
             contract_failure(
                 CapabilityContractError::InvalidField("nodeIds"),
-                CapabilityId::ListGraphResults,
+                CapabilityId::ResultList,
             )
         })?;
     let outputs = request

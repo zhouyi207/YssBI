@@ -14,8 +14,8 @@ pub struct AgentRoleId(String);
 
 string_identity!(AgentRoleId, "agent role id");
 
-pub const DELEGATE_TASK_TOOL: &str = "delegate_task";
-pub const FOLLOWUP_TASK_TOOL: &str = "followup_task";
+pub const DELEGATE_TASK_TOOL: &str = "agent_delegate_task";
+pub const FOLLOWUP_TASK_TOOL: &str = "agent_continue_task";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentOutputMode {

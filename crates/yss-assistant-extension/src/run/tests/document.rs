@@ -135,14 +135,14 @@ async fn document_sections_keep_their_original_read_baseline_through_writes_and_
         ResourceObservations::default(),
     );
     let document = DocumentResourceRef::new(document().id);
-    let outline = CapabilityInput::InspectDocument(
+    let outline = CapabilityInput::DocumentInspect(
         serde_json::from_value(json!({"document":document})).unwrap(),
     );
     let section = DocumentSectionRef {
         heading_index: 0,
         start: 0,
     };
-    let text = CapabilityInput::ReadDocument(
+    let text = CapabilityInput::DocumentRead(
         serde_json::from_value(json!({"document":document,"section":section})).unwrap(),
     );
     let unread = run.execute(text.clone()).await.unwrap_err();
@@ -161,18 +161,18 @@ async fn document_sections_keep_their_original_read_baseline_through_writes_and_
     let inputs = [
         outline.clone(),
         text.clone(),
-        CapabilityInput::SearchDocument(
+        CapabilityInput::DocumentSearch(
             serde_json::from_value(json!({"document":document,"query":"Current"})).unwrap(),
         ),
-        CapabilityInput::WriteDocument(WriteDocumentInput {
+        CapabilityInput::DocumentWriteText(WriteDocumentInput {
             document: document.clone(),
             markdown: "Long report paragraph.\n".repeat(5000),
         }),
-        CapabilityInput::AppendDocument(AppendDocumentInput {
+        CapabilityInput::DocumentAppendText(AppendDocumentInput {
             document: document.clone(),
             text: "\nConclusion".into(),
         }),
-        CapabilityInput::ReplaceDocumentText(ReplaceDocumentTextInput {
+        CapabilityInput::DocumentReplaceText(ReplaceDocumentTextInput {
             document: document.clone(),
             replacements: vec![DocumentTextReplacement {
                 old_text: "Conclusion".into(),

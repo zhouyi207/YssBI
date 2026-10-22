@@ -7,6 +7,7 @@ mod models;
 mod preference_fields;
 mod preferences;
 mod render;
+mod web_search;
 
 pub use commands::{SettingsSaveOutcome, SettingsSaveRequest};
 
@@ -44,6 +45,7 @@ pub struct SettingsPanel {
     breadcrumb_focus: FocusHandle,
     catalog: Option<Arc<LanguageModelCatalog>>,
     knowledge: knowledge::KnowledgeSettings,
+    web_search: web_search::WebSearchForm,
     notifications: yss_ui::notifications::Notifications,
     page: Page,
     initial_page: gpui_kit::component::setting::SelectIndex,
@@ -80,6 +82,7 @@ impl SettingsPanel {
             breadcrumb_focus: cx.focus_handle().tab_stop(true),
             catalog: None,
             knowledge: knowledge::KnowledgeSettings::default(),
+            web_search: web_search::WebSearchForm::new(window, cx),
             notifications: yss_ui::notifications::Notifications::new(window),
             page: Page::Overview,
             initial_page: Default::default(),
@@ -113,6 +116,7 @@ impl SettingsPanel {
     pub fn has_pending_operation(&self) -> bool {
         self.task.is_some()
             || self.knowledge.pending
+            || self.web_search.pending
             || self.preference_timer.is_some()
             || self.preference_write.is_some()
     }

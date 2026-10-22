@@ -122,7 +122,7 @@ Harness 图执行由 Application 依据实际执行范围的语义依赖继承�
 
 Harness 公开图概览提供计数、就绪、已有运行状态及预算内的整体结构。`automation/graph/inspection/overview` 从同一次文档与解析投影生成精简节点参数、字面量和连接，超过 32 KiB 时依次省略配置或全部结构，并明确返回所处层级。预算复用 `result_encoding` 的编码字节计数，不另建缓存或图状态。节点查找、定向详情和连接查询各有独立入口，从同一次捕获投影筛选后分页。节点的 Pin 与 Pin 的已知 schema 可分别续读，未知 schema 不伪装成空列。查询观察标识绑定图版本、语义身份和筛选/分页条件。内部完整检查仍服务编辑及函数用例，内部图编辑回执继续保留完整的已变实体；Contract 的模型投影省略重复的编辑器元数据、参数选项和列 schema，需要这些信息时通过定向检查读取。查询不执行节点、不读取运行值，也不产生第二份图状态。Harness 的内部调用上下文可携带已观察的语义输入依据，Application 在同一次解析投影上核对后再处理图操作；幂等回执查询仍返回原提交结果。模型侧字段和分页约定见 [Harness 查询契约](../../../yss-harness-core/README.md)。
 
-`validate_graph` 从同次打开回执的 Analysis 校验全图或指定节点的上游闭包；范围由 Execution 的
+`graph_validate` 从同次打开回执的 Analysis 校验全图或指定节点的上游闭包；范围由 Execution 的
 `GraphExecutionScope` 选择，诊断归属和 readiness 共用 Analysis 规则。诊断分页独立于完整就绪判断，
 无关分支不阻断局部范围；该检查不生成运行值，也不保证当前缓存输入存在。公开执行输入使用 graph 与
 可选 nodeId/mode，转换为原全图或节点 demand；没有 nodeId 时不得单独传 mode。
@@ -140,24 +140,24 @@ Application 将这些映射与常量创建映射一起写入 Project 原提交�
 常量业务读写位于 `automation/graph/constants.rs`，类型和值直接消费 Data Contract；修改复用原
 `SetConstant` 规范化、类型校验和可逆补丁。删除常量保持引用节点，由同一语义投影报告失效引用。
 
-`update_nodes.removePins` 复用原精确端口删除能力，保留其余 Pin 的身份和顺序；与数量调整互斥。
-`undo_resource` / `redo_resource` 复用 Project 图历史及过期版本检查，不自动保存；`save_resource`
+`graph_update_nodes.removePins` 复用原精确端口删除能力，保留其余 Pin 的身份和顺序；与数量调整互斥。
+`project_undo_resource` / `project_redo_resource` 复用 Project 图历史及过期版本检查，不自动保存；`project_save_resource`
 调用正常 Save。模型目录不再注册通用图批次或单独图保存别名，内部编辑请求与恢复回执仍供明确工具共用。
 
-| Owner                                                                     | 职责                                                                             |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| yss-node-protocol / yss-node-registry / yss-node-catalog                  | 节点能力与接口声明、注册校验与指纹、内置定义及节点目录本地化                     |
-| yss-graph-document                                                        | 节点实例、连线、位置、文档意图、稳定地址和语义文档 fingerprint                   |
-| yss-graph-document-edit / editor                                          | structural validation、typed mutation、连接预检、端口顺序、clipboard、编辑器投影 |
-| yss-graph-analysis                                                        | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof      |
-| yss-graph-resource-contract                                               | immutable resource facts 与一次 Resolve 的 dependency observations               |
-| yss-graph-runtime                                                         | 图解析 facade、派生端口认领、编辑解析缓存                                       |
-| yss-graph-diagnostics                                                     | 图诊断代码、模板与定义校验                                                       |
-| yss-project                                                               | committed authority、资源版本、文件事务与 publication                            |
-| yss-application                                                           | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
-| yss-graph-execution                                                       | 计划构建与缓存、demand/DAG、内核调用适配、ResultStore、运行事件                  |
-| yss-node-kernel                                                           | 中立内核调用契约、运行值、冻结 KernelRegistry 与内置执行适配                     |
-| yss-desktop-gpui | 原生界面调度与类型化图投影消费 |
+| Owner                                                    | 职责                                                                             |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| yss-node-protocol / yss-node-registry / yss-node-catalog | 节点能力与接口声明、注册校验与指纹、内置定义及节点目录本地化                     |
+| yss-graph-document                                       | 节点实例、连线、位置、文档意图、稳定地址和语义文档 fingerprint                   |
+| yss-graph-document-edit / editor                         | structural validation、typed mutation、连接预检、端口顺序、clipboard、编辑器投影 |
+| yss-graph-analysis                                       | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof      |
+| yss-graph-resource-contract                              | immutable resource facts 与一次 Resolve 的 dependency observations               |
+| yss-graph-runtime                                        | 图解析 facade、派生端口认领、编辑解析缓存                                        |
+| yss-graph-diagnostics                                    | 图诊断代码、模板与定义校验                                                       |
+| yss-project                                              | committed authority、资源版本、文件事务与 publication                            |
+| yss-application                                          | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
+| yss-graph-execution                                      | 计划构建与缓存、demand/DAG、内核调用适配、ResultStore、运行事件                  |
+| yss-node-kernel                                          | 中立内核调用契约、运行值、冻结 KernelRegistry 与内置执行适配                     |
+| yss-desktop-gpui                                         | 原生界面调度与类型化图投影消费                                                   |
 
 Workspace 成员见[根 Cargo.toml](../../../../Cargo.toml)，模块导航见[开发指南](../../../../docs/src/development.md)。
 
@@ -231,7 +231,7 @@ Application 的 GUI 创建目录和兼容节点目录保留完整定义，按会
 `graph/catalog::node_documentation` 捕获当前会话、核对项目身份和冻结 Registry 后，按类型读取 Node Catalog 的同一本地化帮助，交付前重验会话。
 未注册类型或没有帮助的定义返回 None；没有执行内核的已注册定义仍可阅读说明。查询不加载图、不读取项目资源目录，也不生成整份创建目录。
 
-Harness 的 `browse_nodes` 复用该目录的搜索与类别过滤，分页只交付类型、名称、短说明和资源绑定；`inspect_node_type` 按精确类型 ID 批量投影 Protocol 的配置 Schema 与端口数量约束。两者均不要求打开图或运行节点，完整定义不随目录页重复传输。
+Harness 的 `catalog_search_nodes` 复用该目录的搜索与类别过滤，分页只交付类型、名称、短说明和资源绑定；`catalog_inspect_nodes` 按精确类型 ID 批量投影 Protocol 的配置 Schema 与端口数量约束。两者均不要求打开图或运行节点，完整定义不随目录页重复传输。
 
 能力指纹进入 Graph 的语义输入哈希和 Execution 的 `PlanBasis`。Execution 在计划准备、资源准备和执行入口
 检查该指纹；同一图文档不会复用能力版本不同的计划。节点输出缓存
@@ -397,7 +397,7 @@ Save 接收当前编辑 version 与 operation ID，由 Rust 读取匹配的当�
 
 成功后更新保存指纹并保留当前图的撤销/重做历史，失败保留当前内存编辑与历史。只有用不同完整正文覆盖当前文档时才清除不再适用的历史。前端 saving 只用于交互反馈，后端按图协调及版本校验保护真正的提交。保存后的视图恢复读取最新状态，不能把较新的内存编辑误标为已保存。
 
-Assistant 的 `apply_graph_edit` 默认通过同一文件事务保存整个当前图文档，包含调用前已有的手动编辑。
+Assistant 的 `graph_apply_edit` 默认通过同一文件事务保存整个当前图文档，包含调用前已有的手动编辑。
 Project 在一次提交内安装编辑、保存指纹、历史及幂等回执；写入失败或版本失效时回滚文件，保留调用前的内存文档和历史。
 自动保存保留批次的撤销记录；手动撤销使图重新变为未保存，重做回到已保存内容后清除 dirty。
 助手编辑不要求打开图面板，提交结果由 Rust 事务回执确认。
@@ -406,14 +406,14 @@ Project 在一次提交内安装编辑、保存指纹、历史及幂等回执；
 
 ## Cross-boundary routing
 
-| 信息                            | 去向                                   |
-| ------------------------------- | -------------------------------------- |
-| 普通 Graph validation / Blocked | Graph Projection / Problems            |
-| 计算结果                        | ResultStore + typed query              |
-| 图运行失败                      | RunErrored + Output panel 失败摘要     |
-| 内部技术故障                    | sanitized tracing / incident           |
-| 操作拒绝 | 类型化 Application 错误 |
-| 用户反馈 | 原生宿主本地化 |
+| 信息                            | 去向                               |
+| ------------------------------- | ---------------------------------- |
+| 普通 Graph validation / Blocked | Graph Projection / Problems        |
+| 计算结果                        | ResultStore + typed query          |
+| 图运行失败                      | RunErrored + Output panel 失败摘要 |
+| 内部技术故障                    | sanitized tracing / incident       |
+| 操作拒绝                        | 类型化 Application 错误            |
+| 用户反馈                        | 原生宿主本地化                     |
 
 详见 [Application](../../README.md)、[Logging](../../../yss-logging/README.md)、
 [GPUI host](../../../yss-desktop-gpui/README.md) 与 [Rust workspace 验证](../../../../README.md)。

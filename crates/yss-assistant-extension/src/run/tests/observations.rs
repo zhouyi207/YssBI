@@ -48,7 +48,7 @@ async fn resumed_workers_use_current_receipts_but_cannot_reuse_them_after_anothe
                     }
                 } else {
                     capabilities
-                        .execute(model::CapabilityInput::SaveResource(
+                        .execute(model::CapabilityInput::ProjectSaveResource(
                             model::ResourceTargetInput {
                                 resource: document(),
                             },
@@ -92,7 +92,7 @@ async fn resumed_workers_use_current_receipts_but_cannot_reuse_them_after_anothe
         store
             .tool_invocations()
             .iter()
-            .filter(|record| record.tool == CapabilityId::SaveResource.as_str())
+            .filter(|record| record.tool == CapabilityId::ProjectSaveResource.as_str())
             .count(),
         4
     );

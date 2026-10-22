@@ -295,7 +295,7 @@ mod tests {
                 "{part}"
             );
         }
-        let input = crate::capability_input_schema(crate::CapabilityId::InspectResult);
+        let input = crate::capability_input_schema(crate::CapabilityId::ResultInspect);
         let properties = &input.as_value()["properties"];
         let reference_schema = properties["resultRef"]["$ref"].as_str().unwrap();
         assert_eq!(

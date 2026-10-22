@@ -127,7 +127,7 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
         scope.clone(),
         ResourceObservations::default(),
     );
-    let read = model::CapabilityInput::InspectDatabaseSchema(model::InspectDatabaseSchemaInput {
+    let read = model::CapabilityInput::DataInspectSchema(model::InspectDatabaseSchemaInput {
         database: database.clone(),
         columns: vec![],
         offset: 0,
@@ -160,7 +160,7 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
     let visible = model::capability_result(&first.result).unwrap();
     assert!(visible["payload"].get("version").is_none());
     let inputs = [
-        model::CapabilityInput::InsertRows(model::InsertRowsInput {
+        model::CapabilityInput::DataCreateRows(model::InsertRowsInput {
             database: database.clone(),
             rows: vec![
                 [("value".into(), serde_json::from_value(json!(5)).unwrap())].into(),
@@ -168,7 +168,7 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
             ],
             before_row_id: Some(3),
         }),
-        model::CapabilityInput::UpdateCells(model::UpdateCellsInput {
+        model::CapabilityInput::DataUpdateCells(model::UpdateCellsInput {
             database: database.clone(),
             cells: vec![model::DatabaseCellEdit {
                 row_id: 40,
@@ -176,15 +176,15 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
                 value: serde_json::from_value(json!(null)).unwrap(),
             }],
         }),
-        model::CapabilityInput::DeleteRows(model::DeleteRowsInput {
+        model::CapabilityInput::DataDeleteRows(model::DeleteRowsInput {
             database: database.clone(),
             row_ids: vec![40, 41],
         }),
-        model::CapabilityInput::CreateColumns(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"name":"flag","dtype":"Bool"}]})).unwrap()),
-        model::CapabilityInput::RenameColumns(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"column":"x","name":"value"}]})).unwrap()),
-        model::CapabilityInput::DeleteColumns(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":["x"]})).unwrap()),
-        model::CapabilityInput::CastColumns(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"column":"x","dtype":"Int64","force":false}]})).unwrap()),
-        model::CapabilityInput::SetColumnSemantics(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"column":"x","semantic":{"kind":"Identifier","values":[],"positiveValue":null,"numeric":null}}]})).unwrap()),
+        model::CapabilityInput::DataCreateColumns(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"name":"flag","dtype":"Bool"}]})).unwrap()),
+        model::CapabilityInput::DataRenameColumns(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"column":"x","name":"value"}]})).unwrap()),
+        model::CapabilityInput::DataDeleteColumns(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":["x"]})).unwrap()),
+        model::CapabilityInput::DataCastColumns(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"column":"x","dtype":"Int64","force":false}]})).unwrap()),
+        model::CapabilityInput::DataUpdateColumnSemantics(serde_json::from_value(json!({"database":{"kind":"database","id":"sample"},"columns":[{"column":"x","semantic":{"kind":"Identifier","values":[],"positiveValue":null,"numeric":null}}]})).unwrap()),
     ];
     for input in &inputs {
         let outcome = run.execute(input.clone()).await.unwrap();
@@ -204,7 +204,7 @@ async fn database_tools_bind_committed_versions_and_keep_public_ledger_arguments
         assert_eq!(record.state, ToolInvocationState::Succeeded);
         let visible = model::capability_result(&outcome.result).unwrap();
         assert!(!visible.to_string().contains("revision"));
-        if input.capability_id() == CapabilityId::InsertRows {
+        if input.capability_id() == CapabilityId::DataCreateRows {
             assert_eq!(
                 visible["payload"]["databaseEdit"]["insertedRowIds"],
                 json!([40, 41])

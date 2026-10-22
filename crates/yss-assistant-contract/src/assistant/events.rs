@@ -114,6 +114,15 @@ pub enum AssistantEventKind {
     DeliveryBlocked {
         reason: String,
     },
+    ApprovalRequested {
+        approval_id: String,
+        capability_id: AssistantToolIdentity,
+        arguments: serde_json::Value,
+    },
+    ApprovalResolved {
+        approval_id: String,
+        decision: crate::ApprovalDecision,
+    },
     AgentRunInvalidated {
         run_id: String,
     },
@@ -347,6 +356,22 @@ impl TryFrom<&AgentEvent> for AssistantEventKind {
             AgentEvent::TextDelta { delta } => Self::TextDelta {
                 delta: delta.clone(),
             },
+            AgentEvent::ApprovalRequested {
+                approval_id,
+                tool,
+                arguments,
+            } => Self::ApprovalRequested {
+                approval_id: approval_id.clone(),
+                capability_id: AssistantToolIdentity::Capability(tool.clone()),
+                arguments: arguments.clone(),
+            },
+            AgentEvent::ApprovalResolved {
+                approval_id,
+                decision,
+            } => Self::ApprovalResolved {
+                approval_id: approval_id.clone(),
+                decision: *decision,
+            },
             AgentEvent::ControlToolStarted {
                 invocation_id,
                 tool,
@@ -492,7 +517,7 @@ mod tests {
             .into();
             let business = AgentEvent::ToolInvocationFailed {
                 invocation_id: invocation_id.clone(),
-                tool: CapabilityId::SaveResource.as_str().into(),
+                tool: CapabilityId::ProjectSaveResource.as_str().into(),
                 failure_code: code.clone(),
                 failure_details: Some(details.clone()),
             };
@@ -546,7 +571,7 @@ mod tests {
         }
         let event = AgentEvent::ToolInvocationFailed {
             invocation_id,
-            tool: CapabilityId::SaveResource.as_str().into(),
+            tool: CapabilityId::ProjectSaveResource.as_str().into(),
             failure_code: CapabilityFailureCode::REVISION_CONFLICT,
             failure_details: None,
         };
@@ -606,7 +631,7 @@ mod tests {
         };
         let wire = serde_json::to_value(AssistantEventKind::try_from(event).unwrap()).unwrap();
         assert_eq!(wire["type"], "tool_invocation_failed");
-        assert_eq!(wire["payload"]["capabilityId"], "delegate_task");
+        assert_eq!(wire["payload"]["capabilityId"], "agent_delegate_task");
         assert_eq!(wire["payload"]["failureCode"], "invalid_request");
         assert!(
             AssistantToolInspection::from_control_events(
@@ -635,14 +660,14 @@ mod tests {
             },
             AssistantEventKind::ToolInvocationStarted {
                 invocation_id: "tool-1".into(),
-                capability_id: CapabilityId::InspectDatabaseSchema.into(),
+                capability_id: CapabilityId::DataInspectSchema.into(),
             },
             AssistantEventKind::TurnCompleted {
                 final_text: "Schema inspected.".into(),
             },
             AssistantEventKind::ToolInvocationFailed {
                 invocation_id: "tool-2".into(),
-                capability_id: CapabilityId::ProfileDatabase.into(),
+                capability_id: CapabilityId::DataInspectProfile.into(),
                 failure_code: crate::CapabilityFailureCode::DEADLINE_ELAPSED.to_string(),
             },
             AssistantEventKind::AgentRunResumed {

@@ -45,9 +45,9 @@ pub enum MindReadContent {
 impl MindReadContent {
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
-            Self::Outline { .. } => CapabilityId::InspectMind,
-            Self::Found { .. } => CapabilityId::FindTopics,
-            Self::Topics { .. } => CapabilityId::InspectTopics,
+            Self::Outline { .. } => CapabilityId::MindInspect,
+            Self::Found { .. } => CapabilityId::MindSearchTopics,
+            Self::Topics { .. } => CapabilityId::MindInspectTopics,
         }
     }
 }

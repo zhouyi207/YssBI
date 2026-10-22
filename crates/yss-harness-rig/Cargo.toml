@@ -8,6 +8,7 @@ publish = false
 futures-util.workspace = true
 rig-agent.workspace = true
 rig-core.workspace = true
+rig-memory.workspace = true
 rig-reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

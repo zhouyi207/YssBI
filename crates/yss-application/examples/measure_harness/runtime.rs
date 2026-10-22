@@ -70,6 +70,8 @@ pub async fn initialize(
             tool_ledger: store.clone(),
             knowledge,
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+            web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+            python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
             clock,
             ids: Arc::new(Ids),
         })

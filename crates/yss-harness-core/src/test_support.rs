@@ -24,6 +24,8 @@ pub fn note_ports(
         tool_ledger: store.clone(),
         knowledge: store,
         knowledge_index: std::sync::Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+        web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+        python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
         clock: std::sync::Arc::new(FixedClock::new(now)),
         ids: std::sync::Arc::new(SequentialIds::default()),
     }
@@ -52,6 +54,9 @@ pub fn run_executor(
                 store.clone(),
                 std::sync::Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
             )),
+            web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+            python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
+            approvals: std::sync::Arc::default(),
             ledger: store,
             clock: std::sync::Arc::new(FixedClock::new(1000)),
             ids,

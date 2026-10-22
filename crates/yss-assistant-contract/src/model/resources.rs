@@ -75,85 +75,89 @@ impl From<&EditResourceRequest> for super::CapabilityInput {
                 rows,
                 before_row_id,
             } => {
-                return Self::InsertRows(super::InsertRowsInput {
+                return Self::DataCreateRows(super::InsertRowsInput {
                     database: super::DatabaseResourceRef::new(value.resource.id.clone()),
                     rows: rows.clone(),
                     before_row_id: *before_row_id,
                 });
             }
             ResourceEdit::UpdateCells { cells } => {
-                return Self::UpdateCells(super::UpdateCellsInput {
+                return Self::DataUpdateCells(super::UpdateCellsInput {
                     database: super::DatabaseResourceRef::new(value.resource.id.clone()),
                     cells: cells.clone(),
                 });
             }
             ResourceEdit::DeleteRows { row_ids } => {
-                return Self::DeleteRows(super::DeleteRowsInput {
+                return Self::DataDeleteRows(super::DeleteRowsInput {
                     database: super::DatabaseResourceRef::new(value.resource.id.clone()),
                     row_ids: row_ids.clone(),
                 });
             }
             ResourceEdit::CreateColumns { columns } => {
-                return Self::CreateColumns(super::CreateColumnsInput {
+                return Self::DataCreateColumns(super::CreateColumnsInput {
                     database: super::DatabaseResourceRef::new(value.resource.id.clone()),
                     columns: columns.clone(),
                 });
             }
             ResourceEdit::RenameColumns { columns } => {
-                return Self::RenameColumns(super::RenameColumnsInput {
+                return Self::DataRenameColumns(super::RenameColumnsInput {
                     database: super::DatabaseResourceRef::new(value.resource.id.clone()),
                     columns: columns.clone(),
                 });
             }
             ResourceEdit::DeleteColumns { columns } => {
-                return Self::DeleteColumns(super::DeleteColumnsInput {
+                return Self::DataDeleteColumns(super::DeleteColumnsInput {
                     database: super::DatabaseResourceRef::new(value.resource.id.clone()),
                     columns: columns.clone(),
                 });
             }
             ResourceEdit::CastColumns { columns } => {
-                return Self::CastColumns(super::CastColumnsInput {
+                return Self::DataCastColumns(super::CastColumnsInput {
                     database: super::DatabaseResourceRef::new(value.resource.id.clone()),
                     columns: columns.clone(),
                 });
             }
             ResourceEdit::SetColumnSemantics { columns } => {
-                return Self::SetColumnSemantics(super::SetColumnSemanticsInput {
+                return Self::DataUpdateColumnSemantics(super::SetColumnSemanticsInput {
                     database: super::DatabaseResourceRef::new(value.resource.id.clone()),
                     columns: columns.clone(),
                 });
             }
             ResourceEdit::GraphHistory { redo: false, .. }
-            | ResourceEdit::DatabaseHistory { redo: false } => return Self::UndoResource(target()),
+            | ResourceEdit::DatabaseHistory { redo: false } => {
+                return Self::ProjectUndoResource(target());
+            }
             ResourceEdit::GraphHistory { redo: true, .. }
-            | ResourceEdit::DatabaseHistory { redo: true } => return Self::RedoResource(target()),
+            | ResourceEdit::DatabaseHistory { redo: true } => {
+                return Self::ProjectRedoResource(target());
+            }
             ResourceEdit::UpdateChart { settings } => {
-                return Self::UpdateChart(super::UpdateChartInput {
+                return Self::ChartUpdate(super::UpdateChartInput {
                     chart: super::ChartResourceRef::new(value.resource.id.clone()),
                     settings: settings.clone(),
                 });
             }
             ResourceEdit::CreateTopics { topics, before_id } => {
-                return Self::CreateTopics(super::CreateTopicsInput {
+                return Self::MindCreateTopics(super::CreateTopicsInput {
                     mind: super::MindResourceRef::new(value.resource.id.clone()),
                     topics: topics.clone(),
                     before_id: before_id.clone(),
                 });
             }
             ResourceEdit::UpdateTopics { topics } => {
-                return Self::UpdateTopics(super::UpdateTopicsInput {
+                return Self::MindUpdateTopics(super::UpdateTopicsInput {
                     mind: super::MindResourceRef::new(value.resource.id.clone()),
                     topics: topics.clone(),
                 });
             }
             ResourceEdit::MoveTopics { topics } => {
-                return Self::MoveTopics(super::MoveTopicsInput {
+                return Self::MindMoveTopics(super::MoveTopicsInput {
                     mind: super::MindResourceRef::new(value.resource.id.clone()),
                     topics: topics.clone(),
                 });
             }
             ResourceEdit::DeleteTopics { topic_ids } => {
-                return Self::DeleteTopics(super::DeleteTopicsInput {
+                return Self::MindDeleteTopics(super::DeleteTopicsInput {
                     mind: super::MindResourceRef::new(value.resource.id.clone()),
                     topic_ids: topic_ids.clone(),
                 });
@@ -163,7 +167,7 @@ impl From<&EditResourceRequest> for super::CapabilityInput {
                 parent_id,
                 before_id,
             } => {
-                return Self::DuplicateTopics(super::DuplicateTopicsInput {
+                return Self::MindDuplicateTopics(super::DuplicateTopicsInput {
                     mind: super::MindResourceRef::new(value.resource.id.clone()),
                     topic_ids: topic_ids.clone(),
                     parent_id: parent_id.clone(),
@@ -171,19 +175,19 @@ impl From<&EditResourceRequest> for super::CapabilityInput {
                 });
             }
             ResourceEdit::ReplaceDocumentText { replacements } => {
-                return Self::ReplaceDocumentText(super::ReplaceDocumentTextInput {
+                return Self::DocumentReplaceText(super::ReplaceDocumentTextInput {
                     document: super::DocumentResourceRef::new(value.resource.id.clone()),
                     replacements: replacements.clone(),
                 });
             }
             ResourceEdit::AppendDocument { text } => {
-                return Self::AppendDocument(super::AppendDocumentInput {
+                return Self::DocumentAppendText(super::AppendDocumentInput {
                     document: super::DocumentResourceRef::new(value.resource.id.clone()),
                     text: text.clone(),
                 });
             }
             ResourceEdit::WriteDocument { markdown } => {
-                return Self::WriteDocument(super::WriteDocumentInput {
+                return Self::DocumentWriteText(super::WriteDocumentInput {
                     document: super::DocumentResourceRef::new(value.resource.id.clone()),
                     markdown: markdown.clone(),
                 });
@@ -192,7 +196,7 @@ impl From<&EditResourceRequest> for super::CapabilityInput {
                 signature: signature.into(),
             },
         };
-        Self::EditResource(EditResourceInput {
+        Self::GraphUpdateFunctionSignature(EditResourceInput {
             resource: value.resource.clone(),
             edit,
         })

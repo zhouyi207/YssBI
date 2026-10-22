@@ -18,15 +18,17 @@ pub enum ToolEffect {
     Compute,
     Mutate,
     Destructive,
-    External,
+    /// Runs code or programs on the user's machine; every call needs the user's approval.
+    Execute,
 }
 
 impl ToolEffect {
     pub const fn default_timeout_ms(self) -> u64 {
-        if matches!(self, Self::Compute) {
-            60_000
-        } else {
-            30_000
+        match self {
+            Self::Compute => 60_000,
+            // Covers the longest script run a call may ask for, plus process shutdown.
+            Self::Execute => (crate::MAX_PYTHON_RUN_SECONDS as u64 + 60) * 1_000,
+            Self::Inspect | Self::Mutate | Self::Destructive => 30_000,
         }
     }
 }
@@ -105,6 +107,7 @@ impl CapabilityFailureCode {
     pub const PERSISTENCE_UNAVAILABLE: Self = Self::from_static("persistence_unavailable");
     pub const INTERNAL_FAILURE: Self = Self::from_static("internal_failure");
     pub const OUTCOME_UNKNOWN: Self = Self::from_static("outcome_unknown");
+    pub const APPROVAL_DENIED: Self = Self::from_static("approval_denied");
 
     pub const fn from_static(code: &'static str) -> Self {
         Self(Cow::Borrowed(code))

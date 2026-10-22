@@ -32,7 +32,7 @@ impl CapabilityGatewayPort for ConcurrentEdit {
             let eligible = context
                 .agent()
                 .is_some_and(|agent| agent.role == AgentRole::Data)
-                && request.capability_id() == CapabilityId::ReadDatabaseRows;
+                && request.capability_id() == CapabilityId::DataReadRows;
             let result = self
                 .gateway
                 .invoke(context.clone(), request, control.clone())

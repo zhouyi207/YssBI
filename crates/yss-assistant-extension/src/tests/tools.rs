@@ -66,7 +66,7 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
         crate::contract::ResultRef::new("session".into(), u64::MAX),
         Some("structured:/values".into()),
     );
-    let schema = crate::contract::capability_input_schema(CapabilityId::ReadResultTable);
+    let schema = crate::contract::capability_input_schema(CapabilityId::ResultReadTable);
     let decoded: crate::contract::ReadResultTableRequest = decode_arguments(
         json!({"tableRef": reference, "columns": ["value"], "offset": 7, "limit": 3}),
         schema.as_value(),
@@ -83,40 +83,44 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
     );
 
     let schema = serde_json::to_value(crate::contract::capability_input_schema(
-        CapabilityId::CreateConstants,
+        CapabilityId::GraphCreateConstants,
     ))
     .unwrap();
     let mut arguments = json!({"graph":{"kind":"event_graph","id":"events/Main.yssbi-event"},"constants":[
         {"clientId":"exact","name":"Exact","value":{"dataType":{"kind":"Scalar","inner":"Numeric"},"dataValue":{"Integer":"9223372036854775807"}}},
         {"clientId":"table","name":"Table","value":{"dataType":{"kind":"DataFrame"},"tabular":{"columns":{"x":[1,2]}}}}
     ]});
-    let request =
-        decode_request(CapabilityId::CreateConstants, arguments.clone(), &schema).unwrap();
-    assert_eq!(request.capability_id(), CapabilityId::CreateConstants);
+    let request = decode_request(
+        CapabilityId::GraphCreateConstants,
+        arguments.clone(),
+        &schema,
+    )
+    .unwrap();
+    assert_eq!(request.capability_id(), CapabilityId::GraphCreateConstants);
     assert_eq!(
         serde_json::to_value(request).unwrap()["payload"]["constants"][0]["value"]["dataValue"]["Integer"],
         "9223372036854775807"
     );
     arguments["constants"][0]["value"]["dataValue"]["Integer"] = json!(42);
-    assert!(decode_request(CapabilityId::CreateConstants, arguments, &schema).is_err());
+    assert!(decode_request(CapabilityId::GraphCreateConstants, arguments, &schema).is_err());
     for (capability, arguments) in [
         (
-            CapabilityId::SearchKnowledge,
+            CapabilityId::KnowledgeSearch,
             json!({"query":"regression diagnostics"}),
         ),
         (
-            CapabilityId::ReadKnowledge,
+            CapabilityId::KnowledgeRead,
             json!({"reference":{"documentId":"ols","chunkId":"chunk-1"}}),
         ),
     ] {
         let schema =
             serde_json::to_value(crate::contract::capability_input_schema(capability)).unwrap();
         let decode = |arguments| match capability {
-            CapabilityId::SearchKnowledge => {
+            CapabilityId::KnowledgeSearch => {
                 decode_arguments::<SearchKnowledgeRequest>(arguments, &schema)
                     .map(|request| serde_json::to_value(request).unwrap())
             }
-            CapabilityId::ReadKnowledge => {
+            CapabilityId::KnowledgeRead => {
                 decode_arguments::<ReadKnowledgeRequest>(arguments, &schema)
                     .map(|request| serde_json::to_value(request).unwrap())
             }
@@ -133,11 +137,11 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
         }
     }
     let schema = serde_json::to_value(crate::contract::capability_input_schema(
-        CapabilityId::InspectGraph,
+        CapabilityId::GraphInspect,
     ))
     .unwrap();
     let overview = decode_request(
-        CapabilityId::InspectGraph,
+        CapabilityId::GraphInspect,
         json!({"graph":{"kind":"event_graph","id":"events/Main.yssbi-event"}}),
         &schema,
     )
@@ -151,7 +155,7 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
     );
     assert!(
         decode_request(
-            CapabilityId::InspectGraph,
+            CapabilityId::GraphInspect,
             json!({"graph":{"kind":"event_graph","id":"events/Main.yssbi-event"}, "view":"full"}),
             &schema,
         )
@@ -159,28 +163,28 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
     );
     assert!(
         decode_request(
-            CapabilityId::InspectGraph,
+            CapabilityId::GraphInspect,
             json!({"graph":{"kind":"database","id":"data"}}),
             &schema,
         )
         .is_err()
     );
     let schema = serde_json::to_value(crate::contract::capability_input_schema(
-        CapabilityId::InspectNodes,
+        CapabilityId::GraphInspectNodes,
     ))
     .unwrap();
-    let nodes = decode_request(CapabilityId::InspectNodes,
+    let nodes = decode_request(CapabilityId::GraphInspectNodes,
         json!({"graph":{"kind":"event_graph","id":"events/Main.yssbi-event"}, "nodeIds":["node-1"], "fields":["parameters","schema"], "portOffset":10, "portLimit":5}), &schema).unwrap();
-    let CapabilityInput::InspectNodes(nodes) = nodes else {
+    let CapabilityInput::GraphInspectNodes(nodes) = nodes else {
         panic!("nodes")
     };
     nodes.validate().unwrap();
     let schema = serde_json::to_value(crate::contract::capability_input_schema(
-        CapabilityId::CreateResource,
+        CapabilityId::ProjectCreateResource,
     ))
     .unwrap();
     let request = decode_request(
-        CapabilityId::CreateResource,
+        CapabilityId::ProjectCreateResource,
         json!({
             "kind": "doc", "name": "Report"
         }),
@@ -189,11 +193,13 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
     .unwrap();
     assert!(matches!(
         request,
-        CapabilityInput::CreateResource(crate::contract::model::CreateResourceInput::Doc { .. })
+        CapabilityInput::ProjectCreateResource(
+            crate::contract::model::CreateResourceInput::Doc { .. }
+        )
     ));
 
     let schema = serde_json::to_value(crate::contract::capability_input_schema(
-        CapabilityId::ReplaceDocumentText,
+        CapabilityId::DocumentReplaceText,
     ))
     .unwrap();
     let mut input = json!({
@@ -201,21 +207,21 @@ fn provider_arguments_decode_through_the_registered_resource_schemas() {
         "replacements": [{"oldText": "原文", "newText": "正文"}]
     });
     let request =
-        decode_request(CapabilityId::ReplaceDocumentText, input.clone(), &schema).unwrap();
+        decode_request(CapabilityId::DocumentReplaceText, input.clone(), &schema).unwrap();
     assert_eq!(serde_json::to_value(&request).unwrap()["payload"], input);
     input["version"] = json!({"revision": 2, "sessionId": "doc-session"});
-    assert!(decode_request(CapabilityId::ReplaceDocumentText, input, &schema).is_err());
+    assert!(decode_request(CapabilityId::DocumentReplaceText, input, &schema).is_err());
     let schema = serde_json::to_value(crate::contract::capability_input_schema(
-        CapabilityId::UpdateChart,
+        CapabilityId::ChartUpdate,
     ))
     .unwrap();
     let mut input =
         json!({"chart":{"kind":"chart","id":"charts/Trend.yssbi-chart"},"settings":{"y":null}});
-    let decoded = decode_request(CapabilityId::UpdateChart, input.clone(), &schema).unwrap();
+    let decoded = decode_request(CapabilityId::ChartUpdate, input.clone(), &schema).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap()["payload"], input);
     for field in ["databaseId", "chartType"] {
         input["settings"] = json!({field:null});
-        assert!(decode_request(CapabilityId::UpdateChart, input.clone(), &schema).is_err());
+        assert!(decode_request(CapabilityId::ChartUpdate, input.clone(), &schema).is_err());
     }
 }
 
@@ -248,162 +254,162 @@ fn model_capabilities_hide_concurrency_fields_in_schemas_calls_and_live_replay_r
         }
     }
     // Internal owner operations are never admitted as model calls.
-    for internal in [CapabilityId::ApplyGraphEdit, CapabilityId::SaveGraph] {
+    for internal in [CapabilityId::GraphApplyEdit, CapabilityId::GraphSave] {
         let schema = serde_json::to_value(capability_input_schema(internal)).unwrap();
         assert_eq!(schema, json!(false));
         assert!(decode_request(internal, json!({}), &schema).is_err());
     }
     for (capability, input) in [
         (
-            CapabilityId::InspectDocument,
+            CapabilityId::DocumentInspect,
             json!({"document":{"kind":"doc","id":"docs/report.md"}}),
         ),
         (
-            CapabilityId::ReadDocument,
+            CapabilityId::DocumentRead,
             json!({"document":{"kind":"doc","id":"docs/report.md"},"section":{"headingIndex":1,"start":20}}),
         ),
         (
-            CapabilityId::SearchDocument,
+            CapabilityId::DocumentSearch,
             json!({"document":{"kind":"doc","id":"docs/report.md"},"query":"Result","range":{"start":0,"end":200}}),
         ),
         (
-            CapabilityId::ReplaceDocumentText,
+            CapabilityId::DocumentReplaceText,
             json!({"document":{"kind":"doc","id":"docs/report.md"},"replacements":[{"oldText":"before","newText":"after"}]}),
         ),
         (
-            CapabilityId::AppendDocument,
+            CapabilityId::DocumentAppendText,
             json!({"document":{"kind":"doc","id":"docs/report.md"},"text":"Append"}),
         ),
         (
-            CapabilityId::WriteDocument,
+            CapabilityId::DocumentWriteText,
             json!({"document":{"kind":"doc","id":"docs/report.md"},"markdown":"# Report"}),
         ),
         (
-            CapabilityId::InspectMind,
+            CapabilityId::MindInspect,
             json!({"mind":{"kind":"mind","id":"minds/plan.yssbi-mind"}}),
         ),
         (
-            CapabilityId::FindTopics,
+            CapabilityId::MindSearchTopics,
             json!({"mind":{"kind":"mind","id":"minds/plan.yssbi-mind"},"query":"result"}),
         ),
         (
-            CapabilityId::InspectTopics,
+            CapabilityId::MindInspectTopics,
             json!({"mind":{"kind":"mind","id":"minds/plan.yssbi-mind"},"topicIds":["root"]}),
         ),
         (
-            CapabilityId::CreateTopics,
+            CapabilityId::MindCreateTopics,
             json!({"mind":{"kind":"mind","id":"minds/plan.yssbi-mind"},"topics":[{"clientId":"child","parentId":"root","content":"Result"}]}),
         ),
         (
-            CapabilityId::UpdateTopics,
+            CapabilityId::MindUpdateTopics,
             json!({"mind":{"kind":"mind","id":"minds/plan.yssbi-mind"},"topics":[{"topicId":"root","reference":null}]}),
         ),
         (
-            CapabilityId::MoveTopics,
+            CapabilityId::MindMoveTopics,
             json!({"mind":{"kind":"mind","id":"minds/plan.yssbi-mind"},"topics":[{"topicId":"leaf","parentId":"root"}]}),
         ),
         (
-            CapabilityId::DeleteTopics,
+            CapabilityId::MindDeleteTopics,
             json!({"mind":{"kind":"mind","id":"minds/plan.yssbi-mind"},"topicIds":["leaf"]}),
         ),
         (
-            CapabilityId::DuplicateTopics,
+            CapabilityId::MindDuplicateTopics,
             json!({"mind":{"kind":"mind","id":"minds/plan.yssbi-mind"},"topicIds":["leaf"],"parentId":"root"}),
         ),
         (
-            CapabilityId::InspectDatabase,
+            CapabilityId::DataInspect,
             json!({"database":{"kind":"database","id":"data"}}),
         ),
         (
-            CapabilityId::InspectDatabaseSchema,
+            CapabilityId::DataInspectSchema,
             json!({"database":{"kind":"database","id":"data"},"columns":["x"],"limit":1}),
         ),
         (
-            CapabilityId::ProfileDatabase,
+            CapabilityId::DataInspectProfile,
             json!({"database":{"kind":"database","id":"data"},"columns":["x"],"metrics":["statistics"]}),
         ),
         (
-            CapabilityId::ReadDatabaseRows,
+            CapabilityId::DataReadRows,
             json!({"database":{"kind":"database","id":"data"},"columns":["x"],"filters":[{"column":"x","comparison":"is_null"}],"order":[{"column":"x","ascending":true,"nullsFirst":false}]}),
         ),
         (
-            CapabilityId::ExportDatabase,
+            CapabilityId::DataExport,
             json!({"database":{"kind":"database","id":"data"},"path":"output.csv","format":"csv"}),
         ),
         (
-            CapabilityId::ImportDatabase,
+            CapabilityId::DataImport,
             json!({"name":"Chosen name","source":{"kind":"csv","path":"input.csv","delimiter":",","hasHeader":true,"inferSchemaLength":10}}),
         ),
         (
-            CapabilityId::MoveNodes,
+            CapabilityId::GraphMoveNodes,
             json!({"graph":{"kind":"event_graph","id":"events/analysis.yssbi-event"},"positions":[{"nodeId":"node","x":1,"y":2}]}),
         ),
         (
-            CapabilityId::ExecuteGraph,
+            CapabilityId::GraphExecute,
             json!({"graph":{"kind":"event_graph","id":"events/analysis.yssbi-event"}}),
         ),
         (
-            CapabilityId::ExecuteGraph,
+            CapabilityId::GraphExecute,
             json!({"graph":{"kind":"event_graph","id":"events/analysis.yssbi-event"},"nodeId":"node","mode":"currentInputs"}),
         ),
         (
-            CapabilityId::ValidateGraph,
+            CapabilityId::GraphValidate,
             json!({"graph":{"kind":"event_graph","id":"events/analysis.yssbi-event"},"nodeIds":["node"],"offset":0,"limit":1}),
         ),
         (
-            CapabilityId::SaveResource,
+            CapabilityId::ProjectSaveResource,
             json!({"resource":{"kind":"doc","id":"docs/report.md"}}),
         ),
         (
-            CapabilityId::UndoResource,
+            CapabilityId::ProjectUndoResource,
             json!({"resource":{"kind":"event_graph","id":"events/analysis.yssbi-event"}}),
         ),
         (
-            CapabilityId::RedoResource,
+            CapabilityId::ProjectRedoResource,
             json!({"resource":{"kind":"database","id":"data"}}),
         ),
         (
-            CapabilityId::InsertRows,
+            CapabilityId::DataCreateRows,
             json!({"database":{"kind":"database","id":"data"},"rows":[{"x":1,"label":"A"},{}],"beforeRowId":4}),
         ),
         (
-            CapabilityId::UpdateCells,
+            CapabilityId::DataUpdateCells,
             json!({"database":{"kind":"database","id":"data"},"cells":[{"rowId":4,"column":"x","value":null}]}),
         ),
         (
-            CapabilityId::DeleteRows,
+            CapabilityId::DataDeleteRows,
             json!({"database":{"kind":"database","id":"data"},"rowIds":[4,9]}),
         ),
         (
-            CapabilityId::CreateColumns,
+            CapabilityId::DataCreateColumns,
             json!({"database":{"kind":"database","id":"data"},"columns":[{"name":"flag","dtype":"Bool"}]}),
         ),
         (
-            CapabilityId::RenameColumns,
+            CapabilityId::DataRenameColumns,
             json!({"database":{"kind":"database","id":"data"},"columns":[{"column":"x","name":"value"}]}),
         ),
         (
-            CapabilityId::DeleteColumns,
+            CapabilityId::DataDeleteColumns,
             json!({"database":{"kind":"database","id":"data"},"columns":["x"]}),
         ),
         (
-            CapabilityId::CastColumns,
+            CapabilityId::DataCastColumns,
             json!({"database":{"kind":"database","id":"data"},"columns":[{"column":"x","dtype":"Int64","force":false}]}),
         ),
         (
-            CapabilityId::SetColumnSemantics,
+            CapabilityId::DataUpdateColumnSemantics,
             json!({"database":{"kind":"database","id":"data"},"columns":[{"column":"x","semantic":{"kind":"Identifier","values":[],"positiveValue":null,"numeric":null}}]}),
         ),
         (
-            CapabilityId::EditResource,
+            CapabilityId::GraphUpdateFunctionSignature,
             json!({"resource":{"kind":"function_graph","id":"functions/fit.yssbi-function"},"edit":{"kind":"function_signature","signature":{"parameters":[],"returnType":"core.numeric"}}}),
         ),
         (
-            CapabilityId::RequestUiIntent,
+            CapabilityId::UiOpen,
             json!({"intent":{"kind":"showPanel","panel":"project"}}),
         ),
         (
-            CapabilityId::RequestUiIntent,
+            CapabilityId::UiOpen,
             json!({"intent":{"kind":"openResult","resultRef":ResultRef::new("11111111-1111-4111-8111-111111111111".into(), 7)}}),
         ),
     ] {
@@ -447,7 +453,7 @@ created_constants: Default::default(),
             removed_constant_ids: vec![], ready: true, diagnostics: vec![],
         },
     });
-    let live = tool_result_json("apply_graph_edit", Ok(result.clone()));
+    let live = tool_result_json("graph_apply_edit", Ok(result.clone()));
     assert_eq!(live["payload"]["createdNodes"]["fit"], "real-node-id");
     let node = &live["payload"]["changes"]["nodes"][0];
     assert_eq!(node["parameters"][0]["value"], json!({"revision":19}));
@@ -470,7 +476,7 @@ created_constants: Default::default(),
         assert!(live["payload"]["changes"].get(field).is_none());
     }
     let failure = tool_result_json(
-        "apply_graph_edit",
+        "graph_apply_edit",
         Err(
             CapabilityFailure::new(CapabilityFailureCode::REVISION_CONFLICT)
                 .with_detail("expectedRevision", "21")
@@ -494,11 +500,11 @@ fn actionable_failures_replay_without_internal_sync_diagnostics() {
             .with_detail("expectedRevision", "9001")
             .with_detail("sessionId", "private-session"),
         CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
-            .with_detail("capabilityId", "inspect_result")
+            .with_detail("capabilityId", "result_inspect")
             .with_detail("field", "schemaLimit")
             .with_detail("nextStep", "Use a schemaLimit between 1 and 100."),
         CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST)
-            .with_detail("capabilityId", "edit_resource")
+            .with_detail("capabilityId", "graph_update_function_signature")
             .with_detail("field", "version.sessionId"),
         CapabilityFailure::new(CapabilityFailureCode::REVISION_CONFLICT)
             .with_detail("reason", "resource_requires_current_read")
@@ -509,7 +515,7 @@ fn actionable_failures_replay_without_internal_sync_diagnostics() {
     .into_iter()
     .enumerate()
     {
-        let live = tool_result_json("inspect_result", Err(failure.clone()));
+        let live = tool_result_json("result_inspect", Err(failure.clone()));
         if failure.code == CapabilityFailureCode::REVISION_CONFLICT {
             assert_eq!(
                 live["failure"]["code"],

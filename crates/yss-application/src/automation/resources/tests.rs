@@ -188,7 +188,7 @@ async fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_a
         let before = fixture.inspect(resource);
         let path = fixture.directory.join("project").join(&resource.id);
         let saved = std::fs::read(&path).unwrap();
-        let failure = call(report.as_ref(), &store, "save_resource", resource)
+        let failure = call(report.as_ref(), &store, "project_save_resource", resource)
             .await
             .unwrap_err();
         assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
@@ -198,13 +198,13 @@ async fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_a
         assert_eq!(publications.load(Ordering::Relaxed), 0);
     }
     assert_eq!(
-        call(report.as_ref(), &store, "inspect_resource", &doc)
+        call(report.as_ref(), &store, "project_inspect_resource", &doc)
             .await
             .unwrap(),
         AutomationCapabilityResult::ResourceInspection(doc_before)
     );
     let AutomationCapabilityResult::ResourceManaged(receipt) =
-        call(report.as_ref(), &store, "save_resource", &doc)
+        call(report.as_ref(), &store, "project_save_resource", &doc)
             .await
             .unwrap()
     else {
@@ -248,20 +248,30 @@ async fn agent_permissions_reject_wrong_resource_kind_and_unassigned_documents_a
         },
     );
     let publication_count = publications.load(Ordering::Relaxed);
-    let failure = call(review.as_ref(), &review_store, "save_resource", &doc)
-        .await
-        .unwrap_err();
+    let failure = call(
+        review.as_ref(),
+        &review_store,
+        "project_save_resource",
+        &doc,
+    )
+    .await
+    .unwrap_err();
     assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
-    assert_eq!(failure.details["capabilityId"], "save_resource");
+    assert_eq!(failure.details["capabilityId"], "project_save_resource");
     assert_eq!(fixture.inspect(&doc), review_before);
     assert_eq!(
         std::fs::read_to_string(fixture.directory.join("project").join(&doc.id)).unwrap(),
         report_markdown
     );
     assert_eq!(
-        call(review.as_ref(), &review_store, "inspect_resource", &doc)
-            .await
-            .unwrap(),
+        call(
+            review.as_ref(),
+            &review_store,
+            "project_inspect_resource",
+            &doc
+        )
+        .await
+        .unwrap(),
         AutomationCapabilityResult::ResourceInspection(review_before.clone())
     );
     assert_eq!(fixture.inspect(&doc), review_before);

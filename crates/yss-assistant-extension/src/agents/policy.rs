@@ -98,18 +98,18 @@ pub(crate) fn authorize_model_capability(
 ) -> Result<(), CapabilityFailure> {
     authorize_role_capability(scope, request.capability_id())?;
     match request {
-        Request::ListResources(_) | Request::InspectUiIntent(_) | Request::RequestUiIntent(_) => {
+        Request::ProjectListResources(_) | Request::UiInspectReceipt(_) | Request::UiOpen(_) => {
             if scope.role == AgentRole::Manager && scope.task.is_none() {
                 Ok(())
             } else {
                 Err(denied())
             }
         }
-        Request::BrowseNodes(_) | Request::InspectNodeType(_) => Ok(()),
-        Request::InspectChart(request) => {
+        Request::CatalogSearchNodes(_) | Request::CatalogInspectNodes(_) => Ok(()),
+        Request::ChartInspect(request) => {
             authorize_agent_resource(scope, &request.chart.resource(), Op::Inspect)
         }
-        Request::UpdateChart(request) => {
+        Request::ChartUpdate(request) => {
             authorize_agent_resource(scope, &request.chart.resource(), Op::Edit)?;
             if let Some(id) = &request.settings.database_id
                 && !id.is_empty()
@@ -125,173 +125,175 @@ pub(crate) fn authorize_model_capability(
             }
             Ok(())
         }
-        Request::InspectResource(request) => {
+        Request::ProjectInspectResource(request) => {
             authorize_agent_resource(scope, &request.resource, Op::Inspect)
         }
-        Request::InspectMind(request) => {
+        Request::MindInspect(request) => {
             authorize_agent_resource(scope, &request.mind.resource(), Op::Inspect)
         }
-        Request::FindTopics(request) => {
+        Request::MindSearchTopics(request) => {
             authorize_agent_resource(scope, &request.mind.resource(), Op::Inspect)
         }
-        Request::InspectTopics(request) => {
+        Request::MindInspectTopics(request) => {
             authorize_agent_resource(scope, &request.mind.resource(), Op::Inspect)
         }
-        Request::CreateTopics(request) => {
+        Request::MindCreateTopics(request) => {
             authorize_agent_resource(scope, &request.mind.resource(), Op::Edit)
         }
-        Request::UpdateTopics(request) => {
+        Request::MindUpdateTopics(request) => {
             authorize_agent_resource(scope, &request.mind.resource(), Op::Edit)
         }
-        Request::MoveTopics(request) => {
+        Request::MindMoveTopics(request) => {
             authorize_agent_resource(scope, &request.mind.resource(), Op::Edit)
         }
-        Request::DeleteTopics(request) => {
+        Request::MindDeleteTopics(request) => {
             authorize_agent_resource(scope, &request.mind.resource(), Op::Edit)
         }
-        Request::DuplicateTopics(request) => {
+        Request::MindDuplicateTopics(request) => {
             authorize_agent_resource(scope, &request.mind.resource(), Op::Edit)
         }
-        Request::InspectDocument(request) => {
+        Request::DocumentInspect(request) => {
             authorize_agent_resource(scope, &request.document.resource(), Op::Inspect)
         }
-        Request::ReadDocument(request) => {
+        Request::DocumentRead(request) => {
             authorize_agent_resource(scope, &request.document.resource(), Op::Inspect)
         }
-        Request::SearchDocument(request) => {
+        Request::DocumentSearch(request) => {
             authorize_agent_resource(scope, &request.document.resource(), Op::Inspect)
         }
-        Request::ReplaceDocumentText(request) => {
+        Request::DocumentReplaceText(request) => {
             authorize_agent_resource(scope, &request.document.resource(), Op::Edit)
         }
-        Request::AppendDocument(request) => {
+        Request::DocumentAppendText(request) => {
             authorize_agent_resource(scope, &request.document.resource(), Op::Edit)
         }
-        Request::WriteDocument(request) => {
+        Request::DocumentWriteText(request) => {
             authorize_agent_resource(scope, &request.document.resource(), Op::Edit)
         }
-        Request::InspectDatabase(request) => {
+        Request::DataInspect(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Inspect)
         }
-        Request::InspectDatabaseSchema(request) => {
+        Request::DataInspectSchema(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Inspect)
         }
-        Request::ProfileDatabase(request) => {
+        Request::DataInspectProfile(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Inspect)
         }
-        Request::ReadDatabaseRows(request) => {
+        Request::DataReadRows(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Inspect)
         }
-        Request::InsertRows(request) => {
+        Request::DataCreateRows(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::UpdateCells(request) => {
+        Request::DataUpdateCells(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::DeleteRows(request) => {
+        Request::DataDeleteRows(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::CreateColumns(request) => {
+        Request::DataCreateColumns(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::RenameColumns(request) => {
+        Request::DataRenameColumns(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::DeleteColumns(request) => {
+        Request::DataDeleteColumns(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::CastColumns(request) => {
+        Request::DataCastColumns(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::SetColumnSemantics(request) => {
+        Request::DataUpdateColumnSemantics(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Edit)
         }
-        Request::InspectGraph(request) => {
+        Request::GraphInspect(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }
-        Request::FindNodes(request) => {
+        Request::GraphSearchNodes(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }
-        Request::FindConstants(request) => {
+        Request::GraphSearchConstants(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }
-        Request::InspectConstants(request) => {
+        Request::GraphInspectConstants(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }
-        Request::CreateConstants(request) => {
+        Request::GraphCreateConstants(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::UpdateConstants(request) => {
+        Request::GraphUpdateConstants(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::DeleteConstants(request) => {
+        Request::GraphDeleteConstants(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
 
-        Request::InspectNodes(request) => {
+        Request::GraphInspectNodes(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }
-        Request::FindConnections(request) => {
+        Request::GraphSearchConnections(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }
-        Request::ValidateGraph(request) => {
+        Request::GraphValidate(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }
-        Request::ListGraphResults(request) => {
+        Request::ResultList(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Inspect)
         }
-        Request::ApplyGraphEdit(request) => graph_resource(scope, &request.graph_path, Op::Edit),
-        Request::CreateNodes(request) => {
+        Request::GraphApplyEdit(request) => graph_resource(scope, &request.graph_path, Op::Edit),
+        Request::GraphCreateNodes(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::UpdateNodes(request) => {
+        Request::GraphUpdateNodes(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::DeleteNodes(request) => {
+        Request::GraphDeleteNodes(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::DuplicateNodes(request) => {
+        Request::GraphDuplicateNodes(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::MoveNodes(request) => {
+        Request::GraphMoveNodes(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::CreateConnections(request) => {
+        Request::GraphCreateConnections(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::UpdateConnections(request) => {
+        Request::GraphUpdateConnections(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::DeleteConnections(request) => {
+        Request::GraphDeleteConnections(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Edit)
         }
-        Request::ExecuteGraph(request) => {
+        Request::GraphExecute(request) => {
             authorize_agent_resource(scope, &request.graph.resource(), Op::Execute)
         }
-        Request::SaveGraph(request) => graph_resource(scope, &request.graph_path, Op::Save),
-        Request::InspectResult(request) => authorize_result(scope, &request.result_ref),
-        Request::ReadResultTable(request) => {
+        Request::GraphSave(request) => graph_resource(scope, &request.graph_path, Op::Save),
+        Request::ResultInspect(request) => authorize_result(scope, &request.result_ref),
+        Request::ResultReadTable(request) => {
             authorize_result(scope, request.table_ref.result_ref())
         }
-        Request::CreateResource(value) => authorize_creation(scope, &value.clone().into()),
-        Request::ImportDatabase(value) => authorize_creation(
+        Request::ProjectCreateResource(value) => authorize_creation(scope, &value.clone().into()),
+        Request::DataImport(value) => authorize_creation(
             scope,
             &ResourceCreation::Database {
                 source: value.source.clone(),
                 name: value.name.clone(),
             },
         ),
-        Request::RenameResource(value) => {
+        Request::ProjectRenameResource(value) => {
             authorize_agent_resource(scope, &value.resource, Op::Rename)
         }
-        Request::DuplicateResource(value) => {
+        Request::ProjectDuplicateResource(value) => {
             authorize_agent_resource(scope, &value.resource, Op::Duplicate)
         }
-        Request::DeleteResource(value) => {
+        Request::ProjectDeleteResource(value) => {
             authorize_agent_resource(scope, &value.resource, Op::Delete)
         }
-        Request::SaveResource(value) => authorize_agent_resource(scope, &value.resource, Op::Save),
-        Request::UndoResource(value) | Request::RedoResource(value) => {
+        Request::ProjectSaveResource(value) => {
+            authorize_agent_resource(scope, &value.resource, Op::Save)
+        }
+        Request::ProjectUndoResource(value) | Request::ProjectRedoResource(value) => {
             if !matches!(
                 value.resource.kind,
                 Kind::EventGraph | Kind::FunctionGraph | Kind::Database
@@ -300,10 +302,10 @@ pub(crate) fn authorize_model_capability(
             }
             authorize_agent_resource(scope, &value.resource, Op::Edit)
         }
-        Request::EditResource(request) => {
+        Request::GraphUpdateFunctionSignature(request) => {
             authorize_agent_resource(scope, &request.resource, Op::Edit)
         }
-        Request::ExportDatabase(request) => {
+        Request::DataExport(request) => {
             authorize_agent_resource(scope, &request.database.resource(), Op::Export)?;
             if scope
                 .task
@@ -470,7 +472,7 @@ mod authorization_tests {
             "positions": [{"nodeId":"node-1","x":1.0,"y":2.0}],
         }))
         .unwrap();
-        let public = Request::MoveNodes(input.clone());
+        let public = Request::GraphMoveNodes(input.clone());
         let bound = AutomationCapabilityRequest::GraphMutation(GraphMutationRequest {
             input: model::GraphMutationInput::MoveNodes(input),
             base_revision: 1,
@@ -545,17 +547,17 @@ mod authorization_tests {
             let input: model::ValidateGraphInput =
                 serde_json::from_value(serde_json::json!({"graph":graph})).unwrap();
             assert!(
-                authorize_model_capability(&scope, &Request::ValidateGraph(input.clone())).is_ok()
+                authorize_model_capability(&scope, &Request::GraphValidate(input.clone())).is_ok()
             );
             let execution = serde_json::from_value(serde_json::json!({"graph":graph})).unwrap();
-            assert!(authorize_model_capability(&scope, &Request::ExecuteGraph(execution)).is_err());
+            assert!(authorize_model_capability(&scope, &Request::GraphExecute(execution)).is_err());
             if role == AgentRole::Review {
                 let outside = model::ValidateGraphInput {
                     graph: GraphResourceRef::for_path("events/other.yssbi-event"),
                     ..input
                 };
                 assert!(
-                    authorize_model_capability(&scope, &Request::ValidateGraph(outside)).is_err()
+                    authorize_model_capability(&scope, &Request::GraphValidate(outside)).is_err()
                 );
             }
         }
@@ -585,7 +587,7 @@ mod authorization_tests {
                 ..Default::default()
             }),
         };
-        for name in ["inspect_database", "inspect_database_schema"] {
+        for name in ["data_inspect", "data_inspect_schema"] {
             for id in ["dataset", "outside"] {
                 let input: Request = serde_json::from_value(serde_json::json!({"type":name,"payload":{"database":{"kind":"database","id":id}}})).unwrap();
                 assert_eq!(

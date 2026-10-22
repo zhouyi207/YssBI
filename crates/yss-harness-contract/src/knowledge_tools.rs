@@ -7,8 +7,8 @@ use crate::{CapabilityContractError, KnowledgeChunkId, KnowledgeDocumentId, Know
 
 pub const MAX_KNOWLEDGE_RESULTS: u16 = 20;
 
-pub const SEARCH_KNOWLEDGE_TOOL: &str = "search_knowledge";
-pub const READ_KNOWLEDGE_TOOL: &str = "read_knowledge";
+pub const SEARCH_KNOWLEDGE_TOOL: &str = "knowledge_search";
+pub const READ_KNOWLEDGE_TOOL: &str = "knowledge_read";
 
 #[cfg(any(test, feature = "test-support"))]
 pub fn search_knowledge_schema() -> serde_json::Value {

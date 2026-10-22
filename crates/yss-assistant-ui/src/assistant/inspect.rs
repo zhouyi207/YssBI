@@ -1,4 +1,5 @@
 //! Visible tool cards read the sanitized ledger projection within the original session boundary.
+mod domain;
 mod render;
 use super::{
     ConversationPanel,

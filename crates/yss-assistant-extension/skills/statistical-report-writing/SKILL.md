@@ -16,8 +16,8 @@ requested scope, and report structure.
   edit/save permissions and the required evidence references. Derive a suitable
   title from the requested analysis when the user does not supply one. Do not
   treat creating the requested Doc as optional follow-up work.
-- ReportAgent creates the Doc with `create_resource` or inspects an existing Doc,
-  initializes Markdown with `write_document`, extends it with `append_document`, or revises unique passages with `replace_document_text`, then explicitly calls `save_resource`.
+- ReportAgent creates the Doc with `project_create_resource` or inspects an existing Doc,
+  initializes Markdown with `document_write_text`, extends it with `document_append_text`, or revises unique passages with `document_replace_text`, then explicitly calls `project_save_resource`.
   The host binds read and committed facts. Completion requires a successful save after the final edit
   for every changed Doc. If blocked, report the blocker instead of claiming
   delivery or pasting the full requested report into chat.
@@ -29,7 +29,7 @@ requested scope, and report structure.
 ## Evidence and reporting
 
 - Use current tool results and explicitly supplied data. Inspect missing result
-  content with `inspect_result`; result IDs and summaries alone are not numerical
+  content with `result_inspect`; result IDs and summaries alone are not numerical
   evidence. Reuse available evidence without rerunning an analysis unnecessarily.
 - Do not invent estimates, standard errors, p-values, confidence intervals, sample
   sizes, diagnostics, citations, or model specifications. Missing or uncomputed
@@ -89,8 +89,8 @@ delimiters, table column counts, literal pipes, currency, and TeX percentages.
 Escape only the syntax needed in its context; never run blanket substitutions over
 the report, code blocks, or formulas.
 
-Use `create_resource`, `inspect_document`, `read_document`, `search_document`,
-`write_document`, `append_document`, `replace_document_text`, and `save_resource`
+Use `project_create_resource`, `document_inspect`, `document_read`, `document_search`,
+`document_write_text`, `document_append_text`, `document_replace_text`, and `project_save_resource`
 with the exact resource identity from successful receipts. Read additional
 contents only as needed. Preserve unrelated content. Claim creation, edits, or saving only
 after the corresponding successful receipt. This skill supplies writing

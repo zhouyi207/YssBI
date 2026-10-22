@@ -91,7 +91,7 @@ async fn report_document_operations(capabilities: &Tools<'_>, delivery: ReportDe
         return;
     }
     capabilities
-        .execute(model::CapabilityInput::CreateResource(
+        .execute(model::CapabilityInput::ProjectCreateResource(
             model::CreateResourceInput::Doc {
                 name: "Report".into(),
             },
@@ -99,7 +99,7 @@ async fn report_document_operations(capabilities: &Tools<'_>, delivery: ReportDe
         .await
         .unwrap();
     let edit = || {
-        model::CapabilityInput::WriteDocument(model::WriteDocumentInput {
+        model::CapabilityInput::DocumentWriteText(model::WriteDocumentInput {
             document: model::DocumentResourceRef::new(document().id),
             markdown: "# Analysis report\n\nVerified findings and limitations.".into(),
         })
@@ -109,7 +109,7 @@ async fn report_document_operations(capabilities: &Tools<'_>, delivery: ReportDe
         return;
     }
     let saved = capabilities
-        .execute(model::CapabilityInput::SaveResource(
+        .execute(model::CapabilityInput::ProjectSaveResource(
             model::ResourceTargetInput {
                 resource: document(),
             },
@@ -758,17 +758,14 @@ async fn long_turns_can_finish_more_than_twenty_four_tasks_and_256_tools() {
         .filter(|record| record.state == ToolInvocationState::Failed)
         .collect();
     assert_eq!(rejected.len(), 26);
-    assert!(
-        rejected
-            .iter()
-            .all(|record| record.tool == CapabilityId::SaveResource.as_str()
-                && record.request.is_none()
-                && record.failure.as_ref().is_some_and(|failure| {
-                    failure.code == CapabilityFailureCode::INVALID_REQUEST
-                        && failure.details.get("capabilityId").map(String::as_str)
-                            == Some(CapabilityId::SaveResource.as_str())
-                }))
-    );
+    assert!(rejected.iter().all(|record| record.tool
+        == CapabilityId::ProjectSaveResource.as_str()
+        && record.request.is_none()
+        && record.failure.as_ref().is_some_and(|failure| {
+            failure.code == CapabilityFailureCode::INVALID_REQUEST
+                && failure.details.get("capabilityId").map(String::as_str)
+                    == Some(CapabilityId::ProjectSaveResource.as_str())
+        })));
 }
 
 #[tokio::test]
@@ -1013,7 +1010,7 @@ async fn recovery_preserves_committed_worker_receipts_without_repeating_the_task
         turn_id: turn_id.clone(),
         agent_run_id: Some(worker_id.clone()),
         project: session.project.clone(),
-        tool: CapabilityId::SaveResource.as_str().into(),
+        tool: CapabilityId::ProjectSaveResource.as_str().into(),
         effect: ToolEffect::Mutate,
         arguments: serde_json::json!({"resource": document()}),
         request: Some(
@@ -1096,7 +1093,7 @@ async fn recovery_preserves_committed_worker_receipts_without_repeating_the_task
             run_id: worker_id.clone(),
             event: AgentEvent::ToolInvocationStarted {
                 invocation_id: invocation_id.clone(),
-                tool: CapabilityId::SaveResource.as_str().into(),
+                tool: CapabilityId::ProjectSaveResource.as_str().into(),
             },
         },
         HarnessEvent::TurnFailed,

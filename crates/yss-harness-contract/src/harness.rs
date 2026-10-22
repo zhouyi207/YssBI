@@ -133,6 +133,15 @@ pub struct AgentTurnResult {
     pub final_text: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalDecision {
+    AllowOnce,
+    /// Allows this tool in the current project until the application restarts.
+    AllowForProject,
+    Deny,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum AgentEvent {
@@ -181,6 +190,16 @@ pub enum AgentEvent {
         tool: String,
         failure_code: Option<crate::CapabilityFailureCode>,
         failure_details: Option<std::collections::BTreeMap<String, String>>,
+    },
+    /// A tool with the `Execute` effect waits for the user before it is invoked.
+    ApprovalRequested {
+        approval_id: String,
+        tool: String,
+        arguments: Value,
+    },
+    ApprovalResolved {
+        approval_id: String,
+        decision: ApprovalDecision,
     },
     ToolInvocationStarted {
         invocation_id: ToolInvocationId,
@@ -421,6 +440,7 @@ pub enum AutomationIdKind {
     HarnessTurn,
     AgentRun,
     ToolInvocation,
+    ApprovalRequest,
 }
 
 impl AutomationIdKind {
@@ -430,6 +450,7 @@ impl AutomationIdKind {
             Self::HarnessTurn => "turn",
             Self::AgentRun => "agent",
             Self::ToolInvocation => "tool",
+            Self::ApprovalRequest => "approval",
         }
     }
 }

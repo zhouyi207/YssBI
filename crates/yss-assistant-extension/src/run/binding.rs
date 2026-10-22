@@ -27,87 +27,87 @@ impl AssistantRun {
         }
         use AutomationCapabilityRequest as Request;
         Ok(match input {
-            Input::InspectChart(value) => {
+            Input::ChartInspect(value) => {
                 let version = self.read_resource_version(&value.chart.resource());
                 Request::InspectChart(InspectChartRequest {
                     chart: value.chart,
                     version,
                 })
             }
-            Input::UpdateChart(value) => self.bind_resource_edit(
+            Input::ChartUpdate(value) => self.bind_resource_edit(
                 value.chart.resource(),
                 ResourceEdit::UpdateChart {
                     settings: value.settings,
                 },
             )?,
-            Input::InspectResource(value) => Request::InspectResource(value.into()),
-            Input::InspectDocument(value) => {
+            Input::ProjectInspectResource(value) => Request::InspectResource(value.into()),
+            Input::DocumentInspect(value) => {
                 self.bind_document_read(model::DocumentReadInput::Outline(value))?
             }
-            Input::ReadDocument(value) => {
+            Input::DocumentRead(value) => {
                 self.bind_document_read(model::DocumentReadInput::Text(value))?
             }
-            Input::SearchDocument(value) => {
+            Input::DocumentSearch(value) => {
                 self.bind_document_read(model::DocumentReadInput::Search(value))?
             }
-            Input::ReplaceDocumentText(value) => self.bind_resource_edit(
+            Input::DocumentReplaceText(value) => self.bind_resource_edit(
                 value.document.resource(),
                 ResourceEdit::ReplaceDocumentText {
                     replacements: value.replacements,
                 },
             )?,
-            Input::AppendDocument(value) => self.bind_resource_edit(
+            Input::DocumentAppendText(value) => self.bind_resource_edit(
                 value.document.resource(),
                 ResourceEdit::AppendDocument { text: value.text },
             )?,
-            Input::WriteDocument(value) => self.bind_resource_edit(
+            Input::DocumentWriteText(value) => self.bind_resource_edit(
                 value.document.resource(),
                 ResourceEdit::WriteDocument {
                     markdown: value.markdown,
                 },
             )?,
 
-            Input::InspectMind(value) => {
+            Input::MindInspect(value) => {
                 let input = model::MindReadInput::Outline(value);
                 let version = self.read_resource_version(&input.mind().resource());
                 Request::ReadMind(MindReadRequest { input, version })
             }
-            Input::FindTopics(value) => {
+            Input::MindSearchTopics(value) => {
                 let input = model::MindReadInput::Find(value);
                 let version = self.read_resource_version(&input.mind().resource());
                 Request::ReadMind(MindReadRequest { input, version })
             }
-            Input::InspectTopics(value) => {
+            Input::MindInspectTopics(value) => {
                 let input = model::MindReadInput::Topics(value);
                 let version = self.read_resource_version(&input.mind().resource());
                 Request::ReadMind(MindReadRequest { input, version })
             }
-            Input::CreateTopics(value) => self.bind_resource_edit(
+            Input::MindCreateTopics(value) => self.bind_resource_edit(
                 value.mind.resource(),
                 ResourceEdit::CreateTopics {
                     topics: value.topics,
                     before_id: value.before_id,
                 },
             )?,
-            Input::UpdateTopics(value) => self.bind_resource_edit(
+            Input::MindUpdateTopics(value) => self.bind_resource_edit(
                 value.mind.resource(),
                 ResourceEdit::UpdateTopics {
                     topics: value.topics,
                 },
             )?,
-            Input::MoveTopics(value) => self.bind_resource_edit(
+            Input::MindMoveTopics(value) => self.bind_resource_edit(
                 value.mind.resource(),
                 ResourceEdit::MoveTopics {
                     topics: value.topics,
                 },
             )?,
-            Input::DeleteTopics(value) => self.bind_resource_edit(
+            Input::MindDeleteTopics(value) => self.bind_resource_edit(
                 value.mind.resource(),
                 ResourceEdit::DeleteTopics {
                     topic_ids: value.topic_ids,
                 },
             )?,
-            Input::DuplicateTopics(value) => self.bind_resource_edit(
+            Input::MindDuplicateTopics(value) => self.bind_resource_edit(
                 value.mind.resource(),
                 ResourceEdit::DuplicateTopics {
                     topic_ids: value.topic_ids,
@@ -116,147 +116,147 @@ impl AssistantRun {
                 },
             )?,
 
-            Input::InspectGraph(value) => Request::InspectGraph(value.into()),
-            Input::BrowseNodes(value) => Request::BrowseNodes(value),
-            Input::InspectNodeType(value) => Request::InspectNodeType(value),
-            Input::FindNodes(value) => Request::FindNodes(value),
-            Input::FindConstants(value) => Request::FindConstants(value),
-            Input::InspectConstants(value) => Request::InspectConstants(value),
-            Input::CreateConstants(value) => {
+            Input::GraphInspect(value) => Request::InspectGraph(value.into()),
+            Input::CatalogSearchNodes(value) => Request::BrowseNodes(value),
+            Input::CatalogInspectNodes(value) => Request::InspectNodeType(value),
+            Input::GraphSearchNodes(value) => Request::FindNodes(value),
+            Input::GraphSearchConstants(value) => Request::FindConstants(value),
+            Input::GraphInspectConstants(value) => Request::InspectConstants(value),
+            Input::GraphCreateConstants(value) => {
                 self.bind_graph_mutation(model::GraphMutationInput::CreateConstants(value), runner)
                     .await?
             }
-            Input::UpdateConstants(value) => {
+            Input::GraphUpdateConstants(value) => {
                 self.bind_graph_mutation(model::GraphMutationInput::UpdateConstants(value), runner)
                     .await?
             }
-            Input::DeleteConstants(value) => {
+            Input::GraphDeleteConstants(value) => {
                 self.bind_graph_mutation(model::GraphMutationInput::DeleteConstants(value), runner)
                     .await?
             }
 
-            Input::InspectNodes(value) => Request::InspectNodes(value),
-            Input::FindConnections(value) => Request::FindConnections(value),
-            Input::InspectDatabase(value) => {
+            Input::GraphInspectNodes(value) => Request::InspectNodes(value),
+            Input::GraphSearchConnections(value) => Request::FindConnections(value),
+            Input::DataInspect(value) => {
                 self.bind_database_read(model::DatabaseReadInput::Overview(value))
             }
-            Input::InspectDatabaseSchema(value) => {
+            Input::DataInspectSchema(value) => {
                 self.bind_database_read(model::DatabaseReadInput::Schema(value))
             }
-            Input::ProfileDatabase(value) => {
+            Input::DataInspectProfile(value) => {
                 self.bind_database_read(model::DatabaseReadInput::Profile(value))
             }
-            Input::ReadDatabaseRows(value) => {
+            Input::DataReadRows(value) => {
                 self.bind_database_read(model::DatabaseReadInput::Rows(value))
             }
-            Input::InspectResult(value) => Request::InspectResult(value),
-            Input::ReadResultTable(value) => Request::ReadResultTable(value),
-            Input::ListResources(value) => Request::ListResources(value),
-            Input::InspectUiIntent(value) => Request::InspectUiIntent(value),
-            Input::ListGraphResults(value) => Request::ListGraphResults(value),
-            Input::RequestUiIntent(value) => Request::RequestUiIntent(RequestUiIntent {
+            Input::ResultInspect(value) => Request::InspectResult(value),
+            Input::ResultReadTable(value) => Request::ReadResultTable(value),
+            Input::ProjectListResources(value) => Request::ListResources(value),
+            Input::UiInspectReceipt(value) => Request::InspectUiIntent(value),
+            Input::ResultList(value) => Request::ListGraphResults(value),
+            Input::UiOpen(value) => Request::RequestUiIntent(RequestUiIntent {
                 client_key: runner.new_call_key()?,
                 input: value,
             }),
-            Input::CreateResource(value) => {
+            Input::ProjectCreateResource(value) => {
                 Request::ManageResource(ManageResourceRequest::Create {
                     specification: value.into(),
                 })
             }
-            Input::ImportDatabase(value) => {
-                Request::ManageResource(ManageResourceRequest::Create {
-                    specification: ResourceCreation::Database {
-                        source: value.source,
-                        name: value.name,
-                    },
-                })
-            }
-            Input::RenameResource(value) => {
+            Input::DataImport(value) => Request::ManageResource(ManageResourceRequest::Create {
+                specification: ResourceCreation::Database {
+                    source: value.source,
+                    name: value.name,
+                },
+            }),
+            Input::ProjectRenameResource(value) => {
                 Request::ManageResource(ManageResourceRequest::Rename {
                     version: self.resource_version(&value.resource)?,
                     resource: value.resource,
                     name: value.name,
                 })
             }
-            Input::DuplicateResource(value) => {
+            Input::ProjectDuplicateResource(value) => {
                 Request::ManageResource(ManageResourceRequest::Duplicate {
                     version: self.resource_version(&value.resource)?,
                     resource: value.resource,
                     name: value.name,
                 })
             }
-            Input::DeleteResource(value) => {
+            Input::ProjectDeleteResource(value) => {
                 Request::ManageResource(ManageResourceRequest::Delete {
                     version: self.resource_version(&value.resource)?,
                     resource: value.resource,
                 })
             }
-            Input::SaveResource(value) => Request::ManageResource(ManageResourceRequest::Save {
-                version: self.resource_version(&value.resource)?,
-                resource: value.resource,
-            }),
-            Input::UndoResource(value) => {
+            Input::ProjectSaveResource(value) => {
+                Request::ManageResource(ManageResourceRequest::Save {
+                    version: self.resource_version(&value.resource)?,
+                    resource: value.resource,
+                })
+            }
+            Input::ProjectUndoResource(value) => {
                 self.bind_resource_history(value.resource, false, runner)
                     .await?
             }
-            Input::RedoResource(value) => {
+            Input::ProjectRedoResource(value) => {
                 self.bind_resource_history(value.resource, true, runner)
                     .await?
             }
-            Input::InsertRows(value) => self.bind_resource_edit(
+            Input::DataCreateRows(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::InsertRows {
                     rows: value.rows,
                     before_row_id: value.before_row_id,
                 },
             )?,
-            Input::UpdateCells(value) => self.bind_resource_edit(
+            Input::DataUpdateCells(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::UpdateCells { cells: value.cells },
             )?,
-            Input::DeleteRows(value) => self.bind_resource_edit(
+            Input::DataDeleteRows(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::DeleteRows {
                     row_ids: value.row_ids,
                 },
             )?,
-            Input::CreateColumns(value) => self.bind_resource_edit(
+            Input::DataCreateColumns(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::CreateColumns {
                     columns: value.columns,
                 },
             )?,
-            Input::RenameColumns(value) => self.bind_resource_edit(
+            Input::DataRenameColumns(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::RenameColumns {
                     columns: value.columns,
                 },
             )?,
-            Input::DeleteColumns(value) => self.bind_resource_edit(
+            Input::DataDeleteColumns(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::DeleteColumns {
                     columns: value.columns,
                 },
             )?,
-            Input::CastColumns(value) => self.bind_resource_edit(
+            Input::DataCastColumns(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::CastColumns {
                     columns: value.columns,
                 },
             )?,
-            Input::SetColumnSemantics(value) => self.bind_resource_edit(
+            Input::DataUpdateColumnSemantics(value) => self.bind_resource_edit(
                 value.database.resource(),
                 ResourceEdit::SetColumnSemantics {
                     columns: value.columns,
                 },
             )?,
-            Input::ExportDatabase(value) => Request::ExportDatabase(ExportDatabaseRequest {
+            Input::DataExport(value) => Request::ExportDatabase(ExportDatabaseRequest {
                 version: self.resource_version(&value.database.resource())?,
                 resource: value.database.resource(),
                 path: value.path,
                 format: value.format,
             }),
-            Input::EditResource(value) => {
+            Input::GraphUpdateFunctionSignature(value) => {
                 let version = self.resource_version(&value.resource)?;
                 let edit = match value.edit {
                     Edit::FunctionSignature { signature } => {
@@ -281,64 +281,64 @@ impl AssistantRun {
                     edit,
                 })
             }
-            Input::CreateNodes(value) => {
+            Input::GraphCreateNodes(value) => {
                 self.bind_graph_mutation(model::GraphMutationInput::CreateNodes(value), runner)
                     .await?
             }
-            Input::UpdateNodes(value) => {
+            Input::GraphUpdateNodes(value) => {
                 self.bind_graph_mutation(model::GraphMutationInput::UpdateNodes(value), runner)
                     .await?
             }
-            Input::DeleteNodes(value) => {
+            Input::GraphDeleteNodes(value) => {
                 self.bind_graph_mutation(model::GraphMutationInput::DeleteNodes(value), runner)
                     .await?
             }
-            Input::DuplicateNodes(value) => {
+            Input::GraphDuplicateNodes(value) => {
                 self.bind_graph_mutation(model::GraphMutationInput::DuplicateNodes(value), runner)
                     .await?
             }
-            Input::MoveNodes(value) => {
+            Input::GraphMoveNodes(value) => {
                 self.bind_graph_mutation(model::GraphMutationInput::MoveNodes(value), runner)
                     .await?
             }
-            Input::CreateConnections(value) => {
+            Input::GraphCreateConnections(value) => {
                 self.bind_graph_mutation(
                     model::GraphMutationInput::CreateConnections(value),
                     runner,
                 )
                 .await?
             }
-            Input::UpdateConnections(value) => {
+            Input::GraphUpdateConnections(value) => {
                 self.bind_graph_mutation(
                     model::GraphMutationInput::UpdateConnections(value),
                     runner,
                 )
                 .await?
             }
-            Input::DeleteConnections(value) => {
+            Input::GraphDeleteConnections(value) => {
                 self.bind_graph_mutation(
                     model::GraphMutationInput::DeleteConnections(value),
                     runner,
                 )
                 .await?
             }
-            Input::ApplyGraphEdit(_) | Input::SaveGraph(_) => {
+            Input::GraphApplyEdit(_) | Input::GraphSave(_) => {
                 return Err(CapabilityFailure::new(
                     CapabilityFailureCode::INVALID_REQUEST,
                 ));
             }
-            Input::ValidateGraph(value) => Request::ValidateGraph(ValidateGraphRequest {
+            Input::GraphValidate(value) => Request::ValidateGraph(ValidateGraphRequest {
                 graph_hash: self.graph_basis(&value.graph.id, runner).await?.hash,
                 graph: value.graph,
                 node_ids: value.node_ids,
                 offset: value.offset,
                 limit: value.limit,
             }),
-            Input::ExecuteGraph(value) => Request::ExecuteGraph(ExecuteGraphRequest {
+            Input::GraphExecute(value) => Request::ExecuteGraph(ExecuteGraphRequest {
                 graph_hash: self.graph_basis(&value.graph.id, runner).await?.hash,
                 demand: value
                     .demand()
-                    .map_err(|error| contract_failure(error, CapabilityId::ExecuteGraph))?,
+                    .map_err(|error| contract_failure(error, CapabilityId::GraphExecute))?,
                 graph: value.graph,
             }),
         })

@@ -28,18 +28,29 @@ struct Fixture {
 }
 
 fn setup(extension: NoteExtension) -> Fixture {
+    setup_with(extension, note_specs(true), Arc::default())
+}
+
+fn setup_with(
+    extension: NoteExtension,
+    specs: Vec<ToolSpec>,
+    approvals: Arc<crate::approvals::Approvals>,
+) -> Fixture {
     let store = Arc::new(InMemoryHarnessStore::default());
     let clock = Arc::new(FixedClock::new(1000));
     let output = Arc::new(Output::default());
     let cancellation = CancellationToken::default();
     let executor = HarnessToolExecutor::new(
-        ToolRegistry::new(note_specs(true)),
+        ToolRegistry::new(specs),
         ToolServices {
             extension: Arc::new(extension),
             knowledge: Arc::new(crate::KnowledgeService::new(
                 store.clone(),
                 Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
             )),
+            web: Arc::new(yss_harness_contract::DisabledWebAccess),
+            python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
+            approvals,
             ledger: store.clone(),
             clock: clock.clone(),
             ids: Arc::new(SequentialIds::default()),
@@ -214,4 +225,132 @@ async fn rejected_calls_keep_only_decoded_arguments_and_their_timing() {
         .unwrap_err();
     assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
     assert_eq!(failure.details["capabilityId"], "unregistered");
+}
+
+fn executing_specs() -> Vec<ToolSpec> {
+    note_specs(false)
+        .into_iter()
+        .map(|mut spec| {
+            if spec.name == READ_NOTE {
+                spec.effect = ToolEffect::Execute;
+            }
+            spec
+        })
+        .collect()
+}
+
+async fn answer(
+    fixture: &Fixture,
+    approvals: &crate::approvals::Approvals,
+    decision: ApprovalDecision,
+) -> Result<ToolInvocationOutcome, CapabilityFailure> {
+    let execution = fixture
+        .executor
+        .execute(call(READ_NOTE, json!({"id": "a"})), fixture.executor.now());
+    tokio::pin!(execution);
+    loop {
+        let requested =
+            fixture
+                .output
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .rev()
+                .find_map(|event| match event {
+                    AgentEvent::ApprovalRequested { approval_id, .. } => Some(approval_id.clone()),
+                    _ => None,
+                });
+        if let Some(approval_id) = requested
+            && approvals.resolve(&approval_id, decision)
+        {
+            break;
+        }
+        tokio::select! {
+            _ = tokio::task::yield_now() => {}
+            outcome = &mut execution => return outcome,
+        }
+    }
+    execution.await
+}
+
+#[tokio::test]
+async fn executing_tools_wait_for_the_user_and_record_a_denial() {
+    let approvals = Arc::new(crate::approvals::Approvals::default());
+    let extension = NoteExtension::default().with_note("a", "alpha");
+    let fixture = setup_with(extension.clone(), executing_specs(), approvals.clone());
+    let failure = answer(&fixture, &approvals, ApprovalDecision::Deny)
+        .await
+        .unwrap_err();
+    assert_eq!(failure.code, CapabilityFailureCode::APPROVAL_DENIED);
+    assert_eq!(extension.executions(), 0);
+    let records = fixture.store.tool_invocations();
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        records[0].failure.as_ref().unwrap().code,
+        CapabilityFailureCode::APPROVAL_DENIED
+    );
+    let events = fixture.output.0.lock().unwrap();
+    assert!(matches!(
+        events.as_slice(),
+        [
+            AgentEvent::ApprovalRequested { tool, .. },
+            AgentEvent::ApprovalResolved { decision: ApprovalDecision::Deny, .. },
+            AgentEvent::ToolInvocationStarted { .. },
+            AgentEvent::ToolInvocationFailed { .. },
+        ] if tool == READ_NOTE
+    ));
+}
+
+#[tokio::test]
+async fn project_approval_is_remembered_for_later_calls() {
+    let approvals = Arc::new(crate::approvals::Approvals::default());
+    let extension = NoteExtension::default().with_note("a", "alpha");
+    let fixture = setup_with(extension.clone(), executing_specs(), approvals.clone());
+    answer(&fixture, &approvals, ApprovalDecision::AllowForProject)
+        .await
+        .unwrap();
+    fixture
+        .executor
+        .execute(call(READ_NOTE, json!({"id": "a"})), fixture.executor.now())
+        .await
+        .unwrap();
+    assert_eq!(extension.executions(), 2);
+    let requests = fixture
+        .output
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| matches!(event, AgentEvent::ApprovalRequested { .. }))
+        .count();
+    assert_eq!(requests, 1);
+}
+
+#[tokio::test]
+async fn cancelling_the_turn_answers_a_pending_approval() {
+    let approvals = Arc::new(crate::approvals::Approvals::default());
+    let extension = NoteExtension::default().with_note("a", "alpha");
+    let fixture = setup_with(extension.clone(), executing_specs(), approvals);
+    let execution = fixture
+        .executor
+        .execute(call(READ_NOTE, json!({"id": "a"})), fixture.executor.now());
+    tokio::pin!(execution);
+    while !fixture
+        .output
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|event| matches!(event, AgentEvent::ApprovalRequested { .. }))
+    {
+        tokio::select! {
+            _ = tokio::task::yield_now() => {}
+            _ = &mut execution => panic!("the call must wait for the user"),
+        }
+    }
+    fixture.cancellation.cancel(CancellationReason::User);
+    let failure = execution.await.unwrap_err();
+    assert_eq!(failure.code, CapabilityFailureCode::CANCELLED);
+    assert_eq!(extension.executions(), 0);
 }

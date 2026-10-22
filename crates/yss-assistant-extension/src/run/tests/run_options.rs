@@ -41,7 +41,7 @@ impl AgentDriverPort for OptionsDriver {
                     .unwrap();
                     assert!(
                         capabilities
-                            .execute(model::CapabilityInput::RequestUiIntent(intent))
+                            .execute(model::CapabilityInput::UiOpen(intent))
                             .await
                             .is_err()
                     );
@@ -78,7 +78,7 @@ impl AgentDriverPort for OptionsDriver {
                     inspect_resource(&capabilities, document()).await;
                     assert!(
                         capabilities
-                            .execute(model::CapabilityInput::SaveResource(
+                            .execute(model::CapabilityInput::ProjectSaveResource(
                                 model::ResourceTargetInput {
                                     resource: document()
                                 }
@@ -97,7 +97,7 @@ impl AgentDriverPort for OptionsDriver {
             } else {
                 inspect_resource(&capabilities, document()).await;
                 capabilities
-                    .execute(model::CapabilityInput::SaveResource(
+                    .execute(model::CapabilityInput::ProjectSaveResource(
                         model::ResourceTargetInput {
                             resource: document(),
                         },

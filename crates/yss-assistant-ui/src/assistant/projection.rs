@@ -2,7 +2,7 @@
 mod output;
 mod tool;
 pub(super) mod usage;
-pub(super) use output::{Compaction, Content, Output, Part, Usage};
+pub(super) use output::{Approval, Compaction, Content, Output, Part, Usage};
 pub(super) use tool::{Tool, ToolState};
 use yss_assistant_contract::{
     AgentRole, AssistantEvent, AssistantEventKind as Event, AssistantResultReference,

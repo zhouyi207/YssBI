@@ -22,7 +22,7 @@ GUI 与 Harness 通过原 Application 请求、检查和结算同一回执；Har
 
 ## 意图与回执
 
-Harness `request_ui_intent` 通过 Application 请求界面操作。`openResource` 使用
+Harness `ui_open` 通过 Application 请求界面操作。`openResource` 使用
 `yss-project-identity::ProjectResourceRef { kind, id }` 打开已有事件图、函数图、图表、思维导图、
 文档或数据；可选 `nodeId` 只用于事件图和函数图的节点定位。其他意图为打开保留结果、显示白名单面板。
 原生宿主复用文件/数据库打开入口，并检查原生活动面板的真实身份。
@@ -33,7 +33,7 @@ Harness `request_ui_intent` 通过 Application 请求界面操作。`openResourc
 关闭面板不要求结束 Harness 对话，界面操作也不保存图文档。
 
 未认领或未确认的请求超过 30 秒转为 expired；它表示没有及时得到完成证据，不能宣称已执行或撤销。没有活动工作台时请求直接失败。
-重连恢复只投递 pending 意图，不重新执行 claimed 意图。Harness 可通过 `inspect_ui_intent` 查询回执，pending 不是成功证据。
+重连恢复只投递 pending 意图，不重新执行 claimed 意图。Harness 可通过 `ui_inspect_receipt` 查询回执，pending 不是成功证据。
 GPUI Workbench 持有当前 binding 的有界临时队列和恢复标记。队列满载时记录恢复需求，
 排空后从同一 binding 重读 pending；恢复不扩张队列，也不重放已经认领的操作。
 事件接纳检查项目身份和宿主的交付代次，项目替换时丢弃旧队列。

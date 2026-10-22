@@ -80,6 +80,8 @@ async fn cancelled_reference_lookup_cannot_start_a_model_or_block_the_next_turn(
             tool_ledger: store.clone(),
             knowledge: store.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+            web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+            python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
             clock: Arc::new(FixedClock::new(1000)),
             ids: Arc::new(SequentialIds::default()),
         })

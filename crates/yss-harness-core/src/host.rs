@@ -14,6 +14,7 @@ pub use session::HarnessSessionAccess;
 pub struct HarnessHost {
     ports: HarnessPorts,
     knowledge: Arc<crate::KnowledgeService>,
+    approvals: Arc<crate::approvals::Approvals>,
     active_turns: Arc<Mutex<BTreeMap<HarnessSessionId, CancellationToken>>>,
     session_access: tokio::sync::Mutex<()>,
     event_publication: Arc<tokio::sync::Mutex<()>>,
@@ -47,6 +48,15 @@ impl HarnessHost {
         Ok(self.knowledge.inspect(citation, &session.project).await?)
     }
 
+    /// Answers a pending `ApprovalRequested`; false when it no longer waits.
+    pub fn resolve_approval(
+        &self,
+        approval_id: &str,
+        decision: yss_harness_contract::ApprovalDecision,
+    ) -> bool {
+        self.approvals.resolve(approval_id, decision)
+    }
+
     pub fn new(ports: HarnessPorts) -> Result<Self, HarnessError> {
         Ok(Self {
             knowledge: Arc::new(crate::KnowledgeService::new(
@@ -54,6 +64,7 @@ impl HarnessHost {
                 ports.knowledge_index.clone(),
             )),
             ports,
+            approvals: Arc::default(),
             active_turns: Arc::new(Mutex::new(BTreeMap::new())),
             session_access: tokio::sync::Mutex::new(()),
             event_publication: Arc::new(tokio::sync::Mutex::new(())),

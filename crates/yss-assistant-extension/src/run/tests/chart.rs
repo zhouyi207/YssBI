@@ -109,8 +109,8 @@ async fn chart_tools_bind_versions_preserve_public_identity_and_authorize_source
         scope.clone(),
         ResourceObservations::default(),
     );
-    let read = CapabilityInput::InspectChart(InspectChartInput { chart: chart() });
-    let update = CapabilityInput::UpdateChart(UpdateChartInput {
+    let read = CapabilityInput::ChartInspect(InspectChartInput { chart: chart() });
+    let update = CapabilityInput::ChartUpdate(UpdateChartInput {
         chart: chart(),
         settings: ChartSettingsUpdate {
             y: Some(None),
@@ -152,7 +152,7 @@ async fn chart_tools_bind_versions_preserve_public_identity_and_authorize_source
         restored.hooks.replay(record, &record.project);
     }
     restored.execute(update.clone()).await.unwrap();
-    let source_change = CapabilityInput::UpdateChart(UpdateChartInput {
+    let source_change = CapabilityInput::ChartUpdate(UpdateChartInput {
         chart: chart(),
         settings: ChartSettingsUpdate {
             database_id: Some("unassigned".into()),

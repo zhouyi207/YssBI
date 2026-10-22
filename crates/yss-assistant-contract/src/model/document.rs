@@ -36,7 +36,7 @@ impl DocumentResourceRef {
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DocumentSectionRef {
-    /// Use the complete reference returned by inspect_document or search_document.
+    /// Use the complete reference returned by document_inspect or document_search.
     pub heading_index: usize,
     /// Absolute Unicode character position of the heading, not a byte or UTF-16 offset.
     pub start: usize,

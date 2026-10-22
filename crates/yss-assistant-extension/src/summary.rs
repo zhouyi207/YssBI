@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 /// Graph and resource inspections are reduced in summary input; other results stay exact.
 pub(crate) fn projection(tool: &str, output: &Value) -> Option<Value> {
-    if !matches!(tool, "inspect_graph" | "inspect_resource") {
+    if !matches!(tool, "graph_inspect" | "project_inspect_resource") {
         return None;
     }
     let mut value = output.clone();
@@ -69,7 +69,7 @@ mod tests {
             "nodes":[{"nodeId":"n1","nodeTypeId":"stat.test","parameters":[{"key":"column","value":"income","options":["choice ".repeat(8_000)]}],"ports":[{"address":{"nodeId":"n1","portKey":"alpha"},"literal":0.05,"schema":{"description":"repeated port metadata ".repeat(8_000)}}]}],
             "connections":[{"id":"c1"}]
         }});
-        let projected = projection("inspect_graph", &graph).unwrap();
+        let projected = projection("graph_inspect", &graph).unwrap();
         assert!(projected.to_string().len() < graph.to_string().len() / 10);
         for key in ["diagnostics", "version", "constants", "connections"] {
             assert_eq!(projected["payload"][key], graph["payload"][key], "{key}");
@@ -82,11 +82,11 @@ mod tests {
         let statistics = json!({"type":"result_inspection","payload":{
             "resultId":42,"rows":[["Group A",0.0000234,"exact value ".repeat(1000)]]
         }});
-        assert_eq!(projection("inspect_result", &statistics), None);
+        assert_eq!(projection("result_inspect", &statistics), None);
 
         let page = json!({"type":"resource_inspection","payload":{"content":{
             "kind":"graph_page","graph":{"view":"ports","observationHash":"observation","page":{"nextOffset":50},"content":{"kind":"ports","items":[{"schema":{"x":"Integer"}}]}}
         }}});
-        assert_eq!(projection("inspect_resource", &page), Some(page));
+        assert_eq!(projection("project_inspect_resource", &page), Some(page));
     }
 }

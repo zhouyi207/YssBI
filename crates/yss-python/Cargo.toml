@@ -1,0 +1,19 @@
+[package]
+name = "yss-python"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "src/python.rs"
+
+[dependencies]
+rig-tools = { version = "=0.45.0", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+yss-canonical-hash = { path = "../yss-canonical-hash" }
+yss-harness-contract = { path = "../yss-harness-contract" }
+
+[dev-dependencies]
+uuid.workspace = true

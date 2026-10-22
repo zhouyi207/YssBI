@@ -437,30 +437,36 @@ impl DatasetImportSource {
 impl EditResourceRequest {
     pub const fn capability_id(&self) -> crate::CapabilityId {
         match &self.edit {
-            ResourceEdit::UpdateChart { .. } => crate::CapabilityId::UpdateChart,
-            ResourceEdit::ReplaceDocumentText { .. } => crate::CapabilityId::ReplaceDocumentText,
-            ResourceEdit::AppendDocument { .. } => crate::CapabilityId::AppendDocument,
-            ResourceEdit::WriteDocument { .. } => crate::CapabilityId::WriteDocument,
+            ResourceEdit::UpdateChart { .. } => crate::CapabilityId::ChartUpdate,
+            ResourceEdit::ReplaceDocumentText { .. } => crate::CapabilityId::DocumentReplaceText,
+            ResourceEdit::AppendDocument { .. } => crate::CapabilityId::DocumentAppendText,
+            ResourceEdit::WriteDocument { .. } => crate::CapabilityId::DocumentWriteText,
 
-            ResourceEdit::CreateTopics { .. } => crate::CapabilityId::CreateTopics,
-            ResourceEdit::UpdateTopics { .. } => crate::CapabilityId::UpdateTopics,
-            ResourceEdit::MoveTopics { .. } => crate::CapabilityId::MoveTopics,
-            ResourceEdit::DeleteTopics { .. } => crate::CapabilityId::DeleteTopics,
-            ResourceEdit::DuplicateTopics { .. } => crate::CapabilityId::DuplicateTopics,
+            ResourceEdit::CreateTopics { .. } => crate::CapabilityId::MindCreateTopics,
+            ResourceEdit::UpdateTopics { .. } => crate::CapabilityId::MindUpdateTopics,
+            ResourceEdit::MoveTopics { .. } => crate::CapabilityId::MindMoveTopics,
+            ResourceEdit::DeleteTopics { .. } => crate::CapabilityId::MindDeleteTopics,
+            ResourceEdit::DuplicateTopics { .. } => crate::CapabilityId::MindDuplicateTopics,
 
-            ResourceEdit::CreateColumns { .. } => crate::CapabilityId::CreateColumns,
-            ResourceEdit::RenameColumns { .. } => crate::CapabilityId::RenameColumns,
-            ResourceEdit::DeleteColumns { .. } => crate::CapabilityId::DeleteColumns,
-            ResourceEdit::CastColumns { .. } => crate::CapabilityId::CastColumns,
-            ResourceEdit::SetColumnSemantics { .. } => crate::CapabilityId::SetColumnSemantics,
-            ResourceEdit::InsertRows { .. } => crate::CapabilityId::InsertRows,
-            ResourceEdit::UpdateCells { .. } => crate::CapabilityId::UpdateCells,
-            ResourceEdit::DeleteRows { .. } => crate::CapabilityId::DeleteRows,
+            ResourceEdit::CreateColumns { .. } => crate::CapabilityId::DataCreateColumns,
+            ResourceEdit::RenameColumns { .. } => crate::CapabilityId::DataRenameColumns,
+            ResourceEdit::DeleteColumns { .. } => crate::CapabilityId::DataDeleteColumns,
+            ResourceEdit::CastColumns { .. } => crate::CapabilityId::DataCastColumns,
+            ResourceEdit::SetColumnSemantics { .. } => {
+                crate::CapabilityId::DataUpdateColumnSemantics
+            }
+            ResourceEdit::InsertRows { .. } => crate::CapabilityId::DataCreateRows,
+            ResourceEdit::UpdateCells { .. } => crate::CapabilityId::DataUpdateCells,
+            ResourceEdit::DeleteRows { .. } => crate::CapabilityId::DataDeleteRows,
             ResourceEdit::GraphHistory { redo: false, .. }
-            | ResourceEdit::DatabaseHistory { redo: false } => crate::CapabilityId::UndoResource,
+            | ResourceEdit::DatabaseHistory { redo: false } => {
+                crate::CapabilityId::ProjectUndoResource
+            }
             ResourceEdit::GraphHistory { redo: true, .. }
-            | ResourceEdit::DatabaseHistory { redo: true } => crate::CapabilityId::RedoResource,
-            _ => crate::CapabilityId::EditResource,
+            | ResourceEdit::DatabaseHistory { redo: true } => {
+                crate::CapabilityId::ProjectRedoResource
+            }
+            _ => crate::CapabilityId::GraphUpdateFunctionSignature,
         }
     }
 

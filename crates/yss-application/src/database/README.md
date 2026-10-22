@@ -23,13 +23,13 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 示例资产分发及导入、资源菜单的人工验收仍待完成；原生状态及验收范围见
 [GPUI host](../../../yss-desktop-gpui/README.md)。后端数据库编辑、历史和 checkpoint 仍由 Database runtime 的当前契约拥有。
 
-数据概览由 Harness 的 profile capability 携带查询控制直接读取；行列编辑、checkpoint 和编辑状态通过资源工具调用 Application 用例。撤销重做使用明确的 `undo_resource` / `redo_resource`，继续调用同一个 DatabaseMutation 与原历史、checkpoint 所有者。
+数据概览由 Harness 的 profile capability 携带查询控制直接读取；行列编辑、checkpoint 和编辑状态通过资源工具调用 Application 用例。撤销重做使用明确的 `project_undo_resource` / `project_redo_resource`，继续调用同一个 DatabaseMutation 与原历史、checkpoint 所有者。
 Profile 查询保留 Runtime 已分类的取消和期限错误，分别返回 `cancelled` 和 `deadline_elapsed`；其他数据库查询错误继续返回 `database_unavailable`。
 
-Harness 通过明确的 `insert_rows`、`update_cells`、`delete_rows` 调用原子行用例；列编辑使用
-`create_columns`、`rename_columns`、`delete_columns`、`cast_columns` 和 `set_column_semantics`。
-读取通过 `inspect_database`、`inspect_database_schema`、`profile_database` 和 `read_database_rows`；导入导出使用
-`import_database` / `export_database`。资源生命周期工具覆盖撤销重做、checkpoint、重命名和删除。每次修改携带 Project 资源 revision；资源检查中的
+Harness 通过明确的 `data_create_rows`、`data_update_cells`、`data_delete_rows` 调用原子行用例；列编辑使用
+`data_create_columns`、`data_rename_columns`、`data_delete_columns`、`data_cast_columns` 和 `data_update_column_semantics`。
+读取通过 `data_inspect`、`data_inspect_schema`、`data_inspect_profile` 和 `data_read_rows`；导入导出使用
+`data_import` / `data_export`。资源生命周期工具覆盖撤销重做、checkpoint、重命名和删除。每次修改携带 Project 资源 revision；资源检查中的
 元数据、分页和编辑状态沿用本次资源检查捕获的同一 revision。`duplicate_database_for_application` 复用流式 Parquet
 导出和导入，保留数据及列元数据，由现有名称分配器按可选目标名称生成副本名称并分配新 DatabaseId。名称在导入事务内确定，不追加重命名操作。
 Harness 导出还携带预期资源 revision，创建临时文件前同时核对 Project 与 Runtime 声明版本，

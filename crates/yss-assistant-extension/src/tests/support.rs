@@ -196,6 +196,8 @@ pub(crate) fn ports(
         tool_ledger: store.clone(),
         knowledge: store.clone(),
         knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+        web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+        python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
         clock: Arc::new(yss_harness_core::test_support::FixedClock::new(1000)),
         ids: Arc::new(yss_harness_core::test_support::SequentialIds::default()),
     }

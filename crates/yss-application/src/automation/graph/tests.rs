@@ -1667,7 +1667,7 @@ fn execute_graph_returns_its_committed_results_after_a_later_graph_edit() {
 fn execute_graph_reports_when_its_result_references_are_bounded() {
     let mut f = Fixture::new();
     f.inspect();
-    let limit = usize::from(CapabilityId::ExecuteGraph.descriptor().maximum_results);
+    let limit = usize::from(CapabilityId::GraphExecute.descriptor().maximum_results);
     let producers = (0..=limit).collect::<Vec<_>>();
     for batch in producers.chunks(10) {
         let mut operations = Vec::new();

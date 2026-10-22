@@ -9,11 +9,11 @@ use std::time::Duration;
 
 use serde_json::Value;
 use yss_harness_contract::{
-    AgentEvent, AgentEventOutput, AgentRunHooks, AgentRunId, AutomationIdKind, CancellationToken,
-    CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityInvocationId, ClockPort,
-    HarnessExtension, HarnessMode, HarnessSessionId, HarnessTurnId, IdGeneratorPort,
-    IdempotencyKey, PreparedToolCall, PrincipalId, ProjectSessionBinding, READ_KNOWLEDGE_TOOL,
-    SEARCH_KNOWLEDGE_TOOL, ToolEffect, ToolExecution, ToolInvocationBegin, ToolInvocationContext,
+    AgentEvent, AgentEventOutput, AgentRunHooks, AgentRunId, ApprovalDecision, AutomationIdKind,
+    CancellationToken, CapabilityControl, CapabilityFailure, CapabilityFailureCode,
+    CapabilityInvocationId, ClockPort, HarnessExtension, HarnessMode, HarnessSessionId,
+    HarnessTurnId, IdGeneratorPort, IdempotencyKey, PreparedToolCall, PrincipalId,
+    ProjectSessionBinding, ToolEffect, ToolExecution, ToolInvocationBegin, ToolInvocationContext,
     ToolInvocationId, ToolInvocationLedgerPort, ToolInvocationOutcome, ToolInvocationRecord,
     ToolInvocationState, ToolRecovery, ToolSpec, UnixMillis,
 };
@@ -48,15 +48,14 @@ impl ToolRegistry {
     }
 }
 
-pub(crate) fn is_knowledge_tool(name: &str) -> bool {
-    matches!(name, SEARCH_KNOWLEDGE_TOOL | READ_KNOWLEDGE_TOOL)
-}
-
 /// Shared services behind every invocation of one Host.
 #[derive(Clone)]
 pub(crate) struct ToolServices {
     pub extension: Arc<dyn HarnessExtension>,
     pub knowledge: Arc<crate::KnowledgeService>,
+    pub web: Arc<dyn yss_harness_contract::WebAccessPort>,
+    pub python: Arc<dyn yss_harness_contract::PythonPort>,
+    pub approvals: Arc<crate::approvals::Approvals>,
     pub ledger: Arc<dyn ToolInvocationLedgerPort>,
     pub clock: Arc<dyn ClockPort>,
     pub ids: Arc<dyn IdGeneratorPort>,
@@ -174,8 +173,75 @@ impl HarnessToolExecutor {
     ) -> Result<ToolInvocationOutcome, CapabilityFailure> {
         let tool = call.tool.clone();
         let arguments = call.arguments.clone();
+        let executes = self
+            .registry
+            .get(&tool)
+            .is_some_and(|spec| spec.effect == ToolEffect::Execute);
+        if executes {
+            // The deadline starts once the user has answered; waiting is not tool time.
+            return match self.approve(&tool, &arguments).await {
+                Ok(()) => {
+                    let started_at = self.services.clock.now();
+                    self.execute_invocation(tool, arguments, Ok(call), started_at)
+                        .await
+                }
+                Err(failure) => {
+                    self.execute_invocation(tool, arguments, Err(failure), started_at)
+                        .await
+                }
+            };
+        }
         self.execute_invocation(tool, arguments, Ok(call), started_at)
             .await
+    }
+
+    async fn approve(&self, tool: &str, arguments: &Value) -> Result<(), CapabilityFailure> {
+        let approvals = &self.services.approvals;
+        if approvals.allowed(&self.scope.project, tool) {
+            return Ok(());
+        }
+        let approval_id = self.services.ids.next_id(AutomationIdKind::ApprovalRequest);
+        let answer = approvals.register(approval_id.clone());
+        let requested = self
+            .emit(AgentEvent::ApprovalRequested {
+                approval_id: approval_id.clone(),
+                tool: tool.to_owned(),
+                arguments: arguments.clone(),
+            })
+            .await;
+        if let Err(failure) = requested {
+            approvals.forget(&approval_id);
+            return Err(failure);
+        }
+        let decision = tokio::select! {
+            biased;
+            _ = self.cancellation.cancelled() => None,
+            decision = answer => decision.ok(),
+        };
+        approvals.forget(&approval_id);
+        let decision = decision.unwrap_or(ApprovalDecision::Deny);
+        self.emit(AgentEvent::ApprovalResolved {
+            approval_id,
+            decision,
+        })
+        .await?;
+        match decision {
+            ApprovalDecision::AllowOnce => Ok(()),
+            ApprovalDecision::AllowForProject => {
+                approvals.remember(&self.scope.project, tool);
+                Ok(())
+            }
+            ApprovalDecision::Deny if self.cancellation.is_cancelled() => {
+                Err(CapabilityFailure::new(CapabilityFailureCode::CANCELLED))
+            }
+            ApprovalDecision::Deny => Err(CapabilityFailure::new(
+                CapabilityFailureCode::APPROVAL_DENIED,
+            )
+            .with_detail(
+                "nextStep",
+                "The user declined this call. Do not retry it; continue without it or ask the user how to proceed.",
+            )),
+        }
     }
 
     pub(crate) async fn reject(
@@ -305,7 +371,28 @@ impl HarnessToolExecutor {
                 let invocation = async {
                     validation?;
                     let call = call.as_ref().map_err(Clone::clone)?;
-                    if is_knowledge_tool(&tool) {
+                    if yss_harness_contract::is_python_tool(&tool) {
+                        let result = crate::python::invoke(
+                            self.services.python.as_ref(),
+                            &tool,
+                            &call.request,
+                            &self.scope.project,
+                            &control,
+                        )
+                        .await?;
+                        return Ok((ToolExecution::new(result), None));
+                    }
+                    if crate::web::is_web_tool(&tool) {
+                        let result = crate::web::invoke(
+                            self.services.web.as_ref(),
+                            &tool,
+                            &call.request,
+                            &control,
+                        )
+                        .await?;
+                        return Ok((ToolExecution::new(result), None));
+                    }
+                    if yss_harness_contract::is_harness_tool(&tool) {
                         let (result, cited) = self
                             .services
                             .knowledge

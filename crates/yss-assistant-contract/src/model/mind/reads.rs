@@ -84,9 +84,9 @@ impl MindReadInput {
     }
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
-            Self::Outline(_) => CapabilityId::InspectMind,
-            Self::Find(_) => CapabilityId::FindTopics,
-            Self::Topics(_) => CapabilityId::InspectTopics,
+            Self::Outline(_) => CapabilityId::MindInspect,
+            Self::Find(_) => CapabilityId::MindSearchTopics,
+            Self::Topics(_) => CapabilityId::MindInspectTopics,
         }
     }
     pub fn validate(&self) -> Result<(), CapabilityContractError> {

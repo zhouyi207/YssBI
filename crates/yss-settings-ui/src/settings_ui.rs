@@ -6,7 +6,9 @@ pub use settings::{
 };
 
 use std::sync::Arc;
-use yss_application::harness::{knowledge::ProjectKnowledgeService, models::LanguageModelService};
+use yss_application::harness::{
+    knowledge::ProjectKnowledgeService, models::LanguageModelService, web::WebSearchService,
+};
 use yss_desktop_services::ApplicationTasks;
 use yss_settings::SettingsStore;
 
@@ -16,6 +18,7 @@ pub struct SettingsServices {
     tasks: Arc<ApplicationTasks>,
     models: Arc<LanguageModelService>,
     knowledge: Arc<ProjectKnowledgeService>,
+    web: Arc<WebSearchService>,
     preferences: Arc<SettingsStore>,
     preference_load_failed: bool,
     logs: Option<yss_logging::LogRuntime>,
@@ -26,6 +29,7 @@ impl SettingsServices {
         tasks: Arc<ApplicationTasks>,
         models: Arc<LanguageModelService>,
         knowledge: Arc<ProjectKnowledgeService>,
+        web: Arc<WebSearchService>,
         preferences: Arc<SettingsStore>,
         preference_load_failed: bool,
         logs: Option<yss_logging::LogRuntime>,
@@ -34,6 +38,7 @@ impl SettingsServices {
             tasks,
             models,
             knowledge,
+            web,
             preferences,
             preference_load_failed,
             logs,

@@ -125,10 +125,10 @@ impl DatabaseReadInput {
     }
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
-            Self::Overview(_) => CapabilityId::InspectDatabase,
-            Self::Schema(_) => CapabilityId::InspectDatabaseSchema,
-            Self::Profile(_) => CapabilityId::ProfileDatabase,
-            Self::Rows(_) => CapabilityId::ReadDatabaseRows,
+            Self::Overview(_) => CapabilityId::DataInspect,
+            Self::Schema(_) => CapabilityId::DataInspectSchema,
+            Self::Profile(_) => CapabilityId::DataInspectProfile,
+            Self::Rows(_) => CapabilityId::DataReadRows,
         }
     }
     pub fn validate(&self) -> Result<(), CapabilityContractError> {

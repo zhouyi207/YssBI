@@ -148,7 +148,7 @@ async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
         session_id: session.id.clone(),
         turn_id: yss_harness_contract::HarnessTurnId::try_new("turn-1").unwrap(),
         project,
-        tool: "inspect_graph".into(),
+        tool: "graph_inspect".into(),
         effect: yss_harness_contract::ToolEffect::Inspect,
         arguments: serde_json::json!({"graph": {"kind": "event_graph", "id": "events/Main.yssbi-event"}}),
         request: Some(

@@ -26,7 +26,7 @@ fn default_catalog_page_limit() -> u16 {
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InspectNodeTypeRequest {
-    /// Exact type IDs returned by browse_nodes; one definition per requested type.
+    /// Exact type IDs returned by catalog_search_nodes; one definition per requested type.
     #[schemars(length(min = 1, max = 100))]
     pub type_ids: Vec<String>,
     pub locale: String,

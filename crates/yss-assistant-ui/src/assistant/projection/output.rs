@@ -27,6 +27,13 @@ pub(in crate::assistant) struct Compaction {
     pub interrupted: bool,
 }
 #[derive(Clone)]
+pub(in crate::assistant) struct Approval {
+    pub id: String,
+    pub kind: AssistantToolIdentity,
+    pub arguments: serde_json::Value,
+    pub decision: Option<yss_harness_contract::ApprovalDecision>,
+}
+#[derive(Clone)]
 pub(in crate::assistant) enum Content {
     Text(Text),
     Reasoning(String),
@@ -34,6 +41,7 @@ pub(in crate::assistant) enum Content {
     Task(usize),
     Outcome(usize),
     Plan(Box<StatisticalPlan>),
+    Approval(Box<Approval>),
     Citation(KnowledgeCitation),
     Failure(String),
     Status {
@@ -197,6 +205,32 @@ impl Output {
             Event::DeliveryBlocked { reason } => {
                 self.fail(id, reason);
             }
+            Event::ApprovalRequested {
+                approval_id,
+                capability_id,
+                arguments,
+            } => self.push(
+                id,
+                Content::Approval(Box::new(Approval {
+                    id: approval_id,
+                    kind: capability_id,
+                    arguments,
+                    decision: None,
+                })),
+            ),
+            Event::ApprovalResolved {
+                approval_id,
+                decision,
+            } => {
+                if let Some(approval) = self.parts.iter_mut().rev().find_map(|part| match &mut part
+                    .content
+                {
+                    Content::Approval(approval) if approval.id == approval_id => Some(approval),
+                    _ => None,
+                }) {
+                    approval.decision = Some(decision);
+                }
+            }
             Event::ToolInvocationStarted {
                 invocation_id,
                 capability_id,
@@ -226,7 +260,7 @@ impl Output {
                 self.tool(
                     id,
                     invocation_id,
-                    yss_assistant_contract::CapabilityId::ExecuteGraph.into(),
+                    yss_assistant_contract::CapabilityId::GraphExecute.into(),
                 )
                 .executed(at, &status, failure_code);
             }

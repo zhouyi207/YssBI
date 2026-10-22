@@ -33,7 +33,7 @@
 `cancel_and_drain` 关闭准入并请求取消已登记运行，再等待工作租约释放。
 `close_admission` 仅关闭准入，只在 `test-support` 下提供。排空在每次唤醒后重验工作数，所有工作释放后返回 Drained。
 
-`execute_graph` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。
+`graph_execute` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。
 Application 校验文档、捕获解析与语义身份后，Execution 的 `GraphExecutionScope` 按目标输出选择必要上游；
 全图请求直接选择所有语义节点，单节点请求按节点身份遍历依赖，只有显式输出请求构建输出地址索引。
 范围就绪性由 Analysis 检查，资源授权只消费这些节点及可达函数的语义资源引用，普通路径字符串不作为资源。

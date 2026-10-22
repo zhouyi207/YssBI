@@ -17,6 +17,7 @@ pub(super) const KEYBINDINGS_PAGE: usize = 7;
 impl Render for SettingsPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.refresh_key_placeholder(window, cx);
+        self.sync_web_search_inputs(window, cx);
         let owner = cx.weak_entity();
         let mut groups = vec![
             SettingGroup::new().item(
@@ -32,6 +33,7 @@ impl Render for SettingsPanel {
             Page::Overview => {
                 groups.push(self.overview(cx));
                 groups.push(self.assistant_preferences(cx));
+                groups.push(self.web_search_group(cx));
             }
             Page::Providers => groups.push(self.providers(cx)),
             Page::Provider => groups.extend(self.provider_form(cx)),

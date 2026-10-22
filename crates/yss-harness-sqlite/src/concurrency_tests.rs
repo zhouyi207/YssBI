@@ -163,7 +163,7 @@ async fn indexed_invocation_identity_cannot_be_replaced_when_finishing() {
         turn_id: HarnessTurnId::try_new("turn-1").unwrap(),
         agent_run_id: None,
         project: session.project,
-        tool: "inspect_graph".into(),
+        tool: "graph_inspect".into(),
         effect: ToolEffect::Inspect,
         arguments: serde_json::json!({}),
         request: Some(serde_json::json!({"graph": "events/Main.yssbi-event"})),

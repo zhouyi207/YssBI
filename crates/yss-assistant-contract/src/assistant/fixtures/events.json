@@ -33,7 +33,7 @@
     "type": "tool_invocation_started",
     "payload": {
       "invocationId": "tool-1",
-      "capabilityId": "inspect_database_schema"
+      "capabilityId": "data_inspect_schema"
     }
   },
   {
@@ -54,7 +54,7 @@
     "type": "tool_invocation_failed",
     "payload": {
       "invocationId": "tool-2",
-      "capabilityId": "profile_database",
+      "capabilityId": "data_inspect_profile",
       "failureCode": "deadline_elapsed"
     }
   },

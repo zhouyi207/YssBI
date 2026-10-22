@@ -115,6 +115,7 @@ impl NativeServices {
             tasks.clone(),
             application.harness.models.clone(),
             application.harness.knowledge.clone(),
+            application.harness.web.clone(),
             preferences.clone(),
             preference_load_failed,
             logging.logs().cloned(),

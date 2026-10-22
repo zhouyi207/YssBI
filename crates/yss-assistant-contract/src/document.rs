@@ -50,9 +50,9 @@ pub enum DocumentReadContent {
 impl DocumentReadContent {
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
-            Self::Outline { .. } => CapabilityId::InspectDocument,
-            Self::Text { .. } => CapabilityId::ReadDocument,
-            Self::Search { .. } => CapabilityId::SearchDocument,
+            Self::Outline { .. } => CapabilityId::DocumentInspect,
+            Self::Text { .. } => CapabilityId::DocumentRead,
+            Self::Search { .. } => CapabilityId::DocumentSearch,
         }
     }
     pub fn sections(&self) -> Vec<&DocumentSectionRef> {

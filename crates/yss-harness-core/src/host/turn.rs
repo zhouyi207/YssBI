@@ -164,6 +164,7 @@ impl HarnessHost {
             self.ports.clone(),
             resolved.driver,
             self.knowledge.clone(),
+            self.approvals.clone(),
             session.clone(),
             turn_id.clone(),
             self.event_writer(),

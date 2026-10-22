@@ -4,6 +4,7 @@
 
 #![forbid(unsafe_code)]
 
+mod approvals;
 mod conversation;
 mod error;
 mod events;
@@ -11,7 +12,9 @@ mod host;
 mod knowledge;
 mod orchestration;
 mod ports;
+mod python;
 mod tools;
+mod web;
 
 pub use error::HarnessError;
 pub use host::{HarnessHost, HarnessSessionAccess};

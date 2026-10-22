@@ -196,6 +196,11 @@ impl Inspection {
         for (key, value) in &detail.parameters {
             body = body.child(fact(key, value, true, cx));
         }
+        if let Some(output) = &detail.output
+            && let Some(domain) = super::domain::details(self.card.tool.kind.name(), output, cx)
+        {
+            body = body.child(domain);
+        }
         body = body.child(crate::assistant::resources::cards(
             "tool-artifacts",
             &self.card.owner,

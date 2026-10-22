@@ -400,7 +400,7 @@ pub fn invoke_graph_capability(
                     .results
                     .iter()
                     .take(usize::from(
-                        CapabilityId::ExecuteGraph.descriptor().maximum_results,
+                        CapabilityId::GraphExecute.descriptor().maximum_results,
                     ))
                     .map(|result| GraphResultReference {
                         result_ref: ResultRef::new(
@@ -541,7 +541,7 @@ impl ApplicationState {
     ) -> Result<Option<GraphEditReceipt>, CapabilityFailure> {
         AutomationCapabilityRequest::ApplyGraphEdit(request.clone())
             .validate()
-            .map_err(|error| contract_failure(error, CapabilityId::ApplyGraphEdit))?;
+            .map_err(|error| contract_failure(error, CapabilityId::GraphApplyEdit))?;
         let captured = self.capture_session().map_err(map_session_capture_error)?;
         ensure_project_binding(&captured, &context)?;
         let path = GraphResourcePath::new(&request.graph_path)

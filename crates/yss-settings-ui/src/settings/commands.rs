@@ -26,6 +26,7 @@ impl SettingsSaveRequest {
 
 impl SettingsPanel {
     pub fn ensure_loaded(&mut self, cx: &mut Context<Self>) {
+        self.ensure_web_search_loaded(cx);
         if self.catalog.is_some() || self.busy() {
             return;
         }

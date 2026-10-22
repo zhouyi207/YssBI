@@ -27,7 +27,7 @@
 
 GUI 保存把配置草稿作为 `ChartEdit::SetDocument` 提交到捕获的文件版本，再执行 Save；
 文件在磁盘上被外部修改或版本已变化时保存被拒绝，草稿保留，由编辑器的冲突状态决定重新载入或保留草稿后覆盖。
-Harness 的 `inspect_chart` 返回当前类型化配置和文件版本（revision 与文件会话）；`update_chart` 校验读取时的版本，
+Harness 的 `chart_inspect` 返回当前类型化配置和文件版本（revision 与文件会话）；`chart_update` 校验读取时的版本，
 只合并显式设置的字段，以同样的 Edit 与 Save 立即持久化，两次提交都会发布资源事件。
 省略字段保持原值，轴的 null 清空对应配置，空 databaseId 断开数据源；这两个工具不触发数据计算或图表渲染。
 `ChartDocument` 和图表文件只保存图表配置与格式版本，不携带资源 `revision`；资源版本由 Project 的文件状态管理。

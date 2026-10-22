@@ -20,6 +20,8 @@ async fn deletion_requires_the_owner_and_an_idle_session_and_prevents_reopening(
         tool_ledger: store.clone(),
         knowledge: store.clone(),
         knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+        web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+        python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
         clock: Arc::new(FixedClock::new(1000)),
         ids: Arc::new(SequentialIds::default()),
     })

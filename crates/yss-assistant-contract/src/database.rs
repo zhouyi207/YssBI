@@ -53,10 +53,10 @@ pub enum DatabaseReadContent {
 impl DatabaseReadContent {
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
-            Self::Overview { .. } => CapabilityId::InspectDatabase,
-            Self::Schema { .. } => CapabilityId::InspectDatabaseSchema,
-            Self::Profile { .. } => CapabilityId::ProfileDatabase,
-            Self::Rows { .. } => CapabilityId::ReadDatabaseRows,
+            Self::Overview { .. } => CapabilityId::DataInspect,
+            Self::Schema { .. } => CapabilityId::DataInspectSchema,
+            Self::Profile { .. } => CapabilityId::DataInspectProfile,
+            Self::Rows { .. } => CapabilityId::DataReadRows,
         }
     }
 }

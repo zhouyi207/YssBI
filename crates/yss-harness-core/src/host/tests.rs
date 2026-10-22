@@ -275,8 +275,8 @@ async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_can
                 .collect::<Vec<_>>(),
             [
                 READ_KNOWLEDGE_TOOL,
-                READ_NOTE,
                 SEARCH_KNOWLEDGE_TOOL,
+                READ_NOTE,
                 DELEGATE_TASK_TOOL,
                 FOLLOWUP_TASK_TOOL
             ]
@@ -564,4 +564,145 @@ async fn scripted_turn_publishes_extension_notices_after_the_settled_call() {
     assert_eq!(outcome.output["state"], "completed");
     assert_eq!(outcome.output["changed"], json!(["a"]));
     assert_eq!(outcome.output["role"], "helper");
+}
+
+#[derive(Default)]
+struct RecordingPython(Mutex<Vec<PythonRunScriptRequest>>);
+
+impl PythonPort for RecordingPython {
+    fn inspect(&self, _: &ProjectSessionBinding) -> PythonFuture<'_, PythonEnvironment> {
+        Box::pin(async { Err(PythonFailure::Failed) })
+    }
+    fn read_script(&self, _: &ProjectSessionBinding, _: &str) -> PythonFuture<'_, PythonScript> {
+        Box::pin(async { Err(PythonFailure::Failed) })
+    }
+    fn write_script(
+        &self,
+        _: &ProjectSessionBinding,
+        _: &str,
+        _: &str,
+    ) -> PythonFuture<'_, PythonScriptWritten> {
+        Box::pin(async { Err(PythonFailure::Failed) })
+    }
+    fn install_packages(
+        &self,
+        _: &ProjectSessionBinding,
+        _: &[String],
+        _: CancellationToken,
+    ) -> PythonFuture<'_, PythonPackagesInstalled> {
+        Box::pin(async { Err(PythonFailure::Failed) })
+    }
+    fn run_script(
+        &self,
+        _: &ProjectSessionBinding,
+        request: &PythonRunScriptRequest,
+        _: CancellationToken,
+    ) -> PythonFuture<'_, PythonRun> {
+        self.0.lock().unwrap().push(request.clone());
+        Box::pin(async {
+            Ok(PythonRun {
+                exit_code: Some(0),
+                timed_out: false,
+                output: "collected 3 rows\n".into(),
+                omitted_lines: 0,
+                output_files: vec![],
+            })
+        })
+    }
+}
+
+#[tokio::test]
+async fn executing_tools_run_only_after_the_user_approves_through_the_host() {
+    let store = Arc::new(InMemoryHarnessStore::default());
+    let driver = Arc::new(
+        ScriptedDriver::default()
+            .script(
+                "lead",
+                vec![
+                    ScriptedStep::Call(
+                        DELEGATE_TASK_TOOL,
+                        json!({
+                            "worker": "helper", "objective": "Collect", "constraints": "",
+                            "completionCriteria": "Collected", "dependsOn": [],
+                            "scope": {"notes": ["a"], "write": true}
+                        }),
+                    ),
+                    ScriptedStep::Text("Delegated."),
+                ],
+            )
+            .script(
+                "helper",
+                vec![ScriptedStep::Call(
+                    PYTHON_RUN_SCRIPT_TOOL,
+                    json!({"name": "collect", "timeoutSeconds": 60}),
+                )],
+            ),
+    );
+    let python = Arc::new(RecordingPython::default());
+    let mut ports = note_ports(
+        store.clone(),
+        crate::test_support::fixed_model(driver.clone()),
+        NoteExtension::default().with_note("a", "alpha"),
+        1_000,
+    );
+    ports.python = python.clone();
+    let host = Arc::new(HarnessHost::new(ports).unwrap());
+    let session = host
+        .create_session(PrincipalId::try_new("user-1").unwrap(), project())
+        .await
+        .unwrap();
+    let approver = tokio::spawn({
+        let host = host.clone();
+        let store = store.clone();
+        async move {
+            loop {
+                let requested = store
+                    .published_events()
+                    .into_iter()
+                    .find_map(|event| match event.event {
+                        HarnessEvent::AgentRunOutput {
+                            event:
+                                AgentEvent::ApprovalRequested {
+                                    approval_id, tool, ..
+                                },
+                            ..
+                        } if tool == PYTHON_RUN_SCRIPT_TOOL => Some(approval_id),
+                        _ => None,
+                    });
+                if let Some(approval_id) = requested {
+                    assert!(
+                        python.0.lock().unwrap().is_empty(),
+                        "nothing runs before approval"
+                    );
+                    if host.resolve_approval(&approval_id, ApprovalDecision::AllowOnce) {
+                        return;
+                    }
+                }
+                tokio::task::yield_now().await;
+            }
+        }
+    });
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        host.submit_turn(
+            &session.id,
+            &session.project,
+            "Collect data.".into(),
+            vec![],
+            None,
+            Default::default(),
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    approver.await.unwrap();
+    let run = driver
+        .outcomes()
+        .into_iter()
+        .find(|(_, tool, _)| tool == PYTHON_RUN_SCRIPT_TOOL)
+        .unwrap()
+        .2;
+    assert_eq!(run.output["exitCode"], 0);
+    assert_eq!(run.output["output"], "collected 3 rows\n");
 }

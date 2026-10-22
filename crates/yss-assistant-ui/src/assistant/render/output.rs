@@ -156,6 +156,7 @@ impl ConversationPanel {
             Content::Task(index) => self.task_card(id, &tasks[*index], running, cx),
             Content::Outcome(index) => self.outcome_card(id, &tasks[*index], cx),
             Content::Plan(plan) => self.plan_card(format!("plan-{id}"), plan, cx),
+            Content::Approval(approval) => self.approval_card(approval, running, cx),
             Content::Citation(citation) => super::super::sources::card(
                 format!("citation-{id}"),
                 citation,

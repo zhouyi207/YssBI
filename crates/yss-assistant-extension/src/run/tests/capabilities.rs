@@ -283,7 +283,7 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
         ResourceObservations::default(),
     );
     let edit = || {
-        model::CapabilityInput::MoveNodes(model::MoveNodesInput {
+        model::CapabilityInput::GraphMoveNodes(model::MoveNodesInput {
             graph: GraphResourceRef::for_path(graph_resource().id),
             positions: vec![GraphEditPosition {
                 node_id: "node".into(),
@@ -293,7 +293,7 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
         })
     };
     assert_eq!(
-        run.execute(model::CapabilityInput::WriteDocument(
+        run.execute(model::CapabilityInput::DocumentWriteText(
             model::WriteDocumentInput {
                 document: model::DocumentResourceRef::new(graph_resource().id),
                 markdown: String::new(),
@@ -304,27 +304,27 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
         .code,
         CapabilityFailureCode::INVALID_REQUEST
     );
-    let model::CapabilityInput::MoveNodes(mut unauthorized) = edit() else {
+    let model::CapabilityInput::GraphMoveNodes(mut unauthorized) = edit() else {
         panic!("graph edit input")
     };
     let unauthorized_path = "functions/unassigned.yssbi-function";
     unauthorized.graph = GraphResourceRef::for_path(unauthorized_path.to_owned());
     let failure = run
-        .execute(model::CapabilityInput::MoveNodes(unauthorized))
+        .execute(model::CapabilityInput::GraphMoveNodes(unauthorized))
         .await
         .unwrap_err();
     assert_eq!(failure.code, CapabilityFailureCode::INVALID_REQUEST);
     assert_eq!(failure.details["reason"], "agent_scope_denied");
     let rejected = store.tool_invocations().pop().unwrap();
     assert_eq!(rejected.state, ToolInvocationState::Failed);
-    assert_eq!(rejected.tool, CapabilityId::MoveNodes.as_str());
+    assert_eq!(rejected.tool, CapabilityId::GraphMoveNodes.as_str());
     assert!(rejected.request.is_none());
     assert_eq!(rejected.arguments["graph"]["id"], unauthorized_path);
     assert!(rejected.finished_at.is_some());
     assert!(run.state().evidence.lock().unwrap().invocations.is_empty());
     assert_eq!(gateway.0.lock().unwrap().writes, 0);
     run.execute(edit()).await.unwrap();
-    run.execute(model::CapabilityInput::SaveResource(
+    run.execute(model::CapabilityInput::ProjectSaveResource(
         model::ResourceTargetInput {
             resource: graph_resource(),
         },
@@ -337,7 +337,7 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
         2,
         "edits reuse committed facts; save metadata requires one internal graph-basis read"
     );
-    run.execute(model::CapabilityInput::ExecuteGraph(
+    run.execute(model::CapabilityInput::GraphExecute(
         model::ExecuteGraphInput {
             graph: GraphResourceRef::for_path(graph_resource().id),
             node_id: None,
@@ -347,7 +347,7 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
     .await
     .unwrap();
     let signature = || {
-        model::CapabilityInput::EditResource(model::EditResourceInput {
+        model::CapabilityInput::GraphUpdateFunctionSignature(model::EditResourceInput {
             resource: graph_resource(),
             edit: model::ResourceEditInput::FunctionSignature {
                 signature: model::FunctionSignatureInput {
@@ -361,7 +361,7 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
         run.execute(signature()).await.unwrap_err().details["reason"],
         "resource_read_required"
     );
-    run.execute(model::CapabilityInput::InspectResource(
+    run.execute(model::CapabilityInput::ProjectInspectResource(
         model::InspectResourceInput {
             resource: graph_resource(),
         },
@@ -398,7 +398,7 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
             Some(AutomationCapabilityRequest::GraphMutation(_))
         ) {
             public_edits += 1;
-            assert_eq!(record.tool, CapabilityId::MoveNodes.as_str());
+            assert_eq!(record.tool, CapabilityId::GraphMoveNodes.as_str());
             assert_eq!(record.arguments["graph"]["id"], graph_resource().id);
             assert!(record.arguments.get("graphHash").is_none());
         }
@@ -412,7 +412,7 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
         "signature counters are distinct from graph resource revisions"
     );
     let inspect = || {
-        model::CapabilityInput::InspectGraph(
+        model::CapabilityInput::GraphInspect(
             (&InspectGraphRequest::overview(graph_resource().id)).into(),
         )
     };
@@ -489,7 +489,7 @@ async fn model_graph_writes_bind_receipts_restore_after_compaction_and_reject_gu
         ResourceObservations::default(),
     );
     let outcome = manager
-        .execute(model::CapabilityInput::ValidateGraph(
+        .execute(model::CapabilityInput::GraphValidate(
             model::ValidateGraphInput {
                 graph: GraphResourceRef::for_path(graph_resource().id),
                 node_ids: vec![],
@@ -543,8 +543,8 @@ async fn resource_history_keeps_public_ledger_identity_and_rejects_changed_input
         resource: graph_resource(),
     };
     for input in [
-        model::CapabilityInput::UndoResource(target()),
-        model::CapabilityInput::RedoResource(target()),
+        model::CapabilityInput::ProjectUndoResource(target()),
+        model::CapabilityInput::ProjectRedoResource(target()),
     ] {
         let expected = input.capability_id();
         run.execute(input.clone()).await.unwrap();
@@ -583,7 +583,7 @@ async fn resource_history_keeps_public_ledger_identity_and_rejects_changed_input
     assert_eq!(gateway.0.lock().unwrap().writes, 2);
     gateway.0.lock().unwrap().revision += 1;
     assert_eq!(
-        run.execute(model::CapabilityInput::UndoResource(target()))
+        run.execute(model::CapabilityInput::ProjectUndoResource(target()))
             .await
             .unwrap_err()
             .code,
@@ -600,7 +600,7 @@ async fn resource_history_keeps_public_ledger_identity_and_rejects_changed_input
         .resources[0]
         .operations = vec![AgentResourceOperation::Inspect];
     assert!(
-        run.execute(model::CapabilityInput::RedoResource(target()))
+        run.execute(model::CapabilityInput::ProjectRedoResource(target()))
             .await
             .is_err()
     );

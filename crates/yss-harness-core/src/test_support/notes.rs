@@ -189,6 +189,12 @@ pub fn note_specs(write: bool) -> Vec<ToolSpec> {
             json!({"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}, "key": {"type": "string"}}, "required": ["id", "text"]}),
             ToolEffect::Mutate,
         ));
+        specs.push(ToolSpec::new(
+            PYTHON_RUN_SCRIPT_TOOL,
+            "Run a script.",
+            json!({"type": "object", "properties": {"name": {"type": "string"}, "arguments": {"type": "array", "items": {"type": "string"}}, "timeoutSeconds": {"type": "integer"}}, "required": ["name"]}),
+            ToolEffect::Execute,
+        ));
     }
     specs
 }

@@ -129,22 +129,24 @@ async fn mind_only_report_binds_topic_tools_replays_receipts_and_requires_a_fina
         ResourceObservations::default(),
     );
     assert!(run.state().evidence.lock().unwrap().delivery_pending());
-    run.execute(CapabilityInput::CreateResource(CreateResourceInput::Mind {
-        name: "Plan".into(),
-    }))
+    run.execute(CapabilityInput::ProjectCreateResource(
+        CreateResourceInput::Mind {
+            name: "Plan".into(),
+        },
+    ))
     .await
     .unwrap();
     assert!(run.state().evidence.lock().unwrap().delivery_pending());
     let mind = MindResourceRef::new(mind_resource().id);
     let inputs: Vec<CapabilityInput> = vec![
-        CapabilityInput::InspectMind(serde_json::from_value(json!({"mind":mind})).unwrap()),
-        CapabilityInput::FindTopics(serde_json::from_value(json!({"mind":mind,"query":"result"})).unwrap()),
-        CapabilityInput::InspectTopics(serde_json::from_value(json!({"mind":mind,"topicIds":["root"]})).unwrap()),
-        CapabilityInput::CreateTopics(serde_json::from_value(json!({"mind":mind,"topics":[{"clientId":"branch","parentId":"root","content":"Branch"}]})).unwrap()),
-        CapabilityInput::UpdateTopics(serde_json::from_value(json!({"mind":mind,"topics":[{"topicId":"root","reference":null}]})).unwrap()),
-        CapabilityInput::MoveTopics(serde_json::from_value(json!({"mind":mind,"topics":[{"topicId":"branch","parentId":"root"}]})).unwrap()),
-        CapabilityInput::DuplicateTopics(serde_json::from_value(json!({"mind":mind,"topicIds":["branch"],"parentId":"root"})).unwrap()),
-        CapabilityInput::DeleteTopics(serde_json::from_value(json!({"mind":mind,"topicIds":["branch"]})).unwrap()),
+        CapabilityInput::MindInspect(serde_json::from_value(json!({"mind":mind})).unwrap()),
+        CapabilityInput::MindSearchTopics(serde_json::from_value(json!({"mind":mind,"query":"result"})).unwrap()),
+        CapabilityInput::MindInspectTopics(serde_json::from_value(json!({"mind":mind,"topicIds":["root"]})).unwrap()),
+        CapabilityInput::MindCreateTopics(serde_json::from_value(json!({"mind":mind,"topics":[{"clientId":"branch","parentId":"root","content":"Branch"}]})).unwrap()),
+        CapabilityInput::MindUpdateTopics(serde_json::from_value(json!({"mind":mind,"topics":[{"topicId":"root","reference":null}]})).unwrap()),
+        CapabilityInput::MindMoveTopics(serde_json::from_value(json!({"mind":mind,"topics":[{"topicId":"branch","parentId":"root"}]})).unwrap()),
+        CapabilityInput::MindDuplicateTopics(serde_json::from_value(json!({"mind":mind,"topicIds":["branch"],"parentId":"root"})).unwrap()),
+        CapabilityInput::MindDeleteTopics(serde_json::from_value(json!({"mind":mind,"topicIds":["branch"]})).unwrap()),
     ];
     let mut replay = ResourceObservations::default();
     for input in &inputs {
@@ -178,7 +180,7 @@ async fn mind_only_report_binds_topic_tools_replays_receipts_and_requires_a_fina
         13
     );
     assert!(run.state().evidence.lock().unwrap().delivery_pending());
-    let save = CapabilityInput::SaveResource(ResourceTargetInput {
+    let save = CapabilityInput::ProjectSaveResource(ResourceTargetInput {
         resource: mind_resource(),
     });
     run.execute(save).await.unwrap();

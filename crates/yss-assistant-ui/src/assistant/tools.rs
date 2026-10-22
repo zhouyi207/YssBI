@@ -2,7 +2,7 @@
 use super::{
     ConversationPanel,
     inspect::ToolCard,
-    projection::{Tool, ToolState},
+    projection::{Approval, Tool, ToolState},
 };
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
@@ -12,6 +12,7 @@ use gpui_kit::component::{
     spinner::Spinner,
 };
 use gpui_kit::{AnyElement, Context, Empty, IntoElement, SharedString, div, prelude::*};
+use yss_harness_contract::ApprovalDecision;
 
 impl ConversationPanel {
     pub(super) fn tool_group<'a>(
@@ -153,6 +154,109 @@ impl ConversationPanel {
             })
             .content(body)
             .into_any_element()
+    }
+}
+
+const APPROVAL_ARGUMENT_PREVIEW: usize = 400;
+
+impl ConversationPanel {
+    pub(super) fn approval_card(
+        &self,
+        approval: &Approval,
+        running: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let mut arguments = approval.arguments.to_string();
+        if let Some((end, _)) = arguments.char_indices().nth(APPROVAL_ARGUMENT_PREVIEW) {
+            arguments.truncate(end);
+            arguments.push('…');
+        }
+        let header = div()
+            .min_w_0()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(Icon::new(IconName::SquareTerminal).small())
+            .child(div().min_w_0().truncate().child(yss_ui::text::format(
+                "panel.assistantApprovalTitle",
+                &[("tool", super::activity::tool_name(&approval.kind))],
+            )));
+        let mut card = div()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_2()
+            .rounded_md()
+            .border_1()
+            .border_color(cx.theme().border)
+            .child(header)
+            .child(
+                div()
+                    .min_w_0()
+                    .text_xs()
+                    .font_family(cx.theme().mono_font_family.clone())
+                    .text_color(cx.theme().muted_foreground)
+                    .child(arguments),
+            );
+        let settled = match approval.decision {
+            Some(ApprovalDecision::AllowOnce | ApprovalDecision::AllowForProject) => {
+                Some("panel.assistantApprovalAllowed")
+            }
+            Some(ApprovalDecision::Deny) => Some("panel.assistantApprovalDenied"),
+            None if !running => Some("panel.assistantApprovalExpired"),
+            None => None,
+        };
+        if let Some(key) = settled {
+            return card
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(yss_ui::text::t(key)),
+                )
+                .into_any_element();
+        }
+        card = card
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(yss_ui::text::t("panel.assistantApprovalHint")),
+            )
+            .child(
+                div().flex().flex_wrap().gap_2().children(
+                    [
+                        (
+                            ApprovalDecision::AllowOnce,
+                            "panel.assistantApprovalAllowOnce",
+                        ),
+                        (
+                            ApprovalDecision::AllowForProject,
+                            "panel.assistantApprovalAllowProject",
+                        ),
+                        (ApprovalDecision::Deny, "panel.assistantApprovalDeny"),
+                    ]
+                    .map(|(decision, key)| {
+                        let id = approval.id.clone();
+                        let button = Button::new(SharedString::from(format!(
+                            "approval-{}-{key}",
+                            approval.id
+                        )))
+                        .small()
+                        .label(yss_ui::text::t(key))
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            view.resolve_approval(&id, decision, cx)
+                        }));
+                        match decision {
+                            ApprovalDecision::AllowOnce => button.primary(),
+                            ApprovalDecision::AllowForProject => button.outline(),
+                            ApprovalDecision::Deny => button.ghost(),
+                        }
+                    }),
+                ),
+            );
+        card.into_any_element()
     }
 }
 

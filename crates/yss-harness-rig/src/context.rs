@@ -4,6 +4,7 @@ use crate::recovery::{ModelActivity, TurnOutput};
 use rig_agent::agent::hook::*;
 use rig_core::completion::{AssistantContent, Message};
 use rig_core::{DynModel, operation::Completion};
+use rig_memory::ClearToolOutputs;
 use std::sync::{Arc, Mutex};
 use yss_harness_contract::*;
 
@@ -171,6 +172,37 @@ impl AgentHook for ContextHook {
             Err(_) => return self.fail(crate::error::invalid_response()),
         };
         if size >= threshold {
+            // Clearing old tool outputs needs no model call and keeps the conversation's
+            // structure. It is a pure function of the history, so replay reproduces it.
+            let mut history = event.history.to_vec();
+            let cleared = ClearToolOutputs::default().clear(&mut history);
+            if cleared.results > 0 {
+                let remaining: Vec<_> = history
+                    .iter()
+                    .map(Arc::as_ref)
+                    .chain(std::iter::once(event.prompt))
+                    .collect();
+                let cleared_size = match serde_json::to_vec(&remaining) {
+                    Ok(bytes) => bytes.len(),
+                    Err(_) => return self.fail(crate::error::invalid_response()),
+                };
+                if cleared_size < threshold {
+                    tracing::info!(
+                        domain = "Application",
+                        event = "harness_tool_outputs_cleared",
+                        cleared_results = cleared.results,
+                        cleared_tokens = cleared.tokens,
+                        "Harness cleared older tool outputs"
+                    );
+                    let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                    state.boundary.messages.history = history
+                        .iter()
+                        .map(|message| Message::clone(message))
+                        .collect();
+                    state.compacted = true;
+                    return CompletionCallAction::stop("harness_tool_outputs_cleared");
+                }
+            }
             if let Err(error) = self
                 .emit(AgentEvent::RuntimeStatus {
                     phase: AgentRuntimePhase::Compacting,

@@ -1,8 +1,8 @@
 //! Provider message mapping for replayed Harness history.
 
 use crate::error::invalid_response;
-use rig_core::completion::{AssistantMessage, Message};
 use rig_core::completion::message::{AssistantContent, CallId, ToolCall, ToolFunction, ToolName};
+use rig_core::completion::{AssistantMessage, Message};
 use yss_harness_contract::{AgentDriverFailure, AgentMessage};
 
 #[derive(Clone)]

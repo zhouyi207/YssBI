@@ -3,7 +3,9 @@
 mod gateway;
 pub mod knowledge;
 pub mod models;
+pub mod python;
 mod resources;
+pub mod web;
 
 pub use gateway::ApplicationCapabilityGateway;
 pub use resources::ApplicationResourceResolver;
@@ -279,6 +281,8 @@ mod tests {
             tool_ledger: store.clone(),
             knowledge: store.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+            web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+            python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
             clock,
             ids,
         }
@@ -609,6 +613,8 @@ mod tests {
             tool_ledger: store.clone(),
             knowledge: store.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+            web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+            python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
             clock: Arc::new(FixedClock::new(2_000)),
             ids: Arc::new(SequentialIds::default()),
         };

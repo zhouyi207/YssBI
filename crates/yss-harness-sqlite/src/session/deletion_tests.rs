@@ -44,7 +44,7 @@ async fn populate(store: &SqliteHarnessStore, id: &str) -> HarnessSessionRecord 
             session_id: session.id.clone(),
             turn_id: turn.id,
             project: session.project.clone(),
-            tool: "inspect_graph".into(),
+            tool: "graph_inspect".into(),
             effect: ToolEffect::Inspect,
             arguments: serde_json::json!({"graph": "events/Main.yssbi-event"}),
             request: Some(serde_json::json!({"graph": "events/Main.yssbi-event"})),

@@ -41,11 +41,14 @@ fn resource_identity_reads_and_domain_page_limits_have_distinct_schemas() {
     let failure = model::DocumentReadInput::Text(invalid)
         .validate()
         .unwrap_err();
-    let failure = contract_failure(failure, CapabilityId::ReadDocument);
+    let failure = contract_failure(failure, CapabilityId::DocumentRead);
     assert_eq!(model::failure(&failure)["details"]["field"], "limit");
-    let schema = capability_input_schema(CapabilityId::ReadResultTable);
+    let schema = capability_input_schema(CapabilityId::ResultReadTable);
     assert_eq!(schema.as_value()["properties"]["limit"]["maximum"], 1000);
-    for capability in [CapabilityId::UndoResource, CapabilityId::RedoResource] {
+    for capability in [
+        CapabilityId::ProjectUndoResource,
+        CapabilityId::ProjectRedoResource,
+    ] {
         let schema = capability_input_schema(capability);
         assert_eq!(
             schema.as_value()["$defs"]["ProjectResourceKind"]["enum"],
@@ -70,7 +73,8 @@ fn graph_tool_contracts_require_the_facts_used_by_followup_edits() {
     .unwrap();
     request.as_object_mut().unwrap().remove("graphHash");
     assert!(serde_json::from_value::<ApplyGraphEditRequest>(request).is_err());
-    let schema = serde_json::to_value(capability_input_schema(CapabilityId::MoveNodes)).unwrap();
+    let schema =
+        serde_json::to_value(capability_input_schema(CapabilityId::GraphMoveNodes)).unwrap();
     for field in ["graphHash", "baseRevision", "clientKey"] {
         assert!(schema["properties"].get(field).is_none());
     }
@@ -126,12 +130,12 @@ fn capability_registry_is_closed_and_schema_generation_is_available() {
             .all(|descriptor| descriptor.effect == ToolEffect::Inspect)
     );
     assert_eq!(
-        CapabilityId::ApplyGraphEdit.descriptor().effect,
+        CapabilityId::GraphApplyEdit.descriptor().effect,
         ToolEffect::Mutate
     );
     assert_eq!(
-        CapabilityId::SaveGraph.descriptor().id,
-        CapabilityId::SaveGraph
+        CapabilityId::GraphSave.descriptor().id,
+        CapabilityId::GraphSave
     );
     let _request_schema = schemars::schema_for!(AutomationCapabilityRequest);
     let _result_schema = schemars::schema_for!(AutomationCapabilityResult);
@@ -143,6 +147,32 @@ fn capability_registry_is_closed_and_schema_generation_is_available() {
         );
         let schema = serde_json::to_value(capability_input_schema(capability.id)).unwrap();
         assert_eq!(schema["type"], "object", "{}", capability.id.as_str());
+    }
+}
+
+#[test]
+fn capability_names_are_domain_prefixed() {
+    const DOMAINS: [&str; 12] = [
+        "project",
+        "data",
+        "document",
+        "mind",
+        "chart",
+        "graph",
+        "catalog",
+        "result",
+        "knowledge",
+        "web",
+        "python",
+        "ui",
+    ];
+    for capability in CAPABILITY_DESCRIPTORS {
+        let name = capability.id.as_str();
+        let domain = name.split_once('_').map(|(domain, _)| domain);
+        assert!(
+            domain.is_some_and(|domain| DOMAINS.contains(&domain)),
+            "{name} must start with a tool domain"
+        );
     }
 }
 
@@ -180,8 +210,7 @@ fn result_ui_intentions_preserve_opaque_references_in_live_results_and_history()
         assert_eq!(result["payload"]["id"], "intent-1");
         assert!(!result.to_string().contains("executionSessionId"));
     }
-    let schema =
-        serde_json::to_value(capability_input_schema(CapabilityId::RequestUiIntent)).unwrap();
+    let schema = serde_json::to_value(capability_input_schema(CapabilityId::UiOpen)).unwrap();
     for private in ["executionSessionId", "clientKey", "revision"] {
         assert!(!schema.to_string().contains(private));
         assert!(!public.to_string().contains(private));
@@ -202,7 +231,8 @@ fn result_ui_intentions_preserve_opaque_references_in_live_results_and_history()
 
 #[test]
 fn argument_diagnostics_use_business_schema_paths_without_echoing_values() {
-    let schema = serde_json::to_value(capability_input_schema(CapabilityId::BrowseNodes)).unwrap();
+    let schema =
+        serde_json::to_value(capability_input_schema(CapabilityId::CatalogSearchNodes)).unwrap();
     for (arguments, category, path, expected) in [
         (
             serde_json::json!({"query": "secret"}),
@@ -223,7 +253,8 @@ fn argument_diagnostics_use_business_schema_paths_without_echoing_values() {
         assert!(failure.details["expected"].contains(expected));
         assert!(!serde_json::to_string(&failure).unwrap().contains("secret"));
     }
-    let schema = serde_json::to_value(capability_input_schema(CapabilityId::MoveNodes)).unwrap();
+    let schema =
+        serde_json::to_value(capability_input_schema(CapabilityId::GraphMoveNodes)).unwrap();
     for payload in [
         serde_json::json!({"nodeId": "secret", "x": "secret", "y": 0}),
         serde_json::json!({"nodeId": "secret", "y": 0}),

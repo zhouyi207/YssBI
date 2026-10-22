@@ -131,6 +131,8 @@ fn host(sessions: &Arc<PausedSessions>) -> Arc<HarnessHost> {
             tool_ledger: store.clone(),
             knowledge: store.clone(),
             knowledge_index: Arc::new(yss_harness_tantivy::TantivyKnowledgeIndex),
+            web: std::sync::Arc::new(yss_harness_contract::DisabledWebAccess),
+            python: std::sync::Arc::new(yss_harness_contract::DisabledPython),
             clock: Arc::new(FixedClock::new(1_000)),
             ids: Arc::new(SequentialIds::default()),
         })

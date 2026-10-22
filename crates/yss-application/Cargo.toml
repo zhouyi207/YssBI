@@ -20,6 +20,8 @@ yss-node-kernel = { path = "../yss-node-kernel" }
 tokio = { workspace = true, features = ["sync", "time"] }
 yss-harness-sqlite = { path = "../yss-harness-sqlite" }
 yss-harness-tantivy = { path = "../yss-harness-tantivy" }
+yss-harness-web = { path = "../yss-harness-web" }
+yss-python = { path = "../yss-python" }
 yss-project-registry-sqlite = { path = "../yss-project-registry-sqlite" }
 yss-plugin-runtime = { path = "../yss-plugin-runtime" }
 yss-harness-rig = { path = "../yss-harness-rig" }
@@ -31,6 +33,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+url.workspace = true
 uuid.workspace = true
 yss-harness-contract = { path = "../yss-harness-contract" }
 yss-assistant-contract = { path = "../yss-assistant-contract" }

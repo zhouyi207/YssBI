@@ -10,7 +10,6 @@ use crate::HarnessPorts;
 use crate::events::{EventWriter, PersistingAgentOutput};
 use crate::tools::{
     HarnessToolExecutor, InvocationScope, ToolRegistry, ToolServices, contain_tool_failure,
-    is_knowledge_tool,
 };
 
 struct TaskEntry {
@@ -31,6 +30,7 @@ pub(crate) struct TurnOrchestrator {
     pub ports: HarnessPorts,
     driver: Arc<dyn AgentDriverPort>,
     knowledge: Arc<crate::KnowledgeService>,
+    approvals: Arc<crate::approvals::Approvals>,
     pub session: HarnessSessionRecord,
     pub turn_id: HarnessTurnId,
     pub writer: EventWriter,
@@ -59,6 +59,7 @@ impl TurnOrchestrator {
         ports: HarnessPorts,
         driver: Arc<dyn AgentDriverPort>,
         knowledge: Arc<crate::KnowledgeService>,
+        approvals: Arc<crate::approvals::Approvals>,
         session: HarnessSessionRecord,
         turn_id: HarnessTurnId,
         writer: EventWriter,
@@ -74,6 +75,7 @@ impl TurnOrchestrator {
             ports,
             driver,
             knowledge,
+            approvals,
             session,
             turn_id,
             writer,
@@ -232,7 +234,7 @@ impl TurnOrchestrator {
         [
             ToolSpec::new(
                 DELEGATE_TASK_TOOL,
-                "Delegate a task with precise resources, permissions and completion criteria. Always provide worker, objective, constraints (a string), completionCriteria, dependsOn and scope as top-level fields. The host captures read observations and deduplicates identical task specifications within this turn. Use followup_task to continue a previous worker.",
+                "Delegate a task with precise resources, permissions and completion criteria. Always provide worker, objective, constraints (a string), completionCriteria, dependsOn and scope as top-level fields. The host captures read observations and deduplicates identical task specifications within this turn. Use agent_continue_task to continue a previous worker.",
                 self.ports.extension.delegate_task_schema(),
                 ToolEffect::Inspect,
             ),
@@ -258,6 +260,9 @@ impl TurnOrchestrator {
             ToolServices {
                 extension: self.ports.extension.clone(),
                 knowledge: self.knowledge.clone(),
+                web: self.ports.web.clone(),
+                python: self.ports.python.clone(),
+                approvals: self.approvals.clone(),
                 ledger: self.ports.tool_ledger.clone(),
                 clock: self.ports.clock.clone(),
                 ids: self.ports.ids.clone(),
@@ -630,8 +635,8 @@ impl RunExecutor {
                     .into(),
             );
         }
-        if is_knowledge_tool(&call.name) {
-            return prepare_knowledge(call, &self.tools);
+        if is_harness_tool(&call.name) {
+            return prepare_harness_tool(call, &self.tools);
         }
         contain_tool_failure(async {
             Ok::<_, CapabilityFailure>(self.hooks.prepare(call, self).await)
@@ -775,7 +780,7 @@ impl AgentToolExecutor for RunExecutor {
     }
 }
 
-fn prepare_knowledge(
+fn prepare_harness_tool(
     call: ToolCall,
     tools: &HarnessToolExecutor,
 ) -> Result<PreparedToolCall, RejectedToolCall> {
@@ -785,6 +790,29 @@ fn prepare_knowledge(
     let schema = &spec.input_schema;
     let request = match call.name.as_str() {
         SEARCH_KNOWLEDGE_TOOL => serde_json::to_value(decode_arguments::<SearchKnowledgeRequest>(
+            call.arguments,
+            schema,
+        )?),
+        WEB_SEARCH_TOOL => serde_json::to_value(decode_arguments::<WebSearchRequest>(
+            call.arguments,
+            schema,
+        )?),
+        WEB_FETCH_TOOL => {
+            serde_json::to_value(decode_arguments::<WebFetchRequest>(call.arguments, schema)?)
+        }
+        PYTHON_INSPECT_ENVIRONMENT_TOOL => serde_json::to_value(decode_arguments::<
+            PythonInspectEnvironmentRequest,
+        >(call.arguments, schema)?),
+        PYTHON_READ_SCRIPT_TOOL => serde_json::to_value(
+            decode_arguments::<PythonReadScriptRequest>(call.arguments, schema)?,
+        ),
+        PYTHON_WRITE_SCRIPT_TOOL => serde_json::to_value(decode_arguments::<
+            PythonWriteScriptRequest,
+        >(call.arguments, schema)?),
+        PYTHON_INSTALL_PACKAGES_TOOL => serde_json::to_value(decode_arguments::<
+            PythonInstallPackagesRequest,
+        >(call.arguments, schema)?),
+        PYTHON_RUN_SCRIPT_TOOL => serde_json::to_value(decode_arguments::<PythonRunScriptRequest>(
             call.arguments,
             schema,
         )?),

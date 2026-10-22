@@ -86,6 +86,17 @@ impl From<ToolInvocationRecord> for AssistantToolInspection {
                     .unwrap_or_else(|_| json!({"error": "tool_output_unavailable"}))
             }),
         };
+        if crate::is_python_tool(&record.tool) {
+            dto.python(&record);
+            return dto;
+        }
+        if matches!(
+            record.tool.as_str(),
+            crate::WEB_SEARCH_TOOL | crate::WEB_FETCH_TOOL
+        ) {
+            dto.web(&record);
+            return dto;
+        }
         let knowledge = matches!(
             record.tool.as_str(),
             crate::SEARCH_KNOWLEDGE_TOOL | crate::READ_KNOWLEDGE_TOOL
@@ -178,16 +189,18 @@ impl From<ToolInvocationRecord> for AssistantToolInspection {
                 Request::EditResource(request) => {
                     dto.target = Some(request.resource.id.clone());
                     let operation = match request.capability_id() {
-                        crate::CapabilityId::UndoResource => "undo",
-                        crate::CapabilityId::RedoResource => "redo",
-                        crate::CapabilityId::InsertRows => "insert_rows",
-                        crate::CapabilityId::UpdateCells => "update_cells",
-                        crate::CapabilityId::DeleteRows => "delete_rows",
-                        crate::CapabilityId::CreateColumns => "create_columns",
-                        crate::CapabilityId::RenameColumns => "rename_columns",
-                        crate::CapabilityId::DeleteColumns => "delete_columns",
-                        crate::CapabilityId::CastColumns => "cast_columns",
-                        crate::CapabilityId::SetColumnSemantics => "set_column_semantics",
+                        crate::CapabilityId::ProjectUndoResource => "undo",
+                        crate::CapabilityId::ProjectRedoResource => "redo",
+                        crate::CapabilityId::DataCreateRows => "data_create_rows",
+                        crate::CapabilityId::DataUpdateCells => "data_update_cells",
+                        crate::CapabilityId::DataDeleteRows => "data_delete_rows",
+                        crate::CapabilityId::DataCreateColumns => "data_create_columns",
+                        crate::CapabilityId::DataRenameColumns => "data_rename_columns",
+                        crate::CapabilityId::DataDeleteColumns => "data_delete_columns",
+                        crate::CapabilityId::DataCastColumns => "data_cast_columns",
+                        crate::CapabilityId::DataUpdateColumnSemantics => {
+                            "data_update_column_semantics"
+                        }
                         _ => "edit",
                     };
                     dto.parameters.insert("operation".into(), json!(operation));
@@ -499,6 +512,59 @@ impl AssistantToolInspection {
             self.target = Some(passage.title);
         }
     }
+
+    fn python(&mut self, record: &ToolInvocationRecord) {
+        let Some(request) = &record.request else {
+            self.parameters
+                .insert("argumentStatus".into(), json!("rejected"));
+            return;
+        };
+        if let Some(name) = request.get("name").and_then(serde_json::Value::as_str) {
+            self.target = Some(crate::python_script_file(name));
+        }
+        if let Some(packages) = request.get("packages") {
+            self.parameters.insert("packages".into(), packages.clone());
+        }
+        if let Some(arguments) = request.get("arguments") {
+            self.parameters
+                .insert("arguments".into(), arguments.clone());
+        }
+        let Some(result) = &record.result else {
+            return;
+        };
+        if let Ok(run) = serde_json::from_value::<crate::PythonRun>(result.clone()) {
+            self.parameters
+                .insert("exitCode".into(), json!(run.exit_code));
+            self.parameters
+                .insert("outputFiles".into(), json!(run.output_files.len()));
+        }
+    }
+
+    fn web(&mut self, record: &ToolInvocationRecord) {
+        if let Some(request) = &record.request {
+            if let Ok(request) = serde_json::from_value::<crate::WebSearchRequest>(request.clone())
+            {
+                self.parameters.insert("query".into(), json!(request.query));
+                self.parameters.insert("limit".into(), json!(request.limit));
+            } else if let Ok(request) =
+                serde_json::from_value::<crate::WebFetchRequest>(request.clone())
+            {
+                self.target = Some(request.url);
+            }
+        } else {
+            self.parameters
+                .insert("argumentStatus".into(), json!("rejected"));
+        }
+        let Some(result) = &record.result else {
+            return;
+        };
+        if let Ok(result) = serde_json::from_value::<crate::WebSearchResult>(result.clone()) {
+            self.parameters
+                .insert("resultCount".into(), json!(result.results.len()));
+        } else if let Ok(page) = serde_json::from_value::<crate::WebPage>(result.clone()) {
+            self.target = Some(page.title.unwrap_or(page.url));
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -526,7 +592,7 @@ mod tests {
 
     #[test]
     fn pre_execution_failure_details_keep_safe_targets_and_authoritative_timing() {
-        let input = model::CapabilityInput::WriteDocument(model::WriteDocumentInput {
+        let input = model::CapabilityInput::DocumentWriteText(model::WriteDocumentInput {
             document: model::DocumentResourceRef::new("docs/report.md".into()),
             markdown: "private document body".into(),
         });
@@ -534,7 +600,7 @@ mod tests {
             "id":"tool-1", "idempotencyKey":"tool-1", "sessionId":"session-1",
             "turnId":"turn-1", "agentRunId":null,
             "project":{"projectInstanceId":"project-1", "projectSessionId":"project-session-1"},
-            "tool":"write_document", "effect":"mutate", "arguments":{}, "request":null,
+            "tool":"document_write_text", "effect":"mutate", "arguments":{}, "request":null,
             "state":"failed", "result":null, "failure":{"code":"invalid_request", "details":{
                 "category":"missing_field", "path":"$.markdown", "expected":"type=string",
                 "expectedRevision":"private-version"
@@ -585,7 +651,7 @@ mod tests {
             "id": "tool-1", "idempotencyKey": "operation-1", "sessionId": "session-1", "turnId": "turn-1",
             "agentRunId": null,
             "project": { "projectInstanceId": "00000000-0000-0000-0000-000000000001", "projectSessionId": "00000000-0000-0000-0000-000000000002" },
-            "tool": "import_database", "effect": "mutate", "arguments": {}, "request": encode_request(&request).unwrap(), "state": "running", "result": null, "failure": null,
+            "tool": "data_import", "effect": "mutate", "arguments": {}, "request": encode_request(&request).unwrap(), "state": "running", "result": null, "failure": null,
             "startedAt": 1000, "deadline": 31000, "finishedAt": null,
         })).unwrap();
         let dto = serde_json::to_value(AssistantToolInspection::from(record.clone())).unwrap();

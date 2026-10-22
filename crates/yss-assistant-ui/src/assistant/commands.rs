@@ -110,6 +110,18 @@ impl ConversationPanel {
         .detach();
         cx.notify();
     }
+    pub(super) fn resolve_approval(
+        &mut self,
+        approval_id: &str,
+        decision: yss_harness_contract::ApprovalDecision,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.services.host.resolve_approval(approval_id, decision) {
+            tracing::debug!(approval_id, "Approval no longer pending");
+        }
+        cx.notify();
+    }
+
     pub(super) fn cancel(&mut self, cx: &mut Context<Self>) {
         if !self.running() || self.stopping {
             return;

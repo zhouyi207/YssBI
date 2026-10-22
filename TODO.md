@@ -2,7 +2,7 @@
 
 Keep only open work here. Current behavior belongs to source and module READMEs; completed history belongs in Git. Items below distinguish missing features, uncompleted acceptance and optional candidates. Documentation cleanup does not close any of them.
 
-- [ ] Investigate the user-reported AI node-discovery problem: “节点 catelog ai 获取不到……ai 不知道要创建哪些节点”. Capture a concrete model/session/tool reproduction against the current `browse_nodes` and `inspect_node_type` capabilities and generated configuration schema described in [Harness Core](crates/yss-harness-core/README.md). Do not treat the report as resolved, or as proof that discovery is globally absent.
+- [ ] Investigate the user-reported AI node-discovery problem: “节点 catelog ai 获取不到……ai 不知道要创建哪些节点”. Capture a concrete model/session/tool reproduction against the current `catalog_search_nodes` and `catalog_inspect_nodes` capabilities and generated configuration schema described in [Harness Core](crates/yss-harness-core/README.md). Do not treat the report as resolved, or as proof that discovery is globally absent.
 
 ## Active tasks
 
@@ -49,6 +49,11 @@ Use project copies and the [Graph application](crates/yss-application/src/graph/
 ## Assistant and Harness
 
 Current capability and persistence boundaries remain in [Harness Core](crates/yss-harness-core/README.md); real-model measurements have an existing [example](crates/yss-application/examples/measure_harness/README.md).
+
+- [ ] Accept web search and Python with a real model: anomaly explanation that cites fetched pages; a Data task that writes, approves, runs and fixes a collection script, then imports its CSV/Parquet output. Check the approval card's allow-once, allow-for-project, deny and cancel states and an expired request after restart.
+- [ ] Decide whether YssBI should download uv itself when neither uv nor Python 3 is installed; today the tools return installation instructions.
+- [ ] Record provider cassettes with rig-cassette for `measure_harness` scenarios so Harness regressions replay offline; needs real provider keys.
+- [ ] Spike rig-ecs (Bevy 0.20 ECS kernel) behind the Harness driver: one turn with an extension tool and a UI card; measure the bridge between Bevy and GPUI state, cancellation and recovery before deciding whether it replaces yss-harness-core orchestration.
 
 - [ ] Complete Assistant grouping/layout, task/tool/statistical-plan/usage cards, links/formulas and subscription/cache release. Persist drafts, unconfirmed input and queued messages across restart without loss or accidental sends after close/project replacement. Accept explicit-resource multiselect/removal/same-name/deleted-resource retry/reopen/narrow panels and knowledge-source add/rebuild/remove/status/citation/original-document interactions.
 - [ ] **P6 — tool names and summaries:** use real Harness calls to read a test document and create/save Doc or Mind; inspect main/Worker cards, technical details and copying. Show actual public names, resource/query/change scope, readable long arguments and matching copied text, never internal synchronization fields.

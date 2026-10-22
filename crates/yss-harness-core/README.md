@@ -45,7 +45,7 @@ Rig 根据 provider-neutral 请求构建模型与工具循环，不另设角色�
 | ReviewAgent  | 独立上下文中的只读审查，返回问题和证据；不能修改或委派               |
 
 一个用户 Turn 内创建一个 Manager run 和按需启动的 Worker runs。只有 Manager 的 executor
-实现 `delegate_task` 和 `followup_task`；Worker 只能返回 Manager，不能互相调用或递归委派。
+实现 `agent_delegate_task` 和 `agent_continue_task`；Worker 只能返回 Manager，不能互相调用或递归委派。
 模型委派参数只包含目标、约束、完成条件、当前 turn 内已完成的依赖 run IDs，以及精确的资源/操作授权。
 创建授权同时列出精确创建参数和新资源后续允许的操作。Core 按任务规范生成内部去重身份，
 同一 turn 的相同规范复用已有结果；运行中的相同任务明确拒绝，不自动执行第二次。
@@ -67,7 +67,7 @@ Core 拒绝未在当前角色注册的工具；Assistant extension 按工具、�
 资源版本及原子提交。Manager 生成的过宽任务不能改变角色边界，例如 Report 不能编辑 Database，
 Review 不能写入。新资源仅从真实回执取得 ID，并继承明确声明的操作。统计图执行在 Application
 准备入口继续核对实际资源需求、语义依赖和资源版本；共享读取权限不会授予写权限。
-内部图/资源读取回执保留完整版本；模型只看到业务事实。`inspect_resource` 返回身份、名称和 dirty 状态；
+内部图/资源读取回执保留完整版本；模型只看到业务事实。`project_inspect_resource` 返回身份、名称和 dirty 状态；
 函数资源另保留既有签名投影，不返回节点或连线正文。
 
 图变更在模型与内部入口共用角色能力检查；内部授权读取原请求的能力身份与图引用，不复制节点、参数或常量值。执行器由同一个基础构造函数初始化共同服务与默认状态，再设置 Agent 运行身份。
@@ -112,28 +112,28 @@ interrupted，保留已经提交的工具证据，不自动重做可能已提交
 任务卡片和运行状态，统计计划继续复用现有展示。真实模型与桌面人工验收见
 [Assistant 与 Harness 待办](../../TODO.md#assistant-and-harness)。
 
-`followup_task(runId, instruction)` resumes the same durable run ID, including across user turns and after restart. Core rebuilds scope from the original grant and successful receipts, restores the latest context checkpoint plus subsequent history, and binds any fresh Manager observations only to resources already in that scope. It never adds resources or operations. Without a fresh Manager observation, each granted resource must match the worker's current-project read or commit receipt; older session records do not invalidate a later verified receipt. Another project rebind requires current reads again before that baseline can be reused. Dependencies and input versions are rechecked under the existing execution gate. Unknown commit outcomes block continuation until reconciled; committed graph edits retain their owner-level idempotency. Startup recovery closes unfinished resumed runs as interrupted and never automatically repeats their writes.
+`agent_continue_task(runId, instruction)` resumes the same durable run ID, including across user turns and after restart. Core rebuilds scope from the original grant and successful receipts, restores the latest context checkpoint plus subsequent history, and binds any fresh Manager observations only to resources already in that scope. It never adds resources or operations. Without a fresh Manager observation, each granted resource must match the worker's current-project read or commit receipt; older session records do not invalidate a later verified receipt. Another project rebind requires current reads again before that baseline can be reused. Dependencies and input versions are rechecked under the existing execution gate. Unknown commit outcomes block continuation until reconciled; committed graph edits retain their owner-level idempotency. Startup recovery closes unfinished resumed runs as interrupted and never automatically repeats their writes.
 
 Recovery, compaction, delivery checks and graph business outcomes have dedicated persisted events. The Assistant read projection hides checkpoint text while preserving lifecycle facts and exact failure codes. Reopening a conversation therefore retains provider failures and undelivered status. Tool-call completion is distinct from graph execution success. Model observations carry session, turn and agent-run correlation through tracing spans without recording prompts, data or credentials.
 
 ## Source organization
 
-Manager 与 Review 可用 `validate_graph` 读取全图或指定依赖范围的就绪事实；它不授予图编辑或执行权限。没有 Worker 任务信封的 Manager 通过原图检查用例捕获本次只读校验基线；Worker 继续核对授权版本，不以新读取覆盖已过期的写入依据。Report 可检查已授权数据库的概览和 schema，以核对报告的数据来源、行列数和变量类型，不能修改数据库。所有 Worker 仍受原资源读取范围约束；共享工具指令提到的其他角色工具不因此获得注册或授权。
+Manager 与 Review 可用 `graph_validate` 读取全图或指定依赖范围的就绪事实；它不授予图编辑或执行权限。没有 Worker 任务信封的 Manager 通过原图检查用例捕获本次只读校验基线；Worker 继续核对授权版本，不以新读取覆盖已过期的写入依据。Report 可检查已授权数据库的概览和 schema，以核对报告的数据来源、行列数和变量类型，不能修改数据库。所有 Worker 仍受原资源读取范围约束；共享工具指令提到的其他角色工具不因此获得注册或授权。
 
 Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各自 crate 根导出。内部按实际职责组织：
 
-| 范围          | 源码入口与职责                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core Host     | [host.rs](src/host.rs) 构造共享状态；[session](src/host/session.rs)、[turn](src/host/turn.rs) 分别实现对应入口                                                                                                                                                                                                                                                                  |
-| Core 公共依赖 | [ports.rs](src/ports.rs) 拥有注入端口集合，[error.rs](src/error.rs) 拥有 Core 错误；编排器不依赖 Host 内部实现                                                                                                                                                                                                                                                                                                                                              |
-| 上下文与事件  | [conversation.rs](src/conversation.rs) 统一历史重建和消息组装；[events.rs](src/events.rs) 统一持久事件写入、交付及 Agent 输出适配                                                                                                                                                                                                                                                                                                                           |
-| 角色与权限    | [Assistant agents](../yss-assistant-extension/src/agents.rs) 定义六角色与工具，Assistant extension 执行角色和任务授权；Core 执行工具注册与模式准入 |
-| 编排与交付    | [Core orchestration](src/orchestration.rs) 调度通用运行；[Assistant run](../yss-assistant-extension/src/run.rs) 绑定任务、归集业务回执并恢复读取基线；其回归测试位于 [run/tests.rs](../yss-assistant-extension/src/run/tests.rs) |
-| Rig           | [driver.rs](../yss-harness-rig/src/driver.rs) 执行模型循环，[provider/client.rs](../yss-harness-rig/src/provider/client.rs) 建立原生协议客户端，[stream.rs](../yss-harness-rig/src/stream.rs) 管理流与取消，[messages.rs](../yss-harness-rig/src/messages.rs) 映射消息，[tools](../yss-harness-rig/src/tools.rs) 映射模型工具，[error.rs](../yss-harness-rig/src/error.rs) 分类失败                                                                     |
-| Knowledge     | [knowledge.rs](src/knowledge.rs) 处理查询与引用；[knowledge/tools.rs](src/knowledge/tools.rs) 映射公开工具结果与内部引用事件；[knowledge/index.rs](src/knowledge/index.rs) 管理来源快照与索引发布；[knowledge/retrieval.rs](src/knowledge/retrieval.rs) 拥有 Unicode 分段与引用身份 |
-| Tantivy       | [lib.rs](../yss-harness-tantivy/src/lib.rs) 实现中立索引构建端口；[index.rs](../yss-harness-tantivy/src/index.rs) 拥有字段、查询和摘要；[tokenizer.rs](../yss-harness-tantivy/src/tokenizer.rs) 拥有中英文分词；[collector.rs](../yss-harness-tantivy/src/collector.rs) 在结果限制前按文档去重                                                                                                                                                              |
-| SQLite        | [lib.rs](../yss-harness-sqlite/src/lib.rs) 构造唯一 Store/连接池；各持久化 port 分别实现于 session、events、ledger 和 knowledge 模块；[schema.rs](../yss-harness-sqlite/src/schema.rs) 拥有唯一 schema，[codec.rs](../yss-harness-sqlite/src/codec.rs) 共享编码与错误映射                                                                                                                                                               |
-| Contract      | [契约说明](../yss-harness-contract/README.md) 维护共享值边界；[lib.rs](../yss-harness-contract/src/lib.rs) 只组织模块和导出；[context.rs](../yss-harness-contract/src/context.rs) 拥有调用身份与绑定 |
+| 范围          | 源码入口与职责                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core Host     | [host.rs](src/host.rs) 构造共享状态；[session](src/host/session.rs)、[turn](src/host/turn.rs) 分别实现对应入口                                                                                                                                                                                                                                                                      |
+| Core 公共依赖 | [ports.rs](src/ports.rs) 拥有注入端口集合，[error.rs](src/error.rs) 拥有 Core 错误；编排器不依赖 Host 内部实现                                                                                                                                                                                                                                                                      |
+| 上下文与事件  | [conversation.rs](src/conversation.rs) 统一历史重建和消息组装；[events.rs](src/events.rs) 统一持久事件写入、交付及 Agent 输出适配                                                                                                                                                                                                                                                   |
+| 角色与权限    | [Assistant agents](../yss-assistant-extension/src/agents.rs) 定义六角色与工具，Assistant extension 执行角色和任务授权；Core 执行工具注册与模式准入                                                                                                                                                                                                                                  |
+| 编排与交付    | [Core orchestration](src/orchestration.rs) 调度通用运行；[Assistant run](../yss-assistant-extension/src/run.rs) 绑定任务、归集业务回执并恢复读取基线；其回归测试位于 [run/tests.rs](../yss-assistant-extension/src/run/tests.rs)                                                                                                                                                    |
+| Rig           | [driver.rs](../yss-harness-rig/src/driver.rs) 执行模型循环，[provider/client.rs](../yss-harness-rig/src/provider/client.rs) 建立原生协议客户端，[stream.rs](../yss-harness-rig/src/stream.rs) 管理流与取消，[messages.rs](../yss-harness-rig/src/messages.rs) 映射消息，[tools](../yss-harness-rig/src/tools.rs) 映射模型工具，[error.rs](../yss-harness-rig/src/error.rs) 分类失败 |
+| Knowledge     | [knowledge.rs](src/knowledge.rs) 处理查询与引用；[knowledge/tools.rs](src/knowledge/tools.rs) 映射公开工具结果与内部引用事件；[knowledge/index.rs](src/knowledge/index.rs) 管理来源快照与索引发布；[knowledge/retrieval.rs](src/knowledge/retrieval.rs) 拥有 Unicode 分段与引用身份                                                                                                 |
+| Tantivy       | [lib.rs](../yss-harness-tantivy/src/lib.rs) 实现中立索引构建端口；[index.rs](../yss-harness-tantivy/src/index.rs) 拥有字段、查询和摘要；[tokenizer.rs](../yss-harness-tantivy/src/tokenizer.rs) 拥有中英文分词；[collector.rs](../yss-harness-tantivy/src/collector.rs) 在结果限制前按文档去重                                                                                      |
+| SQLite        | [lib.rs](../yss-harness-sqlite/src/lib.rs) 构造唯一 Store/连接池；各持久化 port 分别实现于 session、events、ledger 和 knowledge 模块；[schema.rs](../yss-harness-sqlite/src/schema.rs) 拥有唯一 schema，[codec.rs](../yss-harness-sqlite/src/codec.rs) 共享编码与错误映射                                                                                                           |
+| Contract      | [契约说明](../yss-harness-contract/README.md) 维护共享值边界；[lib.rs](../yss-harness-contract/src/lib.rs) 只组织模块和导出；[context.rs](../yss-harness-contract/src/context.rs) 拥有调用身份与绑定                                                                                                                                                                                |
 
 提示词不承担后端授权，编写约束见 [crates 规则](../.rules)。
 现有测试随模块组织到对应 `tests.rs` 或并发测试文件，测试功能和协议夹具保持一致。
@@ -150,7 +150,7 @@ Harness crates 按 Core、Contract 与具体适配器分层，公开类型从各
 | Skill identity/version/source                        | Harness skill registry                              |
 | Knowledge source/citation                            | knowledge source store；Tantivy index 是 projection |
 | ordered Assistant stream                             | persisted Harness events + Rust sequence            |
-| rendered conversation cards                          | GPUI projection，可从持久事件 replay 重建            |
+| rendered conversation cards                          | GPUI projection，可从持久事件 replay 重建           |
 
 Harness 只保存业务资源的 opaque references、project/session binding、captured revisions、完整结果 JSON、分页数据及其他有界 capability results 和 receipts。Result payload 仍由 Execution `ResultStore` 拥有；Harness 不能复制完整 DataFrame 或成为 Project history。
 
@@ -184,53 +184,83 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 
 桌面按 `ToolRegistry::new(profile.tools).with_mode(mode)` 选择工具，角色 profile 由 extension 提供。Registry 保存允许的能力集合，同一 run 的模型工具和执行器复用该集合，仅为模型请求生成一次输入 schema。下表是共享业务能力全集，每个角色只获得其中的子集：
 
-| Capability                                                         | 作用                                                                           |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `list_resources`                                                   | 读取有界项目资源索引，包含没有打开编辑器面板的图文件                           |
-| `inspect_resource`                                                 | 统一资源身份、名称与保存状态，保留函数签名，正文通过领域工具读取               |
-| `create_resource`                                                  | 按种类和名称创建图、Chart、Mind 或 Doc，返回实际身份及初始业务引用             |
-| `import_database`                                                  | 从明确的 CSV、Parquet、Excel 或 SQL 来源创建数据库，可在同一导入事务中指定名称 |
-| `rename_resource`                                                  | 重命名并返回实际新资源身份                                                     |
-| `duplicate_resource`                                               | 可指定名称的原子复制，沿用 owner 的身份和名称分配                              |
-| `delete_resource`                                                  | 删除获准资源并保留实际提交回执                                                 |
-| `save_resource`                                                    | 按资源 owner 的保存边界提交，返回已核对的状态                                  |
-| `edit_resource`                                                    | 本轮保留的函数签名编辑                                                         |
-| `inspect_chart` / `update_chart`                                   | 类型化配置读取与指定字段更新，沿用立即持久化                                   |
-| `inspect_document` / `read_document` / `search_document`           | 文档大纲、章节/字符范围及带原文上下文的精确搜索                                |
-| `replace_document_text` / `append_document` / `write_document`     | 原子精确替换、追加与明确整篇替换，保留显式保存生命周期                         |
-| `inspect_mind` / `find_topics` / `inspect_topics`                  | 有限大纲、子树搜索和定向主题正文、子主题与引用                                 |
-| `create_topics` / `update_topics` / `move_topics`                  | 原子建树、正文/引用修改与最终父子关系调整                                      |
-| `delete_topics` / `duplicate_topics`                               | 子树删除或复制，返回实际删除范围或全新主题身份映射                             |
-| `insert_rows` / `update_cells` / `delete_rows`                     | 按稳定 rowId 原子插入并初始化、更新单元格或删除行；插入回执交付实际 ID         |
-| `create_columns` / `rename_columns` / `delete_columns`             | 原子修改列集合与名称，保留现有身份、默认空值和至少一列的规则                   |
-| `cast_columns` / `set_column_semantics`                            | 原子转换物理类型或设置业务语义，验证整个批次后提交                             |
-| `export_database`                                                  | 将授权数据库导出为 CSV 或 Parquet，返回真实目标路径，工具层保留原读取基线校验  |
-| `inspect_graph`                                                    | 读取图计数、就绪、已有运行状态及按字节预算降级的节点配置和连接概览             |
-| `browse_nodes`                                                     | 搜索、按类别筛选并分页浏览可创建节点类型                                       |
-| `inspect_node_type`                                                | 批量读取指定类型的参数 schema、默认值和 Pin 数量约束                           |
-| `find_nodes`                                                       | 按名称、类型或 ID 筛选图中节点，再分页读取身份摘要                             |
-| `inspect_nodes`                                                    | 按 ID 读取指定参数、Pin、schema 和选项，Pin/列分别分页                         |
-| `find_connections`                                                 | 按节点及 Pin 交集筛选、分页读取连接与真实端点                                  |
-| `create_nodes`                                                     | 单批创建并配置参数、Pin 数量及初始连接，返回节点和 Pin 别名映射                |
-| `update_nodes`                                                     | 按明确字段批量修改参数、标签、字面量和 Pin 数量，或精确删除指定可变 Pin        |
-| `delete_nodes` / `duplicate_nodes` / `move_nodes`                  | 删除、复制或移动节点，沿用同一原子编辑与历史边界                               |
-| `create_connections` / `update_connections` / `delete_connections` | 按真实端点批量连接、按 ID 原子重接或删除                                       |
-| `find_constants` / `inspect_constants`                             | 按名称查找常量摘要；按 ID 与值范围读取，文本/集合/表格分别分页                 |
-| `create_constants` / `update_constants` / `delete_constants`       | 原子修改类型化常量，可同时创建初始引用节点                                     |
-| `search_knowledge`                                                 | 按需搜索当前项目可见的知识，返回摘要和可读取的片段引用                         |
-| `read_knowledge`                                                   | 核验并读取指定片段，成功后记录可展开的来源引用                                 |
-| `inspect_database`                                                 | 读取名称、行列计数及编辑状态，不附完整 schema 或数据行                         |
-| `inspect_database_schema`                                          | 选择列并分页读取类型、物理类型和业务语义                                       |
-| `profile_database`                                                 | 只计算指定列和完整性、统计摘要或分布指标组                                     |
-| `read_database_rows`                                               | 按列投影、AND 条件与多列排序读取行页，返回稳定 rowId 和真实继续位置            |
-| `inspect_result`                                                   | 读取标量、结果结构和分页 schema，交付完整表引用，不读取数据行                  |
-| `read_result_table`                                                | 按完整表引用、选定列及行范围读取，返回实际行页和列页                           |
-| `validate_graph`                                                   | 全图或所选节点实际依赖范围的只读就绪检查，诊断独立分页                         |
-| `execute_graph`                                                    | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs          |
-| `list_graph_results`                                               | 按图、节点、Pin 或运行筛选结果引用与有效性，支持分页，包括手动运行产物         |
-| `undo_resource` / `redo_resource`                                  | 在已授权的 Graph 或 Database 中导航一个原有历史单位                            |
-| `inspect_ui_intent`                                                | 按 ID 读取工作台界面操作回执                                                   |
-| `request_ui_intent`                                                | 请求打开六类资源/结果、定位图节点或显示允许的面板，返回待执行回执              |
+| Capability                                                                           | 作用                                                                           |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `project_list_resources`                                                             | 读取有界项目资源索引，包含没有打开编辑器面板的图文件                           |
+| `project_inspect_resource`                                                           | 统一资源身份、名称与保存状态，保留函数签名，正文通过领域工具读取               |
+| `project_create_resource`                                                            | 按种类和名称创建图、Chart、Mind 或 Doc，返回实际身份及初始业务引用             |
+| `data_import`                                                                        | 从明确的 CSV、Parquet、Excel 或 SQL 来源创建数据库，可在同一导入事务中指定名称 |
+| `project_rename_resource`                                                            | 重命名并返回实际新资源身份                                                     |
+| `project_duplicate_resource`                                                         | 可指定名称的原子复制，沿用 owner 的身份和名称分配                              |
+| `project_delete_resource`                                                            | 删除获准资源并保留实际提交回执                                                 |
+| `project_save_resource`                                                              | 按资源 owner 的保存边界提交，返回已核对的状态                                  |
+| `graph_update_function_signature`                                                    | 本轮保留的函数签名编辑                                                         |
+| `chart_inspect` / `chart_update`                                                     | 类型化配置读取与指定字段更新，沿用立即持久化                                   |
+| `document_inspect` / `document_read` / `document_search`                             | 文档大纲、章节/字符范围及带原文上下文的精确搜索                                |
+| `document_replace_text` / `document_append_text` / `document_write_text`             | 原子精确替换、追加与明确整篇替换，保留显式保存生命周期                         |
+| `mind_inspect` / `mind_search_topics` / `mind_inspect_topics`                        | 有限大纲、子树搜索和定向主题正文、子主题与引用                                 |
+| `mind_create_topics` / `mind_update_topics` / `mind_move_topics`                     | 原子建树、正文/引用修改与最终父子关系调整                                      |
+| `mind_delete_topics` / `mind_duplicate_topics`                                       | 子树删除或复制，返回实际删除范围或全新主题身份映射                             |
+| `data_create_rows` / `data_update_cells` / `data_delete_rows`                        | 按稳定 rowId 原子插入并初始化、更新单元格或删除行；插入回执交付实际 ID         |
+| `data_create_columns` / `data_rename_columns` / `data_delete_columns`                | 原子修改列集合与名称，保留现有身份、默认空值和至少一列的规则                   |
+| `data_cast_columns` / `data_update_column_semantics`                                 | 原子转换物理类型或设置业务语义，验证整个批次后提交                             |
+| `data_export`                                                                        | 将授权数据库导出为 CSV 或 Parquet，返回真实目标路径，工具层保留原读取基线校验  |
+| `graph_inspect`                                                                      | 读取图计数、就绪、已有运行状态及按字节预算降级的节点配置和连接概览             |
+| `catalog_search_nodes`                                                               | 搜索、按类别筛选并分页浏览可创建节点类型                                       |
+| `catalog_inspect_nodes`                                                              | 批量读取指定类型的参数 schema、默认值和 Pin 数量约束                           |
+| `graph_search_nodes`                                                                 | 按名称、类型或 ID 筛选图中节点，再分页读取身份摘要                             |
+| `graph_inspect_nodes`                                                                | 按 ID 读取指定参数、Pin、schema 和选项，Pin/列分别分页                         |
+| `graph_search_connections`                                                           | 按节点及 Pin 交集筛选、分页读取连接与真实端点                                  |
+| `graph_create_nodes`                                                                 | 单批创建并配置参数、Pin 数量及初始连接，返回节点和 Pin 别名映射                |
+| `graph_update_nodes`                                                                 | 按明确字段批量修改参数、标签、字面量和 Pin 数量，或精确删除指定可变 Pin        |
+| `graph_delete_nodes` / `graph_duplicate_nodes` / `graph_move_nodes`                  | 删除、复制或移动节点，沿用同一原子编辑与历史边界                               |
+| `graph_create_connections` / `graph_update_connections` / `graph_delete_connections` | 按真实端点批量连接、按 ID 原子重接或删除                                       |
+| `graph_search_constants` / `graph_inspect_constants`                                 | 按名称查找常量摘要；按 ID 与值范围读取，文本/集合/表格分别分页                 |
+| `graph_create_constants` / `graph_update_constants` / `graph_delete_constants`       | 原子修改类型化常量，可同时创建初始引用节点                                     |
+| `knowledge_search`                                                                   | 按需搜索当前项目可见的知识，返回摘要和可读取的片段引用                         |
+| `knowledge_read`                                                                     | 核验并读取指定片段，成功后记录可展开的来源引用                                 |
+| `data_inspect`                                                                       | 读取名称、行列计数及编辑状态，不附完整 schema 或数据行                         |
+| `data_inspect_schema`                                                                | 选择列并分页读取类型、物理类型和业务语义                                       |
+| `data_inspect_profile`                                                               | 只计算指定列和完整性、统计摘要或分布指标组                                     |
+| `data_read_rows`                                                                     | 按列投影、AND 条件与多列排序读取行页，返回稳定 rowId 和真实继续位置            |
+| `result_inspect`                                                                     | 读取标量、结果结构和分页 schema，交付完整表引用，不读取数据行                  |
+| `result_read_table`                                                                  | 按完整表引用、选定列及行范围读取，返回实际行页和列页                           |
+| `graph_validate`                                                                     | 全图或所选节点实际依赖范围的只读就绪检查，诊断独立分页                         |
+| `graph_execute`                                                                      | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs          |
+| `result_list`                                                                        | 按图、节点、Pin 或运行筛选结果引用与有效性，支持分页，包括手动运行产物         |
+| `project_undo_resource` / `project_redo_resource`                                    | 在已授权的 Graph 或 Database 中导航一个原有历史单位                            |
+| `ui_inspect_receipt`                                                                 | 按 ID 读取工作台界面操作回执                                                   |
+| `ui_open`                                                                            | 请求打开六类资源/结果、定位图节点或显示允许的面板，返回待执行回执              |
+
+### 工具命名与覆盖
+
+模型工具名统一为 `<domain>_<verb>[_<object>]`，`yss-assistant-contract` 的测试拒绝没有领域前缀的能力。
+领域为 `project`、`data`、`document`、`mind`、`chart`、`graph`、`catalog`、`result`、`knowledge`、`ui`；
+Harness 自身的控制工具使用 `agent_`（委派、续跑）与 `analysis_`（统计计划）。读取动词只用
+`list`（枚举集合）、`inspect`（结构与元数据）、`read`（正文或数据页）和 `search`（按条件查找）；
+写入动词描述 owner 的实际语义，例如 `create`、`update`、`delete`、`move`、`duplicate`、`rename`、
+`cast`、`import`、`export`、`execute`、`validate`、`save`、`undo`、`redo`。
+
+工作台用户操作与 Harness 能力的对应关系：
+
+| 用户操作                                         | Harness 能力                                                            |
+| ------------------------------------------------ | ----------------------------------------------------------------------- |
+| 新建事件图、函数图、Chart、Mind、Doc             | `project_create_resource`                                               |
+| 导入数据（CSV、Parquet、Excel、SQL）             | `data_import`                                                           |
+| 资源打开、重命名、复制、删除、保存、撤销、重做   | `ui_open`、`project_rename_resource` 等 `project_*`                     |
+| 导出当前数据集                                   | `data_export`                                                           |
+| 数据库单元格、行、列编辑与列语义                 | `data_*`                                                                |
+| 图节点、Pin、连接、常量编辑，Pin 重置与断开连接  | `graph_*_nodes`、`graph_*_connections`、`graph_*_constants`             |
+| 函数签名编辑                                     | `graph_update_function_signature`                                       |
+| 运行整图、运行当前节点、运行到当前节点           | `graph_execute`（`nodeId` 与 `mode`）                                   |
+| 查看结果                                         | `result_*`、`ui_open`                                                   |
+| Chart 设置                                       | `chart_inspect`、`chart_update`                                         |
+| 文档与思维导图编辑                               | `document_*`、`mind_*`                                                  |
+| 添加节点面板                                     | `catalog_search_nodes`、`catalog_inspect_nodes`                         |
+
+故意不提供的操作：打开、关闭或另存项目（Harness 会话属于当前项目）；窗口布局、分栏、主题与侧栏
+显示；在系统文件管理器中显示；设置、模型供应商与插件管理；剪贴板。停止运行由取消当前 Harness
+回合完成，`graph_execute` 等待运行终态，因此没有单独的停止工具。
 
 界面意图契约由共享的 `yss-ui-contract` 拥有，GUI 与 Harness 共用 Application presentation。
 Harness 的 `openResult` 意图接收结果工具给出的完整 `resultRef`；工具层转换为 UI owner 的内部来源标识。
@@ -240,13 +270,13 @@ Harness 的 `openResult` 意图接收结果工具给出的完整 `resultRef`；�
 节点、连接和常量写入均在 Application 适配到现有 Graph 原子事务，提交整个当前图并保留一个撤销步骤。
 `createdNodes`、`createdPorts`、`createdConstants` 是提交时实际分配的映射；复制时节点映射以原节点 ID 为键，
 Pin 映射以原端口地址文本为键，值仍是可直接传给工具的真实端点。映射随 Project 幂等回执保留，重放不重新分配。
-`update_nodes` 省略标签表示保留，显式 null 清空；Pin 缩减按 owner 顺序保留前面的实例并报告断连。
-`update_connections` 先在候选中释放本批所选连接，再整体校验新端点，因此可交换已占用输入并保留连接 ID。
+`graph_update_nodes` 省略标签表示保留，显式 null 清空；Pin 缩减按 owner 顺序保留前面的实例并报告断连。
+`graph_update_connections` 先在候选中释放本批所选连接，再整体校验新端点，因此可交换已占用输入并保留连接 ID。
 常量类型和值复用 Data Contract，整数以带标签的十进制字符串传输。列表不返回大值；定向读取的 `valuePath`
 可选择嵌套对象或列表，文本按 Unicode 字符续读，表格按列和行分页。分页内容不能作为完整常量回写。
 模型工具和内部编辑批次共用 `ConstantDeclaration`、`ConstantUpdate` 及按常量 ID 删除的契约。
 Application 只通过同一类型化常量入口创建和更新，不另接收未标记原始 JSON 值或推断常量类型。
-`apply_graph_edit` 与 `save_graph` 已从模型目录、角色工具集及可调用 schema 移除。内部批量编辑与保存用例继续服务明确工具；已存账本仍按原名称投影业务参数，历史可读不代表工具仍可调用。函数签名分支继续保留。
+`graph_apply_edit` 与 `graph_save` 已从模型目录、角色工具集及可调用 schema 移除。内部批量编辑与保存用例继续服务明确工具；已存账本仍按原名称投影业务参数，历史可读不代表工具仍可调用。函数签名分支继续保留。
 
 数据库读取参数只接受 `database: {kind: "database", id}`，由 Core 将 Worker 已获准的原读取基线绑定到内部
 `DatabaseReadRequest`；首次读取由 Application 的原查询 gate 建立基线。四种读取结果均推进同一个观察表，
@@ -256,9 +286,9 @@ schema 默认 50 列、最大 100 列；行页默认 20 行、最大 1000 行，
 并列值按显示顺序及 rowId 定位。过滤后的总数未知时为 null，分页仍返回实际 `hasMore` 与 `nextOffset`。
 画像只运行明确选择的指标组；省略的指标组不会计算。
 
-`inspect_result` 与界面复用 Application 的有界 `query_result_projection` 和共享 `result_encoding` 映射，返回 `ResultValueInspection::Json`。内联结果受投影展开预算及 64 KiB 编码上限约束，超限明确拒绝，不静默裁剪。原生报告使用概览、参数目录与表引用，统计数据按表引用继续读取。普通结果字段、嵌套对象与文本没有 AI 专用白名单或截断规则。
+`result_inspect` 与界面复用 Application 的有界 `query_result_projection` 和共享 `result_encoding` 映射，返回 `ResultValueInspection::Json`。内联结果受投影展开预算及 64 KiB 编码上限约束，超限明确拒绝，不静默裁剪。原生报告使用概览、参数目录与表引用，统计数据按表引用继续读取。普通结果字段、嵌套对象与文本没有 AI 专用白名单或截断规则。
 
-`inspect_result` 接受完整的 opaque `resultRef`；DataFrame、DataSeries 和内存数列只返回表引用与分页 schema，不读取数据行。`read_result_table` 接受完整 `tableRef`，按列选择及行范围读取。行页默认 20、最大 1000，列页默认 50、最大 100；响应分别携带实际行页和列页。关系选列在读取数据前下推至原查询 owner，未知列或重复列明确拒绝。项目会话、结果可用性、取消和 deadline 检查继续生效。
+`result_inspect` 接受完整的 opaque `resultRef`；DataFrame、DataSeries 和内存数列只返回表引用与分页 schema，不读取数据行。`result_read_table` 接受完整 `tableRef`，按列选择及行范围读取。行页默认 20、最大 1000，列页默认 50、最大 100；响应分别携带实际行页和列页。关系选列在读取数据前下推至原查询 owner，未知列或重复列明确拒绝。项目会话、结果可用性、取消和 deadline 检查继续生效。
 
 结构化统计结果的数组保持表引用，包括小数组、空数组和分页内的嵌套数组。完整引用在原投影生成位置编码，用户数据中的 `resultRef`、`tableRef`、`part` 等字段保持原值，不做递归键名替换。模型不接触内部会话和表路径，也不拼接引用。编码只包含原 ResultStore 身份与原表选择，不引入身份映射表、结果租约或第二份缓存。
 
@@ -266,7 +296,7 @@ Contract 中的结果引用通过 `hex` 编解码会话和表选择的 UTF-8 字
 长度限制和完整引用格式校验；非法 UTF-8 或非规范引用继续拒绝。
 Core 的工具幂等、任务、技能和知识摘要也由 `hex` 编码；领域分隔及摘要输入仍归各自 owner。
 
-`list_graph_results` 只列出当前有效输出，可按节点、输出 Pin、运行筛选并分页；指定运行也不返回仅由报告租约持有的旧结果。读取回执区分 `currentValid` 与显式租约持有的 `retained`，后者不进入结果目录。重跑准入或输入失效移除相关旧输出，失败、取消与撤销均不恢复。运行状态、过期会话、已回收结果和不存在的表分别反馈；读取永不触发重算。Worker 授权、委派和历史回放使用同一完整业务引用。
+`result_list` 只列出当前有效输出，可按节点、输出 Pin、运行筛选并分页；指定运行也不返回仅由报告租约持有的旧结果。读取回执区分 `currentValid` 与显式租约持有的 `retained`，后者不进入结果目录。重跑准入或输入失效移除相关旧输出，失败、取消与撤销均不恢复。运行状态、过期会话、已回收结果和不存在的表分别反馈；读取永不触发重算。Worker 授权、委派和历史回放使用同一完整业务引用。
 
 Model-facing schema 来自 `model::CapabilityInput` 所用业务参数类型。
 模型不填写 revision/sessionId、图 hash、条件查询 token 或幂等 key。
@@ -288,25 +318,25 @@ Worker 压缩和续接通过完整账本重建这些依据，Manager 的新读�
 Harness 内部不以任意 JSON 代替 request/result 类型。每次调用先写 running ledger record，再由 executor 分派到 Core KnowledgeService 或 Application Gateway，最后持久化成功 result 或 structured failure。两条路径共用授权、取消、deadline、计时和事件收尾；idempotency 命中已有 terminal record 时返回既有 outcome，而不是重复执行。
 已解码、已授权请求的业务参数校验失败也记录调用账本和开始/失败事件，不进入实际资源操作；保留校验字段与范围，便于模型修正及界面追踪。
 
-`list_resources` 复用 Project 的 `read_resource_catalog`，沿用图、Chart、Mind、Doc 的路径扫描与数据库声明身份，
+`project_list_resources` 复用 Project 的 `read_resource_catalog`，沿用图、Chart、Mind、Doc 的路径扫描与数据库声明身份，
 不复制 ProjectData、读取文件正文或加载关闭的图。按 kinds 及不区分大小写的名称/路径 query 筛选后分页，默认 100 项、范围 1..100；
 `page` 返回实际数量、总数、hasMore 和 nextOffset。返回前重验 Project 索引依据，失败或变化返回 typed failure。
 模型条目包含 `resource` 和显示名称；内部投影另有资源与 Project publication revision。新的图查询使用返回的完整引用作为 `graph`，
 其 schema 仅接受事件图或函数图。显式消息引用解析使用同一完整目录，不受模型分页限制。
 
-`inspect_resource` 也走这条轻量目录；数据库 dirty 状态独立查询其编辑 owner，不读取行数据。
+`project_inspect_resource` 也走这条轻量目录；数据库 dirty 状态独立查询其编辑 owner，不读取行数据。
 其内部元信息仅附带 Runtime 已捕获的运行和 schema 版本，用于核对工作流或历史观察；模型投影不包含这些字段。
 关闭图的元信息允许没有编辑会话身份；首次打开在相同资源 revision 上补齐会话，之后继续严格比较完整依据。
 修改回执只附带与实际提交版本一致的元信息，并推进 Core 授权和历史观察。并发变化或查询失败不会把已提交操作改写成失败，
 也不会用较新的元信息覆盖提交基线；缺失的状态由后续明确读取补齐。
 
-`inspect_graph` 的公开输入只有 `graph`，结果包含 `ready`、全图数量及现有运行状态；运行来自原 Execution 恢复投影，
+`graph_inspect` 的公开输入只有 `graph`，结果包含 `ready`、全图数量及现有运行状态；运行来自原 Execution 恢复投影，
 并标注是否对应当前语义输入。该工具不附节点、Pin、常量或结果值。
-`find_nodes` 先按名称/标题/ID query、精确 typeIds 和 nodeIds 筛选，再分页读取摘要。
-`inspect_nodes` 按 nodeIds 与 fields 读取 parameters、ports、schema、options，默认 parameters 和 ports；
+`graph_search_nodes` 先按名称/标题/ID query、精确 typeIds 和 nodeIds 筛选，再分页读取摘要。
+`graph_inspect_nodes` 按 nodeIds 与 fields 读取 parameters、ports、schema、options，默认 parameters 和 ports；
 portOffset/portLimit 按每个节点应用，columnOffset/columnLimit 按每个 Pin 的 schema 应用。
 未请求的 schema 省略，`schemaKnown:false` 表示未知，不返回伪造的空列集合。
-`find_connections` 组合节点及精确 Pin 条件，返回它们的交集和实际连接端点。
+`graph_search_connections` 组合节点及精确 Pin 条件，返回它们的交集和实际连接端点。
 公开 `page`、`portPage` 和 `schemaPage` 包含实际范围、总数、hasMore 和 nextOffset；未读取内容仍是未知。
 Worker 的分页读取由调用层核对资源与语义依据，冲突页不作为成功结果进入模型上下文。
 
@@ -314,17 +344,17 @@ Worker 的分页读取由调用层核对资源与语义依据，冲突页不作�
 `ifUnchanged` 且标识匹配时只返回当前基线、数量及 `content.kind: unchanged`，不重复发送正文。
 本地未保留该查询内容时不能使用条件读取；改变查询范围、页码、图版本或语义依赖都不会误命中。
 它不维护另一份图缓存，也不改变编辑/执行的权限或版本准入。内部 `view: full` 继续为原编辑与函数用例提供完整 `GraphInspection`，
-不属于公开 `inspect_graph` 输入。
+不属于公开 `graph_inspect` 输入。
 
-`inspect_resource` 只接受 resource，不再提供 graphView、metadataOnly 或正文分页参数。
-图概览走 `inspect_graph`，局部筛选走 `find_nodes` / `inspect_nodes` / `find_connections`。
+`project_inspect_resource` 只接受 resource，不再提供 graphView、metadataOnly 或正文分页参数。
+图概览走 `graph_inspect`，局部筛选走 `graph_search_nodes` / `graph_inspect_nodes` / `graph_search_connections`。
 函数资源的既有签名通过 `content.kind: function` 返回，仍可用于范围外的签名编辑；运行数据由结果工具独立读取。
 Application 的 `automation/graph/inspection.rs` 从同一次捕获的编辑投影生成查询结果，完整快照和
 局部查询复用端口/常量映射；Rig 工具说明及角色提示引导按需读取并复用编辑增量。
 
 资源命令由 Application 的 `automation/resources` 统一分发，调用现有 Graph、Chart、Mind、Doc
 和 Database 用例。名称、路径、类型、树约束与持久化仍由这些 owner 校验；不另建 Harness 文档。
-`inspect_resource` 的内部回执返回 `ResourceVersion`，调用层保留文档编辑会话和资源 revision。写入拒绝过期版本；
+`project_inspect_resource` 的内部回执返回 `ResourceVersion`，调用层保留文档编辑会话和资源 revision。写入拒绝过期版本；
 函数签名另有自己的 revision，回执用 `revisionKind` 区分，不能拿签名版本代替图资源版本。
 图表基于读取版本的修改在 Project writer 内重验，GUI 独立 Save 保留原来的覆盖语义。
 Harness 的 `ChartSettings` 复用 `yss-chart-document::ChartType`；工具 schema 和文档序列化共享
@@ -332,10 +362,10 @@ Harness 的 `ChartSettings` 复用 `yss-chart-document::ChartType`；工具 sche
 
 Mind 的公开 DTO 归 Contract 的 `model/mind`，领域回执归 `mind.rs`；Application 的
 `automation/resources/mind` 只投影原 `MindTree` 查询和翻译原 `MindEdit` 命令。
-`inspect_mind` 默认读取相对深度 2、50 项大纲，最多深度 20、200 项；`find_topics`
+`mind_inspect` 默认读取相对深度 2、50 项大纲，最多深度 20、200 项；`mind_search_topics`
 执行大小写不敏感的正文子串搜索，默认 50、最多 100 项，并给出至多最后 32 个祖先/自身 ID，
 通过 `pathComplete` 明示路径是否完整。摘要最多 160 个 Unicode 字符，不返回整棵树正文。
-`inspect_topics` 每次最多 20 个主题，正文默认且最多 2048 个 Unicode 字符，子主题默认且最多 50 个；
+`mind_inspect_topics` 每次最多 20 个主题，正文默认且最多 2048 个 Unicode 字符，子主题默认且最多 50 个；
 两种分页各有实际范围与继续位置。读取保留原会话和版本，在返回前重验，模型投影不含同步信息。
 
 五种主题编辑每次最多 200 个请求项，仍通过 Project 的单次 File Edit 提交。
@@ -343,18 +373,18 @@ Mind 的公开 DTO 归 Contract 的 `model/mind`，领域回执归 `mind.rs`；A
 更新中省略 reference 保留引用，null 明确清空；移动按整批最终关系校验，不因暂时父关系拒绝合法交换。
 删除包括全部后代且不能删除资源根；复制子树分配全新 ID，外部引用原样保留，失效外部目标不等同于坏树。
 `mindEdit` 回执提供实际创建映射、影响主题、删除主题及 dirty；回执体积在提交前核对，非法批次不发布。
-Report 可写 Mind，其他角色仍受原只读边界约束。主题工具沿真实读写回执绑定版本，显式 `save_resource`
+Report 可写 Mind，其他角色仍受原只读边界约束。主题工具沿真实读写回执绑定版本，显式 `project_save_resource`
 完成持久化。
-`inspect_resource` 的模型参数由 `model::InspectResourceInput` 定义；正文分页由各领域工具声明单位、范围及继续位置。
-Markdown 的范围按 Unicode 字符计数；局部编辑使用 `replace_document_text` 的 replacements 列表，
+`project_inspect_resource` 的模型参数由 `model::InspectResourceInput` 定义；正文分页由各领域工具声明单位、范围及继续位置。
+Markdown 的范围按 Unicode 字符计数；局部编辑使用 `document_replace_text` 的 replacements 列表，
 在同一个捕获正文中按顺序匹配唯一原文。空原文、零匹配或多处匹配拒绝整个批次，返回字段与修正指引，
 不提交前面的操作；成功后仍通过原 Doc owner 按捕获版本原子提交并显式保存。未读正文保持不变。
 
 六个公开文档工具的 DTO 归 `model/document`，Application 的 `automation/resources/document`
-调用原 Doc 快照、`DocView` 和 File Edit。`inspect_document` 默认 50、最多 100 个标题，正文长度
-独立于大纲页；`read_document` 默认 8192、最多 16384 个 Unicode 字符，在可行时沿完整块边界结束，
+调用原 Doc 快照、`DocView` 和 File Edit。`document_inspect` 默认 50、最多 100 个标题，正文长度
+独立于大纲页；`document_read` 默认 8192、最多 16384 个 Unicode 字符，在可行时沿完整块边界结束，
 返回实际绝对范围、所选范围、相对分页位置及本页是否覆盖整个所选范围。
-`search_document` 是大小写敏感的原文子串搜索，包含重叠命中，默认 20、最多 100 项；
+`document_search` 是大小写敏感的原文子串搜索，包含重叠命中，默认 20、最多 100 项；
 每侧上下文默认 120、最多 500 个字符。若 JSON 转义导致结果超出共享预算，减少本页条目并返回实际继续位置。
 
 章节引用包含标题序号和字符位置，区分重复标题。Core 在现有 ResourceObservations 中从读取回执
@@ -362,19 +392,19 @@ Markdown 的范围按 Unicode 字符计数；局部编辑使用 `replace_documen
 偷偷换基线。旧引用或 GUI 并发修改会被拒绝，重新读取首张完整大纲页才能刷新定位。
 模型无需接触版本、会话或校验摘要。该观察投影不拥有正文或持久化 AST。
 
-`write_document` 表达明确的整篇初始化/替换；`append_document` 原样追加，包括调用者提供的换行。
+`document_write_text` 表达明确的整篇初始化/替换；`document_append_text` 原样追加，包括调用者提供的换行。
 读页大小和原 Graph 的 JSON 输入预算不限制完整文档写入，实际大小仍由 Doc owner 的 `MAX_FILE_BYTES`
 约束。`documentEdit` 回执返回每步实际 Unicode 变更范围、最终字符数和 dirty，成功后继续通过
-`save_resource` 保存。Report 角色没有通用内容编辑工具；报告提示和内置写作 Skill 使用这些明确工具。
+`project_save_resource` 保存。Report 角色没有通用内容编辑工具；报告提示和内置写作 Skill 使用这些明确工具。
 数据读取按行分页并返回稳定 row IDs、物理类型、列语义及历史状态；复制通过既有导出/导入 owner
 保留数据和 Schema，产生新的数据库身份。导出在替换目标前重验版本，发布结果不确定时不自动重试。
 
-Doc/Mind 修改保留现有 Edit/Save 生命周期；`undo_resource` / `redo_resource` 只支持已有历史的 Graph 与 Database，要求 Edit 授权，并由调用层绑定原读取版本。通用模型编辑不再接受 GraphHistory 或数据库 Undo/Redo 分支。账本记录明确的公开工具名；实际历史与保存边界仍归原 owner，Graph 历史导航不自动保存。
+Doc/Mind 修改保留现有 Edit/Save 生命周期；`project_undo_resource` / `project_redo_resource` 只支持已有历史的 Graph 与 Database，要求 Edit 授权，并由调用层绑定原读取版本。通用模型编辑不再接受 GraphHistory 或数据库 Undo/Redo 分支。账本记录明确的公开工具名；实际历史与保存边界仍归原 owner，Graph 历史导航不自动保存。
 
-数据库行修改使用三个明确工具，`database` 引用在 schema 中只允许 Database。Data 角色还须持有该资源的 Edit 授权，Core 在既有资源 envelope 中补齐此前观察版本；成功回执继续推进同一观察状态。`insert_rows` 按可选 `beforeRowId` 或追加位置初始化行，省略列为 null；`update_cells` 拒绝重复 rowId/column，null 显式清空；`delete_rows` 只接收稳定行 ID。每批最多 200 个请求项，Store 在原准备/提交路径验证整个批次，形成一个 Runtime 历史单位；这不是计算行数限制。公开回执的 `databaseEdit` 返回实际插入 ID、提交项数、dirty 和历史可用状态，不返回行值或内部版本。通用 `edit_resource` 不再提供单行插入、单元格修改或按页位置删除分支。
+数据库行修改使用三个明确工具，`database` 引用在 schema 中只允许 Database。Data 角色还须持有该资源的 Edit 授权，Core 在既有资源 envelope 中补齐此前观察版本；成功回执继续推进同一观察状态。`data_create_rows` 按可选 `beforeRowId` 或追加位置初始化行，省略列为 null；`data_update_cells` 拒绝重复 rowId/column，null 显式清空；`data_delete_rows` 只接收稳定行 ID。每批最多 200 个请求项，Store 在原准备/提交路径验证整个批次，形成一个 Runtime 历史单位；这不是计算行数限制。公开回执的 `databaseEdit` 返回实际插入 ID、提交项数、dirty 和历史可用状态，不返回行值或内部版本。通用 `graph_update_function_signature` 不再提供单行插入、单元格修改或按页位置删除分支。
 
 五个列工具使用同一 Database 授权与回执路径，每批最多 200 个列目标。新增列初值为空，重命名支持最终名称交换且保留身份；删除必须保留至少一列。物理类型名称由原 Arrow owner 解析，每列转换要求显式 `force`：允许无法表示的值转为空，但不能绕过语义约束。语义修改只更新元数据并验证全部当前值。批次失败不提交，成功只产生一个撤销单位；`databaseEdit.columnNames` 返回本次提交的目标名称（重命名后的名称或已删除名称）。Data 角色没有通用内容编辑工具。
-图表设置修改立即持久化。Chart 没有 Rust 未保存缓冲区，`save_resource` 的 Chart 保存
+图表设置修改立即持久化。Chart 没有 Rust 未保存缓冲区，`project_save_resource` 的 Chart 保存
 确认已持久化版本，不读取或保存独立的前端配置草稿；后续发布继续保留前端未提交的修改。
 资源回执返回实际变化、删除标识、移动和创建的节点 ID，不猜测新名称对应的路径。
 Gateway 将真实提交送入既有 Project 事件发布入口，使侧栏和编辑器通过同一发布协调器刷新。
@@ -386,7 +416,7 @@ Application 的 `invoke_automation_capability` 是同步业务入口。`yss-appl
 
 图操作由 `ApplicationCapabilityGateway` 直接调用 Rust Application，读取 Project 当前编辑版本并核对 revision/hash。编辑、只读校验、执行与保存使用同一状态；校验返回就绪状态和诊断，Execute 在后端准备匹配计划。Rust 返回真实 capability result，Graph Activity 通知前端更新编辑投影与运行状态；前端不生成 tool result。
 
-`execute_graph` 使用 graph 与可选 nodeId/mode；未指定节点时全图重算，指定节点时采用 `currentInputs` / `dependencies`
+`graph_execute` 使用 graph 与可选 nodeId/mode；未指定节点时全图重算，指定节点时采用 `currentInputs` / `dependencies`
 模式，分别消费当前已求值输入或补算必要依赖，节点默认 dependencies。局部执行不要求无关分支就绪。输入缺失或过期返回
 `input_result_unavailable` 与源位置；内部查询计划不计作已发布的可查看结果。
 
@@ -401,22 +431,22 @@ Capability invocation identity 由 ledger 已保存的 idempotency key 确定，
 后续连接使用该别名，回执交付真实端口地址。序号只用于本批别名，不进入文档连接身份。
 参数合并、未完成编辑、资源绑定及端口数量限制与 GUI 共用 Graph Editor 和 Protocol。
 
-`browse_nodes` 按名称、别名、技术词及类别筛选，返回不含配置的分页类型摘要和资源绑定；
-搜索保留 `to_numeric` 与完整 type ID，不拆解标识符；ASCII 词匹配边界，避免 `bin` 命中 `Durbin` 等词中间，中文仍按子串匹配。实际范围与继续位置由 `page` 交付。已知类型可直接用 `inspect_node_type` 批量读取，无须先搜索；复用本轮已读定义。它返回 `configurationSchema`，描述创建请求的
+`catalog_search_nodes` 按名称、别名、技术词及类别筛选，返回不含配置的分页类型摘要和资源绑定；
+搜索保留 `to_numeric` 与完整 type ID，不拆解标识符；ASCII 词匹配边界，避免 `bin` 命中 `Durbin` 等词中间，中文仍按子串匹配。实际范围与继续位置由 `page` 交付。已知类型可直接用 `catalog_inspect_nodes` 批量读取，无须先搜索；复用本轮已读定义。它返回 `configurationSchema`，描述创建请求的
 `parameters` 和 `portCounts`，另附端口模板、方向和固定/可变/派生分类。Schema 从冻结 Registry
 中的 Node Protocol 生成，Application 补充本地化文本；仅为指定且可创建的类型生成详细定义。
 省略参数保留默认值或未完成配置，Null 表示重置；`x-yss-requiredForExecution` 标明运行所需字段，
 `x-yss-activeWhen` 标明条件字段，`x-yss-linkedPorts` 表示共享数量的模板。
 固定值、枚举、数值范围、列列表和无损筛选字面量都由对应类型投影，旧的参数定义 DTO 不再并行返回。
 具体节点 Schema 由目录发现提供，不把整个目录嵌入每次模型请求；后端继续通过 Graph 校验实际实参。
-`update_nodes.removePins` 按真实地址删除可变 Pin 并保留其他 Pin 身份，与 portCounts 互斥；连接后的选项使用 `inspect_nodes.fields: ["options"]` 获取。
+`graph_update_nodes.removePins` 按真实地址删除可变 Pin 并保留其他 Pin 身份，与 portCounts 互斥；连接后的选项使用 `graph_inspect_nodes.fields: ["options"]` 获取。
 无需先创建节点、连接或运行才能查询；缺失类型明确返回业务失败。工具集成测试与真实模型任务验收分别记录。
 
-`inspect_graph` 的初次概览复用同一次捕获的文档和解析投影，先移除编辑器说明、参数选项、列 schema 和无关端口详情，再按实际 UTF-8 JSON 字节数检查 32 KiB 的结构预算；使用共享的计数 writer，不额外生成完整编码缓冲区。`overview.detail=configuration` 提供全部节点、已保存参数及当前可见默认值、字面量覆盖和连接；超限时 `topology` 保留全部节点身份和连接，省略参数及字面量；仍超限时 `counts` 省略结构，保留外层计数、就绪和运行状态，转向定向查询。省略层级明确，不截断 JSON，也不以空数组暗示图中无节点；常量正文和运行数据仍单独读取。项目打开不自动读取所有图，只在任务涉及该图且缺少结构事实时读取一次并复用。
+`graph_inspect` 的初次概览复用同一次捕获的文档和解析投影，先移除编辑器说明、参数选项、列 schema 和无关端口详情，再按实际 UTF-8 JSON 字节数检查 32 KiB 的结构预算；使用共享的计数 writer，不额外生成完整编码缓冲区。`overview.detail=configuration` 提供全部节点、已保存参数及当前可见默认值、字面量覆盖和连接；超限时 `topology` 保留全部节点身份和连接，省略参数及字面量；仍超限时 `counts` 省略结构，保留外层计数、就绪和运行状态，转向定向查询。省略层级明确，不截断 JSON，也不以空数组暗示图中无节点；常量正文和运行数据仍单独读取。项目打开不自动读取所有图，只在任务涉及该图且缺少结构事实时读取一次并复用。
 
 内部 `GraphEditReceipt` 保存图修订、graph hash、`clientKey`、创建元素的身份映射及本次提交的 `changes`。节点、端口、参数、连接和常量与内部检查共用完整事实结构，包含派生列和端口，连接包含实际顺序。删除节点、连接和常量明确返回 ID；未变化实体省略。`ready` 和 `diagnostics` 是提交时的完整状态，替换此前诊断。所有图编辑操作统一比较提交前后解析投影，覆盖下游连带变化，不根据模型请求猜测结果。
 
-模型编辑回执由 Contract 统一投影，实时调用与历史回放使用同一结构。变化节点保留 ID、类型、标签、位置、参数键值及所有端口的地址、方向、类型、孤立状态、连接数和字面量；不重复发送节点编辑器元数据、参数选项或列 schema。连接、移除项、实际创建映射和完整诊断仍返回；需要选项或列时使用 `inspect_nodes` 定向读取，省略不表示空集合。内部完整回执仍用于恢复原提交。
+模型编辑回执由 Contract 统一投影，实时调用与历史回放使用同一结构。变化节点保留 ID、类型、标签、位置、参数键值及所有端口的地址、方向、类型、孤立状态、连接数和字面量；不重复发送节点编辑器元数据、参数选项或列 schema。连接、移除项、实际创建映射和完整诊断仍返回；需要选项或列时使用 `graph_inspect_nodes` 定向读取，省略不表示空集合。内部完整回执仍用于恢复原提交。
 
 参数事实中的 `options: null` 表示候选尚未知或不适用，`options: []` 表示已知空候选集；固定枚举直接返回选项。`contextHint` 提供来自同一语义投影的输入结构提示。配置提交成功不表示可以执行，模型继续读取 `ready` 与诊断。
 
@@ -426,7 +456,7 @@ Application 复用打开图时的基线和编辑流程的最终解析投影，�
 
 内部常量检查和编辑差分都包含覆盖完整内容的 `contentHash`；模型投影只返回名称、类型、展示元数据和可展示值。长文本、列表或表格等值即使以 `valueIncluded=false` 只暴露元数据，内容改变也会产生新的事实和差分，不因展示元数据相同而漏报。
 
-`execute_graph` 从本次 `RunGraphReceipt` 取得已发布结果引用，不在运行后重新查询当前图的结果索引。后续编辑、另一次运行或结果失效不会改变原回执。`resultCount` 是成功运行实际发布的结果数，失败时为 null；`resultsComplete` 明确区分完整列表和受能力条目上限约束的部分引用。结果引用不取得新的租约，后续读取仍检查实际可用性；部分列表不能当成该次运行的全部结果。
+`graph_execute` 从本次 `RunGraphReceipt` 取得已发布结果引用，不在运行后重新查询当前图的结果索引。后续编辑、另一次运行或结果失效不会改变原回执。`resultCount` 是成功运行实际发布的结果数，失败时为 null；`resultsComplete` 明确区分完整列表和受能力条目上限约束的部分引用。结果引用不取得新的租约，后续读取仍检查实际可用性；部分列表不能当成该次运行的全部结果。
 
 运行 `timing` 来自 Execution 的单调时钟，分别给出 admissionMs、runningMs、finalizationMs 和 elapsedMs。
 运行阶段包含调度、资源准备及物化，不等同于纯节点计算或工具往返时间；仍在运行时查询给出当前经过时间。
@@ -434,19 +464,19 @@ Application 复用打开图时的基线和编辑流程的最终解析投影，�
 
 所有改变状态的模型能力按各自 owner 返回事实：
 
-| 请求                       | 返回的提交或执行事实                                          | 后续读取条件                                                       |
-| -------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 节点、连接和常量写工具     | 创建 ID、受影响实体、删除 ID、就绪状态和诊断                  | 发生冲突或缺少业务事实                                             |
-| `save_resource`            | 原 owner 确认的资源及 dirty 状态                              | 后续状态变化或需要未掌握的内容                                     |
-| `execute_graph`            | 实际 run 状态、阶段耗时、失败位置及完整结果引用               | 通过 `inspect_result` 读取概览，`read_result_table` 读取所需数据页 |
-| `request_ui_intent`        | 意图身份和实际回执状态                                        | pending/claimed 时查询完成状态，不能把接受当成界面已执行           |
-| `propose_statistical_plan` | Harness 校验且持久化成功后返回 accepted 和实际记录的完整 plan | 计划正文可直接继续使用，不代表分析已经执行                         |
+| 请求                    | 返回的提交或执行事实                                          | 后续读取条件                                                       |
+| ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 节点、连接和常量写工具  | 创建 ID、受影响实体、删除 ID、就绪状态和诊断                  | 发生冲突或缺少业务事实                                             |
+| `project_save_resource` | 原 owner 确认的资源及 dirty 状态                              | 后续状态变化或需要未掌握的内容                                     |
+| `graph_execute`         | 实际 run 状态、阶段耗时、失败位置及完整结果引用               | 通过 `result_inspect` 读取概览，`result_read_table` 读取所需数据页 |
+| `ui_open`               | 意图身份和实际回执状态                                        | pending/claimed 时查询完成状态，不能把接受当成界面已执行           |
+| `analysis_propose_plan` | Harness 校验且持久化成功后返回 accepted 和实际记录的完整 plan | 计划正文可直接继续使用，不代表分析已经执行                         |
 
 节点、连接和常量写工具自动保存整个当前图文档，包括调用前已有的手动编辑，无需打开编辑器。
 它复用 Project 的文件事务，将文件、当前文档、保存指纹、可撤销历史及编辑回执作为一次提交；
 保存失败返回 `persistence_unavailable`，保留调用前的文件、文档和历史，不产生成功回执。
 成功后 dirty 为 false，批次仍可整体撤销；重试读取原回执，不重复修改或保存。
-校验和执行不隐式保存。显式 `save_resource` 用于用户要求单独保存现有编辑，复用正常 Save。
+校验和执行不隐式保存。显式 `project_save_resource` 用于用户要求单独保存现有编辑，复用正常 Save。
 图工具与桌面编辑共享 Project 编辑状态和历史，调用始终校验项目会话与编辑版本。
 
 GraphPortInspection 的 declared/instance 字段统一使用 camelCase，序列化、会话持久化读取与 capability schema 使用同一契约，不接受 snake_case 别名。
@@ -471,7 +501,7 @@ Host 的 `HarnessSessionAccess` 串行化绑定协调、对话选择和 session 
 提示只包含资源标识和读取要求，不包含内部版本、会话绑定或 hash。重新读取后该要求消失；忽略提示的委派仍被拒绝，
 不能把历史依据直接替换为最新版本以放行操作。
 
-`list_graph_results` / `execute_graph` 的每个结果交付完整 `resultRef`，模型原样传回即可。内部解析仍校验原执行会话与结果 ID；项目重启后的历史编号不能读取到新结果，过期引用返回 `RESULT_UNAVAILABLE` 失败码及 `reason: reference_expired`。
+`result_list` / `graph_execute` 的每个结果交付完整 `resultRef`，模型原样传回即可。内部解析仍校验原执行会话与结果 ID；项目重启后的历史编号不能读取到新结果，过期引用返回 `RESULT_UNAVAILABLE` 失败码及 `reason: reference_expired`。
 
 Turn 流程是：
 
@@ -501,7 +531,7 @@ Host 在 active-turn 锁内捕获当前 turn 的 cancellation token，释放锁�
 
 Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事实。计划区分 research question、analysis mode、study design、estimands、variable roles、candidate methods、selected workflow、diagnostics、robustness 和 reporting needs。
 
-当前 Assistant 的数据质量检查通过 DataAgent 的 `inspect_database_schema` 和 `profile_database` 能力执行。
+当前 Assistant 的数据质量检查通过 DataAgent 的 `data_inspect_schema` 和 `data_inspect_profile` 能力执行。
 
 统计计划未通过校验时，工具反馈具体失败原因与 MethodRegistry 的当前方法卡（方法 ID、研究设计、变量角色和诊断要求），供模型修正后重新提交；schema 解码失败返回字段、枚举、数值/长度范围及对应字段说明，不回显原始参数。`selectedWorkflow` 是不超过 128 UTF-8 字节的短工作流标识，不接收大段分析描述。工具、并发度和输出模式统一由 Core 的角色配置传入 Rig。
 
@@ -512,7 +542,7 @@ Harness 生成 typed Statistical Plan，而不是让 model 自由决定数值事
 - builtin、versioned Skill source 和 exact resolution；
 - builtin statistical knowledge 安装；
 - Tantivy BM25 检索、中英文分词、命中片段摘要和可核验 source citation；
-- 六个角色共用按需 `search_knowledge` / `read_knowledge` 工具；
+- 六个角色共用按需 `knowledge_search` / `knowledge_read` 工具；
 - SQLite persistence ports for sessions/events/ledger/knowledge。
 
 Skill 是包含指令正文的版本化方法包，manifest 记录 ID、版本和来源哈希。`SkillRegistry` 是当前内置方法包的来源，SQLite 不存储 Skill 安装包。当前内置 Skill 用于上下文预加载；执行权限由实际角色/任务范围和 Gateway 校验。内置 Knowledge source 是 authority；项目来源的正文 authority 仍为 Project，SQLite 只保存显式来源选择和检索快照。搜索索引可以重建。
@@ -521,7 +551,7 @@ Skill 是包含指令正文的版本化方法包，manifest 记录 ID、版本�
 
 Application 装配 `yss-harness-tantivy`，Core 只依赖中立索引端口。Tantivy 使用 BM25，标题与 scope/标签分别加权；英文按单词、中文按相邻双字分词，索引、查询和摘要使用同一 tokenizer，保留原始 UTF-8 偏移。这是字面检索，不承诺同义词或语义召回。Core 按 Unicode 字符切出重叠片段，Tantivy 先过滤可见文档、再选每份文档的最佳片段，最后限制结果数量，避免一份长文档占满结果。若命中在最终核验时失效，Core 排除已检查文档后继续查询，避免旧来源挤占当前有效结果。
 
-普通轮次不预先检索或把命中片段拼入用户消息。模型需要方法背景时调用 `search_knowledge`，再通过 `read_knowledge` 获取完整片段；两者使用原生工具结果并随账本重建历史。查询只接受文本、scope 与结果数量，读取只接受文档/片段定位；project binding、来源版本、hash 和索引缓存标记由后端处理，不进入模型 schema、返回结果或历史。Knowledge 文本始终是参考数据，不能授予权限或替代实际计算结果。
+普通轮次不预先检索或把命中片段拼入用户消息。模型需要方法背景时调用 `knowledge_search`，再通过 `knowledge_read` 获取完整片段；两者使用原生工具结果并随账本重建历史。查询只接受文本、scope 与结果数量，读取只接受文档/片段定位；project binding、来源版本、hash 和索引缓存标记由后端处理，不进入模型 schema、返回结果或历史。Knowledge 文本始终是参考数据，不能授予权限或替代实际计算结果。
 
 只有成功读取才产生 `KnowledgeCited`，搜索摘要不自动成为引用。完整引用身份保留在内部事件和桌面引用投影中，Manager 与 Worker 的引用均可从主会话展开；读取已删除、已变化或不可见的片段返回可重新搜索的业务失败。来源存储或索引暂时不可用作为工具失败反馈，账本与事件持久化失败仍保留运行错误语义。查询取消或到期通过同一工具生命周期关闭账本，不发布迟到引用。
 
@@ -542,6 +572,28 @@ Assistant 展开引用返回片段正文与可选原始资源定位，打开原�
 Host 初始化时通过内置 `SkillRegistry` 精确解析 `yssbi.statistics.statistical-report-writing@1.0.0`，将 ID、版本和原始规范作为独立 System 消息预加载到每次 ManagerAgent 和 ReportAgent 请求，位于基础工具策略之后、对话历史之前；source hash 仅用于内部校验，不发送给模型。Skill 的适用条件限定为生成、修改或续写统计报告，涵盖 Assistant 正文和 Doc 内容；无需按当前消息关键词猜测，也不会因后续修改省略“报告”一词而丢失规范。ReportAgent 复用同一写作 Skill，Manager 直接撰写统计正文时同样适用。当前没有模型侧 `load_skill` 工具；内置方法包由 Core 加载。新增 Skill 文件必须同时注册并接入上下文，单独添加文件不会生效。
 
 Hybrid/vector retrieval 和 remote Skill trust 尚未成为 current production contract。
+
+### Web and Python tools
+
+`web_search` / `web_fetch` 和 `python_*` 与知识工具一样由 Harness 执行，`is_harness_tool` 是它们的唯一判定。
+网络访问经 `WebAccessPort`，Application 用 [yss-harness-web](../yss-harness-web/src/web.rs) 实现：搜索后端为 Brave、
+Tavily 或用户自建的 SearXNG，在设置中选择，API key 保存在系统凭据存储；未配置时工具返回可读的
+`web_search_not_configured`。页面读取只接受公网 http(s) 地址，DNS 解析结果和每次重定向都会再次检查，拒绝
+回环、私有、链路本地等地址；HTML 转为纯文本后按固定窗口分页返回，模型用 `nextOffset` 继续读取并引用最终 URL。
+
+Python 经 `PythonPort`，Application 用 [yss-python](../yss-python/src/python.rs) 实现。安装包不附带 Python：优先使用
+uv（PATH 或 uv 默认安装目录），否则使用系统 Python 3 的 venv；两者都没有时工具返回安装说明。每个项目一个
+虚拟环境，放在应用数据目录中、按项目根路径区分；脚本位于 `<project>/scripts`，依赖记录在
+`scripts/requirements.txt`，新环境首次使用时按该文件安装。脚本运行时工作目录为 `scripts`，产出写入
+`YSSBI_OUTPUT_DIR`（`scripts/output`），结果列出本次新建或修改的文件绝对路径，表格再经 `data_import` 入库。
+进程使用独立进程组，到期或取消时终止整个进程树；长输出保留开头和结尾。
+
+### Approval
+
+`ToolEffect::Execute` 表示在用户机器上运行代码（`python_install_packages`、`python_run_script`）。Ask 模式不提供
+这类工具；Write 模式下每次调用先发出 `ApprovalRequested`，等待 `HarnessHost::resolve_approval`，再登记账本并开始
+计时，等待用户的时间不计入工具超时。用户可允许一次、在本项目内始终允许（仅保存在内存，重启后重新询问）
+或拒绝；拒绝记为 `approval_denied` 失败，取消回合等同拒绝并记为 `cancelled`。
 
 ## 8. Rig adapter
 
