@@ -36,7 +36,7 @@ lru = { version = "0.18.5", default-features = false }
 url = "2.5"
 arrow = { version = "=59.3.0", default-features = false, features = ["ipc", "csv", "chrono-tz"] }
 arrow-schema = { version = "=59.3.0", features = ["serde"] }
-parquet = { version = "=59.3.0", default-features = false, features = ["arrow", "snap", "zstd"] }
+parquet = { version = "=60.0.0", default-features = false, features = ["arrow", "snap", "zstd"] }
 datafusion = { version = "=55.0.0", default-features = false, features = ["parquet", "sql", "datetime_expressions", "string_expressions", "unicode_expressions", "nested_expressions"] }
 chrono = "0.4.41"
 mathlex = "=0.4.2"
