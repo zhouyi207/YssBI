@@ -205,7 +205,7 @@ impl HarnessExtension for AssistantExtension {
         Some(AgentProfile {
             role: role.id(),
             instructions,
-            tools: tools::role_specs(definition),
+            tools: tools::role_specs(definition, &self.shared.methods),
             tool_concurrency: definition.tool_concurrency(),
             delegates: definition.delegates(),
             output_mode: definition.output_mode(),

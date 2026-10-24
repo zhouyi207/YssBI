@@ -8,3 +8,5 @@ pub const MAX_LOCALE_BYTES: usize = 32;
 pub const AUTOMATION_LOCALE: &str = "en-US";
 
 pub const MAX_CATALOG_RESULTS: u16 = 100;
+/// Search pages stay short; inspect known type IDs together instead of paging broad lists.
+pub const MAX_CATALOG_SEARCH_RESULTS: u16 = 30;

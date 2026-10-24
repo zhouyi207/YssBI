@@ -96,6 +96,10 @@ pub(super) fn browse_nodes(
             (score > 0).then_some((score, item))
         })
         .collect::<Vec<_>>();
+    // A word shared by many nodes would otherwise list the whole catalog; keep the
+    // matches that are close to the best one.
+    let best = matches.iter().map(|(score, _)| *score).max().unwrap_or(0);
+    matches.retain(|(score, _)| *score * 2 >= best);
     matches.sort_by(|(left_score, left), (right_score, right)| {
         right_score
             .cmp(left_score)
@@ -108,15 +112,16 @@ pub(super) fn browse_nodes(
     let matches = matches
         .into_iter()
         .skip(offset)
-        .take(usize::from(request.limit))
+        .take(usize::from(
+            request
+                .limit
+                .min(yss_assistant_contract::MAX_CATALOG_SEARCH_RESULTS),
+        ))
         .map(|(_, item)| NodeCatalogMatch {
             type_id: item.node_type_id.to_string(),
             title: item.title.to_string(),
             category_id: item.category_id.to_string(),
-            summary: item
-                .documentation
-                .as_ref()
-                .map(|text| text.chars().take(240).collect()),
+            summary: item.documentation.as_deref().and_then(catalog_summary),
             resource_path: item
                 .resource_path
                 .as_ref()
@@ -181,34 +186,69 @@ pub(super) fn inspect_node_type(
     })
 }
 
+/// Names weigh more than descriptive search text. Categories are filtered with the
+/// `category` argument, not matched as words: most statistics nodes share one prefix.
 fn catalog_item_score(item: &LocalizedCatalogItem, query: &str, terms: &[&str]) -> usize {
     if terms.is_empty() {
         return 1;
     }
-    let fixed_fields = [
-        item.node_type_id.as_ref(),
-        item.title.as_ref(),
-        item.category_id.as_ref(),
-        item.style_id.as_ref(),
-    ];
-    let fields = fixed_fields
-        .into_iter()
-        .chain(item.aliases.iter().map(AsRef::as_ref))
-        .chain(item.technical_terms.iter().map(AsRef::as_ref))
-        .chain(item.backend_search_text.iter().map(AsRef::as_ref))
-        .chain(item.resource_names.iter().map(AsRef::as_ref))
-        .map(str::to_lowercase)
-        .collect::<Vec<_>>();
-    let exact = usize::from(
-        fields
-            .iter()
-            .any(|value| contains_search_term(value, query)),
-    ) * 100;
+    let lower =
+        |values: &mut dyn Iterator<Item = &str>| values.map(str::to_lowercase).collect::<Vec<_>>();
+    let names = lower(
+        &mut [item.node_type_id.as_ref(), item.title.as_ref()]
+            .into_iter()
+            .chain(item.aliases.iter().map(AsRef::as_ref))
+            .chain(item.resource_names.iter().map(AsRef::as_ref)),
+    );
+    let terms_text = lower(&mut item.technical_terms.iter().map(AsRef::as_ref));
+    let text = lower(&mut item.backend_search_text.iter().map(AsRef::as_ref));
+    let found = |fields: &[String], term: &str| {
+        fields.iter().any(|value| contains_search_term(value, term))
+    };
+    let exact = if found(&names, query) {
+        100
+    } else if found(&terms_text, query) {
+        60
+    } else {
+        0
+    };
     exact
         + terms
             .iter()
-            .filter(|term| fields.iter().any(|value| contains_search_term(value, term)))
-            .count()
+            .map(|term| {
+                if found(&names, term) {
+                    4
+                } else if found(&terms_text, term) {
+                    3
+                } else if found(&text, term) {
+                    1
+                } else {
+                    0
+                }
+            })
+            .sum::<usize>()
+}
+
+/// The first sentence of a node's documentation, without its Markdown heading.
+fn catalog_summary(documentation: &str) -> Option<String> {
+    const MAX_CHARACTERS: usize = 120;
+    let paragraph = documentation
+        .split("\n\n")
+        .map(str::trim)
+        .find(|paragraph| !paragraph.is_empty() && !paragraph.starts_with('#'))?;
+    let flat = paragraph.split_whitespace().collect::<Vec<_>>().join(" ");
+    let sentence_end = flat
+        .char_indices()
+        .find(|(_, character)| matches!(character, '。' | '；' | '.' | ';'))
+        .map_or(flat.len(), |(index, character)| {
+            index + character.len_utf8()
+        });
+    let sentence = &flat[..sentence_end];
+    let mut summary: String = sentence.chars().take(MAX_CHARACTERS).collect();
+    if sentence.chars().count() > MAX_CHARACTERS {
+        summary.push('…');
+    }
+    Some(summary)
 }
 
 fn contains_search_term(value: &str, term: &str) -> bool {

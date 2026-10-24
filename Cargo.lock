@@ -12984,6 +12984,7 @@ dependencies = [
  "yss-harness-core",
  "yss-harness-tantivy",
  "yss-project-identity",
+ "yss-project-layout",
 ]
 
 [[package]]

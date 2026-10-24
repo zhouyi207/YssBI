@@ -16,6 +16,7 @@ tracing.workspace = true
 yss-assistant-contract = { path = "../yss-assistant-contract" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-harness-contract = { path = "../yss-harness-contract" }
+yss-project-layout = { path = "../yss-project-layout" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }

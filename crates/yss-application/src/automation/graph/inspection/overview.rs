@@ -2,7 +2,7 @@
 use super::*;
 use crate::result_encoding::json_fits_budget;
 
-const MAX_OVERVIEW_BYTES: usize = 32 * 1024;
+const MAX_OVERVIEW_BYTES: usize = 20 * 1024;
 
 pub(super) fn project(
     document: &GraphDocument,

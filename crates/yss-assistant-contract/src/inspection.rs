@@ -14,13 +14,14 @@ pub struct BrowseNodesRequest {
     pub category: Option<String>,
     #[serde(default)]
     pub offset: usize,
+    /// Larger values return at most 30 matches.
     #[serde(default = "default_catalog_page_limit")]
-    #[schemars(range(min = 1, max = 100))]
+    #[schemars(range(min = 1))]
     pub limit: u16,
 }
 
 fn default_catalog_page_limit() -> u16 {
-    20
+    10
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]

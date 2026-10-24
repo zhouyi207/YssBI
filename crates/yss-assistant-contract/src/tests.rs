@@ -112,12 +112,12 @@ fn identities_and_requests_reject_ambiguous_or_unbounded_input() {
         offset: 0,
         query: "regression".to_owned(),
         locale: "en-US".to_owned(),
-        limit: MAX_CATALOG_RESULTS + 1,
+        limit: 0,
     });
     assert_eq!(
         request.validate(),
         Err(CapabilityContractError::InvalidLimit {
-            maximum: MAX_CATALOG_RESULTS,
+            maximum: MAX_CATALOG_SEARCH_RESULTS,
         })
     );
 }

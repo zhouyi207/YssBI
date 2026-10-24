@@ -46,7 +46,7 @@ pub fn capability_result(result: &AutomationCapabilityResult) -> Result<Value, s
                     "removedNodeIds": value.changes.removed_node_ids,
                     "connections": value.changes.connections, "removedConnectionIds": value.changes.removed_connection_ids,
                     "constants": constants(&value.changes.constants), "removedConstantIds": value.changes.removed_constant_ids,
-                    "ready": value.changes.ready, "diagnostics": value.changes.diagnostics,
+                    "ready": value.changes.ready, "diagnostics": diagnostics(&value.changes.diagnostics),
                 },
             }),
         ),
@@ -93,19 +93,31 @@ fn ui_intent(value: &yss_ui_contract::UiIntentReceipt) -> Result<Value, serde_js
 }
 
 fn edited_node(value: &GraphNodeInspection) -> Value {
-    // Receipts confirm committed facts. Repeated editor metadata and column
-    // choices belong to targeted inspection, not every edit in model history.
+    // Receipts confirm committed facts. Ports, editor metadata and column choices
+    // belong to targeted inspection: a connection batch touches every node at both
+    // ends, and repeating all their ports made each receipt tens of kilobytes.
     json!({
-        "nodeId": value.node_id, "nodeTypeId": value.node_type_id,
-        "userLabel": value.user_label, "x": value.x, "y": value.y,
-        "parameters": value.parameters.iter().map(|parameter| json!({
-            "key": parameter.key, "value": parameter.value,
-        })).collect::<Vec<_>>(),
-        "ports": value.ports.iter().map(|port| json!({
-            "address": port.address, "direction": port.direction,
-            "dataType": port.data_type, "orphan": port.orphan,
-            "connectionCount": port.connection_count, "literal": port.literal,
-        })).collect::<Vec<_>>(),
+        "nodeId": value.node_id, "nodeTypeId": value.node_type_id, "userLabel": value.user_label,
+        "parameters": value.parameters.iter()
+            .filter(|parameter| parameter.value.is_some())
+            .map(|parameter| (parameter.key.clone(), parameter.value.clone().unwrap_or(Value::Null)))
+            .collect::<serde_json::Map<_, _>>(),
+    })
+}
+
+/// Complete diagnostic sets repeat on every edit; the model gets counts and the first few.
+fn diagnostics(values: &[GraphDiagnosticInspection]) -> Value {
+    const SHOWN: usize = 12;
+    let mut by_code = std::collections::BTreeMap::<&str, usize>::new();
+    for diagnostic in values {
+        *by_code.entry(diagnostic.code.as_str()).or_default() += 1;
+    }
+    json!({
+        "count": values.len(),
+        "blocking": values.iter().filter(|diagnostic| diagnostic.blocking).count(),
+        "byCode": by_code,
+        "items": &values[..values.len().min(SHOWN)],
+        "omitted": values.len().saturating_sub(SHOWN),
     })
 }
 
@@ -138,7 +150,7 @@ fn mutation(value: &ResourceMutationReceipt) -> Value {
 fn graph(value: &GraphInspection) -> Value {
     json!({
         "graphPath": value.graph_path, "ready": value.ready, "nodes": value.nodes,
-        "connections": value.connections, "constants": constants(&value.constants), "diagnostics": value.diagnostics,
+        "connections": value.connections, "constants": constants(&value.constants), "diagnostics": diagnostics(&value.diagnostics),
     })
 }
 

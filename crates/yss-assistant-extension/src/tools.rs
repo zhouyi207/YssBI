@@ -8,8 +8,9 @@ use crate::contract::{
     ToolEffect, ToolSpec, capability_input_schema, decode_arguments, model::CapabilityInput,
     statistical_plan_schema,
 };
+use crate::planner::MethodRegistry;
 
-pub(crate) const PLAN_TOOL_DESCRIPTION: &str = "Propose a complete typed statistical plan for Harness policy validation before analytical execution. Returns accepted and the exact plan recorded by Harness after validation and persistence.";
+pub(crate) const PLAN_TOOL_DESCRIPTION: &str = "Propose a complete typed statistical plan for Harness policy validation before analytical execution. candidateMethods accepts only the method IDs listed in its schema; when none of them fits the analysis, do not propose a plan and build the analysis graph directly. Returns accepted and the exact plan recorded by Harness after validation and persistence.";
 
 pub(crate) fn capability_spec(capability: CapabilityId) -> ToolSpec {
     let descriptor = capability.descriptor();
@@ -22,17 +23,25 @@ pub(crate) fn capability_spec(capability: CapabilityId) -> ToolSpec {
     }
 }
 
-pub(crate) fn plan_spec() -> ToolSpec {
+pub(crate) fn plan_spec(methods: &MethodRegistry) -> ToolSpec {
+    let mut schema = Value::from(statistical_plan_schema());
+    if let Some(items) = schema.pointer_mut("/properties/candidateMethods/items") {
+        // The registry, not the free-form schema, decides which methods have plan cards.
+        *items = serde_json::json!({
+            "type": "string",
+            "enum": methods.cards().iter().map(|card| card.id.to_string()).collect::<Vec<_>>(),
+        });
+    }
     ToolSpec::new(
         PROPOSE_STATISTICAL_PLAN_TOOL,
         PLAN_TOOL_DESCRIPTION,
-        Value::from(statistical_plan_schema()),
+        schema,
         ToolEffect::Inspect,
     )
 }
 
 /// The tools registered for one role. The Harness filters them by turn mode.
-pub(crate) fn role_specs(definition: &AgentDefinition) -> Vec<ToolSpec> {
+pub(crate) fn role_specs(definition: &AgentDefinition, methods: &MethodRegistry) -> Vec<ToolSpec> {
     let mut specs: Vec<_> = definition
         .capabilities
         .iter()
@@ -40,7 +49,7 @@ pub(crate) fn role_specs(definition: &AgentDefinition) -> Vec<ToolSpec> {
         .map(capability_spec)
         .collect();
     if definition.proposes_plans() {
-        specs.push(plan_spec());
+        specs.push(plan_spec(methods));
     }
     specs
 }
@@ -283,12 +292,71 @@ pub(crate) fn description(capability_id: CapabilityId) -> &'static str {
     }
 }
 
+/// Models often name a resource by its path alone, or omit the kind of a reference whose field
+/// already says it. Completing those references avoids a failed call and a retry.
+fn complete_resource_references(mut arguments: Value) -> Value {
+    use yss_project_layout::{
+        CHART_EXTENSION, DOC_EXTENSION, EVENT_GRAPH_EXTENSION, FUNCTION_GRAPH_EXTENSION,
+        MIND_EXTENSION,
+    };
+    let kind_of_path = |path: &str| {
+        let extension = path.rsplit_once('.').map(|(_, extension)| extension)?;
+        [
+            (EVENT_GRAPH_EXTENSION, "event_graph"),
+            (FUNCTION_GRAPH_EXTENSION, "function_graph"),
+            (CHART_EXTENSION, "chart"),
+            (MIND_EXTENSION, "mind"),
+            (DOC_EXTENSION, "doc"),
+        ]
+        .into_iter()
+        .find_map(|(known, kind)| (known == extension).then_some(kind))
+    };
+    let Some(fields) = arguments.as_object_mut() else {
+        return arguments;
+    };
+    for (field, value) in fields.iter_mut() {
+        let id = match value {
+            Value::String(id) => id.clone(),
+            Value::Object(reference) if !reference.contains_key("kind") => {
+                match reference.get("id").and_then(Value::as_str) {
+                    Some(id) => id.to_owned(),
+                    None => continue,
+                }
+            }
+            _ => continue,
+        };
+        let kind = match field.as_str() {
+            "document" => Some("doc"),
+            "chart" => Some("chart"),
+            "mind" => Some("mind"),
+            "database" => Some("database"),
+            "graph" => Some(if kind_of_path(&id) == Some("function_graph") {
+                "function_graph"
+            } else {
+                "event_graph"
+            }),
+            "resource" => kind_of_path(&id),
+            _ => None,
+        };
+        let Some(kind) = kind else {
+            continue;
+        };
+        let id = match kind {
+            "database" => id.strip_prefix("databases/").unwrap_or(&id).to_owned(),
+            _ => id,
+        };
+        *value = serde_json::json!({"kind": kind, "id": id});
+    }
+    arguments
+}
+
 /// Decode model arguments into the typed input of `capability_id` with schema diagnostics.
 pub(crate) fn decode_input(
     capability_id: CapabilityId,
     arguments: Value,
     schema: &Value,
 ) -> Result<CapabilityInput, CapabilityFailure> {
+    let arguments = complete_resource_references(arguments);
     match capability_id {
         CapabilityId::ProjectInspectResource => {
             decode_arguments(arguments, schema).map(CapabilityInput::ProjectInspectResource)

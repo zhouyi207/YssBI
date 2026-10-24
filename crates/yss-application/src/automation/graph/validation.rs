@@ -50,10 +50,9 @@ pub(super) fn inspect(
         .take(request.limit)
         .map(|diagnostic| GraphDiagnosticInspection {
             code: diagnostic.code.as_str().into(),
-            message_key: diagnostic.message_key.to_string(),
             blocking: diagnostic.blocking,
             severity: format!("{:?}", diagnostic.severity).to_lowercase(),
-            location: format!("{:?}", diagnostic.primary),
+            node_id: super::diagnostic_node(&diagnostic.primary),
             arguments: diagnostic
                 .arguments
                 .iter()

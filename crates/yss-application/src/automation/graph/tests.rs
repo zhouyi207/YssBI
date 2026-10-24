@@ -487,6 +487,24 @@ fn assistant_autosave_failure_preserves_the_previous_document_history_and_file()
 }
 
 #[test]
+fn resource_bound_nodes_accept_their_binding_repeated_as_a_parameter() {
+    let mut f = Fixture::new();
+    for repeated in [f.dataset.clone(), format!("databases/{}", f.dataset)] {
+        let created = f.edit(vec![GraphEditOperation::CreateNode {
+            port_counts: Default::default(),
+            parameters: [("dataframe".to_owned(), serde_json::json!(repeated))].into(),
+            client_id: Some("source".into()),
+            node_type_id: "yssbi.dataframe.source.get".into(),
+            resource_path: Some(format!("databases/{}", f.dataset)),
+            x: 0.,
+            y: 0.,
+            user_label: None,
+        }]);
+        assert_eq!(created.created_nodes.len(), 1);
+    }
+}
+
+#[test]
 fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results() {
     let mut f = Fixture::new();
     let saved_path = f.directory.join("project").join(&f.path);

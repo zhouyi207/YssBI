@@ -456,11 +456,11 @@ created_constants: Default::default(),
     let live = tool_result_json("graph_apply_edit", Ok(result.clone()));
     assert_eq!(live["payload"]["createdNodes"]["fit"], "real-node-id");
     let node = &live["payload"]["changes"]["nodes"][0];
-    assert_eq!(node["parameters"][0]["value"], json!({"revision":19}));
-    assert_eq!(node["ports"][0]["literal"], json!({"revision":20}));
-    assert_eq!(node["ports"][0]["address"]["nodeId"], "real-node-id");
-    assert!(node["parameters"][0].get("options").is_none());
-    assert!(node["ports"][0].get("schema").is_none());
+    assert_eq!(node["parameters"]["user_value"], json!({"revision":19}));
+    // Ports and parameter choices belong to targeted node inspection, not receipts.
+    assert!(node.get("ports").is_none());
+    assert!(!live.to_string().contains("\"options\""));
+    assert_eq!(live["payload"]["changes"]["diagnostics"]["count"], 0);
     let constant = &live["payload"]["changes"]["constants"]["c1"];
     assert!(constant.get("contentHash").is_none());
     assert_eq!(constant["dataValue"], json!({"revision":19}));
@@ -542,4 +542,46 @@ fn actionable_failures_replay_without_internal_sync_diagnostics() {
             assert!(!encoded.contains(internal), "{encoded}");
         }
     }
+}
+
+#[test]
+fn resource_references_given_as_paths_or_without_kind_are_completed() {
+    for (capability, arguments) in [
+        (
+            CapabilityId::DocumentWriteText,
+            json!({"document": "docs/report.md", "markdown": "# Report"}),
+        ),
+        (
+            CapabilityId::DocumentWriteText,
+            json!({"document": {"id": "docs/report.md"}, "markdown": "# Report"}),
+        ),
+        (
+            CapabilityId::DataInspect,
+            json!({"database": "databases/data"}),
+        ),
+        (
+            CapabilityId::GraphInspect,
+            json!({"graph": "functions/fit.yssbi-function"}),
+        ),
+        (
+            CapabilityId::ProjectSaveResource,
+            json!({"resource": "minds/plan.yssbi-mind"}),
+        ),
+    ] {
+        let schema = serde_json::to_value(capability_input_schema(capability)).unwrap();
+        let input = decode_request(capability, arguments.clone(), &schema)
+            .unwrap_or_else(|failure| panic!("{arguments}: {failure:?}"));
+        let encoded = serde_json::to_value(&input).unwrap().to_string();
+        assert!(!encoded.contains("databases/"), "{encoded}");
+    }
+    let schema =
+        serde_json::to_value(capability_input_schema(CapabilityId::ProjectSaveResource)).unwrap();
+    assert!(
+        decode_request(
+            CapabilityId::ProjectSaveResource,
+            json!({"resource": "unknown"}),
+            &schema
+        )
+        .is_err()
+    );
 }

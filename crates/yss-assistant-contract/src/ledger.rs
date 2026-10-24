@@ -48,6 +48,30 @@ pub fn project_tool_result(tool: &str, result: &Value) -> Result<Value, serde_js
         }
         tool if crate::is_python_tool(tool) => Ok(json!({"type": tool, "payload": result})),
         PROPOSE_STATISTICAL_PLAN_TOOL => Ok(result.clone()),
-        _ => crate::model::capability_result(&decode_result(result)?),
+        tool => {
+            let mut projected = crate::model::capability_result(&decode_result(result)?)?;
+            if is_connection_tool(tool) {
+                // A connection batch changes the connection counts of every node at both
+                // ends; their parameters did not change and are not repeated.
+                if let Some(changes) = projected
+                    .pointer_mut("/payload/changes")
+                    .and_then(Value::as_object_mut)
+                    && let Some(Value::Array(nodes)) = changes.remove("nodes")
+                {
+                    changes.insert("changedNodeCount".into(), json!(nodes.len()));
+                }
+            }
+            Ok(projected)
+        }
     }
+}
+
+fn is_connection_tool(tool: &str) -> bool {
+    [
+        crate::CapabilityId::GraphCreateConnections,
+        crate::CapabilityId::GraphUpdateConnections,
+        crate::CapabilityId::GraphDeleteConnections,
+    ]
+    .iter()
+    .any(|capability| capability.as_str() == tool)
 }

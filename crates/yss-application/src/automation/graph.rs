@@ -908,7 +908,10 @@ pub(super) fn editor_mutation(
             Ok(EditorGraphMutation::CreateNode {
                 descriptor,
                 position: NodePosition { x, y },
-                parameters: parse_edit_parameters(parameters)?,
+                parameters: parse_edit_parameters(without_resource_echo(
+                    parameters,
+                    resource_path.as_deref(),
+                ))?,
                 port_counts: parse_port_counts(port_counts)?,
                 user_label,
                 connect_from: None,
@@ -956,6 +959,21 @@ pub(super) fn editor_mutation(
             })
         }
     }
+}
+
+/// The resource path binds a resource-bound node's parameter. Models often repeat that
+/// binding as a parameter, with the full path or only its final ID; drop those echoes so they
+/// do not read as an attempt to change the binding. Any other value still conflicts.
+fn without_resource_echo(
+    mut parameters: BTreeMap<String, serde_json::Value>,
+    resource_path: Option<&str>,
+) -> BTreeMap<String, serde_json::Value> {
+    if let Some(path) = resource_path {
+        let id = path.rsplit('/').next().unwrap_or(path);
+        parameters
+            .retain(|_, value| !matches!(value.as_str(), Some(text) if text == path || text == id));
+    }
+    parameters
 }
 
 fn parse_edit_parameters(
@@ -1182,6 +1200,21 @@ fn parameter(value: &EditorParameterModel) -> GraphParameterInspection {
     }
 }
 
+pub(super) fn diagnostic_node(
+    location: &yss_graph_analysis::GraphDiagnosticLocation,
+) -> Option<String> {
+    use yss_graph_analysis_contract::DiagnosticLocation;
+    match location {
+        DiagnosticLocation::Node(node_id) | DiagnosticLocation::Parameter { node_id, .. } => {
+            Some(node_id.to_string())
+        }
+        DiagnosticLocation::Port(address) => Some(address.node_id.to_string()),
+        DiagnosticLocation::Graph
+        | DiagnosticLocation::Connection(_)
+        | DiagnosticLocation::Resource(_) => None,
+    }
+}
+
 fn diagnostics(projection: &EditorProjectionModel) -> Vec<GraphDiagnosticInspection> {
     let mut seen = BTreeSet::new();
     projection
@@ -1195,10 +1228,9 @@ fn diagnostics(projection: &EditorProjectionModel) -> Vec<GraphDiagnosticInspect
         )
         .map(|diagnostic| GraphDiagnosticInspection {
             code: diagnostic.code.to_string(),
-            message_key: diagnostic.message_key.to_string(),
             blocking: diagnostic.blocking,
             severity: format!("{:?}", diagnostic.severity).to_lowercase(),
-            location: format!("{:?}", diagnostic.location),
+            node_id: diagnostic_node(&diagnostic.location),
             arguments: diagnostic
                 .arguments
                 .iter()

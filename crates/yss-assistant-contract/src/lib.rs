@@ -38,7 +38,8 @@ pub use results::*;
 pub use statistics::*;
 pub use ui::*;
 pub use validation::{
-    AUTOMATION_LOCALE, MAX_CATALOG_QUERY_BYTES, MAX_CATALOG_RESULTS, MAX_LOCALE_BYTES,
+    AUTOMATION_LOCALE, MAX_CATALOG_QUERY_BYTES, MAX_CATALOG_RESULTS, MAX_CATALOG_SEARCH_RESULTS,
+    MAX_LOCALE_BYTES,
 };
 
 pub(crate) use graph::validate_graph_edit_operation;

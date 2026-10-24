@@ -9,6 +9,13 @@ use std::sync::{Arc, Mutex};
 use yss_harness_contract::*;
 
 const COMPACT_AT_BYTES: usize = 192_000;
+/// Every request resends the whole history, so cost grows with the square of the number of
+/// calls. Old tool outputs are cleared at this working size, whatever the model's window.
+const CLEAR_AT_BYTES: usize = 120_000;
+const WORKING_OUTPUTS: ClearToolOutputs = ClearToolOutputs {
+    keep_tokens: 8_000,
+    keep_under: 400,
+};
 mod source;
 mod summary;
 
@@ -171,11 +178,11 @@ impl AgentHook for ContextHook {
             Ok(bytes) => bytes.len(),
             Err(_) => return self.fail(crate::error::invalid_response()),
         };
-        if size >= threshold {
+        if size >= threshold.min(CLEAR_AT_BYTES) {
             // Clearing old tool outputs needs no model call and keeps the conversation's
             // structure. It is a pure function of the history, so replay reproduces it.
             let mut history = event.history.to_vec();
-            let cleared = ClearToolOutputs::default().clear(&mut history);
+            let cleared = WORKING_OUTPUTS.clear(&mut history);
             if cleared.results > 0 {
                 let remaining: Vec<_> = history
                     .iter()
@@ -203,6 +210,8 @@ impl AgentHook for ContextHook {
                     return CompletionCallAction::stop("harness_tool_outputs_cleared");
                 }
             }
+        }
+        if size >= threshold {
             if let Err(error) = self
                 .emit(AgentEvent::RuntimeStatus {
                     phase: AgentRuntimePhase::Compacting,

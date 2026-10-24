@@ -100,10 +100,10 @@ pub struct GraphPortTemplateInspection {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphDiagnosticInspection {
     pub code: String,
-    pub message_key: String,
     pub blocking: bool,
     pub severity: String,
-    pub location: String,
+    /// The node the diagnostic is located on, when it has one.
+    pub node_id: Option<String>,
     pub arguments: BTreeMap<String, String>,
 }
 

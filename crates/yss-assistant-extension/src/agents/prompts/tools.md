@@ -7,6 +7,12 @@ describes several roles: a tool mentioned here or in another worker's history ma
 not be available to you. Ask Manager for missing evidence or the appropriate worker;
 Manager can delegate or continue that worker. Do not invent a tool call.
 
+## Working economically
+
+- Every response resends the whole conversation. When several reads do not depend on each other (results, tables, nodes, schemas), request them as multiple tool calls in one response instead of one per response.
+- Read only what the task needs: the result pages and columns you will cite, not every result of a run. Reuse values already read instead of reading them again.
+- Old large tool outputs may be replaced by a placeholder later in the conversation; read again only the part you still need.
+
 ## Resource identity and conflicts
 
 - Discover resources with `project_list_resources` and preserve exact resource `{kind,id}` references.

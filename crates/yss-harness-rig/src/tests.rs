@@ -2015,6 +2015,15 @@ async fn compaction_checkpoints_working_context_without_replaying_large_history(
 
 #[tokio::test]
 async fn large_old_tool_outputs_are_cleared_before_any_summary() {
+    assert_old_outputs_cleared(None, 3_000).await;
+}
+
+#[tokio::test]
+async fn old_tool_outputs_are_cleared_at_the_working_size_of_a_large_window() {
+    assert_old_outputs_cleared(Some(1_048_576), 1_400).await;
+}
+
+async fn assert_old_outputs_cleared(context_window: Option<u32>, repeats: usize) {
     let model = scripted_model([vec![AssistantContent::text("Answered from receipts.")]]);
     let mut request = request(vec![]);
     request.messages = vec![AgentMessage::User {
@@ -2030,7 +2039,7 @@ async fn large_old_tool_outputs_are_cleared_before_any_summary() {
         request.messages.push(AgentMessage::ToolResult {
             invocation_id,
             tool: "data_inspect_profile".into(),
-            output: json!({"rows": "profile row ".repeat(3_000)}),
+            output: json!({"rows": "profile row ".repeat(repeats)}),
         });
     }
     request.messages.push(AgentMessage::User {
@@ -2038,6 +2047,19 @@ async fn large_old_tool_outputs_are_cleared_before_any_summary() {
     });
     let output = Arc::new(CollectingOutput::default());
     let result = RigAgentDriver::new(model.clone())
+        .with_model_config(
+            &LanguageModelConfig {
+                reasoning_efforts: Vec::new(),
+                id: "model".into(),
+                name: "Model".into(),
+                context_window,
+                max_output_tokens: None,
+                temperature: None,
+                top_p: None,
+                additional_parameters: Default::default(),
+            },
+            LanguageModelProtocol::OpenAiChat,
+        )
         .run_turn(
             request,
             Arc::new(StaticExecutor),

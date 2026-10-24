@@ -739,3 +739,52 @@ fn conditional_graph_reads_bind_query_pages_and_current_edit_and_dependency_iden
     assert_ne!(reopened.version.session_id, edited.version.session_id);
     assert!(matches!(reopened.content, GraphInspectionItems::Nodes(_)));
 }
+
+#[test]
+fn catalog_search_ranks_named_matches_and_keeps_summaries_short() {
+    let mut f = Fixture::new();
+    let mut search = |query: &str, locale: &str| {
+        let AutomationCapabilityResult::NodeCatalogPage(page) = f
+            .action(AutomationCapabilityRequest::BrowseNodes(
+                BrowseNodesRequest {
+                    query: query.into(),
+                    locale: locale.into(),
+                    category: None,
+                    offset: 0,
+                    limit: 50,
+                },
+            ))
+            .unwrap()
+        else {
+            panic!("catalog")
+        };
+        page
+    };
+    let describe = search("describe summary statistics", "en-US");
+    assert_eq!(describe.matches[0].type_id, "yssbi.statistics.describe");
+    assert!(
+        describe.page.total.is_some_and(|total| total < 30),
+        "{:?}",
+        describe.page.total
+    );
+    assert!(describe.matches.len() <= 30);
+    for item in &describe.matches {
+        let summary = item.summary.as_deref().unwrap_or_default();
+        assert!(
+            !summary.starts_with('#') && summary.chars().count() <= 121,
+            "{summary}"
+        );
+    }
+    let pca = search("主成分分析 PCA", "zh-CN");
+    assert!(
+        pca.matches
+            .iter()
+            .take(3)
+            .any(|item| item.type_id == "yssbi.statistics.multivariate.pca"),
+        "{:?}",
+        pca.matches
+            .iter()
+            .map(|item| &item.type_id)
+            .collect::<Vec<_>>()
+    );
+}

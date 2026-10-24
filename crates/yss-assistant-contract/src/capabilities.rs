@@ -234,7 +234,7 @@ macro_rules! capability_descriptors {
 capability_descriptors! {
     public {
         GraphInspect => Inspect, 2_000;
-        CatalogSearchNodes => Inspect, MAX_CATALOG_RESULTS;
+        CatalogSearchNodes => Inspect, crate::MAX_CATALOG_SEARCH_RESULTS;
         DataInspectSchema => Inspect, 100;
         DataInspectProfile => Inspect, 1;
         ResultInspect => Inspect, 100;
@@ -491,9 +491,9 @@ impl AutomationCapabilityRequest {
                 if request.locale.trim().is_empty() || request.locale.len() > MAX_LOCALE_BYTES {
                     return Err(CapabilityContractError::InvalidField("locale"));
                 }
-                if request.limit == 0 || request.limit > MAX_CATALOG_RESULTS {
+                if request.limit == 0 {
                     return Err(CapabilityContractError::InvalidLimit {
-                        maximum: MAX_CATALOG_RESULTS,
+                        maximum: crate::MAX_CATALOG_SEARCH_RESULTS,
                     });
                 }
                 if let Some(category) = &request.category {

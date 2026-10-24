@@ -155,7 +155,7 @@ impl TurnOrchestrator {
                     .get(id)
                     .filter(|outcome| outcome.state == AgentRunState::Completed)
                     .cloned()
-                    .ok_or_else(|| rejected("dependency_not_completed"))
+                    .ok_or_else(|| super::dependency_not_completed(id))
             })
             .collect::<Result<Vec<_>, _>>()?;
         // Keys belong to a user turn; resumed runs retain their durable run ID across turns.

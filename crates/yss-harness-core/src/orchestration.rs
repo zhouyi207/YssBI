@@ -326,7 +326,7 @@ impl TurnOrchestrator {
                         .and_then(|entry| entry.outcome.as_ref())
                         .filter(|outcome| outcome.state == AgentRunState::Completed)
                         .cloned()
-                        .ok_or_else(|| rejected("dependency_not_completed"))
+                        .ok_or_else(|| dependency_not_completed(id))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let run_id = AgentRunId::try_new(self.ports.ids.next_id(AutomationIdKind::AgentRun))
@@ -926,6 +926,15 @@ pub(crate) fn finish_outcome(
 
 fn rejected(reason: &str) -> CapabilityFailure {
     CapabilityFailure::new(CapabilityFailureCode::INVALID_REQUEST).with_detail("reason", reason)
+}
+
+pub(crate) fn dependency_not_completed(run_id: &AgentRunId) -> CapabilityFailure {
+    rejected("dependency_not_completed")
+        .with_detail("runId", run_id.as_str())
+        .with_detail(
+            "nextStep",
+            "dependsOn lists only tasks delegated in this turn that have completed. For earlier work, state its findings in the objective or constraints and leave dependsOn empty, or continue that worker with agent_continue_task.",
+        )
 }
 fn persistence_failure() -> CapabilityFailure {
     CapabilityFailure::new(CapabilityFailureCode::PERSISTENCE_UNAVAILABLE)
